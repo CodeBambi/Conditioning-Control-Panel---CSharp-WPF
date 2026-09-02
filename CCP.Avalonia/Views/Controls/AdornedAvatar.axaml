@@ -1,0 +1,50 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AdornedAvatar.xaml.
+     Structure, x:Names and every literal preserved. Deviations, all forced:
+
+       x:Name on the ImageBrush     -> dropped (AVLN2000: only a StyledElement can be named);
+                                       the code-behind casts AvatarRing.Background instead
+       Visibility="Collapsed"       -> IsVisible="False"
+       SnapsToDevicePixels          -> dropped (no Avalonia equivalent; UseLayoutRounding kept) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AdornedAvatar"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignHeight="104" d:DesignWidth="104"
+             UseLayoutRounding="True">
+
+    <!-- ================================================================
+         ADORNED AVATAR — the wardrobe render surface (redesign Phase 3)
+
+         A circular avatar with an optional decoration stacked 1:1 over it.
+         The decoration is a 512 canvas PNG whose avatar circle sits centred
+         at 70% of the canvas width, so the ONLY layout maths in the whole
+         wardrobe is "draw the canvas at diameter / 0.70, centred" — there is
+         no per-item anchor data and no per-item code.
+
+         Nothing here clips: a hat has to overflow the avatar box, and layout
+         must NOT reserve room for it (the avatar still measures as its own
+         diameter, so the hero's columns do not move when a hat is equipped).
+         ================================================================ -->
+
+    <Grid x:Name="Root" Width="104" Height="104">
+        <!-- The avatar itself. Ring colour/thickness are properties: the profile
+             hero wants the pink ring, a leaderboard row will want none. -->
+        <Border x:Name="AvatarRing" CornerRadius="52" BorderBrush="#FF69B4" BorderThickness="3">
+            <Border.Background>
+                <ImageBrush Stretch="UniformToFill"/>
+            </Border.Background>
+        </Border>
+
+        <!-- Decoration layer. Sized/centred in code from AvatarSize; Fill because
+             the canvas is square and must map onto the avatar exactly. -->
+        <Image x:Name="DecoLayer" Stretch="Fill" IsVisible="False"
+               IsHitTestVisible="False"
+               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+        <!-- Presence dot, above the decoration so a choker can never hide it. -->
+        <Ellipse x:Name="PresenceDotShape" Width="20" Height="20"
+                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                 Margin="0,0,4,4" Stroke="#1E1E3F" StrokeThickness="3" Fill="#43B581"/>
+    </Grid>
+</UserControl>

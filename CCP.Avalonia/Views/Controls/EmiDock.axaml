@@ -1,0 +1,88 @@
+<!-- PORTED from ConditioningControlPanel/Controls/EmiDock.xaml.
+     Structure, x:Names and literals preserved. Deviations, all forced:
+
+       ControlTemplate <ContentPresenter/>  -> ContentPresenter Content="{TemplateBinding Content}"
+                                               (a bare presenter draws nothing on Avalonia)
+       x:Name on SolidColorBrush / DropShadowEffect -> dropped (AVLN2000: only a StyledElement can
+                                               be named); the knock reaches them through Ring.Stroke
+       emi:EmiFace                          -> TextBlock stub (see the code-behind)
+       Text set from code (Loc.Get)         -> {loc:Str key}, same keys
+       ToolTip set from code                -> ToolTip.Tip="{loc:Str ...}"
+       Visibility="Collapsed"               -> IsVisible="False" -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.EmiDock"
+             Margin="0,2,0,4">
+
+    <!--
+        THE DOCK CHIP. EMI's way in and out when she is not already out, pinned under the nav rail's
+        doors. Deliberately NOT a door medallion: no NavDoorMap row, no "you are here" ring.
+
+        The face and the ring are the button's CONTENT, not its template, so they are real fields on
+        this class: the live face binding needs an element it can address without a
+        FindName-through-the-template dance every time the rail rebuilds.
+    -->
+    <Grid ColumnDefinitions="56,*">
+
+        <Button x:Name="BtnChip"
+                Grid.Column="0"
+                Width="40" Height="40"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="Transparent" BorderThickness="0" Padding="0"
+                Cursor="Hand" Focusable="False"
+                ToolTip.Tip="{loc:Str emi_desk_dock_tooltip}">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Grid Background="Transparent">
+                        <ContentPresenter Content="{TemplateBinding Content}"/>
+                    </Grid>
+                </ControlTemplate>
+            </Button.Template>
+            <Grid>
+                <!--
+                    THE KNOCK'S RING. The knock animates the stroke colour, the thickness and the
+                    glow. The face is NEVER animated: a live kaomoji pulsing reads as a glitch,
+                    not a knock. See EmiDock.axaml.cs.
+                -->
+                <Ellipse x:Name="Ring"
+                         Fill="#0E0E1C"
+                         StrokeThickness="2">
+                    <Ellipse.Stroke>
+                        <SolidColorBrush Color="#FF69B4"/>
+                    </Ellipse.Stroke>
+                    <Ellipse.Effect>
+                        <DropShadowEffect Color="#FF69B4"
+                                          BlurRadius="0"
+                                          OffsetX="0" OffsetY="0"
+                                          Opacity="0"/>
+                    </Ellipse.Effect>
+                </Ellipse>
+                <!-- Her live face, inset so the kaomoji never touches the ring.
+                     ponytail: EmiFace is a WPF FrameworkElement with its own OnRender; until it is
+                     ported this is the resting kaomoji as plain text in her pink. -->
+                <TextBlock x:Name="MiniFace" Margin="7,8,7,8"
+                           Text="0_0" Foreground="#FF69B4"
+                           FontSize="11" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+        </Button>
+
+        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+            <TextBlock x:Name="TxtName"
+                       Text="{loc:Str emi_desk_dock_name}"
+                       Foreground="#FF69B4"
+                       FontSize="11" FontWeight="SemiBold"/>
+            <!-- The muted pill. Press Start 2P is bundled as woff2 for the web layers; this asks
+                 for the installed family and falls through to a mono stack. 7px chrome either way. -->
+            <TextBlock x:Name="TxtMuted"
+                       Text="{loc:Str emi_desk_dock_muted_pill}"
+                       IsVisible="False"
+                       Foreground="#9A8FB5"
+                       FontFamily="Press Start 2P, Consolas, monospace"
+                       FontSize="7"
+                       TextWrapping="Wrap"
+                       Margin="0,3,0,0"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
