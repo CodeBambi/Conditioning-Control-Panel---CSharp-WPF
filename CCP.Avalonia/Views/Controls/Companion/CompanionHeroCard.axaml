@@ -1,0 +1,611 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/CompanionHeroCard.xaml.
+     Structure, order, spacing, comments and every resource key are preserved so the two can be
+     diffed. Deviations, all forced by real WPF/Avalonia differences (the CompanionTheme.axaml
+     header lists the general mapping; the ones specific to this file):
+
+       Style.Triggers/DataTrigger      ->  a class bound to the same boolean (Classes.x="{Binding}")
+                                           plus a <Style Selector="...x"> in UserControl.Styles
+       DataTrigger swapping Command    ->  Command lives ONLY in the styles (Button.aipill and
+                                           Button.aipill.locked); a local Command attribute would
+                                           outrank both, so the WPF file's placement is mirrored
+       Visibility + CmpBoolToVis(Inv)  ->  IsVisible="{Binding X}" / "{Binding !X}"
+       CmpHasContentToVis/CmpEmptyToVis->  ObjectConverters.IsNotNull / IsNull
+       <Image .. CmpEmojiToImage>      ->  <TextBlock Text="🎓"/>; glyph swaps are two TextBlocks
+                                           with opposite IsVisible bindings
+       ColumnDefinition Width binding  ->  local:CompanionGrid.StarFraction (see CompanionConverters.cs)
+       ToolTip="..."                   ->  ToolTip.Tip="..."
+       x:Name on ScaleTransform/ImageBrush -> dropped (illegal on non-controls); the breathe is a
+                                           Style.Animations block toggled by class, see below
+       Grid.Clip EllipseGeometry       ->  Rect form (Center/RadiusX is WPF-only)
+       local:RelationshipConstellation ->  not ported yet; a band-brush placeholder (ponytail below)
+       d:DataContext mock              ->  dropped; the view seeds CompanionHeroCardViewModel itself -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.CompanionHeroCard"
+             x:DataType="local:CompanionHeroCardViewModel"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             mc:Ignorable="d"
+             d:DesignWidth="1160" d:DesignHeight="360">
+
+    <!-- ================================================================
+         Z0 header band + Z1 THE COMPANION CARD (hero).
+         The Trainer Card recipe applied to her: banner + left-dark scrim,
+         portrait ring, identity stack, status pills, XP, quick actions,
+         gold level plate, and the constellation band along the bottom.
+
+         Traps honoured here:
+          · The banner is a Border + brush, NEVER an <Image>. An
+            unconstrained Image in a StackPanel/ScrollViewer measures to
+            its natural size and blew the profile hero to 1383px.
+          · The XP fill is a star-width column — no ActualWidth maths.
+          · The mini toggles bind IsChecked OneWay and act through their
+            command. IsMuted / IsCompanionShown are read-only on the
+            interface, so a TwoWay binding would either fail silently or
+            fight the command and undo the user's click.
+          · This control owns the tab's ONE ambient loop (the portrait
+            breathe). Nothing else here may loop forever, and the loop is
+            parked entirely while she is disabled.
+
+         Free / logged-out users see this card in full — barks are free,
+         and the page must never look broken. Only the header plate dims
+         (behind a Vault teaser ribbon) and only Z2 locks.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Local-only styles. Anything the whole page would want belongs in the shared
+                 theme; these three are the header band's private jewelry. -->
+            <ControlTheme x:Key="CmpHeroTierPlateTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="10"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </ControlTheme>
+
+            <!-- .tierplate, but it dims itself when the user has no AI entitlement. -->
+            <ControlTheme x:Key="CmpHeroAiPlateStyle" TargetType="Border" BasedOn="{StaticResource CmpTierPlateStyle}">
+                <Style Selector="^.dim">
+                    <Setter Property="Opacity" Value="0.28"/>
+                    <Setter Property="Effect" Value="{x:Null}"/>
+                </Style>
+            </ControlTheme>
+
+            <!-- the Velvet-Vault sell, shrunk to a ribbon: gradient chip + lock glow, and it is a
+                 button, not a veil — the header never blocks anything. -->
+            <ControlTheme x:Key="CmpHeroTeaserRibbonStyle" TargetType="Button"
+                          BasedOn="{StaticResource CmpCtaPillStyle}">
+                <Setter Property="FontSize" Value="10"/>
+                <Setter Property="Padding" Value="12,5,12,5"/>
+                <Setter Property="Margin" Value="8,0,0,0"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </ControlTheme>
+
+            <!-- The AI entitlement plate's chrome-free button. WPF declared it inline as
+                 Button.Style; a ControlTheme has to be keyed. -->
+            <ControlTheme x:Key="CmpHeroAiPlateButtonStyle" TargetType="Button">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Margin" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+                <Setter Property="Focusable" Value="False"/>
+                <Setter Property="Template">
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="PlateHost" Background="Transparent">
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^:pointerover /template/ Border#PlateHost">
+                    <Setter Property="Opacity" Value="0.75"/>
+                </Style>
+                <!-- dim = locked = the deep link into the Patreon tab -->
+                <Style Selector="^.dim">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Focusable" Value="True"/>
+                </Style>
+            </ControlTheme>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- The DataTriggers of the WPF file, one class each. Every Style that binds carries its
+             own x:DataType because compiled bindings are on. -->
+
+        <!-- Resting values live in the class styles too: a local attribute outranks every
+             Style, so the state class could never override it. -->
+
+        <!-- portrait ring: flat gray and no glow while she is disabled -->
+        <Style Selector="Ellipse.ring">
+            <Setter Property="Effect" Value="{StaticResource CmpRingGlow}"/>
+            <Setter Property="Fill">
+                <!-- WPF has no conic gradient; the mockup's sweep reads the same as a four-stop diagonal. -->
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                    <GradientStop Color="#FFFF69B4" Offset="0"/>
+                    <GradientStop Color="#FFB478FF" Offset="0.35"/>
+                    <GradientStop Color="#FFFF8FCB" Offset="0.65"/>
+                    <GradientStop Color="#FF9370DB" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter>
+        </Style>
+        <!-- CmpPortraitBreatheStoryboard (CompanionTheme.axaml §17): scale 1.000 to 1.015, 2.5s
+             each way, SineEaseInOut, forever. The code-behind adds/removes the class, which is
+             how the loop is started and parked. A Transform cannot be animated directly on
+             Avalonia (the animator wants a Visual), so the setters target the Ellipse. -->
+        <Style Selector="Ellipse.ring.breathe">
+            <Style.Animations>
+                <Animation Duration="0:0:2.5" IterationCount="Infinite" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.0"/>
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.015"/>
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.015"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Ellipse.ring.asleep">
+            <Setter Property="Fill" Value="#FF3A3552"/>
+            <Setter Property="Effect" Value="{x:Null}"/>
+        </Style>
+
+        <!-- presence dot: pink pulse while the provider is live -->
+        <Style Selector="Ellipse.presence">
+            <Setter Property="Fill" Value="#FF4A4560"/>
+        </Style>
+        <Style Selector="Ellipse.presence.live">
+            <Setter Property="Fill">
+                <RadialGradientBrush Center="35%,35%" GradientOrigin="35%,35%">
+                    <GradientStop Color="#FFFFB3DB" Offset="0"/>
+                    <GradientStop Color="#FFFF69B4" Offset="1"/>
+                </RadialGradientBrush>
+            </Setter>
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFF69B4" BlurRadius="12" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+            </Setter>
+        </Style>
+
+        <!-- mood token: dormant at 40%, lit orb when the mood is real -->
+        <Style Selector="Border.moodtoken">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+        <Style Selector="Border.moodtoken.live">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Border.moodorb">
+            <Setter Property="Background">
+                <RadialGradientBrush Center="35%,30%" GradientOrigin="35%,30%">
+                    <GradientStop Color="#FF9C93C4" Offset="0"/>
+                    <GradientStop Color="#FF5C5480" Offset="1"/>
+                </RadialGradientBrush>
+            </Setter>
+        </Style>
+        <Style Selector="Border.moodorb.live">
+            <Setter Property="Background">
+                <RadialGradientBrush Center="35%,30%" GradientOrigin="35%,30%">
+                    <GradientStop Color="#FFFFD27A" Offset="0"/>
+                    <GradientStop Color="#FFFF8C42" Offset="1"/>
+                </RadialGradientBrush>
+            </Setter>
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFF8C42" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.55"/>
+            </Setter>
+        </Style>
+
+        <!-- status pills. Three states for the AI pill, not two: off is gray and goes to the
+             Engine Room; LOCKED is pink-dim, reads as a lock, and goes to the Lab. The command
+             is set here and nowhere else - see the header. -->
+        <Style Selector="Button.aipill" x:DataType="local:CompanionHeroCardViewModel">
+            <Setter Property="Command" Value="{Binding OpenEngineRoomCommand}"/>
+        </Style>
+        <Style Selector="Button.aipill.off">
+            <Setter Property="Background" Value="#FF1B1B2C"/>
+            <Setter Property="BorderBrush" Value="#40FFFFFF"/>
+            <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        </Style>
+        <Style Selector="Button.aipill.locked" x:DataType="local:CompanionHeroCardViewModel">
+            <Setter Property="Background" Value="#1FFF69B4"/>
+            <Setter Property="BorderBrush" Value="#66FF69B4"/>
+            <Setter Property="Foreground" Value="#FFFFC2E0"/>
+            <Setter Property="Command" Value="{Binding Header.OpenPatreonCommand}"/>
+        </Style>
+        <Style Selector="Button.awpill.closed">
+            <Setter Property="Background" Value="#FF1B1B2C"/>
+            <Setter Property="BorderBrush" Value="#40FFFFFF"/>
+            <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,Auto">
+
+        <!-- ================================================================
+             Z0 — HEADER BAND. Collapses whole when the host supplies no
+             header viewmodel (Header defaults to null), so a page that
+             draws its own title never gets two.
+             ================================================================ -->
+        <!-- The visibility binding lives on this outer Grid because the inner one re-points its
+             DataContext at Header: an element's own DataContext wins for every binding on it, so
+             the two cannot share a level. -->
+        <Grid Grid.Row="0" x:Name="HeaderBand" Margin="0,0,0,18"
+              IsVisible="{Binding Header, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <Grid DataContext="{Binding Header}" x:DataType="local:CompanionHeaderViewModel"
+              ColumnDefinitions="*,Auto">
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Title}" Theme="{StaticResource CmpPageTitleStyle}"/>
+                <TextBlock Text="{Binding Subtitle}" Theme="{StaticResource CmpPageSubtitleStyle}"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                        Margin="16,0,0,0">
+                <Button Theme="{StaticResource CmpChipButtonStyle}" Command="{Binding TutorialCommand}"
+                        Margin="0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🎓" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding TutorialLabel}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- The AI entitlement plate: the tab-level "is she awake in the cloud?" glance.
+                     Design §3 Z0 — "the plate doubles as the glance and clicks through to the
+                     Patreon tab when dim". A user who reads the dimmed LAB·AI plate as the lock is
+                     reading it correctly, so it has to answer. It is a chrome-free Button whose
+                     hit-testing is off while entitled (nothing to sell) and on while dim; the
+                     teaser ribbon beside it stays as the explicit CTA. Off hit-testing also
+                     suppresses the tooltip, so it can be bound unconditionally. -->
+                <Button x:Name="AiPlateButton" Command="{Binding OpenPatreonCommand}"
+                        Theme="{StaticResource CmpHeroAiPlateButtonStyle}"
+                        Classes.dim="{Binding !HasAiAccess}"
+                        IsHitTestVisible="{Binding !HasAiAccess}"
+                        ToolTip.Tip="{Binding TeaserRibbonLabel}">
+                    <Border Theme="{StaticResource CmpHeroAiPlateStyle}" Classes.dim="{Binding !HasAiAccess}">
+                        <TextBlock Text="{Binding AiPlateLabel}" Theme="{StaticResource CmpHeroTierPlateTextStyle}"/>
+                    </Border>
+                </Button>
+
+                <!-- the tier above is always dim: aspiration, not a lock -->
+                <Border Theme="{StaticResource CmpTierPlateDimStyle}">
+                    <TextBlock Text="{Binding NextTierPlateLabel}" Theme="{StaticResource CmpHeroTierPlateTextStyle}"/>
+                </Border>
+
+                <Button Theme="{StaticResource CmpHeroTeaserRibbonStyle}"
+                        Command="{Binding OpenPatreonCommand}"
+                        IsVisible="{Binding !HasAiAccess}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🔒" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding TeaserRibbonLabel}" VerticalAlignment="Center"
+                                   FontWeight="Bold" Foreground="{StaticResource CmpTextBrush}"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+        </Grid>
+
+        <!-- ================================================================
+             Z1 — THE COMPANION CARD
+             ================================================================ -->
+        <!-- No Effect on this Border. It used to carry a BlurRadius=40 / ShadowDepth=6
+             DropShadowEffect over the full ~1460x300 card, inside PageScroll — the single most
+             expensive surface on the page, re-blurred on every wheel notch. The lift is a static
+             gradient (CmpHeroCardLiftBrush) below instead; the card's own border does the rest. -->
+        <Border Grid.Row="1" CornerRadius="{StaticResource CmpRadiusCard}" ClipToBounds="True"
+                Background="{StaticResource CmpCardBrush}"
+                BorderBrush="{StaticResource CmpCardBorderBrush}" BorderThickness="1">
+            <Grid>
+                <!-- ========== banner + scrim ========== -->
+                <Border Background="{StaticResource CmpHeroBannerBrush}" Opacity="0.9"/>
+                <Border Background="{StaticResource CmpRoomGlowPinkBrush}"/>
+                <Border Background="{StaticResource CmpHeroScrimBrush}"/>
+                <Border Background="{StaticResource CmpHeroCardLiftBrush}" IsHitTestVisible="False"/>
+
+                <Grid RowDefinitions="*,Auto">
+
+                    <!-- ========== upper band: portrait | identity | rail ==========
+                         MinHeight fixes the strip so a short flavor line in one language and a
+                         wrapped one in another do not give the hero two different shapes. -->
+                    <Grid Grid.Row="0" Margin="22,20,22,14" MinHeight="176" ColumnDefinitions="Auto,*,Auto">
+
+                        <!-- ===== portrait: ring, hole, bust, shine, presence dot ===== -->
+                        <Grid Grid.Column="0" Width="138" Height="138" Margin="0,0,20,0"
+                              VerticalAlignment="Top"
+                              Opacity="{Binding IsCompanionEnabled, Converter={StaticResource CmpBoolToOpacity},
+                                                ConverterParameter=1.0|0.45}">
+                            <!-- The ring. Its ScaleTransform is the one Forever animation on this
+                                 tab; when she is disabled it goes flat gray and the code-behind
+                                 parks the clock, matching the mockup's animation:none. -->
+                            <Ellipse x:Name="PortraitRing" RenderTransformOrigin="50%,50%"
+                                     Classes="ring" Classes.asleep="{Binding !IsCompanionEnabled}"/>
+
+                            <!-- the hole -->
+                            <Ellipse Margin="3">
+                                <Ellipse.Fill>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#FF0E0A1C" Offset="0"/>
+                                        <GradientStop Color="#FF1B0F2A" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
+
+                            <!-- The placeholder bust, drawn the way the mockup draws it: a head
+                                 disc, a shoulder cap over it, one specular dot. Vector only, so it
+                                 is DPI-safe and needs no art file; it yields to the real companion
+                                 portrait the moment there is one. -->
+                            <Grid Width="132" Height="132" Margin="3"
+                                  IsVisible="{Binding Portrait, Converter={x:Static ObjectConverters.IsNull}}">
+                                <Grid.Clip>
+                                    <EllipseGeometry Rect="0,0,132,132"/>
+                                </Grid.Clip>
+
+                                <Ellipse Width="69" Height="69" HorizontalAlignment="Center"
+                                         VerticalAlignment="Top" Margin="0,21,0,0">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush Center="38%,30%" GradientOrigin="38%,30%">
+                                            <GradientStop Color="#FFFFC4E4" Offset="0"/>
+                                            <GradientStop Color="#FFFF8FCB" Offset="0.45"/>
+                                            <GradientStop Color="#FFC86BD9" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect Color="#FFFF69B4" BlurRadius="18" OffsetX="0" OffsetY="0" Opacity="0.40"/>
+                                    </Ellipse.Effect>
+                                </Ellipse>
+
+                                <Border Width="127" Height="69" HorizontalAlignment="Center"
+                                        VerticalAlignment="Bottom" Margin="0,0,0,-16"
+                                        CornerRadius="63,63,0,0">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                            <GradientStop Color="#FFB478FF" Offset="0"/>
+                                            <GradientStop Color="#FF7A4FC9" Offset="0.6"/>
+                                            <GradientStop Color="#FF4A2B85" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+
+                                <Ellipse Width="12" Height="12" HorizontalAlignment="Left"
+                                         VerticalAlignment="Top" Margin="32,26,0,0" Opacity="0.85">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#FFFFFFFF" Offset="0"/>
+                                            <GradientStop Color="#00FFFFFF" Offset="0.7"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
+
+                            <!-- The real portrait, when there is one. Stretch is Uniform, NOT
+                                 UniformToFill: the busts are full-body art on a tall canvas, and a
+                                 fill crop ate her head and heels. The WPF code-behind then points
+                                 the brush's Viewbox at a square centred on the art's own opaque
+                                 bounds; on Avalonia that is ImageBrush.SourceRect - see
+                                 CompanionHeroCard.axaml.cs · CentrePortrait. -->
+                            <Ellipse Margin="3" IsVisible="{Binding Portrait, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                <Ellipse.Fill>
+                                    <ImageBrush Source="{Binding Portrait}"
+                                                Stretch="Uniform" AlignmentX="Center" AlignmentY="Center"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+
+                            <!-- presence dot = AI state. Pink when the provider is live, gray when
+                                 off, gone entirely when she is asleep (there is no presence to
+                                 report). -->
+                            <Ellipse x:Name="PresenceDot" Width="20" Height="20"
+                                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                     Margin="0,0,6,8" Stroke="{StaticResource CmpCardBrush}" StrokeThickness="3"
+                                     Classes="presence" Classes.live="{Binding IsAiLive}"
+                                     IsVisible="{Binding IsCompanionEnabled}"/>
+                        </Grid>
+
+                        <!-- ===== identity stack ===== -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="0,2,16,0">
+
+                            <!-- name + mod chip + mood token -->
+                            <WrapPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}" FontFamily="Fredoka, Segoe UI, Inter" FontWeight="SemiBold"
+                                           FontSize="31" Foreground="White" VerticalAlignment="Center"
+                                           Margin="0,0,11,0" Effect="{StaticResource CmpNameGlow}"/>
+
+                                <Border Theme="{StaticResource CmpModChipStyle}" Margin="0,0,11,0">
+                                    <TextBlock Text="{Binding ModName}" Theme="{StaticResource CmpModChipTextStyle}"/>
+                                </Border>
+
+                                <!-- Daily mood token. Pre-Train 4 the view substitutes a sleeping
+                                     moon on a cool orb at 40% and the tooltip makes the promise —
+                                     present and dormant, never a hidden control. -->
+                                <Border x:Name="MoodToken" local:CompanionCapsule.IsCapsule="True"
+                                        Background="#FF2A1A3A" BorderBrush="#55FF69B4" BorderThickness="1"
+                                        Padding="6,4,12,4" VerticalAlignment="Center"
+                                        Classes="moodtoken" Classes.live="{Binding IsMoodLive}"
+                                        ToolTip.Tip="{Binding MoodCaption}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="22" Height="22" CornerRadius="11" Margin="0,0,7,0"
+                                                Classes="moodorb" Classes.live="{Binding IsMoodLive}">
+                                            <!-- Avalonia draws colour emoji and symbol glyphs alike, so the
+                                                 WPF image-plus-text-fallback pair is two TextBlocks. -->
+                                            <Grid>
+                                                <!-- dormant: the sleeping moon, per design §3 Z1 -->
+                                                <TextBlock Text="🌙" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           IsVisible="{Binding !IsMoodLive}"/>
+                                                <TextBlock Text="{Binding MoodGlyph}" FontSize="12" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           IsVisible="{Binding IsMoodLive}"/>
+                                            </Grid>
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MoodWord}" FontSize="11.5" FontWeight="Bold"
+                                                       Foreground="#FFFFD9A8"/>
+                                            <!-- The dormant token is a moon and a word; its promise
+                                                 belongs in the tooltip, not spread across the name
+                                                 row where it competes with her name. -->
+                                            <TextBlock Text="{Binding MoodCaption}" FontSize="9.5"
+                                                       Foreground="{StaticResource CmpFaintBrush}"
+                                                       MaxWidth="150" TextTrimming="CharacterEllipsis"
+                                                       IsVisible="{Binding IsMoodLive}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
+
+                            <!-- one-line flavor, or the asleep copy when she is disabled -->
+                            <TextBlock Text="{Binding Flavor}" Margin="0,7,0,0" FontSize="13"
+                                       Foreground="{StaticResource CmpDimBrush}" TextWrapping="Wrap"
+                                       MaxHeight="38" TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding IsCompanionEnabled}"/>
+
+                            <WrapPanel Orientation="Horizontal" Margin="0,7,0,0"
+                                       IsVisible="{Binding !IsCompanionEnabled}">
+                                <TextBlock Text="{Binding AsleepCopy}" Theme="{StaticResource CmpFlavorTextStyle}"
+                                           FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Button Theme="{StaticResource CmpCtaPillStyle}"
+                                        Command="{Binding WakeCommand}" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str companion_hero_wake}"/>
+                                </Button>
+                            </WrapPanel>
+
+                            <!-- status pills: both are deep-links now -->
+                            <WrapPanel Orientation="Horizontal" Margin="0,11,0,0">
+                                <!-- Three states, not two. Off (provider or companion) is gray and
+                                     goes to the Engine Room; LOCKED is pink-dim, reads as a lock,
+                                     and goes to the Lab — a free user's pill must agree with the
+                                     teaser ribbon rather than tell them she is asleep. -->
+                                <Button Theme="{StaticResource CmpAiPillStyle}"
+                                        Classes="aipill" Classes.off="{Binding !IsAiLive}" Classes.locked="{Binding IsAiLocked}">
+                                    <TextBlock Text="{Binding AiPillText}"/>
+                                </Button>
+                                <Button Theme="{StaticResource CmpAwarenessPillStyle}" Command="{Binding FocusAwarenessCommand}"
+                                        Classes="awpill" Classes.closed="{Binding !IsAwarenessOpen}">
+                                    <TextBlock Text="{Binding AwarenessPillText}"/>
+                                </Button>
+                            </WrapPanel>
+
+                            <!-- Companion XP. The bar is capped by a star column with a MaxWidth
+                                 rather than by the element's own MaxWidth: a Stretch element that
+                                 cannot fill its slot degrades to Center, and HorizontalAlignment
+                                 Left would instead collapse the track to its (zero) desired width.
+                                 A greedy star column that stops growing at 430 does what the mockup
+                                 draws, at every tab width. -->
+                            <Grid Margin="0,13,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MaxWidth="430"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0" RowDefinitions="Auto,Auto">
+                                    <Border Grid.Row="0" Theme="{StaticResource CmpGaugeTrackStyle}">
+                                        <Grid local:CompanionGrid.StarFraction="{Binding XpFraction}">
+                                            <Border Grid.Column="0" Theme="{StaticResource CmpGaugeFillStyle}"/>
+                                            <!-- Brain-Parasite drain flash, kept from the old hero
+                                                 (MainWindow.Companion.cs FlashXpBarOnDrain). It
+                                                 sits in the same star column as the fill, so it is
+                                                 already exactly as wide as the earned portion. -->
+                                            <Border x:Name="PrgCompanion0FlashOverlay"
+                                                    Grid.Column="0" Theme="{StaticResource CmpGaugeFillStyle}"
+                                                    Opacity="0" IsHitTestVisible="False"/>
+                                        </Grid>
+                                    </Border>
+                                    <Grid Grid.Row="1">
+                                        <TextBlock Text="{Binding XpLabel}" Theme="{StaticResource CmpGaugeLabelStyle}"
+                                                   HorizontalAlignment="Left"/>
+                                        <TextBlock Text="{Binding NextLevelLabel}" Theme="{StaticResource CmpGaugeLabelStyle}"
+                                                   HorizontalAlignment="Right"/>
+                                    </Grid>
+                                </Grid>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- ===== right rail: chat CTA, mini chips, level plate ===== -->
+                        <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Top">
+                            <Button Command="{Binding ChatCommand}" Theme="{StaticResource CmpCtaButtonStyle}"
+                                    HorizontalAlignment="Right">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="💬" FontSize="15" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str companion_hero_chat}" VerticalAlignment="Center" FontWeight="Bold"
+                                               Foreground="White" FontSize="13"/>
+                                    <!-- live shortcut only; its editor lives in the Workshop -->
+                                    <Border Background="#30000000" CornerRadius="5" Padding="6,2,6,2" Margin="9,0,0,0"
+                                            VerticalAlignment="Center"
+                                            IsVisible="{Binding ChatShortcutHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                        <TextBlock Text="{Binding ChatShortcutHint}" FontSize="10" FontWeight="SemiBold"
+                                                   Foreground="White" Opacity="0.8"/>
+                                    </Border>
+                                </StackPanel>
+                            </Button>
+
+                            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                <Button Theme="{StaticResource CmpChipButtonStyle}" Command="{Binding SwitchCommand}">
+                                    <TextBlock Text="{loc:Str companion_hero_switch}"/>
+                                </Button>
+                                <Button Theme="{StaticResource CmpChipButtonStyle}" Command="{Binding DetachCommand}">
+                                    <TextBlock Text="{loc:Str companion_hero_detach}"/>
+                                </Button>
+
+                                <!-- OneWay + command: the interface exposes these as read-only, and a
+                                     TwoWay binding here would race the command and undo the click. -->
+                                <ToggleButton Theme="{StaticResource CmpChipButtonStyle}"
+                                              IsChecked="{Binding IsCompanionShown, Mode=OneWay}"
+                                              Command="{Binding ToggleShownCommand}"
+                                              ToolTip.Tip="{loc:Str companion_hero_show_tip}">
+                                    <Grid>
+                                        <TextBlock Text="👁" FontSize="13" IsVisible="{Binding IsCompanionShown}"/>
+                                        <TextBlock Text="🙈" FontSize="13" IsVisible="{Binding !IsCompanionShown}"/>
+                                    </Grid>
+                                </ToggleButton>
+
+                                <ToggleButton Theme="{StaticResource CmpChipButtonStyle}" Margin="0"
+                                              IsChecked="{Binding IsMuted, Mode=OneWay}"
+                                              Command="{Binding ToggleMuteCommand}"
+                                              ToolTip.Tip="{loc:Str companion_hero_mute_tip}">
+                                    <Grid>
+                                        <TextBlock Text="🔊" FontSize="13" IsVisible="{Binding !IsMuted}"/>
+                                        <TextBlock Text="🔇" FontSize="13" IsVisible="{Binding IsMuted}"/>
+                                    </Grid>
+                                </ToggleButton>
+                            </WrapPanel>
+
+                            <Border Theme="{StaticResource CmpGoldPlateStyle}" HorizontalAlignment="Right"
+                                    Margin="0,12,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str companion_hero_level_plate}" Theme="{StaticResource CmpGoldPlateKeyStyle}"/>
+                                    <TextBlock Text="{Binding Level}" Theme="{StaticResource CmpGoldPlateValueStyle}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ========== constellation band ========== -->
+                    <!-- ponytail: RelationshipConstellation is not ported yet (its own unit); this is
+                         the band wash at the WPF control's height so the card keeps its shape.
+                         Replace with <local:RelationshipConstellation DataContext="{Binding Constellation}"/>
+                         when it lands. -->
+                    <Border Grid.Row="1" x:Name="ConstellationBand" Height="56"
+                            Background="{StaticResource CmpConstellationBandBrush}"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ================================================================
+             COMPAT SEAM (design §6, last row of the disposition table; §7.10).
+             The WPF MainWindow partials WRITE to these by name (~100
+             references) and CompanionTabView keeps them hidden for exactly
+             that reason. Kept here so the names exist when that wiring
+             crosses. Never make them visible: the status they carry is
+             drawn properly by the pills above.
+             ================================================================ -->
+        <StackPanel Grid.Row="1" IsVisible="False" IsHitTestVisible="False">
+            <TextBlock x:Name="TxtDetachStatusCompanion" Text=""/>
+            <TextBlock x:Name="TxtCompanionStatus" Text=""/>
+            <Button x:Name="HelpBtnQuickControls" Tag="QuickControls"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
