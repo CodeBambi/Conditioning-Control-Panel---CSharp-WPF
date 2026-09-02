@@ -1,0 +1,141 @@
+<!-- PORTED from ConditioningControlPanel/Views/Deeper/NewEnhancementDialog.xaml.
+     Structure, ordering and every resource key preserved. Deviations, all forced:
+
+       WindowStyle="None"          -> SystemDecorations="None"
+       ResizeMode="NoResize"       -> CanResize="False"
+       ToolTip="{loc:Str …}"       -> ToolTip.Tip="{loc:Str …}"
+       Click="…"                   -> wired in the constructor
+       MessageBox on empty source  -> TxtError TextBlock under the source hint (Avalonia has no
+                                      MessageBox; same pattern as Dialogs/UrlPromptDialog)
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case. See the porting notes in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Deeper.NewEnhancementDialog"
+        Title="{loc:Str deeper_dialog_new_title}"
+        Height="410" Width="540"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="False"
+        SystemDecorations="None">
+
+    <Border BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1" CornerRadius="0">
+        <Grid Margin="22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- title -->
+                <RowDefinition Height="Auto"/> <!-- subtitle -->
+                <RowDefinition Height="Auto"/> <!-- media type label -->
+                <RowDefinition Height="Auto"/> <!-- media type radios -->
+                <RowDefinition Height="Auto"/> <!-- source label -->
+                <RowDefinition Height="Auto"/> <!-- source picker -->
+                <RowDefinition Height="Auto"/> <!-- source hint -->
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/> <!-- buttons -->
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="{loc:Str deeper_dialog_new_title}"
+                       Foreground="{DynamicResource DeeperAccentBrush}"
+                       FontSize="18" FontWeight="Bold" Margin="0,0,0,4"/>
+            <TextBlock Grid.Row="1" Text="{loc:Str deeper_dialog_new_subtitle}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,0,0,18"/>
+
+            <TextBlock Grid.Row="2" Text="{loc:Str deeper_dialog_media_type_label}"
+                       Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="SemiBold"
+                       Margin="0,0,0,6"/>
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,16">
+                <RadioButton x:Name="RbVideo" Content="🎬  Video" IsChecked="True" GroupName="MediaType"
+                             Foreground="{DynamicResource TextLightBrush}" FontSize="13"
+                             Padding="8,6" Margin="0,0,16,0"/>
+                <RadioButton x:Name="RbAudio" Content="🎵  Audio" GroupName="MediaType"
+                             Foreground="{DynamicResource TextLightBrush}" FontSize="13"
+                             Padding="8,6"/>
+            </StackPanel>
+
+            <TextBlock Grid.Row="4" Text="{loc:Str deeper_dialog_source_label}"
+                       Foreground="{DynamicResource TextLightBrush}" FontSize="12" FontWeight="SemiBold"
+                       Margin="0,0,0,6"/>
+
+            <Grid Grid.Row="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="TxtSource" Grid.Column="0"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                         BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                         Padding="10,8" FontSize="13"/>
+                <Button x:Name="BtnBrowse" Grid.Column="1"
+                        Padding="14,8" Margin="8,0,0,0" Cursor="Hand"
+                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                        Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
+                    <TextBlock Text="{loc:Str btn_browse}"/>
+                </Button>
+            </Grid>
+
+            <StackPanel Grid.Row="6">
+                <TextBlock Text="{loc:Str deeper_dialog_source_hint}"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                           Margin="0,6,0,0" TextWrapping="Wrap"/>
+                <TextBlock x:Name="TxtError" Text="{loc:Str deeper_dialog_source_required}"
+                           Foreground="#FFFF6B6B" FontSize="11"
+                           Margin="0,4,0,0" TextWrapping="Wrap" IsVisible="False"/>
+            </StackPanel>
+
+            <!-- Three interactive on-rails tutorials: each walks the user through
+                 producing a finished .ccpenh.json file end-to-end. -->
+            <StackPanel Grid.Row="7" Orientation="Vertical" Margin="0,12,0,0">
+                <TextBlock Text="{loc:Str deeper_tutorial_header}"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                           Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnLocalVideoTutorial"
+                            ToolTip.Tip="{loc:Str deeper_tutorial_local_video_tooltip}"
+                            Padding="10,6" Margin="0,0,8,0" Cursor="Hand" FontSize="11"
+                            Background="Transparent"
+                            Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                            BorderThickness="1">
+                        <TextBlock Text="{loc:Str deeper_tutorial_local_video_btn}"/>
+                    </Button>
+                    <Button x:Name="BtnLocalAudioTutorial"
+                            ToolTip.Tip="{loc:Str deeper_tutorial_local_audio_tooltip}"
+                            Padding="10,6" Margin="0,0,8,0" Cursor="Hand" FontSize="11"
+                            Background="Transparent"
+                            Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                            BorderThickness="1">
+                        <TextBlock Text="{loc:Str deeper_tutorial_local_audio_btn}"/>
+                    </Button>
+                    <Button x:Name="BtnTryHypnoTubeTutorial"
+                            ToolTip.Tip="{loc:Str deeper_tutorial_ht_tooltip}"
+                            Padding="10,6" Cursor="Hand" FontSize="11"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}"
+                            BorderThickness="1">
+                        <TextBlock Text="{loc:Str deeper_tutorial_ht_btn}"/>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <Button x:Name="BtnCancel" Width="90" Padding="10,8" Margin="0,0,10,0"
+                        Background="{DynamicResource PanelAccentBrush}" Foreground="White" BorderThickness="0"
+                        Cursor="Hand">
+                    <TextBlock Text="{loc:Str btn_cancel}"/>
+                </Button>
+                <Button x:Name="BtnCreate" Width="120" Padding="10,8"
+                        Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold"
+                        Cursor="Hand">
+                    <TextBlock Text="{loc:Str deeper_dialog_create}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

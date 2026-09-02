@@ -1,0 +1,102 @@
+<!-- PORTED from ConditioningControlPanel/Views/Deeper/GazePickerWindow.xaml.
+     Structure, ordering and every resource key preserved. Deviations, all forced:
+
+       WindowStyle="None" / AllowsTransparency  -> SystemDecorations="None" / TransparencyLevelHint
+       ResizeMode="NoResize"                    -> CanResize="False"
+       Visibility="Collapsed"                   -> IsVisible="False"
+       Mouse* / KeyDown events                  -> Pointer* / KeyDown, wired in code-behind
+       Cursor="SizeNWSE" etc.                   -> Avalonia's StandardCursorType names
+       TxtHint set from code                    -> {loc:Str} here; same static key
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case. See the porting notes in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Deeper.GazePickerWindow"
+        SystemDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        WindowStartupLocation="Manual">
+
+    <Grid>
+        <!-- Semi-transparent backdrop so the user can see the video underneath
+             but knows they're in pick mode. -->
+        <Border Background="{DynamicResource DeeperGazePickerBackdropBrush}"/>
+
+        <!-- The pick canvas. All click/drag happens against this. -->
+        <Canvas x:Name="PickCanvas" Background="Transparent">
+
+            <!-- The live rect outline. Fill is semi-transparent so the user
+                 can still see what's inside. Stroke + fill pick up the Deeper
+                 accent — change DeeperAccent in Colors.xaml and this follows. -->
+            <Rectangle x:Name="RectShape"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"
+                       Fill="{DynamicResource DeeperAccentTransparent40Brush}"
+                       IsVisible="False"/>
+
+            <!-- Eight resize handles. Created here so they share z-order with
+                 the rect; positioned in code. -->
+            <Rectangle x:Name="HandleNW" Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="TopLeftCorner" IsVisible="False" Tag="NW"/>
+            <Rectangle x:Name="HandleN"  Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="SizeNorthSouth" IsVisible="False" Tag="N"/>
+            <Rectangle x:Name="HandleNE" Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="TopRightCorner" IsVisible="False" Tag="NE"/>
+            <Rectangle x:Name="HandleE"  Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="SizeWestEast" IsVisible="False" Tag="E"/>
+            <Rectangle x:Name="HandleSE" Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="BottomRightCorner" IsVisible="False" Tag="SE"/>
+            <Rectangle x:Name="HandleS"  Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="SizeNorthSouth" IsVisible="False" Tag="S"/>
+            <Rectangle x:Name="HandleSW" Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="BottomLeftCorner" IsVisible="False" Tag="SW"/>
+            <Rectangle x:Name="HandleW"  Width="12" Height="12"
+                       Fill="{DynamicResource DeeperGazePickerHandleFillBrush}"
+                       Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="1.5"
+                       Cursor="SizeWestEast" IsVisible="False" Tag="W"/>
+        </Canvas>
+
+        <!-- Top hint bar with live coords + Done / Cancel. -->
+        <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,12,0,0"
+                Background="{DynamicResource DeeperGazePickerToolbarBgBrush}" Padding="14,8" CornerRadius="6"
+                BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
+            <DockPanel LastChildFill="False">
+                <TextBlock x:Name="TxtHint" DockPanel.Dock="Left" Text="{loc:Str deeper_editor_gaze_pick_hint}"
+                           Foreground="White" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,0,16,0"/>
+                <TextBlock x:Name="TxtCoords" DockPanel.Dock="Left"
+                           Foreground="{DynamicResource DeeperAccentSoftBrush}" FontSize="11"
+                           FontFamily="Consolas, Courier New" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                <Button x:Name="BtnDone" DockPanel.Dock="Right" Margin="8,0,0,0"
+                        Padding="14,6" Cursor="Hand" FontSize="11" FontWeight="SemiBold"
+                        Background="{DynamicResource DeeperAccentBrush}" Foreground="White" BorderThickness="0">
+                    <TextBlock Text="{loc:Str deeper_editor_gaze_pick_done}"/>
+                </Button>
+                <Button x:Name="BtnCancel" DockPanel.Dock="Right"
+                        Padding="14,6" Cursor="Hand" FontSize="11"
+                        Background="Transparent" Foreground="White"
+                        BorderBrush="{DynamicResource DeeperGazePickerCancelBorderBrush}" BorderThickness="1">
+                    <TextBlock Text="{loc:Str deeper_editor_gaze_pick_cancel}"/>
+                </Button>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>
