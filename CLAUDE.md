@@ -132,11 +132,26 @@ Pure `git mv`, zero content edits, namespace unchanged. Verify with `git diff -M
 rename at 100% similarity, then build both projects. If Core rejects the file, leave it in the head
 and record why — a partial move is a correct outcome, not a failure.
 
+## Stacked PRs
+
+Every change to this repo lands as a layer of the port's stacked-PR chain, never as a direct push
+to `main`. One-time setup per clone:
+
+```bash
+gh extension install github/gh-stack
+gh skill install github/gh-stack gh-stack --agent claude-code   # agent instructions, gitignored under .claude/
+git config rerere.enabled true
+```
+
+A layer is one concern, ≤ ~1,000 changed lines (rename-aware), and builds and renders on its
+own. Use the non-interactive forms only: `gh stack view --json`, `gh stack submit --auto`,
+`gh stack merge <pr> --yes`.
+
 ## Agent skills
 
 ### Issue tracker
 
-GitHub Issues on the upstream repo `CodeBambi/Conditioning-Control-Panel---CSharp-WPF`, via `gh` with an explicit `--repo`. See `docs/agents/issue-tracker.md`.
+GitHub Issues on this repo, via `gh`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
