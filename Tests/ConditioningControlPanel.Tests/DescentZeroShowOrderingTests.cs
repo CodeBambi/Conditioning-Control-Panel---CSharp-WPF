@@ -109,6 +109,172 @@ public class DescentZeroShowOrderingTests
         Assert.False(service.CanOpenCeremony());
     }
 
+    // ------------------------------------------------- the same-session deferral (#1111)
+
+    /// <summary>
+    /// THE BUG v6.9.0 SHIPPED. The sync heartbeat is 120 seconds and every response still carries
+    /// <c>descent_migration.required</c> — by design, because the server keeps offering until a
+    /// choice actually lands. With nothing but the "a window is already up" guard in front of it,
+    /// "Not tonight" bought about two minutes before the fullscreen ceremony came back, and back,
+    /// and back; #1111 (RopePunny, Michaela) both rolled back to 6.8.6 over it.
+    ///
+    /// <para>The whole fix is the fourth input to the open predicate, so that is what this pins:
+    /// an uncommitted close latches, and every re-offer after it is a no-op.</para>
+    /// </summary>
+    [Fact]
+    public void AnUncommittedClose_StopsTheHeartbeatReopeningTheCeremony()
+    {
+        var service = new DescentMigrationService();
+        service.HoldOffers();               // keeps the open path off a dispatcher that is not there
+
+        service.OfferReceived(AnOffer());
+        Assert.False(service.DeferredThisSession);
+
+        // "Not tonight" — the window leaves with nothing written.
+        service.NoteCeremonyClosed(committed: false);
+
+        Assert.True(service.DeferredThisSession);
+        Assert.False(service.IsCeremonyOpen);
+
+        // The next four heartbeats. Each one re-sends the same standing offer and each one is
+        // turned away — this is the loop, and this is it not happening.
+        for (var i = 0; i < 4; i++) service.OfferReceived(AnOffer());
+
+        Assert.False(service.IsCeremonyOpen);
+        Assert.False(service.CanOpenCeremony());
+    }
+
+    /// <summary>
+    /// THE DEFERRAL DOES NOT COST THE WITHHOLD. <c>_liveOffer</c> is never cleared, so the spiral
+    /// surfaces stay dark for the rest of a deferred session exactly as they did before — the
+    /// documented intent, and the thing a fix that "cancelled" the offer instead would have broken.
+    /// </summary>
+    [Fact]
+    public void ADeferredSession_StillHoldsTheOfferAndTheWithhold()
+    {
+        var service = new DescentMigrationService();
+        service.HoldOffers();
+
+        service.OfferReceived(AnOffer());
+        service.NoteCeremonyClosed(committed: false);
+        service.OfferReceived(AnOffer());
+
+        Assert.NotNull(service.LiveOffer);
+        Assert.Equal(240, service.LiveOffer!.DevotionDays);
+        Assert.True(DescentMigrationService.SpiralWithheldFor(
+            new ConditioningControlPanel.Models.AppSettings { DescentMigrationOffered = true },
+            offerInHand: service.LiveOffer is not null, ceremonyOpen: false));
+    }
+
+    /// <summary>
+    /// THE SECOND DOOR INTO THE SAME LOOP. <see cref="DescentMigrationService.ReleaseOffers"/>
+    /// re-opens the moment <c>CanOpenCeremony</c> passes, so a deferral enforced only inside
+    /// <c>OfferReceived</c> would still be walked straight through by a catch-up show that ends
+    /// after the subject closed the ceremony. The latch lives in the predicate for exactly this.
+    /// </summary>
+    [Fact]
+    public void AHoldReleaseCycleAfterADeferral_DoesNotReopen()
+    {
+        var service = new DescentMigrationService();
+        service.HoldOffers();
+        service.OfferReceived(AnOffer());
+        service.NoteCeremonyClosed(committed: false);
+
+        // A fullscreen show comes and goes on top of the deferred session.
+        service.HoldOffers();
+        Assert.False(service.CanOpenCeremony());
+        service.ReleaseOffers();
+
+        Assert.False(service.CanOpenCeremony());
+        Assert.False(service.IsCeremonyOpen);
+
+        // ...and the original hold lifting is not a way back in either.
+        service.ReleaseOffers();
+        Assert.Equal(0, service.OfferHoldDepth);
+        Assert.False(service.CanOpenCeremony());
+    }
+
+    /// <summary>
+    /// A COMMITTED CLOSE IS NOT A DEFERRAL. It does not need to be — the server stops sending
+    /// <c>required</c> once the choice lands, and ProfileSyncService turns the re-send away on the
+    /// pending choice long before this — but latching on a commit would be a lie in the state, and
+    /// the flag is read by the predicate that decides whether anything can ever open again.
+    /// </summary>
+    [Fact]
+    public void ACommittedClose_DoesNotDefer()
+    {
+        var service = new DescentMigrationService();
+        service.HoldOffers();
+        service.OfferReceived(AnOffer());
+
+        service.NoteCeremonyClosed(committed: true);
+
+        Assert.False(service.DeferredThisSession);
+        Assert.False(service.IsCeremonyOpen);
+
+        service.ReleaseOffers();
+        Assert.True(service.CanOpenCeremony());
+    }
+
+    /// <summary>
+    /// A CEREMONY THAT NEVER PAINTED NEVER DEFERRED. A held offer — the catch-up crack's ordering
+    /// guarantee, and the same shape as a run muted with <c>CCP_DESCENT_CEREMONY=off</c> — opens no
+    /// window and closes none, so nothing latches and the release replays it exactly as it always
+    /// did. The latch is armed by a user closing something, never by a sync.
+    /// </summary>
+    [Fact]
+    public void AHeldOfferThatNeverOpened_IsNotADeferral()
+    {
+        var service = new DescentMigrationService();
+        service.HoldOffers();
+
+        service.OfferReceived(AnOffer());
+        service.OfferReceived(AnOffer());   // and again, the way the heartbeat does
+
+        Assert.False(service.DeferredThisSession);
+
+        service.ReleaseOffers();
+        Assert.True(service.CanOpenCeremony());
+    }
+
+    /// <summary>
+    /// THE CLOSE EVENT IS UNCHANGED. <c>CeremonyClosed</c> still carries "was it committed" to the
+    /// Year One ignition on every exit path — the deferral latch is set beside the raise, not
+    /// instead of it, so a subscriber added for the fuse still hears both halves.
+    /// </summary>
+    [Fact]
+    public void TheCloseEvent_StillFiresWithTheCommittedFlag()
+    {
+        var service = new DescentMigrationService();
+        var heard = new System.Collections.Generic.List<bool>();
+        service.CeremonyClosed += (_, committed) => heard.Add(committed);
+
+        service.NoteCeremonyClosed(committed: false);
+        service.NoteCeremonyClosed(committed: true);
+
+        Assert.Equal(new[] { false, true }, heard);
+    }
+
+    /// <summary>
+    /// THE OPEN PREDICATE, as arithmetic. Four inputs, and every one of them is a veto — the same
+    /// shape as <c>SpiralWithheldFor</c>, and testable without a dispatcher for the same reason.
+    /// </summary>
+    [Fact]
+    public void TheOpenPredicate_VetoesOnEveryInput()
+    {
+        Assert.True(DescentMigrationService.ShouldOpenCeremonyFor(
+            offerInHand: true, ceremonyOpen: false, offerHold: 0, deferredThisSession: false));
+
+        Assert.False(DescentMigrationService.ShouldOpenCeremonyFor(
+            offerInHand: false, ceremonyOpen: false, offerHold: 0, deferredThisSession: false));
+        Assert.False(DescentMigrationService.ShouldOpenCeremonyFor(
+            offerInHand: true, ceremonyOpen: true, offerHold: 0, deferredThisSession: false));
+        Assert.False(DescentMigrationService.ShouldOpenCeremonyFor(
+            offerInHand: true, ceremonyOpen: false, offerHold: 1, deferredThisSession: false));
+        Assert.False(DescentMigrationService.ShouldOpenCeremonyFor(
+            offerInHand: true, ceremonyOpen: false, offerHold: 0, deferredThisSession: true));
+    }
+
     // ------------------------------------------------------------ the heartbeat
 
     /// <summary>
