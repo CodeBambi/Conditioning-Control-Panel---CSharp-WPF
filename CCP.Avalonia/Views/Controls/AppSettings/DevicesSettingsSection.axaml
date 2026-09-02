@@ -1,0 +1,572 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AppSettings/DevicesSettingsSection.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     directly. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"     -> Theme="{StaticResource X}"
+       <Style x:Key="SettingChip">    -> <ControlTheme> in UserControl.Resources (Border is not
+                                         templated, so property-only is safe); IsMouseOver trigger
+                                         becomes a ^:pointerover selector
+       ToolTip="..."                  -> ToolTip.Tip="..."
+       helpers:EmojiTextBlock         -> TextBlock
+       Image + EmojiToImageSource     -> <TextBlock Text="👁"/> (Avalonia draws colour emoji natively)
+       <Button.Resources><Style Border CornerRadius/> -> CornerRadius="..." on the Button
+       Content="{loc:Str …}"          -> a <TextBlock> child (Avalonia parses "_" in Content as an
+                                         access key and every loc key here is snake_case)
+       ComboBox / Slider (implicit)   -> Theme="{StaticResource DarkComboBoxStyle}" / PinkSlider -
+                                         the WPF file relies on the head's implicit ComboBox
+                                         (Inputs.xaml:42) and Slider (Theme/MainWindow.xaml:341,
+                                         BasedOn PinkSlider); Avalonia has no implicit style of
+                                         ours, so the keyed twins are named
+       x:FieldModifier="internal"     -> dropped; MainWindow reaches these by name on WPF and the
+                                         Avalonia head has no such host yet. x:Names are kept.
+
+     Sliders carry Value="0.6"/"0.5" so the render matches the TxtWakeVal/TxtCmdVal defaults; WPF
+     leaves them unset and fills from settings. CmbMicDevice carries one placeholder item ("System
+     default", the WPF list's first entry). Every handler is stubbed - see the code-behind. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.DevicesSettingsSection"
+             d:DesignWidth="700"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <!-- ================================================================
+         SETTINGS · DEVICES  (UX restructure, Phase 2)
+
+         The single source of truth for every piece of hardware the app
+         touches, plus the two escape hatches that are physically typed
+         rather than clicked (panic key, global hotkeys).
+
+         See the WPF original's header for what moved here and what died
+         with it. Quiet surface: no storyboards, no ambient loops.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <!-- ponytail: local copy of DevicesSettingsSection.xaml:SettingChip, hoist when a second view needs it -->
+        <ControlTheme x:Key="SettingChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{StaticResource SectionHueDevicesBorderBrush}"/>
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <StackPanel>
+
+        <!-- ============================================================
+             WEBCAM & EYE TRACKING
+             ============================================================ -->
+        <Border x:Name="WebcamCard"
+                CornerRadius="12" Padding="0" Margin="0,0,0,10"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{StaticResource SectionHueDevicesBorderBrush}" BorderThickness="1">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDevicesWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDevicesBrush}"/>
+                <StackPanel Margin="16,13,16,13">
+
+                    <!-- Header -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
+                                Background="{DynamicResource AccentTintedBgBrush}"
+                                BorderBrush="{StaticResource SectionHueDevicesBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="👁" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Theme="{StaticResource SectionHeader}"
+                                       Foreground="{StaticResource SectionHueDevicesBrush}"
+                                       Text="{loc:Str set2_devices_webcam_title}" FontSize="14" Margin="0"/>
+                            <TextBlock Text="{loc:Str set2_devices_webcam_sub}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- ── The engine bar, re-hosted. Same x:Names, same handlers. ── -->
+                    <Border x:Name="LabWebcamEngineBar"
+                            CornerRadius="12" Padding="14" Margin="0,0,0,4"
+                            Background="{DynamicResource PanelBgBrush}"
+                            BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1">
+                        <StackPanel>
+                            <WrapPanel Orientation="Horizontal">
+
+                                <!-- 6-blink → stop & recalibrate shortcut. THE toggle now. -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,20,4"
+                                            ToolTip.Tip="Blink fast 6 times in a row to stop everything and jump to recalibration.">
+                                    <CheckBox x:Name="ChkBlinkRecalWebcamBar"
+                                              Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Blink to recalibrate" Foreground="{DynamicResource TextSecondaryBrush}"
+                                               FontSize="11" VerticalAlignment="Center" Margin="7,0,0,0"/>
+                                </StackPanel>
+
+                                <!-- camera -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
+                                    <TextBlock Text="CAM" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New"
+                                               FontSize="10.5" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                    <ComboBox x:Name="CmbWebcamDevice" Width="170"
+                                              Theme="{StaticResource DarkComboBoxStyle}"
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="Pick the capture device to use for blink / gaze tracking. If your physical webcam doesn't show its in-use light, you may have a virtual camera selected (OBS, Snap, etc.) — switch here, then hit Start."/>
+                                    <Button x:Name="BtnWebcamDeviceRefresh" Content="↻"
+                                            ToolTip.Tip="Re-scan connected video-capture devices."
+                                            Padding="9,3" Margin="6,0,0,0" VerticalAlignment="Center"
+                                            Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                            FontSize="12" FontWeight="Bold" Cursor="Hand" CornerRadius="8"/>
+                                </StackPanel>
+
+                                <!-- monitor -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,12,4">
+                                    <TextBlock Text="MON" Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New"
+                                               FontSize="10.5" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                    <ComboBox x:Name="CmbWebcamMonitor" Width="150"
+                                              Theme="{StaticResource DarkComboBoxStyle}"
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="{loc:Str webcam_monitor_tooltip}"/>
+                                </StackPanel>
+
+                                <!-- status pill -->
+                                <Border x:Name="LabTrackerPill" CornerRadius="9" Padding="11,7"
+                                        Margin="0,4,16,4" VerticalAlignment="Center"
+                                        Background="{DynamicResource PanelBgBrush}"
+                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse x:Name="LabTrackerDot" Width="8" Height="8"
+                                                 Fill="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtWebcamDebugStatus" Text="{loc:Str rf_webcam_stopped}"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontFamily="Consolas, Courier New" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- actions -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,4">
+                                    <Button x:Name="BtnWebcamReviewPrivacy" Content="Privacy info"
+                                            ToolTip.Tip="{loc:Str tooltip_webcam_review_privacy}"
+                                            Padding="10,6" Margin="0,0,6,0" VerticalAlignment="Center"
+                                            Background="Transparent" Foreground="{DynamicResource TextSecondaryBrush}"
+                                            BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                            FontSize="11" Cursor="Hand" CornerRadius="8"/>
+                                    <Button x:Name="BtnWebcamDebugCalibrate" Content="Calibrate"
+                                            ToolTip.Tip="{loc:Str tooltip_webcam_calibrate}"
+                                            Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
+                                            Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                            FontSize="11" FontWeight="SemiBold" Cursor="Hand" CornerRadius="8"/>
+                                    <Button x:Name="BtnWebcamDebugQuickRecal" Content="Quick Recal"
+                                            ToolTip.Tip="One-dot drift correction. Stare at the pink center dot for ~2 s — a constant nudge is added to the cursor so it lands where you're looking, no full recalibration needed."
+                                            Padding="11,6" Margin="0,0,6,0" VerticalAlignment="Center"
+                                            Background="Transparent" Foreground="{DynamicResource PinkBrush}"
+                                            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                            FontSize="11" FontWeight="SemiBold" Cursor="Hand" CornerRadius="8"/>
+                                    <Button x:Name="BtnWebcamDebugStart" Content="Start tracking"
+                                            ToolTip.Tip="{loc:Str tooltip_webcam_start_tracking}"
+                                            Padding="14,7" VerticalAlignment="Center"
+                                            Background="{DynamicResource SuccessGreenBrush}" Foreground="Black" BorderThickness="0"
+                                            FontWeight="Bold" FontSize="12" Cursor="Hand" CornerRadius="9"/>
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <!-- Advanced / diagnostics (everything from the old card preserved) -->
+                            <Expander Header="Advanced" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,12,0,0">
+                                <StackPanel Margin="4,8,0,0">
+                                    <WrapPanel Orientation="Horizontal">
+                                        <Button x:Name="BtnWebcamDebugTrackerTest" Content="Tracker Test"
+                                                ToolTip.Tip="{loc:Str tooltip_webcam_tracker_test}"
+                                                Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
+                                                Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
+                                                BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
+                                                FontSize="11" FontWeight="SemiBold" Cursor="Hand" CornerRadius="8"/>
+                                        <Button x:Name="BtnWebcamRevokeConsent" Content="Revoke consent"
+                                                ToolTip.Tip="Stops webcam tracking, deletes calibration data, and clears your consent. You'll be re-prompted next time you enable a webcam feature."
+                                                Padding="11,6" Margin="0,0,10,8" VerticalAlignment="Center"
+                                                Background="Transparent" Foreground="{DynamicResource DangerBrush}"
+                                                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
+                                                FontSize="11" FontWeight="SemiBold" Cursor="Hand" CornerRadius="8"/>
+                                    </WrapPanel>
+
+                                    <!-- The three diagnostics switches: a cluster of >=3, so a 2-column chip grid. -->
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="6"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0" Grid.Column="0" Theme="{StaticResource SettingChip}"
+                                                ToolTip.Tip="{loc:Str tooltip_webcam_show_debug_cursor}">
+                                            <Grid MinHeight="22">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Show debug gaze cursor"
+                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkWebcamDebugCursor"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="0" Grid.Column="2" Theme="{StaticResource SettingChip}"
+                                                ToolTip.Tip="Keeps the calibration fresh automatically: when you click somewhere while looking at it, the gaze mapping gets a tiny nudge toward the click. Corrects the slow drift that used to need a Quick Recal.">
+                                            <Grid MinHeight="22">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Auto drift correction"
+                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkWebcamDriftCorrection"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                                                Theme="{StaticResource SettingChip}"
+                                                ToolTip.Tip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors.">
+                                            <Grid MinHeight="22">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Restrict gaze-reactive effects to the calibrated screen"
+                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="12.5" FontWeight="SemiBold" TextWrapping="Wrap"
+                                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkRestrictGazeToCalScreen"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock x:Name="TxtWebcamDebugCounters"
+                                               Text="Face: — | Blinks: 0 | Gaze: —"
+                                               Foreground="{DynamicResource SuccessGreenBrush}" FontFamily="Consolas, Courier New" FontSize="12"
+                                               FontWeight="SemiBold" Margin="0,2,0,0"/>
+                                    <Border Background="{DynamicResource PreviewBgBrush}" CornerRadius="8" Padding="10" Margin="0,8,0,0">
+                                        <TextBlock x:Name="TxtWebcamDebugLog" Text="(events will appear here)"
+                                                   Foreground="{DynamicResource SuccessGreenBrush}" FontFamily="Consolas, Courier New" FontSize="11"
+                                                   TextWrapping="Wrap" MinHeight="60"/>
+                                    </Border>
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================================================
+             MICROPHONE
+             ============================================================ -->
+        <Border x:Name="MicrophoneCard"
+                CornerRadius="12" Padding="0" Margin="0,0,0,10"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{StaticResource SectionHueDevicesBorderBrush}" BorderThickness="1">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDevicesWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDevicesBrush}"/>
+                <StackPanel Margin="16,13,16,13">
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
+                                Background="{DynamicResource AccentTintedBgBrush}"
+                                BorderBrush="{StaticResource SectionHueDevicesBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="🎤" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Theme="{StaticResource SectionHeader}"
+                                       Foreground="{StaticResource SectionHueDevicesBrush}"
+                                       Text="{loc:Str set2_devices_mic_title}" FontSize="14" Margin="0"/>
+                            <TextBlock Text="{loc:Str set2_devices_mic_sub}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Input device -->
+                    <Grid MinHeight="34" Margin="0,0,0,6"
+                          ToolTip.Tip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards).">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Theme="{StaticResource SettingLabel}" Text="{loc:Str set2_devices_mic_input}"
+                                   FontSize="12" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" x:Name="CmbMicDevice"
+                                  Theme="{StaticResource DarkComboBoxStyle}"
+                                  Margin="6,0" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                  SelectedIndex="0"
+                                  ToolTip.Tip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards).">
+                            <!-- ponytail: placeholder - PopulateMicDevices fills this from SpeechService on WPF -->
+                            <ComboBoxItem Content="System default"/>
+                        </ComboBox>
+                        <Button Grid.Column="2" x:Name="BtnMicRefresh" Content="↻"
+                                Padding="10,3" Background="#33FF69B4" Foreground="White" FontSize="12"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Re-scan microphones."/>
+                    </Grid>
+
+                    <!-- Wake word -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip.Tip="{loc:Str set2_devices_wake_word_hint}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_wake_word}"
+                                   Theme="{StaticResource SettingLabel}" FontSize="12"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkSpeechWakeWord"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </Grid>
+                    <Grid Margin="22,0,0,8"
+                          ToolTip.Tip="Comma-separated wake phrases (e.g. hey bambi, hey bimbo). Short common-word phrases recognize best.">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_wake_phrases}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox x:Name="TxtSpeechWakeWords" Grid.Column="1"
+                                 Text="hey bambi" FontSize="11"
+                                 Foreground="{DynamicResource TextLightBrush}" Background="{DynamicResource SurfaceBgBrush}"
+                                 BorderBrush="{DynamicResource PanelAccentHoverBrush}" BorderThickness="1" Padding="6,3"
+                                 ToolTip.Tip="Comma-separated wake phrases (e.g. hey bambi, hey bimbo). Short common-word phrases recognize best."/>
+                    </Grid>
+
+                    <!-- Wake sensitivity. Height="32" on both sliders: Theme/PinkSlider sets Height=18,
+                         which clips the Fluent slider's thumb and track in a 34px row (found by the
+                         render); the local value overrides it. -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip.Tip="{loc:Str set2_devices_wake_sensitivity_hint}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="46"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Theme="{StaticResource SettingLabel}" Text="{loc:Str set2_devices_wake_sensitivity}"
+                                   FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Slider Grid.Column="1" x:Name="SliderWakePrecision" Theme="{StaticResource PinkSlider}" Height="32"
+                                Minimum="0.3" Maximum="0.95" SmallChange="0.01" LargeChange="0.05" Value="0.6"
+                                Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtWakeVal" Text="0.60"
+                                   Theme="{StaticResource ValueLabel}" FontSize="12" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Command match precision -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip.Tip="{loc:Str set2_devices_cmd_precision_hint}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="46"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Theme="{StaticResource SettingLabel}" Text="{loc:Str set2_devices_cmd_precision}"
+                                   FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Slider Grid.Column="1" x:Name="SliderCmdPrecision" Theme="{StaticResource PinkSlider}" Height="32"
+                                Minimum="0.3" Maximum="0.95" SmallChange="0.01" LargeChange="0.05" Value="0.5"
+                                Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtCmdVal" Text="0.50"
+                                   Theme="{StaticResource ValueLabel}" FontSize="12" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Push-to-talk -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip.Tip="{loc:Str set2_devices_ptt_hint}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_ptt}"
+                                   Theme="{StaticResource SettingLabel}" FontSize="12"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkSpeechPushToTalk"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </Grid>
+                    <Grid Margin="22,0,0,8"
+                          ToolTip.Tip="Click, then press the key you want to use for push-to-talk.">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_ptt_key}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TxtPttKey" Grid.Column="1" Text="F8"
+                                   FontSize="11" FontWeight="Bold" Foreground="{DynamicResource SuccessGreenBrush}"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="BtnSetPttKey" Grid.Column="2"
+                                FontSize="11" Padding="10,3"
+                                Theme="{StaticResource OutlineButton}"
+                                ToolTip.Tip="Click, then press the key you want to use for push-to-talk.">
+                            <TextBlock Text="{loc:Str set2_btn_set_key}"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Headphones / barge-in -->
+                    <Grid MinHeight="34" ToolTip.Tip="{loc:Str set2_devices_headphones_hint}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str set2_devices_headphones}"
+                                   Theme="{StaticResource SettingLabel}" FontSize="12"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkHeadphones"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================================================
+             PANIC KEY & SHORTCUTS
+             ============================================================ -->
+        <Border x:Name="SafetyCard"
+                CornerRadius="12" Padding="0"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{StaticResource SectionHueDevicesBorderBrush}" BorderThickness="1">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDevicesWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDevicesBrush}"/>
+                <StackPanel Margin="16,13,16,13">
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
+                                Background="{DynamicResource AccentTintedBgBrush}"
+                                BorderBrush="{StaticResource SectionHueDevicesBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="⌨️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Theme="{StaticResource SectionHeader}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource SectionHueDevicesBrush}"
+                                   Text="{loc:Str set2_devices_safety_title}" FontSize="14" Margin="0"/>
+                    </StackPanel>
+
+                    <!-- Panic key rebind. THE rebind surface; the System popup shows it read-only. -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip.Tip="{loc:Str tooltip_click_to_change_panic_key}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str btn_escape}"
+                                   Theme="{StaticResource SettingLabel}" FontSize="12"
+                                   Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" x:Name="BtnPanicKey"
+                                Theme="{StaticResource OutlineButton}"
+                                Padding="12,6" VerticalAlignment="Center"
+                                ToolTip.Tip="{loc:Str tooltip_click_to_change_panic_key}">
+                            <TextBlock Text="{loc:Str btn_escape}"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- v6.8.5: what ONE panic press means. On (default) = stop everything at
+                         once. Off = the pre-6.8.5 hand-off ladder. -->
+                    <Grid Margin="0,0,0,6" ToolTip.Tip="{loc:Str tooltip_panic_overrides_all}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock Text="{loc:Str setting_panic_overrides_all}"
+                                       Theme="{StaticResource SettingLabel}" FontSize="12"/>
+                            <TextBlock Text="{loc:Str tooltip_panic_overrides_all}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="ChkPanicOverridesAll"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Optional pause-key rebind. Same capture pattern as the panic key above;
+                         unbound by default, and Escape during capture clears it again. -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip.Tip="{loc:Str tooltip_pause_key}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_pause_key}"
+                                   Theme="{StaticResource SettingLabel}" FontSize="12"
+                                   Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" x:Name="BtnPauseKey"
+                                Theme="{StaticResource OutlineButton}"
+                                Padding="12,6" VerticalAlignment="Center"
+                                ToolTip.Tip="{loc:Str tooltip_pause_key}">
+                            <TextBlock Text="{loc:Str btn_pause_key_unbound}"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Disable the panic key entirely (double-confirmed in the handler).
+                         DANGER ROW: the consequence line stays VISIBLE per the contract. -->
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock Text="{loc:Str setting_no_panic}"
+                                       Foreground="{DynamicResource DangerBrush}"
+                                       FontSize="12" FontWeight="SemiBold"/>
+                            <TextBlock Text="{loc:Str tooltip_danger_completely_disables_panic_key_you_won}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="ChkNoPanic"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Global hotkeys. The editor is ChatShortcutCaptureDialog; this is a second
+                         launcher for it. No setting is written here. -->
+                    <Grid MinHeight="34" Margin="0,0,0,6" ToolTip.Tip="{loc:Str tooltip_change_chat_shortcut}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str tooltip_change_chat_shortcut}"
+                                   Theme="{StaticResource SettingLabel}" FontSize="12" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" Margin="0,0,10,0"/>
+                        <Button Grid.Column="1" x:Name="BtnChatShortcutDevices"
+                                Theme="{StaticResource OutlineButton}" Padding="12,5"
+                                ToolTip.Tip="{loc:Str tooltip_change_chat_shortcut}">
+                            <TextBlock x:Name="TxtChatShortcutLabelDevices" Text="Ctrl+T"
+                                       Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="11"/>
+                        </Button>
+                    </Grid>
+                    <Grid MinHeight="34" ToolTip.Tip="{loc:Str tooltip_change_camera_shortcut}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str tooltip_change_camera_shortcut}"
+                                   Theme="{StaticResource SettingLabel}" FontSize="12" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" Margin="0,0,10,0"/>
+                        <Button Grid.Column="1" x:Name="BtnCameraShortcutDevices"
+                                Theme="{StaticResource OutlineButton}" Padding="12,5"
+                                ToolTip.Tip="{loc:Str tooltip_change_camera_shortcut}">
+                            <TextBlock x:Name="TxtCameraShortcutLabelDevices" Text="Ctrl+Alt+K"
+                                       Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="11"/>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>
