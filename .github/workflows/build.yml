@@ -4,6 +4,18 @@ name: build
 # 4,900-test suite still passes. This adds that, and nothing else - no linting, no packaging,
 # no release automation.
 
+# The workflow only builds and tests - it never writes to the repository, so the token it gets
+# should not be able to either. Explicitly declaring any permissions block also drops every
+# scope that is not listed, which is the point.
+permissions:
+  contents: read
+
+# Pushing a new commit to a PR makes the run already in flight worthless. Cancel it instead of
+# paying for both. Keyed on the ref, so main and each PR queue independently.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
