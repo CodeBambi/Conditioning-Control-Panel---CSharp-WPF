@@ -1,0 +1,142 @@
+<!-- PORTED from ConditioningControlPanel/Windows/EmiCodexWindow.xaml.
+     Structure, ordering, spacing and every literal brush preserved so the two diff cleanly.
+
+     NOT a WebView2 host, despite the wave it arrived in. This window is the PLAIN COPY - the
+     fail-soft body that runs precisely when the hosted page cannot - so it has no browser in it
+     and gets no controls:WebHost. Its WebView2-hosted twin is EmiCodex's page, a different file.
+
+     Documented deviations, all forced:
+
+       <Style x:Key TargetType>        -> <ControlTheme x:Key TargetType>  (with a Template, or a
+                                          keyed theme for a templated control draws nothing)
+       ControlTemplate.Triggers        -> <Style Selector="^:pointerover /template/ Border#Bd">
+       <ContentPresenter/>             -> Content/ContentTemplate TemplateBindings (Avalonia's
+                                          presenter does not find its content implicitly)
+       Style="{StaticResource X}"      -> Theme="{StaticResource X}"
+       Content="{loc:Str …}" on Button -> a <TextBlock> child (Avalonia parses "_" in Content as an
+                                          access key and every key here is snake_case)
+       ListBox.ItemContainerStyle      -> <Window.Styles><Style Selector="ListBoxItem">, NOT a
+                                          ControlTheme: property-only would null the container's
+                                          template and the list would draw empty rows
+       ResizeMode="CanResizeWithGrip"  -> CanResize="True"  (Avalonia has no resize grip)
+       AllowsTransparency="False"      -> dropped; opaque is the Avalonia default, and the reason
+                                          the original states it out loud is a WPF-only hazard
+       SelectionChanged in markup      -> wired in the constructor, per the porting convention
+       Text="{loc:Str emi_codex_plain_note}" on WhyText -> set from the code-behind. The WPF value
+                                          was dead - the constructor overwrote it on every path -
+                                          and a live {loc:Str} would win it back on a language
+                                          change.
+
+     Every brush stays a literal, exactly as the original insists: this window's whole job is to be
+     the thing that still works, so it reaches into no resource dictionary. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.EmiCodexWindow"
+        Title="{loc:Str emi_codex_title}"
+        Width="880" Height="700"
+        MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True"
+        Background="#12121F"
+        Foreground="#E0E0E0"
+        FontSize="13">
+
+    <Window.Resources>
+        <ControlTheme x:Key="CodexButton" TargetType="Button">
+            <Setter Property="Background" Value="#26263F"/>
+            <Setter Property="Foreground" Value="#E8E8F4"/>
+            <Setter Property="BorderBrush" Value="#3D3D60"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="#33334F"/>
+                <Setter Property="BorderBrush" Value="#FF69B4"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- The WPF ItemContainerStyle, setters verbatim. -->
+        <Style Selector="ListBox#ChapterList > ListBoxItem">
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- header: what this is, and why it looks like this -->
+        <Border Grid.Row="0" Background="#1A1A2E" BorderBrush="#2D2D48" BorderThickness="0,0,0,1" Padding="18,14">
+            <StackPanel>
+                <TextBlock Text="{loc:Str emi_codex_plain_heading}"
+                           FontSize="17" FontWeight="SemiBold" Foreground="#FF9ECF"/>
+                <!-- ponytail: set from code (ExplainFor), so it does NOT follow a language change
+                     the way a {loc:Str} would. The key depends on which failure got us here, which
+                     is a constructor argument; bind it when that reason becomes observable. -->
+                <TextBlock x:Name="WhyText"
+                           Margin="0,5,0,0" TextWrapping="Wrap" Foreground="#A8A8C0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- body: the contents list on the left, the chapter on the right -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" MinWidth="160"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" MinWidth="240"/>
+            </Grid.ColumnDefinitions>
+
+            <ListBox x:Name="ChapterList"
+                     Grid.Column="0"
+                     Background="#15152A" BorderThickness="0"
+                     Foreground="#E0E0E0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+
+            <GridSplitter Grid.Column="1" Width="3" Background="#2D2D48"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+            <ScrollViewer x:Name="PageScroll" Grid.Column="2"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="22,18,22,24">
+                <StackPanel x:Name="PageBody"/>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- footer: the way out to the website, and the way out of the window -->
+        <Border Grid.Row="2" Background="#1A1A2E" BorderBrush="#2D2D48" BorderThickness="0,1,0,0" Padding="18,12">
+            <Grid>
+                <Button x:Name="ManualButton"
+                        HorizontalAlignment="Left"
+                        Theme="{StaticResource CodexButton}">
+                    <TextBlock Text="{loc:Str emi_codex_open_site}"/>
+                </Button>
+                <Button x:Name="CloseButton"
+                        HorizontalAlignment="Right"
+                        Theme="{StaticResource CodexButton}">
+                    <TextBlock Text="{loc:Str emi_codex_close}"/>
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
