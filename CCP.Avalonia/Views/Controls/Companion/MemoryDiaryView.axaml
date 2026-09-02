@@ -1,0 +1,327 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/MemoryDiaryView.xaml.
+     Structure, order, spacing and every resource key are preserved so the two can be diffed.
+     Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"       ->  Theme="{StaticResource X}"
+       {loc:Str key}                    ->  {loc:Str key} (the Avalonia twin in CCP.Avalonia/Localization)
+       DataTemplate.Triggers            ->  Classes.boundary/.dormant/.editing bound on the card's
+                                            root Grid + selectors in <UserControl.Styles>. A Style
+                                            setter outranks a ControlTheme setter, so the WPF
+                                            "swap the Style" triggers become the swapped style's
+                                            setters written directly on the same Border.
+       Trigger IsMouseOver              ->  :pointerover
+       Visibility + CmpBoolToVis        ->  IsVisible="{Binding X}" / "{Binding !X}"
+       <Image .. CmpEmojiToImage>       ->  <TextBlock Text="📌"/> (colour emoji render natively)
+       RelativeSource AncestorType      ->  #Root (x:Name on the UserControl)
+       ToolTip="..."                    ->  ToolTip.Tip="..."
+       IsVisibleChanged                 ->  PropertyChanged (filtered on IsVisibleProperty in code)
+       d:DataContext MockMemoryDiaryVm  ->  dropped; MemoryDiaryViewModel (code-behind) carries the
+                                            same artboard data
+       CompanionWheelRelay              ->  dropped; Avalonia's ScrollViewer chains an unusable
+                                            wheel notch to its parent by itself (IsScrollChainingEnabled) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.MemoryDiaryView"
+             x:Name="Root"
+             x:DataType="local:MemoryDiaryViewModel"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             mc:Ignorable="d"
+             d:DesignWidth="660" d:DesignHeight="560">
+
+    <!-- ================================================================
+         Z3 — WHAT SHE KNOWS ABOUT YOU (her diary).
+         The trust surface, and deliberately NOT paywalled: everything
+         here is local and deterministic, so a free user sees all of it.
+
+         Layout: gold profile strip ▸ kind filter chips ▸ the fact wall
+         ▸ footer (storage note + "Forget everything…").
+
+         Ordering and filtering are done by the viewmodel
+         (boundary ▸ pinned ▸ salience ▸ dormant). The view never sorts.
+
+         Kind is legible before a word is read: every card carries a thin
+         kind-coloured rail and a kind-coloured tag. Boundary cards keep
+         the theme's steel border instead so the consent record reads
+         differently from a running joke at a glance.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- kind → accent. Local to this control (the assembler promotes shared candidates). -->
+            <local:CompanionFactKindBrushConverter x:Key="CmpSurfFactKindBrush"/>
+            <local:CompanionFactKindBrushConverter x:Key="CmpSurfFactKindRailBrush" Soft="True"/>
+
+            <!-- gold read-only stat chip -->
+            <DataTemplate x:Key="CmpSurfProfileStatTemplate" x:DataType="x:String">
+                <Border Theme="{StaticResource CmpStatChipStyle}">
+                    <TextBlock Text="{Binding}" Theme="{StaticResource CmpStatChipTextStyle}"/>
+                </Border>
+            </DataTemplate>
+
+            <!-- kind filter chip -->
+            <DataTemplate x:Key="CmpSurfFactFilterTemplate" x:DataType="local:FactFilter">
+                <ToggleButton Theme="{StaticResource CmpToggleChipStyle}"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                    <TextBlock Text="{Binding Label}"/>
+                </ToggleButton>
+            </DataTemplate>
+
+            <!-- one fact card: kind rail + tag, text (or inline edit box), meta, hover action row -->
+            <DataTemplate x:Key="CmpSurfFactCardTemplate" x:DataType="local:MemoryFact">
+                <Grid Classes="fact"
+                      Classes.boundary="{Binding IsBoundary}"
+                      Classes.dormant="{Binding IsDormant}"
+                      Classes.editing="{Binding IsEditing}">
+                    <Border Name="Card" Theme="{StaticResource CmpFactCardStyle}">
+                        <Grid RowDefinitions="Auto,Auto,Auto">
+
+                            <Grid Grid.Row="0">
+                                <TextBlock Name="KindTag" Text="{Binding KindLabel}"
+                                           Theme="{StaticResource CmpFactKindTagStyle}"
+                                           Foreground="{Binding KindKey, Converter={StaticResource CmpSurfFactKindBrush}}"
+                                           TextTrimming="CharacterEllipsis" Margin="0,0,20,0"/>
+                                <!-- the gold pin, on pinned cards only -->
+                                <TextBlock Name="Pin" Text="📌" FontSize="11" HorizontalAlignment="Right"
+                                           VerticalAlignment="Top" IsVisible="{Binding IsPinned}"
+                                           ToolTip.Tip="{loc:Str companion_memory_pin_tip}"/>
+                            </Grid>
+
+                            <TextBlock Name="FactText" Grid.Row="1" Text="{Binding Text}"
+                                       Theme="{StaticResource CmpFactTextStyle}"/>
+
+                            <!-- inline edit: the text becomes a box in place, Enter saves, Esc backs out -->
+                            <Grid Name="FactEditRow" Grid.Row="1" IsVisible="{Binding IsEditing}" Margin="0,4,0,0"
+                                  ColumnDefinitions="*,Auto,Auto">
+                                <!-- IsVisible on the box itself too: Avalonia's IsVisible does not propagate,
+                                     so the focus handler below would otherwise never see a change. -->
+                                <TextBox Name="FactEdit" Grid.Column="0" IsVisible="{Binding IsEditing}"
+                                         Theme="{StaticResource CmpFieldBoxStyle}"
+                                         Text="{Binding EditText, Mode=TwoWay}"
+                                         PropertyChanged="FactEdit_PropertyChanged"
+                                         KeyDown="FactEdit_KeyDown"/>
+                                <Button Grid.Column="1" Margin="6,0,0,0" FontSize="10.5"
+                                        Foreground="{StaticResource CmpDimBrush}"
+                                        Theme="{StaticResource CmpFactActionStyle}"
+                                        Command="{Binding CommitEditCommand}">
+                                    <TextBlock Text="{loc:Str companion_memory_edit_save}"/>
+                                </Button>
+                                <Button Grid.Column="2" FontSize="10.5"
+                                        Foreground="{StaticResource CmpFaintBrush}"
+                                        Theme="{StaticResource CmpFactActionStyle}"
+                                        Click="FactEditCancel_Click">
+                                    <TextBlock Text="{loc:Str companion_memory_edit_cancel}"/>
+                                </Button>
+                            </Grid>
+
+                            <Grid Grid.Row="2">
+                                <TextBlock Text="{Binding MetaLabel}" Theme="{StaticResource CmpFactMetaStyle}"
+                                           Margin="0,6,96,0"/>
+                                <!-- hover-reveal action row: pure selector, no code-behind. Opacity=0 lives
+                                     in UserControl.Styles, not here: a local value would outrank the
+                                     :pointerover setter and the row could never appear. -->
+                                <StackPanel Name="Actions" Orientation="Horizontal"
+                                            HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                    <Button Name="PinAction" Theme="{StaticResource CmpFactActionStyle}"
+                                            Command="{Binding PinCommand}"
+                                            ToolTip.Tip="{loc:Str companion_memory_pin_tip}">
+                                        <TextBlock Text="📌" FontSize="11"/>
+                                    </Button>
+                                    <Button Theme="{StaticResource CmpFactActionStyle}" Command="{Binding EditCommand}"
+                                            ToolTip.Tip="{loc:Str companion_memory_edit_tip}">
+                                        <TextBlock Text="✏" FontSize="11" Foreground="{StaticResource CmpDimBrush}"/>
+                                    </Button>
+                                    <Button Theme="{StaticResource CmpFactActionStyle}" Command="{Binding ForgetCommand}"
+                                            ToolTip.Tip="{loc:Str companion_memory_forget_tip}">
+                                        <TextBlock Text="🗑" FontSize="11"/>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <!-- the kind rail. A separate Rectangle rather than the card's own BorderBrush,
+                         because a bound BorderBrush would be a local value and the hover style
+                         could no longer light the card. -->
+                    <Rectangle Name="KindRail" Width="3" HorizontalAlignment="Left"
+                               Margin="0,0,0,9" RadiusX="1.5" RadiusY="1.5" IsHitTestVisible="False"
+                               Fill="{Binding KindKey, Converter={StaticResource CmpSurfFactKindRailBrush}}"/>
+
+                    <!-- dashed outline for the dormant promise card -->
+                    <Rectangle Name="DormantOutline" Theme="{StaticResource CmpDashedOutlineStyle}"
+                               Margin="0,0,0,9" IsVisible="{Binding IsDormant}"/>
+                </Grid>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- The WPF DataTemplate.Triggers, as selectors. Each block is one trigger, in the same order. -->
+    <UserControl.Styles>
+        <!-- IsBoundary: CmpFactBoundaryCardStyle's setters; the steel rail IS the border, the kind
+             rail stands down; a boundary is never "pinned" like a joke. -->
+        <Style Selector="Grid.fact.boundary Border#Card">
+            <Setter Property="Background" Value="#A61D2735"/>
+            <Setter Property="BorderBrush" Value="{StaticResource CmpSteelBrush}"/>
+            <Setter Property="BorderThickness" Value="3,1,1,1"/>
+        </Style>
+        <Style Selector="Grid.fact.boundary Rectangle#KindRail">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="Grid.fact.boundary Button#PinAction">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <!-- IsDormant: CmpDormantBlockStyle on the card, CmpDormantCopyStyle on the text -->
+        <Style Selector="Grid.fact.dormant Border#Card">
+            <Setter Property="Background" Value="#0AB478FF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="14"/>
+        </Style>
+        <Style Selector="Grid.fact.dormant TextBlock#FactText">
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontStyle" Value="Italic"/>
+            <Setter Property="Foreground" Value="#FFC9B8EC"/>
+            <Setter Property="LineHeight" Value="18"/>
+        </Style>
+        <Style Selector="Grid.fact.dormant Rectangle#KindRail">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="Grid.fact.dormant StackPanel#Actions">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <!-- IsEditing: the box replaces the text; the hover row would fight the save/cancel pair -->
+        <Style Selector="Grid.fact.editing TextBlock#FactText">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="Grid.fact.editing StackPanel#Actions">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <!-- Hover reveals the action row on every card. The BORDER is split: a boundary card
+             brightens its steel instead of going pink, so the rail survives the moment you aim. -->
+        <Style Selector="Grid.fact StackPanel#Actions">
+            <Setter Property="Opacity" Value="0"/>
+        </Style>
+        <Style Selector="Grid.fact Border#Card:pointerover">
+            <Setter Property="BorderBrush" Value="#66FF69B4"/>
+        </Style>
+        <Style Selector="Grid.fact.boundary Border#Card:pointerover">
+            <Setter Property="BorderBrush" Value="#FF9FCFEE"/>
+        </Style>
+        <Style Selector="Grid.fact Border#Card:pointerover StackPanel#Actions">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Theme="{StaticResource CmpCardStyle}">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+            <!-- ========== header ========== -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="📖" FontSize="16" Margin="0,0,9,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str companion_memory_title}" Theme="{StaticResource CmpSectionTitleStyle}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{loc:Str companion_memory_hint}"
+                           Theme="{StaticResource CmpSectionHintStyle}"/>
+                <Border Grid.Column="2" Theme="{StaticResource CmpTrainTagLiveStyle}">
+                    <TextBlock Text="{loc:Str companion_tag_train1}" Theme="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                </Border>
+            </Grid>
+
+            <!-- ========== profile strip (deterministic, free, always populated) ==========
+                 DockPanel, not a StackPanel: the label docks left and the chip WrapPanel gets a
+                 constrained width, so a long German strip wraps to a second line. -->
+            <Border Grid.Row="1" Margin="0,13,0,12" CornerRadius="{StaticResource CmpRadiusInner}"
+                    Background="#B312101F" BorderBrush="#26FFD700" BorderThickness="1"
+                    Padding="12,10,12,10">
+                <DockPanel LastChildFill="True">
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding ProfileStripLabel}"
+                               FontSize="11" FontWeight="Bold" VerticalAlignment="Center"
+                               Foreground="{StaticResource CmpMutedBrush}" Margin="0,0,8,0"/>
+                    <ItemsControl ItemsSource="{Binding ProfileStats}"
+                                  ItemTemplate="{StaticResource CmpSurfProfileStatTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
+
+            <!-- ========== kind filter chips ========== -->
+            <ItemsControl Grid.Row="2" ItemsSource="{Binding Filters}"
+                          ItemTemplate="{StaticResource CmpSurfFactFilterTemplate}" Margin="0,0,0,10">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <!-- ========== the fact wall ========== -->
+            <Grid Grid.Row="3" MinHeight="90">
+                <ItemsControl Name="FactWall" ItemsSource="{Binding Facts}"
+                              ItemTemplate="{StaticResource CmpSurfFactCardTemplate}"
+                              Theme="{StaticResource CmpVirtualizedItemsControlStyle}"
+                              MaxHeight="420"/>
+
+                <!-- fresh user: the wall is not blank, it is a ghost card -->
+                <Grid VerticalAlignment="Top" IsVisible="{Binding IsEmpty}">
+                    <Border Theme="{StaticResource CmpEmptyBlockStyle}">
+                        <TextBlock Text="{Binding EmptyCopy}" Theme="{StaticResource CmpEmptyCopyStyle}"/>
+                    </Border>
+                    <Rectangle Theme="{StaticResource CmpEmptyOutlineStyle}"/>
+                </Grid>
+            </Grid>
+
+            <!-- ========== footer ==========
+                 Two faces in one row: the usual storage note, and — once armed — the wipe's
+                 confirm strip, asked in her voice. Inline rather than a modal, so the card never
+                 blocks the tab (the Vault rule). ForgetConfirm is the little state machine that
+                 owns which one shows; see MemoryForgetConfirm. -->
+            <Grid Grid.Row="4" Margin="0,13,0,0">
+
+                <Grid IsVisible="{Binding !#Root.ForgetConfirm.IsArmed}"
+                      ColumnDefinitions="Auto,Auto,*">
+                    <TextBlock Grid.Column="0" Text="{Binding StorageNote}" FontSize="11"
+                               Foreground="{StaticResource CmpFaintBrush}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                    <!-- string Content on purpose: CmpLinkButtonStyle's template is a TextBlock bound
+                         to Content, which does no access-key parsing and cannot host a child. -->
+                    <Button Grid.Column="1" Content="{Binding StorageLinkLabel}"
+                            Theme="{StaticResource CmpLinkButtonStyle}" Margin="6,0,0,0"
+                            Command="{Binding OpenStorageFolderCommand}"/>
+                    <Button Grid.Column="2" Theme="{StaticResource CmpDangerButtonStyle}" HorizontalAlignment="Right"
+                            Command="{Binding #Root.ForgetConfirm.ArmCommand}">
+                        <TextBlock Text="{Binding ForgetEverythingLabel}"/>
+                    </Button>
+                </Grid>
+
+                <Border Background="#12FF5C7A" BorderBrush="#59FF5C7A" BorderThickness="1"
+                        CornerRadius="{StaticResource CmpRadiusInner}" Padding="12,9,12,9"
+                        IsVisible="{Binding #Root.ForgetConfirm.IsArmed}">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Margin="0,0,10,0" FontSize="11.5" FontStyle="Italic"
+                                   Foreground="#FFF2DEED"
+                                   Text="{loc:Str companion_memory_forget_confirm}"/>
+                        <Button Grid.Column="1" Theme="{StaticResource CmpDangerButtonStyle}"
+                                Command="{Binding #Root.ForgetConfirm.ConfirmCommand}">
+                            <TextBlock Text="{loc:Str companion_memory_forget_yes}"/>
+                        </Button>
+                        <Button Grid.Column="2" Margin="8,0,0,0" Theme="{StaticResource CmpGrayButtonStyle}"
+                                Command="{Binding #Root.ForgetConfirm.CancelCommand}">
+                            <TextBlock Text="{loc:Str companion_memory_forget_no}"/>
+                        </Button>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>
