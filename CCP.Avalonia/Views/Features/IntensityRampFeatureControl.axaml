@@ -1,0 +1,242 @@
+<!-- PORTED from ConditioningControlPanel/Features/IntensityRampFeatureControl.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+       Style="{StaticResource X}"        ->  Theme="{StaticResource X}"
+       ToolTip="..."                     ->  ToolTip.Tip="..."
+       helpers:EmojiTextBlock            ->  TextBlock
+       Visibility="Collapsed"            ->  IsVisible="False"
+       Polyline StrokeLineJoin/Start+EndLineCap -> StrokeJoin / StrokeLineCap (one cap property)
+       feat:SessionLock.Owned            ->  dropped (WPF-head attached behaviour)
+       all event handlers                ->  wired in code-behind (porting convention) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.IntensityRampFeatureControl">
+
+    <!-- ONE dense controls card plus the links card. The hero for this feature lives on
+         Views/Controls/Studio/RampRackPanel.xaml, but the ENABLE SWITCH stays here: this
+         control is also hosted bare in the feature popup, and a hero-mounted pill would exist
+         on the rack only. So the standalone Enable card becomes this card's first row. -->
+    <StackPanel>
+
+        <Border Theme="{StaticResource SettingCardStyle}">
+            <Grid>
+                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueStudioBrush}"/>
+                <StackPanel Margin="16,8,16,8">
+
+                    <!-- Enable -->
+                    <Grid Height="34">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str btn_enable}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkEnabled"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                    <!-- Duration -->
+                    <Grid Height="36">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="10" Maximum="180" Value="60"
+                                VerticalAlignment="Center" Margin="10,0"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="60 min" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                   Foreground="{DynamicResource PinkBrush}"/>
+                    </Grid>
+
+                    <!-- Ramp mode. Multiplier is the legacy behaviour and the default; Range swaps the
+                         single "up to Nx" dial for a start to end pair expressed as a PERCENT OF EACH
+                         LINKED FEATURE'S OWN SETTING. -->
+                    <Grid Height="36" ToolTip.Tip="{loc:Str tooltip_ramp_mode}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_mode}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" x:Name="CmbRampMode"
+                                  Height="26" MaxWidth="220" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ComboBoxItem Content="{loc:Str ramp_mode_multiplier}" Tag="Multiplier"/>
+                            <ComboBoxItem Content="{loc:Str ramp_mode_range}" Tag="Range"/>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- Multiplier (Multiplier mode only) -->
+                    <Grid x:Name="RowMultiplier" Height="36">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_multiplier}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderMultiplier" Minimum="1" Maximum="3" Value="1.5"
+                                SmallChange="0.1" LargeChange="0.5"
+                                VerticalAlignment="Center" Margin="10,0"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtMultiplier" Text="1.5x" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                   Foreground="{DynamicResource PinkBrush}"/>
+                    </Grid>
+
+                    <!-- Range start/end (Range mode only). 0..300% of the feature's own value;
+                         100 to 100 is the default and a deliberate no-op. -->
+                    <Grid x:Name="RowRangeStart" Height="36" IsVisible="False"
+                          ToolTip.Tip="{loc:Str tooltip_ramp_range}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_start}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderRangeStart" Minimum="0" Maximum="300" Value="100"
+                                SmallChange="5" LargeChange="25" TickFrequency="5" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="10,0"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtRangeStart" Text="100%" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                   Foreground="{DynamicResource PinkBrush}"/>
+                    </Grid>
+
+                    <Grid x:Name="RowRangeEnd" Height="36" IsVisible="False"
+                          ToolTip.Tip="{loc:Str tooltip_ramp_range}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto" MinWidth="56"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_end}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <Slider Grid.Column="1" x:Name="SliderRangeEnd" Minimum="0" Maximum="300" Value="100"
+                                SmallChange="5" LargeChange="25" TickFrequency="5" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center" Margin="10,0"/>
+                        <TextBlock Grid.Column="2" x:Name="TxtRangeEnd" Text="100%" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" FontSize="13" FontWeight="Bold"
+                                   Foreground="{DynamicResource PinkBrush}"/>
+                    </Grid>
+
+                    <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                    <!-- Ramp curve. THE ONLY OWNED CONTROL IN THIS POPUP: SessionEngine resolves
+                         `settings.RampCurve ?? App.Settings.Current.RampCurve` on EVERY tick, so for
+                         most sessions this dropdown reshapes the running session's own ramp. -->
+                    <Grid Height="36" ToolTip.Tip="{loc:Str tooltip_ramp_curve}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_curve}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" x:Name="CmbRampCurve"
+                                  Height="26" MaxWidth="220" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <ComboBoxItem Content="{loc:Str ramp_curve_linear}" Tag="Linear"/>
+                            <ComboBoxItem Content="{loc:Str ramp_curve_ease_in}" Tag="EaseIn"/>
+                            <ComboBoxItem Content="{loc:Str ramp_curve_ease_out}" Tag="EaseOut"/>
+                            <ComboBoxItem Content="{loc:Str ramp_curve_scurve}" Tag="SCurve"/>
+                            <ComboBoxItem Content="{loc:Str ramp_curve_exponential}" Tag="Exponential"/>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- Live curve preview. Drawn in code-behind off the same curve math the runtime
+                         uses (CCP.Core RampCurves), so it cannot drift from what the ramp does. -->
+                    <Grid Height="52" Margin="0,4,0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_ramp_preview}" FontSize="12"
+                                   Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                        <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="8" MinWidth="120"
+                                Background="{StaticResource SectionHueStudioWashBrush}"
+                                BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}">
+                            <Canvas x:Name="CurvePreviewCanvas" ClipToBounds="True" Margin="6,5,6,5"
+                                    Background="Transparent">
+                                <Polyline x:Name="CurvePreviewLine" StrokeThickness="2"
+                                          Stroke="{DynamicResource PinkBrush}"
+                                          StrokeJoin="Round" StrokeLineCap="Round"/>
+                            </Canvas>
+                        </Border>
+                    </Grid>
+
+                    <!-- Stays VISIBLE, not a ToolTip: it is the reason the dials above look inert
+                         mid-session. -->
+                    <TextBlock Text="{loc:Str st4_ramp_session_note}"
+                               Foreground="{StaticResource TextMutedBrush}" FontSize="10.5" FontStyle="Italic"
+                               TextWrapping="Wrap" Margin="0,2,0,4"/>
+
+                    <!-- End at ramp -->
+                    <Grid Height="34">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str setting_end_at_complete}" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkEndAt"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </Grid>
+
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Ramp links: its own card, six peer switches on one wrapped row. -->
+        <Border Theme="{StaticResource SettingCardStyle}">
+            <Grid>
+                <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueStudioBrush}"/>
+                <StackPanel Margin="16,8,16,8">
+                    <TextBlock Text="{loc:Str label_link_to_ramp}"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"
+                               Margin="0,0,0,6"/>
+                    <WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                            <CheckBox x:Name="ChkLinkFlash" Theme="{StaticResource ToggleStyle}"/>
+                            <TextBlock Text="{loc:Str label_flash}" Foreground="{StaticResource TextLightBrush}"
+                                       FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                            <CheckBox x:Name="ChkLinkSpiral" Theme="{StaticResource ToggleStyle}"/>
+                            <TextBlock Text="{loc:Str label_spiral}" Foreground="{StaticResource TextLightBrush}"
+                                       FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                            <CheckBox x:Name="ChkLinkPink" Theme="{StaticResource ToggleStyle}"/>
+                            <TextBlock Text="{loc:Str label_pink}" Foreground="{StaticResource TextLightBrush}"
+                                       FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                            <CheckBox x:Name="ChkLinkMaster" Theme="{StaticResource ToggleStyle}"/>
+                            <TextBlock Text="{loc:Str setting_master}" Foreground="{StaticResource TextLightBrush}"
+                                       FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                            <CheckBox x:Name="ChkLinkSub" Theme="{StaticResource ToggleStyle}"/>
+                            <TextBlock Text="{loc:Str label_sub}" Foreground="{StaticResource TextLightBrush}"
+                                       FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <!-- Brain Drain rides the ramp like the spiral does: the BLUR strength. -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <CheckBox x:Name="ChkLinkBrainDrain" Theme="{StaticResource ToggleStyle}"/>
+                            <TextBlock Text="{loc:Str label_braindrain}" Foreground="{StaticResource TextLightBrush}"
+                                       FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </WrapPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+    </StackPanel>
+</UserControl>
