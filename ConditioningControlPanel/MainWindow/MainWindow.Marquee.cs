@@ -155,7 +155,7 @@ namespace ConditioningControlPanel
                 stack.Children.Add(new System.Windows.Controls.TextBlock
                 {
                     Text = "You've been recognized as a Season 0 OG.\n\n" +
-                           "Your account has been reset for Season 1, but your legacy lives on:\n\n" +
+                           "That badge is for the very first month this app ever ran, and it stays yours:\n\n" +
                            "  ⭐ Your name now has a star icon on the leaderboard\n" +
                            "  ✨ Your row is highlighted in gold\n" +
                            "  👑 Everyone will know you were here from the beginning\n\n" +
@@ -327,30 +327,34 @@ namespace ConditioningControlPanel
                             //
                             // AND IT HAS TO KNOW WHICH PATH BROUGHT IT HERE. Two things reach this
                             // dialog and only one of them is a reset: a board rotation (the server's
-                            // season key moved on and nothing of the user's was touched) and an
+                            // month key moved on and nothing of the user's was touched) and an
                             // explicit server level_reset (an admin acting on one account). The old
                             // text was one message that enumerated "What resets: Current Level and XP"
                             // for both, which after the Descent is the single sentence the ceremony
                             // promised nobody would read again. A rotation now says what actually
                             // happened; the admin path keeps the honest wipe list.
+                            //
+                            // The admin list lost its "Mechanical enhancements (re-buy them...)" line
+                            // because that stopped being true: every skill is permanent since the
+                            // Descent and SkillTreeService leaves the tree intact through a reset, so
+                            // the tree belongs under "preserved" and nowhere else.
                             string message, caption;
                             if (reallyPending)
                             {
                                 message =
-                                    "Your season was reset on the server.\n\n" +
+                                    "Your progress was reset on the server.\n\n" +
                                     "What resets:\n" +
                                     "  - Current Level and XP\n" +
                                     "  - Daily quest streak\n" +
-                                    "  - Monthly leaderboard position\n" +
-                                    "  - Mechanical enhancements (re-buy them to raise your Prestige)\n\n" +
+                                    "  - Your place on the monthly leaderboard\n\n" +
                                     "What's preserved:\n" +
                                     "  - All achievements\n" +
                                     "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
                                     "  - Your sparkle points balance\n" +
-                                    "  - Permanent stat enhancements and your Prestige\n" +
+                                    "  - Every skill on your tree, and your Prestige\n" +
                                     "  - Total lifetime XP\n" +
                                     "  - Patreon perks and whitelist";
-                                caption = "Season Reset";
+                                caption = "Progress Reset";
                             }
                             else
                             {
@@ -358,7 +362,7 @@ namespace ConditioningControlPanel
                                     "The monthly leaderboard has rotated, which it does at the start of every month so everyone gets a fresh run at the rankings.\n\n" +
                                     "That is all that changed. Your level, your XP, your streak and everything you have unlocked carry forward exactly as they were, and they will keep doing that from here on.\n\n" +
                                     "Highest Level Ever: " + highestLevel + "\n\n" +
-                                    "Welcome to season " + currentSeason + "!";
+                                    "The new board is open, so go and see how far up it you can get this time.";
                                 caption = "New Board, Same Progress";
                             }
 
