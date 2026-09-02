@@ -13,7 +13,11 @@ namespace ConditioningControlPanel.ViewModels
     {
         public string Label { get; init; } = "";
         public int Count { get; init; }
-        /// <summary>pack:// URI of the dashboard feature icon (bound to Image.Source).</summary>
+        /// <summary>
+        /// URI of the dashboard feature icon (bound to Image.Source). Comes from
+        /// ModResourceResolver.ResolveUri, so it is file:// when a mod or event skin overrides
+        /// the icon and pack:// only when it falls through to the embedded default.
+        /// </summary>
         public string? ImagePath { get; init; }
     }
 
@@ -35,8 +39,13 @@ namespace ConditioningControlPanel.ViewModels
             _s = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         }
 
-        /// <summary>Mode-sensitive backdrop art for the card (green for drone mode, pink default).</summary>
-        public string BackgroundImagePath => RecapBackgrounds.ForMod(App.Mods?.ActiveModId);
+        /// <summary>
+        /// Mode-sensitive backdrop art for the card (green for drone mode, pink default).
+        /// Core hands back a bare file name; the pack:// scheme is applied here because only the
+        /// WPF head can resolve it (bound straight to Image.Source in SeasonRecapCard.xaml).
+        /// </summary>
+        public string BackgroundImagePath =>
+            "pack://application:,,,/Resources/" + RecapBackgrounds.ForMod(App.Mods?.ActiveModId);
 
         // ---------- header ----------
         public int SeasonNumber => SeasonNumbering.ToSeasonNumber(_s.SeasonKey);

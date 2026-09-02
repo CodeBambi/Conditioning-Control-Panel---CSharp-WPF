@@ -208,7 +208,7 @@ to touch achievement tracking.
    `IsDroneMod` — **no content tagging required.**
 
 3. **Drone keyword triggers, by text (partial content-level).** The keyword pipeline
-   carries the matched string (`Models/KeywordTrigger.cs` `TriggerFireRecord.Keyword`;
+   carries the matched string (`CCP.Core/Models/KeywordTrigger.cs` `TriggerFireRecord.Keyword`;
    `KeywordTriggers.TriggerFired` passes a `KeywordTrigger`). So firing a *specific*
    drone trigger (e.g. `COMPLY`, `UNIT FREEZE`) is distinguishable by comparing the
    fired text to the drone `customTriggers` pool — this is the one content type whose

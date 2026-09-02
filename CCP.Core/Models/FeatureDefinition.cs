@@ -49,7 +49,10 @@ namespace ConditioningControlPanel.Models
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Icon { get; set; } = "";              // Emoji icon
-        public string? ImagePath { get; set; }              // Optional PNG image path (e.g., "pack://application:,,,/Resources/features/audio.png")
+        // Optional PNG, app-relative and scheme-less (e.g. "Resources/features/audio.png").
+        // Do NOT write a pack:// URI here - Core cannot resolve one. The head adds the scheme
+        // (SessionEditorWindow builds "pack://application:,,,/{ImagePath}").
+        public string? ImagePath { get; set; }
         public string Color { get; set; } = "#FF69B4";      // Feature color for timeline bar
         public FeatureCategory Category { get; set; }
         public bool SupportsRamping { get; set; }           // Can values ramp over time?

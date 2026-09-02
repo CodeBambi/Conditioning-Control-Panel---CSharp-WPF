@@ -558,7 +558,7 @@ constructed by `HapticService`'s ctor (not `App.xaml.cs`) and reached as `App.Ha
     `ConditioningControlPanel.Services` and it has zero haptics coupling — it is strict-lock/panic
     lockdown plumbing. Ignore it when reasoning about haptics.
 13. **Two unrelated classes named `HapticTrack`.** `Models/HapticTrack.cs` is the runtime
-    audio-analysis buffer used by AudioSync; `Models/Deeper/HapticTrack.cs` is the `.ccpenh.json`
+    audio-analysis buffer used by AudioSync; `CCP.Core/Models/Deeper/HapticTrack.cs` is the `.ccpenh.json`
     event schema used by Deeper. Same name, different namespace, unrelated.
 14. **`EndAt` is computed from the UNSCALED envelope.** `HapticMixer.Play` derives a sequence's
     `EndAt` before temperament scales attack/decay, so under Tease/Cruel an **awaited** legacy call

@@ -338,9 +338,9 @@ Inoltre il **WindowAwarenessService** legge il titolo della finestra attiva + UR
 
 ### Trigger keywords + dove
 
-Ogni `KeywordTrigger` (`Models/KeywordTrigger.cs`) ha:
+Ogni `KeywordTrigger` (`CCP.Core/Models/KeywordTrigger.cs`) ha:
 - `Keyword` (PlainText o Regex)
-- `Actions` lista polimorfica con `PlayAudio`, `VisualEffect` (SubliminalFlash/Bubbles/OverlayPulse/MindWipe/Highlight), `Highlight`, `Haptic`, `AddXp`, `AvatarComment`, `ExtendSession` (stub), `ChasterAddTime` (stub) — vedi `Models/KeywordAction.cs:1-203`.
+- `Actions` lista polimorfica con `PlayAudio`, `VisualEffect` (SubliminalFlash/Bubbles/OverlayPulse/MindWipe/Highlight), `Highlight`, `Haptic`, `AddXp`, `AvatarComment`, `ExtendSession` (stub), `ChasterAddTime` (stub) — vedi `CCP.Core/Models/KeywordAction.cs:1-203`.
 - `cooldownSeconds`, `matchType` (PlainText/Regex), `enabled`.
 
 I trigger possono essere creati dall'utente nell'Exclusives editor (campo libero), installati come parte di un preset, o aggiunti via "+ New Preset" custom (`AwarenessPresetDetailDialog.xaml.cs`).
@@ -438,7 +438,7 @@ I numeri non vengono persistiti né tx'd. Per-event biometric ratios (EAR baseli
 
 ## 5. Deeper
 
-### Schema `ccp-enhancement/v1` (`Models/Deeper/Enhancement.cs:1-111`)
+### Schema `ccp-enhancement/v1` (`CCP.Core/Models/Deeper/Enhancement.cs:1-111`)
 
 Una "enhancement" (estensione `.ccpenh.json` / bundle `.ccpmod` per pack multi-file) è un overlay reattivo su un media file dell'utente.
 
@@ -452,7 +452,7 @@ Top-level:
 - `rules[]`: trigger → action
 - `timeline_items[]`: nuovo unified model (coexists con regions/haptic_tracks/rules durante transizione additiva)
 
-### Action types (`Models/Deeper/EnhancementAction.cs:8-20`)
+### Action types (`CCP.Core/Models/Deeper/EnhancementAction.cs:8-20`)
 
 Lista costanti `ActionTypes`:
 - `seek` — sposta playhead (time / region_start / region_end)

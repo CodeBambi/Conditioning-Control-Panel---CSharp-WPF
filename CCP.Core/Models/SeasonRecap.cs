@@ -171,14 +171,15 @@ namespace ConditioningControlPanel.Models
     /// <summary>
     /// Per-mod recap card backdrop art (seasonal neon). Mode-sensitive: each mod can have its own
     /// background; unmapped mods fall back to the default. EDITABLE in one place — add a mod id to
-    /// the switch as new per-mod art is bundled into Resources/. Images are pack URIs.
+    /// the switch as new per-mod art is bundled into Resources/. Values are bare file names under
+    /// the head's Resources/ folder; the head composes the platform URI (WPF: pack://).
     /// </summary>
     public static class RecapBackgrounds
     {
         public static string ForMod(string? modId) => modId switch
         {
-            "drone-mode" => "pack://application:,,,/Resources/february_drone.png", // green neon
-            _ => "pack://application:,,,/Resources/february.png",                   // default pink neon
+            "drone-mode" => "february_drone.png", // green neon
+            _ => "february.png",                  // default pink neon
         };
     }
 

@@ -63,8 +63,12 @@ namespace ConditioningControlPanel.Models
         public CompanionBonusType BonusType { get; set; }
 
         /// <summary>
-        /// Resource path for the companion's icon/avatar.
-        /// Used for selection UI and avatar display.
+        /// File name of the companion's icon/avatar art (e.g. "avatar4_pose1.png") under the
+        /// head's Resources/ folder. Deliberately scheme-less so Core stays platform-neutral —
+        /// a head composes its own URI (WPF: "pack://application:,,,/Resources/{value}").
+        /// NOTHING READS THIS TODAY: the WPF avatar path derives its file name from AvatarSet
+        /// instead (AvatarTube/AvatarTubeWindow.Avatar.cs). Kept as catalog data, not a live
+        /// contract - wire it up before trusting it.
         /// </summary>
         public string IconResourcePath { get; set; } = "";
 
@@ -89,7 +93,7 @@ namespace ConditioningControlPanel.Models
                 XPMechanicDescription = "Bonus XP from pink filter. The pinker your screen, the faster she levels!",
                 RequiredLevel = 50,
                 BonusType = CompanionBonusType.PinkFilterBonus,
-                IconResourcePath = "pack://application:,,,/Resources/avatar3_pose1.png",
+                IconResourcePath = "avatar3_pose1.png",
                 AvatarSet = 3
             },
             new CompanionDefinition
@@ -100,7 +104,7 @@ namespace ConditioningControlPanel.Models
                 XPMechanicDescription = "+50% XP when Autonomy Mode triggers actions. Let go and let her grow!",
                 RequiredLevel = 100,
                 BonusType = CompanionBonusType.AutonomyBonus,
-                IconResourcePath = "pack://application:,,,/Resources/avatar4_pose1.png",
+                IconResourcePath = "avatar4_pose1.png",
                 AvatarSet = 4
             },
             new CompanionDefinition
@@ -111,7 +115,7 @@ namespace ConditioningControlPanel.Models
                 XPMechanicDescription = "Drains 3 XP/sec. You must actively train to outpace the drain!",
                 RequiredLevel = 125,
                 BonusType = CompanionBonusType.XPDrain,
-                IconResourcePath = "pack://application:,,,/Resources/avatar5_pose1.png",
+                IconResourcePath = "avatar5_pose1.png",
                 AvatarSet = 5
             },
             new CompanionDefinition
@@ -122,7 +126,7 @@ namespace ConditioningControlPanel.Models
                 XPMechanicDescription = "-50% XP without Strict Mode, +100% with No Escape. -25 XP on attention fail.",
                 RequiredLevel = 150,
                 BonusType = CompanionBonusType.StrictModeBonus,
-                IconResourcePath = "pack://application:,,,/Resources/avatar6_pose1.png",
+                IconResourcePath = "avatar6_pose1.png",
                 AvatarSet = 6
             },
             new CompanionDefinition
@@ -134,7 +138,7 @@ namespace ConditioningControlPanel.Models
                 XPMechanicDescription = "+25% bonus XP from session completion rewards. Finish what you start!",
                 RequiredLevel = 75,
                 BonusType = CompanionBonusType.SessionCompletionBonus,
-                IconResourcePath = "pack://application:,,,/Resources/avatar7_pose1.png",
+                IconResourcePath = "avatar7_pose1.png",
                 AvatarSet = 7
             }
         };

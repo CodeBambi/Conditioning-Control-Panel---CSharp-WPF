@@ -193,7 +193,7 @@ id is surfaced.
 ## 4. The "awareness-preset" system (belongs to System B, not to `WindowAwareness`)
 
 This is the part most likely to mislead: **"awareness presets" have nothing to do with
-`WindowAwarenessService`.** They are `KeywordTriggerPreset` objects (`Models/KeywordTriggerPreset.cs`)
+`WindowAwarenessService`.** They are `KeywordTriggerPreset` objects (`CCP.Core/Models/KeywordTriggerPreset.cs`)
 that drive **System B** (keyword/OCR triggers).
 
 - **Source of truth:** `Resources/AwarenessPresets/*.json` — shipped built-ins `trance.json`,
