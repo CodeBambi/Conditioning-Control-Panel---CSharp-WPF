@@ -24,6 +24,52 @@ namespace ConditioningControlPanel.Services.Moderation
         private static readonly RegexOptions Opts =
             RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant;
 
+        // ---------- P3-SPELL: age tokens ----------
+        //
+        // Every locale's Minor age rule was numeral-only — `(1[0-7]|[1-9])` — so a
+        // spelled age ("fünf jahre alt", "siete años", "пять лет") walked straight
+        // through. Each fragment below matches EITHER a numeral 1-17, optionally
+        // zero-padded ("05"), OR that locale's spelled numbers 1-17.
+        //
+        // Two guards keep ADULTS allowed:
+        // - every spelled form carries a trailing `\b`, so a compound written as ONE word
+        //   ("achtzehn", "diecisiete", "diciotto", "dezenove", "восемнадцать") cannot
+        //   match through its unit-word prefix;
+        // - where a locale writes compounds with a SPACE or HYPHEN ("treinta y cinco",
+        //   "vingt-cinq", "vinte e cinco", "двадцать пять") a negative lookbehind rejects
+        //   a unit word that trails a tens/hundreds word or the joining conjunction.
+        //
+        // Indefinite-article forms are deliberately OMITTED where the locale's context
+        // word does not include "old" (es "un", fr "un/une", it "un/uno", pt "um/uma"):
+        // "hace un año ... sexo" / "il y a un an ... sexe" mean "a year AGO", and those
+        // patterns match bare "años"/"ans"/"anni"/"anos". German keeps "ein/eins" because
+        // its pattern requires "alt".
+        //
+        // ja / ko / zh are NOT extended: their patterns have no word boundaries to anchor
+        // against, and CJK numerals decompose (十八 = 十 + 八), so a bare 八/여덟/八 arm
+        // would match the "8" inside 十八歳 / 열여덟살 / 十八岁 and BLOCK 18-year-olds.
+        private const string AgeDe =
+            @"(?:0?(?:1[0-7]|[1-9])|(?:siebzehn|sechzehn|f[üu]nfzehn|vierzehn|dreizehn|zw[öo]lf|elf|zehn|neun|acht|sieben|sechs|f[üu]nf|vier|drei|zwei|eins|ein)\b)";
+
+        private const string AgeEs =
+            @"(?:0?(?:1[0-7]|[1-9])|(?<!\b(?:y|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento)\s)" +
+            @"(?:diecisiete|diecis[ée]is|quince|catorce|trece|doce|once|diez|nueve|ocho|siete|seis|cinco|cuatro|tres|dos|uno)\b)";
+
+        private const string AgeFr =
+            @"(?:0?(?:1[0-7]|[1-9])|(?<!\b(?:et|vingts?|trente|quarante|cinquante|soixante|cents?|dix)[\s-])" +
+            @"(?:dix[\s-]?sept|seize|quinze|quatorze|treize|douze|onze|dix|neuf|huit|sept|six|cinq|quatre|trois|deux)\b)";
+
+        private const string AgeIt =
+            @"(?:0?(?:1[0-7]|[1-9])|(?:diciassette|sedici|quindici|quattordici|tredici|dodici|undici|dieci|nove|otto|sette|sei|cinque|quattro|tre|due)\b)";
+
+        private const string AgePt =
+            @"(?:0?(?:1[0-7]|[1-9])|(?<!\b(?:e|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento)\s)" +
+            @"(?:dezessete|dezassete|dezesseis|dezasseis|quinze|catorze|quatorze|treze|doze|onze|dez|nove|oito|sete|seis|cinco|quatro|tr[êe]s|dois|duas)\b)";
+
+        private const string AgeRu =
+            @"(?:0?(?:1[0-7]|[1-9])|(?<!\b(?:двадцать|тридцать|сорок|пятьдесят|шестьдесят|семьдесят|восемьдесят|девяносто|сто)\s)" +
+            @"(?:семнадцать|шестнадцать|пятнадцать|четырнадцать|тринадцать|двенадцать|одиннадцать|десять|девять|восемь|семь|шесть|пять|четыре|три|две|два|одна|один)\b)";
+
         // Per-language, per-category pattern strings. Built into the compiled cache below
         // at static-init time. Keep this list small per (lang, cat) — CCBill cares about
         // presence in target language, not exhaustive coverage.
@@ -41,7 +87,7 @@ namespace ConditioningControlPanel.Services.Moderation
                     },
                     [ProhibitedCategory.Minor] = new[]
                     {
-                        @"\b(1[0-7]|[1-9])\s*(jahre?\s*alt|jährig\w*)\b.{0,40}\b(sex|ficken|nackt|schwanz|muschi|titten)\b",
+                        @"\b" + AgeDe + @"\s*(jahre?\s*alt|jährig\w*)\b.{0,40}\b(sex|ficken|nackt|schwanz|muschi|titten)\b",
                         @"\b(schulmädchen|grundschüler|minderjährig\w*|kind|kinder)\b.{0,30}\b(sex|ficken|nackt|porno)\b",
                         @"\bkinderporno\w*\b", @"\bloli\b", @"\bshota\b",
                     },
@@ -123,7 +169,7 @@ namespace ConditioningControlPanel.Services.Moderation
                     },
                     [ProhibitedCategory.Minor] = new[]
                     {
-                        @"\b(1[0-7]|[1-9])\s*años?\b.{0,40}\b(sexo|follar|coger|polla|verga|tetas|coño|desnud)\w*\b",
+                        @"\b" + AgeEs + @"\s*años?\b.{0,40}\b(sexo|follar|coger|polla|verga|tetas|coño|desnud)\w*\b",
                         @"\b(colegiala|menor|niñ[oa]|preescolar)\b.{0,30}\b(sexo|follar|coger|porno|desnud)\w*\b",
                         @"\b(porno|pornograf\w*)\s+infantil\b", @"\bloli\b", @"\bshota\b",
                     },
@@ -204,7 +250,7 @@ namespace ConditioningControlPanel.Services.Moderation
                     },
                     [ProhibitedCategory.Minor] = new[]
                     {
-                        @"\b(1[0-7]|[1-9])\s*ans?\b.{0,40}\b(sexe|baiser|niquer|bite|chatte|seins|nu[e]?)\b",
+                        @"\b" + AgeFr + @"\s*ans?\b.{0,40}\b(sexe|baiser|niquer|bite|chatte|seins|nu[e]?)\b",
                         @"\b(coll[ée]gienne|mineur\w*|enfant|gamine?|pr[ée]ado)\b.{0,30}\b(sexe|baiser|niquer|porno|nu[e]?)\b",
                         @"\b(porno|pornographie)\s+(infantile|enfantine|p[ée]dophile)\b", @"\bloli\b", @"\bshota\b",
                     },
@@ -286,7 +332,7 @@ namespace ConditioningControlPanel.Services.Moderation
                     },
                     [ProhibitedCategory.Minor] = new[]
                     {
-                        @"\b(1[0-7]|[1-9])\s*ann[io]\b.{0,40}\b(sesso|scopare|cazzo|figa|tette|nud[oa])\b",
+                        @"\b" + AgeIt + @"\s*ann[io]\b.{0,40}\b(sesso|scopare|cazzo|figa|tette|nud[oa])\b",
                         @"\b(scolaretta|minorenne|bambin[oa]|ragazzin[oa])\b.{0,30}\b(sesso|scopare|porno|nud[oa])\b",
                         @"\b(porno|pornografia)\s+(infantile|minorile|pedo\w*)\b", @"\bloli\b", @"\bshota\b",
                     },
@@ -368,7 +414,7 @@ namespace ConditioningControlPanel.Services.Moderation
                     },
                     [ProhibitedCategory.Minor] = new[]
                     {
-                        @"\b(1[0-7]|[1-9])\s*anos?\b.{0,40}\b(sexo|foder|trepar|pau|buceta|peitos|pelad[ao])\b",
+                        @"\b" + AgePt + @"\s*anos?\b.{0,40}\b(sexo|foder|trepar|pau|buceta|peitos|pelad[ao])\b",
                         @"\b(colegial|menor|criança|pré-?adolescente)\b.{0,30}\b(sexo|foder|porno|pelad[ao])\b",
                         @"\b(porno|pornografia)\s+(infantil|de\s+menores)\b", @"\bloli\b", @"\bshota\b",
                     },
@@ -449,7 +495,7 @@ namespace ConditioningControlPanel.Services.Moderation
                     },
                     [ProhibitedCategory.Minor] = new[]
                     {
-                        @"\b(1[0-7]|[1-9])\s*(лет|года?)\b.{0,40}\b(секс|трах\w*|член|сиськи|пизд\w*|голая?)\b",
+                        @"\b" + AgeRu + @"\s*(лет|года?)\b.{0,40}\b(секс|трах\w*|член|сиськи|пизд\w*|голая?)\b",
                         @"\b(школьниц\w*|малолетк\w*|несовершеннолетн\w*|ребен\w*|дет\w*)\b.{0,30}\b(секс|трах\w*|порно|голая?)\b",
                         @"\bдетск\w*\s+порно\b", @"\bлоли\b", @"\bшота\b",
                     },

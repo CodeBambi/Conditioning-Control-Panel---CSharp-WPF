@@ -79,13 +79,37 @@ namespace ConditioningControlPanel.Services.Moderation
         // False positive watch: "8-year-old" in a non-sexual sentence will trip the
         // sexual-context window only if a sexual term is within ~40 chars. The plain
         // keyword list catches the dedicated slurs.
+        // P3-SPELL: shared age-token fragment used by every English age pattern so they
+        // stay in lockstep. Matches EITHER a numeral 1-17, optionally zero-padded ("05",
+        // which LeetFold leaves alone as a 2-digit run but `\b(1[0-7]|[1-9])` could not
+        // match), OR the English spelled equivalent one..seventeen.
+        //
+        // Two guards keep adults allowed:
+        // - each spelled form carries its own trailing `\b`, so "eighteen"/"nineteen"
+        //   cannot match via their "eight"/"nine" prefix ("eight" is followed by "een",
+        //   no word boundary);
+        // - the negative lookbehind rejects a unit word that trails a tens/hundreds word,
+        //   so "twenty one years old" and "thirty-five years old" do NOT match through
+        //   their "one"/"five" tail.
+        // Longest-first ordering is cosmetic (the trailing context word forces the engine
+        // to backtrack to the right alternative anyway) but keeps the intent readable.
+        private const string AgeTens =
+            @"(?<!\b(?:twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety|hundred)[\s-])";
+        private const string AgeSpelled =
+            @"(?:seventeen|sixteen|fifteen|fourteen|thirteen|twelve|eleven|ten|nine|eight|seven|six|five|four|three|two|one)\b";
+        private const string AgeNum = @"(?:0?(?:1[0-7]|[1-9])|" + AgeTens + AgeSpelled + ")";
+
+        // The age CONTEXT words are unchanged and still REQUIRED: a bare spelled number
+        // ("she is twelve", "five years ago", "twelve minutes") does not trip anything.
+        private const string AgeCtx = @"(?:yo|y\.o\.?|years?\s*old|yr\s*old)";
+
         private static readonly Regex[] MinorRegex =
         {
             // "14yo", "14 year old", "fourteen year old" + sexual term within 50 chars.
-            new(@"\b(1[0-7]|[1-9])\s*(?:yo|y\.o\.?|years?\s*old|yr\s*old)\b.{0,50}\b(sex|fuck|cock|cum|pussy|tits|nude|naked|horny|wet|aroused|kiss|grope|touch|spread|breed|virgin|innocent|loli|shota)\b", Opts),
-            new(@"\b(sex|fuck|cock|cum|pussy|tits|nude|naked|horny|wet|aroused|kiss|grope|touch|spread|breed|virgin)\b.{0,50}\b(1[0-7]|[1-9])\s*(?:yo|y\.o\.?|years?\s*old|yr\s*old)\b", Opts),
+            new(@"\b" + AgeNum + @"\s*" + AgeCtx + @"\b.{0,50}\b(sex|fuck|cock|cum|pussy|tits|nude|naked|horny|wet|aroused|kiss|grope|touch|spread|breed|virgin|innocent|loli|shota)\b", Opts),
+            new(@"\b(sex|fuck|cock|cum|pussy|tits|nude|naked|horny|wet|aroused|kiss|grope|touch|spread|breed|virgin)\b.{0,50}\b" + AgeNum + @"\s*" + AgeCtx + @"\b", Opts),
             // "act as a 14-year-old", "pretend you are 14".
-            new(@"\b(act|pretend|roleplay|be|you\s+are|play)\b.{0,15}\b(a\s+|an\s+)?(1[0-7]|[1-9])\s*(?:yo|y\.o\.?|years?\s*old|yr\s*old)\b", Opts),
+            new(@"\b(act|pretend|roleplay|be|you\s+are|play)\b.{0,15}\b(a\s+|an\s+)?" + AgeNum + @"\s*" + AgeCtx + @"\b", Opts),
             // Schoolgirl / minor-coded + explicit sexual verb.
             new(@"\b(schoolgirl|preteen|pre-?teen|middle\s*school|elementary\s*school|kindergarten)\b.{0,40}\b(sex|fuck|cock|cum|pussy|tits|nude|naked|horny|wet|aroused|grope|spread|breed)\b", Opts),
             // Diaper-coded + explicit sexual.
@@ -475,14 +499,28 @@ namespace ConditioningControlPanel.Services.Moderation
             // turn a previously hard-blocked foreign input into an allow. Excluding it
             // removes that soft-return path entirely, so the un-folded pass can only
             // produce hard blocks. PA keeps its exact pre-fix behaviour (folded only).
-            var (normalised, unfolded) = NormalizePair(text);
+            //
+            // P3-MIX: the two passes above still miss leetspeak MIXED with a literal digit
+            // in one sentence — "5 y3ars old" is "s years old" folded (the age is eaten)
+            // and "5 y3ars old" un-folded (the context word is still leet). A THIRD
+            // variant closes it: the word-internal fold applies LeetFold only to digits
+            // that touch a letter, so isolated digit tokens survive ("5") while leet words
+            // are repaired ("y3ars" -> "years") — the sentence becomes "5 years old".
+            // It is added under the same rules as the un-folded pass (hard categories
+            // only, never PA), so it can only ever ADD blocks.
+            var (normalised, unfolded, wordFolded) = NormalizeVariants(text);
             bool foldChanged = !string.Equals(normalised, unfolded, StringComparison.Ordinal);
+            bool wordFoldChanged =
+                !string.Equals(wordFolded, normalised, StringComparison.Ordinal) &&
+                !string.Equals(wordFolded, unfolded, StringComparison.Ordinal);
 
             foreach (var (cat, regexes, keywords) in rules)
             {
                 if (MatchesAny(normalised, regexes, keywords, out var note) ||
                     (foldChanged && cat != ProhibitedCategory.ProfessionalAdvice &&
-                     MatchesAny(unfolded, regexes, keywords, out note)))
+                     MatchesAny(unfolded, regexes, keywords, out note)) ||
+                    (wordFoldChanged && cat != ProhibitedCategory.ProfessionalAdvice &&
+                     MatchesAny(wordFolded, regexes, keywords, out note)))
                 {
                     if (cat == ProhibitedCategory.ProfessionalAdvice)
                         return ModerationResult.SoftHit(cat, note);
@@ -502,11 +540,18 @@ namespace ConditioningControlPanel.Services.Moderation
             // "5 años"). Both hard blocks are resolved before either soft hit, so a
             // ProfessionalAdvice hit on one string can never mask a Minor block on the
             // other.
+            // P3-MIX: and the word-internal fold too, for hard blocks only — its soft PA
+            // hit is deliberately dropped so this pass can never change an existing Pass()
+            // into a ProfessionalAdvice soft hit. Add-blocks-only, exactly like the pass
+            // in the English loop above.
             var foreignFolded = ForeignLanguageKeywords.Scan(normalised);
             if (!foreignFolded.Allow) return foreignFolded;
 
             var foreignUnfolded = foldChanged ? ForeignLanguageKeywords.Scan(unfolded) : ModerationResult.Pass();
             if (!foreignUnfolded.Allow) return foreignUnfolded;
+
+            var foreignWordFolded = wordFoldChanged ? ForeignLanguageKeywords.Scan(wordFolded) : ModerationResult.Pass();
+            if (!foreignWordFolded.Allow) return foreignWordFolded;
 
             if (foreignFolded.Category == ProhibitedCategory.ProfessionalAdvice)
                 return foreignFolded;
@@ -539,25 +584,31 @@ namespace ConditioningControlPanel.Services.Moderation
         /// arrays; callers in unit tests or in foreign-language follow-up workstreams
         /// can fold a string through the same pipeline.
         /// </summary>
-        public static string Normalize(string text) => NormalizePair(text).Folded;
+        public static string Normalize(string text) => NormalizeVariants(text).Folded;
 
         /// <summary>
-        /// Runs the <see cref="Normalize"/> pipeline once and hands back BOTH end states:
-        /// <c>Folded</c> is what <see cref="Normalize"/> returns (steps 1-5, l33t fold
-        /// included), <c>Unfolded</c> is the same string with step 4 skipped (steps 1-3
-        /// + 5 only).
+        /// Runs the <see cref="Normalize"/> pipeline once and hands back the THREE end
+        /// states <see cref="Scan"/> matches against:
+        /// <list type="bullet">
+        /// <item><c>Folded</c> — what <see cref="Normalize"/> returns (steps 1-5, l33t
+        /// fold included).</item>
+        /// <item><c>Unfolded</c> — the same string with step 4 skipped (steps 1-3 + 5).</item>
+        /// <item><c>WordFolded</c> — step 4 applied only to digits ADJACENT TO A LETTER,
+        /// so isolated digit tokens are left alone.</item>
+        /// </list>
         ///
         /// Step 4 is lossy: it rewrites isolated single digits as letters, which destroys
         /// single-digit ages ("5 years old" -&gt; "s years old") before any age pattern
-        /// can see them. <see cref="Scan"/> matches every rule against both strings and
-        /// blocks on either, so each covers the class the other cannot: Folded catches
-        /// leetspeak substitution (b0mb, n!gger), Unfolded catches literal digits the
-        /// fold would eat (single-digit ages, "c4"). Neither catches the two mixed in
-        /// one sentence ("5 y3ars old") — see the P3-AGE note in <see cref="Scan"/>.
+        /// can see them. <see cref="Scan"/> matches every rule against all three strings
+        /// and blocks on any, so each covers the class the others cannot: Folded catches
+        /// leetspeak substitution (b0mb, n!gger), Unfolded catches literal digits the fold
+        /// would eat (single-digit ages, "c4"), and WordFolded catches the two MIXED in
+        /// one sentence — "5 y3ars old" is unreachable from Folded ("s years old") and
+        /// from Unfolded ("5 y3ars old") but reads as "5 years old" here.
         /// </summary>
-        private static (string Folded, string Unfolded) NormalizePair(string text)
+        private static (string Folded, string Unfolded, string WordFolded) NormalizeVariants(string text)
         {
-            if (string.IsNullOrEmpty(text)) return (string.Empty, string.Empty);
+            if (string.IsNullOrEmpty(text)) return (string.Empty, string.Empty, string.Empty);
 
             // Step 1: NFKC.
             string nfkc;
@@ -578,8 +629,12 @@ namespace ConditioningControlPanel.Services.Moderation
             // Step 4: l33t fold, suppressed inside short numeric runs.
             var folded = LeetFold(stripped);
 
+            // Step 4b: word-internal l33t fold — same rules, but a single digit is only
+            // folded when it touches a letter.
+            var wordFolded = LeetFold(stripped, wordInternalDigitsOnly: true);
+
             // Step 5: lowercase.
-            return (folded.ToLowerInvariant(), stripped.ToLowerInvariant());
+            return (folded.ToLowerInvariant(), stripped.ToLowerInvariant(), wordFolded.ToLowerInvariant());
         }
 
         private static bool IsStrippableControl(int v)
@@ -600,7 +655,14 @@ namespace ConditioningControlPanel.Services.Moderation
             return false;
         }
 
-        private static string LeetFold(string s)
+        /// <param name="wordInternalDigitsOnly">
+        /// When true, a lone digit is folded ONLY if it is adjacent to a letter — the
+        /// actual leetspeak-inside-a-word shape (b0mb, y3ars, f4ggot). A digit standing
+        /// on its own ("she is 5 years old") is left as a digit so the age patterns can
+        /// still see it. Non-digit leet characters (! @ $) fold either way; they can
+        /// never be an age. Default false = the original behaviour, unchanged.
+        /// </param>
+        private static string LeetFold(string s, bool wordInternalDigitsOnly = false)
         {
             if (string.IsNullOrEmpty(s)) return s;
 
@@ -621,6 +683,10 @@ namespace ConditioningControlPanel.Services.Moderation
                     {
                         sb.Append(s, i, runLen);
                     }
+                    else if (wordInternalDigitsOnly && !TouchesLetter(s, i))
+                    {
+                        sb.Append(s[i]);
+                    }
                     else
                     {
                         sb.Append(MapLeet(s[i]));
@@ -634,6 +700,10 @@ namespace ConditioningControlPanel.Services.Moderation
             }
             return sb.ToString();
         }
+
+        private static bool TouchesLetter(string s, int i) =>
+            (i > 0 && char.IsLetter(s[i - 1])) ||
+            (i + 1 < s.Length && char.IsLetter(s[i + 1]));
 
         private static char MapLeet(char c)
         {
