@@ -1,0 +1,96 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/UsernamePickerDialog.xaml.
+     Structure, order, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                  -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"      -> CanResize="False"
+       Visibility="Collapsed"     -> IsVisible="False"
+       {loc:Str key}              -> {loc:Str key} unchanged, via the Avalonia twin extension in
+                                     Localization/StrExtension.cs
+       MouseLeftButtonDown / TextChanged / Click -> wired in the constructor
+
+     Buttons carry a TextBlock child rather than Content (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.UsernamePickerDialog"
+        Title="{loc:Str dialog_choose_your_display_name}" Height="350" Width="450"
+        WindowStartupLocation="CenterOwner" CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}"
+        SystemDecorations="None" TransparencyLevelHint="Transparent">
+
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" CornerRadius="10">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <TextBlock Grid.Row="0" Text="{loc:Str dialog_choose_your_display_name}"
+                       FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+            <!-- Subtitle for new users -->
+            <TextBlock x:Name="TxtSubtitle" Grid.Row="1"
+                       Text="{loc:Str label_this_name_will_be_shown_on_the_leaderboard_an}"
+                       FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
+                       HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+            <!-- OG Welcome message (hidden by default) -->
+            <Border x:Name="OgWelcomePanel" Grid.Row="2" IsVisible="False"
+                    Background="#30FFD700" BorderBrush="#FFD700" BorderThickness="1"
+                    CornerRadius="5" Padding="10" Margin="0,0,0,15">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str label_welcome_back_pioneer}"
+                               FontSize="16" FontWeight="Bold" Foreground="#FFD700"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_you_ve_been_recognized_as_a_season_0_og_your}"
+                               FontSize="11" Foreground="White" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Username input -->
+            <StackPanel Grid.Row="3" Margin="0,0,0,10">
+                <TextBlock Text="{loc:Str label_display_name}" Foreground="White" FontSize="14" Margin="0,0,0,5"/>
+                <TextBox x:Name="TxtUsername" FontSize="18" Padding="10,8"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                         MaxLength="30"/>
+                <TextBlock x:Name="TxtAvailability" FontSize="11" Margin="0,5,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" Text="{loc:Str label_enter_a_unique_display_name_3_30_characters}"/>
+            </StackPanel>
+
+            <!-- Suggested name (from legacy data or provider) -->
+            <StackPanel x:Name="SuggestionPanel" Grid.Row="4" IsVisible="False" Margin="0,0,0,10">
+                <TextBlock Text="{loc:Str label_suggested_name_from_your_previous_account}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                <Button x:Name="BtnUseSuggestion" Padding="10,5"
+                        Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderThickness="0"
+                        Cursor="Hand" Margin="0,3,0,0"
+                        HorizontalAlignment="Left">
+                    <TextBlock/>
+                </Button>
+            </StackPanel>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                <Button x:Name="BtnCancel" Padding="20,10"
+                        Background="{DynamicResource AccentTintedBgBrush}" Foreground="White" BorderThickness="0"
+                        Cursor="Hand" Margin="0,0,10,0">
+                    <TextBlock Text="{loc:Str btn_cancel}"/>
+                </Button>
+                <Button x:Name="BtnConfirm" Padding="20,10"
+                        Background="{DynamicResource PinkBrush}" Foreground="White" BorderThickness="0"
+                        Cursor="Hand" IsEnabled="False">
+                    <TextBlock Text="{loc:Str btn_confirm}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

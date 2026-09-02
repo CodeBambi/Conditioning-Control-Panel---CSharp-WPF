@@ -1,0 +1,106 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/RoadmapStepPopup.xaml.
+     Structure, order, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                     -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       Background="Transparent"      -> kept (the rounded Border is the visible surface)
+       ResizeMode="NoResize"         -> CanResize="False"
+       DropShadowEffect ShadowDepth  -> OffsetX/OffsetY (Avalonia spells the offset out)
+       {DynamicResource PinkColor}   -> {StaticResource PinkColor} on the effect: Avalonia's
+                                       DropShadowEffect.Color is not a styled property, so it
+                                       cannot carry a DynamicResource
+       Image + EmojiToImageSource    -> TextBlock (CLAUDE.md trap 3: Avalonia draws colour emoji)
+       Visibility="Collapsed"        -> IsVisible="False"
+       ImageBrush x:Name="PhotoBrush"-> the Ellipse is named instead and its Fill is assigned in
+                                       code; FindControl only reaches Controls, not brushes
+       Button.Style IsMouseOver trig -> the Button.popupclose :pointerover selector below
+       MouseLeftButtonDown / Click   -> wired in the constructor
+
+     The close button carries a TextBlock rather than Content (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.RoadmapStepPopup"
+        Title="Step Complete!"
+        Width="400" Height="180"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        CanResize="False"
+        WindowStartupLocation="Manual">
+
+    <Window.Styles>
+        <!-- The WPF <Style TargetType="Button"> trigger block, verbatim in intent. The Fluent
+             theme paints its own hover plate, so the rest state has to be pinned too or the
+             borderless close button grows a grey background on hover. -->
+        <Style Selector="Button.popupclose /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Button.popupclose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="#E01A1A2E" CornerRadius="12" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <Grid Margin="15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Step Photo/Icon -->
+            <Border Grid.Column="0" Width="100" Height="100" Background="{DynamicResource DarkerBgBrush}"
+                    CornerRadius="50" Margin="0,0,15,0" ClipToBounds="True"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <!-- Photo thumbnail (if available) -->
+                    <Ellipse x:Name="PhotoEllipse" Width="96" Height="96" IsVisible="False"/>
+                    <!-- Default checkmark icon -->
+                    <TextBlock x:Name="CheckmarkIcon" Text="✓" FontSize="48" FontWeight="Bold"
+                               Foreground="#00E676" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Text Content -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <!-- Star Icon + "Step Complete" -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="✨" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="STEP COMPLETE!" Foreground="#FFD700"
+                               FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Step Title -->
+                <TextBlock x:Name="TxtStepTitle" Text="Step Title"
+                           Foreground="{StaticResource PinkBrush}"
+                           FontWeight="Bold" FontSize="18"
+                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                <!-- Track Name -->
+                <TextBlock x:Name="TxtTrackName" Text="Track Name"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                           TextWrapping="Wrap" FontStyle="Italic"/>
+            </StackPanel>
+
+            <!-- Close Button -->
+            <Button x:Name="BtnClose" Grid.Column="1" Classes="popupclose"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="24" Height="24" Margin="0,-5,-5,0" Padding="0"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                <TextBlock Text="✕"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>
