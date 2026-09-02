@@ -25,8 +25,16 @@
          runtime, with no compile error. Move both, or neither. -->
     <RootNamespace>ConditioningControlPanel</RootNamespace>
     <AssemblyName>CCP.Core</AssemblyName>
-    <!-- Match the app: assembly info lives in Properties/AssemblyInfo.cs. -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- Keep in step with ConditioningControlPanel.csproj <Version>. Without it the dll
+         ships stamped 0.0.0.0, which makes a crash-log assembly version useless. -->
+    <Version>6.9.0</Version>
+    <!-- Deliberately NOT matching the app, which sets this false and hand-writes
+         Properties/AssemblyInfo.cs. That switch turns off the whole GenerateAssemblyInfo
+         target, so the app's own <Version> never reaches its dll - measured, it loads as
+         0.0.0.0 despite the "auto-generated" comment in its AssemblyInfo.cs. Core keeps
+         generation ON so <Version> above is really stamped; AssemblyInfo.cs here declares
+         only InternalsVisibleTo, so there is nothing for the generated file to collide with. -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <!-- CA1416 (platform compatibility) is an ERROR here. The app <NoWarn>s it because it is
          deliberately Windows-only; Core is the opposite case, and a warning would be lost
          among the app's ~342 pre-existing ones. Registry/DPAPI/Console.Beep must not compile. -->
@@ -37,5 +45,21 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Serilog" Version="3.1.1" />
   </ItemGroup>
+
+  <!--
+    LIMIT: only non-XAML types are a pure `git mv` into here.
+
+    Every one of the app's 265 `xmlns:x="clr-namespace:ConditioningControlPanel..."`
+    declarations (147 .xaml files, 14 distinct namespaces) is written WITHOUT an
+    `;assembly=` part - verified, not one carries it. A bare clr-namespace resolves in the
+    assembly that is compiling the XAML, i.e. ConditioningControlPanel. So the moment a type
+    that XAML names - a converter, an `x:Type` key, an enum bound in markup, a UserControl -
+    lands in CCP.Core, that markup fails to compile with MC3074 ("the tag does not exist in
+    XML namespace") until every xmlns pointing at its namespace is rewritten to
+    `clr-namespace:...;assembly=CCP.Core`.
+
+    That rewrite is per-namespace and repo-wide, so it has to be its own reviewed change.
+    Until then: move types no XAML references. Grep the .xaml before moving anything.
+  -->
 
 </Project>

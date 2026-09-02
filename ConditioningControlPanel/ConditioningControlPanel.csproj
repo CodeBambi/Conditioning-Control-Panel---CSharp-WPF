@@ -42,6 +42,14 @@
     <!-- Deterministic builds -->
     <Deterministic>true</Deterministic>
 
+    <!-- Agent tooling checks whole git worktrees out under .claude/ inside this folder, i.e. a
+         second copy of every .cs and .xaml in the project. The SDK already excludes those:
+         DefaultExcludesInProjectFolder carries **/.*/** and every default glob (Compile,
+         Page, Resource, None, EmbeddedResource) applies it - verified, a duplicate App.xaml
+         planted there is picked up by none of them. This states the exclusion outright so
+         the build does not silently depend on that implicit dot-directory rule. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);.claude\**</DefaultItemExcludes>
+
     <!-- Suppress CA1416 platform compatibility warnings — this is a Windows-only WPF app -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
