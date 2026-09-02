@@ -1,0 +1,244 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/CompanionPhraseEditorDialog.xaml.
+     Structure, ordering, spacing, x:Names and every loc key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       ResizeMode="CanResizeWithGrip"   -> CanResize="True" (Avalonia has no resize grip)
+       Window.Resources brush shadows   -> dropped. PinkBrush / DarkerBgBrush / SurfaceBgBrush /
+         (PinkBrush, DarkBg, CardBg,       PanelBgBrush already exist in Theme/Brushes.xaml over
+          InputBg, BorderColor, MutedText) the same Colors; the WPF copies only re-wrapped them.
+                                           BorderColor and MutedText were never referenced.
+       <Style x:Key="ActionButton">     -> Theme="{StaticResource ActionButton}" from
+       <Style x:Key="SecondaryButton">     Theme/Styles.xaml - same shape, already hoisted. The
+                                           hoisted pair is a size larger (12/15,8 and 12/12,8), so
+                                           each button carries the WPF style's own FontSize and
+                                           Padding: without them the four toolbar buttons grow past
+                                           the search box at the window's 820px width.
+       <Style x:Key="DarkComboBox">     -> Theme="{StaticResource DarkComboBoxStyle}", likewise
+       <Style x:Key="PhraseItemStyle">  -> dropped with the ListBox (see below)
+       CollectionViewSource + GroupStyle-> a nested ItemsControl over PhraseGroup rows. Avalonia
+         + VirtualizingPanel.*             has no CollectionViewSource, no GroupStyle and no
+                                           grouped virtualization; the code-behind groups and
+                                           filters in LINQ and rebinds. See the ponytail note on
+                                           PhraseList in the code-behind for the ceiling.
+       DataTemplate.Triggers            -> style classes and IsVisible bindings. Avalonia has no
+                                           DataTriggers, and - the trap - a LOCAL attribute value
+                                           outranks a style setter here, the reverse of what WPF's
+                                           template triggers did. So every property a trigger
+                                           touched (the row Background/BorderBrush/BorderThickness
+                                           and the phrase Foreground) is set ONLY from the styles
+                                           below, never as an attribute on the element.
+       EnableChk Content On/Off trigger -> two TextBlocks in a Panel, one per IsEnabled state. A
+                                           Content setter would lose to the local value the same way.
+       TxtSearchPlaceholder TextBlock   -> Watermark on the TextBox (native), so the placeholder
+                                           and its visibility toggle disappear
+       MouseLeftButtonDown / Click /    -> PointerPressed / Button.ClickEvent / TextChanged /
+         LostFocus / SelectionChanged      SelectionChanged, wired in the constructor: a
+         in markup                         DataTemplate has no name scope to FindControl through,
+                                           so the two per-row events are AddHandler'd on the list
+       ToolTip="..."                    -> ToolTip.Tip="..."
+       Visibility="Collapsed"           -> IsVisible="False"
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case. See the porting notes in CLAUDE.md.
+     The per-row remove button gained x:Name="RemoveBtn" so the one list-level Click handler can
+     tell it from Browse and Clear; the Close button gained BtnClose for the same reason. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:models="clr-namespace:ConditioningControlPanel.Models;assembly=CCP.Core"
+        xmlns:views="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.CompanionPhraseEditorDialog"
+        Title="{loc:Str dialog_manage_companion_phrases}"
+        Width="820" Height="620"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="True">
+
+    <Window.Styles>
+        <!-- The WPF DataTemplate.Triggers block, setters verbatim. Driven by the Classes.* bindings
+             on the row; the defaults live here rather than on the element so the .selected / .off
+             variants can win (see the header note). -->
+        <Style Selector="Border.phraserow">
+            <Setter Property="Background" Value="#1E1E3A"/>
+            <Setter Property="BorderBrush" Value="#2A2A45"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <Style Selector="Border.phraserow.selected">
+            <Setter Property="Background" Value="#2A1E3A"/>
+            <Setter Property="BorderBrush" Value="#FF69B4"/>
+            <Setter Property="BorderThickness" Value="1,0,0,1"/>
+        </Style>
+        <Style Selector="TextBlock.phrasetext">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="TextBlock.phrasetext.off">
+            <Setter Property="Foreground" Value="#606060"/>
+        </Style>
+        <Style Selector="TextBox.phrasetext">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="TextBox.phrasetext.off">
+            <Setter Property="Foreground" Value="#606060"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{loc:Str label_phrase_manager}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
+            <TextBlock Text="{loc:Str label_manage_companion_speech_bubble_phrases_and_co}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,3,0,0"/>
+        </StackPanel>
+
+        <!-- Toolbar -->
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnSelectAll" Theme="{StaticResource SecondaryButton}" FontSize="11" Padding="10,5" Margin="0,0,6,0">
+                    <TextBlock Text="{loc:Str btn_select_all}"/>
+                </Button>
+                <Button x:Name="BtnDeselectAll" Theme="{StaticResource SecondaryButton}" FontSize="11" Padding="10,5" Margin="0,0,6,0">
+                    <TextBlock Text="{loc:Str btn_deselect_all}"/>
+                </Button>
+                <Button x:Name="BtnEnableSelected" Theme="{StaticResource SecondaryButton}" FontSize="11" Padding="10,5" Margin="0,0,6,0">
+                    <TextBlock Text="{loc:Str btn_enable_selected}"/>
+                </Button>
+                <Button x:Name="BtnDisableSelected" Theme="{StaticResource SecondaryButton}" FontSize="11" Padding="10,5">
+                    <TextBlock Text="{loc:Str btn_disable_selected}"/>
+                </Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="#505070" BorderThickness="1"
+                        CornerRadius="4" Margin="0,0,10,0" Width="190" VerticalAlignment="Center">
+                    <TextBox x:Name="TxtSearch" Background="Transparent" Foreground="White" BorderThickness="0"
+                             Padding="8,4" FontSize="11" VerticalContentAlignment="Center"
+                             Watermark="{loc:Str label_search_phrases}"/>
+                </Border>
+                <TextBlock Text="{loc:Str label_filter}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="CmbCategoryFilter" Width="160" Theme="{StaticResource DarkComboBoxStyle}"
+                          FontSize="11"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Phrase List (grouped; see the ponytail note in the code-behind for what replaced WPF's
+             grouped UI virtualization) -->
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="PhraseList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="views:PhraseGroup">
+                        <StackPanel>
+                            <!-- GroupStyle.HeaderTemplate. WPF built "Name (ItemCount)" out of four
+                                 Runs; PhraseGroup.Header is the same string, formed once. -->
+                            <Border Background="#20203C" CornerRadius="6,6,0,0" Padding="10,8" Margin="0,8,0,0">
+                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#FF69B4"
+                                           Text="{Binding Header}"/>
+                            </Border>
+
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:CompanionPhrase">
+                                        <Border Classes="phraserow" Classes.selected="{Binding IsSelected}"
+                                                Padding="10,6" Margin="0,0,0,1" Cursor="Hand">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <CheckBox Grid.Column="0" Theme="{StaticResource ItemCheckBox}"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                                                <TextBlock Grid.Column="1" x:Name="BuiltInText" Text="{Binding Text}" FontSize="12"
+                                                           Classes="phrasetext" Classes.off="{Binding !IsEnabled}"
+                                                           IsVisible="{Binding IsBuiltIn}"
+                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding Text}"/>
+                                                <TextBox Grid.Column="1" x:Name="CustomText"
+                                                         IsVisible="{Binding !IsBuiltIn}"
+                                                         Text="{Binding Text, Mode=TwoWay}"
+                                                         Classes="phrasetext" Classes.off="{Binding !IsEnabled}"
+                                                         Background="#252542" BorderBrush="#404060" BorderThickness="1"
+                                                         Padding="4,2" FontSize="12" VerticalAlignment="Center"/>
+
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                    <StackPanel x:Name="HasAudioPanel" Orientation="Horizontal"
+                                                                IsVisible="{Binding HasAudio}">
+                                                        <TextBlock Text="&#x266B; " Foreground="#50C878" FontSize="12" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding AudioDisplayName}" Foreground="#50C878" FontSize="10"
+                                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="90"
+                                                                   ToolTip.Tip="{Binding AudioFileName}"/>
+                                                        <Button x:Name="ClearAudioBtn"
+                                                                Background="Transparent" Foreground="#FF6B6B" BorderThickness="0" FontSize="10"
+                                                                Padding="4,0,0,0" Cursor="Hand" VerticalAlignment="Center" ToolTip.Tip="Remove audio"
+                                                                IsVisible="{Binding CanClearAudio}">
+                                                            <TextBlock Text="&#x2716;"/>
+                                                        </Button>
+                                                    </StackPanel>
+                                                    <StackPanel x:Name="NoAudioPanel" Orientation="Horizontal"
+                                                                IsVisible="{Binding !HasAudio}">
+                                                        <TextBlock Text="No Audio" Foreground="#606060" FontSize="10" VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"/>
+                                                        <Button x:Name="BrowseBtn" Background="#353550"
+                                                                Foreground="White" BorderThickness="0" FontSize="10" Padding="6,2" Cursor="Hand"
+                                                                VerticalAlignment="Center" IsVisible="{Binding CanBrowseAudio}">
+                                                            <TextBlock Text="Browse"/>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <CheckBox Grid.Column="3" x:Name="EnableChk" IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                          VerticalAlignment="Center" Margin="8,0,0,0">
+                                                    <Panel>
+                                                        <TextBlock Text="On" Foreground="#50C878" FontSize="10"
+                                                                   IsVisible="{Binding IsEnabled}"/>
+                                                        <TextBlock Text="Off" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                                                   IsVisible="{Binding !IsEnabled}"/>
+                                                    </Panel>
+                                                </CheckBox>
+
+                                                <Button Grid.Column="4" x:Name="RemoveBtn" Background="Transparent"
+                                                        Foreground="#FF69B4" BorderThickness="0" FontSize="13" Padding="6,0,2,0" Cursor="Hand"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="&#x2716;"/>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Footer Buttons -->
+        <Grid Grid.Row="3" Margin="0,10,0,0">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnAddPhrase" Theme="{StaticResource ActionButton}" FontSize="12" Padding="12,6" Margin="0,0,8,0">
+                    <TextBlock Text="{loc:Str btn_add_phrase}"/>
+                </Button>
+                <Button x:Name="BtnRemoveSelected" Theme="{StaticResource SecondaryButton}" FontSize="11" Padding="10,5" Foreground="#FF6B6B">
+                    <TextBlock Text="{loc:Str btn_remove_selected}"/>
+                </Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock x:Name="TxtTotalCount" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                           VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Button x:Name="BtnClose" Theme="{StaticResource SecondaryButton}" FontSize="11" Padding="16,6">
+                    <TextBlock Text="{loc:Str btn_close}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
