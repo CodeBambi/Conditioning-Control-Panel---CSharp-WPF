@@ -20,15 +20,15 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.9.0";
+        public const string AppVersion = "6.9.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.0 - The Spiral
+        public const string CurrentPatchNotes = @"v6.9.1 - The Spiral
 
-this is the big one. tomorrow, September 1st at 7pm UTC, the monthly wipe runs one final time and then it is gone forever. after the ceremony your level, your XP and your hours are yours for good. this is the version that carries you into that world, and i wanted it to feel special. it does :3
+this is the big one. on September 1st the Descent ceremony ran and the monthly wipe is gone forever. from here on your level, your XP and your hours are yours for good. this is the version that carries you into that world, and i wanted it to feel special. it does :3
 
 THE ARCADEMY
 - the campus takes center stage. classes that are secretly little games, a prize counter, your own locker, report cards, the works. wander around, get graded, get conditioned.
@@ -46,7 +46,7 @@ EVERYWHERE AT ONCE
 - the CCP Mobile public beta is live! grab the APK here: https://github.com/CodeBambi/CCP-Mobile-Releases/releases/latest
 
 THE DESCENT
-- September 1st, 7pm UTC. the board clears one final time and then never again. levels and hours carry forward from that moment on.
+- the wipe is gone. nothing clears any more, and levels and hours carry forward from here on.
 - the season recap card only shows if a reset actually happened to you, the countdown is honest and stands down when it is over, and if a stray reset order ever reaches the app after the Descent, the app refuses it. your progress does not roll back because a server hiccuped.
 
 NEW MOD: INFECTION CONTROL
@@ -56,7 +56,17 @@ NEW MOD: INFECTION CONTROL
 
 AND SOME FIXES
 - the updater now upgrades the copy you are actually running, the fade slider actually fades, escape always escapes when it should, muted means muted, tooltips are readable again, ghost mode stops freezing, and the menus behave.
-- full nerd changelog in the pull requests, numbers 380 through 445.";
+- full nerd changelog in the pull requests, numbers 380 through 445.
+
+6.9.1 HOTFIXES (the day after)
+- the ceremony's two doors fit on screen at high display scaling, and ""not tonight"" stops re-asking for the session.
+- your profile card shows which door you picked, with the +10% on the XP numbers if you cycled.
+- the board notice, the Spiral help card and EMI's barks all agree now: nothing was wiped and nothing resets.
+- bubbles have their own ""stare to pop"" switch on the bubble page.
+- a headset play/pause tap no longer ends a strict lock video.
+- a failed update download gets a proper box and a manual download button, and the exe carries its real version number.
+- flash audio unducks after a stop, reveal in explorer works with spaces, customize and privacy are hidden on other people's cards, OCR text stays out of the logs, and the single-digit age bypass is closed.
+- full nerd changelog in pull requests 451 through 475.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
