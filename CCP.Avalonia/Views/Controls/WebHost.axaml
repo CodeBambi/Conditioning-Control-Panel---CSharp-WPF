@@ -1,0 +1,67 @@
+<!-- NOT a port. There is no WPF twin: the WPF head embeds Microsoft.Web.WebView2 directly
+     (ChaosWebViewHost, MainWindow.Browser, SpiralEmbedView), which is Windows-only. This is the
+     cross-platform seam those hosts will move onto - Avalonia.Controls.WebView wraps WebView2 on
+     Windows and WebKitGTK/WPE on Linux behind one control.
+
+     The fallback panel is the reason this control exists rather than a bare <NativeWebView/>:
+     "WebKitGtk library is not installed" is the DEFAULT state of a fresh Linux box (and of the CI
+     runner), and a web view with no engine behind it draws nothing at all - an empty rectangle
+     that looks exactly like a broken layout. The panel says which engine is missing instead.
+
+     Strings here are literals, not {loc:Str}: there is no WPF original to copy a key from, and
+     inventing one would put a key in the XAML that no .resx defines.
+     ponytail: hardcoded English; give it loc keys when the WebView2 hosts actually move over -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.WebHost"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignHeight="360" d:DesignWidth="640">
+
+    <Grid x:Name="Root">
+        <!-- The real thing. Created in the code-behind, NOT declared here, so a platform with no
+             engine never attaches it: NativeWebView builds its adapter on attach, and an adapter
+             that cannot be built is an exception on the render thread rather than a blank box. -->
+        <Panel x:Name="WebSlot"/>
+
+        <!-- Fallback. Visible whenever no adapter reports itself installed AND able to host a
+             native control. That is every headless render, so the render proof always shows it. -->
+        <Border x:Name="Fallback"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="24">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                <TextBlock Text="🌐"
+                           FontSize="40"
+                           Opacity="0.75"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="Web view unavailable"
+                           FontSize="15"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextLightBrush}"
+                           HorizontalAlignment="Center"/>
+                <!-- Filled from the adapter's own UnavailableReason ("WebKitGtk library is not
+                     installed. Install webkit2gtk 4.0+ package."), so the panel names the fix. -->
+                <TextBlock x:Name="TxtReason"
+                           Text="No native web view on this platform."
+                           FontSize="12"
+                           MaxWidth="380"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center"/>
+                <!-- The page that would have loaded. Hidden until Source is set. -->
+                <TextBlock x:Name="TxtSource"
+                           FontSize="11"
+                           MaxWidth="380"
+                           TextTrimming="CharacterEllipsis"
+                           TextAlignment="Center"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           HorizontalAlignment="Center"
+                           IsVisible="False"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
