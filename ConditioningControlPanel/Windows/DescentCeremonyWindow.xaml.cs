@@ -42,6 +42,22 @@ namespace ConditioningControlPanel
         /// </summary>
         private static readonly List<DescentCeremonyWindow> Live = new();
 
+        /// <summary>
+        /// The height, in DIPs, below which the act stops scaling down and starts scrolling
+        /// instead (ccp-bugs #1109). The tallest act is the two doors at roughly 630 DIPs, so the
+        /// floor is a little under half scale - and the machines that reach it are running 250% to
+        /// 300% Windows scaling, where half scale is still larger on the glass than the design is
+        /// at 100%.
+        ///
+        /// <para>The act host is the window less the margins, the eyebrow and the escape hatch,
+        /// which is about 187 DIPs: every scaling Windows actually offers clears this floor and
+        /// scales to fit rather than scrolling. 3840x2160 at 300% (1280x720 DIPs), 2560x1600 at
+        /// 250% (1024x640), 1920x1080 at 200% (960x540) and 2560x1440 at 300% (853x480) all fit
+        /// whole. Past that the scroller takes over, because a button that has to be scrolled to
+        /// is still a button, and one shrunk past reading is not.</para>
+        /// </summary>
+        private const double ActMinHeight = 290;
+
         private readonly DescentMigrationOffer _offer;
         private readonly int _restoreLevel;
         private string? _pendingChoice;
@@ -130,6 +146,31 @@ namespace ConditioningControlPanel
             }
 
             Say(DescentCeremonyCopy.CompanionIntro);
+        }
+
+        /// <summary>
+        /// Hand the act's Viewbox a height budget, which is the one thing XAML cannot state on its
+        /// own: inside a vertical ScrollViewer the Viewbox is measured against infinity, so without
+        /// a MaxHeight it would never scale anything down and would scroll instead every time.
+        ///
+        /// <para>The budget is the viewport, or <see cref="ActMinHeight"/> when the viewport is
+        /// smaller than that - and that floor is what hands the overflow back to the scroller.</para>
+        ///
+        /// <para>It reads the scroller's own height and not its ViewportHeight, which is still 0
+        /// the first time this fires and never changes again on a window that cannot be resized:
+        /// reading it there left the Viewbox at MaxHeight=Infinity for the life of the ceremony,
+        /// which is to say scaled by width alone, which is to say the bug was still there.</para>
+        /// </summary>
+        private void OnActScrollerSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            var viewport = e.NewSize.Height;
+            if (viewport <= 0) return;
+
+            var budget = Math.Max(ActMinHeight, viewport);
+
+            // Only on a real change: assigning MaxHeight re-measures, and a same-value write on
+            // every SizeChanged is a layout pass nobody asked for.
+            if (Math.Abs(ActBox.MaxHeight - budget) > 0.5) ActBox.MaxHeight = budget;
         }
 
         private void OnClosedInternal(object? sender, EventArgs e)
