@@ -1,0 +1,1084 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/PresetsTabView.xaml.
+
+     THE SESSION DOOR (tab key "presets"). Same bones as the WPF original: a header band, then
+     rack | splitter | detail. The left column stacks three zones - PRESETS (a wrapped chip rail),
+     SESSIONS (toolbar + one code-built list) and TAKEAWAY (a one-line strip over an overflow
+     tray). The right column is one detail panel shared by presets and sessions, with the spoiler
+     veil opt-in.
+
+     The design essays in the WPF file (why the rail wraps, why the rack is one list, why the
+     catalogue is a chip) are NOT transcribed - they describe decisions, not code, and they are
+     still readable in the original. What IS kept verbatim: every x:Name, every resource key and
+     every loc key, because MainWindow reaches into this view by all three.
+
+     Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"       -> Theme="{StaticResource X}"  (keyed styles are ControlThemes)
+       <Style x:Key TargetType>         -> <ControlTheme x:Key TargetType>; the four templated ones
+                                           (SdRackChip, SdRackDot, SdRowAction, SdRowActionDanger)
+                                           keep a Template whose ContentPresenter binds Content, or
+                                           they draw nothing (CLAUDE.md traps 4 and 6)
+       <Style.Triggers> IsMouseOver     -> <Style Selector="^:pointerover /template/ Border#x">
+       <Trigger IsChecked>              -> <Style Selector="^:checked ...">
+       SdRowActionDanger BasedOn        -> NOT BasedOn: the base's :pointerover sets a pink fill the
+                                           danger variant must not inherit. Restated in full.
+       Visibility="Collapsed"           -> IsVisible="False"
+       Visibility="Hidden" (SdRackActions) -> dropped; see the note on that key below
+       Panel.ZIndex="-1"                -> ZIndex="-1"
+       helpers:EmojiTextBlock           -> TextBlock (Avalonia renders colour emoji natively)
+       ToolTip="…"                      -> ToolTip.Tip="…"
+       Content="{loc:Str snake_case}"   -> a <TextBlock> child on every Button, RadioButton and
+                                           ComboBoxItem: Avalonia parses `_` in Content as an
+                                           access key (CLAUDE.md trap 1)
+       TxtRackSearchHint sibling        -> TextBox.PlaceholderText, which Avalonia has natively. The
+                                           WPF sibling exists only because that head's watermark
+                                           template drags in EmoteHelper's attached properties.
+       GridSplitter                     -> same control, ResizeDirection stated explicitly
+       Click / MouseLeftButtonUp / …    -> not wired: every handler in the WPF code-behind is a
+                                           two-line forward into MainWindow. See the code-behind.
+
+     The rack rows, preset chips, toolbar chips and takeaway chips are built in code, exactly as
+     they are on WPF (MainWindow.SessionIO / .Presets / .Takeaway) - here by SeedPlaceholders in
+     the code-behind, against these same keys, so the ControlThemes are actually exercised. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.PresetsTabView">
+    <UserControl.Resources>
+
+        <!-- ============================ zone furniture ============================ -->
+        <ControlTheme x:Key="SdZoneTag" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdZoneRule" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdZoneHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+        </ControlTheme>
+
+        <!-- ============================ THE SESSION RACK ============================
+             One 44px row per session, every one built by RepaintSessionRack on WPF. Zero padding
+             is deliberate: the difficulty stripe is full-bleed to the row's left edge. The 5px
+             bottom margin is hover headroom for the 2px lift. -->
+        <ControlTheme x:Key="SdSessionRow" TargetType="Border">
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- Selection: accent tint + accent stroke, restated under :pointerover so a hovered
+             selected row stays lit rather than falling back to the base hover fill. -->
+        <ControlTheme x:Key="SdSessionRowSelected" TargetType="Border" BasedOn="{StaticResource SdSessionRow}">
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SdRackIcon" TargetType="TextBlock">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdRowTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </ControlTheme>
+        <!-- The spoiler-free blurb, on the same line as the name. Full text on the row tooltip. -->
+        <ControlTheme x:Key="SdRowBlurb" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </ControlTheme>
+        <!-- Duration and reward. Consolas so the numbers form a column down the list. -->
+        <ControlTheme x:Key="SdRackMeta" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+        </ControlTheme>
+
+        <!-- SdRackActions is NOT ported. On WPF it is Visibility="Hidden" plus a DataTrigger on
+             the ancestor row's IsMouseOver, so a row's action buttons only appear under the
+             pointer. A headless render never hovers, so a faithful port would prove nothing about
+             SdRowAction and would leave a blank strip on every row. The placeholder rows built in
+             the code-behind show their actions instead; the reveal belongs with RepaintSessionRack,
+             which is not ported.
+             ponytail: restore the hover reveal (a `Border:pointerover StackPanel.rackActions`
+             selector) when the real rack builder moves to Core. -->
+
+        <!-- ============================ pills and badges ============================ -->
+        <ControlTheme x:Key="SdPill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="5"/>
+            <Setter Property="Padding" Value="7,1.5"/>
+            <Setter Property="Margin" Value="9,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdPillText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </ControlTheme>
+        <!-- BUILT-IN / YOURS / CAT. Mono means "structural label" on this page, never content. -->
+        <ControlTheme x:Key="SdRackBadgeText" TargetType="TextBlock" BasedOn="{StaticResource SdPillText}">
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="9"/>
+        </ControlTheme>
+
+        <!-- ============================ rack toolbar ============================ -->
+        <ControlTheme x:Key="SdRackChip" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Chip" CornerRadius="11" Padding="9,3"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource PanelAccentBrush}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Chip">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#Chip">
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- A difficulty dot carries its OWN colour in Foreground (set per dot in code), so the
+             checked state dims the whole button rather than repainting it. -->
+        <ControlTheme x:Key="SdRackDot" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,3,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MinWidth" Value="24"/>
+            <Setter Property="Opacity" Value="0.32"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Dot" CornerRadius="11" Padding="6,3"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource PanelAccentBrush}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Dot">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Opacity" Value="1"/>
+            </Style>
+        </ControlTheme>
+        <!-- The line the list shows instead of rows when a filter has emptied it. -->
+        <ControlTheme x:Key="SdRackEmpty" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,26,0,0"/>
+        </ControlTheme>
+
+        <!-- ============================ row actions ============================ -->
+        <ControlTheme x:Key="SdRowAction" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="3,0,0,0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="chrome" CornerRadius="7"
+                            Background="{TemplateBinding Background}"
+                            BorderThickness="1" BorderBrush="Transparent">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#chrome">
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- Same shape, red hover, and NO fill: destructive actions do not get the brand colour.
+             Restated rather than BasedOn - inheriting the base theme would inherit its pink
+             :pointerover fill along with the geometry. -->
+        <ControlTheme x:Key="SdRowActionDanger" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="3,0,0,0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="chrome" CornerRadius="7"
+                            Background="{TemplateBinding Background}"
+                            BorderThickness="1" BorderBrush="Transparent">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#chrome">
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ============================ THE PRESET CHIP RAIL ============================
+             34px pills on a WrapPanel. Selection is the rack's language - an accent tint plus a
+             1px accent stroke - never a fatter border, which would re-flow the chip on click. -->
+        <ControlTheme x:Key="SdPresetChip" TargetType="Border">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="CornerRadius" Value="17"/>
+            <Setter Property="Padding" Value="11,0"/>
+            <Setter Property="Margin" Value="0,0,7,6"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="SdPresetChipSelected" TargetType="Border" BasedOn="{StaticResource SdPresetChip}">
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- The fixed "new preset" chip at the end of the rail. -->
+        <ControlTheme x:Key="SdPresetChipNew" TargetType="Border" BasedOn="{StaticResource SdPresetChip}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- MaxWidth is set per chip in code - a theme cannot know how much room the glyphs took. -->
+        <ControlTheme x:Key="SdPresetChipName" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </ControlTheme>
+        <!-- A tag pill sized for the inside of a 34px chip; SdPill's lead overflows a pill-in-a-pill. -->
+        <ControlTheme x:Key="SdChipTag" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="5,1"/>
+            <Setter Property="Margin" Value="7,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </ControlTheme>
+
+        <!-- ==================== THE TAKEAWAY STRIP AND ITS TRAY ====================
+             A receipt, not a launcher: clicking one replays the order in the Just Drop window and
+             mints nothing. r16 on a 32px chip, a size down from the rail's r17 pills. -->
+        <ControlTheme x:Key="SdTakeawayChip" TargetType="Border">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="11,0"/>
+            <Setter Property="Margin" Value="0,0,7,0"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- The "order a drop" door: muted stroke on nothing, so the strip ends on an invitation. -->
+        <ControlTheme x:Key="SdTakeawayChipDoor" TargetType="Border" BasedOn="{StaticResource SdTakeawayChip}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- The "+n more" toggle: the one chip that acts on the PAGE rather than on an order. -->
+        <ControlTheme x:Key="SdTakeawayChipAccent" TargetType="Border" BasedOn="{StaticResource SdTakeawayChip}">
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+        <!-- The Community Catalogue door, violet: the same SessionSrcImported family the rack
+             spends on catalogue rows, so the colour keeps meaning across the page. -->
+        <ControlTheme x:Key="SdCatalogueChip" TargetType="Border" BasedOn="{StaticResource SdTakeawayChip}">
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Background" Value="{DynamicResource SessionSrcImportedWashBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SessionSrcImportedWashBrush}"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{DynamicResource SessionSrcImportedBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SdTakeawayChipTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdTakeawayChipMeta" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+        </ControlTheme>
+        <!-- The copy-link chip. Quiet until hovered: the chip's whole job is "click to replay". -->
+        <ControlTheme x:Key="SdTakeawayCopy" TargetType="Border">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Opacity" Value="0.55"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="Opacity" Value="1"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ============================ the tray ============================ -->
+        <ControlTheme x:Key="SdTakeawayRow" TargetType="Border">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="SdTakeawayRowTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdTakeawayRowMeta" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdTakeawayRowAge" TargetType="TextBlock" BasedOn="{StaticResource SdTakeawayRowMeta}">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+        </ControlTheme>
+
+        <!-- ============================ medallions ============================ -->
+        <ControlTheme x:Key="SdMedallion" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="6,9"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdMedLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdMedValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,3,0,0"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </ControlTheme>
+
+        <!-- ============================ detail chrome ============================ -->
+        <ControlTheme x:Key="SdDetailLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </ControlTheme>
+        <ControlTheme x:Key="SdDetailValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Margin" Value="0,0,0,13"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- =====================================================================
+             HEADER BAND. The two actions that used to live in the placeholder
+             boxes at the bottom of the page. The wash is a one-way accent
+             gradient on its own layer rather than a filled bar.
+             ===================================================================== -->
+        <Border Grid.Row="0" Margin="5,5,5,0" CornerRadius="11" Padding="16,11"
+                Background="{DynamicResource PanelBgBrush}"
+                BorderThickness="1" BorderBrush="{DynamicResource GlassBorderBrush}">
+            <Grid ColumnDefinitions="*,Auto">
+
+                <!-- The accent wash is its OWN low-opacity layer: theme colours are opaque and a
+                     GradientStop cannot borrow an alpha from one, so painting the background
+                     directly would give this band a solid pink left edge. The negative margin
+                     cancels the parent's Padding so the wash is full-bleed. -->
+                <Border Grid.Column="0" Grid.ColumnSpan="2" ZIndex="-1"
+                        CornerRadius="11" Opacity="0.16" Margin="-16,-11">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                            <GradientStop Color="Transparent" Offset="0.7"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str sd_page_title}" Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="16.5" FontWeight="Bold"/>
+                    <TextBlock Text="{loc:Str sd_page_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Recent sessions. Moved up out of the Sessions zone header, where it was a
+                         second competing action next to the zone tag. -->
+                    <Button x:Name="BtnSessionHistory"
+                            ToolTip.Tip="{loc:Str tooltip_recent_sessions}"
+                            Theme="{StaticResource OutlineButton}"
+                            Padding="12,7" Margin="0,0,7,0" FontSize="11.5" Cursor="Hand">
+                        <TextBlock Text="{loc:Str btn_recent_sessions}" FontWeight="SemiBold"/>
+                    </Button>
+                    <!-- Was the right-hand "Session Editor" placeholder box. -->
+                    <Button x:Name="BtnCreateSession"
+                            Theme="{StaticResource PinkButton}"
+                            Padding="14,7" FontSize="11.5" FontWeight="SemiBold" Cursor="Hand">
+                        <TextBlock Text="{loc:Str btn_create_new}"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== MAIN CONTENT: rack | splitter | detail ===================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="430" MinWidth="300" MaxWidth="700"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ============================ LEFT: the rack ============================
+                 The rack takes every pixel the other two zones do not; Takeaway is Auto, so the
+                 strip costs it one 32px line and the tray only costs more while it is open. -->
+            <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+
+                <!-- ============================ ZONE: PRESETS ============================ -->
+                <Border Grid.Row="0" Theme="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
+                    <StackPanel>
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource SdZoneTag}" Text="{loc:Str sd_zone_presets}"/>
+                            <Border Grid.Column="1" Theme="{StaticResource SdZoneRule}">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <Button Grid.Column="2" x:Name="HelpBtnPresets"
+                                    Theme="{StaticResource HelpButtonStyle}" Tag="Presets"/>
+                        </Grid>
+
+                        <!-- THE RAIL. A WrapPanel, not a horizontal scroller: preset eleven lands
+                             on a second line instead of off the right edge.
+
+                             THE "+ NEW" CHIP IS A CHILD OF THIS PANEL, deliberately - it has to
+                             wrap with the chips. RefreshPresetsList inserts ahead of it rather
+                             than clearing the panel. Do NOT "simplify" that to Children.Clear(). -->
+                        <WrapPanel x:Name="PresetCardsPanel" Orientation="Horizontal">
+                            <Border Theme="{StaticResource SdPresetChipNew}"
+                                    ToolTip.Tip="{loc:Str tooltip_create_a_new_preset_from_current_settings}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="+" FontSize="15" FontWeight="Bold"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                    <TextBlock Text="{loc:Str label_new}" FontSize="10" FontWeight="Bold"
+                                               FontFamily="Consolas, Courier New" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================ ZONE: SESSIONS ============================
+                     One toolbar and ONE StackPanel. Every row - built-in, custom, imported - is
+                     built by RepaintSessionRack from the session registry and told apart by a
+                     colour code, never by which panel it sits in. Rows carry the session id in
+                     Tag, and that is contractual. -->
+                <Border Grid.Row="1" Theme="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
+                    <Grid RowDefinitions="Auto,Auto,*">
+
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,0,0,10">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource SdZoneTag}" Text="{loc:Str sd_zone_sessions}"/>
+                            <Border Grid.Column="1" Theme="{StaticResource SdZoneRule}">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Grid.Column="2" x:Name="TxtRackCount"
+                                       Theme="{StaticResource SdZoneHint}" Text=""/>
+                            <Button Grid.Column="3" x:Name="HelpBtnSessions"
+                                    Theme="{StaticResource HelpButtonStyle}" Tag="Sessions"/>
+                        </Grid>
+
+                        <!-- THE RACK TOOLBAR. 28px, one line, and every control here is a VIEW
+                             over the same list - none of them mutate a session. Source is
+                             single-select, difficulty is four independent toggles, sort and search
+                             are free. The chips are built in code because each carries a live
+                             count; sort and search are declared here because they are fixed
+                             furniture. -->
+                        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto,Auto" Height="28" Margin="0,0,0,9">
+
+                            <StackPanel Grid.Column="0" x:Name="RackSourceChips"
+                                        Orientation="Horizontal" VerticalAlignment="Center"/>
+
+                            <StackPanel Grid.Column="1" x:Name="RackDifficultyChips"
+                                        Orientation="Horizontal" VerticalAlignment="Center" Margin="9,0,0,0"/>
+
+                            <ComboBox Grid.Column="3" x:Name="CmbRackSort" SelectedIndex="0"
+                                      Width="128" Height="26" VerticalAlignment="Center" FontSize="11"
+                                      Margin="8,0,7,0"
+                                      ToolTip.Tip="{loc:Str tooltip_rack_sort}">
+                                <!-- Tag is the persisted token; the face text is localized. Never
+                                     key the sort off SelectedIndex - reordering this list would
+                                     silently repoint every saved preference. -->
+                                <ComboBoxItem Tag="recent"><TextBlock Text="{loc:Str rack_sort_recent}"/></ComboBoxItem>
+                                <ComboBoxItem Tag="name"><TextBlock Text="{loc:Str rack_sort_name}"/></ComboBoxItem>
+                                <ComboBoxItem Tag="easiest"><TextBlock Text="{loc:Str rack_sort_easiest}"/></ComboBoxItem>
+                                <ComboBoxItem Tag="hardest"><TextBlock Text="{loc:Str rack_sort_hardest}"/></ComboBoxItem>
+                                <ComboBoxItem Tag="shortest"><TextBlock Text="{loc:Str rack_sort_shortest}"/></ComboBoxItem>
+                                <ComboBoxItem Tag="xp"><TextBlock Text="{loc:Str rack_sort_xp}"/></ComboBoxItem>
+                            </ComboBox>
+
+                            <!-- Avalonia's TextBox has a native PlaceholderText, so the WPF sibling
+                                 TextBlock (TxtRackSearchHint) and the code that collapses it are
+                                 both gone. -->
+                            <TextBox Grid.Column="4" x:Name="TxtRackSearch" Width="150"
+                                     Height="26" FontSize="11" Padding="7,0"
+                                     VerticalContentAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     PlaceholderText="{loc:Str rack_search_watermark}"/>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                            <!-- ONE panel. RepaintSessionRack clears and refills it; nothing else
+                                 may add a child, or the FX sweep picks up a stranger. -->
+                            <StackPanel x:Name="SessionRackPanel"/>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- ====================== ZONE: TAKEAWAY ======================
+                     The Just Drop order drawer, rendered - not owned. Every chip is an order the
+                     ACCOUNT already has; the desktop cannot create, price or delete one. Clicking
+                     replays it, and the 🔗 element copies the public taste link and nothing else.
+                     The full doctrine is at the head of MainWindow.Takeaway.cs and it is
+                     load-bearing, not decoration.
+
+                     ONE LINE: the three newest drops, a "+n more" toggle, the shop door, then -
+                     hard right - the page's two remaining links. The strip never wraps and never
+                     scrolls sideways; the tray is what makes the rest reachable.
+
+                     THE ZONE NO LONGER HIDES ITSELF: it carries the Community Catalogue chip and
+                     the session Export button, which must be reachable on a fresh install. Only
+                     the order half hides - see PaintTakeawayShelf. -->
+                <Border Grid.Row="2" x:Name="TakeawayZone"
+                        Theme="{StaticResource SectionPanel}" Margin="5,8,5,5" Padding="14,12">
+                    <StackPanel>
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+                            <TextBlock Grid.Column="0" Theme="{StaticResource SdZoneTag}" Text="{loc:Str sd_zone_takeaway}"/>
+                            <Border Grid.Column="1" Theme="{StaticResource SdZoneRule}">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Grid.Column="2" x:Name="TxtTakeawayCount"
+                                       Theme="{StaticResource SdZoneHint}" Text=""/>
+                        </Grid>
+
+                        <!-- THE STRIP. A DockPanel because the line needs a flexible middle: the
+                             right-hand doors are docked and get their width FIRST, the order chips
+                             take what is left. Docked children claim their edge in declaration
+                             order, so the Catalogue chip is declared first to sit furthest right. -->
+                        <DockPanel LastChildFill="True">
+                            <Border DockPanel.Dock="Right"
+                                    x:Name="SessionDropZone"
+                                    Theme="{StaticResource SdCatalogueChip}"
+                                    ToolTip.Tip="{loc:Str tooltip_open_catalogue}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock x:Name="DropZoneIcon"
+                                               Text="🌐" FontSize="13" VerticalAlignment="Center"
+                                               Margin="0,0,7,0"
+                                               Foreground="{DynamicResource SessionSrcImportedBrush}"/>
+                                    <TextBlock Text="{loc:Str label_catalogue_card_title}"
+                                               FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource SessionSrcImportedBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Export of the SELECTED session. It says "Export session", not
+                                 "Export" (#961): sharing a strip with the Takeaway chips made a
+                                 bare "Export" read as "export this takeaway", which it can never
+                                 do. SelectSession flips IsEnabled. -->
+                            <Button DockPanel.Dock="Right" x:Name="BtnExportSession"
+                                    IsEnabled="False" Theme="{StaticResource OutlineButton}"
+                                    Padding="12,5" FontSize="11" Margin="0,0,7,0" VerticalAlignment="Center"
+                                    ToolTip.Tip="{loc:Str tooltip_export_session}">
+                                <TextBlock Text="{loc:Str btn_export_session}"/>
+                            </Button>
+
+                            <!-- Import ticker. Hidden until ShowDropZoneStatus has something; it
+                                 is the drag-drop system's only feedback surface. -->
+                            <TextBlock DockPanel.Dock="Right" x:Name="DropZoneStatus" Text=""
+                                       FontSize="11" FontFamily="Consolas, Courier New" VerticalAlignment="Center"
+                                       MaxWidth="240" Margin="10,0,10,0" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource PinkBrush}" IsVisible="False"/>
+
+                            <!-- The fill. Clipped rather than wrapped or scrolled: on a narrow
+                                 window the last pinned chip is cut, and everything is still one
+                                 click away in the tray. -->
+                            <Grid ClipToBounds="True">
+                                <StackPanel x:Name="TakeawayShelf" Orientation="Horizontal"/>
+                            </Grid>
+                        </DockPanel>
+
+                        <!-- THE TRAY. Collapsed on every repaint - an expander that remembered
+                             being open would push the rack down on every tab visit. MaxHeight so
+                             five orders do not reserve the room for thirty. -->
+                        <Border x:Name="TakeawayTrayHost"
+                                IsVisible="False" Margin="0,9,0,0" MaxHeight="150">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="TakeawayTray"/>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Only ever seen when there are no orders AND the Just Drop door is
+                             withheld: a fresh install, or someone signed out. -->
+                        <TextBlock x:Name="TxtTakeawayEmpty"
+                                   Text="{loc:Str sd_takeaway_empty}" IsVisible="False"
+                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11.5"
+                                   Margin="2,4,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ============================ SPLITTER ============================ -->
+            <GridSplitter Grid.Column="1" Width="5" ResizeDirection="Columns"
+                          HorizontalAlignment="Stretch"
+                          Background="{DynamicResource PanelAccentBrush}" Cursor="SizeWestEast"/>
+
+            <!-- ============================ RIGHT: detail ============================ -->
+            <Border Grid.Column="2" Theme="{StaticResource SectionPanel}" Margin="5,8,5,5" Padding="0,0,0,14">
+                <Grid RowDefinitions="Auto,*,Auto">
+
+                    <!-- HERO PLATE. The session glyph rides inside TxtDetailTitle's own string
+                         ("{icon} {name}", set in SelectSession), so the plate needs no new element
+                         to carry art. Radius matches SectionPanel's 12 on the top two corners. -->
+                    <Border Grid.Row="0" CornerRadius="12,12,0,0" Padding="16,15,16,14"
+                            Background="{DynamicResource PanelBgBrush}"
+                            BorderThickness="0,0,0,1" BorderBrush="{DynamicResource PanelAccentBrush}">
+                        <Grid>
+                            <!-- Accent wash on its own layer, same reason as the header band's:
+                                 an opaque theme colour cannot be a soft gradient stop. -->
+                            <Border ZIndex="-1" CornerRadius="12,12,0,0" Opacity="0.20"
+                                    Margin="-16,-15,-16,-14">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="90%,100%">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock x:Name="TxtDetailTitle"
+                                               Text="{loc:Str label_select_a_preset}"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               FontSize="18" FontWeight="Bold" TextWrapping="Wrap"
+                                               Margin="0,0,26,0"/>
+                                    <Button x:Name="HelpBtnSessionDetails"
+                                            Theme="{StaticResource HelpButtonStyle}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Tag="SessionDetails"/>
+                                </Grid>
+                                <TextBlock x:Name="TxtDetailSubtitle"
+                                           Text="{loc:Str label_click_on_a_preset_or_session_to_see_details}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"
+                                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                <!-- Catalogue share status badge (preset view) -->
+                                <StackPanel x:Name="PresetShareStatusHost"
+                                            Orientation="Horizontal" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- ================== DETAIL: preset view ================== -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="16,14,16,0"
+                                  x:Name="PresetDetailScroller">
+                        <StackPanel x:Name="DetailContentPanel">
+                            <TextBlock x:Name="TxtDetailFlashLabel"
+                                       Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_flash_images}"/>
+                            <TextBlock x:Name="TxtDetailFlash"
+                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <TextBlock x:Name="TxtDetailVideoLabel"
+                                       Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_mandatory_videos}"/>
+                            <TextBlock x:Name="TxtDetailVideo"
+                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <TextBlock x:Name="TxtDetailSubLabel"
+                                       Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_subliminals_2}"/>
+                            <TextBlock x:Name="TxtDetailSubliminal"
+                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_audio}"/>
+                            <TextBlock x:Name="TxtDetailAudio"
+                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_overlays}"/>
+                            <TextBlock x:Name="TxtDetailOverlays"
+                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                            <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_advanced}"/>
+                            <TextBlock x:Name="TxtDetailAdvanced"
+                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- ================== DETAIL: session view (spoiler-free) ================== -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="16,14,16,0"
+                                  x:Name="SessionDetailScroller" IsVisible="False">
+                        <StackPanel x:Name="SessionDetailPanel">
+
+                            <!-- The medallion row: duration / reward / grade read as one stat line.
+                                 All three value elements keep their old names - SessionIO writes
+                                 to them without knowing they moved. -->
+                            <Grid ColumnDefinitions="*,8,*,8,*" Margin="0,0,0,14">
+
+                                <Border Grid.Column="0" Theme="{StaticResource SdMedallion}">
+                                    <StackPanel>
+                                        <TextBlock Theme="{StaticResource SdMedLabel}" Text="{loc:Str label_duration}"/>
+                                        <TextBlock x:Name="TxtSessionDuration"
+                                                   Theme="{StaticResource SdMedValue}" Text="{loc:Str label_30_minutes}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Grid.Column="2" Theme="{StaticResource SdMedallion}">
+                                    <StackPanel>
+                                        <TextBlock Theme="{StaticResource SdMedLabel}" Text="{loc:Str label_reward}"/>
+                                        <TextBlock x:Name="TxtSessionXP"
+                                                   Theme="{StaticResource SdMedValue}" Text="{loc:Str label_50_xp}"
+                                                   Foreground="#90EE90"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- DifficultyBadge keeps its name: it is the element whose
+                                     Background SessionIO retints per difficulty. -->
+                                <Border Grid.Column="4" x:Name="DifficultyBadge" Theme="{StaticResource SdMedallion}">
+                                    <StackPanel>
+                                        <TextBlock Theme="{StaticResource SdMedLabel}" Text="{loc:Str sd_med_grade}"/>
+                                        <TextBlock x:Name="TxtSessionDifficulty"
+                                                   Theme="{StaticResource SdMedValue}" Text="{loc:Str label_easy_2}"
+                                                   FontSize="12.5" Foreground="#FFD700"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <TextBlock x:Name="TxtSessionDescription" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"
+                                       LineHeight="20" Margin="0,0,0,16"
+                                       Text="{loc:Str label_let_the_morning_carry_you_away}"/>
+
+                            <!-- Corner GIF option (Gamer Girl) -->
+                            <Border x:Name="CornerGifOptionPanel"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                    CornerRadius="10" Padding="12" Margin="0,0,0,13" IsVisible="False">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock x:Name="TxtFeatureCornerGif"
+                                                   Text="{loc:Str label_corner_gif}" Foreground="{DynamicResource PinkBrush}"
+                                                   FontWeight="Bold" FontSize="11.5"/>
+                                        <CheckBox x:Name="ChkCornerGifEnabled"
+                                                  Theme="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <TextBlock x:Name="TxtCornerGifDesc"
+                                               Text="{loc:Str label_place_a_subtle_gif_in_a_screen_corner}"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                               Margin="0,5,0,0" TextWrapping="Wrap"/>
+
+                                    <StackPanel x:Name="CornerGifSettings"
+                                                IsVisible="False" Margin="0,10,0,0">
+                                        <Button x:Name="BtnSelectCornerGif"
+                                                Theme="{StaticResource OutlineButton}" Padding="10,6" FontSize="10.5"
+                                                Margin="0,0,0,10">
+                                            <TextBlock Text="{loc:Str btn_select_gif}"/>
+                                        </Button>
+                                        <TextBlock Text="{loc:Str label_position}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,0,0,5"/>
+                                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                                            <RadioButton x:Name="RbCornerTL"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5">
+                                                <TextBlock Text="{loc:Str btn_top_left}"/>
+                                            </RadioButton>
+                                            <RadioButton x:Name="RbCornerTR" Grid.Column="1"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5">
+                                                <TextBlock Text="{loc:Str btn_top_right}"/>
+                                            </RadioButton>
+                                            <RadioButton x:Name="RbCornerBL" Grid.Row="1"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5" IsChecked="True">
+                                                <TextBlock Text="{loc:Str btn_bottom_left}"/>
+                                            </RadioButton>
+                                            <RadioButton x:Name="RbCornerBR" Grid.Row="1" Grid.Column="1"
+                                                         Foreground="{DynamicResource TextLightBrush}"
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10.5">
+                                                <TextBlock Text="{loc:Str btn_bottom_right}"/>
+                                            </RadioButton>
+                                        </Grid>
+
+                                        <TextBlock Text="{loc:Str label_size}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,10,0,4"/>
+                                        <Grid ColumnDefinitions="*,50">
+                                            <Slider x:Name="SliderCornerGifSize" Minimum="100" Maximum="600" Value="300"
+                                                    VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtCornerGifSize" Grid.Column="1" Text="{loc:Str label_300px}"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="10" VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
+
+                                        <TextBlock Text="{loc:Str label_opacity}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,10,0,4"/>
+                                        <Grid ColumnDefinitions="*,50">
+                                            <Slider x:Name="SliderCornerGifOpacity" Minimum="5" Maximum="100" Value="20"
+                                                    VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtCornerGifOpacity" Grid.Column="1" Text="20%"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="10" VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- The veil. SPOILERS STAY OPT-IN: the mystery panel and its explicit
+                                 Reveal button are a product decision, not an oversight. Do not
+                                 auto-expand SessionSpoilerPanel. -->
+                            <Border CornerRadius="10" Padding="13" Margin="0,0,0,13"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource NeonPurpleTransparent20Brush}">
+                                <Grid>
+                                    <!-- Purple-to-pink wash on its own layer; both stops are mod
+                                         theme colours, so the veil re-tints with the active mod. -->
+                                    <Border ZIndex="-1" CornerRadius="10" Opacity="0.22" Margin="-13">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                <GradientStop Color="{DynamicResource NeonPurpleColor}" Offset="0"/>
+                                                <GradientStop Color="Transparent" Offset="0.55"/>
+                                                <GradientStop Color="{DynamicResource PinkColor}" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str label_mystery_experience}" Foreground="{DynamicResource TextLightBrush}"
+                                                   FontWeight="Bold" FontSize="12.5" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str label_the_magic_works_best_when_you_don_t_know_what}"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextAlignment="Center"
+                                                   TextWrapping="Wrap" Margin="0,6,0,0" FontStyle="Italic"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Button x:Name="BtnRevealSpoilers"
+                                    Theme="{StaticResource OutlineButton}" Padding="12,8" FontSize="12"
+                                    Margin="0,0,0,13"
+                                    ToolTip.Tip="{loc:Str tooltip_this_will_show_all_session_settings_spoils_th}">
+                                <TextBlock Text="{loc:Str btn_reveal_details}"/>
+                            </Button>
+
+                            <!-- Spoiler content, hidden by default. -->
+                            <StackPanel x:Name="SessionSpoilerPanel" IsVisible="False">
+                                <Border CornerRadius="8" Padding="10" Margin="0,0,0,13"
+                                        Background="{DynamicResource SurfaceBgBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource DangerBrush}">
+                                    <TextBlock Text="{loc:Str label_spoilers_below}" Foreground="{DynamicResource DangerBrush}"
+                                               FontFamily="Consolas, Courier New" FontSize="11.5"
+                                               FontWeight="Bold" HorizontalAlignment="Center"/>
+                                </Border>
+
+                                <TextBlock x:Name="TxtSessionFlashLabel"
+                                           Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_flash_images}"/>
+                                <TextBlock x:Name="TxtSessionFlash"
+                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <TextBlock x:Name="TxtSessionSubLabel"
+                                           Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_subliminals_2}"/>
+                                <TextBlock x:Name="TxtSessionSubliminal"
+                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_audio}"/>
+                                <TextBlock x:Name="TxtSessionAudio"
+                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_overlays}"/>
+                                <TextBlock x:Name="TxtSessionOverlays"
+                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_extras}"/>
+                                <TextBlock x:Name="TxtSessionExtras"
+                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+
+                                <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_timeline}"/>
+                                <TextBlock x:Name="TxtSessionTimeline"
+                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- ================== ACTION FLOOR ==================
+                         Both action stacks live in the same row so the primary button sits at the
+                         same height whichever mode the panel is in. -->
+                    <StackPanel Grid.Row="2" x:Name="PresetButtonsPanel" Margin="16,12,16,0">
+                        <Button x:Name="BtnLoadPreset"
+                                Theme="{StaticResource PinkButton}"
+                                Margin="0,0,0,7" Padding="12,11" FontSize="13" IsEnabled="False"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                            <TextBlock Text="{loc:Str btn_load_preset}"/>
+                        </Button>
+                        <Grid ColumnDefinitions="*,*">
+                            <Button x:Name="BtnSaveOverPreset" Grid.Column="0"
+                                    Theme="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
+                                    IsEnabled="False" FontSize="12"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="{loc:Str btn_save_2}"/>
+                            </Button>
+                            <Button x:Name="BtnDeletePreset" Grid.Column="1"
+                                    Theme="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
+                                    IsEnabled="False" FontSize="12"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="{loc:Str btn_delete_2}"/>
+                            </Button>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,*" Margin="0,6,0,0">
+                            <Button x:Name="BtnExportPreset" Grid.Column="0"
+                                    Theme="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
+                                    IsEnabled="False" FontSize="12"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="{loc:Str btn_export_preset}"/>
+                            </Button>
+                            <Button x:Name="BtnSharePreset" Grid.Column="1"
+                                    Theme="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
+                                    IsEnabled="False" FontSize="12"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                                <TextBlock Text="{loc:Str btn_share_to_catalogue}"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" x:Name="SessionButtonsPanel"
+                                Margin="16,12,16,0" IsVisible="False">
+                        <Button x:Name="BtnStartSession"
+                                Theme="{StaticResource PinkButton}"
+                                Padding="12,13" FontSize="14"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                            <TextBlock Text="{loc:Str btn_start_session}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
