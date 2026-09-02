@@ -1,0 +1,88 @@
+<!-- PORTED from ConditioningControlPanel/Windows/PinkRushPopup.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None"              -> SystemDecorations="None"
+       AllowsTransparency="True"       -> TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"           -> CanResize="False"
+       MouseLeftButtonDown="..."       -> PointerPressed, wired in the constructor
+       DropShadowEffect ShadowDepth=0  -> OffsetX="0" OffsetY="0"
+       Button.Style + IsMouseOver      -> Style Selector="Button.closeGlyph:pointerover" below,
+                                          same shape as Windows/AchievementPopup.axaml. The
+                                          local Foreground on the button outranks it, so it was
+                                          already dead in WPF and is dead here for the reason.
+       Skill art (pack:// PNG)         -> a "⚡" TextBlock. Resources/skills/*.png is not an
+                                          AvaloniaResource in this head; the glyph stands in,
+                                          same call as ItemUnlockedPopup's gift fallback.
+       CardBorder VerticalAlignment    -> "Top" with an explicit 130px height (150 window minus
+                                          the 2x10 margin). The WPF window is exactly card-sized
+                                          and never resizes, so pinning the card to its own
+                                          height is identical on the desktop - and it keeps the
+                                          render harness' 200px minimum window height from
+                                          stretching the card down the whole PNG.
+
+     The close button carries a TextBlock child rather than Content: Avalonia parses "_" in
+     Content as an access key (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.PinkRushPopup"
+        Title="Pink Rush!"
+        Width="350" Height="150"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        CanResize="False"
+        WindowStartupLocation="Manual">
+
+    <Window.Styles>
+        <Style Selector="Button.closeGlyph:pointerover">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <!-- Fluent paints a hover plate behind the glyph that WPF's trigger-only style never had. -->
+        <Style Selector="Button.closeGlyph:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- 10px transparent margin so the pink glow has room to bleed: 350x150 window = 330x130 card -->
+    <Border Background="#E0151530" CornerRadius="12" BorderBrush="#FF1493" BorderThickness="2"
+            Margin="10" VerticalAlignment="Top" Height="130">
+        <Border.Effect>
+            <DropShadowEffect Color="#FF1493" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <Grid Margin="15" ColumnDefinitions="Auto,*">
+
+            <!-- Skill Image -->
+            <Border Grid.Column="0" Width="80" Height="80" Background="{DynamicResource DarkerBgBrush}"
+                    CornerRadius="8" Margin="0,0,15,0">
+                <TextBlock Text="&#x26A1;" FontSize="36"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- Text Content -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtPinkRushTitle" Text="⚡ PINK RUSH!" Foreground="#FF1493"
+                           FontWeight="Bold" FontSize="18" Margin="0,0,0,4"/>
+                <TextBlock x:Name="TxtPinkRushSubtitle" Text="3x XP for 60 seconds!" Foreground="{DynamicResource PinkBrush}"
+                           FontSize="13" Margin="0,0,0,6"/>
+                <TextBlock x:Name="TxtCountdown" Text="60s remaining" Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="12"/>
+            </StackPanel>
+
+            <!-- Close Button -->
+            <Button x:Name="BtnClose" Grid.Column="1" Classes="closeGlyph"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="24" Height="24" Margin="0,-5,-5,0" Padding="0"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand">
+                <TextBlock Text="✕"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>
