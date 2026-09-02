@@ -615,8 +615,43 @@
                                                     </Border>
                                                 </Grid>
                                             </Border>
-                                            <TextBlock x:Name="TxtProfileXpProgress" x:FieldModifier="internal" Grid.Row="1"
-                                                       Text="0 / 0 XP" Foreground="#B8B1CC" FontSize="11" Margin="0,5,0,0"/>
+                                            <StackPanel Grid.Row="1" Orientation="Horizontal">
+                                                <TextBlock x:Name="TxtProfileXpProgress" x:FieldModifier="internal"
+                                                           Text="0 / 0 XP" Foreground="#B8B1CC" FontSize="11" Margin="0,5,0,0"
+                                                           VerticalAlignment="Center"/>
+
+                                                <!-- THE DESCENT RECEIPT (v6.9.1). The migration
+                                                     ceremony asks an irreversible question once and
+                                                     then closes; this is the only place the answer
+                                                     is ever shown again, which is the bug it exists
+                                                     to close. Dark pill with a gradient border - the
+                                                     WHITELISTED badge's build, because it is a mark
+                                                     and not a button, and it must not compete with
+                                                     the two gold plates across the card.
+
+                                                     YOUR CARD ONLY, and only after the server has
+                                                     acked a choice. Everything about it is painted by
+                                                     MainWindow.ProfileCard.RefreshProfileDescentReceipt,
+                                                     which runs off SetProfileViewingSelf so a searched
+                                                     card can never wear your ceremony. -->
+                                                <Border x:Name="ProfileDescentReceipt" x:FieldModifier="internal"
+                                                        Visibility="Collapsed" Cursor="Help"
+                                                        Padding="8,2,8,2.5" CornerRadius="8" BorderThickness="1"
+                                                        Background="#CC1A1226" Margin="10,5,0,0"
+                                                        VerticalAlignment="Center"
+                                                        ToolTipService.InitialShowDelay="150"
+                                                        ToolTipService.ShowDuration="30000">
+                                                    <Border.BorderBrush>
+                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                                            <GradientStop Color="#B478FF" Offset="1"/>
+                                                        </LinearGradientBrush>
+                                                    </Border.BorderBrush>
+                                                    <TextBlock x:Name="ProfileDescentReceiptText" x:FieldModifier="internal"
+                                                               Foreground="#E7DEFF" FontSize="9.5" FontWeight="Bold"
+                                                               FontFamily="Segoe UI" VerticalAlignment="Center"/>
+                                                </Border>
+                                            </StackPanel>
                                         </Grid>
                                     </StackPanel>
 

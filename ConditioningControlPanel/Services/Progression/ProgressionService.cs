@@ -55,6 +55,14 @@ namespace ConditioningControlPanel.Services
         private readonly Dictionary<int, double> _cumulativeXPCacheV2 = new();
 
         /// <summary>
+        /// Whether this run has already announced the Cycle bonus in the log. ONCE PER LAUNCH, not
+        /// once per award: the bonus rides every single XP grant, so an unguarded line would bury
+        /// the log it is meant to make readable. Support asks "is their bonus actually on?" and
+        /// this is the one line that answers it from a bug report's log alone.
+        /// </summary>
+        private bool _cycleBonusLogged;
+
+        /// <summary>
         /// Awards XP to both the user (for feature unlocks) and the active companion (for companion leveling).
         /// </summary>
         /// <param name="amount">Base XP amount to award.</param>
@@ -96,6 +104,13 @@ namespace ConditioningControlPanel.Services
             var skillMultiplier = App.SkillTree?.GetTotalXpMultiplier() ?? 1.0;
             var cycleMultiplier = Descent.DescentMigration.ActiveCycleXpBonus;
             var adjustedAmount = amount * skillMultiplier * cycleMultiplier;
+
+            if (cycleMultiplier > 1.0 && !_cycleBonusLogged)
+            {
+                _cycleBonusLogged = true;
+                App.Logger?.Information(
+                    "Descent Cycle XP bonus active: x{Mult} applied to every award this run", cycleMultiplier);
+            }
 
             var previousXP = settings.PlayerXP;
             settings.PlayerXP += adjustedAmount;

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Descent;
 
 namespace ConditioningControlPanel
 {
@@ -94,6 +95,8 @@ namespace ConditioningControlPanel
                 // return below, so a missing "back to me" chip cannot strand the plate on
                 // somebody else's card.
                 RefreshProfileSpiralPlate();
+                // So does the migration receipt, and for the same reason.
+                RefreshProfileDescentReceipt();
                 if (DiscordTab?.BtnProfileBackToMe == null) return;
                 DiscordTab.BtnProfileBackToMe.Visibility = isSelf ? Visibility.Collapsed : Visibility.Visible;
             }
@@ -184,11 +187,77 @@ namespace ConditioningControlPanel
                 }
                 if (DiscordTab.TxtProfileXpProgress != null)
                 {
+                    // The Cycle bonus rides the readout itself, not just the chip beside it: the
+                    // XP numbers are where somebody looks when they wonder whether the bonus is
+                    // real, and the suffix is the cheapest possible answer. Own card only, via
+                    // the same kind the chip uses.
+                    var kind = OwnDescentReceiptKind();
+                    var bonus = DescentMigration.ActiveCycleXpBonus;
                     DiscordTab.TxtProfileXpProgress.Text =
-                        Loc.GetF("profile_xp_progress", $"{have:N0}", $"{needed:N0}");
+                        DescentReceipt.ShowsXpMultiplier(kind, bonus)
+                            ? Loc.GetF("profile_xp_progress_boosted", $"{have:N0}", $"{needed:N0}",
+                                       DescentReceipt.BonusPercentText(bonus))
+                            : Loc.GetF("profile_xp_progress", $"{have:N0}", $"{needed:N0}");
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("UpdateProfileXpMeter: {E}", ex.Message); }
+        }
+
+        // ============================== the migration receipt ==============================
+
+        /// <summary>
+        /// Which receipt the card on screen is owed. <see cref="DescentReceiptKind.None"/> for a
+        /// searched card, for an account that never went through the ceremony, and for one whose
+        /// choice the server has not acked yet — the three cases where drawing a mark would be a
+        /// claim we cannot stand behind.
+        /// </summary>
+        private DescentReceiptKind OwnDescentReceiptKind()
+        {
+            if (!_profileViewingSelf) return DescentReceiptKind.None;
+            var settings = App.Settings?.Current;
+            if (settings == null) return DescentReceiptKind.None;
+            return DescentReceipt.Resolve(settings.DescentMigrationCompleted, settings.DescentMigrationChoice);
+        }
+
+        /// <summary>
+        /// Paint the permanent record of the migration choice under the hero XP bar.
+        ///
+        /// <para>THE POINT OF THE WHOLE THING (v6.9.1): the ceremony is one night and one
+        /// irreversible question, and until this chip existed the app never mentioned the answer
+        /// again. The Cycle bonus was live in the ledger and invisible on the screen, which reads
+        /// from the outside exactly like a bonus that was never granted.</para>
+        ///
+        /// <para>The percent is derived from <see cref="DescentMigration.ActiveCycleXpBonus"/> —
+        /// the multiplier <c>AddXP</c> actually applies — and never from a literal, so retuning
+        /// the constant retunes the chip with it.</para>
+        /// </summary>
+        internal void RefreshProfileDescentReceipt()
+        {
+            try
+            {
+                var pill = DiscordTab?.ProfileDescentReceipt;
+                if (pill == null) return;
+
+                var kind = OwnDescentReceiptKind();
+                if (kind == DescentReceiptKind.None)
+                {
+                    pill.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                var percent = DescentReceipt.BonusPercentText(DescentMigration.ActiveCycleXpBonus);
+                var (label, tip) = kind == DescentReceiptKind.Cycle
+                    ? (Loc.GetF("profile_cycle_receipt_cycle", percent),
+                       Loc.GetF("profile_cycle_receipt_tip_cycle", percent))
+                    : (Loc.Get("profile_cycle_receipt_restore"),
+                       Loc.Get("profile_cycle_receipt_tip_restore"));
+
+                if (DiscordTab!.ProfileDescentReceiptText != null)
+                    DiscordTab.ProfileDescentReceiptText.Text = label;
+                pill.ToolTip = tip;
+                pill.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex) { App.Logger?.Debug("RefreshProfileDescentReceipt: {E}", ex.Message); }
         }
 
         // ============================== showcase ==============================
