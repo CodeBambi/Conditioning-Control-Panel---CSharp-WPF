@@ -1,0 +1,54 @@
+name: build
+
+# There is currently no CI in this repository, so nothing checks that a PR builds or that the
+# 4,900-test suite still passes. This adds that, and nothing else - no linting, no packaging,
+# no release automation.
+
+# The workflow only builds and tests - it never writes to the repository, so the token it gets
+# should not be able to either. Explicitly declaring any permissions block also drops every
+# scope that is not listed, which is the point.
+permissions:
+  contents: read
+
+# Pushing a new commit to a PR makes the run already in flight worthless. Cancel it instead of
+# paying for both. Keyed on the ref, so main and each PR queue independently.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # -p:ValidateExecutableReferencesMatchSelfContained=false is required, not cosmetic.
+      # ConditioningControlPanel.csproj is SelfContained + win-x64, while
+      # ConditioningControlPanel.Tests sets a RID but NOT SelfContained and ProjectReferences the
+      # app. The .NET 10 SDK rejects that combination with NETSDK1151; the .NET 8 SDK allowed it.
+      # Without a global.json the highest installed SDK wins, so the plain command fails on a
+      # runner that has SDK 10 - which windows-latest does.
+      #
+      # Suppressing the validation on the command line rather than editing either .csproj keeps
+      # what ships byte-for-byte unchanged. Drop the flag if the solution ever builds clean
+      # without it.
+      - name: Build solution
+        run: dotnet build ConditioningControlPanel.sln -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
+
+      # The suite includes WpfRenderHarness.cs and PlayDoorRenderTests.cs, which do real WPF
+      # rendering. Those pass headless on windows-latest - measured, 4924 passed / 0 failed in
+      # about 45 seconds - so this is a hard gate rather than advisory. An advisory job that is
+      # always green trains everyone to ignore it.
+      - name: Test
+        run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
