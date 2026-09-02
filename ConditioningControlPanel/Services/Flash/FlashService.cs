@@ -63,6 +63,40 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         internal static int ResolveFlashCap(bool useLayer, bool useHost)
             => (useLayer || useHost) ? MAX_CONCURRENT_FLASH_HOST : MAX_CONCURRENT_FLASH;
+
+        /// <summary>
+        /// The current run's cancellation token, or <see cref="CancellationToken.None"/> when no run
+        /// owns one (Stop retires it - see #1107). Tolerates a source disposed by a racing Stop.
+        /// </summary>
+        private CancellationToken CurrentRunToken()
+        {
+            try { return _cancellationSource?.Token ?? CancellationToken.None; }
+            catch (ObjectDisposedException) { return CancellationToken.None; }
+        }
+
+        /// <summary>
+        /// #1107 - schedule the flash-audio unduck. Deliberately takes NO CancellationToken: the
+        /// unduck RELEASES a ref-counted duck, so skipping it leaves every other app on the machine
+        /// quiet until AudioService's five minute watchdog fires. It used to hang off the run token
+        /// with TaskContinuationOptions.NotOnCanceled, so any Takeover that played a video first
+        /// (VideoService stops flashes in its prologue) silently dropped it. A late unduck is
+        /// harmless: Unduck is generation-guarded and its ref count is clamped at zero.
+        /// Pure enough to unit-test without WPF.
+        /// </summary>
+        internal static Task ScheduleUnduck(int delayMs, Action unduck)
+        {
+            if (unduck == null) return Task.CompletedTask;
+            if (delayMs < 0) delayMs = 0;
+            return Task.Delay(delayMs).ContinueWith(_ =>
+            {
+                try { unduck(); }
+                catch (Exception ex)
+                {
+                    try { App.Logger?.Debug("FlashService unduck failed: {Error}", ex.Message); }
+                    catch { }
+                }
+            });
+        }
         // Per-window shells are sized to a coarse bucket grid so the pool recycles by size instead of
         // realizing a fresh window on nearly every (image-sized, so almost-always-unique) flash. A fresh
         // Window.Show() runs a synchronous MediaContext.CompleteRender on first realization; under a
@@ -427,7 +461,18 @@ namespace ConditioningControlPanel.Services
         public void Stop()
         {
             _isRunning = false;
-            try { _cancellationSource?.Cancel(); }
+            // #1107: cancel AND retire the source. It used to stay in the field, cancelled forever,
+            // so every later one-shot (TriggerFlashOnce creates no source of its own) inherited a
+            // dead token: Task.Delay handed back an already-cancelled task and the NotOnCanceled
+            // continuations were dropped. Delays scheduled BEFORE this point captured the token
+            // already, so Cancel() still stops them - the staggered hydra spawns in ShowImages must
+            // keep being cancelled by Stop. Only NEW schedules fall through to CancellationToken.None,
+            // and those are gated by _isRunning / _oneShotActive / OneShotGate instead.
+            var retiredCts = _cancellationSource;
+            _cancellationSource = null;
+            try { retiredCts?.Cancel(); }
+            catch (ObjectDisposedException) { }
+            try { retiredCts?.Dispose(); }
             catch (ObjectDisposedException) { }
             StopHeartbeat();
             _schedulerTimer?.Stop();
@@ -1236,14 +1281,9 @@ namespace ConditioningControlPanel.Services
                         App.Audio.Duck(settings.DuckingLevel);
                         var duckGen = App.Audio?.DuckGeneration ?? -1;
 
-                        // Schedule unduck
+                        // Schedule unduck (#1107: never cancellable - see ScheduleUnduck)
                         var unduckDelay = (int)(duration * 1000) + 1500;
-                        var token = _cancellationSource?.Token ?? CancellationToken.None;
-                        Task.Delay(unduckDelay, token).ContinueWith(_ =>
-                        {
-                            try { App.Audio?.Unduck(duckGen); }
-                            catch (Exception ex) { App.Logger?.Debug("FlashService unduck failed: {Error}", ex.Message); }
-                        }, TaskContinuationOptions.NotOnCanceled);
+                        ScheduleUnduck(unduckDelay, () => App.Audio?.Unduck(duckGen));
                     }
                 }
                 catch (Exception ex)
@@ -1266,7 +1306,7 @@ namespace ConditioningControlPanel.Services
             if (_oneShotActive && !isMultiplication)
             {
                 var oneShotCleanupDelay = lifetimeMs + 2000; // extra 2s for fade-out
-                var cleanupToken = _cancellationSource?.Token ?? CancellationToken.None;
+                var cleanupToken = CurrentRunToken();
                 Task.Delay(oneShotCleanupDelay, cleanupToken).ContinueWith(_ =>
                 {
                     try
@@ -1307,7 +1347,7 @@ namespace ConditioningControlPanel.Services
                     var capturedGeneration = hydraGeneration;
                     var capturedSuppressHaptic = suppressHaptic;
                     var capturedOneShotGen = oneShotGen;
-                    var spawnToken = _cancellationSource?.Token ?? CancellationToken.None;
+                    var spawnToken = CurrentRunToken();
                     Task.Delay(delayMs, spawnToken).ContinueWith(_ =>
                     {
                         try
@@ -1696,6 +1736,8 @@ namespace ConditioningControlPanel.Services
                     window.Background = System.Windows.Media.Brushes.Transparent;
                     window.Content = content;
                     window.Opacity = 0;
+                    window.FadeAlpha = 0;
+                    window.LastWrittenAlpha = 0;
 
                     // Click handler + Alt+Tab hiding are wired ONCE in AcquireFlashWindow (the
                     // handler reads IsClickable per spawn) so recycled windows never stack handlers.
@@ -2227,6 +2269,41 @@ namespace ConditioningControlPanel.Services
         // default 40% lands on 0.4 s — the same envelope the old fixed FADE_PER_SEC = 2.4 gave.
         private const double FADE_SECONDS_PER_PERCENT = 0.01;
 
+        // meadow (6.9.0): the Fade slider went live in 3d6601a15 and a high percentage tanked the
+        // frame rate. A classic per-flash window is AllowsTransparency=true, so EVERY Window.Opacity
+        // write costs a full re-rasterise plus an UpdateLayeredWindow blit of a monitor-sized bitmap
+        // on the UI thread, inside CompositionTarget.Rendering - and a lucky flash re-blurs its
+        // DropShadowEffect glow on top of that. At 0% the ramp is 2 writes per flash; at 100% it was
+        // ~60 in and ~60 out per window, times MAX_CONCURRENT_FLASH. Two cheap brakes, layered path
+        // only: cap the ramp length, and only write when the alpha has actually moved a visible step.
+        // Compositor/solid-host flashes write LayerItem.Opacity / a hosted element's Opacity, which
+        // costs nothing, so they keep the exact per-frame ramp.
+        private const double LAYERED_MAX_FADE_SECONDS = 0.5;
+        private const double LAYERED_ALPHA_EPSILON = 1.0 / 32.0;
+
+        /// <summary>
+        /// Fade ramp length for one window. The layered (per-window, AllowsTransparency) path is
+        /// clamped to <see cref="LAYERED_MAX_FADE_SECONDS"/>; compositor and solid-host visuals are
+        /// cheap to nudge and keep the slider's full ramp. Pure so it can be unit-tested.
+        /// </summary>
+        internal static double ResolveFadeSeconds(double fadeSeconds, bool cheapAlpha)
+            => cheapAlpha ? fadeSeconds : Math.Min(fadeSeconds, LAYERED_MAX_FADE_SECONDS);
+
+        /// <summary>
+        /// Quantiser for the layered fade path: skip an opacity write the viewer cannot see, but
+        /// ALWAYS write the terminal values - the exact target alpha (so a fade-in settles where the
+        /// Opacity slider says) and an exact 0 (the heartbeat's removal trigger reads
+        /// <c>newAlpha &lt;= 0</c>, so a skipped zero would strand the window on screen).
+        /// Pure so it can be unit-tested without WPF.
+        /// </summary>
+        internal static bool ShouldWriteAlpha(double last, double next, double target, double epsilon)
+        {
+            if (double.IsNaN(next)) return false;
+            if (next <= 0.0) return true;                       // fade-out terminal: 0 must land exactly
+            if (Math.Abs(next - target) <= 1e-9) return true;   // fade-in terminal: settle on target
+            return Math.Abs(next - last) >= epsilon;
+        }
+
         /// <summary>Subscribe the heartbeat to the composition clock (idempotent, any thread).</summary>
         private void StartHeartbeat()
         {
@@ -2283,7 +2360,6 @@ namespace ConditioningControlPanel.Services
             // Read the Fade slider live so a mid-session change lands on the next frame.
             // 0% = instant: a full-alpha step arrives (and leaves) in a single frame.
             var fadeSeconds = settings.FadeDuration * FADE_SECONDS_PER_PERCENT;
-            var fadeStep = fadeSeconds > 0 ? dt / fadeSeconds : 1.0;
 
             FlashWindow[] windowsCopy;
             lock (_lockObj)
@@ -2319,15 +2395,33 @@ namespace ConditioningControlPanel.Services
                     var targetAlpha = showThisWindow ? maxAlpha : 0.0;
 
                     // Fade in/out per-window~ uwu (VisualOpacity routes to the hosted root in solid mode)
-                    var currentAlpha = window.VisualOpacity;
+                    // Layered windows pay a monitor-sized blit per opacity write, so their ramp is
+                    // clamped and their writes quantised; the ramp itself still advances every frame
+                    // (window.FadeAlpha), only the writes are thinned.
+                    var cheapAlpha = window.UsesLayer || window.UsesHost;
+                    var winFadeSeconds = ResolveFadeSeconds(fadeSeconds, cheapAlpha);
+                    var fadeStep = winFadeSeconds > 0 ? dt / winFadeSeconds : 1.0;
+
+                    var currentAlpha = cheapAlpha ? window.VisualOpacity : window.FadeAlpha;
                     if (targetAlpha > currentAlpha)
                     {
-                        window.VisualOpacity = Math.Min(targetAlpha, currentAlpha + fadeStep);
+                        var newAlpha = Math.Min(targetAlpha, currentAlpha + fadeStep);
+                        window.FadeAlpha = newAlpha;
+                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, LAYERED_ALPHA_EPSILON))
+                        {
+                            window.VisualOpacity = newAlpha;
+                            window.LastWrittenAlpha = newAlpha;
+                        }
                     }
                     else if (targetAlpha < currentAlpha)
                     {
                         var newAlpha = Math.Max(0.0, currentAlpha - fadeStep);
-                        window.VisualOpacity = newAlpha;
+                        window.FadeAlpha = newAlpha;
+                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, LAYERED_ALPHA_EPSILON))
+                        {
+                            window.VisualOpacity = newAlpha;
+                            window.LastWrittenAlpha = newAlpha;
+                        }
 
                         if (newAlpha <= 0)
                         {
@@ -4077,6 +4171,8 @@ namespace ConditioningControlPanel.Services
                 window.Effect = null;   // belt-and-suspenders: ensure no effect render-target lingers on the pooled shell
                 window.IsFadingOut = false;
                 window.Opacity = 0;
+                window.FadeAlpha = 0;
+                window.LastWrittenAlpha = 0;
 
                 // Recycle instead of Close: hide the window and return it to the pool.
                 // Closing a layered window mid-run is the render-thread-deadlock trigger.
@@ -4314,6 +4410,21 @@ namespace ConditioningControlPanel.Services
                 else Opacity = value;
             }
         }
+
+        /// <summary>
+        /// Layered path only: the logical fade ramp, advanced every heartbeat frame. Split from the
+        /// value actually written to <see cref="VisualOpacity"/> because those writes are quantised
+        /// (see FlashService.ShouldWriteAlpha) - reading the window's own Opacity back as "current"
+        /// would stall the ramp on every frame whose step lands under the epsilon.
+        /// </summary>
+        public double FadeAlpha { get; set; }
+
+        /// <summary>
+        /// Layered path only: the last alpha actually pushed to <see cref="VisualOpacity"/>, so the
+        /// quantiser knows when the ramp has moved a visible step. Reset with Opacity at spawn and
+        /// on pool return.
+        /// </summary>
+        public double LastWrittenAlpha { get; set; }
 
         /// <summary>
         /// The lucky/sparkle glow effect applied this spawn, if any. Held so the pool-return path
