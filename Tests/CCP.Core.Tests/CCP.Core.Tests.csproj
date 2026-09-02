@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests for CCP.Core. Plain net8.0 with no RuntimeIdentifier and no UseWPF, deliberately:
+    this project must be runnable by the core-linux CI job, which is the anti-drift check.
+    Adding -windows / win-x64 / UseWPF here would make it unrunnable on Linux and quietly
+    delete that signal. Package versions match Tests/ConditioningControlPanel.Tests.
+
+    It currently contains no tests, so CI builds it rather than running `dotnet test` - every
+    runner treats "zero tests ran" as a failure (exit 1). See .github/workflows/build.yml.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <AssemblyName>CCP.Core.Tests</AssemblyName>
+    <RootNamespace>CCP.Core.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\CCP.Core\CCP.Core.csproj" />
+  </ItemGroup>
+
+</Project>
