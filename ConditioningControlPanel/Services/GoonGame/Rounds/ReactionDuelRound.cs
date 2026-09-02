@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -146,7 +147,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 if (!got)
                 {
                     lock (gate) { settled = true; }
-                    App.Logger?.Information("GoonSuddenDeath: reaction duel round {Round} — no input within {Ms}ms", ctx.RoundNo, spec.MaxResponseMs);
+                    Log.Information("GoonSuddenDeath: reaction duel round {Round} — no input within {Ms}ms", ctx.RoundNo, spec.MaxResponseMs);
                     return new RoundResultMsg
                     {
                         RoundNo = ctx.RoundNo,
@@ -159,7 +160,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 var reactionMs = pressed.Task.Result;
                 var suspect = reactionMs < GoonConsts.SuspectReactionMs;
                 if (suspect)
-                    App.Logger?.Warning("GoonSuddenDeath: reaction {Ms}ms is below the suspect floor ({Floor}ms) — scoring it, badged", reactionMs, GoonConsts.SuspectReactionMs);
+                    Log.Warning("GoonSuddenDeath: reaction {Ms}ms is below the suspect floor ({Floor}ms) — scoring it, badged", reactionMs, GoonConsts.SuspectReactionMs);
 
                 return new RoundResultMsg
                 {
@@ -180,7 +181,7 @@ namespace ConditioningControlPanel.Services.GoonGame
 
         private static RoundResultMsg FalseStartResult(GoonRoundContext ctx, Stopwatch sw)
         {
-            App.Logger?.Information("GoonSuddenDeath: reaction duel round {Round} lost to a false start at {Ms}ms", ctx.RoundNo, sw.ElapsedMilliseconds);
+            Log.Information("GoonSuddenDeath: reaction duel round {Round} lost to a false start at {Ms}ms", ctx.RoundNo, sw.ElapsedMilliseconds);
             return new RoundResultMsg
             {
                 RoundNo = ctx.RoundNo,

@@ -91,7 +91,7 @@ public class AwarenessConsentTests
     {
         var writers = SourceWriters("AwarenessModeEnabled")
             .Concat(SourceWriters("AwarenessConsentGiven"))
-            .Select(Path.GetFileName)
+            .Select(SourceRoots.Relative)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -100,12 +100,20 @@ public class AwarenessConsentTests
         // (#267's EnforceEntitlementLapse, extended for awareness in #1047) and is only allowed here
         // because it can only ever write FALSE — asserted below, so it cannot quietly become a second
         // door. Anything else on this list IS a second door.
+        //
+        // Keyed on the path relative to the REPO, not on the bare filename. The walk spans every
+        // product root now, so a filename is no longer a unique key: a CCP.Core/Models/AppSettings.cs
+        // added during the Core split would inherit this exemption and open a second door in
+        // silence. Whole-path keys also mean that moving a door to Core fails here loudly, which is
+        // the right moment to re-review whether it is still the only way in.
         var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "AppSettings.cs", "MainWindow.CompanionRoom.cs", "MainWindow.Patreon.cs"
+            "ConditioningControlPanel/Models/AppSettings.cs",
+            "ConditioningControlPanel/MainWindow/MainWindow.CompanionRoom.cs",
+            "ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs"
         };
 
-        var strays = writers.Where(f => !allowed.Contains(f!)).ToList();
+        var strays = writers.Where(f => !allowed.Contains(f)).ToList();
         Assert.True(strays.Count == 0,
             "awareness is switched on outside the consent gate in: " + string.Join(", ", strays));
     }
@@ -307,22 +315,16 @@ public class AwarenessConsentTests
     /// <summary>Files that ASSIGN <paramref name="property"/> (i.e. "Property =", not "Property ==").</summary>
     private static IEnumerable<string> SourceWriters(string property)
     {
-        foreach (var file in Directory.EnumerateFiles(SourceRoot(), "*.cs", SearchOption.AllDirectories))
+        // Every product root, not just the WPF head: a consent gate that moves to CCP.Core has to
+        // stay under this guard. Build output and nested worktrees are excluded by the helper.
+        foreach (var file in SourceRoots.EnumerateProductSources("*.cs"))
         {
-            if (file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) ||
-                file.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) ||
-                // Nested git worktrees (e.g. .claude/worktrees/*) are other branches' sources —
-                // scanning them reports their files as second doors that do not exist on this tree.
-                file.Contains(Path.DirectorySeparatorChar + ".claude" + Path.DirectorySeparatorChar)) continue;
-
             foreach (var line in File.ReadLines(file))
             {
                 var i = line.IndexOf(property + " =", StringComparison.Ordinal);
                 if (i < 0) continue;
                 if (line.Contains(property + " ==", StringComparison.Ordinal)) continue;
                 if (line.TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
-                if (line.Contains("_" + char.ToLowerInvariant(property[0]) + property.Substring(1),
-                        StringComparison.Ordinal)) { /* the backing-field assignment inside the setter */ }
                 yield return file;
                 break;
             }

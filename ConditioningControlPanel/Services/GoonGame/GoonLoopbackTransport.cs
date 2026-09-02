@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.GoonGame
 {
@@ -213,7 +214,7 @@ namespace ConditioningControlPanel.Services.GoonGame
         public void SimulateOutage(int ms)
         {
             lock (_linkGate) _outageUntilLocalMs = Environment.TickCount64 + Math.Max(0, ms);
-            App.Logger?.Information("[{Tag}] Simulating a {Ms}ms outage", Tag, ms);
+            Log.Information("[{Tag}] Simulating a {Ms}ms outage", Tag, ms);
         }
 
         /// <summary>Frames written but not yet delivered. Handy in a test assertion.</summary>
@@ -244,7 +245,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 catch (OperationCanceledException) { /* closed */ }
                 catch (Exception ex)
                 {
-                    App.Logger?.Error(ex, "[{Tag}] Loopback pump died", Tag);
+                    Log.Error(ex, "[{Tag}] Loopback pump died", Tag);
                 }
             });
         }

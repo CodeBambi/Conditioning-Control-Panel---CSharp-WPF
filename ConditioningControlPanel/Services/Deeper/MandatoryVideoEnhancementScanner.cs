@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using ConditioningControlPanel.Models.Deeper;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Deeper
 {
@@ -87,7 +88,7 @@ namespace ConditioningControlPanel.Services.Deeper
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("MandatoryVideoEnhancementScanner: scan failed: {Error}", ex.Message);
+                Log.Debug("MandatoryVideoEnhancementScanner: scan failed: {Error}", ex.Message);
             }
             return new ScanResult(anyEnhanced, anyWebcam);
         }
