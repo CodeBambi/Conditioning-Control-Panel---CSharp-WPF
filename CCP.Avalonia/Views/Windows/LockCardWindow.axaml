@@ -1,0 +1,191 @@
+<!-- PORTED from ConditioningControlPanel/Windows/LockCardWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                      -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"          -> CanResize="False"
+       x:Name on a SolidColorBrush    -> dropped. Avalonia only name-scopes StyledElements, so
+                                         BackgroundBrush, CardBackground, AccentBrush, PhraseBrush,
+                                         InputBackground, InputBorderBrush, InputTextBrush,
+                                         VoiceStateBrush and VoiceLevelBrush would not compile
+                                         (AVLN2000). The code-behind reaches each through the
+                                         control that owns it.
+       {DynamicResource X} on a brush inside Border.Background / an Effect
+                                      -> {StaticResource X}. Neither is in the logical tree, so
+                                         DynamicResource has no scope to resolve through.
+       DropShadowEffect ShadowDepth="0"
+                                      -> OffsetX="0" OffsetY="0"
+       Image + EmojiToImageSource     -> plain TextBlock. Avalonia renders COLR/CPAL colour emoji
+                                         natively, which is the entire reason that converter and
+                                         its pack:// Twemoji SVGs exist (see CLAUDE.md).
+       Visibility="Collapsed"         -> IsVisible="False"
+       ContextMenu="{x:Null}"         -> ContextFlyout="{x:Null}"
+       AllowDrop="False"              -> DragDrop.AllowDrop="False"
+       RenderTransformOrigin="0,0.5"  -> "0%,50%" (a bare pair is ABSOLUTE pixels in Avalonia)
+       KeyDown= / Loaded= / TextChanged=
+                                      -> wired in the constructor
+       <Window.Resources></Window.Resources>  dropped - it was empty in the original too. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LockCardWindow"
+        Title="{loc:Str dialog_lock_card}"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        WindowState="Maximized"
+        ShowInTaskbar="False"
+        CanResize="False">
+
+    <Window.Styles>
+        <!-- Fluent's TextBox paints PART_BorderElement opaque on hover and focus, and that setter
+             sits on the template child, so it outranks the TextBox's own Background="Transparent".
+             The card focuses TxtInput on show, so without this the input reads as a pale slab
+             inside the pink-bordered field - the WPF original never changed background on focus.
+             ponytail: local copy of MantraWindow.axaml's TextBox.transparent style, hoist to
+             Theme/Styles.xaml when a third view needs it. -->
+        <Style Selector="TextBox.transparent /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- Semi-transparent background -->
+    <Grid x:Name="MainGrid">
+        <Grid.Background>
+            <SolidColorBrush Color="#E6000000"/>
+        </Grid.Background>
+
+        <!-- Centered card -->
+        <Border x:Name="CardBorder"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                CornerRadius="16"
+                Padding="50,40"
+                MinWidth="500"
+                MaxWidth="700">
+            <Border.Background>
+                <SolidColorBrush Color="{StaticResource DarkerBg}"/>
+            </Border.Background>
+            <Border.Effect>
+                <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="30" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+            </Border.Effect>
+
+            <StackPanel>
+                <!-- Lock icon and title -->
+                <TextBlock Text="🔐" FontSize="42" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <TextBlock x:Name="TxtTitle" Text="{loc:Str label_type_to_unlock_2}"
+                           FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush Color="{StaticResource PinkColor}"/>
+                    </TextBlock.Foreground>
+                </TextBlock>
+
+                <!-- The phrase to type -->
+                <TextBlock x:Name="TxtPhrase" Text="{loc:Str label_good_girls_obey}"
+                           FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"
+                           Margin="0,0,0,25" TextWrapping="Wrap" TextAlignment="Center">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush Color="{StaticResource PinkColor}"/>
+                    </TextBlock.Foreground>
+                </TextBlock>
+
+                <!-- Input field (text mode) -->
+                <Border x:Name="InputBorder" CornerRadius="8" Padding="15,12" Margin="0,0,0,20"
+                        BorderThickness="2">
+                    <Border.Background>
+                        <SolidColorBrush Color="{StaticResource PanelBg}"/>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <SolidColorBrush Color="{StaticResource PinkColor}"/>
+                    </Border.BorderBrush>
+                    <TextBox x:Name="TxtInput"
+                             Classes="transparent"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             FontSize="20"
+                             TextAlignment="Center"
+                             MaxLength="200"
+                             ContextFlyout="{x:Null}"
+                             DragDrop.AllowDrop="False">
+                        <TextBox.Foreground>
+                            <SolidColorBrush Color="White"/>
+                        </TextBox.Foreground>
+                        <TextBox.CaretBrush>
+                            <SolidColorBrush Color="{StaticResource PinkColor}"/>
+                        </TextBox.CaretBrush>
+                    </TextBox>
+                </Border>
+
+                <!-- Voice panel (voice mode) — hidden unless the card is solved by speaking -->
+                <StackPanel x:Name="VoicePanel" IsVisible="False" Margin="0,0,0,20">
+                    <TextBlock x:Name="TxtVoiceState" Text="🎤 Listening…" FontSize="15" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Margin="0,0,0,10">
+                        <TextBlock.Foreground>
+                            <SolidColorBrush Color="{StaticResource PinkColor}"/>
+                        </TextBlock.Foreground>
+                    </TextBlock>
+                    <!-- Level meter -->
+                    <Border CornerRadius="5" Height="10" Background="#33FFFFFF" MinWidth="280" Margin="0,0,0,8">
+                        <Border x:Name="VoiceLevelFill" CornerRadius="5" HorizontalAlignment="Left" Width="280"
+                                RenderTransformOrigin="0%,50%">
+                            <Border.Background>
+                                <SolidColorBrush Color="{StaticResource PinkColor}"/>
+                            </Border.Background>
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="0"/>
+                            </Border.RenderTransform>
+                        </Border>
+                    </Border>
+                    <TextBlock x:Name="TxtVoiceHeard" Text="I heard: …" FontSize="12" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextMutedBrush}" FontStyle="Italic"/>
+                </StackPanel>
+
+                <!-- Progress indicator -->
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="TxtProgress" Grid.Column="0" Text="0 / 3"
+                               FontSize="14" VerticalAlignment="Center" Margin="0,0,15,0"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+
+                    <Border x:Name="ProgressBarContainer" Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" MinWidth="200">
+                        <Border x:Name="ProgressBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
+                                HorizontalAlignment="Left" Width="0"/>
+                    </Border>
+
+                    <TextBlock x:Name="TxtStrict" Grid.Column="2" Text=""
+                               FontSize="11" VerticalAlignment="Center" Margin="15,0,0,0"
+                               Foreground="#FF6B6B"/>
+                </Grid>
+
+                <!-- Hint text -->
+                <TextBlock x:Name="TxtHint" Text="{loc:Str label_type_the_phrase_exactly_as_shown_above}"
+                           FontSize="11" HorizontalAlignment="Center" Margin="0,20,0,0"
+                           Foreground="#666666" FontStyle="Italic"/>
+
+                <!-- Completion message (hidden initially) -->
+                <StackPanel x:Name="CompletionPanel" IsVisible="False" Margin="0,20,0,0">
+                    <TextBlock Text="{loc:Str label_good_girl_2}" FontSize="24" FontWeight="Bold"
+                               HorizontalAlignment="Center" Foreground="#00E676"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- ESC hint (only if not strict) -->
+        <TextBlock x:Name="TxtEscHint"
+                   Text="{loc:Str label_press_esc_to_close_if_allowed}"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Bottom"
+                   Margin="0,0,0,30"
+                   FontSize="11"
+                   Foreground="#444444"/>
+    </Grid>
+</Window>

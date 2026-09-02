@@ -1,0 +1,762 @@
+using System;
+using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
+using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using ConditioningControlPanel.Localization;
+using Serilog;
+
+namespace ConditioningControlPanel.Avalonia.Views.Windows
+{
+    /// <summary>
+    /// Lock Card window — the user must type (or speak) a phrase a number of times before the
+    /// cover comes off the screen.
+    ///
+    /// PORTED from ConditioningControlPanel/Windows/LockCardWindow.xaml.cs. What survives is
+    /// everything that only touches this view: the phrase/repeat state machine, the #734 anti-cheat
+    /// gate, the progress bar, the encouragement line, the pulse/shake feedback and the voice
+    /// panel's visuals. What does NOT survive, and why:
+    ///
+    ///  - <b>Every Win32 call is gone.</b> <c>SetWindowPos(HWND_TOPMOST)</c> is the XAML's
+    ///    <c>Topmost="True"</c>; <c>SetForegroundWindow</c> is <c>Activate()</c>;
+    ///    <c>WS_EX_TOOLWINDOW</c> is <c>ShowInTaskbar="False"</c>;
+    ///    <c>SetLayeredWindowAttributes</c> + <c>AllowsTransparency</c> is
+    ///    <c>TransparencyLevelHint="Transparent"</c> + <c>SystemDecorations="None"</c>.
+    ///    <c>DisableProcessWindowsGhosting</c>, <c>WindowInteropHelper</c>/<c>HwndSource</c> and the
+    ///    <c>WM_DPICHANGED</c> swallow-hook are dropped outright — see the losses listed on
+    ///    <see cref="ShowOnAllMonitors"/>.
+    ///  - <b>The whole multi-monitor / pool / dead-man's-switch machinery is stubbed.</b> It is
+    ///    built out of hwnds, <c>System.Windows.Forms.Screen</c> and a background thread that
+    ///    force-drops a layered window at the Win32 level; none of that maps, and the parts that
+    ///    could (screen enumeration via <c>Screens</c>) exist only to serve the parts that cannot.
+    ///  - <b>Services stay in the WPF head</b>: App.Settings (card colours, panic key),
+    ///    App.Speech (voice solve), App.Autonomy (mic hand-off), App.Progression / App.Achievements
+    ///    / App.LockCard (XP, achievements, completion notify), App.PanicHook, App.Logger.
+    ///
+    /// Placeholder session state is applied in the constructor so the headless render shows a live
+    /// card rather than an empty one.
+    /// </summary>
+    public partial class LockCardWindow : Window
+    {
+        // ponytail: needs LockCardService, wired when it moves to Core. Placeholder card so the
+        // render (and any manual run) shows the real layout with real strings.
+        private const int SampleRepeats = 3;
+
+        // Per-session config (mutable: the WPF original pooled windows and reconfigured on reuse).
+        private string _phrase = "";
+        private int _requiredRepeats;
+        private bool _strictMode;
+        private bool _voiceMode;
+        private int _completedRepeats;
+        private bool _isCompleted;
+        private DispatcherTimer? _closeTimer;
+
+        // ── Anti-cheat: the phrase must actually be TYPED (#734) ───────────────
+        // Blocking the clipboard keys alone was never enough, and undo was the bigger hole:
+        // RegisterSuccessfulRepeat clears the box, so Ctrl+Z put the whole phrase straight back and
+        // re-fired the match. Belt and braces: the input is hardened (no paste, no undo, no
+        // clipboard gestures) AND a repeat is only accepted once the user has produced at least as
+        // many characters as the phrase is long.
+        private int _keystrokes;          // characters genuinely entered since the last accepted repeat
+        private int _lastInputLength;     // previous TxtInput.Text length, for the growth fail-safe
+        private bool _sawTextInput;       // the text-input handler already credited this change
+
+        // Achievement tracking (kept so the counters the stubbed services want are already correct).
+        private DateTime _startTime;
+        private int _totalErrors;
+        private int _totalCharsTyped;
+
+        // WPF named nine SolidColorBrushes and a ScaleTransform directly. Avalonia only name-scopes
+        // StyledElements, so each is reached through the control that owns it.
+        private readonly TextBlock _txtTitle, _txtPhrase, _txtVoiceState, _txtVoiceHeard,
+                                   _txtProgress, _txtStrict, _txtHint, _txtEscHint;
+        private readonly TextBox _txtInput;
+        private readonly Border _cardBorder, _inputBorder, _voiceLevelFill,
+                                _progressBar, _progressBarContainer;
+        private readonly StackPanel _voicePanel, _completionPanel;
+
+        public LockCardWindow()
+        {
+            AvaloniaXamlLoader.Load(this);
+
+            _cardBorder = this.FindControl<Border>("CardBorder")!;
+            _txtTitle = this.FindControl<TextBlock>("TxtTitle")!;
+            _txtPhrase = this.FindControl<TextBlock>("TxtPhrase")!;
+            _inputBorder = this.FindControl<Border>("InputBorder")!;
+            _txtInput = this.FindControl<TextBox>("TxtInput")!;
+            _voicePanel = this.FindControl<StackPanel>("VoicePanel")!;
+            _txtVoiceState = this.FindControl<TextBlock>("TxtVoiceState")!;
+            _voiceLevelFill = this.FindControl<Border>("VoiceLevelFill")!;
+            _txtVoiceHeard = this.FindControl<TextBlock>("TxtVoiceHeard")!;
+            _txtProgress = this.FindControl<TextBlock>("TxtProgress")!;
+            _progressBarContainer = this.FindControl<Border>("ProgressBarContainer")!;
+            _progressBar = this.FindControl<Border>("ProgressBar")!;
+            _txtStrict = this.FindControl<TextBlock>("TxtStrict")!;
+            _txtHint = this.FindControl<TextBlock>("TxtHint")!;
+            _completionPanel = this.FindControl<StackPanel>("CompletionPanel")!;
+            _txtEscHint = this.FindControl<TextBlock>("TxtEscHint")!;
+
+            // ── Input hardening (#734) ─────────────────────────────────────────
+            // Kills every paste route at the source — Ctrl+V, Shift+Insert, the context menu and
+            // drag-drop. Programmatic Text sets do NOT raise it, so a mirror sync is unaffected.
+            _txtInput.AddHandler(TextBox.PastingFromClipboardEvent, (_, e) =>
+            {
+                e.Handled = true;
+                RejectCheat("paste");
+            });
+
+            // No undo stack ⇒ Ctrl+Z can't resurrect the phrase RegisterSuccessfulRepeat cleared.
+            _txtInput.IsUndoEnabled = false;
+
+            // WPF's PreviewKeyDown / PreviewTextInput are Avalonia's tunnelling KeyDown / TextInput.
+            // Both MUST tunnel: the bubbling versions run after TextBox's own handling, which is
+            // exactly the bug #734 fixed on the WPF side.
+            _txtInput.AddHandler(KeyDownEvent, TxtInput_PreviewKeyDown, RoutingStrategies.Tunnel);
+            _txtInput.AddHandler(TextInputEvent, (_, e) =>
+            {
+                _keystrokes += Math.Max(1, e.Text?.Length ?? 1);
+                _sawTextInput = true;
+            }, RoutingStrategies.Tunnel);
+
+            _txtInput.TextChanged += (_, _) => TxtInput_TextChanged();
+            KeyDown += (_, e) => Window_KeyDown(e);
+            Loaded += (_, _) => OnShown();
+
+            Configure(Loc.Get("label_good_girls_obey"), SampleRepeats, strictMode: false, voiceMode: false);
+        }
+
+        /// <summary>
+        /// Bind a TextBlock to a localization key rather than assigning <c>.Text</c>. Avalonia keeps
+        /// the XAML's {loc:Str} binding alive under a local value, so a plain assignment is undone
+        /// on the next language change (see CLAUDE.md). Same binding the markup extension builds.
+        /// </summary>
+        private static void SetLocalized(TextBlock target, string key) =>
+            target[!TextBlock.TextProperty] = new Binding($"[{key}]")
+            {
+                Source = LocalizationManager.Instance,
+                Mode = BindingMode.OneWay,
+            };
+
+        /// <summary>
+        /// Apply per-session configuration: phrase, repeat count, strict/voice mode, and reset every
+        /// transient piece of card state. The WPF original also positioned the window on a specific
+        /// <c>System.Windows.Forms.Screen</c> in device pixels via <c>SetWindowPos</c>; here the
+        /// window is simply <c>WindowState="Maximized"</c> on its screen.
+        /// </summary>
+        private void Configure(string phrase, int repeats, bool strictMode, bool voiceMode)
+        {
+            _closeTimer?.Stop();
+            _closeTimer = null;
+            _completedRepeats = 0;
+            _isCompleted = false;
+            ResetKeystrokeGate();
+
+            _phrase = phrase;
+            _requiredRepeats = repeats;
+            _strictMode = strictMode;
+            // ponytail: needs App.Speech (IsAvailable) and App.Settings (MicConsentGiven) to decide
+            // whether voice solve is usable; without them a requested voice card would trap the user
+            // behind a mic that never answers, so voice stays off on this head.
+            _voiceMode = false;
+            if (voiceMode)
+                Log.Information("LockCardWindow: voice mode requested but SpeechService is not on this head — falling back to typing");
+
+            _txtPhrase.Text = phrase;
+
+            // Clear any pulse/shake transform and reset input + panels to the fresh (unsolved) look.
+            _cardBorder.RenderTransform = null;
+            _txtInput.IsEnabled = true;
+            _txtInput.Clear();
+            _completionPanel.IsVisible = false;
+            _txtHint.IsVisible = true;
+            _txtHint.Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
+            _txtVoiceHeard.Text = "I heard: …";
+
+            // Swap the input affordance for the voice panel when solving by voice.
+            if (_voiceMode)
+            {
+                _inputBorder.IsVisible = false;
+                _voicePanel.IsVisible = true;
+                _txtTitle.Text = "SAY IT TO UNLOCK";
+                SetVoiceStateColor(VoicePink);
+                SetVoiceLevel(0);
+            }
+            else
+            {
+                _inputBorder.IsVisible = true;
+                _voicePanel.IsVisible = false;
+                SetLocalized(_txtTitle, "label_type_to_unlock_2");
+            }
+
+            UpdateProgress();
+
+            if (_strictMode) SetLocalized(_txtStrict, "label_strict");
+            else _txtStrict.Text = "";
+            RefreshEscHint();
+
+            // The WPF original owned the keyboard on exactly one monitor and mirrored the rest; with
+            // the multi-monitor set stubbed out, this window is always the input owner.
+            ApplyInputAffordance();
+            ApplyColors();
+        }
+
+        /// <summary>
+        /// Input affordance for this card. In the WPF original exactly one card (the primary) owned
+        /// the keyboard/mic and every other monitor was a read-only mirror; the mirror half is gone
+        /// with <see cref="ShowOnAllMonitors"/>, so this always configures the owner.
+        /// </summary>
+        private void ApplyInputAffordance()
+        {
+            _txtInput.IsReadOnly = false;
+            _txtInput.Focusable = true;
+            if (_voiceMode)
+            {
+                _txtVoiceState.Text = "🎤 Listening…";
+                _txtHint.Text = "Say the phrase out loud, clearly.";
+            }
+            else SetLocalized(_txtHint, "label_type_the_phrase_exactly_as_shown_above");
+        }
+
+        /// <summary>
+        /// Give this card the caret. In voice mode there is no visible textbox, so the Window itself
+        /// takes focus (keeps Esc and the key handler live); in typing mode the input does.
+        /// </summary>
+        private void FocusInput()
+        {
+            if (_voiceMode) Focus(); else _txtInput.Focus();
+        }
+
+        /// <summary>
+        /// Runs on every show. <c>SetWindowPos(HWND_TOPMOST)</c> + <c>SetForegroundWindow</c> become
+        /// the XAML's <c>Topmost="True"</c> plus <c>Activate()</c>; the device-pixel re-cover
+        /// (ApplyPhysicalBounds) is gone with the hwnd it needed.
+        /// </summary>
+        private void OnShown()
+        {
+            _startTime = DateTime.Now;
+            _totalErrors = 0;
+            _totalCharsTyped = 0;
+
+            Activate();
+            FocusInput();
+
+            Log.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}",
+                _phrase, _requiredRepeats, _strictMode, _voiceMode);
+        }
+
+        /// <summary>
+        /// A strict card refuses to close until it is solved. This is where WPF's Alt+F4 defence
+        /// actually lived: the <c>KeyDown</c> branch only covered the in-process key, while the WM's
+        /// own close gesture (titlebar, Alt+F4, a task switcher) arrives as a close request. On X11
+        /// that is <c>WM_DELETE_WINDOW</c>, which Avalonia surfaces here as a cancellable
+        /// <c>Closing</c> — the same hook, so strict mode keeps its teeth off Windows.
+        ///
+        /// ponytail: the WPF override also removed this card from the visible set, refreshed the
+        /// watchdog snapshot, un-poisoned its hwnd, pulled it out of the keep-alive pool and
+        /// released App.InteractionQueue's LockCard slot (#462). All five need the stubbed
+        /// machinery or a service — see <see cref="ShowOnAllMonitors"/>.
+        /// </summary>
+        protected override void OnClosing(WindowClosingEventArgs e)
+        {
+            // In strict mode, only allow closing if completed.
+            if (_strictMode && !_isCompleted)
+            {
+                e.Cancel = true;
+                ShakeCard();
+                return;
+            }
+
+            _closeTimer?.Stop();
+            _voiceMode = false;
+            base.OnClosing(e);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // --render-all closes the window externally and a live tick would outlive the view in
+            // that shared process.
+            _closeTimer?.Stop();
+            _closeTimer = null;
+            base.OnClosed(e);
+        }
+
+        // ── Anti-cheat ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Swallow the clipboard / undo gestures before the TextBox's own handling can act on them.
+        /// This MUST be the TUNNELLING handler: on the bubbling one, TextBox has already run
+        /// Paste/Undo and marked the event handled — that was the #734 bug.
+        /// </summary>
+        private void TxtInput_PreviewKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (!IsBlockedInputGesture(e.Key, e.KeyModifiers)) return;
+
+            // Auto-repeat: still swallowed, but WITHOUT the feedback. Holding Ctrl+Z fires ~30 of
+            // these a second and each RejectCheat starts an animation on a fullscreen window.
+            // The first press already shook the card, which is all the "no" the user needs.
+            // ponytail: Avalonia's KeyEventArgs has no IsRepeat, so the throttle is by elapsed time
+            // instead — same effect, one shake per burst.
+            var now = DateTime.UtcNow;
+            var repeat = now - _lastRejectAt < TimeSpan.FromMilliseconds(400);
+            _lastRejectAt = now;
+
+            e.Handled = true;
+            if (!repeat) RejectCheat($"key {e.KeyModifiers}+{e.Key}");
+        }
+
+        private DateTime _lastRejectAt = DateTime.MinValue;
+
+        /// <summary>
+        /// Every keyboard gesture that could put text into the box without typing it, or take text
+        /// out of it: clipboard (Ctrl+C/V/X, Ctrl+Insert, Shift+Insert, Shift+Delete), select-all,
+        /// and undo/redo. Pure so it can be unit-tested. Escape is deliberately NOT here: it is an
+        /// exit, not a way to cheat text into the box — whether it closes the card is decided once,
+        /// in <see cref="Window_KeyDown"/> via <see cref="EscClosesCard"/>.
+        /// </summary>
+        internal static bool IsBlockedInputGesture(Key key, KeyModifiers mods)
+        {
+            // HasFlag rather than ==, so Ctrl+Shift+V (paste as plain text) is caught too.
+            //
+            // ...but NOT with Alt down: AltGr arrives as Ctrl+Alt, so on Polish, Croatian and
+            // US-International layouts AltGr+{C,V,X,A,Z,Y} are how you type ć/ź/ą/ż and friends.
+            // Blocking those made any phrase containing them literally unsolvable.
+            if (mods.HasFlag(KeyModifiers.Control) && !mods.HasFlag(KeyModifiers.Alt) &&
+                (key == Key.C || key == Key.V || key == Key.X || key == Key.A ||
+                 key == Key.Z || key == Key.Y || key == Key.Insert))
+                return true;
+
+            // Legacy clipboard gestures: Shift+Insert = paste, Shift+Delete = cut.
+            if (mods.HasFlag(KeyModifiers.Shift) && (key == Key.Insert || key == Key.Delete))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// The semantic half of the anti-cheat: a repeat only counts once the user has produced at
+        /// least as many characters as the phrase is long. Any route that fills the box in one shot
+        /// (paste, undo, a drop) leaves the credit far short of this, so the match is refused.
+        /// </summary>
+        internal static bool HasTypedEnough(int keystrokes, int phraseLength) => keystrokes >= phraseLength;
+
+        /// <summary>
+        /// Keystroke credit for a text change the tunnelling TextInput handler did NOT account for:
+        /// the full growth of the box, not a single character.
+        ///
+        /// The old "+1 only if it grew by exactly one" rule silently bricked every bulk-but-
+        /// legitimate input route — a CJK IME commits the whole composed phrase in one change with
+        /// no TextInput at all, as do voice typing and the emoji picker. The gate then saw 0
+        /// keystrokes for a full-phrase match, wiped the box, and the card became unsolvable.
+        ///
+        /// This costs no cheat resistance: pasting is cancelled before it reaches the box, undo is
+        /// off, and every blocked gesture is handled before the TextBox acts.
+        /// </summary>
+        internal static int CreditFailSafeGrowth(bool sawTextInput, int previousLength, int currentLength)
+            => (!sawTextInput && currentLength > previousLength) ? currentLength - previousLength : 0;
+
+        /// <summary>
+        /// Visible "no" for a blocked shortcut or a rejected bulk insert. Deliberately wordless (a
+        /// shake of the card) so there is no new user-facing string to localize.
+        /// </summary>
+        private void RejectCheat(string reason)
+        {
+            Log.Debug("LockCardWindow: blocked cheat attempt ({Reason})", reason);
+            try { ShakeCard(); } catch { }
+        }
+
+        /// <summary>Zero the typing credit. Called wherever the input is cleared.</summary>
+        private void ResetKeystrokeGate()
+        {
+            _keystrokes = 0;
+            _lastInputLength = _txtInput?.Text?.Length ?? 0;
+            _sawTextInput = false;
+        }
+
+        // ── Typing ─────────────────────────────────────────────────────────────
+
+        private void TxtInput_TextChanged()
+        {
+            if (_isCompleted) return;
+
+            var input = _txtInput.Text ?? "";
+
+            // Fail-safe keystroke accounting: the tunnelling TextInput handler is the counter of
+            // record, but if an input method delivers text without raising it, credit the growth.
+            _keystrokes += CreditFailSafeGrowth(_sawTextInput, _lastInputLength, input.Length);
+            _sawTextInput = false;
+            _lastInputLength = input.Length;
+
+            _totalCharsTyped++;
+
+            // Check for errors (input doesn't match phrase prefix)
+            if (input.Length > 0)
+            {
+                var expectedPrefix = _phrase.Substring(0, Math.Min(input.Length, _phrase.Length));
+                if (!string.Equals(input, expectedPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    _totalErrors++;
+                }
+            }
+
+            // ponytail: needs the multi-monitor set (SyncInputToAllWindows) — see ShowOnAllMonitors.
+
+            if (string.Equals(input.Trim(), _phrase, StringComparison.OrdinalIgnoreCase))
+            {
+                // The gate lives at THIS call site only. The spoken-solve path calls
+                // RegisterSuccessfulRepeat directly and must never be gated on typing.
+                if (HasTypedEnough(_keystrokes, _phrase.Length))
+                {
+                    RegisterSuccessfulRepeat();
+                }
+                else
+                {
+                    // A full-phrase match that nobody typed: some insertion route got past the
+                    // hardening above. Refuse it and make the user type it for real.
+                    Log.Information(
+                        "Lock Card: rejected an untyped match ({Keys} keystroke(s) for a {Len}-char phrase) (#734)",
+                        _keystrokes, _phrase.Length);
+                    _txtInput.Clear();
+                    ResetKeystrokeGate();
+                    RejectCheat("untyped match");
+                }
+            }
+        }
+
+        /// <summary>Shared completion step for one correct repeat. UI thread only.</summary>
+        private void RegisterSuccessfulRepeat()
+        {
+            if (_isCompleted) return;
+
+            _completedRepeats++;
+            UpdateProgress();
+
+            // Clear input for next repeat (no-op/harmless in voice mode).
+            _txtInput.Clear();
+            // The next repeat has to be earned from scratch — the clear Ctrl+Z used to undo.
+            ResetKeystrokeGate();
+
+            PulseCard();
+
+            if (_completedRepeats >= _requiredRepeats)
+            {
+                CompleteCard();
+            }
+            else
+            {
+                var hint = GetEncouragement();
+                _txtHint.Text = hint;
+                _txtHint.Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100));
+            }
+        }
+
+        private void CompleteCard()
+        {
+            var completionTime = (DateTime.Now - _startTime).TotalSeconds;
+
+            // ponytail: needs App.Progression (AddXP, XPSource.LockCard), App.Achievements
+            // (TrackLockCardCompletion) and App.LockCard (NotifyCompleted); wired when they move to
+            // Core. The XP formula and the strict 1.5x multiplier live with them, not with the view.
+            Log.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors",
+                _requiredRepeats, completionTime, _totalErrors);
+
+            _isCompleted = true;
+            _txtInput.IsEnabled = false;
+            _txtHint.IsVisible = false;
+            _completionPanel.IsVisible = true;
+
+            // Auto-close after delay
+            _closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+            _closeTimer.Tick += (_, _) =>
+            {
+                _closeTimer?.Stop();
+                CloseAllWindows();
+            };
+            _closeTimer.Start();
+        }
+
+        private void UpdateProgress()
+        {
+            _txtProgress.Text = Loc.GetF("lockcard_progress", _completedRepeats, _requiredRepeats);
+
+            // Update progress bar width based on actual container width
+            var progressPercent = _requiredRepeats > 0 ? (double)_completedRepeats / _requiredRepeats : 0;
+            var maxWidth = _progressBarContainer.Bounds.Width > 0 ? _progressBarContainer.Bounds.Width : 200;
+            _progressBar.Width = maxWidth * progressPercent;
+        }
+
+        private string GetEncouragement()
+        {
+            var remaining = _requiredRepeats - _completedRepeats;
+            var messages = new[]
+            {
+                Loc.GetF("lockcard_encourage_1", remaining),
+                Loc.GetF("lockcard_encourage_2", remaining),
+                Loc.GetF("lockcard_encourage_3", remaining),
+                Loc.GetF("lockcard_encourage_4", remaining),
+                Loc.GetF("lockcard_encourage_5", remaining)
+            };
+
+            return messages[_completedRepeats % messages.Length];
+        }
+
+        // ── Escape ─────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// #875: is there a panic escape from this card RIGHT NOW? On WPF the panic key rides a
+        /// <c>WH_KEYBOARD_LL</c> hook that can be absent while the setting says yes, so the answer
+        /// was <c>PanicKeyEnabled &amp;&amp; PanicHook.IsInstalled</c>.
+        /// ponytail: needs App.Settings and App.PanicHook. There is no global-hook equivalent in
+        /// this head at all (<c>SetWindowsHookEx</c> has no X11 twin here), so no panic escape can
+        /// be live — and this falls OPEN, exactly as the WPF version does when the hook is gone.
+        /// </summary>
+        private static bool PanicEscapeIsLive => false;
+
+        /// <summary>
+        /// #875: does Esc close THIS card? Non-strict cards: yes. Strict cards: only while a panic
+        /// escape is actually live, because otherwise Esc is the sole remaining exit and strict mode
+        /// must never become an inescapable trap. Every failure mode here falls open, not shut.
+        /// </summary>
+        private bool EscClosesCard => !_strictMode || !PanicEscapeIsLive;
+
+        /// <summary>
+        /// #875: paint the bottom hint from the exit this card honours RIGHT NOW, rather than
+        /// promising a key that will do nothing.
+        /// </summary>
+        private void RefreshEscHint()
+        {
+            if (_txtEscHint == null) return;
+            if (EscClosesCard) SetLocalized(_txtEscHint, "label_press_esc_to_close");
+            // ponytail: needs App.Settings.PanicKey for the key name in the strict variant
+            // (Loc.GetF("label_strict_only_panic_key_closes", panicKey)). Unreachable while
+            // PanicEscapeIsLive is false, kept so the branch does not silently vanish.
+            else _txtEscHint.Text = Loc.GetF("label_strict_only_panic_key_closes", "?");
+        }
+
+        private void Window_KeyDown(KeyEventArgs e)
+        {
+            // Esc closes the card unless strict mode is on AND a panic escape is genuinely live to
+            // cover it. Strict means "type it out, or panic out" — never "no exit".
+            if (e.Key == Key.Escape && !_isCompleted)
+            {
+                if (EscClosesCard)
+                {
+                    Log.Information("Lock Card closed via ESC (strict={Strict})", _strictMode);
+                    CloseAllWindows();
+                }
+                else
+                {
+                    // Refused. The gate is live, so repaint the hint now that the user has told us
+                    // they are looking for the exit.
+                    RefreshEscHint();
+                }
+            }
+
+            // The WPF original also swallowed Alt+F4 here via e.SystemKey. Avalonia has no
+            // SystemKey and the WM eats Alt+F4 before it is ever a key event, so the block moved to
+            // where the close actually arrives: OnClosing, which cancels an unsolved strict card
+            // for the WM gesture AND for Alt+F4. Same defence, one hook instead of two.
+
+            // Backstop only: covers keys pressed while the input doesn't have focus (voice mode).
+            // The real block is TxtInput_PreviewKeyDown. Do NOT move the Esc branch above into a
+            // tunnelling handler — it is the deliberate exit and has to stay where nothing upstream
+            // can swallow it.
+            if (IsBlockedInputGesture(e.Key, e.KeyModifiers))
+            {
+                e.Handled = true;
+            }
+        }
+
+        // ── Colours ────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// The WPF original repainted the cover, the card, the phrase, the input and the glow from
+        /// five per-user settings (LockCardBackgroundColor / TextColor / InputBackgroundColor /
+        /// InputTextColor / AccentColor), falling back to the mod pack's accent.
+        /// ponytail: needs App.Settings and App.Mods.GetAccentColorHex(); until then the XAML's
+        /// theme colours are the fallbacks the WPF code used anyway, so the card draws correctly —
+        /// it just cannot be recoloured. <see cref="ParseColor"/> is kept because it is the piece
+        /// that will be wired first.
+        /// </summary>
+        private void ApplyColors()
+        {
+            // ponytail: needs App.Settings (LockCard*Color) + App.Mods (accent), wired when they
+            // move to Core.
+        }
+
+        internal static Color ParseColor(string hex, Color fallback)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(hex)) return fallback;
+                if (!hex.StartsWith("#")) hex = "#" + hex;
+                return Color.Parse(hex);
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
+        // ── Feedback animations ────────────────────────────────────────────────
+
+        /// <summary>
+        /// WPF began a DoubleAnimation with AutoReverse on a ScaleTransform. Avalonia has no
+        /// AutoReverse on a code-run Animation, so the return leg is an explicit keyframe.
+        /// </summary>
+        private void PulseCard()
+        {
+            var transform = new ScaleTransform(1, 1);
+            _cardBorder.RenderTransformOrigin = RelativePoint.Center;
+            _cardBorder.RenderTransform = transform;
+
+            var anim = new Animation
+            {
+                Duration = TimeSpan.FromMilliseconds(300),
+                Children =
+                {
+                    Frame(0.0, ScaleTransform.ScaleXProperty, 1.0, ScaleTransform.ScaleYProperty, 1.0),
+                    Frame(0.5, ScaleTransform.ScaleXProperty, 1.05, ScaleTransform.ScaleYProperty, 1.05),
+                    Frame(1.0, ScaleTransform.ScaleXProperty, 1.0, ScaleTransform.ScaleYProperty, 1.0),
+                },
+            };
+            _ = anim.RunAsync(transform);
+        }
+
+        /// <summary>
+        /// WPF: -10 → 10 over 50ms, AutoReverse, RepeatBehavior(3). Same shape here as three
+        /// iterations of a 100ms -10 → 10 → -10 cycle, with the transform cleared afterwards.
+        /// </summary>
+        private void ShakeCard()
+        {
+            var transform = new TranslateTransform();
+            _cardBorder.RenderTransform = transform;
+
+            var anim = new Animation
+            {
+                Duration = TimeSpan.FromMilliseconds(100),
+                IterationCount = new IterationCount(3),
+                Easing = new LinearEasing(),
+                Children =
+                {
+                    Frame(0.0, TranslateTransform.XProperty, -10.0),
+                    Frame(0.5, TranslateTransform.XProperty, 10.0),
+                    Frame(1.0, TranslateTransform.XProperty, -10.0),
+                },
+            };
+            _ = anim.RunAsync(transform).ContinueWith(_ =>
+                Dispatcher.UIThread.Post(() => _cardBorder.RenderTransform = null));
+        }
+
+        private static KeyFrame Frame(double cue, AvaloniaProperty p, object v) => new()
+        {
+            Cue = new Cue(cue),
+            Setters = { new Setter(p, v) },
+        };
+
+        private static KeyFrame Frame(double cue, AvaloniaProperty p1, object v1, AvaloniaProperty p2, object v2) => new()
+        {
+            Cue = new Cue(cue),
+            Setters = { new Setter(p1, v1), new Setter(p2, v2) },
+        };
+
+        // ── Voice solve (speak the phrase) ─────────────────────────────────────
+        //
+        // ponytail: needs App.Speech (ISpeechService: IsAvailable / IsListening /
+        // RecognizePhraseAsync / LevelChanged / PartialTranscript / StopListening) and App.Autonomy
+        // (UserDrivenVoiceArmed / StopVoiceInput / RefreshVoiceInputModes) — the whole
+        // RunVoiceSolveLoopAsync listen loop, the mic hand-off from the "Hey Bambi" wake/PTT owner
+        // and the mid-session fallback all live with those services. What is ported is the panel's
+        // visuals, so the moment the service lands the display is already correct.
+
+        private static readonly Color VoicePink = Color.FromRgb(0xFF, 0x69, 0xB4);
+        private static readonly Color VoiceGreen = Color.FromRgb(0x00, 0xE6, 0x76);
+        private static readonly Color VoiceAmber = Color.FromRgb(0xF0, 0xB4, 0x29);
+
+        private void SetVoiceLevel(double level)
+        {
+            if (_voiceLevelFill.RenderTransform is ScaleTransform st)
+                st.ScaleX = Math.Min(1.0, Math.Max(0.0, level / 0.2)); // RMS ~0..0.2 -> full bar
+        }
+
+        private void SetVoiceHeard(string text) =>
+            _txtVoiceHeard.Text = string.IsNullOrWhiteSpace(text) ? "I heard: …" : $"I heard: {text}";
+
+        private void SetVoiceState(string text, Color color)
+        {
+            _txtVoiceState.Text = text;
+            SetVoiceStateColor(color);
+        }
+
+        private void SetVoiceStateColor(Color color)
+        {
+            if (_txtVoiceState.Foreground is SolidColorBrush b) b.Color = color;
+            else _txtVoiceState.Foreground = new SolidColorBrush(color);
+        }
+
+        /// <summary>Drop back to typed solve if speech dies mid-card, so the user is never stuck.</summary>
+        private void FallBackToTextMidSession()
+        {
+            _voiceMode = false;
+            _voicePanel.IsVisible = false;
+            _inputBorder.IsVisible = true;
+            SetLocalized(_txtTitle, "label_type_to_unlock_2");
+            ApplyInputAffordance();
+            FocusInput();
+            Log.Information("LockCardWindow: fell back to typed solve (speech unavailable mid-card)");
+        }
+
+        // ── Lifecycle / the multi-window surface the services call ─────────────
+
+        /// <summary>
+        /// The card's own deliberate exits (Esc, the completion timer). <c>_isCompleted</c> is set
+        /// first for the same reason WPF's <c>DismissToPool</c> sets it: <see cref="OnClosing"/>
+        /// cancels an unsolved strict close, and an Esc that <see cref="EscClosesCard"/> allowed
+        /// must not then be refused by that guard.
+        /// </summary>
+        private void CloseAllWindows()
+        {
+            _isCompleted = true;
+            Close();
+        }
+
+        /// <summary>
+        /// ponytail: needs LockCardService and a multi-monitor cover story. The WPF original built
+        /// one card per <c>System.Windows.Forms.Screen</c>, kept a keep-alive pool of realized
+        /// layered windows (a fresh <c>Show()</c> of one could deadlock the render thread, #494),
+        /// mirrored the primary's input to the rest, deferred the show across display changes, and
+        /// ran a background dead-man's switch that force-dropped every cover at the Win32 level if
+        /// the UI thread wedged. None of that survives the port:
+        ///
+        ///  - the pool and the #494 workaround are WPF render-thread specific;
+        ///  - the dead-man's switch is <c>SetLayeredWindowAttributes</c> + <c>SetWindowPos</c> on
+        ///    raw hwnds — there is no equivalent, so a wedged UI thread on this head leaves the
+        ///    cover up. That is the single largest behavioural loss in this file;
+        ///  - <c>DisableProcessWindowsGhosting</c> and the <c>WM_DPICHANGED</c> swallow-hook are
+        ///    Windows-only and simply dropped;
+        ///  - multi-monitor enumeration itself maps (<c>Screens.All</c> / <c>screen.WorkingArea</c>
+        ///    / <c>screen.Scaling</c>), but only serves the parts above.
+        /// </summary>
+        public static void ShowOnAllMonitors(string phrase, int repeats, bool strictMode, bool isTest = false, bool voiceMode = false)
+            => Log.Warning("LockCardWindow.ShowOnAllMonitors is not wired on this head (needs LockCardService)");
+
+        /// <summary>ponytail: needs the multi-monitor set — see <see cref="ShowOnAllMonitors"/>.</summary>
+        public static bool IsAnyOpen() => false;
+
+        /// <summary>ponytail: needs the multi-monitor set — see <see cref="ShowOnAllMonitors"/>.</summary>
+        public static void ForceCloseAll() { }
+
+        /// <summary>
+        /// The mic privacy pill: drop every voice-mode card to typed solve so the microphone closes
+        /// but the lock still has to be solved. ponytail: needs the multi-monitor set and
+        /// App.Speech — see <see cref="ShowOnAllMonitors"/>.
+        /// </summary>
+        public static void DisableVoiceForAll() { }
+    }
+}
