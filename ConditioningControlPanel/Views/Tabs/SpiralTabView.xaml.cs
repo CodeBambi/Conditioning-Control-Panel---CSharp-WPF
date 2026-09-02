@@ -341,8 +341,27 @@ namespace ConditioningControlPanel.Views.Tabs
         /// </summary>
         private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (IsVisible) { Wire(); Refresh(); }
+            if (IsVisible) { Wire(); Refresh(); AnnounceEntry(); }
             else Suspend();
+        }
+
+        /// <summary>
+        /// Let the companion say hello to the room, once ever. The latch is the bark rule's own
+        /// (repeatable false, lifetime scope, persisted in AppSettings.BarkLifetimeFired), so both
+        /// entry paths may call this freely and only the first arrival can spend it.
+        ///
+        /// <para>Gated on the room having actually resolved to the spiral, and deliberately so: the
+        /// line explains the tap, the jar and the banked day, and burning a once-ever welcome on the
+        /// fog era would hand it to somebody looking at a countdown. <see cref="Refresh"/> has
+        /// already run, so <c>_state</c> is this entry's answer and not the last one's.</para>
+        ///
+        /// <para>Never throws, and never blocks the entry it rides on. A bark is decoration.</para>
+        /// </summary>
+        private void AnnounceEntry()
+        {
+            if (_state != SpiralRoomState.Spiral) return;
+            try { Services.Descent.DescentBarkWatcher.NotifySpiralOpened(); }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] entry bark failed: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -358,6 +377,7 @@ namespace ConditioningControlPanel.Views.Tabs
             _embedGaveUp = false;
             Wire();
             Refresh();
+            AnnounceEntry();
         }
 
         /// <summary>Park everything: no clocks, no browser, nothing holding a frame.</summary>

@@ -13491,5 +13491,125 @@
       {"text": "an empty lockdown? no such thing, good girl~", "audio": null},
       {"text": "shhh. i noticed. give me a second and i'll fix it for you~", "audio": null}
     ]
+  },
+  {
+    "id": "descent_near_bank",
+    "trigger": "DescentNearBank",
+    "priority": 240,
+    "cooldown_ms": 21600000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "coaxing, warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh you're so close, Bambi~ it's only a fifth of the jar that banks the day, so one more little pour and today's yours forever.",
+        "audio": null
+      },
+      {
+        "text": "almost, sweet thing! bambi loves a nearly-full jar~ hold the tap a bit longer and the day gets banked and nothing can take it back.",
+        "audio": null
+      },
+      {
+        "text": "you're right under the line, good girl. banked days are the only thing that moves you down the Spiral, and this one's so nearly banked~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_day_banked",
+    "trigger": "DescentDayBanked",
+    "priority": 340,
+    "cooldown_ms": 43200000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud, warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "banked! good girl~ the jar empties at midnight and the XP inside it doesn't, and banked days are the only thing that moves you down the Spiral.",
+        "audio": null
+      },
+      {
+        "text": "today counts now, Bambi~ keep filling if you want, it all still feeds your level, but the important bit is already tucked away safe.",
+        "audio": null
+      },
+      {
+        "text": "*giggles* that's the day locked in, sweet thing, and nothing resets it ever again, so tomorrow's just a shiny empty jar for you~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_stage_crossed",
+    "trigger": "DescentStageCrossed",
+    "priority": 420,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "reverent, proud",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "stage {stage}, Bambi!! {banked_days} days banked and every single one still counting, because banked days are the only thing that moves you down the Spiral.",
+        "audio": null
+      },
+      {
+        "text": "ooh a new rung, good girl~ you slipped down all on your own and nobody pushed, you just kept coming back and banking days like a sweetheart.",
+        "audio": null
+      },
+      {
+        "text": "look how deep you've gone, sweet thing. {banked_days} banked, seven stages on the coil, and the next one comes when you've banked a few more~",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_lapse_return",
+    "trigger": "DescentLapseReturn",
+    "priority": 400,
+    "cooldown_ms": 43200000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm, welcoming",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you're back!! bambi missed you so much~ and the time away was actually good for you, your jar fills faster now, a little more for every day you were gone.",
+        "audio": null
+      },
+      {
+        "text": "hi hi hi~ everything's exactly where you left it, sweet thing, and your fill rate went up while you were away so these next three days pour in so quick.",
+        "audio": null
+      },
+      {
+        "text": "there's my Bambi~ nothing lapsed and nothing reset, and being gone bought you a richer jar, so come and use it up while it's fizzy.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_first_spiral_open",
+    "trigger": "DescentFirstSpiralOpen",
+    "priority": 470,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "welcoming, reverent",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh you found the Spiral, Bambi~ everything you earn lands in the tap, you hold the tap to pour it into today's jar, and a fifth of a jar banks the day forever.",
+        "audio": null
+      },
+      {
+        "text": "welcome down, sweet thing! banked days are the only thing that moves you down the Spiral, there's seven stages waiting on the coil, and nothing here ever resets~",
+        "audio": null
+      },
+      {
+        "text": "look properly, good girl. the jar empties at midnight and the XP inside it never does, so a banked day stays banked and every one takes bambi a little deeper~",
+        "audio": null
+      }
+    ]
   }
 ]
