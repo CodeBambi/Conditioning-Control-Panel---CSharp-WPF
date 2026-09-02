@@ -1,0 +1,895 @@
+<!-- PORTED from ConditioningControlPanel/Chaos/ChaosHubWindow.xaml.
+     Structure, ordering, spacing, x:Name-s and every resource key preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" + TransparencyLevelHint
+       shell:WindowChrome                       -> dropped; Win32-only, and SystemDecorations
+                                                   already removes the caption. Edge-resize comes
+                                                   from CanResize + the platform frame instead.
+       FontFamily="Segoe UI"                    -> dropped (Windows-only face)
+       <Style x:Key TargetType>                 -> <ControlTheme x:Key TargetType>
+       Style="{StaticResource X}"               -> Theme="{StaticResource X}"
+       Stepper / WinBtn (property-only Button)  -> BasedOn="{StaticResource {x:Type Button}}", or
+                                                   the ControlTheme leaves Template null and the
+                                                   button draws NOTHING (CLAUDE.md trap 4)
+       ControlTemplate.Triggers                 -> ^:checked / ^:pointerover / ^:disabled selectors
+       bare <ContentPresenter/>                 -> Content/ContentTemplate/Foreground TemplateBindings
+       Visibility="Collapsed"                   -> IsVisible="False"
+       Panel.ZIndex                             -> ZIndex
+       ToolTip="…"                              -> ToolTip.Tip="…"
+       LinearGradientBrush "0,0"/"1,1"          -> "0%,0%"/"100%,100%" (a bare pair is ABSOLUTE px,
+                                                   which collapses the ramp to one pixel) — all
+                                                   FOUR gradients here, not just Brand
+       <Button.Resources><Style TargetType=     -> CornerRadius="N" on the Button; Avalonia's
+         "Border"><Setter CornerRadius>            Fluent template already TemplateBinds it
+       Chk BasedOn="{StaticResource {x:Type     -> a full local template; there is no app-wide
+         CheckBox}}" (Resources/Theme/Inputs)      implicit CheckBox on this head to inherit from
+       OptChk LayoutTransform 1.35              -> ONE LayoutTransformControl around the column
+                                                   (Avalonia has no LayoutTransform per control)
+       skia:SKElement MenuLogoFx / MenuFog      -> no SkiaSharp on this head and no package may be
+                                                   added from a view layer. The logo slot draws the
+                                                   static wordmark frame; the fog layer is inert.
+       bare <Slider> / <ComboBox>               -> Theme="{StaticResource PinkSlider}" /
+                                                   "{StaticResource DarkComboBoxStyle}". WPF got
+                                                   these from the app-wide IMPLICIT styles in
+                                                   Resources/Theme/Inputs.xaml; those two keys in
+                                                   Theme/Styles.xaml are that pair's port, and
+                                                   Avalonia has no implicit theme of ours, so they
+                                                   are named here or the controls fall back to
+                                                   Fluent blue.
+       x:Name on an ImageBrush                  -> dropped; Avalonia's XAML compiler rejects a
+                                                   name on a non-Control (AVLN2000). Nothing looks
+                                                   these up here — the sources come from ChaosArt,
+                                                   which is head-side.
+       MouseLeftButtonDown=                     -> PointerPressed, wired in the constructor
+       {Binding IsChecked, ElementName=X}       -> {Binding #X.IsChecked}
+
+     Every string in this view is hardcoded English in the WPF original too — the Dollhouse was
+     never localized — so there is no {loc:Str} here and no key has been invented for one. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Chaos.ChaosHubWindow"
+        Title="the Dollhouse"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        CanResize="True"
+        WindowStartupLocation="CenterScreen"
+        SizeToContent="Manual" Width="990" Height="930"
+        MinWidth="760" MinHeight="600">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="Pink" Color="#FFE84393"/>
+        <SolidColorBrush x:Key="Purple" Color="#FF8B5CF6"/>
+        <SolidColorBrush x:Key="Bg" Color="#FF14122A"/>
+        <SolidColorBrush x:Key="Card" Color="#FF1C1A36"/>
+        <SolidColorBrush x:Key="Card2" Color="#FF221F40"/>
+        <SolidColorBrush x:Key="Border1" Color="#44E84393"/>
+        <SolidColorBrush x:Key="TextDim" Color="#AAB8B8D0"/>
+        <SolidColorBrush x:Key="TextMut" Color="#88A0A0C0"/>
+        <!-- ponytail: local copy of ChaosHubWindow.xaml:Brand, hoist when a third view needs it.
+             Theme/Brushes.xaml has BrandGradient with the same two stops, but its endpoints are
+             written "0,0"/"1,1", which Avalonia reads as absolute pixels. -->
+        <LinearGradientBrush x:Key="Brand" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#FFE84393" Offset="0"/>
+            <GradientStop Color="#FF8B5CF6" Offset="1"/>
+        </LinearGradientBrush>
+
+        <ControlTheme x:Key="SectionHdr" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Pink}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </ControlTheme>
+        <ControlTheme x:Key="Lbl" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Width" Value="92"/>
+        </ControlTheme>
+        <ControlTheme x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Card}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Border1}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </ControlTheme>
+        <ControlTheme x:Key="Seg" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="b" CornerRadius="8" Background="#22FFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Border#b">
+                <Setter Property="Background" Value="{StaticResource Pink}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Pink}"/>
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+        <!-- tab pill -->
+        <ControlTheme x:Key="Tab" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="b" CornerRadius="9" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,0,0,2" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Border#b">
+                <Setter Property="Background" Value="#22E84393"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Pink}"/>
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.35"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+        <!-- Property-only in WPF, where a keyed Style keeps the control's default template.
+             An Avalonia ControlTheme REPLACES the theme, so without BasedOn this draws nothing. -->
+        <ControlTheme x:Key="Stepper" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="26"/><Setter Property="Height" Value="26"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#22FFFFFF"/><Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="FontWeight" Value="Bold"/>
+        </ControlTheme>
+        <!-- ponytail: local copy of Resources/Theme/Inputs.xaml's implicit CheckBox (the 18px pink
+             dot with the 7px white core), hoist when a second view needs it. WPF's Chk was
+             BasedOn that implicit style; there is no implicit CheckBox on this head, and a
+             property-only ControlTheme would leave the Fluent tick box (CLAUDE.md trap 4).
+             The check-pop storyboard and the three-state middle value are dropped. -->
+        <ControlTheme x:Key="Chk" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="CheckBox">
+                    <!-- Grid, NOT a horizontal StackPanel: wrapped Content must still wrap. -->
+                    <Grid Background="Transparent" ColumnDefinitions="Auto,*">
+                        <Grid x:Name="DotHost" Grid.Column="0" Width="18" Height="18" VerticalAlignment="Center">
+                            <Border x:Name="Dot" CornerRadius="9"
+                                    Background="#332A2A4A" BorderBrush="#33FFFFFF" BorderThickness="1"/>
+                            <Ellipse x:Name="Core" Width="7" Height="7" Fill="White" IsVisible="False"/>
+                        </Grid>
+                        <ContentPresenter x:Name="ContentHost" Grid.Column="1" Margin="8,0,0,0"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Border#Dot">
+                <Setter Property="Background" Value="{StaticResource Pink}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Pink}"/>
+                <Setter Property="Effect">
+                    <DropShadowEffect Color="#FFE84393" BlurRadius="8" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+                </Setter>
+            </Style>
+            <Style Selector="^:checked /template/ Ellipse#Core">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#Dot">
+                <Setter Property="BorderBrush" Value="{StaticResource Pink}"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45"/>
+            </Style>
+        </ControlTheme>
+        <!-- big left-aligned main-menu list button -->
+        <ControlTheme x:Key="MenuBtn" TargetType="Button">
+            <Setter Property="Height" Value="58"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="19"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="22,0"/>
+            <Setter Property="Background" Value="{StaticResource Card}"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" CornerRadius="10" Background="{TemplateBinding Background}"
+                            BorderBrush="{StaticResource Border1}" BorderThickness="1" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#b">
+                <Setter Property="Background" Value="{StaticResource Card2}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Pink}"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+        <!-- big, scaled-up checkbox for the full-width OPTIONS panel. Inherits Chk's dot and
+             label colour transitively (a ControlTheme has ONE BasedOn, same as WPF). The WPF
+             1.35 LayoutTransform lives on the column instead — see MenuOptions. -->
+        <ControlTheme x:Key="OptChk" TargetType="CheckBox" BasedOn="{StaticResource Chk}">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Margin" Value="0,14"/>
+        </ControlTheme>
+        <!-- min / fullscreen / close window-control glyph button -->
+        <ControlTheme x:Key="WinBtn" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="30"/><Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#22FFFFFF"/><Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/><Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border CornerRadius="16" Background="{StaticResource Bg}" BorderBrush="{StaticResource Pink}" BorderThickness="2">
+        <Grid>
+        <!-- Full-width top drag strip. First child = behind everything, so it never blocks a
+             button: it only catches drags in the transparent top gaps. The view title bars +
+             WinChrome render on top of it. -->
+        <Border x:Name="DragBar" Height="46" VerticalAlignment="Top" Background="Transparent"/>
+
+        <!-- THE DOLL HOUSE: the tabbed hub. Hidden until chosen from the main menu. -->
+        <Grid x:Name="DollhouseView" Margin="22" IsVisible="False"
+              RowDefinitions="Auto,Auto,*,Auto">
+
+            <!-- top bar -->
+            <Grid Grid.Row="0" x:Name="TitleBar" Background="Transparent" Margin="0,0,0,14">
+                <!-- Right-aligned decoration: Uniform keeps the art's full height visible at any
+                     window width (UniformToFill was eating the subject's bottom on wide bars);
+                     MaxHeight still guards the auto-sized title row against tall files. -->
+                <Image x:Name="BannerImage" Stretch="Uniform" HorizontalAlignment="Right"
+                       Opacity="0.30" IsVisible="False" MaxHeight="120"/>
+                <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <Button x:Name="BtnBackToMenu" Content="‹ Menu" Click="Back_To_Menu_Click"
+                            HorizontalAlignment="Left" Margin="0,0,0,8" Padding="10,3"
+                            Background="#22FFFFFF" Foreground="{StaticResource TextDim}" FontSize="12"
+                            BorderThickness="0" Cursor="Hand" CornerRadius="7"
+                            ToolTip.Tip="back to the main menu"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🐇 DOWN THE RABBIT HOLE" Foreground="White" FontSize="22" FontWeight="Bold">
+                            <TextBlock.Effect><DropShadowEffect Color="#FFE84393" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.7"/></TextBlock.Effect>
+                        </TextBlock>
+                        <TextBlock Text="the dollhouse" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="12" VerticalAlignment="Bottom" Margin="10,0,0,4"/>
+                    </StackPanel>
+                    <!-- rank / drops / gold under the title, left side — the banner art owns the right -->
+                    <StackPanel Orientation="Horizontal" Margin="2,10,0,0">
+                        <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="12,5" Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="RANK" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock x:Name="TxtRank" Text="Curious" Foreground="White" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="12,5" Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="✦" Foreground="{StaticResource Purple}" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock x:Name="TxtSparks" Text="0" Foreground="White" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="emotes" Foreground="{StaticResource TextMut}" FontSize="11" VerticalAlignment="Bottom" Margin="5,0,0,1"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="12,5" Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="🪙" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock x:Name="TxtGold" Text="0" Foreground="White" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="gold" Foreground="{StaticResource TextMut}" FontSize="11" VerticalAlignment="Bottom" Margin="5,0,0,1"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+                <!-- Close/minimize/fullscreen live in the shared WinChrome cluster (top-right of the
+                     root grid); the guide button sits left of it so they don't overlap. -->
+                <Button x:Name="BtnGuide" Content="?" Click="BtnGuide_Click"
+                        ToolTip.Tip="How to play — the rules card"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,120,0"
+                        Width="28" Height="28" Padding="0" Background="#22FFFFFF" Foreground="White"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+            </Grid>
+
+            <!-- tabs: BAG (glance: pockets + collections), the Toybox (toy/accessory/habit shop),
+                 Settings (run setup), the Looking Glass (stats/diary/mantras/bench) -->
+            <WrapPanel Grid.Row="1" Margin="0,0,0,14">
+                <ToggleButton x:Name="TabLoadout" Theme="{StaticResource Tab}" Content="BAG" Tag="loadout" Click="Tab_Click"/>
+                <ToggleButton x:Name="TabEnhance" Theme="{StaticResource Tab}" Content="the Toybox" Tag="enhance" Click="Tab_Click"/>
+                <ToggleButton x:Name="TabRun" Theme="{StaticResource Tab}" Content="Settings" Tag="run" Click="Tab_Click"/>
+                <ToggleButton x:Name="TabImprove" Theme="{StaticResource Tab}" Content="the Looking Glass" Tag="improve" Click="Tab_Click"/>
+                <ToggleButton x:Name="TabDiary" Theme="{StaticResource Tab}" Content="the Diary" Tag="diary" Click="Tab_Click" IsVisible="False"/>
+            </WrapPanel>
+
+            <!-- content -->
+            <Grid Grid.Row="2">
+
+                <!-- Faint dressing flourish behind every tab (assets/Chaos/hub/backdrop.png,
+                     loaded in LoadBanner; absent file = collapsed, the void returns). -->
+                <Image x:Name="HubBackdrop" Stretch="Uniform" MaxWidth="430" MaxHeight="430"
+                       HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,10,4"
+                       Opacity="0.12" IsHitTestVisible="False" IsVisible="False"/>
+
+                <!-- BAG: the glance page (pockets up top, then the whole collection as tiles) -->
+                <ScrollViewer x:Name="PanelLoadout" VerticalScrollBarVisibility="Auto" IsVisible="False">
+                    <StackPanel>
+                        <Border Theme="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="POCKETS" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
+                                <TextBlock x:Name="TxtPocketsSub" Text="what you take down with you. choose like it matters."
+                                           Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
+                                <StackPanel x:Name="PocketSlotsHost" Orientation="Horizontal"/>
+                            </StackPanel>
+                        </Border>
+                        <Border x:Name="CardBagAccessories" Theme="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <TextBlock Text="ACCESSORIES" Theme="{StaticResource SectionHdr}" Margin="0"/>
+                                    <TextBlock x:Name="TxtAccCount" Foreground="{StaticResource TextMut}" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <UniformGrid x:Name="TilesAccessories" Columns="4" HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+                        </Border>
+                        <Border x:Name="CardBagToys" Theme="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <TextBlock Text="TOYS" Theme="{StaticResource SectionHdr}" Margin="0"/>
+                                    <TextBlock x:Name="TxtSkillCount" Foreground="{StaticResource TextMut}" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <UniformGrid x:Name="TilesSkills" Columns="4" HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Theme="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,2">
+                                    <TextBlock Text="HABITS" Theme="{StaticResource SectionHdr}" Margin="0"/>
+                                    <TextBlock x:Name="TxtHabitCount" Foreground="{StaticResource TextMut}" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <TextBlock Text="trained habits follow you down. tap one to switch it on or off."
+                                           Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
+                                <UniformGrid x:Name="TilesHabits" Columns="4" HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- THE TOYBOX: unlock + deepen toys, accessories and habits -->
+                <ScrollViewer x:Name="PanelEnhance" VerticalScrollBarVisibility="Auto" IsVisible="False">
+                    <StackPanel>
+                        <TextBlock Text="the Toybox" Theme="{StaticResource SectionHdr}" FontSize="20" Margin="2,0,0,2"/>
+                        <TextBlock Text="everything ordered here comes in an anonymous sealed package ;)"
+                                   Foreground="{StaticResource TextMut}" FontSize="11" Margin="2,0,0,14"/>
+                        <Border x:Name="HerCornerCard" Theme="{StaticResource CardStyle}" IsVisible="False">
+                            <StackPanel>
+                                <TextBlock Text="her corner" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
+                                <TextBlock Text="a little table by the door. she takes gold."
+                                           Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
+                                <StackPanel x:Name="HerCornerHost"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="HdrToys" Text="Toys" Theme="{StaticResource SectionHdr}" FontSize="20" Margin="2,0,0,10"/>
+                        <StackPanel x:Name="BoonHostSkills"/>
+                        <Border x:Name="StubToys" IsVisible="False"
+                                Background="{StaticResource Card2}" BorderThickness="1" CornerRadius="8"
+                                Padding="10" Margin="0,0,0,6" Opacity="0.55">
+                            <Border.BorderBrush><SolidColorBrush Color="#1EE84393"/></Border.BorderBrush>
+                            <TextBlock Text="???" Foreground="{StaticResource TextMut}" FontSize="12" FontWeight="SemiBold"/>
+                        </Border>
+                        <TextBlock x:Name="HdrAccessories" Text="Accessories" Theme="{StaticResource SectionHdr}" FontSize="20" Margin="2,14,0,10"/>
+                        <StackPanel x:Name="BoonHostAccessories"/>
+                        <Border x:Name="StubAccessories" IsVisible="False"
+                                Background="{StaticResource Card2}" BorderThickness="1" CornerRadius="8"
+                                Padding="10" Margin="0,8,0,6" Opacity="0.55">
+                            <Border.BorderBrush><SolidColorBrush Color="#1EE84393"/></Border.BorderBrush>
+                            <TextBlock Text="???" Foreground="{StaticResource TextMut}" FontSize="12" FontWeight="SemiBold"/>
+                        </Border>
+                        <TextBlock Text="Habits" Theme="{StaticResource SectionHdr}" FontSize="20" Margin="2,14,0,2"/>
+                        <TextBlock Text="spend your emotes. once trained they're yours for good. switch them on or off between descents."
+                                   Foreground="{StaticResource TextMut}" FontSize="11" Margin="2,0,0,10"/>
+                        <StackPanel x:Name="HabitsHost"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- SETTINGS: run setup -->
+                <ScrollViewer x:Name="PanelRun" VerticalScrollBarVisibility="Auto" IsVisible="False">
+                    <StackPanel>
+                        <StackPanel x:Name="SetupBody">
+                        <Border Theme="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="THE DESCENT" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
+                                <TextBlock Text="dress it up however you like. it ends the same way." Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Difficulty" Theme="{StaticResource Lbl}"/>
+                                    <StackPanel x:Name="GrpDifficulty" Orientation="Horizontal">
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="Easy" Content="Gentle" Click="Segment_Click"/>
+                                        <ToggleButton x:Name="SegMedium" Theme="{StaticResource Seg}" Tag="Medium" Content="Teasing" Click="Segment_Click"/>
+                                        <ToggleButton x:Name="SegHard" Theme="{StaticResource Seg}" Tag="Hard" Content="Relentless" Click="Segment_Click"/>
+                                        <ToggleButton x:Name="SegExtreme" Theme="{StaticResource Seg}" Tag="Extreme" Content="Inescapable 🔒" Click="Segment_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Length" Theme="{StaticResource Lbl}"/>
+                                    <StackPanel x:Name="GrpLength" Orientation="Horizontal">
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="120" Content="2 min" Click="Segment_Click"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="180" Content="3 min" Click="Segment_Click"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="300" Content="5 min" Click="Segment_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Motion" Theme="{StaticResource Lbl}"/>
+                                    <StackPanel x:Name="GrpMotion" Orientation="Horizontal">
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="Mixed" Content="Mixed" Click="Segment_Click"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="FloatUp" Content="Float" Click="Segment_Click"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="RainDown" Content="Rain" Click="Segment_Click"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="RoamBounce" Content="Roam" Click="Segment_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <!-- Resistance stepper removed 2026-06-10: you descend with 0 —
+                                     resistance is TRAINED ("It would never work on me..." charm). -->
+                            </StackPanel>
+                        </Border>
+
+                        <Border Theme="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="SENSATION" Theme="{StaticResource SectionHdr}"/>
+                                <CheckBox x:Name="ChkShake" Theme="{StaticResource Chk}" Content="Screen shake"/>
+                                <Slider x:Name="SldShake" Theme="{StaticResource PinkSlider}" Minimum="0" Maximum="1" Margin="0,0,0,6"/>
+                                <CheckBox x:Name="ChkFlashes" Theme="{StaticResource Chk}" Content="Color flashes"/>
+                                <CheckBox x:Name="ChkSkiaFx" Theme="{StaticResource Chk}" Content="Enhanced FX (bloom &amp; bursts)"
+                                          ToolTip.Tip="Additive Skia-rendered glow: rabbit trail, cursor halo, lightning, bubble pop bursts &amp; glassy shine. Off = the classic effects."/>
+                                <CheckBox x:Name="ChkPinTop" Theme="{StaticResource Chk}" Content="Keep on top"
+                                          ToolTip.Tip="Pins the chaos layer above other windows. Off = other apps can come forward over the descent."/>
+                                <CheckBox x:Name="ChkSharedHost" Theme="{StaticResource Chk}" Content="Smooth bubbles (experimental)"
+                                          ToolTip.Tip="Renders all bubbles on one shared layer instead of a window each, so clicks stay responsive when the screen is busy. Experimental — turn off if bubbles misbehave."/>
+                                <TextBlock Text="Effect intensity" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
+                                <Slider x:Name="SldEffect" Theme="{StaticResource PinkSlider}" Minimum="0.2" Maximum="1.5"/>
+                                <CheckBox x:Name="ChkAnnouncer" Theme="{StaticResource Chk}" Content="Announcements" Margin="0,8,0,0"/>
+                                <TextBlock Text="THE MADAM" Theme="{StaticResource SectionHdr}" Margin="0,12,0,0"/>
+                                <CheckBox x:Name="ChkNarrative" Theme="{StaticResource Chk}" Content="Narrator (voiced reactions)"
+                                          ToolTip.Tip="A reactive narrator speaks voiced + text lines during a descent."/>
+                                <CheckBox x:Name="ChkBackdrop" Theme="{StaticResource Chk}" Content="Zone backdrops" Margin="0,4,0,0"
+                                          ToolTip.Tip="Per-zone backdrop plates under the bubbles. Off = classic Chaos over your live desktop."/>
+                                <TextBlock Text="Backdrop opacity" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
+                                <Slider x:Name="SldBackdropOpacity" Theme="{StaticResource PinkSlider}" Minimum="0" Maximum="1"/>
+                                <CheckBox x:Name="ChkTunnel" Theme="{StaticResource Chk}" Content="3D rabbit-hole tunnel" Margin="0,10,0,0"
+                                          ToolTip.Tip="An endless procedurally-generated 3D tunnel rendered behind the game. Heavier on the GPU — default off."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="CardKeybinds" Theme="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="KEYBINDS" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
+                                <TextBlock x:Name="TxtKeybindsSub" Text="your equipped toy fires on this, mid-descent. the second pocket isn't sewn yet."
+                                           Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
+                                <StackPanel x:Name="RowToyKey1" Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Toy 1" Theme="{StaticResource Lbl}"/>
+                                    <ComboBox x:Name="CmbAccKey1" Theme="{StaticResource DarkComboBoxStyle}" Width="70" SelectionChanged="AccKey_Changed"/>
+                                </StackPanel>
+                                <StackPanel x:Name="RowToyKey2" Orientation="Horizontal">
+                                    <TextBlock Text="Toy 2" Theme="{StaticResource Lbl}"/>
+                                    <ComboBox x:Name="CmbAccKey2" Theme="{StaticResource DarkComboBoxStyle}" Width="70" SelectionChanged="AccKey_Changed"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- TESTING OPTIONS: dev/test knobs the descent normally tunes itself
+                             (bubble pool, mantra/sin toggles, loop count). Collapsed by default
+                             so the casual read is just difficulty + length + feel. -->
+                        <ToggleButton x:Name="TglTesting" Theme="{StaticResource Seg}" Content="🧪 testing options ▸"
+                                      Click="TestingToggle_Click" HorizontalAlignment="Left" Margin="0,0,0,10"/>
+                        <StackPanel x:Name="TestingBody" IsVisible="False">
+
+                            <Border Theme="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="BUBBLE POOL — what can drop" Theme="{StaticResource SectionHdr}"/>
+                                    <WrapPanel x:Name="GrpPool">
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="flash" Content="Flash" Margin="0,0,6,6"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="subliminal" Content="Subliminal" Margin="0,0,6,6"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="pink" Content="Pink Filter" Margin="0,0,6,6"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="spiral" Content="Spiral" Margin="0,0,6,6"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="braindrain" Content="BrainDrain" Margin="0,0,6,6"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="bambifreeze" Content="Bambi Freeze" Margin="0,0,6,6"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="video" Content="Video" Margin="0,0,6,6"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="htlink" Content="Gif Rain" Margin="0,0,6,6"/>
+                                    </WrapPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <TextBlock Text="presets:" Foreground="{StaticResource TextMut}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <Button Content="Balanced" Tag="Balanced" Click="Preset_Click" Theme="{StaticResource Stepper}" Width="NaN" Padding="10,4" Margin="0,0,6,0"/>
+                                        <Button Content="Tease" Tag="Tease" Click="Preset_Click" Theme="{StaticResource Stepper}" Width="NaN" Padding="10,4" Margin="0,0,6,0"/>
+                                        <Button Content="Flash-only" Tag="Flash-only" Click="Preset_Click" Theme="{StaticResource Stepper}" Width="NaN" Padding="10,4"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkDarters" Theme="{StaticResource Chk}" Content="White rabbits (fast bonus catch targets)" Margin="0,12,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Theme="{StaticResource CardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="MANTRAS &amp; LOOPS" Theme="{StaticResource SectionHdr}"/>
+                                    <CheckBox x:Name="ChkBoonDraft" Theme="{StaticResource Chk}" Content="Mantra draft between loops"/>
+                                    <CheckBox x:Name="ChkCurses" Theme="{StaticResource Chk}" Content="Allow sins"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <TextBlock Text="Loops" Foreground="{StaticResource TextDim}" FontSize="12" VerticalAlignment="Center" Width="50"/>
+                                        <Button Theme="{StaticResource Stepper}" Content="−" Tag="waves-" Click="Stepper_Click"/>
+                                        <TextBlock x:Name="TxtWaves" Foreground="White" FontWeight="Bold" FontSize="14" Width="34" TextAlignment="Center" VerticalAlignment="Center"/>
+                                        <Button Theme="{StaticResource Stepper}" Content="+" Tag="waves+" Click="Stepper_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <Button Content="↻ Randomize" Click="BtnRandomize_Click" Theme="{StaticResource Stepper}" Width="NaN" Height="NaN" Padding="12,8" Margin="0,0,8,0"/>
+                                <Button Content="Defaults" Click="BtnDefaults_Click" Theme="{StaticResource Stepper}" Width="NaN" Height="NaN" Padding="12,8"/>
+                            </StackPanel>
+                        </StackPanel><!-- /TestingBody -->
+                        </StackPanel><!-- /SetupBody -->
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- THE LOOKING GLASS: the seamstress's bench (meta unlocks) + mantras + stats & diary -->
+                <Grid x:Name="PanelImprove" IsVisible="False" RowDefinitions="Auto,*">
+                    <Border Grid.Row="0" Theme="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="the seamstress's bench" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
+                            <TextBlock Text="permanent alterations to the dollhouse itself. extra pockets, deeper doors."
+                                       Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
+                            <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="ImprovementsHost"/>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Border>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,*">
+                        <Border x:Name="CardMantras" Grid.Column="0" Theme="{StaticResource CardStyle}" Margin="0,0,6,12">
+                            <Grid RowDefinitions="Auto,Auto,*">
+                                <TextBlock Grid.Row="0" Text="MANTRAS" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
+                                <TextBlock Grid.Row="1" Text="click one to whisper it on the way down. click again for silence."
+                                           Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel x:Name="MantrasHost"/>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Column="1" Theme="{StaticResource CardStyle}" Margin="6,0,0,12">
+                            <Grid RowDefinitions="Auto,*">
+                                <TextBlock x:Name="HdrStats" Grid.Row="0" Text="HOW FAR YOU'VE FALLEN" Theme="{StaticResource SectionHdr}"/>
+                                <Grid Grid.Row="1" x:Name="StatsGrid" VerticalAlignment="Top" Margin="0,0,0,8"
+                                      ColumnDefinitions="Auto,*"
+                                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Emotes" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4" Width="175"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="StSparks" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Descents completed" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="StRuns" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Time under" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="StTimeUnder" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Best score" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="StBestScore" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Best streak" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="4" Grid.Column="1" x:Name="StBestCombo" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Total snapped" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="5" Grid.Column="1" x:Name="StDefused" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Time holding on" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4"/>
+                                    <TextBlock Grid.Row="6" Grid.Column="1" x:Name="StTimeHeld" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <!-- the Diary: its own tab so a full stats sheet can't crowd it out.
+                     Revealed only after the player has met something down there. -->
+                <ScrollViewer x:Name="PanelDiary" VerticalScrollBarVisibility="Auto" IsVisible="False">
+                    <Border Theme="{StaticResource CardStyle}">
+                        <StackPanel>
+                            <TextBlock x:Name="HdrDiary" Text="DIARY · what you've met down there · click to pop out ⤢"
+                                       Cursor="Hand" Foreground="{StaticResource Pink}"
+                                       FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="12" Margin="0,0,0,10"/>
+                            <StackPanel x:Name="DiaryHost"/>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- footer -->
+            <Grid Grid.Row="3" Margin="0,12,0,0">
+                <TextBlock x:Name="TxtHint" Foreground="{StaticResource TextMut}" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <!-- The play-mode pick moved to the Lab card (ChaosModeService.SelectedPlayMode);
+                         this separate Free Desktop button is retired. Kept (collapsed) so it can be
+                         restored if the pick ever returns to the hub. -->
+                    <Button x:Name="BtnBeginDesktop" Content="🖥 FREE DESKTOP" Tag="FreeDesktop" Click="BtnBegin_Click"
+                            IsVisible="False"
+                            ToolTip.Tip="Pop bubbles over your real desktop — no story or backdrop, and other windows can stay in front. Your companion floats along."
+                            Background="#332A2A4A" Foreground="{StaticResource TextMut}" FontWeight="SemiBold" FontSize="14"
+                            BorderBrush="#55E84393" BorderThickness="1" Padding="22,12" Margin="0,0,12,0" Cursor="Hand"
+                            CornerRadius="14"/>
+                    <!-- Single launcher. Mode is decided on the Lab card, so this is mode-neutral
+                         ("FALL IN — STORY" label + Story tag removed). StartRun resolves the actual
+                         mode from ChaosModeService.SelectedPlayMode. -->
+                    <Button x:Name="BtnBegin" Content="▶ FALL IN" Click="BtnBegin_Click"
+                            ToolTip.Tip="Begin the descent."
+                            Background="{StaticResource Brand}" Foreground="White" FontWeight="Bold" FontSize="16"
+                            BorderThickness="0" Padding="32,13" Cursor="Hand" CornerRadius="14">
+                        <Button.Effect><DropShadowEffect Color="#FFE84393" BlurRadius="18" OffsetX="0" OffsetY="0" Opacity="0.6"/></Button.Effect>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
+        <!-- ============ MAIN MENU (cinematic split: menu left, art right) ============ -->
+        <Grid x:Name="MenuView" Margin="22" ColumnDefinitions="Auto,*">
+
+            <!-- right: character / banner art fills the right half. Thick pink neon border with
+                 rounded corners + an animated glow (pulsed in code-behind SetupMenuMotion). -->
+            <Border x:Name="MenuArtPanel" Grid.Column="1" CornerRadius="24" Margin="18,52,2,2"
+                    BorderThickness="3">
+                <Border.BorderBrush>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                        <GradientStop Color="#FFFF5FB0" Offset="0"/>
+                        <GradientStop Color="#FFE84393" Offset="0.5"/>
+                        <GradientStop Color="#FF9B6CF6" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.BorderBrush>
+                <Border.Effect>
+                    <DropShadowEffect Color="#FFE84393" OffsetX="0" OffsetY="0" BlurRadius="20" Opacity="0.7"/>
+                </Border.Effect>
+                <Grid x:Name="MenuArtClip" Background="Transparent">
+                    <!-- Every layer rounds itself: a Border clips its own Background/ImageBrush to its
+                         CornerRadius (reliable, unlike UIElement.Clip here). Fog rounds at the canvas. -->
+                    <Border CornerRadius="22">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                <GradientStop Color="#22E84393" Offset="0"/>
+                                <GradientStop Color="#11000000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <!-- two stacked image layers (rounded image-brush borders) so frames can crossfade;
+                         both share the breathing motion via the wrapping MenuArtMotion grid.
+                         ponytail: needs ChaosArt for the menu flipbook frames, wired when it moves
+                         to Core — both brushes have no Source on this head, so the gradient shows. -->
+                    <Grid x:Name="MenuArtMotion" RenderTransformOrigin="50%,50%">
+                        <Border CornerRadius="22">
+                            <Border.Background><ImageBrush Stretch="UniformToFill"/></Border.Background>
+                        </Border>
+                        <Border x:Name="MenuArtTopBox" CornerRadius="22" Opacity="0">
+                            <Border.Background><ImageBrush Stretch="UniformToFill"/></Border.Background>
+                        </Border>
+                    </Grid>
+                    <!-- WPF: skia:SKElement MenuFog — animated pink fog drifting IN FRONT of the
+                         character (additive-soft), gated on Enhanced FX. ponytail: needs SkiaSharp,
+                         which this head does not reference and a view layer may not add; the layer
+                         stays as an inert placeholder so the z-order still reads. -->
+                    <Border x:Name="MenuFog" IsHitTestVisible="False" Background="Transparent"/>
+                </Grid>
+            </Border>
+
+            <!-- left: title + menu + chips -->
+            <Grid x:Name="MenuLeftCol" Grid.Column="0" Width="370" RowDefinitions="Auto,*,Auto">
+
+                <!-- title (drag region) — neon logo wordmark, centered above the buttons -->
+                <StackPanel Grid.Row="0" x:Name="MenuTitleBar" Background="Transparent">
+                    <!-- WPF: skia:SKElement MenuLogoFx, the wordmark rendered in Skia so the authored
+                         glint FX is true additive light on the logo's real pixels. ponytail: needs
+                         SkiaSharp; the static frame (the wordmark itself, no glint sweep) is drawn
+                         here at the same 314x224 so the menu keeps its title block. -->
+                    <Border x:Name="MenuLogoFx" IsHitTestVisible="False"
+                            Width="314" Height="224" HorizontalAlignment="Center" Margin="0,48,0,0">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="DOWN THE" Foreground="White" FontSize="34" FontWeight="Bold"
+                                       HorizontalAlignment="Center">
+                                <TextBlock.Effect><DropShadowEffect Color="#FFE84393" BlurRadius="26" OffsetX="0" OffsetY="0" Opacity="0.9"/></TextBlock.Effect>
+                            </TextBlock>
+                            <TextBlock Text="RABBIT HOLE" Foreground="White" FontSize="40" FontWeight="Bold"
+                                       HorizontalAlignment="Center" Margin="0,2,0,0">
+                                <TextBlock.Effect><DropShadowEffect Color="#FF8B5CF6" BlurRadius="26" OffsetX="0" OffsetY="0" Opacity="0.9"/></TextBlock.Effect>
+                            </TextBlock>
+                            <TextBlock Text="🐇" FontSize="34" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Text="· the dollhouse ·" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New"
+                               FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <!-- center: the menu list (options now lives full-width — see MenuOptions below) -->
+                <Grid Grid.Row="1" VerticalAlignment="Center" Margin="0,18,0,18">
+                    <StackPanel x:Name="MenuButtons">
+                        <Button x:Name="BtnMenuFallIn" Content="▶  FALL IN" Click="Menu_FallIn_Click"
+                                Height="64" Margin="0,0,0,14" FontSize="22" FontWeight="Bold" Foreground="White"
+                                Background="{StaticResource Brand}" BorderThickness="0" Cursor="Hand"
+                                HorizontalContentAlignment="Left" Padding="22,0" CornerRadius="12"
+                                ToolTip.Tip="you were always going to.">
+                            <Button.Effect><DropShadowEffect Color="#FFE84393" BlurRadius="18" OffsetX="0" OffsetY="0" Opacity="0.6"/></Button.Effect>
+                        </Button>
+                        <Button x:Name="BtnMenuHowTo" Theme="{StaticResource MenuBtn}" Content="📖  HOW TO PLAY"
+                                Click="Menu_HowTo_Click" ToolTip.Tip="new here? thirty seconds and you'll have it."/>
+                        <Button x:Name="BtnMenuDollhouse" Theme="{StaticResource MenuBtn}" Content="🏠  THE DOLL HOUSE"
+                                Click="Menu_Dollhouse_Click" ToolTip.Tip="pockets, toys, the bench — dress the fall."/>
+                        <Button x:Name="BtnMenuStory" Theme="{StaticResource MenuBtn}" Content="📖  STORY MODE  🔒"
+                                Click="Menu_Story_Click" ToolTip.Tip="the Madam's narrated descent — coming soon."/>
+                        <Button x:Name="BtnMenuOptions" Theme="{StaticResource MenuBtn}" Content="⚙  OPTIONS" Click="Menu_Options_Click"/>
+                        <Button x:Name="BtnMenuExit" Theme="{StaticResource MenuBtn}" Content="✕  EXIT" Click="Menu_Exit_Click"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- bottom: rank / drops / gold -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal">
+                    <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="10,5" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="RANK" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="MenuRank" Text="Curious" Foreground="White" FontWeight="Bold" FontSize="13" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="10,5" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="✦" Foreground="{StaticResource Purple}" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="MenuSparks" Text="0" Foreground="White" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="10,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🪙" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="MenuGold" Text="0" Foreground="White" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- soundtrack mute toggle (icon swaps 🔊/🔇 in code-behind) -->
+                    <Button x:Name="BtnMenuMute" Click="BtnMenuMute_Click" Cursor="Hand"
+                            ToolTip.Tip="Mute / unmute the menu music" Background="{StaticResource Card2}"
+                            BorderThickness="0" Padding="10,5" Margin="8,0,0,0" CornerRadius="9">
+                        <TextBlock x:Name="MenuMuteIcon" Text="🔊" FontSize="15" VerticalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- OPTIONS: full-width sub-screen (art + left column hide while it's up) so the toggles
+                 use the whole window — bigger and spread across two columns. The overlapping ones
+                 two-way bind to the Settings-tab controls so there's a single source of truth. -->
+            <Border x:Name="MenuOptions" Grid.ColumnSpan="2" IsVisible="False"
+                    Background="{StaticResource Card}" BorderBrush="{StaticResource Border1}" BorderThickness="2"
+                    CornerRadius="14" Padding="40,30">
+                <Grid RowDefinitions="Auto,*,Auto">
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="⚙  OPTIONS" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="28"/>
+                        <TextBlock Text="display &amp; comfort — these stick between descents." Foreground="{StaticResource TextMut}" FontSize="13" Margin="2,6,0,0"/>
+                    </StackPanel>
+
+                    <Grid Grid.Row="1" Margin="0,12,0,0" VerticalAlignment="Center" ColumnDefinitions="*,64,*">
+
+                        <!-- left: toggles. WPF scaled each OptChk with a 1.35 LayoutTransform; Avalonia
+                             has no per-control LayoutTransform, so ONE LayoutTransformControl scales
+                             the whole column — same 18px dot at ~24px, same intent. -->
+                        <LayoutTransformControl Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="6,0,0,0">
+                            <LayoutTransformControl.LayoutTransform>
+                                <ScaleTransform ScaleX="1.35" ScaleY="1.35"/>
+                            </LayoutTransformControl.LayoutTransform>
+                            <StackPanel>
+                                <CheckBox x:Name="OptFullscreen" Theme="{StaticResource OptChk}" Content="Fullscreen" Click="OptFullscreen_Click"/>
+                                <CheckBox x:Name="OptKeepTop" Theme="{StaticResource OptChk}" Content="Keep on top"
+                                          IsChecked="{Binding #ChkPinTop.IsChecked, Mode=TwoWay}"/>
+                                <CheckBox x:Name="OptSkiaFx" Theme="{StaticResource OptChk}" Content="Enhanced FX (bloom &amp; bursts)"
+                                          IsChecked="{Binding #ChkSkiaFx.IsChecked, Mode=TwoWay}"/>
+                                <CheckBox x:Name="OptAnnounce" Theme="{StaticResource OptChk}" Content="Announcements"
+                                          IsChecked="{Binding #ChkAnnouncer.IsChecked, Mode=TwoWay}"/>
+                            </StackPanel>
+                        </LayoutTransformControl>
+
+                        <!-- right: intensity slider -->
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,6,0">
+                            <TextBlock Text="EFFECT INTENSITY" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <Slider Theme="{StaticResource PinkSlider}" Minimum="0.2" Maximum="1.5" Value="{Binding #SldEffect.Value, Mode=TwoWay}" Height="30"/>
+                            <TextBlock Text="lower = gentler bloom &amp; shake." Foreground="{StaticResource TextMut}" FontSize="12" Margin="0,10,0,0"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Button Grid.Row="2" Content="‹ back" Click="Options_Back_Click" Theme="{StaticResource MenuBtn}"
+                            HorizontalAlignment="Left" Width="170" Height="52" Margin="0,16,0,0"/>
+                </Grid>
+            </Border>
+
+            <!-- HOW TO PLAY: card overlay floating over the menu (art keeps breathing, music keeps
+                 playing underneath). Built one card at a time in code-behind (HowToShow). -->
+            <Border x:Name="MenuHowTo" Grid.ColumnSpan="2" IsVisible="False" Background="#D80B0B16">
+                <Border Width="660" MaxHeight="660" VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Background="{StaticResource Card}" BorderBrush="{StaticResource Border1}" BorderThickness="2"
+                        CornerRadius="18" Margin="0,40,0,0">
+                    <Border.Effect><DropShadowEffect Color="#FFE84393" OffsetX="0" OffsetY="0" BlurRadius="34" Opacity="0.45"/></Border.Effect>
+                    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                        <!-- card image (hidden when no screenshot present) -->
+                        <Border x:Name="HowToImageBox" Grid.Row="0" Height="252" CornerRadius="16,16,0,0" ClipToBounds="True">
+                            <Grid>
+                                <Border CornerRadius="16,16,0,0">
+                                    <Border.Background><ImageBrush Stretch="UniformToFill"/></Border.Background>
+                                </Border>
+                                <Border CornerRadius="16,16,0,0">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                                            <GradientStop Color="#FF1C1A36" Offset="0"/>
+                                            <GradientStop Color="Transparent" Offset="0.85"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- title -->
+                        <StackPanel Grid.Row="1" Margin="32,18,32,0">
+                            <TextBlock x:Name="HowToStep" Text="STEP 1 / 5" Foreground="{StaticResource Pink}"
+                                       FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="HowToTitle" Text="" Foreground="White" FontSize="22" FontWeight="Bold" TextWrapping="Wrap"/>
+                        </StackPanel>
+
+                        <!-- body lines (built in code-behind) -->
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="32,12,32,8">
+                            <StackPanel x:Name="HowToBody"/>
+                        </ScrollViewer>
+
+                        <!-- footer: back · dots · next -->
+                        <Grid Grid.Row="3" Margin="24,8,24,22">
+                            <Button x:Name="HowToBack" Content="‹  BACK" Click="HowTo_Back_Click" Theme="{StaticResource MenuBtn}"
+                                    HorizontalAlignment="Left" Width="140" Height="46"/>
+                            <StackPanel x:Name="HowToDots" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Button x:Name="HowToNext" Content="NEXT  ›" Click="HowTo_Next_Click"
+                                    HorizontalAlignment="Right" Width="140" Height="46" FontWeight="Bold" FontSize="14"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                    Foreground="White" Background="{StaticResource Brand}" BorderThickness="0"
+                                    Cursor="Hand" CornerRadius="10"/>
+                        </Grid>
+
+                        <!-- close X -->
+                        <Button x:Name="HowToClose" Grid.Row="0" Content="✕" Click="HowTo_Close_Click"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,0" ZIndex="5"
+                                Width="34" Height="34" Padding="0" FontSize="14" Foreground="White" Cursor="Hand"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#66000000" BorderThickness="0" CornerRadius="17" ToolTip.Tip="Close"/>
+                    </Grid>
+                </Border>
+            </Border>
+        </Grid>
+
+        <!-- unlock cards float top-center over everything; never blocks clicks (shopping continues under it) -->
+        <Grid x:Name="UnlockCardLayer" IsHitTestVisible="False"/>
+
+        <!-- shared window controls (top-right, above both views) -->
+        <StackPanel x:Name="WinChrome" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,10,12,0" ZIndex="50">
+            <Button x:Name="BtnMin" Theme="{StaticResource WinBtn}" Content="—" Click="BtnMin_Click" ToolTip.Tip="Minimize"/>
+            <Button x:Name="BtnFull" Theme="{StaticResource WinBtn}" Content="⛶" Click="BtnFull_Click" ToolTip.Tip="Fullscreen (maximize)"/>
+            <Button x:Name="BtnCloseWin" Theme="{StaticResource WinBtn}" Content="✕" Click="BtnClose_Click" ToolTip.Tip="Close"/>
+        </StackPanel>
+        </Grid>
+    </Border>
+</Window>
