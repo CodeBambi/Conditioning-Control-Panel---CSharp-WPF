@@ -38,8 +38,16 @@ namespace ConditioningControlPanel.Services
         //
         // "root" is deliberately kept: it identifies no one and dropping it would obscure that
         // the app ran elevated, which matters when reading a crash report.
+        //
+        // The leading boundary is a zero-width lookbehind, not a captured group: a consumed
+        // delimiter belongs to one match and is then missing for the next, so the second half
+        // of "/home/alice,/home/bob" would leak. The name class stops short of trailing
+        // punctuation for the same reason, and the "root" guard mirrors that class so that
+        // "root," is still recognised as root. Case-sensitive on purpose — the real shapes are
+        // lowercase "/home/" and capital-U "/Users/"; a lowercase "/users/" is an HTTP route
+        // ("GET /users/alice HTTP/1.1"), not a home directory.
         private static readonly Regex PosixHomePathRegex = new(
-            @"(?i)(^|[\s""'(\[=:])(/home/|/Users/)(?!root(?:[/\s""')\]]|$))([^/\r\n""'\s]+)",
+            @"(?<=^|[\s""'(\[=:,;])(/home/|/Users/)(?!root(?![^/\r\n""'\s,;)\]]))([^/\r\n""'\s,;)\]]+)",
             RegexOptions.Compiled);
 
         // Email addresses (RFC-ish — good enough for log scrubbing).
@@ -102,7 +110,7 @@ namespace ConditioningControlPanel.Services
             step1 = PosixHomePathRegex.Replace(step1, m =>
             {
                 paths++;
-                return $"{m.Groups[1].Value}{m.Groups[2].Value}<redacted>";
+                return $"{m.Groups[1].Value}<redacted>";
             });
 
             // 2. Email addresses.
