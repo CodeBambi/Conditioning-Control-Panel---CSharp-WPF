@@ -223,7 +223,9 @@ public class DescentZeroShowOrderingTests
         Assert.False(service.IsCeremonyOpen);
 
         service.ReleaseOffers();
-        Assert.True(service.CanOpenCeremony());
+        // Same race as the assertion at line 103: ReleaseOffers may go on to open the ceremony when
+        // an Application is alive, so §2.4 is satisfied by either half. See #472 for the full story.
+        Assert.True(service.CanOpenCeremony() || service.IsCeremonyOpen);
     }
 
     /// <summary>
@@ -244,7 +246,9 @@ public class DescentZeroShowOrderingTests
         Assert.False(service.DeferredThisSession);
 
         service.ReleaseOffers();
-        Assert.True(service.CanOpenCeremony());
+        // Same race again: a released hold either opens the ceremony or leaves it openable, and the
+        // offer is never dropped either way.
+        Assert.True(service.CanOpenCeremony() || service.IsCeremonyOpen);
     }
 
     /// <summary>
