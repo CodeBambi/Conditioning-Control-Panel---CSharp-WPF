@@ -1,0 +1,269 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/LocalAiSetupWizard.xaml.
+     Structure, ordering, spacing and every resource key preserved. Deviations, all forced:
+
+       Style="{StaticResource X}"  -> Theme="{StaticResource X}"   (keyed styles are ControlThemes,
+                                      local copies below - Theme/ has no wizard styles)
+       Visibility="Collapsed"      -> IsVisible="False"
+       ResizeMode="NoResize"       -> CanResize="False"
+       <Hyperlink> in a TextBlock  -> an underlined TextBlock with PointerPressed wired in the ctor
+                                      (Avalonia has no inline Hyperlink)
+       Checked/Unchecked           -> IsCheckedChanged, wired in the ctor
+       ProgressBar Foreground      -> same property; Avalonia's ProgressBar honours it
+
+     Buttons and the CheckBox carry a TextBlock child rather than Content: Avalonia parses "_" in
+     Content as an access key and every loc key here is snake_case. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.LocalAiSetupWizard"
+        Title="{loc:Str dialog_local_ai_setup_title}"
+        Width="560" Height="540"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of LocalAiSetupWizard.xaml:WizardHeader/WizardSub/WizardBody/
+             WizardButton/WizardPrimaryButton, hoist when a second view needs them. -->
+        <ControlTheme x:Key="WizardHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </ControlTheme>
+        <ControlTheme x:Key="WizardSub" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </ControlTheme>
+        <ControlTheme x:Key="WizardBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </ControlTheme>
+        <ControlTheme x:Key="WizardButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="18,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="100"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="WizardPrimaryButton" TargetType="Button" BasedOn="{StaticResource WizardButton}">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="24,18">
+            <StackPanel>
+                <TextBlock x:Name="TxtStepTitle" Theme="{StaticResource WizardHeader}"
+                           Text="{loc:Str dialog_local_ai_setup_title}"/>
+                <TextBlock x:Name="TxtStepSubtitle" Theme="{StaticResource WizardSub}"
+                           Text="{loc:Str label_local_ai_setup_subtitle}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Body -->
+        <Grid Grid.Row="1" Margin="24,18,24,0">
+
+            <!-- Step: Detecting -->
+            <StackPanel x:Name="PanelDetecting" IsVisible="True" VerticalAlignment="Center">
+                <TextBlock Theme="{StaticResource WizardBody}"
+                           HorizontalAlignment="Center"
+                           Text="{loc:Str label_local_ai_detecting}"/>
+                <ProgressBar IsIndeterminate="True" Height="6" Margin="0,16,0,0"
+                             Background="{DynamicResource PanelBgBrush}"
+                             Foreground="{StaticResource PinkBrush}"/>
+            </StackPanel>
+
+            <!-- Step: Consent -->
+            <StackPanel x:Name="PanelConsent" IsVisible="False">
+                <TextBlock Theme="{StaticResource WizardBody}"
+                           Text="{loc:Str label_local_ai_consent_intro}"/>
+
+                <Border Margin="0,14,0,0" Padding="14,10"
+                        Background="{DynamicResource PanelBgBrush}" CornerRadius="6">
+                    <StackPanel>
+                        <TextBlock Theme="{StaticResource WizardBody}"
+                                   FontWeight="SemiBold"
+                                   Text="{loc:Str label_local_ai_consent_will_do}"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtConsentLine1" Theme="{StaticResource WizardBody}"
+                                       Text="{loc:Str label_local_ai_consent_install_ollama}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtConsentLine2" Theme="{StaticResource WizardBody}"
+                                       Text="{loc:Str label_local_ai_consent_pull_model}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                            <TextBlock Theme="{StaticResource WizardBody}"
+                                       Text="{loc:Str label_local_ai_consent_runs_local}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Margin="0,14,0,0" Theme="{StaticResource WizardSub}"
+                           Text="{loc:Str label_local_ai_consent_disk_note}"/>
+
+                <CheckBox x:Name="ChkAdvanced" Margin="0,14,0,0"
+                          Foreground="{DynamicResource TextMutedBrush}">
+                    <TextBlock Text="{loc:Str label_local_ai_advanced_use_different_model}"/>
+                </CheckBox>
+                <Grid x:Name="AdvancedPanel" IsVisible="False" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Theme="{StaticResource WizardBody}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"
+                               Text="{loc:Str label_local_ai_advanced_model_label}"/>
+                    <TextBox Grid.Column="1" x:Name="TxtAdvancedModel"
+                             Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
+                             BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                             Padding="6,4" FontSize="13"/>
+                </Grid>
+
+                <TextBlock x:Name="LinkManualInstall" Margin="0,14,0,0" Cursor="Hand"
+                           Foreground="#B084DC" TextDecorations="Underline"
+                           Text="{loc:Str link_local_ai_manual_install}"/>
+            </StackPanel>
+
+            <!-- Step: Downloading installer -->
+            <StackPanel x:Name="PanelDownloadInstaller" IsVisible="False">
+                <TextBlock Theme="{StaticResource WizardBody}"
+                           Text="{loc:Str label_local_ai_downloading_installer}"/>
+                <Border x:Name="DownloadProgressTrack" Margin="0,12,0,0" Background="{DynamicResource PanelBgBrush}"
+                        CornerRadius="4" Height="20" Padding="2">
+                    <Grid>
+                        <Border x:Name="DownloadProgressFill"
+                                Background="{StaticResource PinkBrush}"
+                                CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
+                    </Grid>
+                </Border>
+                <TextBlock x:Name="TxtDownloadProgress" Theme="{StaticResource WizardBody}"
+                           Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Step: Installing -->
+            <StackPanel x:Name="PanelInstalling" IsVisible="False" VerticalAlignment="Center">
+                <TextBlock Theme="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Text="{loc:Str label_local_ai_installing}"/>
+                <ProgressBar IsIndeterminate="True" Height="6" Margin="0,16,0,0"
+                             Background="{DynamicResource PanelBgBrush}"
+                             Foreground="{StaticResource PinkBrush}"/>
+                <TextBlock Theme="{StaticResource WizardSub}" HorizontalAlignment="Center"
+                           Margin="0,12,0,0"
+                           Text="{loc:Str label_local_ai_installing_hint}"/>
+            </StackPanel>
+
+            <!-- Step: Pulling model -->
+            <StackPanel x:Name="PanelPullModel" IsVisible="False">
+                <TextBlock x:Name="TxtPullHeader" Theme="{StaticResource WizardBody}"
+                           Text="{loc:Str label_local_ai_pulling_model}"/>
+                <Border x:Name="PullProgressTrack" Margin="0,12,0,0" Background="{DynamicResource PanelBgBrush}"
+                        CornerRadius="4" Height="20" Padding="2">
+                    <Grid>
+                        <Border x:Name="PullProgressFill"
+                                Background="{StaticResource PinkBrush}"
+                                CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
+                    </Grid>
+                </Border>
+                <TextBlock x:Name="TxtPullStatus" Theme="{StaticResource WizardBody}"
+                           Margin="0,8,0,0" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtPullDetail" Theme="{StaticResource WizardSub}"
+                           Margin="0,4,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Step: Smoke test -->
+            <StackPanel x:Name="PanelSmokeTest" IsVisible="False" VerticalAlignment="Center">
+                <TextBlock Theme="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Text="{loc:Str label_local_ai_smoke_test}"/>
+                <ProgressBar IsIndeterminate="True" Height="6" Margin="0,16,0,0"
+                             Background="{DynamicResource PanelBgBrush}"
+                             Foreground="{StaticResource PinkBrush}"/>
+                <TextBlock Theme="{StaticResource WizardSub}" HorizontalAlignment="Center"
+                           Margin="0,12,0,0"
+                           Text="{loc:Str label_local_ai_smoke_test_hint}"/>
+            </StackPanel>
+
+            <!-- Step: Done -->
+            <StackPanel x:Name="PanelDone" IsVisible="False" VerticalAlignment="Center">
+                <TextBlock Foreground="{StaticResource PinkBrush}" FontSize="36"
+                           HorizontalAlignment="Center" Text="✓" FontWeight="Bold"/>
+                <TextBlock Theme="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Margin="0,12,0,0" FontSize="15" FontWeight="SemiBold"
+                           Text="{loc:Str label_local_ai_done}"/>
+                <TextBlock x:Name="TxtDoneDetail" Theme="{StaticResource WizardSub}"
+                           Margin="0,8,0,0" HorizontalAlignment="Center"
+                           TextAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Step: Error -->
+            <StackPanel x:Name="PanelError" IsVisible="False">
+                <TextBlock Foreground="#FF6B6B" FontSize="32" HorizontalAlignment="Center"
+                           Text="!" FontWeight="Bold"/>
+                <TextBlock Theme="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Margin="0,8,0,0" FontWeight="SemiBold"
+                           Text="{loc:Str label_local_ai_error_heading}"/>
+                <TextBox x:Name="TxtErrorDetail" Margin="0,12,0,0" MaxHeight="180"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
+                         BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                         Padding="8" FontFamily="Consolas, Courier New, monospace" FontSize="11"
+                         IsReadOnly="True" TextWrapping="Wrap"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                <TextBlock x:Name="LinkManualInstallError" Margin="0,12,0,0" Cursor="Hand"
+                           Foreground="#B084DC" TextDecorations="Underline"
+                           Text="{loc:Str link_local_ai_manual_install}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" Padding="20,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="1" x:Name="BtnSecondary" Theme="{StaticResource WizardButton}"
+                        Margin="0,0,10,0">
+                    <TextBlock x:Name="TxtSecondary" Text="{loc:Str btn_cancel}"/>
+                </Button>
+                <Button Grid.Column="2" x:Name="BtnPrimary" Theme="{StaticResource WizardPrimaryButton}">
+                    <TextBlock x:Name="TxtPrimary" Text="{loc:Str btn_continue}"/>
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
