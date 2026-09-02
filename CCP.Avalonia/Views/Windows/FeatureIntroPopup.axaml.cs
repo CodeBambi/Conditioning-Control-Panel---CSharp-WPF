@@ -1,0 +1,613 @@
+using System;
+using System.Collections.Generic;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
+using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Threading;
+
+namespace ConditioningControlPanel.Avalonia.Views.Windows
+{
+    /// <summary>
+    /// What a one-shot feature intro card says. Copy is hardcoded English on purpose, matching
+    /// ProgramsIntroPopup and the other one-shot popups (see the note there).
+    /// </summary>
+    public sealed class FeatureIntroContent
+    {
+        public string Key { get; init; } = "";
+        public string Glyph { get; init; } = "✨";
+        public string RailTitle { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string Tagline { get; init; } = "";
+        public string[] Bullets { get; init; } = Array.Empty<string>();
+        public string? Footer { get; init; }
+        /// <summary>Accent hex; falls back to app pink when unset or invalid.</summary>
+        public string? Accent { get; init; }
+        public string DismissLabel { get; init; } = "Got it";
+
+        /// <summary>
+        /// Optional CTA (v6.8.0, built for the one-account card). Both must be set or the card
+        /// renders exactly as it always did - one dismiss button. When present, the CTA takes
+        /// the accent fill and the dismiss button steps back to a quiet ghost, and the action
+        /// runs AFTER the modal unwinds (the WhatsNewDialog tour-button pattern), never inside
+        /// the card's own message loop.
+        /// </summary>
+        public string? ActionLabel { get; init; }
+        public Action? OnAction { get; init; }
+    }
+
+    /// <summary>
+    /// One reusable first-open explainer card, generalizing what ProgramsIntroPopup does for the
+    /// Programs tab: shown once per install per feature key, dressed with a glyph rail instead of
+    /// per-feature bitmaps.
+    ///
+    /// PORTED from ConditioningControlPanel/Windows/FeatureIntroPopup.xaml.cs. Deviations:
+    ///  - The whole show gate is stubbed rather than ported. Every line of ShowIfFirstTime /
+    ///    ShowCelebrationIfFirstTime / ShowWhenStartupSettles / ShowCore is App.Settings,
+    ///    App.Tutorial, App.IsUpdateDialogActive, MainWindow.IsStartupDialogShowing and
+    ///    Dispatcher-priority gating. The three entry points stay as empty stubs so the call sites
+    ///    port unchanged; ShowCore and the pacing statics behind them are dropped, because fields
+    ///    nothing reads are worse than nothing. (ProgramsIntroPopup next door dropped its gate
+    ///    outright - this layer keeps the signatures instead.)
+    ///  - <c>CardShadow</c> loses its x:Name: an Effect is not in the XAML name scope, so the
+    ///    accent recolour reaches it through <c>CardBorder.Effect</c>.
+    ///  - <c>Dispatcher.BeginInvoke</c> -&gt; <c>Dispatcher.UIThread.Post</c>;
+    ///    <c>PreviewKeyDown</c> -&gt; <c>KeyDown</c>; <c>DragMove()</c> -&gt; <c>BeginMoveDrag(e)</c>.
+    ///  - <c>App.Logger</c> has no twin here, so the guarded catches simply swallow.
+    /// </summary>
+    public partial class FeatureIntroPopup : Window
+    {
+        private Action? _onAction;
+
+        /// <summary>Render constructor: the one card that exercises the CTA, the ghost dismiss and a
+        /// non-pink accent, so --render-all draws the busiest version of this window.</summary>
+        internal FeatureIntroPopup() : this(FeatureIntros.All["one-account"]) { }
+
+        private FeatureIntroPopup(FeatureIntroContent content)
+        {
+            AvaloniaXamlLoader.Load(this);
+            ApplyContent(content);
+
+            this.FindControl<Button>("BtnDismiss")!.Click += (_, _) => TryClose();
+            this.FindControl<Button>("BtnCloseX")!.Click += (_, _) => TryClose();
+            this.FindControl<Button>("BtnAction")!.Click += (_, _) => RunAction();
+
+            KeyDown += (_, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                e.Handled = true;
+                TryClose();
+            };
+
+            // Chromeless window, so dragging the card is the only way to move it.
+            PointerPressed += (_, e) =>
+            {
+                if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+                try { BeginMoveDrag(e); } catch { /* dragging can throw if the press was consumed */ }
+            };
+        }
+
+        /// <summary>Seen-list key for the one-time premium celebration card.</summary>
+        internal const string CelebrationKey = "premium-celebration";
+
+        // ponytail: needs App.Settings.SeenFeatureIntros, App.Tutorial, App.IsUpdateDialogActive,
+        // MainWindow.IsStartupDialogShowing and the Dispatcher gating - wired when they move to
+        // Core. Until then these are the WPF signatures with no body: the seen-flag spend, the
+        // 10-minute pacing cooldown, the per-door launch budget and the 5-minute startup-settle
+        // clock all live on services this head does not have yet.
+
+        /// <summary>Shows the intro for <paramref name="key"/> once per install, then never again.</summary>
+        internal static void ShowIfFirstTime(string key, Window? owner, string? doorKey = null) { }
+
+        /// <summary>The premium celebration rides the same card and seen-list but skips pacing.</summary>
+        internal static void ShowCelebrationIfFirstTime(Window? owner) { }
+
+        /// <summary>For the ONE card whose surface the app lands on by itself (the Dashboard): waits
+        /// out the startup ladder, then shows.</summary>
+        internal static void ShowWhenStartupSettles(string key, Window? owner, string? doorKey) { }
+
+        private void ApplyContent(FeatureIntroContent content)
+        {
+            var cardBorder = this.FindControl<Border>("CardBorder")!;
+            var txtTitle = this.FindControl<TextBlock>("TxtTitle")!;
+            var txtRailTitle = this.FindControl<TextBlock>("TxtRailTitle")!;
+            var txtFooter = this.FindControl<TextBlock>("TxtFooter")!;
+            var btnAction = this.FindControl<Button>("BtnAction")!;
+            var btnDismiss = this.FindControl<Button>("BtnDismiss")!;
+
+            Title = content.Title;
+            txtTitle.Text = content.Title;
+            this.FindControl<TextBlock>("TxtTagline")!.Text = content.Tagline;
+            this.FindControl<TextBlock>("RailGlyph")!.Text = content.Glyph;
+            txtRailTitle.Text = content.RailTitle;
+            btnDismiss.Content = content.DismissLabel;
+
+            txtFooter.Text = content.Footer ?? "";
+            txtFooter.IsVisible = !string.IsNullOrWhiteSpace(content.Footer);
+
+            // Optional CTA: only when both halves are provided. The CTA takes the accent fill
+            // below; the dismiss button steps back so the card has one obvious action.
+            var hasAction = !string.IsNullOrWhiteSpace(content.ActionLabel) && content.OnAction != null;
+            if (hasAction)
+            {
+                _onAction = content.OnAction;
+                btnAction.Content = content.ActionLabel;
+                btnAction.IsVisible = true;
+            }
+
+            var accent = AccentBrush(content.Accent);
+            try
+            {
+                cardBorder.BorderBrush = accent;
+                txtTitle.Foreground = accent;
+                txtRailTitle.Foreground = accent;
+                this.FindControl<Rectangle>("RailGlow")!.Fill = GlowBrush(accent);
+                if (accent is ISolidColorBrush solid)
+                {
+                    if (cardBorder.Effect is DropShadowEffect shadow) shadow.Color = solid.Color;
+                    this.FindControl<Rectangle>("RailSeam")!.Fill = new SolidColorBrush(
+                        Color.FromArgb(0x55, solid.Color.R, solid.Color.G, solid.Color.B));
+                    if (hasAction)
+                    {
+                        btnAction.Background = accent;
+                        // Quiet ghost: readable, clearly secondary, still themed by the card.
+                        btnDismiss.Background = new SolidColorBrush(
+                            Color.FromArgb(0x30, solid.Color.R, solid.Color.G, solid.Color.B));
+                    }
+                    else
+                    {
+                        btnDismiss.Background = accent;
+                    }
+                }
+            }
+            catch { /* accent dressing is decoration - the pink defaults stand */ }
+
+            BuildBullets(content.Bullets, accent);
+        }
+
+        /// <summary>
+        /// Same accent-glyph row layout ProgramsIntroPopup authors statically, built here from
+        /// content so one XAML card serves every feature.
+        /// </summary>
+        private void BuildBullets(string[] bullets, IBrush accent)
+        {
+            var host = this.FindControl<StackPanel>("BulletsHost")!;
+            host.Children.Clear();
+            foreach (var text in bullets)
+            {
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 9) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var dot = new TextBlock
+                {
+                    Text = "●",
+                    FontSize = 9,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 5, 9, 0),
+                    Foreground = accent
+                };
+                row.Children.Add(dot);
+
+                var body = new TextBlock
+                {
+                    Text = text,
+                    Foreground = Brushes.White,
+                    FontSize = 13.5,
+                    TextWrapping = TextWrapping.Wrap,
+                    LineHeight = 20
+                };
+                Grid.SetColumn(body, 1);
+                row.Children.Add(body);
+
+                host.Children.Add(row);
+            }
+        }
+
+        /// <summary>Card accent, falling back to the app pink a bad hex would otherwise cost us.</summary>
+        private IBrush AccentBrush(string? hex)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(hex))
+                    return new SolidColorBrush(Color.Parse(hex!));
+            }
+            catch { /* a bad accent must never break the card */ }
+
+            return this.TryFindResource("PinkBrush", out var found) && found is IBrush brush
+                ? brush
+                : Brushes.HotPink;
+        }
+
+        private static IBrush GlowBrush(IBrush accent)
+        {
+            try
+            {
+                if (accent is ISolidColorBrush solid)
+                {
+                    var c = solid.Color;
+                    return new RadialGradientBrush
+                    {
+                        GradientStops =
+                        {
+                            new GradientStop(Color.FromArgb(90, c.R, c.G, c.B), 0),
+                            new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1),
+                        },
+                        Center = new RelativePoint(0.5, 0.42, RelativeUnit.Relative),
+                        GradientOrigin = new RelativePoint(0.5, 0.42, RelativeUnit.Relative),
+                        RadiusX = new RelativeScalar(0.7, RelativeUnit.Relative),
+                        RadiusY = new RelativeScalar(0.7, RelativeUnit.Relative),
+                    };
+                }
+            }
+            catch { /* a glow failing must never break the card */ }
+
+            return Brushes.Transparent;
+        }
+
+        private void TryClose()
+        {
+            try { Close(); } catch { }
+        }
+
+        /// <summary>
+        /// The optional CTA. QUEUED, never called inline - Close() only starts the modal unwind,
+        /// and the action (typically a browser launch, possibly ending in a fallback prompt) must
+        /// run after ShowDialog() has returned to whoever opened this card. Same pattern, same
+        /// reason, as WhatsNewDialog's tour button.
+        /// </summary>
+        private void RunAction()
+        {
+            TryClose();
+
+            var action = _onAction;
+            if (action == null) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                try { action(); }
+                catch { /* a CTA throwing must never take the card's caller with it */ }
+            }, DispatcherPriority.Normal);
+        }
+    }
+
+    /// <summary>
+    /// The intro card registry. Adding an intro for a new feature is one entry here plus one
+    /// MaybeShowFeatureIntro call at its ShowTab case - no new settings property, no new XAML.
+    /// Cards deliberately show for free users too: the card explains what the gated tab IS,
+    /// which the premium overlay alone never does.
+    /// </summary>
+    internal static class FeatureIntros
+    {
+        public static readonly Dictionary<string, FeatureIntroContent> All = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["awareness"] = new FeatureIntroContent
+            {
+                Key = "awareness",
+                Glyph = "👁️",
+                RailTitle = "Awareness Engine",
+                Title = "👁️  The Awareness Engine",
+                Tagline = "She notices your words - on screen, and as you type.",
+                Accent = "#64C8FF",
+                Bullets = new[]
+                {
+                    "Choose trigger words, and she watches for them in what's on your screen and what you type.",
+                    "When one appears she can respond: a highlight, a sound, a flash, a spoken comment, haptics, a little XP.",
+                    "One-click starter packs install a themed set of triggers - or build your own, word by word.",
+                    "Cooldowns and loop protection keep it gentle, and the live feed shows you everything she noticed."
+                },
+                Footer = "Premium feature. The master switch stops screen reading and keyboard capture completely, any time."
+            },
+
+            ["shelistening"] = new FeatureIntroContent
+            {
+                Key = "shelistening",
+                Glyph = "🎙️",
+                RailTitle = "She's Listening",
+                Title = "🎙️  She's Listening",
+                Tagline = "Voice control that never leaves your PC.",
+                Accent = "#B478FF",
+                Bullets = new[]
+                {
+                    "Say the wake word - or hold push-to-talk - then speak: start effects, pause a session, ask for a mantra.",
+                    "Your safety word stops every effect, instantly, always.",
+                    "Everything runs offline on your machine. No audio is stored or uploaded, ever.",
+                    "Nothing arms until you give mic consent - and one button revokes it all just as fast."
+                },
+                Footer = "Premium feature. Needs a microphone; the title-bar pill always shows when she's listening."
+            },
+
+            ["blinktrainer"] = new FeatureIntroContent
+            {
+                Key = "blinktrainer",
+                Glyph = "😉",
+                RailTitle = "Blink Trainer",
+                Title = "😉  Blink Trainer",
+                Tagline = "Every blink changes what you see.",
+                Accent = "#FF69B4",
+                Bullets = new[]
+                {
+                    "Your webcam watches for blinks - each one swaps the full-screen overlay to something new.",
+                    "It draws from your own folders of images, GIFs and videos. Add as many as you like.",
+                    "You set the duration and the overlay opacity; it ends itself when time is up.",
+                    "Webcam consent comes first, and the demo stage below works before anything is armed."
+                },
+                Footer = "Premium feature (beta). Live mode needs webcam consent and at least one folder."
+            },
+
+            ["lockdown"] = new FeatureIntroContent
+            {
+                Key = "lockdown",
+                Glyph = "🔒",
+                RailTitle = "Lockdown",
+                Title = "🔒  Lockdown",
+                Tagline = "Lock yourself in - for as long as you dare.",
+                Accent = "#FF4D6D",
+                Bullets = new[]
+                {
+                    "Pick a duration and commit: the Safeties on the card decide what gets taken away until the timer runs out.",
+                    "From five minutes to four hours. The countdown is all you'll see.",
+                    "Possession is switched on by default: while the timer runs, the app's own UI misbehaves on purpose. Ember glow means it was Lockdown, never a bug.",
+                    "If the app crashes mid-lockdown, your real settings are restored on the next launch - nothing stays stuck.",
+                    "And if you truly need out early... the timer keeps a secret. Ask it nicely."
+                },
+                Footer = "Premium feature. Sitting through a long lockdown counts toward achievements."
+            },
+
+            // The rules card. It fires ONCE, on the first lockdown that actually runs with Possession
+            // on (MainWindow.Lab.cs), not on the first visit to the tab - the point is to state the
+            // rules while they are about to matter, and a user who turned the haunt off should never
+            // meet this card at all.
+            ["possession"] = new FeatureIntroContent
+            {
+                Key = "possession",
+                Glyph = "🕯️",
+                RailTitle = "Possession",
+                Title = "🔒  Possession",
+                Tagline = "The room misbehaves while you're locked in.",
+                Accent = "#FF8A5C",
+                Bullets = new[]
+                {
+                    "Things move. Buttons swap places, labels drift, cards sag, letters fall out of titles, and your companion gets up and wanders the window.",
+                    "The rule: an ember glow, and her naming what just happened, means it was Lockdown. Never a bug, never real damage - every last piece puts itself back when the timer ends.",
+                    "It grows with the timer, and it reacts when you try to leave. Minimizing still works. Ctrl+Alt+Del always works.",
+                    "Your dials are on the Lockdown card: Gentle, Eerie or Full Doki, a photosensitive-safe switch, and the three Safeties."
+                },
+                Footer = "Premium feature. Turn Possession off on the Lockdown card to get the plain timed cage back."
+            },
+
+            ["haptics"] = new FeatureIntroContent
+            {
+                Key = "haptics",
+                Glyph = "📳",
+                RailTitle = "Haptics",
+                Title = "📳  Haptics",
+                Tagline = "Let her reach your toys.",
+                Accent = "#F783AC",
+                Bullets = new[]
+                {
+                    "Connects to Lovense Connect or Buttplug.io / Intiface - paste the URL and hit Connect.",
+                    "Nearly everything can drive it: flashes, bubbles, videos in sync with their audio, subliminals, level-ups, keywords, blinks.",
+                    "Each feature gets its own intensity and pattern, on top of one global dial.",
+                    "No hardware yet? The Mock provider lets you feel out the settings without a device."
+                },
+                Footer = "Premium feature. Auto-connect on startup is optional."
+            },
+
+            // Deliberately says nothing about premium: remote media as an asset source is FREE.
+            // It is the fix for "I installed this and have no media", which is overwhelmingly a
+            // free-tier first launch - a card that hinted at a paywall here would sell against
+            // the one thing this feature exists to solve. (The For You *feed* stays premium; see
+            // the gating note in MainWindow.Assets.cs.)
+            ["remotemedia"] = new FeatureIntroContent
+            {
+                Key = "remotemedia",
+                Glyph = "🌐",
+                RailTitle = "Remote Media",
+                Title = "🌐  Remote Media",
+                Tagline = "No folder of your own? She'll bring her own.",
+                Accent = "#5EC8F2",
+                Bullets = new[]
+                {
+                    "You don't need a library to start. The app can pull images and clips straight from Reddit.",
+                    "You choose the niches, and you can add any subreddit by name - only what you picked is ever fetched.",
+                    "It streams from your machine to your screen - nothing is saved, nothing is uploaded, and none of it passes through our servers.",
+                    "Switch back to your own assets whenever you like. The choice lives at the top of the Assets tab."
+                },
+                Footer = "Free for everyone - an empty assets folder should never be a dead end. It is adult content, so only switch it on if you want to see it."
+            },
+
+            // ------------------------------------------------------------------------------
+            // v6.8.0 door tour. The restructure moved surfaces users already knew, so these five
+            // explain a RELOCATION as much as a feature - which is why each one says where the
+            // thing used to be. Their keys are NOT tab keys (a rack is not a tab, a bubble is not
+            // a tab), so every trigger passes its owning tab explicitly to MaybeShowFeatureIntro;
+            // see the doorTab overload in MainWindow.TabNavigation.cs.
+            // ------------------------------------------------------------------------------
+
+            ["studio-rack"] = new FeatureIntroContent
+            {
+                Key = "studio-rack",
+                Glyph = "🎛️",
+                RailTitle = "The Studio",
+                Title = "🎛️  The Studio Rack",
+                Tagline = "Every effect in one rack, instead of a popup for each.",
+                Accent = "#9B8CFF",
+                Bullets = new[]
+                {
+                    "The dashboard popups are gone. Flashes, subliminals, bubbles, bouncing text and the rest are all rows in the list down the left.",
+                    "Left-click a row to open its panel. Right-click it to flip that effect on or off without opening anything at all.",
+                    "The dot on each row is live: at a glance you can see everything that is currently running.",
+                    "Dashboard tiles land here too, on the module you clicked. Same dials, one room."
+                },
+                Footer = "Free. Haptics is a module of this rack now, and still introduces itself when you open it."
+            },
+
+            ["play-wall"] = new FeatureIntroContent
+            {
+                Key = "play-wall",
+                Glyph = "🎪",
+                RailTitle = "The Play Wall",
+                Title = "🎪  The Play Wall",
+                Tagline = "The Lab moved in here, and brought the whole toy box.",
+                Accent = "#FF9F45",
+                Bullets = new[]
+                {
+                    "This is where the Lab page went. Down the Rabbit Hole sits across the top, and every other big toy is a card below it.",
+                    "TOGETHER is the things you do with someone else, EYES is anything your webcam watches, SESSIONS is anything on a timer, and MORE is the odds and ends.",
+                    "The rail on the left holds the rest of this door: Deeper, Exclusives, Graded Intake, Lockdown, Blink Trainer and Remote Control.",
+                    "Locked cards still say what they are, so you can always read the room before you buy into it."
+                },
+                Footer = "The door is free to walk through. Some of what is behind it is premium, and each card says so on its face."
+            },
+
+            ["profile-hub"] = new FeatureIntroContent
+            {
+                Key = "profile-hub",
+                Glyph = "🫧",
+                RailTitle = "Your Bubble",
+                Title = "🫧  The Header Bubble",
+                Tagline = "That little avatar in the top-right corner is you.",
+                Accent = "#6EA8FF",
+                Bullets = new[]
+                {
+                    "Hover it and an account panel drops down: your name and tier, your level and XP bar, your badges, and quick jumps to Profile, Achievements and Settings.",
+                    "Click it instead of hovering and you land straight on this Trainer Card.",
+                    "It reacts while you play. XP pulses it, a level-up bounces it, an achievement rings it in gold.",
+                    "The bug button moved to the title bar, up beside minimise. Same report, new address - the bubble took its old seat."
+                },
+                Footer = "Free, and always on screen. Your photo only appears here if profile-picture sharing is switched on."
+            },
+
+            ["daily-free"] = new FeatureIntroContent
+            {
+                Key = "daily-free",
+                Glyph = "🎁",
+                RailTitle = "Free Today",
+                Title = "🎁  Today's Free Feature",
+                Tagline = "One premium feature, genuinely free, every single day.",
+                Accent = "#FFD700",
+                Bullets = new[]
+                {
+                    "The box on the Dashboard names today's pick. Hover it and the tile turns over to show you what you have got.",
+                    "It really is unlocked: click through and the feature simply works. No trial, no timer, nothing to enter.",
+                    "The gold tag is how you spot it. At midnight the wheel turns and tomorrow's feature takes its place.",
+                    "The same feature never comes back inside three days, so the box is worth a look every morning."
+                },
+                Footer = "Free for everyone. If you already have premium you own the whole pool anyway, and the box just says hello."
+            },
+
+            // Written now, dark for almost everybody: the vat ships behind the server's rollout
+            // dial and the trigger (MainWindow.ProfileVat.ApplyDescentToVat) only fires once the
+            // jar is actually armed AND on screen, so a card for a thing that does not exist can
+            // never appear. Says nothing about the companion's avatar tube - different feature,
+            // different window, and confusing the two is the one mistake this copy must not make.
+            ["descent-vat"] = new FeatureIntroContent
+            {
+                Key = "descent-vat",
+                Glyph = "🫙",
+                RailTitle = "The Vat",
+                Title = "🫙  The Vat",
+                Tagline = "Earn it anywhere. Pour it here.",
+                Accent = "#66E0C0",
+                Bullets = new[]
+                {
+                    "Your portrait is inside a jar on the Trainer Card now, and how full that jar is, is what you have earned today.",
+                    "Everything you earn lands in the tap first, wherever you earned it. Press and hold the tap and it pours into the jar; the percentage under the glass is the same number, said plainly.",
+                    "It fills against a daily cap that grows with your level, so a full jar always means the same thing: you are done for today.",
+                    "Overnight it empties, and tomorrow you start pouring again."
+                },
+                Footer = "Rolling out gradually. If you can see the jar, you are in."
+            },
+
+            // THE VAT'S OTHER HALF. descent-vat above explains the jar; this one explains what
+            // filling it is FOR, and the two are deliberately separate cards because they are
+            // reached from different places by people at different points - the jar introduces
+            // itself on the Trainer Card, and this waits until someone actually walks into the
+            // Spiral Room. Fired from ShowTab("spiral") and gated on the room having painted
+            // the MAP (SpiralTabView.IsShowingSpiral), so it can never explain banked days over
+            // a fog layer or land on top of the first-light reveal.
+            //
+            // ENGLISH-ONLY, and that is a debt rather than a decision: every card in this
+            // registry is hardcoded English and matching the file beats being the one localized
+            // outlier in it. The help topic this ships alongside took the other road
+            // (SpiralTabView.BuildDescentHelpContent reads Loc), so the same explanation exists
+            // translated for anyone who opens the "?" - which is the mitigation, not the fix.
+            ["descent-spiral"] = new FeatureIntroContent
+            {
+                Key = "descent-spiral",
+                Glyph = "🌀",
+                RailTitle = "The Spiral",
+                Title = "🌀  The Spiral",
+                Tagline = "Every day you bank, you sink a little further.",
+                Accent = "#66E0C0",
+                Bullets = new[]
+                {
+                    // The middle clause is verbatim the canonical sentence (6.9.1's
+                    // profile_vat_tick_drain), so the tooltip on the jar and this card say the
+                    // same thing in the same words rather than two paraphrases of it.
+                    "The jar on your Trainer Card is today. A fifth of the jar banks the day, and banked days are the only thing that moves you down the Spiral.",
+                    "Seven stages are waiting at 1, 7, 21, 50, 100, 180 and 300 days, and the map lights up as you pass each one.",
+                    "A short day that banks counts the same as a long one, so showing up beats grinding.",
+                    "Nothing here resets, and nothing is going to. Your level, your XP and every stage you've reached stay yours however long you leave them."
+                },
+                Footer = "Open the Spiral from the rail any time, or from the plate on your Trainer Card."
+            },
+
+            // v6.8.0, the One Account lane: the first card with a real CTA, because a card about
+            // a DESTINATION must be able to take you there. Queued on the same settle path as
+            // daily-free (MainWindow.TabNavigation.OnDashboardTabVisibilityChanged) and owned by
+            // the Home door, so the two drip across launches instead of stacking. Fires for
+            // fresh installs too - they never see What's New, so without this card they hear
+            // nothing about the web at all. The spiral bullet reuses the exact phrasing already
+            // public in the v6.8.0 release notes - it is a tease, not an explanation, and it
+            // stays that way until the Sept 1 announcement.
+            ["one-account"] = new FeatureIntroContent
+            {
+                Key = "one-account",
+                Glyph = "🌐",
+                RailTitle = "One Account",
+                Title = "🌐  One Account",
+                Tagline = "Desktop, web and mobile are windows onto the same account now.",
+                Accent = "#5EC8F2",
+                Bullets = new[]
+                {
+                    "Sign in at app.cclabs.app with the same account you use here.",
+                    "XP you earn on the web lands in your desktop level through the normal sync.",
+                    "Link this device in seconds with a 6-digit code from the web dashboard.",
+                    "A sealed spiral has quietly appeared on the web dashboard. It is not explained."
+                },
+                Footer = "The new Web door above Settings takes you there any time.",
+                ActionLabel = "Open the web app",
+                DismissLabel = "Later",
+                // WPF opens MainWindow.WebAppUrl through Helpers.BrowserLauncher - not Process.Start,
+                // because the no-default-browser machines are exactly who must not see this fail -
+                // and acting on the card also retires the One Account banner beat.
+                // ponytail: needs Helpers.BrowserLauncher and MainWindow.RetireWebBannerBeat, wired
+                // when they move to Core. Kept non-null so the card still shows its CTA.
+                OnAction = () => { }
+            },
+
+            [FeatureIntroPopup.CelebrationKey] = new FeatureIntroContent
+            {
+                Key = FeatureIntroPopup.CelebrationKey,
+                Glyph = "💖",
+                RailTitle = "Thank You",
+                Title = "💖  Premium Unlocked",
+                Tagline = "Your support keeps the Lab running - and it just opened every door.",
+                Accent = "#FF69B4",
+                Bullets = new[]
+                {
+                    "All the exclusive tabs are yours: Takeover, Remote Control, She's Listening, Blink Trainer, Haptics, Awareness, Lockdown, Graded Intake.",
+                    "Your companion's AI limits go up, and premium quests, programs and exclusive achievements switch on.",
+                    "Look for the Premium Rail on the Dashboard - one flip per feature, all in one strip.",
+                    "Each exclusive tab introduces itself the first time you open it. Wander."
+                },
+                Footer = "Everything lives under the Exclusives menu. Enjoy - you earned it.",
+                DismissLabel = "Let's go 💖"
+            }
+        };
+    }
+}
