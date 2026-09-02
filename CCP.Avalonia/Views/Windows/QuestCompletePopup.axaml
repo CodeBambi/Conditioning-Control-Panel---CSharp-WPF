@@ -1,0 +1,89 @@
+<!-- PORTED from ConditioningControlPanel/Windows/QuestCompletePopup.xaml.
+     Structure, ordering, spacing and every colour literal preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None"              -> SystemDecorations="None"
+       AllowsTransparency="True"       -> TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"           -> CanResize="False"
+       MouseLeftButtonDown="..."       -> PointerPressed, wired in the constructor
+       Click="BtnClose_Click"          -> wired in the constructor (BtnClose gained an x:Name)
+       ShadowDepth="0"                 -> OffsetX="0" OffsetY="0"  (Avalonia's DropShadowEffect
+                                          takes a vector, not depth+direction)
+       Button.Style + IsMouseOver      -> the Button.popupclose selectors below
+
+     Every string here is a literal in the WPF original too - this view has no {loc:Str} keys and
+     none are invented for it.
+
+     The close button carries a TextBlock child rather than Content: Avalonia parses "_" in
+     Content as an access key. See the porting notes in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.QuestCompletePopup"
+        Title="Quest Complete!"
+        Width="350" Height="130"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        CanResize="False"
+        WindowStartupLocation="Manual">
+
+    <Window.Styles>
+        <!-- The WPF <Button.Style> IsMouseOver trigger. The Fluent theme paints its own hover
+             plate, so the rest state has to be pinned too or this borderless glyph grows a grey
+             background on hover - which the WPF Background="Transparent" got for free.
+             ponytail: byte-identical to RoadmapStepPopup.axaml:popupclose; hoist both to
+             Theme/Styles.xaml when a third popup wants it (this layer may not edit Theme). -->
+        <Style Selector="Button.popupclose /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Button.popupclose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="#E0151530" CornerRadius="12" BorderBrush="#00E676" BorderThickness="2"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="#00E676" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <Grid Margin="15">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Checkmark Icon -->
+            <Border Grid.Column="0" Width="60" Height="60" Background="#2D4A2D" CornerRadius="30" Margin="0,0,15,0">
+                <TextBlock Text="✓" Foreground="#00E676" FontSize="32" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- Text Content -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="QUEST COMPLETE!" Foreground="#00E676"
+                           FontWeight="Bold" FontSize="16" Margin="0,0,0,4"/>
+                <TextBlock x:Name="TxtQuestName" Text="Quest Name"
+                           Foreground="White" FontSize="14" FontWeight="SemiBold"
+                           TextWrapping="Wrap" Margin="0,0,0,4"/>
+                <TextBlock x:Name="TxtXPAwarded" Text="+0 XP"
+                           Foreground="#FFD700" FontSize="13" FontWeight="Bold"/>
+            </StackPanel>
+
+            <!-- Close Button -->
+            <Button x:Name="BtnClose" Grid.Column="1" Classes="popupclose"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="24" Height="24" Margin="0,-5,-5,0" Padding="0"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand">
+                <TextBlock Text="✕"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>
