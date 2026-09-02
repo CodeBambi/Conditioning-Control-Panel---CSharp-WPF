@@ -1,0 +1,151 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/RoadmapDiaryDialog.xaml. Deviations, all forced:
+       ResizeMode="NoResize" / WindowStyle="None"   -> CanResize="False" / SystemDecorations="None"
+       AllowsTransparency="False"                   -> dropped; Background="Transparent" kept and
+                                                       TransparencyLevelHint added so the rounded
+                                                       border shows against the desktop
+       Visibility="Collapsed"                       -> IsVisible="False"
+       RenderOptions.BitmapScalingMode="HighQuality"-> RenderOptions.BitmapInterpolationMode
+       Button.Style IsMouseOver triggers            -> Window.Styles :pointerover selectors on
+                                                       the .close / .save / .cancel classes
+       Click="..."                                  -> wired in the constructor
+     Buttons carry a TextBlock child rather than Content (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.RoadmapDiaryDialog"
+        Title="{loc:Str dialog_transformation_diary}"
+        Width="500" Height="700"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        CanResize="False"
+        Topmost="True">
+
+    <Window.Styles>
+        <Style Selector="Button.close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+        </Style>
+        <Style Selector="Button.save:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF1493"/>
+        </Style>
+        <Style Selector="Button.cancel:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2" CornerRadius="15">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- Header -->
+                <RowDefinition Height="Auto"/>  <!-- Photo -->
+                <RowDefinition Height="Auto"/>  <!-- Step Info -->
+                <RowDefinition Height="Auto"/>  <!-- Stats -->
+                <RowDefinition Height="*"/>     <!-- Note -->
+                <RowDefinition Height="Auto"/>  <!-- Buttons -->
+            </Grid.RowDefinitions>
+
+            <!-- Header with Close Button -->
+            <Grid Grid.Row="0" Margin="0,0,0,15">
+                <StackPanel>
+                    <TextBlock x:Name="TxtStepNumber" Text="{loc:Str label_step_1_2}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12"/>
+                    <TextBlock x:Name="TxtStepTitle" Text="{loc:Str label_the_blank_slate}"
+                               Foreground="{StaticResource PinkBrush}" FontSize="20" FontWeight="Bold"/>
+                </StackPanel>
+                <Button x:Name="BtnCloseX" Classes="close" Content="X" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                        BorderThickness="0" FontSize="16" FontWeight="Bold"
+                        Cursor="Hand" Padding="5"/>
+            </Grid>
+
+            <!-- Full Resolution Photo -->
+            <Border Grid.Row="1" CornerRadius="12" Background="{DynamicResource PanelBgBrush}"
+                    Margin="0,0,0,15" Height="280" ClipToBounds="True">
+                <Grid>
+                    <Image x:Name="ImgFullPhoto" Stretch="Uniform"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                    <TextBlock x:Name="TxtNoPhoto" Text="{loc:Str label_no_photo_available}"
+                               Foreground="{DynamicResource TextDimBrush}" FontSize="14"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               IsVisible="False"/>
+                </Grid>
+            </Border>
+
+            <!-- Objective/Requirement -->
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="10"
+                    Padding="15" Margin="0,0,0,15">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str label_objective}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="TxtObjective" Text="" Foreground="White"
+                               FontSize="13" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Completion Stats -->
+            <Border Grid.Row="3" Background="{DynamicResource PanelBgBrush}" CornerRadius="10"
+                    Padding="15" Margin="0,0,0,15">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                        <TextBlock Text="{loc:Str label_completed}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="TxtCompletedDate" Text="{loc:Str label_jan_15_2024}"
+                                   Foreground="White" FontSize="14" FontWeight="Bold"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        <TextBlock x:Name="TxtCompletedTime" Text="{loc:Str label_3_45_pm}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                        <TextBlock Text="{loc:Str label_time_taken}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="TxtTimeTaken" Text="{loc:Str label_45_minutes}"
+                                   Foreground="White" FontSize="14" FontWeight="Bold"
+                                   HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- User Note -->
+            <Border Grid.Row="4" Background="{DynamicResource PanelBgBrush}" CornerRadius="10" Padding="15">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="{loc:Str label_personal_note}" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11" Margin="0,0,0,8"/>
+                    <TextBox x:Name="TxtUserNote" Grid.Row="1"
+                             Background="Transparent" Foreground="White"
+                             BorderThickness="0" TextWrapping="Wrap"
+                             AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             FontSize="13" Padding="0"
+                             CaretBrush="{StaticResource PinkBrush}"/>
+                </Grid>
+            </Border>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="5" Orientation="Horizontal"
+                        HorizontalAlignment="Center" Margin="0,15,0,0">
+                <Button x:Name="BtnSaveNote" Classes="save" Background="{StaticResource PinkBrush}"
+                        Foreground="White" Padding="20,10"
+                        BorderThickness="0" Cursor="Hand" Margin="0,0,10,0"
+                        FontWeight="Bold">
+                    <TextBlock x:Name="TxtSaveNote" Text="{loc:Str btn_save_note}"/>
+                </Button>
+                <Button x:Name="BtnClose" Classes="cancel" Background="{DynamicResource PanelAccentBrush}"
+                        Foreground="White" Padding="20,10"
+                        BorderThickness="0" Cursor="Hand">
+                    <TextBlock Text="{loc:Str btn_close}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

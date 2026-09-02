@@ -1,0 +1,82 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/OfflineUsernameDialog.xaml. Deviations, all forced:
+       ResizeMode="NoResize" / WindowStyle="None" -> CanResize="False" / SystemDecorations="None"
+       AllowsTransparency="False"                 -> dropped (Avalonia default)
+       KeyDown="..." / Click="..."                -> wired in the constructor
+     Buttons carry a TextBlock child rather than Content (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.OfflineUsernameDialog"
+        Title="{loc:Str dialog_choose_your_offline_username}"
+        Height="300" Width="450"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="False"
+        SystemDecorations="None">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="InfoBrush" Color="#88AAFF"/>
+    </Window.Resources>
+
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" CornerRadius="0">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <TextBlock Grid.Row="0" Text="{loc:Str dialog_choose_your_offline_username}"
+                       Foreground="{DynamicResource PinkBrush}"
+                       FontSize="18" FontWeight="Bold" Margin="0,0,0,10"
+                       HorizontalAlignment="Center"/>
+
+            <!-- Info Box -->
+            <Border Grid.Row="1" Background="#2A2A3E" CornerRadius="4" Padding="12,8" Margin="0,0,0,15">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str label_offline_progress_is_stored_locally_only_and_c}"
+                               Foreground="{StaticResource InfoBrush}"
+                               FontSize="12" TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock Text="{loc:Str label_you_can_change_this_name_later_in_settings}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11" Margin="0,5,0,0" TextAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Prompt -->
+            <TextBlock Grid.Row="2" Text="{loc:Str label_enter_the_name_you_d_like_to_use}"
+                       Foreground="White" FontSize="13" Margin="0,0,0,8"/>
+
+            <!-- Input -->
+            <TextBox x:Name="TxtUsername" Grid.Row="3"
+                     Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                     BorderBrush="{DynamicResource PinkBrush}"
+                     Padding="12,10" FontSize="15"
+                     MaxLength="30"/>
+
+            <!-- Character count -->
+            <TextBlock x:Name="TxtCharCount" Grid.Row="4" Text="{loc:Str label_0_30_characters}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,5,0,0"
+                       HorizontalAlignment="Right" VerticalAlignment="Top"/>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+                <Button x:Name="BtnCancel" Width="90" Padding="10,10" Margin="0,0,10,0"
+                        Background="#555577" Foreground="White" BorderThickness="0"
+                        Cursor="Hand" FontSize="13" FontWeight="SemiBold">
+                    <TextBlock Text="{loc:Str btn_cancel}"/>
+                </Button>
+                <Button x:Name="BtnConfirm" Width="90" Padding="10,10"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="13"
+                        Cursor="Hand" IsEnabled="False">
+                    <TextBlock Text="{loc:Str btn_confirm}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
