@@ -1,0 +1,185 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/AttentionTargetEditorDialog.xaml.
+     Deviations, all forced:
+       ResizeMode="NoResize"          -> CanResize="False"
+       Style="{StaticResource X}"     -> Theme="{StaticResource X}"
+       Visibility="Collapsed"         -> IsVisible="False"
+       ToolTip="…"                    -> ToolTip.Tip="…"
+       Click="…" / Checked / Unchecked / SelectionChanged -> wired in the constructor by x:Name
+       Content="{loc:Str …}" on Button -> a TextBlock child (trap 1: "_" is an access key)
+       DropShadowEffect (x2)          -> dropped; Avalonia has no DropShadowEffect on a Border/TextBlock.
+                                         PreviewTextShadow's colour math is kept out of the code-behind
+                                         with it. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.AttentionTargetEditorDialog"
+        Title="{loc:Str dialog_attention_target_style}"
+        Height="520" Width="480"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="False">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="{loc:Str dialog_attention_target_style}"
+                   Foreground="{StaticResource PinkBrush}"
+                   FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+
+        <!-- Preview Section -->
+        <Border Grid.Row="1" Background="{DynamicResource PreviewBgBrush}" CornerRadius="8" Padding="20" Margin="0,0,0,15">
+            <StackPanel>
+                <TextBlock Text="{loc:Str section_preview}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                <Border x:Name="PreviewBorder" HorizontalAlignment="Center"
+                        CornerRadius="20" Padding="20,10,20,10" Cursor="Hand">
+                    <TextBlock x:Name="PreviewText" Text="{loc:Str label_good_girl}"
+                               FontSize="40" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Settings -->
+        <Border Grid.Row="2" Background="{StaticResource PanelBgBrush}" CornerRadius="8" Padding="15">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- Preset Buttons -->
+                    <TextBlock Text="{loc:Str label_quick_presets}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,8"/>
+                    <WrapPanel Margin="0,0,0,15">
+                        <Button x:Name="PresetPurple" Theme="{StaticResource SecondaryButton}" Margin="0,0,8,8">
+                            <TextBlock Text="{loc:Str btn_purple_classic}"/>
+                        </Button>
+                        <Button x:Name="PresetPink" Theme="{StaticResource SecondaryButton}" Margin="0,0,8,8">
+                            <TextBlock Text="{loc:Str btn_pink_bubbly}"/>
+                        </Button>
+                        <Button x:Name="PresetGreen" Theme="{StaticResource SecondaryButton}" Margin="0,0,8,8">
+                            <TextBlock Text="{loc:Str btn_neon_green}"/>
+                        </Button>
+                        <Button x:Name="PresetBlue" Theme="{StaticResource SecondaryButton}" Margin="0,0,8,8">
+                            <TextBlock Text="{loc:Str btn_ocean_blue}"/>
+                        </Button>
+                    </WrapPanel>
+
+                    <!-- Color 1 -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str label_primary_color}" Foreground="White" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnColor1" Grid.Column="1" Theme="{StaticResource ColorButton}"/>
+                        <TextBlock x:Name="TxtColor1" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
+                    </Grid>
+
+                    <!-- Color 2 -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str label_secondary_color}" Foreground="White" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnColor2" Grid.Column="1" Theme="{StaticResource ColorButton}"/>
+                        <TextBlock x:Name="TxtColor2" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
+                    </Grid>
+
+                    <!-- Text Color -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str label_text_color}" Foreground="White" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnTextColor" Grid.Column="1" Theme="{StaticResource ColorButton}"/>
+                        <TextBlock x:Name="TxtTextColor" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
+                    </Grid>
+
+                    <!-- Floating Text Toggle -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str label_floating_text}" Foreground="White" VerticalAlignment="Center"
+                                   ToolTip.Tip="{loc:Str tooltip_remove_background_just_show_text_transparent}"/>
+                        <CheckBox x:Name="ChkFloatingText" Grid.Column="1" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Border Toggle -->
+                    <Grid x:Name="BorderToggleRow" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str label_show_border}" Foreground="White" VerticalAlignment="Center"/>
+                        <CheckBox x:Name="ChkShowBorder" Grid.Column="1" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Border Color (only visible when border enabled) -->
+                    <Grid x:Name="BorderColorRow" Margin="0,0,0,12" IsVisible="False">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str label_border_color}" Foreground="White" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnBorderColor" Grid.Column="1" Theme="{StaticResource ColorButton}"/>
+                        <TextBlock x:Name="TxtBorderColor" Grid.Column="2" Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
+                    </Grid>
+
+                    <!-- Font -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{loc:Str label_font}" Foreground="White" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="CmbFont" Grid.Column="1" Background="{DynamicResource SurfaceBgBrush}"
+                                  Foreground="White" Padding="8,6" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="{loc:Str btn_segoe_ui}" Tag="Segoe UI"/>
+                            <ComboBoxItem Content="{loc:Str btn_comic_sans_ms}" Tag="Comic Sans MS"/>
+                            <ComboBoxItem Content="{loc:Str btn_impact}" Tag="Impact"/>
+                            <ComboBoxItem Content="{loc:Str btn_arial_black}" Tag="Arial Black"/>
+                            <ComboBoxItem Content="{loc:Str btn_verdana}" Tag="Verdana"/>
+                        </ComboBox>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Footer Buttons -->
+        <Grid Grid.Row="3" Margin="0,15,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BtnTest" Grid.Column="0" Theme="{StaticResource SecondaryButton}"
+                    ToolTip.Tip="{loc:Str tooltip_spawn_a_test_target_to_see_how_it_looks}">
+                <TextBlock Text="{loc:Str btn_test_target}"/>
+            </Button>
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="BtnCancel" Theme="{StaticResource SecondaryButton}" Margin="0,0,8,0">
+                    <TextBlock Text="{loc:Str btn_cancel}"/>
+                </Button>
+                <Button x:Name="BtnSave" Theme="{StaticResource ActionButton}">
+                    <TextBlock Text="{loc:Str btn_save}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
