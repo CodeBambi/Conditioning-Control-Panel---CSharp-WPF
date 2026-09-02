@@ -1,0 +1,76 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/RoadmapConfirmDialog.xaml. Deviations, all forced:
+       ResizeMode="NoResize" / WindowStyle="None" -> CanResize="False" / SystemDecorations="None"
+       AllowsTransparency="True"                  -> TransparencyLevelHint="Transparent"
+       helpers:EmojiTextBlock                     -> TextBlock (CLAUDE.md trap 3)
+       Button.Style + inline ControlTemplate      -> the button's own Background/CornerRadius plus
+                                                     Window.Styles :pointerover selectors on the
+                                                     .secondary / .primary classes, the same shape
+                                                     the sibling RoadmapDiaryDialog port uses
+       Click="..."                                -> wired in the constructor
+     Buttons carry a TextBlock child rather than Content (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.RoadmapConfirmDialog"
+        Title="{loc:Str dialog_confirm_photo}"
+        Width="450" Height="280"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        CanResize="False">
+
+    <Window.Styles>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+        </Style>
+        <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#FF8DC7"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2" CornerRadius="12">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
+                <TextBlock Text="{loc:Str label_text_9}" FontSize="24" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Str dialog_confirm_photo}" Foreground="{StaticResource PinkBrush}" FontSize="20"
+                           FontWeight="Bold" Margin="10,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Message Content -->
+            <StackPanel Grid.Row="1">
+                <TextBlock Text="{loc:Str label_does_this_photo_show_you_completing}" Foreground="#E0E0E0" FontSize="14"
+                           Margin="0,0,0,10"/>
+                <TextBlock x:Name="TxtStepTitle" Foreground="{StaticResource PinkBrush}" FontSize="16"
+                           FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,15"/>
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="12">
+                    <TextBlock x:Name="TxtRequirement" Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                               TextWrapping="Wrap"/>
+                </Border>
+            </StackPanel>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button x:Name="BtnNo" Classes="secondary" Cursor="Hand" Margin="0,0,10,0"
+                        Background="{DynamicResource PanelAccentBrush}" Foreground="White"
+                        FontWeight="Bold" FontSize="13" Padding="18,12"
+                        BorderThickness="0" CornerRadius="6">
+                    <TextBlock Text="{loc:Str btn_no_choose_another}"/>
+                </Button>
+                <Button x:Name="BtnYes" Classes="primary" Cursor="Hand"
+                        Background="{StaticResource PinkBrush}" Foreground="White"
+                        FontWeight="Bold" FontSize="13" Padding="24,12"
+                        BorderThickness="0" CornerRadius="6">
+                    <TextBlock Text="{loc:Str btn_yes_submit}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

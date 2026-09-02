@@ -1,0 +1,109 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/WelcomeDialog.xaml. Deviations, all forced:
+       ResizeMode="NoResize" / WindowStyle="None" -> CanResize="False" / SystemDecorations="None"
+       AllowsTransparency="True"                  -> TransparencyLevelHint="Transparent"
+       Image + EmojiToImageSource converter       -> <TextBlock Text="💖"/> (CLAUDE.md trap 3)
+       Button.Style + inline ControlTemplate      -> the button's own Background/CornerRadius; the
+                                                     WPF IsMouseOver trigger set the SAME PinkBrush
+                                                     it already had, so there is no hover style to
+                                                     port - the Fluent default hover tint is
+                                                     overridden back to PinkBrush below so the
+                                                     button does not change colour, as in WPF
+       Click="..."                                -> wired in the constructor
+     The button carries a TextBlock child rather than Content (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.WelcomeDialog"
+        Title="{loc:Str dialog_welcome}"
+        Height="670" Width="520"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        CanResize="False">
+
+    <Window.Styles>
+        <Style Selector="Button.begin:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid Margin="30">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar with Pink Background -->
+            <Border Grid.Row="0" Background="{DynamicResource PinkBrush}" CornerRadius="8" Margin="-10,-10,-10,20" Padding="20,15">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="💖" FontSize="24" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBlock Text="{loc:Str app_title}" Foreground="White" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Welcome Message — text set in code-behind to interpolate the active mod's Affirmation -->
+            <TextBlock x:Name="TxtWelcomeHeading" Grid.Row="1"
+                       Foreground="{DynamicResource PinkBrush}" FontSize="26" FontWeight="Bold"
+                       HorizontalAlignment="Center" Margin="0,10,0,20"/>
+
+            <!-- Description -->
+            <StackPanel Grid.Row="2" Margin="0,0,0,20">
+                <TextBlock Foreground="#E0E0E0" FontSize="14" TextWrapping="Wrap" LineHeight="24" TextAlignment="Center">
+                    <Run Text="{loc:Str label_this_application_is_designed_to_enhance_your}"/>
+                </TextBlock>
+
+                <TextBlock Foreground="#E0E0E0" FontSize="14" TextWrapping="Wrap" LineHeight="24" TextAlignment="Center" Margin="0,15,0,0">
+                    <Run Text="{loc:Str label_features_unlock_as_you_level_up_through_use_s}"/>
+                </TextBlock>
+
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,20,0,0">
+                    <StackPanel>
+                        <TextBlock Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center">
+                            <Run Text="{loc:Str label_tips}"/>
+                        </TextBlock>
+                        <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0" FontWeight="SemiBold">
+                            <Run Text="{loc:Str label_click_the}"/>
+                            <Run Text=" ? " FontWeight="Bold" Foreground="White" Background="{DynamicResource PinkBrush}"/>
+                            <Run Text="{loc:Str label_button_in_the_top_bar_for_a_full_tutorial}"/>
+                        </TextBlock>
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
+                            <Run Text="{loc:Str label_hover_over_any_setting_to_see_what_it_does}"/>
+                        </TextBlock>
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
+                            <Run Text="{loc:Str label_add_videos_to_assets_videos_and_images_to_ass}"/>
+                        </TextBlock>
+                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
+                            <Run Text="{loc:Str label_for_gaming_use_borderless_windowed_mode_for_o}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,20,0,0">
+                    <StackPanel>
+                        <TextBlock Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center">
+                            <Run Text="{loc:Str label_performance_warning}"/>
+                        </TextBlock>
+                        <TextBlock Foreground="#FFB347" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0">
+                            <Run Text="{loc:Str label_running_many_features_especially_with_high_fr}"/>
+                            <LineBreak/>
+                            <Run Text="{loc:Str label_if_you_experience_performance_issues_on_low_e}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Button -->
+            <Button x:Name="BtnBegin" Grid.Row="3" Classes="begin" Cursor="Hand"
+                    Background="{StaticResource PinkBrush}" Foreground="White"
+                    FontWeight="Bold" FontSize="16" Padding="40,16"
+                    BorderThickness="0" CornerRadius="8"
+                    HorizontalAlignment="Center">
+                <TextBlock Text="{loc:Str btn_let_s_begin}"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>
