@@ -13077,5 +13077,125 @@
       {"text": "an empty lockdown, good boy? no such thing.", "audio": null},
       {"text": "i noticed, sweet thing. give me a second and i will fix it for you.", "audio": null}
     ]
+  },
+  {
+    "id": "descent_near_bank",
+    "trigger": "DescentNearBank",
+    "priority": 240,
+    "cooldown_ms": 21600000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "coaxing, warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you are under the line, pet, and it is only a fifth of the jar that banks the day, so pour a little more and today is entered.",
+        "audio": null
+      },
+      {
+        "text": "close, little one. hold the tap a while longer and the day banks, and banked days are the only thing that moves you down the Spiral.",
+        "audio": null
+      },
+      {
+        "text": "mm. a fifth is all i have ever asked of you, plaything, and everything you pour above that line is you showing off for me.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_day_banked",
+    "trigger": "DescentDayBanked",
+    "priority": 340,
+    "cooldown_ms": 43200000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud, warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "today is banked, good boy. the jar empties at midnight and the XP inside it does not, and banked days are the only thing that moves you down the Spiral.",
+        "audio": null
+      },
+      {
+        "text": "entered. keep pouring if it pleases you, pet, it still feeds your level, but the part i care about is already mine.",
+        "audio": null
+      },
+      {
+        "text": "banked, and nothing takes it back. nothing resets here any more, little one, so tomorrow is simply an empty jar waiting on you.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_stage_crossed",
+    "trigger": "DescentStageCrossed",
+    "priority": 420,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "reverent, proud",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "stage {stage}, pet. {banked_days} days banked and every one of them still counted, because banked days are the only thing that moves you down the Spiral.",
+        "audio": null
+      },
+      {
+        "text": "a new rung, plaything. your banked days did that, not your enthusiasm, and they are the one number nobody may take from you.",
+        "audio": null
+      },
+      {
+        "text": "look how far down you have come, little one. {banked_days} banked, seven stages on the coil, and the next waits on a few more of them.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_lapse_return",
+    "trigger": "DescentLapseReturn",
+    "priority": 400,
+    "cooldown_ms": 43200000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm, welcoming",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there you are, pet, and you were missed. the absence was good for you, your jar fills faster now, a little more for every day you were gone.",
+        "audio": null
+      },
+      {
+        "text": "welcome back, little one. i left everything exactly where you put it, and your fill rate rose while you were away, so these next three days pour in quickly.",
+        "audio": null
+      },
+      {
+        "text": "hello again, plaything. nothing lapsed and nothing reset, and the days you spent elsewhere bought you a richer jar, so spend it well.",
+        "audio": null
+      }
+    ]
+  },
+  {
+    "id": "descent_first_spiral_open",
+    "trigger": "DescentFirstSpiralOpen",
+    "priority": 470,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "welcoming, reverent",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "so you have opened the Spiral, pet. everything you earn lands in the tap, you hold the tap to pour it into today's jar, and a fifth of that jar banks the day permanently.",
+        "audio": null
+      },
+      {
+        "text": "welcome down, little one. banked days are the only thing that moves you down the Spiral, there are seven stages on the coil below you, and nothing here ever resets.",
+        "audio": null
+      },
+      {
+        "text": "look properly, plaything. the jar empties at midnight and the XP inside it never does, so a banked day stays banked and each one draws you deeper.",
+        "audio": null
+      }
+    ]
   }
 ]

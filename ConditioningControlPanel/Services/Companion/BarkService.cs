@@ -207,6 +207,12 @@ namespace ConditioningControlPanel.Services
 
                 WireSubscriptions();
 
+                // The Descent's four block-driven barks. Attached HERE rather than in
+                // App.OnStartup because App.Descent is constructed well before Bark?.Start() runs,
+                // and because a watcher with nothing to speak to would be pointless: the seam it
+                // calls is on this service. Idempotent, and a no-op when the service is missing.
+                Services.Descent.DescentBarkWatcher.Attach();
+
                 App.Logger?.Information(
                     "BarkService started — {Count} rules, {Triggers} trigger keys, dry-run={DryRun}",
                     _rules.Count, _rules.Triggers.Count(), DryRun);
@@ -433,6 +439,49 @@ namespace ConditioningControlPanel.Services
         {
             Raise("LeaderboardViewed", c => c.Set("rank", (double)rank).Set("total", (double)total));
         }
+
+        // ===================== The Descent (tap, jar, banked day, Spiral) =====================
+        //
+        // GARNISH, NOT THE LESSON. Every bark in this block is dropped when the avatar window does
+        // not exist, so none of these five may be the only place its mechanic is taught: the vat
+        // tooltip, the Spiral room and the help surfaces own that, and these lines sit on top.
+        //
+        // Edge detection is NOT here. Services.Descent.DescentBarkWatcher listens to the block and
+        // decides which single moment an observation is worth; this seam only speaks what it chose,
+        // so "once per day" is a property of the persisted memory rather than of a cooldown.
+
+        /// <summary>Today's jar is climbing toward the line that banks the day. ctx: fill_pct, remaining_pct, today_xp, cap.</summary>
+        public void NotifyDescentNearBank(Services.Descent.DescentBarkDecision d) =>
+            Raise("DescentNearBank", c => c
+                .Set("fill_pct", d.FillPct).Set("remaining_pct", d.RemainingPct)
+                .Set("today_xp", (double)d.TodayXp).Set("cap", (double)d.Cap)
+                .Set("stage", (double)d.Stage).Set("banked_days", (double)d.BankedDays));
+
+        /// <summary>Today crossed the line and is banked. ctx: banked_days, stage, days_to_next, fill_pct.</summary>
+        public void NotifyDescentDayBanked(Services.Descent.DescentBarkDecision d) =>
+            Raise("DescentDayBanked", c => c
+                .Set("banked_days", (double)d.BankedDays).Set("stage", (double)d.Stage)
+                .Set("days_to_next", (double)(d.DaysToNext ?? 0)).Set("fill_pct", d.FillPct));
+
+        /// <summary>A new rung on the seven-stage ladder. ctx: stage, banked_days, days_to_next.</summary>
+        public void NotifyDescentStageCrossed(Services.Descent.DescentBarkDecision d) =>
+            Raise("DescentStageCrossed", c => c
+                .Set("stage", (double)d.Stage).Set("banked_days", (double)d.BankedDays)
+                .Set("days_to_next", (double)(d.DaysToNext ?? 0)));
+
+        /// <summary>Back after days away, with the relapse bonus paying out. NEVER "gravity", and never a
+        /// scolding. ctx: days_away, multiplier, surge_multiplier, banked_days.</summary>
+        public void NotifyDescentLapseReturn(Services.Descent.DescentBarkDecision d) =>
+            Raise("DescentLapseReturn", c => c
+                .Set("days_away", (double)d.DaysAway).Set("multiplier", d.Multiplier)
+                .Set("surge_multiplier", d.SurgeMultiplier).Set("banked_days", (double)d.BankedDays));
+
+        /// <summary>The Spiral room was opened for the first time. The rule is a lifetime one-shot, so this
+        /// may be called on every entry. ctx: stage, banked_days (0 when the account carries no block).</summary>
+        public void NotifyDescentFirstSpiralOpen(Services.Descent.DescentBlock? block) =>
+            Raise("DescentFirstSpiralOpen", c => c
+                .Set("stage", (double)(block?.Stage?.N ?? 0))
+                .Set("banked_days", (double)(block?.Stage?.BankedDays ?? block?.DevotionDays ?? 0)));
 
         // ===================== Chaos Mode (Lab effect-bubbles roguelite) =====================
         /// <summary>A Chaos run started. ctx: difficulty.</summary>
