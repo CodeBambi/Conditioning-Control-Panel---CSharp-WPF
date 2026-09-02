@@ -109,6 +109,25 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private readonly Ellipse _glintA;
         private readonly Ellipse _glintB;
 
+        /// <summary>
+        /// The wobble's moving parts. Written directly to park the badge (see <see cref="StopMotion"/>)
+        /// and animated by the clocks in <see cref="StartMotion"/>.
+        ///
+        /// <para><b>Animate the SIGN, never the transform.</b> Avalonia's <c>TransformAnimator</c> is
+        /// handed the host <c>Visual</c> and resolves the transform itself, walking that visual's
+        /// <c>RenderTransform</c> for the child whose type matches the animated property's owner. So
+        /// a <c>ScaleTransform.ScaleX</c> keyframe is run against <c>_tierSign</c>, and the animator
+        /// finds <c>_tierScale</c> inside its <c>TransformGroup</c>. Pass the transform itself and it
+        /// casts straight to <c>Visual</c> and throws <c>InvalidCastException</c> - into the
+        /// surrounding <c>catch</c>, which is how this control shipped with silently dead motion.</para>
+        ///
+        /// <para>The two tier clocks land on different children (scale on one, angle on the other),
+        /// so they compose rather than race. Do NOT collapse the group into
+        /// <c>TransformOperations</c> to make it one property: <c>TransformAnimator</c> bails out on
+        /// a <c>TransformOperations</c> render transform, and no animator is registered for
+        /// <c>ITransform</c> at all, so keyframing <c>Visual.RenderTransform</c> throws too
+        /// (verified against Avalonia 12.1.1).</para>
+        /// </summary>
         private readonly ScaleTransform _tierScale = new(1, 1);
         private readonly RotateTransform _tierRotate = new(0);
         private readonly ScaleTransform _stampScale = new(1, 1);
@@ -453,7 +472,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
                         },
                     },
                 };
-                _ = punch.RunAsync(_stampScale, _thunk.Token);
+                // The SIGN, not _stampScale - the animator resolves the transform (see the fields).
+                _ = punch.RunAsync(_stampSign, _thunk.Token);
             }
             catch (Exception ex) { Log.Debug("TierBadge.PlayStampThunk: {E}", ex.Message); }
         }
@@ -511,7 +531,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
                         },
                     },
                 };
-                _ = swell.RunAsync(_tierScale, token);
+                // The SIGN, not _tierScale - the animator resolves the transform (see the fields).
+                _ = swell.RunAsync(_tierSign, token);
 
                 // Rotation: the same period, keyframed to START at its maximum - which is the 90
                 // degree phase offset the spec asks for. The badge then "breathes and settles"
@@ -534,7 +555,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 Key(0.50, tilt - WobbleDegrees);
                 Key(0.75, tilt);
                 Key(1.00, tilt + WobbleDegrees);
-                _ = sway.RunAsync(_tierRotate, token);
+                // Same sign as the swell: the two clocks reach different children of its group.
+                _ = sway.RunAsync(_tierSign, token);
 
                 if (FreeToday) return;   // a papered-over sign hums no more; the stamp is the star
 
