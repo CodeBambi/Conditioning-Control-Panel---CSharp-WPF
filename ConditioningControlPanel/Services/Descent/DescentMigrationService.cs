@@ -27,13 +27,15 @@ namespace ConditioningControlPanel.Services.Descent
         private bool _ceremonyOpen;
         private int _offerHold;
         private bool _muteLogged;
+        private bool _deferredThisSession;
+        private bool _deferralLogged;
 
         /// <summary>
         /// THE DEV MUTE. Set <c>CCP_DESCENT_CEREMONY=off</c> to stop the ceremony painting.
         ///
-        /// <para>The ceremony is deliberately NOT dismissible: "Not tonight" defers it, and
-        /// <see cref="OfferReceived"/> is called again on every sync that still carries
-        /// <c>descent_migration.required</c>, so it returns on the next launch and the one after.
+        /// <para>The ceremony is deliberately NOT dismissible: "Not tonight" defers it for the
+        /// session only, and the server keeps sending <c>descent_migration.required</c> until a
+        /// choice lands, so it returns on the next launch and the one after.
         /// That is right for the single account-lifetime event this is, and it makes a tree you
         /// launch twenty times an afternoon unusable - the only ways out are committing a door you
         /// did not mean to commit, or closing the same fullscreen window on every run.</para>
@@ -90,15 +92,51 @@ namespace ConditioningControlPanel.Services.Descent
         internal int OfferHoldDepth { get { lock (_gate) return _offerHold; } }
 
         /// <summary>
+        /// TRUE once the subject has closed the ceremony this process without committing — "Not
+        /// tonight", the window chrome's X, or the panic key. Per-process and never persisted, so
+        /// the next launch is offered the ceremony exactly as designed. Test seam.
+        /// </summary>
+        internal bool DeferredThisSession { get { lock (_gate) return _deferredThisSession; } }
+
+        /// <summary>
         /// Whether an offer could open the ceremony RIGHT NOW: one is in hand, none is on screen,
-        /// and nothing is holding it back. Read by <see cref="ReleaseOffers"/> to decide whether a
-        /// release has anything to replay, and by the tests — the hold's whole behaviour is this
-        /// one predicate, and a state machine that can only be observed through a window opening is
-        /// a state machine nobody can test.
+        /// nothing is holding it back, and it has not already been closed once this session. Read by
+        /// <see cref="ReleaseOffers"/> to decide whether a release has anything to replay, and by
+        /// the tests — the hold's whole behaviour is this one predicate, and a state machine that
+        /// can only be observed through a window opening is a state machine nobody can test.
         /// </summary>
         internal bool CanOpenCeremony()
         {
-            lock (_gate) return !_ceremonyOpen && _offerHold == 0 && _liveOffer != null;
+            lock (_gate)
+                return ShouldOpenCeremonyFor(_liveOffer is not null, _ceremonyOpen, _offerHold, _deferredThisSession);
+        }
+
+        /// <summary>
+        /// The open decision, as arithmetic — every input passed in, the way
+        /// <see cref="SpiralWithheldFor"/> takes its own, so the deferral can be pinned in a test
+        /// without an <c>Application</c>, a dispatcher or a window that cannot be constructed
+        /// headless.
+        ///
+        /// <para><b>The bug this fourth input closes (#1111).</b> The sync heartbeat runs every 120
+        /// seconds and every response still carries <c>descent_migration.required</c> — by design,
+        /// since the server keeps offering until a choice actually lands. Before this,
+        /// <see cref="OfferReceived"/> guarded on nothing but "a window is already up", so "Not
+        /// tonight" bought the subject about two minutes before the fullscreen ceremony came back,
+        /// over and over, and the app was unusable until they rolled back.</para>
+        ///
+        /// <para><b>Why it is not persisted, and must never be.</b> The ceremony is a single
+        /// account-lifetime question and the answer is worth asking for. A per-process flag defers
+        /// it for tonight and nothing further: the next launch takes the same offer off the same
+        /// sync and opens the same window. Persisting it would turn a deferral into a dismissal and
+        /// leave veterans permanently mid-migration, which is the failure mode on the other side of
+        /// this one.</para>
+        /// </summary>
+        internal static bool ShouldOpenCeremonyFor(bool offerInHand, bool ceremonyOpen, int offerHold, bool deferredThisSession)
+        {
+            if (!offerInHand) return false;
+            if (ceremonyOpen) return false;
+            if (offerHold > 0) return false;
+            return !deferredThisSession;
         }
 
         /// <summary>The offer the live ceremony is running against, or null.</summary>
@@ -203,16 +241,41 @@ namespace ConditioningControlPanel.Services.Descent
         /// <summary>
         /// The server has offered the ceremony. Open it — once — on the UI thread.
         /// ProfileSyncService has already ruled out "already migrated" and "a choice is already
-        /// pending"; this method only has to avoid opening a second window over the first.
+        /// pending"; this method has to avoid opening a second window over the first, and (#1111)
+        /// avoid re-opening one the subject already closed tonight.
         /// </summary>
         public void OfferReceived(DescentMigrationOffer offer)
         {
             if (offer is null) return;
 
+            bool deferred;
+            bool logLoudly;
             lock (_gate)
             {
                 if (_ceremonyOpen) return;
+
+                // THE OFFER IS TAKEN EVEN WHEN IT WILL NOT OPEN. _liveOffer is the withhold's input
+                // (see SpiralWithheldFor) and it is never cleared, which is what keeps the spiral
+                // surfaces dark for the rest of a deferred session. Refreshing it here is free and
+                // keeps the deferral path and the open path reading the same object.
                 _liveOffer = offer;
+
+                deferred = _deferredThisSession;
+                logLoudly = deferred && !_deferralLogged;
+                if (logLoudly) _deferralLogged = true;
+            }
+
+            if (deferred)
+            {
+                // Loud once so support can find it in a user's log, quiet after: the sync heartbeat
+                // is 120 seconds, so an Information line every time would be thirty an hour saying
+                // the same thing. Same shape as the dev mute's _muteLogged above.
+                if (logLoudly)
+                    Log.Information("[Descent] The migration offer is still standing, but the ceremony was closed " +
+                                    "this session — it will not re-open until the next launch.");
+                else
+                    Log.Debug("[Descent] Migration offer re-sent; still deferred for this session.");
+                return;
             }
 
             // REMEMBER THAT THE QUESTION WAS ASKED, before anything opens. This is what withholds
@@ -312,6 +375,14 @@ namespace ConditioningControlPanel.Services.Descent
                         Log.Debug("[Descent] Ceremony offer held behind a fullscreen show — it will open when the hold lifts.");
                         return;
                     }
+                    // DEFERRED, re-checked at the last possible moment. OfferReceived already turns
+                    // these away, but this call can also arrive as a dispatcher BeginInvoke queued
+                    // before the close landed — the flag has to win on that path too.
+                    if (_deferredThisSession)
+                    {
+                        Log.Debug("[Descent] Ceremony open skipped — closed once already this session.");
+                        return;
+                    }
                     offer = _liveOffer;
                     if (offer is null) return;
                     _ceremonyOpen = true;
@@ -319,11 +390,7 @@ namespace ConditioningControlPanel.Services.Descent
 
                 // Flat namespace — see the trap note at the top of DescentCeremonyWindow.xaml.cs.
                 var window = new DescentCeremonyWindow(offer);
-                window.Closed += (_, _) =>
-                {
-                    lock (_gate) _ceremonyOpen = false;
-                    RaiseCeremonyClosed();
-                };
+                window.Closed += (_, _) => OnCeremonyWindowClosed();
 
                 var main = Application.Current?.MainWindow;
                 if (main != null && main.IsLoaded) window.Owner = main;
@@ -341,10 +408,15 @@ namespace ConditioningControlPanel.Services.Descent
         }
 
         /// <summary>
-        /// Announce the close, with whether a choice was actually taken. Isolated from the caller
-        /// so a subscriber that throws cannot leave the ceremony's own guard half-reset.
+        /// The ceremony window's Closed handler. Reads "was a choice actually taken" off the
+        /// settings — the window's own <c>_committed</c> is private, and the settings are the thing
+        /// that is really true — then hands the answer to <see cref="NoteCeremonyClosed"/>.
+        ///
+        /// <para>Settings that cannot be read count as NOT committed, which is the safe way round
+        /// on both sides: nothing irreversible is inferred, and the worst case is one deferral for a
+        /// session where the ledger was unreadable anyway.</para>
         /// </summary>
-        private void RaiseCeremonyClosed()
+        private void OnCeremonyWindowClosed()
         {
             bool committed;
             try
@@ -355,6 +427,39 @@ namespace ConditioningControlPanel.Services.Descent
                              DescentMigrationChoices.IsValid(s.PendingDescentMigrationChoice));
             }
             catch { committed = false; }
+
+            NoteCeremonyClosed(committed);
+        }
+
+        /// <summary>
+        /// The close, as a state transition: drop the open guard, arm the session deferral if the
+        /// window left without a commit, and announce it. Isolated from the caller so a subscriber
+        /// that throws cannot leave the ceremony's own guard half-reset — and internal rather than
+        /// private so the deferral can be tested without a window, which is not constructible in a
+        /// headless test.
+        ///
+        /// <para><b>Every uncommitted close counts, the panic key's included.</b>
+        /// <c>DescentCeremonyWindow.ForceCloseAll</c> arrives here through the same Closed handler
+        /// as "Not tonight", and that is deliberate: somebody who hit the panic key wants the
+        /// fullscreen window gone, not back in two minutes. It cannot swallow the ceremony for good
+        /// because the flag is per-process — the next launch is offered it again by the same
+        /// sync.</para>
+        ///
+        /// <para><b>What does NOT count.</b> Only an actual close reaches this. A ceremony suppressed
+        /// by the dev mute or parked behind <see cref="HoldOffers"/> never opened and never closed,
+        /// so it never defers — a held offer still replays on release, exactly as before.</para>
+        /// </summary>
+        internal void NoteCeremonyClosed(bool committed)
+        {
+            lock (_gate)
+            {
+                _ceremonyOpen = false;
+                if (!committed) _deferredThisSession = true;
+            }
+
+            if (!committed)
+                Log.Information("[Descent] Ceremony closed without a choice — deferred for the rest of this session. " +
+                                "The server will offer it again on the next launch.");
 
             try { CeremonyClosed?.Invoke(this, committed); }
             catch (Exception ex) { Log.Debug("[Descent] A CeremonyClosed handler threw: {Error}", ex.Message); }

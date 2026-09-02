@@ -239,7 +239,10 @@ namespace ConditioningControlPanel
 
         private void OnLater(object sender, RoutedEventArgs e)
         {
-            Log.Information("[Descent] Ceremony deferred by the user — nothing written, the server will re-offer.");
+            // Nothing is written here on purpose. The service's Closed handler is what arms the
+            // session deferral (#1111) — it has to, because the chrome's X and the panic key close
+            // this window without ever reaching "Not tonight".
+            Log.Information("[Descent] Ceremony deferred by the user — nothing written, the server will re-offer on the next launch.");
             Close();
         }
 
