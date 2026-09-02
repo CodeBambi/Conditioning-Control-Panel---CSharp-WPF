@@ -23,17 +23,25 @@ namespace ConditioningControlPanel.Services.Descent
     // ============================================================================
 
     /// <summary>
-    /// THE DAILY XP METER. cap = xp_to_next_level / divisor (server-tunable 5-7).
-    /// 20% of cap banks the day, 100% = cap, and the overflow lip sits on top —
-    /// everything above cap flows to lifetime XP only.
+    /// THE DAILY XP METER. 20% of cap banks the day, 100% = cap, and the overflow
+    /// lip sits on top — everything above cap flows to lifetime XP only.
     ///
-    /// THE LIP IS NOT A CONSTANT: 120% base, 125% from stage 4, 130% from stage 6.
-    /// Nothing here may hardcode 120 — read <see cref="FillLipPct"/>, which
+    /// THE CAP IS SERVER-AUTHORED AND THE CLIENT NEVER DERIVES IT. This used to say
+    /// "cap = xp_to_next_level / divisor (server-tunable 5-7)", which was true only
+    /// through 2026-08-16; the two-caps ruling made it the vessel (1500 + 250 × level,
+    /// server-tunable) and the comment went stale where it stood. Neither formula
+    /// belongs in a client: read <see cref="Cap"/> off the wire, and never state the
+    /// arithmetic in user-facing copy — "it scales with your level" is the whole of
+    /// what a surface may promise (see cclabs-web src/lib/descent/types.ts).
+    ///
+    /// THE LIP IS NOT A CONSTANT EITHER: 120% base, 125% from stage 4, 130% from
+    /// stage 6. Nothing here may hardcode 120 — read <see cref="FillLipPct"/>, which
     /// defaults to 120 only when the server omitted it.
     /// </summary>
     public sealed class DescentVat
     {
-        /// <summary>Level-scaled daily cap in XP. Always &gt; 0 when this object exists.</summary>
+        /// <summary>The server's daily cap in XP, which scales with level. Always &gt; 0 when
+        /// this object exists, and never recomputed here from anything else.</summary>
         public int Cap { get; init; }
 
         /// <summary>XP the server has banked into today's vat. Never negative.</summary>

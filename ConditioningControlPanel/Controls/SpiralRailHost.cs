@@ -156,16 +156,31 @@ namespace ConditioningControlPanel.Controls
 
         private void ApplyBlock(DescentBlock? block)
         {
-            _badgeText.Text = StageNumeral(block?.Stage?.N ?? 0);
+            int n = block?.Stage?.N ?? 0;
+            _badgeText.Text = StageNumeral(n);
+
+            // THE NAME LIVES IN THE TOOLTIP, because that is the only place on this
+            // control where a word actually fits. The badge is a 40px circle sized for
+            // one glyph, so the numeral stays where it is and the hover says what the
+            // rung is called and what it feels like - which is the whole reason the
+            // names were locked. A block that has not arrived leaves the tooltip alone
+            // rather than hovering "The Edge" over a rail that is about to light up.
+            ToolTip = block is null
+                ? null
+                : DescentStageCopy.Name(n) + "\n" + DescentStageCopy.Flavor(n);
+
             _embed?.PostState(block);
         }
 
         /// <summary>
-        /// Stage as a Roman numeral, which is the ONLY stage copy this control ships.
-        /// The stage NAMES (Curious … Eternal) are still an open owner decision in §14
-        /// and have no localization keys, so putting one on screen here would be the
-        /// client inventing copy that the ceremony has not agreed to yet. n = 0 is the
-        /// real pre-begin rung and reads as a dot.
+        /// Stage as a Roman numeral, which is the only stage copy the BADGE ships. The
+        /// stage names were an open owner decision when this was written; they were
+        /// locked on 2026-08-11 and now live in <see cref="DescentStageCopy"/> with
+        /// localization keys behind them, so the reason the numeral stays is no longer
+        /// "we have no copy" - it is that a 40px circle has room for a glyph and not for
+        /// "Crush Depth". The name rides the tooltip instead (see
+        /// <see cref="ApplyBlock"/>), and every surface with room for a word uses one.
+        /// n = 0 is the real pre-begin rung and reads as a dot.
         /// </summary>
         internal static string StageNumeral(int n) => n switch
         {
