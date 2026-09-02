@@ -5370,5 +5370,9 @@
   "emi_book_vault_nudge2": "*二级*是第二道坎，*The Arcademy* 就在它后面",
   "emi_book_vault_nudge3": "*每日礼物*每天给所有人开放一项付费功能",
   "emi_book_vault_nudge4": "*闪图*、*视频*、*潜意识*、覆盖层和疗程全都免费",
-  "emi_book_vault_catch": "它会联网核对你的赞助。离线的话还开 14 天，之后关上。"
+  "emi_book_vault_catch": "它会联网核对你的赞助。离线的话还开 14 天，之后关上。",
+  "label_gaze_interaction": "视线交互",
+  "label_stare_to_pop": "注视即可戳破",
+  "tooltip_bubble_gaze_pop": "注视泡泡约 1 秒即可戳破，无需点击。仅对泡泡有效；闪图在闪图页面有独立开关。",
+  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。"
 }

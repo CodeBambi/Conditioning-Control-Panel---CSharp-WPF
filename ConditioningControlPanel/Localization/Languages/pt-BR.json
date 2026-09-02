@@ -4913,5 +4913,9 @@
   "emi_book_vault_nudge2": "o *nível 2* é outro degrau, e a *Arcademy* fica atrás dele",
   "emi_book_vault_nudge3": "o *Presente do dia* libera um recurso pago pra todo mundo por dia",
   "emi_book_vault_nudge4": "*flashes*, *vídeos*, *subliminares*, sobreposições e sessões são grátis",
-  "emi_book_vault_catch": "ele checa seu apoio online. offline, tudo fica aberto 14 dias e depois fecha."
+  "emi_book_vault_catch": "ele checa seu apoio online. offline, tudo fica aberto 14 dias e depois fecha.",
+  "label_gaze_interaction": "Interação por olhar",
+  "label_stare_to_pop": "Olhar para estourar",
+  "tooltip_bubble_gaze_pop": "Olhe para uma bolha por cerca de 1 segundo para estourá-la, sem clicar. Vale só para bolhas; os flashes têm o próprio interruptor na página de Flashes.",
+  "label_gaze_needs_calibration": "Precisa da webcam ligada e do rastreamento ocular calibrado. Configure em Play, Olhar Focado."
 }

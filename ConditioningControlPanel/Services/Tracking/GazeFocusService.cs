@@ -213,6 +213,7 @@ public class GazeFocusService : IDisposable
         {
             case nameof(Models.AppSettings.FlashGazePopEnabled):
             case nameof(Models.AppSettings.FlashGazeLingerEnabled):
+            case nameof(Models.AppSettings.BubbleGazePopEnabled):
             case nameof(Models.AppSettings.VideoGazeClickEnabled):
                 EvaluateDesiredState();
                 break;
@@ -223,8 +224,21 @@ public class GazeFocusService : IDisposable
     {
         var s = App.Settings?.Current;
         if (s == null) return false;
-        return s.FlashGazePopEnabled || s.FlashGazeLingerEnabled || s.VideoGazeClickEnabled;
+        return s.FlashGazePopEnabled || s.FlashGazeLingerEnabled
+               || s.BubbleGazePopEnabled || s.VideoGazeClickEnabled;
     }
+
+    /// <summary>
+    /// May gaze pop a BUBBLE right now? The Lab/Play "Focus Gaze" master arms
+    /// every target type at once; BubbleGazePopEnabled is the bubble's own
+    /// per-feature flag (the twin of FlashGazePopEnabled), surfaced on the
+    /// Bubble Pop panel. Either one is enough, which is what makes "turn the
+    /// camera on, look at a bubble, it pops" work without hunting down the
+    /// master switch on another tab. Every bubble gate reads THIS, so the
+    /// three enumerate/dwell/blink paths can never disagree.
+    /// </summary>
+    private bool BubblesGazeEnabled
+        => _masterEnabled || App.Settings?.Current?.BubbleGazePopEnabled == true;
 
     /// <summary>
     /// Single source of truth for whether the shared dwell engine should be
@@ -480,10 +494,10 @@ public class GazeFocusService : IDisposable
 
             if (hit.Value.Bubble is Bubble b)
             {
-                // Same master gate as FindBestTarget/AdvanceBubbleDwell:
-                // bubbles only react to gaze while the Lab "Focus Gaze"
-                // toggle is armed.
-                if (_masterEnabled)
+                // Same gate as FindBestTarget/AdvanceBubbleDwell: bubbles only
+                // react to gaze while the "Focus Gaze" master or the bubble's
+                // own "Stare to pop" toggle is armed.
+                if (BubblesGazeEnabled)
                 {
                     try { b.Pop(); GazePopped?.Invoke(); }
                     catch (Exception ex) { App.Logger?.Debug("Gaze blink-pop bubble failed: {Error}", ex.Message); }
@@ -695,12 +709,17 @@ public class GazeFocusService : IDisposable
         }
     }
 
-    private static GazeRefineCandidate? BuildRefineCandidate(ScoredCandidate s)
+    // Not static: the bubble branch reads the instance-level BubblesGazeEnabled gate.
+    private GazeRefineCandidate? BuildRefineCandidate(ScoredCandidate s)
     {
         try
         {
             if (s.Bubble is Bubble b)
             {
+                // Mirror of the flash branch below: the panel can only POP a
+                // bubble, so a user with both bubble gates off must never be
+                // offered a chip that pops one.
+                if (!BubblesGazeEnabled) return null;
                 return new GazeRefineCandidate
                 {
                     SourceBounds = s.Bounds,
@@ -956,13 +975,11 @@ public class GazeFocusService : IDisposable
             }
         }
 
-        // Bubbles are gated on the Lab "Focus Gaze" master toggle. Unlike
-        // flashes (FlashGazePopEnabled) and video targets
-        // (VideoGazeClickEnabled), bubbles have no per-feature gaze flag, so
-        // when a consumer flag keeps the engine alive with the master off,
-        // enumerating them here would make gaze pop bubbles the user never
-        // opted into.
-        var bubbles = _masterEnabled ? App.Bubbles?.GetGazeTargets() : null;
+        // Bubbles are gated exactly like flashes (FlashGazePopEnabled) and
+        // video targets (VideoGazeClickEnabled): on their own per-feature flag,
+        // or on the "Focus Gaze" master. Enumerating them with neither armed
+        // would gaze-pop bubbles the user never opted into.
+        var bubbles = BubblesGazeEnabled ? App.Bubbles?.GetGazeTargets() : null;
         if (bubbles != null)
         {
             for (int i = bubbles.Count - 1; i >= 0; i--)
@@ -1155,11 +1172,11 @@ public class GazeFocusService : IDisposable
 
     private void AdvanceBubbleDwell(Bubble b)
     {
-        // Belt-and-braces gate: FindBestTarget already skips bubbles when the
-        // Focus Gaze master is off, but if one slips through (e.g. the toggle
-        // flips mid-tick) release any in-progress bubble dwell instead of
-        // popping something the user turned off.
-        if (!_masterEnabled)
+        // Belt-and-braces gate: FindBestTarget already skips bubbles when both
+        // bubble gates are off, but if one slips through (e.g. a toggle flips
+        // mid-tick) release any in-progress bubble dwell instead of popping
+        // something the user turned off.
+        if (!BubblesGazeEnabled)
         {
             ClearTarget();
             return;

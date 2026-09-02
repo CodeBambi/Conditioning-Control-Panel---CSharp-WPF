@@ -343,6 +343,22 @@ public class StudioRackRenderTests
     }
 
     [Fact]
+    public void TheBubblePopPageCarriesItsOwnStareToPopSwitch()
+    {
+        // v6.9.1. Bubble gaze-pop used to ride ONLY on GazeFocusService.MasterEnabled (the Play
+        // tab's "Focus Gaze" switch), so the Bubble Pop page showed nothing and two launch-night
+        // reporters concluded stare-to-pop had been removed. The switch — and the hint line that
+        // explains the camera prerequisite — must stay on this page.
+        OnStaThread(() =>
+        {
+            var panel = new StudioTabView().HostedFeaturePanels
+                                           .First(p => p.GetType().Name == "BubblePopFeatureControl");
+            Assert.True(panel.FindName("ChkBubbleGazePop") is CheckBox);
+            Assert.True(panel.FindName("TxtBubbleGazeHint") is System.Windows.Controls.TextBlock);
+        });
+    }
+
+    [Fact]
     public void TheFlashExclusionBoxIsOnTheRackAndHasExactlyOneEditor()
     {
         // G12. FlashFeatureControl is the single surface; the legacy save-side mirror was deleted

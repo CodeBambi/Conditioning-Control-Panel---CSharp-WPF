@@ -31,6 +31,8 @@ namespace ConditioningControlPanel.Features
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
             Services.BubbleService.AmbientXpBudgetChanged += OnAmbientXpBudgetChanged;
             UpdateAmbientXpBudgetLine();
+            if (App.Webcam != null) App.Webcam.OnTrackingStateChanged += OnWebcamTrackingStateChanged;
+            UpdateGazeHint();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -38,6 +40,44 @@ namespace ConditioningControlPanel.Features
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
             Services.BubbleService.AmbientXpBudgetChanged -= OnAmbientXpBudgetChanged;
+            if (App.Webcam != null) App.Webcam.OnTrackingStateChanged -= OnWebcamTrackingStateChanged;
+        }
+
+        /// <summary>
+        /// The camera raises this off the UI thread, so the repaint is marshalled and swallowed on
+        /// a shutting-down dispatcher (CLAUDE.md async/threading known issues #6/#8).
+        /// </summary>
+        private void OnWebcamTrackingStateChanged(Services.WebcamTrackingState _)
+        {
+            try
+            {
+                var disp = Dispatcher;
+                if (disp == null || disp.HasShutdownStarted) return;
+                disp.BeginInvoke(new Action(UpdateGazeHint));
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// "Stare to pop" is a stored preference, but it does nothing until the shared camera is
+        /// actually running on a stored calibration with current consent - the same three
+        /// conditions GazeFocusService.EvaluateDesiredState checks before it will start the dwell
+        /// engine. Without this line the toggle reads as broken, so the row stays live and gains a
+        /// hint rather than being hidden or disabled.
+        /// </summary>
+        private void UpdateGazeHint()
+        {
+            try
+            {
+                if (TxtBubbleGazeHint == null) return;
+                var cam = App.Webcam;
+                var ready = cam != null
+                            && cam.IsRunning
+                            && cam.Calibration != null
+                            && Services.WebcamTrackingService.IsConsentCurrent();
+                TxtBubbleGazeHint.Visibility = ready ? Visibility.Collapsed : Visibility.Visible;
+            }
+            catch { }
         }
 
         /// <summary>
@@ -107,6 +147,7 @@ namespace ConditioningControlPanel.Features
                 SliderSpeed.Value = s.BubbleSpeedBoost;
                 TxtSpeed.Text = $"+{s.BubbleSpeedBoost}%";
                 ChkSolidMode.IsChecked = s.BubbleSharedHost;
+                ChkBubbleGazePop.IsChecked = s.BubbleGazePopEnabled;
 
                 // Easter-egg hint (companion auto-pops a lingering effect bubble) — name the active persona.
                 var persona = App.Mods?.ActiveModId switch
@@ -143,6 +184,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.BubblesVolume) ||
                 e.PropertyName == nameof(Models.AppSettings.BubblesSize) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleSpeedBoost) ||
+                e.PropertyName == nameof(Models.AppSettings.BubbleGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggersEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerChance) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerVariants))
@@ -217,6 +259,22 @@ namespace ConditioningControlPanel.Features
             TxtSpeed.Text = $"+{v}%";
             s.BubbleSpeedBoost = v;
             App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// The bubble twin of FlashFeatureControl's ChkFlashGazePop_Changed. GazeFocusService
+        /// listens to the setting itself (EvaluateDesiredState), so there is nothing to start or
+        /// stop here - flipping this on with the camera already up arms bubble dwell on the next
+        /// tick, and flipping it off releases any dwell in progress.
+        /// </summary>
+        private void ChkBubbleGazePop_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.BubbleGazePopEnabled = ChkBubbleGazePop.IsChecked ?? false;
+            App.Settings?.Save();
+            UpdateGazeHint();
         }
 
         private void ChkSolidMode_Changed(object sender, RoutedEventArgs e)

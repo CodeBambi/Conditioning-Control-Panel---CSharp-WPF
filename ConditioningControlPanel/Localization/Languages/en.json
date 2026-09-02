@@ -5489,5 +5489,9 @@
   "emi_book_vault_nudge2": "*tier 2* is a second bar, and the *Arcademy* is behind it",
   "emi_book_vault_nudge3": "the *Daily Gift* opens one paid feature for everybody each day",
   "emi_book_vault_nudge4": "*flashes*, *videos*, *subliminals*, overlays and sessions are all free",
-  "emi_book_vault_catch": "it checks your pledge online. offline, the doors stay open 14 days, then shut."
+  "emi_book_vault_catch": "it checks your pledge online. offline, the doors stay open 14 days, then shut.",
+  "label_gaze_interaction": "Gaze interaction",
+  "label_stare_to_pop": "Stare to pop",
+  "tooltip_bubble_gaze_pop": "Look at a bubble for about 1 second to pop it, no clicking. Covers bubbles only; flashes have their own switch on the Flashes page.",
+  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze."
 }

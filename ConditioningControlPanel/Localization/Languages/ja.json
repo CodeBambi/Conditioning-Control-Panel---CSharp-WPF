@@ -4905,5 +4905,9 @@
   "emi_book_vault_nudge2": "*ティア2*はもう一段上。*The Arcademy*はその先",
   "emi_book_vault_nudge3": "*本日のギフト*が、毎日ひとつ有料機能を全員に開ける",
   "emi_book_vault_nudge4": "*フラッシュ*、*動画*、*サブリミナル*、オーバーレイ、セッションは無料",
-  "emi_book_vault_catch": "支援の確認はオンライン。オフラインでは14日開いたまま、そこで閉じる。"
+  "emi_book_vault_catch": "支援の確認はオンライン。オフラインでは14日開いたまま、そこで閉じる。",
+  "label_gaze_interaction": "視線操作",
+  "label_stare_to_pop": "見つめて割る",
+  "tooltip_bubble_gaze_pop": "バブルを約1秒見つめると、クリックせずに割れます。対象はバブルのみです。フラッシュにはフラッシュページに専用のスイッチがあります。",
+  "label_gaze_needs_calibration": "ウェブカメラの起動と視線追跡のキャリブレーションが必要です。Play のフォーカスゲイズで設定してください。"
 }

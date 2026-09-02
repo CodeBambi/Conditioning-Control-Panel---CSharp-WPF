@@ -231,7 +231,7 @@
                             <TextBlock Text="Gaze interaction" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,4"/>
 
-                            <Grid Height="34" Background="Transparent" ToolTip="Look at a flash for ~1s to dismiss it (same effect as clicking, including hydra).">
+                            <Grid Height="34" Background="Transparent" ToolTip="Look at a flash for ~1s to dismiss it (same effect as clicking, including hydra). Covers flashes only. Bubbles have their own Stare to pop switch on the Bubble Pop page.">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
