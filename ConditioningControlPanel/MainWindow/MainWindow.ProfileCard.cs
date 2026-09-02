@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -83,7 +83,8 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Shows or hides the header's "back to me" chip. Someone else's card is on screen ⇒ the
-        /// chip is the way home.
+        /// chip is the way home. Also the single switch every self-only surface on the card reads,
+        /// so a new one is gated here rather than by re-deriving "is this mine" at its own site.
         /// </summary>
         internal void SetProfileViewingSelf(bool isSelf)
         {
@@ -97,6 +98,15 @@ namespace ConditioningControlPanel
                 RefreshProfileSpiralPlate();
                 // So does the migration receipt, and for the same reason.
                 RefreshProfileDescentReceipt();
+                // Bug #1113: Customize and Privacy always edit YOUR loadout and YOUR sharing
+                // toggles whoever's card is up, so over a searched profile they read as an offer
+                // to edit that stranger's. Same switch, same reason, and set before the early
+                // return below so a missing chip cannot strand them either.
+                var selfOnly = isSelf ? Visibility.Visible : Visibility.Collapsed;
+                if (DiscordTab?.BtnProfileCustomize != null)
+                    DiscordTab.BtnProfileCustomize.Visibility = selfOnly;
+                if (DiscordTab?.BtnProfilePrivacy != null)
+                    DiscordTab.BtnProfilePrivacy.Visibility = selfOnly;
                 if (DiscordTab?.BtnProfileBackToMe == null) return;
                 DiscordTab.BtnProfileBackToMe.Visibility = isSelf ? Visibility.Collapsed : Visibility.Visible;
             }
