@@ -1,0 +1,227 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/AiPermissionsGrid.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"   ->  Theme="{StaticResource X}"    (keyed styles are ControlThemes)
+       Visibility="Collapsed"       ->  IsVisible="False"
+       ToolTip="..."                ->  ToolTip.Tip="..."
+       Image + CmpEmojiToImage      ->  <TextBlock Text="🧠"/>: Avalonia renders colour emoji natively
+       Checked/Unchecked            ->  IsCheckedChanged (Avalonia's CheckBox raises one event)
+       Content="{loc:Str}" on Button->  a <TextBlock> child (Avalonia reads "_" in Content as an
+                                        access key, and every loc key here is snake_case)
+       x:FieldModifier="internal"   ->  dropped; no host in this head pokes the fields yet
+       pack:// merged dictionary    ->  avares:// ResourceInclude
+       hero ImageBrush              ->  dropped (see the comment at the header band) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.AiPermissionsGrid"
+             mc:Ignorable="d"
+             d:DesignWidth="1240" d:DesignHeight="560">
+
+    <!-- ================================================================
+         WHAT SHE'S ALLOWED TO DO — the one AI-permissions surface.
+
+         This card is the Lab tab's "AI Companion Effects & Memory" card,
+         moved (UX restructure, Phase 5) rather than rewritten: same
+         sixteen x:Names, same handlers, same bound
+         CompanionPromptSettings properties.
+
+         THE GATE. The Companion door is Free / Tier 1, so the card carries
+         its own bar - TierGate.RequiresLab, rendered as a violet lockband
+         over the effects half. The memory half is deliberately NOT gated:
+         chat memory works on cloud AI, which is Tier 1. The band is
+         presentation only; enforcement stays in AiCommandService and the
+         providers' prompt envelope.
+
+         MOTION BUDGET: zero.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Theme="{StaticResource CmpVioletCardStyle}">
+        <StackPanel>
+
+            <!-- ========== hero header ==========
+                 The negative margin cancels the card's own 20,18 padding so the art reaches the
+                 card edges. ponytail: the lab_aimemory_hero.png ImageBrush is dropped - this head
+                 ships no Resources/ PNGs yet; only the scrim gradient is drawn. Re-add the brush
+                 as an avares:// ImageBrush when the art moves. -->
+            <Border CornerRadius="14,14,0,0" Height="138" Margin="-20,-18,-20,16" ClipToBounds="True">
+                <Grid>
+                    <Border CornerRadius="14,14,0,0" Background="{StaticResource CmpElevBrush}"/>
+                    <Border CornerRadius="14,14,0,0">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                                <GradientStop Color="{StaticResource CmpCardColor}" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="0.9"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ========== title row ========== -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <Border Width="34" Height="34" CornerRadius="10" Margin="0,0,11,0"
+                        Background="{StaticResource CmpElevBrush}"
+                        BorderBrush="{StaticResource CmpHairlineBrush}" BorderThickness="1">
+                    <TextBlock Text="🧠" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock Text="{loc:Str lab_ai_effects_memory_title}" Theme="{StaticResource CmpSectionTitleStyle}"/>
+                <Border Theme="{StaticResource CmpTrainTagStyle}" Margin="9,0,0,0">
+                    <TextBlock Text="{loc:Str label_beta_2}" Theme="{StaticResource CmpTrainTagTextStyle}"/>
+                </Border>
+                <!-- The T2 plate: on a Free/T1 door it has to be said out loud, entitled or not. -->
+                <Border Theme="{StaticResource CmpTierPlateStyle}">
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t2}" FontSize="10" FontWeight="Bold"
+                               Foreground="{StaticResource CmpTextBrush}"/>
+                </Border>
+            </StackPanel>
+
+            <TextBlock Text="{loc:Str lab_ai_effects_memory_subtitle}"
+                       Theme="{StaticResource CmpBodyTextStyle}" Margin="0,0,0,12"/>
+
+            <!-- ========== "needs a local model" notice ==========
+                 Cloud AI cannot drive effects, so the controls below do nothing without a local
+                 Ollama or a BYO endpoint. Written by UpdateAiBrainPills on the WPF host. -->
+            <Border x:Name="LabEffectsNeedsLocalNotice" IsVisible="False"
+                    Theme="{StaticResource CmpInsetPanelStyle}"
+                    BorderBrush="{StaticResource CmpPinkBrush}" Margin="0,0,0,12">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str lab_ai_effects_needs_local_title}"
+                                   Foreground="{StaticResource CmpPinkBrush}" FontWeight="SemiBold" FontSize="13"/>
+                        <TextBlock Text="{loc:Str lab_ai_effects_needs_local_body}"
+                                   Theme="{StaticResource CmpDimTextStyle}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" x:Name="BtnLabEffectsSetupLocal"
+                            Theme="{StaticResource CmpCtaPillStyle}"
+                            Margin="12,0,0,0" VerticalAlignment="Center"
+                            Click="BtnLabEffectsSetupLocal_Click">
+                        <TextBlock Text="{loc:Str btn_lab_effects_setup_local}"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ========== the two halves ==========
+                 Effects (Tier 2, gated) beside memory (Tier 1, not gated). -->
+            <Grid ColumnDefinitions="3*,16,2*">
+
+                <!-- ===== left: effect control + permissions ===== -->
+                <Grid Grid.Column="0">
+                    <StackPanel x:Name="EffectsGateHost">
+                        <!-- master toggle -->
+                        <Grid Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Str label_capability_effects}"
+                                           Foreground="{StaticResource CmpTextBrush}" FontSize="15" VerticalAlignment="Center"/>
+                                <Button Theme="{DynamicResource HelpButtonStyle}" ToolTip.Tip="{loc:Str tooltip_lab_ai_effects}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkCapEffects" Theme="{DynamicResource ToggleStyle}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      IsChecked="False"
+                                      IsCheckedChanged="ChkCapEffects_Changed"/>
+                        </Grid>
+
+                        <!-- effect permissions panel -->
+                        <Border x:Name="EffectPermsPanel" IsVisible="False"
+                                Theme="{StaticResource CmpInsetPanelStyle}"
+                                BorderBrush="{StaticResource CmpDangerBrush}" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str label_effect_permissions}"
+                                           Foreground="{StaticResource CmpDangerBrush}" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,8">
+                                    <TextBlock Text="{loc:Str label_max_haptic_intensity}"
+                                               Foreground="{StaticResource CmpTextBrush}" FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtMaxHapticIntensity" Text="60%"
+                                               Foreground="{StaticResource CmpPinkBrush}" FontSize="13" FontWeight="SemiBold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Slider x:Name="SliderMaxHapticIntensity" Theme="{DynamicResource PinkSlider}"
+                                        Minimum="0" Maximum="1" Value="0.6" Margin="0,0,0,10"
+                                        ValueChanged="SliderMaxHapticIntensity_ValueChanged"/>
+                                <!-- Ten switches, one handler: each names its own setting through Tag, so
+                                     re-ordering this grid can never remap a saved permission. -->
+                                <UniformGrid Columns="2" Rows="5">
+                                    <CheckBox x:Name="ChkAllowFlash" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_flash}" Foreground="White" FontSize="13" Margin="0,2,4,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Flash"/>
+                                    <CheckBox x:Name="ChkAllowVideo" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_video}" Foreground="White" FontSize="13" Margin="4,2,0,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Video"/>
+                                    <CheckBox x:Name="ChkAllowAudio" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_audio}" Foreground="White" FontSize="13" Margin="0,2,4,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Audio"/>
+                                    <CheckBox x:Name="ChkAllowBubbles" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bubbles}" Foreground="White" FontSize="13" Margin="4,2,0,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Bubbles"/>
+                                    <CheckBox x:Name="ChkAllowSubliminal" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_subliminal}" Foreground="White" FontSize="13" Margin="0,2,4,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Subliminal"/>
+                                    <CheckBox x:Name="ChkAllowOverlay" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_overlay}" Foreground="White" FontSize="13" Margin="4,2,0,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Overlay"/>
+                                    <CheckBox x:Name="ChkAllowLockCard" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_lockcard}" Foreground="White" FontSize="13" Margin="0,2,4,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="LockCard"/>
+                                    <CheckBox x:Name="ChkAllowBounce" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bounce}" Foreground="White" FontSize="13" Margin="4,2,0,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Bounce"/>
+                                    <CheckBox x:Name="ChkAllowHaptic" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_haptic}" Foreground="White" FontSize="13" Margin="0,2,4,2" IsCheckedChanged="ChkAllowEffect_Changed" Tag="Haptic"/>
+                                    <StackPanel Orientation="Horizontal" Margin="4,2,0,2">
+                                        <CheckBox x:Name="ChkAllowGetBackToMe" Theme="{DynamicResource DotCheckBoxStyle}" Content="{loc:Str label_allow_get_back_to_me}" Foreground="White" FontSize="13" IsCheckedChanged="ChkAllowEffect_Changed" Tag="GetBackToMe"/>
+                                        <!-- Named: MainWindow.Presets.cs hangs the help-registry popup on it. -->
+                                        <Button x:Name="HelpBtnGetBackToMe" Theme="{DynamicResource HelpButtonStyle}" Tag="GetBackToMe"/>
+                                    </StackPanel>
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ===== the Tier 2 lockband =====
+                         MinHeight so the band still has room to draw when the permissions panel
+                         underneath it is collapsed (a locked account's normal state). The veil
+                         itself takes no clicks (CmpVeilStyle); only the CTA does. -->
+                    <Grid x:Name="EffectsLockBand" IsVisible="False" MinHeight="164"
+                          AutomationProperties.AutomationId="CompanionPermissionsLockBand">
+                        <Border Theme="{StaticResource CmpVeilStyle}"/>
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock Text="🔒" Theme="{StaticResource CmpLockGlyphStyle}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str hm3_rail_lock_t2}" HorizontalAlignment="Center"
+                                       Margin="0,6,0,0" FontSize="13" FontWeight="Bold"
+                                       Foreground="{StaticResource CmpPurpleBrush}"/>
+                            <TextBlock x:Name="TxtEffectsLockCopy" Theme="{StaticResource CmpVeilCopyStyle}"/>
+                            <Button x:Name="BtnEffectsLockCta"
+                                    Theme="{StaticResource CmpCtaPillStyle}" HorizontalAlignment="Center"
+                                    Click="BtnEffectsLockCta_Click">
+                                <TextBlock Text="{loc:Str tiergate_see_tiers}"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <!-- ===== right: chat memory (Tier 1, NOT gated) ===== -->
+                <Border Grid.Column="2" Theme="{StaticResource CmpInsetPanelStyle}"
+                        BorderBrush="{StaticResource CmpVioletBrush}" VerticalAlignment="Top">
+                    <StackPanel>
+                        <Grid>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                    <TextBlock Text="{loc:Str label_chat_memory_title}"
+                                               Foreground="{StaticResource CmpVioletBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                    <Button Theme="{DynamicResource HelpButtonStyle}" ToolTip.Tip="{loc:Str tooltip_lab_ai_memory}"/>
+                                </StackPanel>
+                                <TextBlock Text="{loc:Str label_chat_memory_hint}"
+                                           Theme="{StaticResource CmpDimTextStyle}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkChatMemoryEnabled" Theme="{DynamicResource ToggleStyle}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      IsChecked="True"
+                                      IsCheckedChanged="ChkChatMemoryEnabled_Changed"/>
+                        </Grid>
+                        <Button x:Name="BtnClearChatMemory"
+                                Theme="{StaticResource CmpDangerButtonStyle}"
+                                HorizontalAlignment="Right" Margin="0,10,0,0"
+                                Click="BtnClearChatMemory_Click"
+                                ToolTip.Tip="{loc:Str tooltip_forget_everything}">
+                            <TextBlock Text="{loc:Str btn_forget_everything}"/>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>
