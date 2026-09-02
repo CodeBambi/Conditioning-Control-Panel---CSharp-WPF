@@ -1,0 +1,79 @@
+<!-- PORTED from ConditioningControlPanel/Windows/WebcamGazeTrackerWindow.xaml.
+     Structure, ordering, spacing and every colour preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None"        -> SystemDecorations="None"
+       ResizeMode="NoResize"     -> CanResize="False"
+       Visibility="Collapsed"    -> IsVisible="False"
+       DropShadowEffect          -> Avalonia.Media.DropShadowEffect; ShadowDepth="0" is
+                                    OffsetX/OffsetY="0", the rest copies verbatim
+       KeyDown/Loaded/Closed     -> wired in the constructor (Loaded becomes OnOpened)
+       Click="BtnErrorClose_Click" -> wired in the constructor, both buttons
+
+     The window carries no {loc:Str}: every string in the WPF original is a literal, and
+     inventing keys here would be worse than keeping them. Both Close buttons hold a
+     TextBlock rather than a string Content, per the access-key trap in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WebcamGazeTrackerWindow"
+        Title="Gaze Tracker Test"
+        Background="#000000"
+        SystemDecorations="None"
+        WindowState="Maximized"
+        CanResize="False"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Canvas x:Name="DotCanvas">
+            <Ellipse x:Name="Dot" Width="36" Height="36" IsVisible="False">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#FF80E0FF" Offset="0"/>
+                        <GradientStop Color="#FF00B0FF" Offset="0.6"/>
+                        <GradientStop Color="#FF005080" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+                <Ellipse.Effect>
+                    <DropShadowEffect Color="#00B0FF" BlurRadius="30" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+                </Ellipse.Effect>
+            </Ellipse>
+        </Canvas>
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
+            <TextBlock Text="Gaze Tracker Test" Foreground="White"
+                       FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Look around the screen. The cyan dot should follow your gaze."
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TxtCoords" Text="" Foreground="#00B0FF" FontSize="12"
+                       Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas, Courier New"/>
+            <!-- Always-visible, mouse-clickable close. Lockdown's global keyboard hook swallows
+                 Escape/Alt+F4 (#528), so a key-based exit can strand the user inside this test
+                 window; a button click bypasses the keyboard hook entirely. -->
+            <Button x:Name="BtnClose" Padding="20,8" Margin="0,16,0,0"
+                    Background="#00B0FF" Foreground="Black" BorderThickness="0"
+                    FontWeight="Bold" Cursor="Hand"
+                    HorizontalAlignment="Center">
+                <TextBlock Text="✕ Close Test"/>
+            </Button>
+        </StackPanel>
+
+        <Border x:Name="ErrorPanel" IsVisible="False"
+                Background="#221A1A" BorderBrush="#FF4040" BorderThickness="2"
+                CornerRadius="10" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="520">
+            <StackPanel>
+                <TextBlock Text="Tracker test unavailable" Foreground="#FF8080" FontSize="18"
+                           FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtErrorDetail" Text="" Foreground="White" FontSize="13"
+                           Margin="0,12,0,16" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                <Button x:Name="BtnErrorClose" Padding="20,8"
+                        Background="#00B0FF" Foreground="Black" BorderThickness="0"
+                        FontWeight="Bold" Cursor="Hand"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="Close"/>
+                </Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
