@@ -1,0 +1,59 @@
+<!-- PORTED from ConditioningControlPanel/Windows/CornerGifWindow.xaml.
+     Structure, ordering, spacing and every colour preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       Style="{DynamicResource OutlineButton}" -> Theme="{StaticResource OutlineButton}"
+                                                  (keyed styles are ControlThemes)
+       ResizeMode="CanResizeWithGrip"          -> CanResize="True" (Avalonia has no resize grip;
+                                                  the window still resizes)
+       VerticalScrollBarVisibility             -> ScrollViewer.VerticalScrollBarVisibility
+       Click="BtnClose_Click"                  -> wired in the constructor
+
+     The window carries no {loc:Str}: every string in the WPF original is a literal.
+     The Done button holds a TextBlock rather than a string Content, per the access-key
+     trap in CLAUDE.md. The slot cards are still built in code-behind, as in WPF. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.CornerGifWindow"
+        Title="Corner GIFs"
+        Width="460" Height="640"
+        WindowStartupLocation="CenterOwner"
+        Background="#0F0F1E"
+        Foreground="#E0E0E0"
+        CanResize="True"
+        MinWidth="420" MinHeight="480">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="🖼 Corner GIFs"
+                   Foreground="{DynamicResource PinkBrush}"
+                   FontSize="20"
+                   FontWeight="SemiBold"/>
+
+        <TextBlock Grid.Row="1"
+                   Text="Pin a looping GIF to a screen corner. Turn on one or both slots and point each at a different corner (great for covering minimaps, HUD corners, or just decoration). Overlays are click-through; a session that brings its own corner GIF borrows the slot and hands it back after."
+                   Foreground="#A0A0B0"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Margin="0,6,0,14"/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="SlotsPanel"/>
+        </ScrollViewer>
+
+        <Button Grid.Row="3"
+                x:Name="BtnClose"
+                Theme="{StaticResource OutlineButton}"
+                Padding="16,8"
+                HorizontalAlignment="Right"
+                Margin="0,14,0,0">
+            <TextBlock Text="Done"/>
+        </Button>
+    </Grid>
+</Window>
