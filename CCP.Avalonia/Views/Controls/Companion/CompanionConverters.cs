@@ -101,9 +101,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// </summary>
     public sealed class CompanionEnumEqualsConverter : IValueConverter
     {
+        /// <summary>Negate the match. Ported from the WPF CompanionEnumToVisibilityConverter, which
+        /// this class also stands in for (CmpEnumToVis / CmpEnumToVisInverse) now that the result
+        /// is a bool for IsVisible rather than a Visibility.</summary>
+        public bool Invert { get; set; }
+
         public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-            => value != null && parameter != null &&
-               string.Equals(value.ToString(), parameter.ToString(), StringComparison.OrdinalIgnoreCase);
+        {
+            bool match = Matches(value?.ToString(), parameter?.ToString());
+            return Invert ? !match : match;
+        }
+
+        /// <summary>
+        /// The parameter may name SEVERAL states, pipe-separated (<c>ConverterParameter=Locked|Dormant</c>):
+        /// the match is "value is any of these". A single name behaves exactly as before.
+        /// </summary>
+        internal static bool Matches(string? value, string? parameter)
+        {
+            if (value == null || string.IsNullOrEmpty(parameter)) return false;
+            foreach (var name in parameter!.Split('|'))
+            {
+                if (string.Equals(value, name.Trim(), StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
 
         public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
@@ -119,5 +140,52 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             }
             return BindingOperations.DoNothing;
         }
+    }
+
+    /// <summary>
+    /// bool -> double, for the "she's asleep" desaturation and other dim states.
+    /// Parameter is "trueOpacity|falseOpacity" (default "1.0|0.45"). Verbatim from the WPF head.
+    /// </summary>
+    public sealed class CompanionBoolToOpacityConverter : IValueConverter
+    {
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            double on = 1.0, off = 0.45;
+            if (parameter is string p)
+            {
+                var parts = p.Split('|');
+                if (parts.Length == 2)
+                {
+                    double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out on);
+                    double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out off);
+                }
+            }
+            return value is bool b && b ? on : off;
+        }
+
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+            => BindingOperations.DoNothing;
+    }
+
+    /// <summary>
+    /// int equality against the ConverterParameter, for radio strips over an int property.
+    /// Unlike <see cref="CompanionEnumEqualsConverter"/> it PARSES the parameter and returns
+    /// DoNothing when it cannot, so a privacy retention radio can never light up without the
+    /// source changing. Verbatim from the WPF head.
+    /// </summary>
+    public sealed class CompanionIntEqualsConverter : IValueConverter
+    {
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+            => value != null && TryParse(parameter, out var wanted) &&
+               value is int actual && actual == wanted;
+
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            if (value is bool b && b && TryParse(parameter, out var wanted)) return wanted;
+            return BindingOperations.DoNothing;
+        }
+
+        private static bool TryParse(object? parameter, out int value)
+            => int.TryParse(parameter?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
     }
 }
