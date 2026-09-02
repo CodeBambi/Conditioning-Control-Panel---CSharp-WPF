@@ -90,7 +90,17 @@ public class DescentZeroShowOrderingTests
         service.ReleaseOffers();
         Assert.Equal(0, service.OfferHoldDepth);
         Assert.NotNull(service.LiveOffer);
-        Assert.True(service.CanOpenCeremony());
+
+        // EITHER OUTCOME IS THE GUARANTEE, and asserting only the first one made this suite depend
+        // on the order it ran in. ReleaseOffers does not just un-gate: when an Application exists it
+        // goes on to BeginInvoke the open, which is the correct behaviour and which sets the very
+        // flag CanOpenCeremony reads. WpfRenderHarness stands one up on an STA thread and leaves it
+        // alive for the rest of the process, so whether this test saw a live Application came down
+        // to whether it beat the first WPF suite to the punch — and the BeginInvoke is asynchronous,
+        // so even losing that race gave a different answer run to run. What §2.4 actually promises
+        // is that the release either opened the ceremony or left it openable; what it never does is
+        // drop the offer. That holds in both environments and in either half of the race.
+        Assert.True(service.CanOpenCeremony() || service.IsCeremonyOpen);
     }
 
     /// <summary>
