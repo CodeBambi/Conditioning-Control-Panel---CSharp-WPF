@@ -1,0 +1,79 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AppSettings/UpdatesSettingsSection.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved. Deviations:
+
+       Style="{DynamicResource X}"   -> Theme="{StaticResource X}"
+       Content="{loc:Str key}"       -> a <TextBlock> child (Avalonia parses "_" in Content as an access key)
+       Click=                        -> wired in the constructor
+       PreviewMouseWheel=            -> dropped (no Preview events; it forwarded to MainWindow anyway)
+       x:FieldModifier="internal"    -> dropped -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.UpdatesSettingsSection"
+             d:DesignWidth="760"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_updates}" Theme="{StaticResource SectionHeader}"/>
+
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueUpdatesBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueUpdatesWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueUpdatesBrush}"/>
+                <Grid Margin="15,12,15,12" ColumnDefinitions="*,Auto">
+
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtUpdatesVersion" Text=""
+                                   Foreground="{StaticResource SectionHueUpdatesBrush}"
+                                   FontSize="15" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtUpdatesProduct" Text=""
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <Button x:Name="BtnCheckUpdates" Grid.Column="1"
+                            Theme="{StaticResource OutlineButton}"
+                            Padding="16,8" FontSize="13"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str btn_check_updates}"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Patch notes for the installed build, in a bounded scrollable box. -->
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueUpdatesBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueUpdatesWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueUpdatesBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock x:Name="TxtPatchNotesHeader"
+                                   Text="{loc:Str set2_whats_new_header}"
+                                   Foreground="{StaticResource SectionHueUpdatesBrush}" FontSize="14" FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="BtnViewPatchNotes"
+                                Theme="{StaticResource OutlineButton}"
+                                Padding="12,6" FontSize="12"
+                                HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str set2_btn_view_patch_notes}"/>
+                        </Button>
+                    </Grid>
+
+                    <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="TxtPatchNotes" Text=""
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
+                                   TextWrapping="Wrap"/>
+                    </ScrollViewer>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+    </StackPanel>
+</UserControl>
