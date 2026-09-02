@@ -215,7 +215,7 @@ public sealed class ChaosFlashOverlay : Window
 
                     var dispatcher = Application.Current?.Dispatcher;
                     if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-                    dispatcher.BeginInvoke(() =>
+                    _ = dispatcher.BeginInvoke(() =>
                     {
                         // A newer wash (or a clear/teardown) may have superseded this decode.
                         try { if (gen == _displayGen) _img.Source = bmp; } catch { }
