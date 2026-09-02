@@ -1,0 +1,252 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.SpiralTabView"
+             mc:Ignorable="d"
+             d:DesignHeight="620" d:DesignWidth="1460">
+
+    <!-- ================================================================
+         THE SPIRAL ROOM (CONTRACT-FUSE-0816 2.4) - three states in one tab.
+         Ported from ConditioningControlPanel/Views/Tabs/SpiralTabView.xaml.
+
+           FOG      - a ceremony is owed or scheduled. A full-bleed fog layer
+                      (SpiralFirstLightVisual held before its first stroke, with
+                      its ambient clock free-running) under centred copy in the
+                      fuse's voice. Nothing is clickable.
+           FIRST    - the one-shot reveal, played INSIDE this tab the moment the
+           LIGHT      user's own ceremony commits. Same canvas, clock running.
+           SPIRAL   - the /embed/spiral canvas at ?mode=map, full tab width,
+                      behind a loading splash until it has actually navigated.
+                      Falls back to the waiting panel, which is today's live path
+                      because the map route is not deployed yet.
+
+         THE AIRSPACE STRATEGY, and it is why this file is shaped like this.
+         A native web view is a child surface: it paints OVER every framework
+         element in the same window whatever the z-order says. So the embed is not
+         merely hidden while the fog or the reveal is up - it is NEVER CONSTRUCTED.
+         The code-behind builds it on entering the spiral state and drops it on the
+         way out, so there is no idle browser behind a tab nobody is looking at and
+         nothing can paint over the fog.
+
+         The SPLASH is the same problem one layer down. A constructed browser paints
+         its own dark slab the instant its surface exists, which is what made the
+         wait read as a hang. So EmbedHost is parked invisible while the engine
+         loads and is only promoted once the embed has something to show. Until then
+         the splash owns the surface and nothing native can paint over it. On a
+         machine with NO engine there is nothing to hide - WebHost draws a legible
+         fallback panel of its own - so the splash is skipped entirely.
+
+         Everything visible here is authored in code-behind or literal: the copy is
+         hardcoded English by contract (4, see DescentFuseCopy) and every colour is
+         the fuse's own gold, never the mod accent.
+
+         ANIMATION LAW: opacity and transform only, everywhere in this file. The two
+         BlurEffects below are STATIC - set once, never animated - and the glow they
+         sit on breathes by opacity.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <!-- ponytail: local copy of ConditioningControlPanel/App.xaml:Font.Mono, hoist when a second view needs it -->
+        <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
+    </UserControl.Resources>
+
+    <Grid Background="#0A0514">
+
+        <!-- The fog / reveal canvas.
+             ponytail: needs Controls/SpiralFirstLightVisual (a WPF DrawingVisual), wired when the
+             reveal is redrawn for this head. The WPF code-behind builds it with an accent Color
+             and drops it in here; this host stays empty, so the fog era is its copy on the bare
+             ground - which is what a machine that cannot run the canvas would show anyway. -->
+        <Grid x:Name="FogHost"/>
+
+        <!-- The fog era's embers: a handful of gold specks drifting up through the
+             weather, seeded and driven from code-behind. Clipped, hit-test dead,
+             and it never exists at all under reduced motion. -->
+        <Canvas x:Name="EmberHost" IsVisible="False"
+                IsHitTestVisible="False" ClipToBounds="True"/>
+
+        <!-- The fog era's copy. Hit-test invisible as a whole: there is nothing to
+             click in the fog, and a caret or a hover state would imply otherwise. -->
+        <StackPanel x:Name="FogCopy" IsVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MaxWidth="620" IsHitTestVisible="False">
+
+            <TextBlock x:Name="FogEyebrow" HorizontalAlignment="Center"
+                       FontSize="12" Foreground="#E0B052" Opacity="0.85"
+                       FontFeatures="smcp"/>
+
+            <TextBlock x:Name="FogLine" HorizontalAlignment="Center"
+                       Margin="0,14,0,0" FontSize="21" LineHeight="30"
+                       TextAlignment="Center" TextWrapping="Wrap"
+                       Foreground="#F2ECF7"/>
+
+            <!-- THE HERO. Two TextBlocks carrying the same string: a blurred gold
+                 duplicate underneath for the bloom, the crisp digits over it. The
+                 glow's Text and FontSize follow the crisp one so the readout can
+                 change size (digits are big, the "any moment now" phrase is not)
+                 without either half being retyped twice.
+
+                 The pulse and the phase flare both live on this host: the scale is
+                 the heartbeat, the glow's opacity is the flare.
+
+                 No RenderTransformOrigin and no declared ScaleTransform: Avalonia's
+                 default origin IS the centre (WPF's is the top-left corner, which is
+                 why the original had to say so), and the pulse animates the whole
+                 RenderTransform as a TransformOperations value - see StartFogFx. -->
+            <Grid x:Name="FogDigitsHost" Margin="0,30,0,0"
+                  HorizontalAlignment="Center">
+
+                <TextBlock x:Name="FogDigitsGlow" HorizontalAlignment="Center"
+                           Text="{Binding #FogDigits.Text}"
+                           FontSize="{Binding #FogDigits.FontSize}"
+                           FontFamily="{DynamicResource Font.Mono}"
+                           FontWeight="Bold" Foreground="#E0B052" Opacity="0.42"
+                           FontFeatures="tnum"
+                           IsHitTestVisible="False">
+                    <TextBlock.Effect>
+                        <BlurEffect Radius="16"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+
+                <TextBlock x:Name="FogDigits" HorizontalAlignment="Center"
+                           FontSize="56" FontWeight="Bold"
+                           FontFamily="{DynamicResource Font.Mono}"
+                           Foreground="#E0B052"
+                           FontFeatures="tnum"/>
+            </Grid>
+
+            <!-- The ornament: one gold hairline that breathes under the digits. A
+                 Rectangle rather than a Border so nothing about it is layout. -->
+            <Rectangle x:Name="FogHairline" HorizontalAlignment="Center"
+                       Margin="0,20,0,0" Width="190" Height="1"
+                       Fill="#E0B052" Opacity="0.30"/>
+
+            <TextBlock x:Name="FogTail" HorizontalAlignment="Center"
+                       Margin="0,22,0,0" FontSize="12" LineHeight="19"
+                       TextAlignment="Center" TextWrapping="Wrap"
+                       Foreground="#8AC9C4D6"/>
+        </StackPanel>
+
+        <!-- The embed's slab. Empty until the spiral state builds one, and invisible
+             rather than shown until that embed has something to paint - see the
+             airspace note at the top of this file.
+
+             THE 32px TOP INSET IS THE HELP CHIP'S AIRSPACE. A native web view paints
+             over every framework element in the window whatever the z-order says, so
+             a "?" drawn on top of a full-bleed embed would simply stop existing the
+             moment the canvas revealed. Reserving a strip the browser is never
+             arranged into is the only way the affordance survives up here, and it
+             costs the map 32px it was not using. The fog and the reveal keep their
+             full bleed: they are the two states with no browser in them, and the chip
+             is not shown in either. -->
+        <Grid x:Name="EmbedHost" IsVisible="False" Margin="0,32,0,0"/>
+
+        <!-- THE SPLASH. Opaque, because its whole job is to be the thing on screen
+             while a browser is being built behind it. Drawn from a spiral the
+             code-behind builds as geometry; the ring, the arm and the three dots
+             are all opacity and rotation. -->
+        <Grid x:Name="SpiralSplash" IsVisible="False" Background="#0A0514">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+
+                <Grid Width="104" Height="104" HorizontalAlignment="Center">
+                    <Ellipse x:Name="SplashHalo" Width="104" Height="104"
+                             Stroke="#E0B052" StrokeThickness="1" Opacity="0.16"/>
+
+                    <!-- WPF's StrokeStartLineCap + StrokeEndLineCap are one property here. -->
+                    <Path x:Name="SplashGlyph" Width="78" Height="78"
+                          Stretch="Uniform" Stroke="#E0B052" StrokeThickness="2.2"
+                          StrokeLineCap="Round" Opacity="0.92"/>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                            Margin="0,26,0,0">
+                    <TextBlock x:Name="SplashLine" FontSize="14"
+                               Foreground="#E0B052" Opacity="0.88"/>
+                    <TextBlock x:Name="SplashDot1" FontSize="14" Foreground="#E0B052"
+                               Opacity="0.15" Text="."/>
+                    <TextBlock x:Name="SplashDot2" FontSize="14" Foreground="#E0B052"
+                               Opacity="0.15" Text="."/>
+                    <TextBlock x:Name="SplashDot3" FontSize="14" Foreground="#E0B052"
+                               Opacity="0.15" Text="."/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- The waiting room. Same chrome as the fuse's corner readout, so a user
+             who has seen the countdown recognises the voice. It gets its own
+             ambient loop - a breathing line over a few drifting motes - because a
+             static panel that says "finding you" reads as a panel that has
+             stopped looking. -->
+        <Border x:Name="WaitingPanel" IsVisible="False"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Padding="26,18" CornerRadius="10"
+                Background="#B00A0514" BorderBrush="#40E0B052" BorderThickness="1">
+            <StackPanel>
+                <Grid HorizontalAlignment="Center">
+                    <TextBlock x:Name="WaitingGlow" HorizontalAlignment="Center"
+                               Text="{Binding #WaitingLine.Text}"
+                               FontSize="16" Foreground="#E0B052" Opacity="0.5"
+                               IsHitTestVisible="False">
+                        <TextBlock.Effect>
+                            <BlurEffect Radius="9"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+
+                    <TextBlock x:Name="WaitingLine" HorizontalAlignment="Center"
+                               FontSize="16" Foreground="#E0B052"/>
+                </Grid>
+
+                <Canvas x:Name="WaitingMotes" Height="34" Width="216"
+                        Margin="0,10,0,0" HorizontalAlignment="Center"
+                        IsHitTestVisible="False" ClipToBounds="True"/>
+            </StackPanel>
+        </Border>
+
+        <!-- THE "?" - what the Spiral actually is, for the people who walked in here
+             and found a map with no legend. Its CONTENT is the app's ordinary help
+             popover (Controls.HelpPopover, attached in code-behind), so it behaves
+             exactly like every other "?" in the app.
+
+             ITS SKIN IS NOT THE APP'S, AND THAT IS THE FILE'S LAW, NOT A PREFERENCE.
+             HelpButtonStyle is an 18px circle that hovers to the theme's hot accent,
+             which is the mod accent, which this room may never wear (see the header,
+             and SpiralRoomTests.TheFogEraWearsTheFusesOwnGoldAndNeverTheModAccent,
+             which pins it by refusing this file ANY resource lookup that is not a
+             font). So the chip is templated here in the fuse's own literal gold. Same
+             shape, same size, same cursor, same meaning; the room's colour.
+
+             DECLARED LAST so it is topmost over the splash and the waiting panel, and
+             it lives in the 32px EmbedHost reserves at the top so the browser cannot
+             paint it away. Hidden by default: the code-behind shows it only in the
+             two states that are actually a room you are being asked to understand,
+             and never over the fog or the reveal, where there is nothing to click by
+             design.
+
+             WPF's ControlTemplate.Triggers becomes a Style selector into the template:
+             same two setters, same trigger. No ToolTip on purpose - the popover and a
+             ToolTip must never both render off the same button. -->
+        <Button x:Name="BtnSpiralHelp" IsVisible="False"
+                HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,8,14,0" Width="18" Height="18" Padding="0"
+                Background="Transparent" Cursor="Help">
+            <Button.Styles>
+                <Style Selector="Button:pointerover /template/ Border#chip">
+                    <Setter Property="Background" Value="#22E0B052"/>
+                    <Setter Property="BorderBrush" Value="#99E0B052"/>
+                </Style>
+            </Button.Styles>
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="chip" Width="18" Height="18" CornerRadius="9"
+                            Background="#00E0B052" BorderBrush="#4DE0B052" BorderThickness="1">
+                        <TextBlock Text="?" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="#B8E0B052" Margin="0,-1,0,0"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
+    </Grid>
+</UserControl>
