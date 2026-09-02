@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Platform-agnostic engine library. Targets plain net8.0 ON PURPOSE: the target framework
+    itself is the architecture test. A net8.0 assembly physically cannot reference
+    System.Windows.*, so any WPF/WinForms/Win32 leak into Core becomes a compile error rather
+    than a code-review question. Do not add -windows, UseWPF, UseWindowsForms, or a
+    RuntimeIdentifier here.
+
+    CA1416 is deliberately NOT suppressed (the app suppresses it) and is escalated to an ERROR
+    below. Core is precisely where a Windows-only API call must not compile.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <!-- Match the app: it does not use implicit usings. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- Must stay ConditioningControlPanel: it is the prefix of every generated resource
+         logical name, so hardcoded strings like "ConditioningControlPanel.assets.knowledge.json"
+         keep naming the same thing once a resource moves here.
+         It does NOT make a moved resource *reachable*. Lookups go through
+         Assembly.GetExecutingAssembly() (e.g. Services/AIService/Enrichment/KnowledgeService.cs),
+         which returns whichever assembly the calling code was compiled into. Move such a caller
+         here without also moving its <EmbeddedResource> and the stream comes back null at
+         runtime, with no compile error. Move both, or neither. -->
+    <RootNamespace>ConditioningControlPanel</RootNamespace>
+    <AssemblyName>CCP.Core</AssemblyName>
+    <!-- Keep in step with ConditioningControlPanel.csproj <Version>. Without it the dll
+         ships stamped 0.0.0.0, which makes a crash-log assembly version useless. -->
+    <Version>6.9.0</Version>
+    <!-- Deliberately NOT matching the app, which sets this false and hand-writes
+         Properties/AssemblyInfo.cs. That switch turns off the whole GenerateAssemblyInfo
+         target, so the app's own <Version> never reaches its dll - measured, it loads as
+         0.0.0.0 despite the "auto-generated" comment in its AssemblyInfo.cs. Core keeps
+         generation ON so <Version> above is really stamped; AssemblyInfo.cs here declares
+         only InternalsVisibleTo, so there is nothing for the generated file to collide with. -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- CA1416 (platform compatibility) is an ERROR here. The app <NoWarn>s it because it is
+         deliberately Windows-only; Core is the opposite case, and a warning would be lost
+         among the app's ~342 pre-existing ones. Registry/DPAPI/Console.Beep must not compile. -->
+    <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+  </ItemGroup>
+
+  <!--
+    LIMIT: only non-XAML types are a pure `git mv` into here.
+
+    Every one of the app's 265 `xmlns:x="clr-namespace:ConditioningControlPanel..."`
+    declarations (147 .xaml files, 14 distinct namespaces) is written WITHOUT an
+    `;assembly=` part - verified, not one carries it. A bare clr-namespace resolves in the
+    assembly that is compiling the XAML, i.e. ConditioningControlPanel. So the moment a type
+    that XAML names - a converter, an `x:Type` key, an enum bound in markup, a UserControl -
+    lands in CCP.Core, that markup fails to compile with MC3074 ("the tag does not exist in
+    XML namespace") until every xmlns pointing at its namespace is rewritten to
+    `clr-namespace:...;assembly=CCP.Core`.
+
+    That rewrite is per-namespace and repo-wide, so it has to be its own reviewed change.
+    Until then: move types no XAML references. Grep the .xaml before moving anything.
+  -->
+
+</Project>
