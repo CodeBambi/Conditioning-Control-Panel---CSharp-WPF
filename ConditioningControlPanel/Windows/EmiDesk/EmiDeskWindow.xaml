@@ -116,7 +116,7 @@
 
             <!-- THE THING SHE IS HOLDING (idle beat). One plate at her right hand - a phone, a
                  clipboard, a punch card - shown for a couple of seconds by a fidget and taken
-                 straight back off. See Services/EmiDesk/EmiProps.cs for the anchor, the sizes and
+                 straight back off. See CCP.Core/Services/EmiDesk/EmiProps.cs for the anchor, the sizes and
                  why the plates are drawn from BEHIND.
 
                  IT DRAWS OVER THE GARMENT, and that is not a breach of THE SKIN LAW. The law says

@@ -242,7 +242,7 @@ alone is the economy, and `selftest-hud` pins it against the old flat 12%.
 ## Phases & task list
 
 ### Phase 0 — Contracts (Fable, before any agent)
-- [ ] `Services/GoonGame/GoonContracts.cs`: envelopes, enums, tick/payload/round schemas,
+- [ ] `../../CCP.Core/Services/GoonGame/GoonContracts.cs`: envelopes, enums, tick/payload/round schemas,
       banned-verb list, tuning consts. Agents extend via new members only, noted here.
 
 ### Phase A — Transport (Agent A)
