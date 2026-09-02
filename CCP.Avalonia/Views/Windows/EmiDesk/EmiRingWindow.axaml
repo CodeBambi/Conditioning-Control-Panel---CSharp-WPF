@@ -1,0 +1,63 @@
+<!-- PORTED from ConditioningControlPanel/Windows/EmiDesk/EmiRingWindow.xaml.
+     Every property preserved; the deviations below are all forced.
+
+       WindowStyle="None" + AllowsTransparency="True"  -> SystemDecorations="None" +
+                                                          TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                           -> CanResize="False"
+       SizeToContent="Manual"                          -> dropped; Manual IS Avalonia's default
+       WindowStartupLocation="Manual"                  -> dropped; the code sets Position, and
+                                                          Manual is Avalonia's default too
+       SnapsToDevicePixels="True"                      -> dropped; Avalonia has UseLayoutRounding
+                                                          only, which is kept
+       WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, set from   -> ShowInTaskbar="False" +
+       the code-behind on SourceInitialized               ShowActivated="False", declared here
+       SetWindowPos(HWND_TOPMOST)                      -> Topmost="True" (Avalonia maps it to
+                                                          _NET_WM_STATE_ABOVE on X11)
+
+     The Canvas keeps NO Background, which is the one place "{x:Null} becomes Transparent" would be
+     wrong: null means not hit-testable in Avalonia exactly as it does in WPF, and the comment
+     below is entirely about the gaps in the fan staying clickable.
+
+     The 600x400 size is the WPF original's; Layout() replaces it with the fan's own bounding box
+     before the window is ever shown. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiRingWindow"
+        Title="EMI ring"
+
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        CanResize="False"
+        UseLayoutRounding="True"
+        Topmost="True"
+        Focusable="False"
+        Width="600" Height="400">
+
+    <!--
+        THE RING.
+
+        NO IsVisible="False" HERE (the book's lesson - see EmiBookWindow.xaml). This window is
+        built by EnsureRing and shown by OpenRing in the SAME dispatcher turn, so a XAML hide is
+        queued against a window that does not exist yet and lands after Show: the window goes
+        invisible while IsOpen and IsVisible keep reading true. That was the whole of "I gotta
+        click 2 or 3 times for the wheel to pop up" - the first open was real but invisible, and
+        the next click went to the global close hook and folded it. A Window is not visible until
+        Show() runs anyway, so the property simply goes.
+
+        A SIBLING window, not a layer inside EmiDeskWindow: the widget carries only 120 DIPs of pad
+        around her silhouette, and a full fan at a 420 DIP body needs far more than that. This
+        window is sized to the WORK AREA of the monitor she is standing on, so a card can be
+        clamped anywhere on that screen without a second resize, and it is parked with the same
+        physical-pixels-over-DPI arithmetic the widget uses (SEAMS.md: BodyScreenRect and
+        RingAnchorScreenPoint are PHYSICAL PIXELS, never DIPs).
+
+        Nothing in here is hit-testable except the cards themselves - on Windows, where a layered
+        window does not hit-test fully transparent pixels. On X11 a window hit-tests its whole
+        rectangle whatever its alpha, so the gaps in the fan are NOT click-through on this head
+        yet; see the ponytail note about X11Overlay in the code-behind.
+    -->
+    <Canvas x:Name="Field" ClipToBounds="False"/>
+</Window>
