@@ -1,0 +1,80 @@
+<!-- PORTED from ConditioningControlPanel/Windows/BubbleCountWindow.xaml.
+     Structure, ordering, spacing, x:Name-s and every resource key preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       WindowStyle="None"                -> SystemDecorations="None"
+       AllowsTransparency="False"        -> nothing; the window is opaque black either way
+       ResizeMode="NoResize"             -> CanResize="False"
+       Visibility="Collapsed"            -> IsVisible="False"
+       FontFamily="Comic Sans MS, Segoe UI" -> dropped; both are Windows faces and this head has
+                                            no fallback for either. Same call every prior port made.
+       DropShadowEffect ShadowDepth="0"  -> OffsetX="0" OffsetY="0"; Avalonia's DropShadowEffect
+                                            takes offsets, it has no ShadowDepth/Direction pair.
+
+     VideoContainer stays an EMPTY black Grid exactly as in WPF: the video surface (a LibVLC
+     VideoView, or a WebView2-backed BrowserVideoSurface in browser mode) is added to it from
+     code-behind at Opened, never declared here. See the code-behind for what each became. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.BubbleCountWindow"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        Title="{loc:Str dialog_bubble_count_challenge}"
+        SystemDecorations="None"
+        Background="Black"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        CanResize="False">
+
+    <Grid x:Name="MainGrid">
+        <!-- Video Player Container - video surface added programmatically -->
+        <!-- Bubbles are now separate windows to avoid blocking LibVLC rendering -->
+        <Grid x:Name="VideoContainer" Background="Black"/>
+
+        <!-- Top Info Bar -->
+        <Border Background="#80000000"
+                VerticalAlignment="Top"
+                Padding="20,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="{loc:Str label_count_the_bubbles}"
+                           FontSize="32"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource PinkBrush}">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <!-- No {loc:Str label_medium_2} here, unlike the WPF original. The WPF ctor
+                     immediately overwrites that binding with $" ({difficulty})", so the key was
+                     only ever a design-time default - and on Avalonia a {loc:Str} binding SURVIVES
+                     under a local value (CLAUDE.md), so a language change would snap Easy/Hard back
+                     to " (Medium)". Set from code-behind instead, the same string WPF produces. -->
+                <TextBlock x:Name="TxtDifficulty"
+                           FontSize="22"
+                           Foreground="{DynamicResource PinkBrush}"
+                           VerticalAlignment="Center"
+                           Margin="10,0,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Strict Mode Indicator -->
+        <TextBlock x:Name="TxtStrict"
+                   Text="{loc:Str label_strict}"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   Foreground="#FF6B6B"
+                   VerticalAlignment="Top"
+                   HorizontalAlignment="Right"
+                   Margin="0,15,20,0"
+                   IsVisible="False"/>
+
+        <!-- ESC Hint -->
+        <TextBlock x:Name="TxtEscHint"
+                   Text="{loc:Str label_press_esc_to_skip_won_t_earn_xp}"
+                   FontSize="16"
+                   Foreground="{DynamicResource TextMutedBrush}"
+                   VerticalAlignment="Bottom"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,20"/>
+    </Grid>
+</Window>
