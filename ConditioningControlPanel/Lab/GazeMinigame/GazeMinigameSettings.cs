@@ -129,7 +129,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
         public const string FileName = "gaze-minigame-settings.json";
 
-        private static string FilePath => Path.Combine(App.UserDataPath, FileName);
+        private static string FilePath => Path.Combine(CorePaths.UserData, FileName);
 
         public static GazeMinigameSettings Load()
         {
@@ -152,7 +152,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             try
             {
                 Clamp();
-                Directory.CreateDirectory(App.UserDataPath);
+                Directory.CreateDirectory(CorePaths.UserData);
                 File.WriteAllText(FilePath, JsonConvert.SerializeObject(this, Formatting.Indented));
             }
             catch (Exception ex)

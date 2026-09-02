@@ -16,7 +16,7 @@ namespace ConditioningControlPanel.Services.Content
     /// (<c>7f3a…c1</c> → <c>7f3a…c1.mp4</c>) so an affected install fixes itself.
     ///
     /// Rules it will not break:
-    ///   * Runs ONCE ever, gated on a marker file under <c>App.UserDataPath</c> (a settings
+    ///   * Runs ONCE ever, gated on a marker file under <c>CorePaths.UserData</c> (a settings
     ///     property was deliberately avoided — see the field remarks).
     ///   * Never overwrites: a taken target name gets <c>_1</c>, <c>_2</c>… appended.
     ///   * Never throws. Asset loading must not be able to fail because of a repair.
@@ -49,7 +49,7 @@ namespace ConditioningControlPanel.Services.Content
         /// the marker has been written.</summary>
         private static int _started;
 
-        private static string MarkerPath => Path.Combine(App.UserDataPath, MarkerFileName);
+        private static string MarkerPath => Path.Combine(CorePaths.UserData, MarkerFileName);
 
         /// <summary>True when the repair has already been done on this install.</summary>
         private static bool AlreadyDone()
@@ -76,11 +76,11 @@ namespace ConditioningControlPanel.Services.Content
                     int renamed = 0;
                     try
                     {
-                        renamed = Run(App.EffectiveAssetsPath);
+                        renamed = Run(CorePaths.EffectiveAssets);
                     }
                     catch (Exception ex)
                     {
-                        // Can only happen if App.EffectiveAssetsPath itself threw — Run is
+                        // Can only happen if CorePaths.EffectiveAssets itself threw — Run is
                         // already total. Swallowed on purpose: the Assets tab is mid-load.
                         App.Logger?.Warning("AssetExtensionRepair: pass failed: {Error}", ex.Message);
                     }
@@ -283,7 +283,7 @@ namespace ConditioningControlPanel.Services.Content
         {
             try
             {
-                Directory.CreateDirectory(App.UserDataPath);
+                Directory.CreateDirectory(CorePaths.UserData);
                 File.WriteAllText(MarkerPath,
                     "Assets extension repair completed " + DateTime.UtcNow.ToString("o") + Environment.NewLine +
                     "Delete this file to let the one-time repair pass run again." + Environment.NewLine);

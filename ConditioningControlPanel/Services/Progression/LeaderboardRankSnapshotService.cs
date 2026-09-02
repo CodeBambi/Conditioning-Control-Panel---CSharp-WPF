@@ -37,7 +37,7 @@ public static class LeaderboardRankSnapshotService
     private static SnapshotFile? _cache;
     private static bool _loaded;
 
-    private static string FilePath => Path.Combine(App.UserDataPath, "leaderboard_ranks.json");
+    private static string FilePath => Path.Combine(CorePaths.UserData, "leaderboard_ranks.json");
 
     // ---------- public API ----------
 
@@ -233,7 +233,7 @@ public static class LeaderboardRankSnapshotService
 
         try
         {
-            Directory.CreateDirectory(App.UserDataPath);
+            Directory.CreateDirectory(CorePaths.UserData);
             File.WriteAllText(temp, JsonConvert.SerializeObject(file, Formatting.Indented));
             File.Move(temp, path, overwrite: true);
             return true;

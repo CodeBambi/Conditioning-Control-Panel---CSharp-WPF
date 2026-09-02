@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 namespace ConditioningControlPanel.Services.Chaos;
 
 /// <summary>
-/// Enumerates the user's active preset (App.EffectiveAssetsPath images/ + videos/) into the
+/// Enumerates the user's active preset (CorePaths.EffectiveAssets images/ + videos/) into the
 /// manifest the DtRH browser game consumes over the bridge (hostMedia.js). Entries become
 /// https://ccp.assets/ URLs; the page never sees a disk path.
 ///
@@ -56,7 +56,7 @@ internal static class DtrhAssetManifest
         var m = new Manifest();
         try
         {
-            var root = App.EffectiveAssetsPath;
+            var root = CorePaths.EffectiveAssets;
             foreach (var it in Scan(root, BuildDisabledSet()))
             {
                 if (it.Skipped) { m.Skipped++; continue; }
@@ -109,7 +109,7 @@ internal static class DtrhAssetManifest
         HashSet<string> disabled;
         try
         {
-            root = App.EffectiveAssetsPath;
+            root = CorePaths.EffectiveAssets;
             disabled = BuildDisabledSet();
         }
         catch (Exception ex)
@@ -257,7 +257,7 @@ internal static class DtrhAssetManifest
 
     private sealed record RemoteEntry(string Id, string Url, bool IsImage, long AtUnix);
 
-    private static string RemoteCachePath => Path.Combine(App.UserDataPath, "dtrh_remote_media.json");
+    private static string RemoteCachePath => Path.Combine(CorePaths.UserData, "dtrh_remote_media.json");
 
     /// <summary>
     /// Append the cached remote pool to <paramref name="m"/> and top the cache up in the
@@ -439,7 +439,7 @@ internal static class DtrhAssetManifest
             var arr = new JArray();
             foreach (var e in _remoteCache ?? new List<RemoteEntry>())
                 arr.Add(new JObject { ["id"] = e.Id, ["url"] = e.Url, ["image"] = e.IsImage, ["at"] = e.AtUnix });
-            Directory.CreateDirectory(App.UserDataPath);
+            Directory.CreateDirectory(CorePaths.UserData);
             File.WriteAllText(RemoteCachePath,
                 new JObject { ["entries"] = arr }.ToString(Newtonsoft.Json.Formatting.None));
         }
