@@ -1,0 +1,114 @@
+<!-- PORTED from ConditioningControlPanel/Features/SplitFeatureCard.xaml.
+     Structure, order, spacing, every x:Name and every resource key preserved. Deviations, all forced:
+
+       Visibility="Collapsed"          -> IsVisible="False"
+       RenderTransformOrigin           -> percentages (Avalonia reads a bare number as pixels)
+       ShadowDepth="0"                 -> OffsetX="0" OffsetY="0"
+       RenderOptions.BitmapScalingMode -> RenderOptions.BitmapInterpolationMode
+       ScaleTransform x:Name           -> built in the code-behind (not reachable via FindControl)
+       MouseLeftButtonUp / MouseRightButtonUp / MouseMove / SizeChanged -> wired in the constructor
+       Hover rim-light DoubleAnimation -> a DoubleTransition on RimLight.Opacity
+
+     DIAGONAL SPLIT TILE: one mosaic cell, TWO features. Half A owns the TOP-LEFT triangle,
+     half B the BOTTOM-RIGHT, split on the "/" diagonal. Hovering a half sweeps the seam across
+     the card until that half fills the square bar a corner peek for the other one. Every
+     size-dependent geometry (clips, washes, scrims, seam, rings, hit test) is a function of
+     SplitProgress in the code-behind, rebuilt on SizeChanged and on every frame of the sweep. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.SplitFeatureCard"
+             Cursor="Hand">
+
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource ElevatedSurfaceBrush}"
+            BorderBrush="{DynamicResource GlassBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            ClipToBounds="True"
+            Margin="6"
+            RenderTransformOrigin="50%,50%">
+        <Border.Effect>
+            <DropShadowEffect Color="{DynamicResource FxGlowColor}"
+                              BlurRadius="18"
+                              OffsetX="0" OffsetY="0"
+                              Opacity="0"/>
+        </Border.Effect>
+
+        <Grid x:Name="ContentRoot">
+            <!-- The two art halves. Full-bleed brushes, polygon-clipped in code. -->
+            <Border x:Name="HalfHostA" CornerRadius="11"
+                    RenderOptions.BitmapInterpolationMode="HighQuality"/>
+            <Border x:Name="HalfHostB" CornerRadius="11"
+                    RenderOptions.BitmapInterpolationMode="HighQuality"/>
+
+            <!-- Per-half hover wash: opacity flips on pointer move, geometry rides the seam. -->
+            <Path x:Name="HoverWashA" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
+            <Path x:Name="HoverWashB" Fill="#14FFFFFF" Opacity="0" IsHitTestVisible="False"/>
+
+            <!-- Peek scrim: the receding half's surviving corner wedge is darkened as the fill
+                 runs, so the filled half reads as a card laid ON TOP. -->
+            <Path x:Name="PeekScrimA" Fill="Black" Opacity="0" IsHitTestVisible="False"/>
+            <Path x:Name="PeekScrimB" Fill="Black" Opacity="0" IsHitTestVisible="False"/>
+
+            <!-- The seam. Stroke is the FULL-fill white; the code-behind parks its Opacity at
+                 SeamRestOpacity so the resting seam renders as the ~#66 hair line. -->
+            <Path x:Name="SeamLine" Stroke="#B3FFFFFF" StrokeThickness="1.2"
+                  Opacity="0.6" IsHitTestVisible="False"/>
+
+            <!-- Per-half active rings: polygon outlines in the mod glow colour. -->
+            <Path x:Name="ActiveRingA" Stroke="{DynamicResource FxGlowBrush}"
+                  StrokeThickness="3" Fill="#12FF69B4"
+                  IsVisible="False" IsHitTestVisible="False"/>
+            <Path x:Name="ActiveRingB" Stroke="{DynamicResource FxGlowBrush}"
+                  StrokeThickness="3" Fill="#12FF69B4"
+                  IsVisible="False" IsHitTestVisible="False"/>
+
+            <!-- Half titles: A pinned to its top-left corner, B to its bottom-right, each on a
+                 dark pill. TextTrimming, not wrapping: a pill in a triangle's corner has one
+                 line of room. Each pill render-scales up when its half fills the card, anchored
+                 to its own corner. -->
+            <Border x:Name="TitlePillA"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="8,8,0,0" CornerRadius="7" Background="#B01A1A2E"
+                    Padding="7,2,8,3" IsHitTestVisible="False"
+                    RenderTransformOrigin="0%,0%">
+                <Border.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.26" Easing="QuadraticEaseOut"/>
+                    </Transitions>
+                </Border.Transitions>
+                <TextBlock x:Name="TxtTitleA" Text="A" Foreground="White"
+                           TextTrimming="CharacterEllipsis"
+                           FontSize="11" FontWeight="SemiBold"/>
+            </Border>
+            <Border x:Name="TitlePillB"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,8,8" CornerRadius="7" Background="#B01A1A2E"
+                    Padding="7,2,8,3" IsHitTestVisible="False"
+                    RenderTransformOrigin="100%,100%">
+                <Border.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.26" Easing="QuadraticEaseOut"/>
+                    </Transitions>
+                </Border.Transitions>
+                <TextBlock x:Name="TxtTitleB" Text="B" Foreground="White"
+                           TextTrimming="CharacterEllipsis"
+                           FontSize="11" FontWeight="SemiBold"/>
+            </Border>
+
+            <!-- Hover rim-light, same register as FeatureCard's. -->
+            <Border x:Name="RimLight"
+                    BorderBrush="{DynamicResource FxGlowBrush}"
+                    BorderThickness="1.5"
+                    CornerRadius="12"
+                    IsHitTestVisible="False"
+                    Opacity="0">
+                <Border.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="QuadraticEaseOut"/>
+                    </Transitions>
+                </Border.Transitions>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

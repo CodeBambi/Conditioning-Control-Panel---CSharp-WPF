@@ -1,0 +1,164 @@
+<!-- PORTED from ConditioningControlPanel/Features/FeatureCard.xaml.
+     Structure, order, spacing, every x:Name and every resource key preserved. Deviations, all forced:
+
+       Visibility="Collapsed"          -> IsVisible="False"
+       Panel.ZIndex                    -> ZIndex
+       RenderTransformOrigin="0.5,0.5" -> "50%,50%" (Avalonia reads a bare number as pixels)
+       ShadowDepth="0"                 -> OffsetX="0" OffsetY="0"
+       RenderOptions.BitmapScalingMode -> RenderOptions.BitmapInterpolationMode
+       LinearGradientBrush points      -> percentages
+       Style="{DynamicResource X}"     -> Theme="{StaticResource X}"
+       Image of an emoji via EmojiToImageSource -> a plain TextBlock (Avalonia draws colour emoji)
+       MouseLeftButtonUp / MouseRightButtonUp / SizeChanged -> wired in the constructor
+       Hover rim-light DoubleAnimation -> a DoubleTransition on RimLight.Opacity (below) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.FeatureCard"
+             Cursor="Hand">
+
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource ElevatedSurfaceBrush}"
+            BorderBrush="{DynamicResource GlassBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            ClipToBounds="True"
+            Margin="6"
+            RenderTransformOrigin="50%,50%">
+        <!-- RootScale (hover lift) is built in the code-behind: a transform's x:Name is not
+             reachable through FindControl. -->
+        <!-- The card's glow. Colour comes from FxTheme (FxGlowColor is rewritten on every mod
+             switch) rather than PinkColor, so an active tile is the mod's colour, not Bambi's.
+             Opacity is driven entirely from code (ApplyActiveState / StartActiveBreath). -->
+        <Border.Effect>
+            <DropShadowEffect
+                              Color="{DynamicResource FxGlowColor}"
+                              BlurRadius="18"
+                              OffsetX="0" OffsetY="0"
+                              Opacity="0"/>
+        </Border.Effect>
+
+        <Grid x:Name="ContentRoot">
+            <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius) -->
+            <Border x:Name="ImgIconHost" CornerRadius="11"
+                    RenderOptions.BitmapInterpolationMode="HighQuality"/>
+
+            <!-- Glyph fallback (for cards without an image) -->
+            <Border x:Name="GlyphHost"
+                    Width="68" Height="68"
+                    CornerRadius="34"
+                    Background="{DynamicResource TransparentPinkBrush}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsVisible="False">
+                <TextBlock x:Name="TxtGlyph"
+                           FontSize="32"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource PinkBrush}"/>
+            </Border>
+
+            <!-- TEASE VEIL. Shown only when TeaseTier > 0 (see ApplyTeaseState): the art below
+                 is blurred out and this scrim + "?" is what the card actually says. Static. -->
+            <Grid x:Name="TeaseHost" IsVisible="False" IsHitTestVisible="False">
+                <Border CornerRadius="11" Background="#59000000"/>
+                <TextBlock x:Name="TxtTeaseGlyph"
+                           Text="?"
+                           FontSize="46" FontWeight="Bold"
+                           Margin="0,0,0,16"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="White" Opacity="0.9"/>
+            </Grid>
+
+            <!-- Bottom gradient + title overlay -->
+            <Border CornerRadius="0,0,11,11"
+                    VerticalAlignment="Bottom"
+                    IsHitTestVisible="False">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="Transparent" Offset="0"/>
+                        <GradientStop Color="#60000000" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <TextBlock x:Name="TxtTitle"
+                           Text="Feature"
+                           Margin="8,14,8,8"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           Foreground="White"
+                           FontSize="12"
+                           FontWeight="SemiBold"/>
+            </Border>
+
+            <!-- Hover rim-light. A separate 1.5px ring rather than a brush swap on RootBorder.
+                 Opacity-only, 150ms. -->
+            <Border x:Name="RimLight"
+                    BorderBrush="{DynamicResource FxGlowBrush}"
+                    BorderThickness="1.5"
+                    CornerRadius="12"
+                    IsHitTestVisible="False"
+                    Opacity="0">
+                <Border.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="QuadraticEaseOut"/>
+                    </Transitions>
+                </Border.Transitions>
+            </Border>
+
+            <!-- Active overlay: mod-tinted ring when the underlying feature is enabled.
+                 Right-click a card to toggle the feature on/off. Breathes with the glow. -->
+            <Border x:Name="ActiveBorder"
+                    BorderBrush="{DynamicResource FxGlowBrush}"
+                    BorderThickness="3.5"
+                    CornerRadius="12"
+                    IsHitTestVisible="False"
+                    IsVisible="False"/>
+
+            <!-- Locked overlay -->
+            <Border x:Name="LockedOverlay"
+                    Background="#C0000000"
+                    CornerRadius="12"
+                    IsVisible="False">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🔒" FontSize="26" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtLockLabel"
+                               Text="Lvl 10"
+                               Margin="0,4,0,0"
+                               HorizontalAlignment="Center"
+                               Foreground="White"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Tier badge (top-left). A price tag, NOT the LockedOverlay veil above: the art
+                 stays bright and the badge names the price. IsHitTestVisible=False on purpose,
+                 so a locked click still lands on the real handler. -->
+            <Border x:Name="TierBadgeHost"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="8,8,0,0" Padding="6,2,7,3"
+                    CornerRadius="7"
+                    Background="#D91A1A2E"
+                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="1"
+                    IsHitTestVisible="False"
+                    ZIndex="11"
+                    IsVisible="False">
+                <TextBlock x:Name="TxtTierBadge"
+                           Text="TIER 1"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="9"
+                           FontWeight="Bold"/>
+            </Border>
+
+            <!-- Help icon overlay (top-right corner) -->
+            <Button x:Name="BtnHelp"
+                    Theme="{StaticResource HelpButtonStyle}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,8,8,0"
+                    ZIndex="10"
+                    IsVisible="False"/>
+        </Grid>
+    </Border>
+</UserControl>
