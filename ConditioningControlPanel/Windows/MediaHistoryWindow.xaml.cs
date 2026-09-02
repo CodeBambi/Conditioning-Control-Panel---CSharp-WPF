@@ -178,7 +178,7 @@ namespace ConditioningControlPanel
             StopPreview();
             PreviewHint.Visibility = Visibility.Collapsed;
             PreviewName.Text = row.DisplayName;
-            PreviewPath.Text = row.Entry.FilePath;
+            PreviewPath.Text = DisplayPath(row.Entry.FilePath);
 
             bool exists = row.FileExists;
             BtnPreviewOpenFolder.IsEnabled = exists;
@@ -314,6 +314,17 @@ namespace ConditioningControlPanel
         {
             // Helper handles the missing-file fallback to the containing folder (#998).
             Helpers.ExplorerLauncher.RevealInExplorer(path);
+        }
+
+        /// <summary>
+        /// Paths reach the log from a mix of sources, so a stored path can carry forward slashes
+        /// from whichever one wrote it and read back as "D:/Assets/images\personal\x.gif" (#1108).
+        /// Display only - the stored path is left alone.
+        /// </summary>
+        private static string DisplayPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            return path.Replace('/', '\\');
         }
 
         // ---- Chrome -------------------------------------------------------

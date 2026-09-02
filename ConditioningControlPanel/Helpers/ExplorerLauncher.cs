@@ -8,16 +8,25 @@ namespace ConditioningControlPanel.Helpers
     /// Opens Windows Explorer on a file or folder.
     ///
     /// <para>Every "Reveal in Explorer" / "Open folder" button in the app used to hand-roll
-    /// <c>Process.Start("explorer.exe", $"/select,\"{path}\"")</c>. Building the command line as a
-    /// single pre-quoted string is fragile: the embedded quotes are re-parsed by the CRT before
-    /// explorer ever sees them, and on a mismatch explorer silently falls back to opening the
-    /// default folder (the desktop) instead of reporting an error - so the button looked like it
-    /// did nothing useful (ccp-bugs #998, media on D: while the app runs from C:).</para>
+    /// <c>Process.Start("explorer.exe", $"/select,\"{path}\"")</c>, and on a mismatch explorer
+    /// silently falls back to opening a default folder instead of reporting an error - so the
+    /// button looked like it did nothing useful (ccp-bugs #998, media on D: while the app runs
+    /// from C:).</para>
     ///
-    /// <para><see cref="ProcessStartInfo.ArgumentList"/> hands the argument over as a single
-    /// pre-tokenized element and lets the runtime apply the correct Windows quoting rules, so
-    /// spaces and non-ASCII characters survive intact. It requires
-    /// <c>UseShellExecute = false</c>, which is fine - explorer.exe is a plain executable.</para>
+    /// <para>The #998 fix handed <c>/select,&lt;path&gt;</c> to
+    /// <see cref="ProcessStartInfo.ArgumentList"/> as a single token so the runtime would apply the
+    /// correct Windows quoting rules. It does - and that is exactly the bug. ArgumentList wraps a
+    /// token in double quotes when it contains whitespace, and it wraps the WHOLE token, so a path
+    /// with spaces came out as <c>explorer.exe "/select,D:\Conditioning Control Panel\..."</c> with
+    /// the switch trapped inside the quotes. Explorer reads that as one nonsense location and falls
+    /// back to Documents. Paths without spaces are never quoted, which is why the button kept
+    /// working for most people and on the dev's machine, and why #998 looked fixed (ccp-bugs
+    /// #1108).</para>
+    ///
+    /// <para>So the command line is built by hand: the switch stays OUTSIDE the quotes and only the
+    /// path is quoted, which is the syntax explorer actually expects. Windows filenames cannot
+    /// contain a double quote, so a path carrying one is rejected rather than escaped - escaping it
+    /// could only ever build a command line that points somewhere else.</para>
     /// </summary>
     public static class ExplorerLauncher
     {
@@ -34,13 +43,15 @@ namespace ConditioningControlPanel.Helpers
             {
                 if (File.Exists(path))
                 {
-                    // One argument, not two: explorer expects the switch and the path glued by the
-                    // comma. ArgumentList quotes the whole token for us.
-                    return Launch($"/select,{Path.GetFullPath(path)}");
+                    var arguments = BuildRevealArguments(Path.GetFullPath(path));
+                    return arguments != null && Launch(arguments);
                 }
 
                 if (Directory.Exists(path))
-                    return Launch(Path.GetFullPath(path));
+                {
+                    var arguments = BuildFolderArguments(Path.GetFullPath(path));
+                    return arguments != null && Launch(arguments);
+                }
 
                 // File is gone (deleted / drive detached) - settle for its folder.
                 return OpenFolder(Path.GetDirectoryName(path));
@@ -67,7 +78,9 @@ namespace ConditioningControlPanel.Helpers
                     App.Logger?.Debug("ExplorerLauncher: folder no longer exists: {Dir}", directory);
                     return false;
                 }
-                return Launch(Path.GetFullPath(directory));
+
+                var arguments = BuildFolderArguments(Path.GetFullPath(directory));
+                return arguments != null && Launch(arguments);
             }
             catch (Exception ex)
             {
@@ -76,24 +89,63 @@ namespace ConditioningControlPanel.Helpers
             }
         }
 
-        private static bool Launch(string argument)
+        /// <summary>
+        /// Command line that opens Explorer on <paramref name="fullPath"/>'s folder with the file
+        /// selected. Null if the path cannot be expressed safely on a command line.
+        /// </summary>
+        internal static string? BuildRevealArguments(string fullPath)
+        {
+            if (!IsQuotable(fullPath)) return null;
+            // The switch must stay outside the quotes: explorer parses `/select,` off the front and
+            // treats the rest as the target. Quoting the pair together is what broke #1108.
+            return $"/select,\"{fullPath}\"";
+        }
+
+        /// <summary>
+        /// Command line that opens Explorer on the folder <paramref name="fullPath"/>. Null if the
+        /// path cannot be expressed safely on a command line.
+        /// </summary>
+        internal static string? BuildFolderArguments(string fullPath)
+        {
+            if (!IsQuotable(fullPath)) return null;
+            // No switch here, so the quotes are only there for the spaces.
+            return $"\"{fullPath}\"";
+        }
+
+        /// <summary>
+        /// A double quote cannot appear in a Windows path, so one showing up means the string is
+        /// not a path we can hand to explorer without changing where it points.
+        /// </summary>
+        private static bool IsQuotable(string fullPath)
+        {
+            if (string.IsNullOrWhiteSpace(fullPath)) return false;
+            if (fullPath.IndexOf('"') >= 0)
+            {
+                App.Logger?.Warning("ExplorerLauncher: refusing path containing a quote: {Path}", fullPath);
+                return false;
+            }
+            return true;
+        }
+
+        private static bool Launch(string arguments)
         {
             try
             {
                 var psi = new ProcessStartInfo
                 {
                     FileName = "explorer.exe",
-                    // ArgumentList needs UseShellExecute = false; it is the whole point of this helper.
+                    // Pre-built command line, so Arguments rather than ArgumentList - see the class
+                    // remarks. UseShellExecute = false keeps the string we built verbatim.
+                    Arguments = arguments,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                psi.ArgumentList.Add(argument);
                 Process.Start(psi);
                 return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ExplorerLauncher: explorer.exe failed to start for {Arg}", argument);
+                App.Logger?.Warning(ex, "ExplorerLauncher: explorer.exe failed to start for {Args}", arguments);
                 return false;
             }
         }
