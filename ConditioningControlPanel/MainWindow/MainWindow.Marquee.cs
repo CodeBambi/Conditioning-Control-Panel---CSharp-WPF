@@ -355,7 +355,7 @@ namespace ConditioningControlPanel
                             else
                             {
                                 message =
-                                    "The monthly leaderboard board has rotated, which it does at the start of every month so everyone gets a fresh run at the rankings.\n\n" +
+                                    "The monthly leaderboard has rotated, which it does at the start of every month so everyone gets a fresh run at the rankings.\n\n" +
                                     "That is all that changed. Your level, your XP, your streak and everything you have unlocked carry forward exactly as they were, and they will keep doing that from here on.\n\n" +
                                     "Highest Level Ever: " + highestLevel + "\n\n" +
                                     "Welcome to season " + currentSeason + "!";
