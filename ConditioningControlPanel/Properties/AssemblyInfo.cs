@@ -4,16 +4,13 @@ using System.Runtime.InteropServices;
 using System.Windows;
 
 // Expose internal decision helpers (flash cap, ambient flash duration, vout mid-play state machine,
-// overlay z-order) to the unit-test assembly. GenerateAssemblyInfo is off, so this lives here rather
-// than as an MSBuild <InternalsVisibleTo> item.
+// overlay z-order) to the unit-test assembly.
 [assembly: InternalsVisibleTo("ConditioningControlPanel.Tests")]
 
-[assembly: AssemblyTitle("Conditioning Control Panel")]
-[assembly: AssemblyDescription("A professional visual conditioning application with gamification features.")]
-[assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("CodeBambi")]
-[assembly: AssemblyProduct("Conditioning Control Panel")]
-[assembly: AssemblyCopyright("Copyright © 2024-2025 CodeBambi")]
+// Only attributes the SDK does NOT generate belong here. GenerateAssemblyInfo is ON, so
+// AssemblyTitle/Description/Configuration/Company/Product/Copyright/Version/FileVersion/
+// InformationalVersion all come from the .csproj - declaring any of them here is a
+// CS0579 duplicate-attribute error.
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -23,6 +20,3 @@ using System.Windows;
     ResourceDictionaryLocation.None,
     ResourceDictionaryLocation.SourceAssembly
 )]
-
-// Version is set in .csproj - do not set here to avoid conflicts
-// [assembly: AssemblyVersion] and [assembly: AssemblyFileVersion] are auto-generated
