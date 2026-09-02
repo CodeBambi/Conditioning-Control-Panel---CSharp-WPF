@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="{loc:Str dialog_update_available}"
-        Height="550" Width="520"
+        Height="585" Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -16,6 +16,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
@@ -49,8 +50,17 @@
                 </Grid>
             </Border>
 
+            <!-- Manual download escape hatch, for people who would rather install it themselves -->
+            <TextBlock Grid.Row="3" Margin="0,0,0,14" TextWrapping="Wrap" FontSize="12.5"
+                       Foreground="{DynamicResource TextMutedBrush}">
+                <Hyperlink x:Name="LinkManualDownload" Click="LinkManualDownload_Click"
+                           Foreground="#B084DC" TextDecorations="Underline">
+                    <Run Text="{loc:Str link_update_download_manually}"/>
+                </Hyperlink>
+            </TextBlock>
+
             <!-- Buttons -->
-            <Grid Grid.Row="3">
+            <Grid Grid.Row="4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
