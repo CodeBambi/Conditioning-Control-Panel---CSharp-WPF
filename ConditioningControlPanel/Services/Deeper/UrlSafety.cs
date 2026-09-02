@@ -114,8 +114,12 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (b[0] == 0) return true;
                 // 100.64.0.0/10 (CGNAT)
                 if (b[0] == 100 && (b[1] & 0xC0) == 64) return true;
-                // 224.0.0.0/4 multicast
-                if (b[0] >= 224 && b[0] <= 239) return true;
+                // 224.0.0.0/4 multicast, 240.0.0.0/4 reserved (RFC 1112 class E), and
+                // 255.255.255.255 limited broadcast. The bound used to be `<= 239`, which
+                // covered multicast only and let 240.0.0.0/4 and the broadcast address
+                // through as "public" - reachable from EnhancementFetcher, which resolves
+                // user-supplied URLs. Everything from 224 up is non-routable here.
+                if (b[0] >= 224) return true;
                 return false;
             }
 
