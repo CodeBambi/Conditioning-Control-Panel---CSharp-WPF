@@ -685,8 +685,11 @@
                                                 </StackPanel>
                                             </Button>
 
-                                            <!-- Phase 2: opens the customization kit. Always edits YOUR
-                                                 loadout, even while someone else's card is on screen. -->
+                                            <!-- Phase 2: opens the customization kit, which always edits YOUR
+                                                 loadout. Both this and Privacy below are therefore self-only -
+                                                 SetProfileViewingSelf (MainWindow.ProfileCard.cs) collapses the
+                                                 pair while somebody else's card is on screen, so neither can
+                                                 read as an offer to edit a stranger's profile (bug #1113). -->
                                             <Button x:Name="BtnProfileCustomize" x:FieldModifier="internal"
                                                     Content="{loc:Str profile_btn_customize}"
                                                     Background="#33B478FF" Foreground="#E7DEFF" BorderThickness="0"
