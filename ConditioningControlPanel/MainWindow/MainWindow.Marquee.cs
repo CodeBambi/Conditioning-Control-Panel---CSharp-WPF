@@ -324,25 +324,47 @@ namespace ConditioningControlPanel
                             // No meaningful season data yet (e.g. first reset after this feature
                             // shipped, before any tracking accrued) — fall back to the legacy notice
                             // so the user still understands what happened.
-                            var message =
-                                "The monthly leaderboard season has rotated. This happens at the start of every month so everyone has a fresh chance to climb the rankings.\n\n" +
-                                "What resets:\n" +
-                                "  - Current Level and XP\n" +
-                                "  - Daily quest streak\n" +
-                                "  - Monthly leaderboard position\n" +
-                                "  - Mechanical enhancements (re-buy them to raise your Prestige)\n\n" +
-                                "What's preserved:\n" +
-                                "  - All achievements\n" +
-                                "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
-                                "  - Your sparkle points balance\n" +
-                                "  - Permanent stat enhancements and your Prestige\n" +
-                                "  - Total lifetime XP\n" +
-                                "  - Patreon perks and whitelist\n\n" +
-                                "Welcome to season " + currentSeason + "!";
+                            //
+                            // AND IT HAS TO KNOW WHICH PATH BROUGHT IT HERE. Two things reach this
+                            // dialog and only one of them is a reset: a board rotation (the server's
+                            // season key moved on and nothing of the user's was touched) and an
+                            // explicit server level_reset (an admin acting on one account). The old
+                            // text was one message that enumerated "What resets: Current Level and XP"
+                            // for both, which after the Descent is the single sentence the ceremony
+                            // promised nobody would read again. A rotation now says what actually
+                            // happened; the admin path keeps the honest wipe list.
+                            string message, caption;
+                            if (reallyPending)
+                            {
+                                message =
+                                    "Your season was reset on the server.\n\n" +
+                                    "What resets:\n" +
+                                    "  - Current Level and XP\n" +
+                                    "  - Daily quest streak\n" +
+                                    "  - Monthly leaderboard position\n" +
+                                    "  - Mechanical enhancements (re-buy them to raise your Prestige)\n\n" +
+                                    "What's preserved:\n" +
+                                    "  - All achievements\n" +
+                                    "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
+                                    "  - Your sparkle points balance\n" +
+                                    "  - Permanent stat enhancements and your Prestige\n" +
+                                    "  - Total lifetime XP\n" +
+                                    "  - Patreon perks and whitelist";
+                                caption = "Season Reset";
+                            }
+                            else
+                            {
+                                message =
+                                    "The monthly leaderboard has rotated, which it does at the start of every month so everyone gets a fresh run at the rankings.\n\n" +
+                                    "That is all that changed. Your level, your XP, your streak and everything you have unlocked carry forward exactly as they were, and they will keep doing that from here on.\n\n" +
+                                    "Highest Level Ever: " + highestLevel + "\n\n" +
+                                    "Welcome to season " + currentSeason + "!";
+                                caption = "New Board, Same Progress";
+                            }
 
                             MessageBox.Show(
                                 message,
-                                "New Season Started",
+                                caption,
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Information);
                         }
