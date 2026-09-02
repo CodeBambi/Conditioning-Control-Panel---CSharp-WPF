@@ -1,0 +1,253 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/AvailableSubjectsTabView.xaml.
+     Structure, ordering, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       <Style x:Key TargetType>          ->  <ControlTheme x:Key TargetType>, applied with Theme=
+       ControlTemplate.Triggers          ->  ^:pointerover / ^:disabled nested selectors
+       <ContentPresenter/>               ->  Content="{TemplateBinding Content}" (trap 6: a bare
+                                             presenter draws NOTHING in Avalonia)
+       Content="{loc:Str ...}" on Button ->  a <TextBlock> child (trap 1: "_" is an access key and
+                                             every loc key here is snake_case)
+       Image + EmojiToImageSource        ->  TextBlock (Avalonia renders colour emoji natively)
+       Visibility="Collapsed"            ->  IsVisible="False"
+       BoolToVisibility                  ->  IsVisible="{Binding HasStatusText}" / "{Binding HasTags}"
+       ToolTip="..."                     ->  ToolTip.Tip="..."
+       x:FieldModifier="internal"        ->  dropped; the x:Names are kept and reached with FindControl
+       <Run Text="{Binding Level}"/>     ->  {Binding LevelDisplay}, the int pre-formatted on the row,
+                                             so the "Lv " Run pair needs no converter
+
+     Dropped, each for a reason that is not a shortcut:
+       PreviewMouseWheel on the scroller - it forwarded to MainWindow only to turn a vertical
+         wheel notch into horizontal scrolling. Avalonia's ScrollViewer already scrolls
+         horizontally when it cannot scroll vertically, so there is nothing to undo.
+       PreviewMouseLeftButtonDown/Up + MouseLeave on Connect - MotionFx.PressSquish, which lives
+         in the WPF head. See the code-behind.
+
+     The roster is placeholder data built in the code-behind (App.AvailableSubjects is a WPF-head
+     service): four rows covering every branch the template carries - status text, tags, a claimed
+     row (dimmed + disabled Connect) and a bare one. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AvailableSubjectsTabView"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="800">
+
+    <UserControl.Resources>
+
+        <!-- The CTA's WPF Button.Style, verbatim: purple plate, white text, 8px radius,
+             hover dims the plate to 0.9. -->
+        <ControlTheme x:Key="SubjectsCtaButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" CornerRadius="8"
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Opacity" Value="0.9"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- The card's Connect button. Same plate; disabled repaints it to the muted violet
+             the "Taken" state wears. -->
+        <ControlTheme x:Key="SubjectsConnectButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" CornerRadius="8"
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:disabled /template/ Border#border">
+                <Setter Property="Background" Value="#3A2E5A"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Foreground" Value="White"/>
+            </Style>
+        </ControlTheme>
+
+    </UserControl.Resources>
+
+    <Grid Margin="36,28,36,28" RowDefinitions="Auto,Auto,*">
+
+        <!-- ============================================================ -->
+        <!-- AMBIENT LAYER - the one looping FX on this tab: a very sparse -->
+        <!-- fog drift behind the roster. Declared FIRST so it is the      -->
+        <!-- bottom of the grid's z-order; the cards paint their own opaque-->
+        <!-- surfaces on top, so the mist only reads through the gutters.  -->
+        <!--                                                              -->
+        <!-- Two puffs at low intensity, not the default three: this tab is-->
+        <!-- a roster you scan, and the air behind it must never compete   -->
+        <!-- with a name. The tint comes from FxTheme (the mod's mist      -->
+        <!-- colour), so it follows the active mod instead of being nailed -->
+        <!-- to one hex - see MainWindow.SubjectsFx for why that is not    -->
+        <!-- literally NeonPurple.                                        -->
+        <!--                                                              -->
+        <!-- AmbientFxCanvas is hit-test invisible by construction and runs -->
+        <!-- a self-stopping clock. MainWindow.SubjectsFx starts it and     -->
+        <!-- registers it with RegisterTabFx; on this head the code-behind  -->
+        <!-- starts it with the same tuning and stops it on unload.         -->
+        <!-- ============================================================ -->
+        <fx:AmbientFxCanvas x:Name="SubjectsAmbientFx" Grid.Row="0" Grid.RowSpan="3"/>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,18" ColumnDefinitions="Auto,*,Auto">
+            <TextBlock Grid.Column="0" Text="🛰️" FontSize="30" Width="44"
+                       TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,16,0"/>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="{loc:Str tab_available_subjects}"
+                           Foreground="{DynamicResource NeonPurpleBrush}"
+                           FontSize="26" FontWeight="Bold"/>
+                <TextBlock Text="{loc:Str desc_available_subjects}"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- "Become a subject!" CTA. Free users get the button +
+                 italic subtitle pointing to Patreon; premium users get
+                 the button alone, opening the Remote Control tab. -->
+            <StackPanel Grid.Column="2" VerticalAlignment="Center"
+                        HorizontalAlignment="Right" MaxWidth="260" Margin="16,0,0,0">
+                <Button x:Name="BtnBecomeASubject"
+                        Theme="{StaticResource SubjectsCtaButton}"
+                        Click="BtnBecomeASubject_Click"
+                        ToolTip.Tip="{loc:Str tooltip_become_a_subject}"
+                        FontSize="13" FontWeight="Bold"
+                        Padding="16,9" BorderThickness="0" Cursor="Hand"
+                        HorizontalAlignment="Right">
+                    <TextBlock Text="{loc:Str btn_become_a_subject}"/>
+                </Button>
+                <TextBlock x:Name="TxtBecomeASubjectSubtitle"
+                           Text="{loc:Str desc_become_a_subject_locked}"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="11" FontStyle="Italic"
+                           Margin="0,6,0,0" TextWrapping="Wrap"
+                           TextAlignment="Right"
+                           IsVisible="False"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Empty state (visible iff service.IsEmpty + !HasError) -->
+        <Border Grid.Row="1" x:Name="AvailableSubjectsEmptyPanel"
+                Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource NeonPurpleBrush}" BorderThickness="1"
+                CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
+                IsVisible="False">
+            <TextBlock Text="{loc:Str empty_available_subjects}"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
+        </Border>
+
+        <!-- Error state (visible iff service.HasError) -->
+        <Border Grid.Row="1" x:Name="AvailableSubjectsErrorPanel"
+                Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
+                CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
+                IsVisible="False">
+            <TextBlock Text="{loc:Str error_available_subjects}"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
+        </Border>
+
+        <!-- Side-scrollable horizontal card list. ItemsSource is bound
+             in code-behind to App.AvailableSubjects.Entries. Each card
+             gets a fixed 260px width to keep horizontal scrolling
+             intentional rather than incidental. -->
+        <ScrollViewer Grid.Row="2" x:Name="AvailableSubjectsScroller"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="AvailableSubjectsList">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="tabs:SubjectRow">
+                        <Border Width="260" Margin="0,0,12,4" Opacity="{Binding CardOpacity}"
+                                Background="{DynamicResource SurfaceBgBrush}"
+                                BorderBrush="{DynamicResource NeonPurpleBrush}"
+                                BorderThickness="1" CornerRadius="10" Padding="18,14">
+                            <StackPanel>
+                                <!-- Top row: name + level + tier badge -->
+                                <Grid Margin="0,0,0,8" ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{Binding DisplayName}" Foreground="White"
+                                                   FontSize="15" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,2,0,0">
+                                            <Run Text="Lv "/><Run Text="{Binding LevelDisplay}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Border Grid.Column="1" Background="{DynamicResource NeonPurpleTransparent20Brush}"
+                                            CornerRadius="9999" Padding="8,3" VerticalAlignment="Top">
+                                        <TextBlock Text="{Binding TierLabel}"
+                                                   Foreground="{DynamicResource NeonPurpleBrush}"
+                                                   FontSize="10" FontWeight="Bold"/>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Status text (only when present) -->
+                                <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                                           IsVisible="{Binding HasStatusText}"/>
+
+                                <!-- Tags as pill badges (mirrors cclabs-web /dashboard/subjects) -->
+                                <ItemsControl ItemsSource="{Binding Tags}" Margin="0,0,0,12"
+                                              IsVisible="{Binding HasTags}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border Background="{DynamicResource NeonPurpleTransparent20Brush}"
+                                                    CornerRadius="9999" Padding="7,2" Margin="0,0,5,5">
+                                                <TextBlock Text="{Binding}"
+                                                           Foreground="{DynamicResource NeonPurpleBrush}"
+                                                           FontSize="10" FontWeight="SemiBold"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- Connect button (or Taken disabled) -->
+                                <Button Theme="{StaticResource SubjectsConnectButton}"
+                                        Tag="{Binding UnifiedId}"
+                                        IsEnabled="{Binding IsConnectEnabled}"
+                                        Click="BtnConnectSubject_Click"
+                                        FontSize="13" FontWeight="Bold"
+                                        Padding="0,8" BorderThickness="0" Cursor="Hand"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center">
+                                    <TextBlock Text="{Binding ConnectButtonText}"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
