@@ -1,0 +1,286 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AppSettings/AccountSettingsSection.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"    ->  Theme="{StaticResource X}"
+       Visibility="Collapsed"        ->  IsVisible="False"
+       Content="{loc:Str btn_x}"     ->  a <TextBlock> child (Avalonia parses "_" in Content as an
+                                         access key and every loc key here is snake_case)
+       x:FieldModifier="internal"    ->  dropped; the MainWindow partials that poke these fields
+                                         are not ported. x:Names are kept.
+
+     The tier card is painted by RefreshTierBadge() in the code-behind; on this head it is a stub
+     that leaves the signed-out markup defaults, because App.Patreon / App.IsLoggedIn live in the
+     WPF head. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.AccountSettingsSection">
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_account}" Theme="{StaticResource SectionHeader}"/>
+
+        <!-- Net-new: who you are, and which bar you clear. Painted by RefreshTierBadge(). -->
+        <Border x:Name="AccountTierCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtAccountSectionName"
+                                   Text="{loc:Str account_chip_sign_in}"
+                                   Foreground="{StaticResource SectionHueAccountBrush}"
+                                   FontSize="15" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtAccountSectionTier"
+                                   Text="{loc:Str label_login_to_unlock_exclusive_features}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,2,0,0"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <Border x:Name="AccountTierBadge" Grid.Column="1"
+                            CornerRadius="10" Padding="10,4" IsVisible="False"
+                            Background="{DynamicResource DarkerBgBrush}"
+                            BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1"
+                            VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtAccountTierBadge" Text="🔒"
+                                   Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Brand card: keeps Patreon red, takes the shared edge-bar pattern in that colour. -->
+        <Border x:Name="PatreonLoginCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="#FF424D" BorderThickness="1">
+            <Grid>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#FF424D"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtPatreonStatus" Text="{loc:Str label_not_connected}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtPatreonTier" Text="{loc:Str label_login_to_unlock_exclusive_features}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                    </StackPanel>
+
+                    <Button x:Name="BtnPatreonLogin" Grid.Column="1"
+                            Background="#FF424D" Foreground="White"
+                            BorderThickness="0" Padding="15,8"
+                            FontWeight="Bold" FontSize="12"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            Click="BtnPatreonLogin_Click">
+                        <TextBlock Text="{loc:Str btn_login}"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Border x:Name="SubscribeStarLoginCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="#009E8F" BorderThickness="1">
+            <Grid>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#009E8F"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtSubscribeStarStatus" Text="{loc:Str label_not_connected}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtSubscribeStarTier" Text="{loc:Str label_login_to_unlock_exclusive_features}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                    </StackPanel>
+
+                    <Button x:Name="BtnSubscribeStarLogin" Grid.Column="1"
+                            Background="#009E8F" Foreground="White"
+                            BorderThickness="0" Padding="15,8"
+                            FontWeight="Bold" FontSize="12"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            Click="BtnSubscribeStarLogin_Click">
+                        <TextBlock Text="{loc:Str btn_login}"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <Border x:Name="DiscordLoginCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="#5865F2" BorderThickness="1">
+            <Grid>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="#5865F2"/>
+                <Grid Margin="15,12,15,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock x:Name="TxtDiscordStatus" Text="{loc:Str label_not_connected}" Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtDiscordInfo" Text="{loc:Str label_link_discord_for_community_features}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                    </StackPanel>
+
+                    <Button x:Name="BtnDiscordLogin" Grid.Column="1"
+                            Background="#5865F2" Foreground="White"
+                            BorderThickness="0" Padding="15,8"
+                            FontWeight="Bold" FontSize="12"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            Click="BtnDiscordLogin_Click">
+                        <TextBlock Text="{loc:Str btn_login}"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Starts hidden; MainWindow.Patreon.cs:UpdateAccountLinkingUI owns it on WPF. -->
+        <Border x:Name="AccountLinkingSection" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" IsVisible="False">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str label_link_accounts}"
+                               Foreground="{StaticResource SectionHueAccountBrush}"
+                               FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Text="{loc:Str label_link_both_providers_to_access_your_account_fr}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnLinkPatreon"
+                                Background="#FF424D" Foreground="White"
+                                BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand" IsVisible="False"
+                                Click="BtnLinkPatreon_Click">
+                            <TextBlock Text="{loc:Str btn_link_patreon}"/>
+                        </Button>
+                        <Button x:Name="BtnLinkDiscord"
+                                Background="#5865F2" Foreground="White"
+                                BorderThickness="0" Padding="15,8"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand" IsVisible="False"
+                                Click="BtnLinkDiscord_Click">
+                            <TextBlock Text="{loc:Str btn_link_discord}"/>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Starts hidden; shown only with a cloud identity. -->
+        <Border x:Name="CloudSettingsBackupSection" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" IsVisible="False">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str label_cloud_settings_backup}"
+                               Foreground="{StaticResource SectionHueAccountBrush}"
+                               FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock x:Name="TxtCloudBackupStatus"
+                               Text="{loc:Str label_checking_backup_status}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnBackupSettingsNow"
+                                Background="{DynamicResource SecondaryBrush}" Foreground="White"
+                                BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnBackupSettingsNow_Click">
+                            <TextBlock Text="{loc:Str btn_backup_now}"/>
+                        </Button>
+                        <Button x:Name="BtnRestoreSettings"
+                                Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
+                                BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1" Padding="15,8"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnRestoreSettings_Click">
+                            <TextBlock Text="{loc:Str btn_restore_from_cloud}"/>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border x:Name="DataPrivacySection" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" IsVisible="False">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str label_data_privacy}"
+                               Foreground="{StaticResource SectionHueAccountBrush}"
+                               FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Text="{loc:Str label_export_your_cloud_data_or_view_our_privacy_po}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnExportData"
+                                Background="#555" Foreground="White"
+                                BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnExportData_Click">
+                            <TextBlock Text="{loc:Str btn_export_my_data}"/>
+                        </Button>
+                        <Button x:Name="BtnPrivacyPolicy"
+                                Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                                BorderBrush="#555" BorderThickness="1" Padding="15,8"
+                                FontWeight="Bold" FontSize="12"
+                                Cursor="Hand"
+                                Click="BtnPrivacyPolicy_Click">
+                            <TextBlock Text="{loc:Str btn_privacy_policy}"/>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border x:Name="SupportDevelopmentCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueAccountWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueAccountBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <TextBlock Text="{loc:Str section_support_development}"
+                               Foreground="{StaticResource SectionHueAccountBrush}" FontSize="14" FontWeight="Bold"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,6,0,0">
+                        <Run Text="{loc:Str section_patreon_unlocks}"/> <Run x:Name="RunPatreonFeatures" Text="{loc:Str section_ai_chat_window_awareness_slut_mode_takeover}" Foreground="{DynamicResource TextLightBrush}"/>
+                    </TextBlock>
+                    <Button x:Name="BtnVisitPatreon"
+                            Background="{DynamicResource SecondaryBrush}" Foreground="White"
+                            BorderThickness="0" Padding="15,8" Margin="0,10,0,0"
+                            HorizontalAlignment="Left" FontSize="12"
+                            Cursor="Hand"
+                            Click="BtnVisitPatreon_Click">
+                        <TextBlock Text="{loc:Str btn_visit_patreon}"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+    </StackPanel>
+</UserControl>

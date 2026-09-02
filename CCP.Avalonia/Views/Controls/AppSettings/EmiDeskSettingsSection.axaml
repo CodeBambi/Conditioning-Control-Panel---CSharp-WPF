@@ -1,0 +1,170 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AppSettings/EmiDeskSettingsSection.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"    ->  Theme="{StaticResource X}"
+       ToolTip="..."                 ->  ToolTip.Tip="..."
+       Content="{loc:Str x}"         ->  a <TextBlock> child (access-key underscore trap)
+       ctl:EmiRingPicker             ->  an empty WrapPanel placeholder (bucket B; not ported yet) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.EmiDeskSettingsSection">
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_emidesk}" Theme="{StaticResource SectionHeader}"/>
+
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueEmiDeskBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueEmiDeskWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueEmiDeskBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+
+                    <!-- 1. master switch -->
+                    <Grid MinHeight="34" ToolTip.Tip="{loc:Str tooltip_emi_desk_enabled}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_enabled}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkEnabled"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="True"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_emi_desk_enabled_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- 2. the summon chord -->
+                    <Grid MinHeight="34" Margin="0,10,0,0" ToolTip.Tip="{loc:Str tooltip_emi_desk_hotkey}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_hotkey}"
+                                   Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" x:Name="BtnHotkey"
+                                Content="Ctrl+Alt+E" Theme="{StaticResource OutlineButton}"
+                                Padding="12,6" VerticalAlignment="Center" MinWidth="130"
+                                Click="BtnHotkey_Click"/>
+                    </Grid>
+                    <TextBlock x:Name="TxtHotkeyHint"
+                               Text="{loc:Str set2_emi_desk_hotkey_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- 3. the mute offer -->
+                    <Grid MinHeight="34" Margin="0,10,0,0" ToolTip.Tip="{loc:Str tooltip_emi_desk_mute}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_mute}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkMuteAvatar"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="True"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_emi_desk_mute_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- 4. spice -->
+                    <Grid MinHeight="34" Margin="0,10,0,0" ToolTip.Tip="{loc:Str tooltip_emi_desk_spice}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_spice}"
+                                   Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
+                        <ComboBox Grid.Column="1" x:Name="CmbSpice" Width="170"
+                                  Theme="{StaticResource DarkComboBoxStyle}" FontSize="11"
+                                  VerticalAlignment="Center"
+                                  SelectionChanged="CmbSpice_SelectionChanged"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_emi_desk_spice_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- 5. offers -->
+                    <Grid MinHeight="34" Margin="0,10,0,0" ToolTip.Tip="{loc:Str tooltip_emi_desk_offers}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_offers}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkOffers"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="True"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_emi_desk_offers_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- 6. the glass -->
+                    <Grid MinHeight="34" Margin="0,10,0,0" ToolTip.Tip="{loc:Str tooltip_emi_desk_glass}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_glass}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkGlass"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="True"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_emi_desk_glass_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- 7. her ring -->
+                    <Grid MinHeight="34" Margin="0,14,0,0" ToolTip.Tip="{loc:Str tooltip_emi_desk_ring}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueEmiDeskBrush}"
+                                   Text="{loc:Str label_emi_desk_ring}"
+                                   Margin="0,0,12,0" TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="1" x:Name="BtnRingReset"
+                                Theme="{StaticResource OutlineButton}"
+                                Padding="12,6" VerticalAlignment="Center"
+                                Click="BtnRingReset_Click">
+                            <TextBlock Text="{loc:Str emi_desk_ring_reset}"/>
+                        </Button>
+                    </Grid>
+                    <TextBlock x:Name="TxtRingHint"
+                               Text="{loc:Str set2_emi_desk_ring_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,6"/>
+                    <!-- ponytail: placeholder for ctl:EmiRingPicker (Views/Controls/EmiRingPicker, bucket B),
+                         swap in when that control is ported -->
+                    <WrapPanel x:Name="RingPicker" Margin="0,0,0,2"/>
+
+                    <TextBlock Text="{loc:Str set2_emi_desk_gestures_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,8,0,0"/>
+
+                </StackPanel>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>
