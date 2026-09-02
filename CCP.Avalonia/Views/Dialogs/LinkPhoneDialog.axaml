@@ -1,0 +1,88 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/LinkPhoneDialog.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" / AllowsTransparency="True" -> SystemDecorations="None" /
+                                                         TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                          -> CanResize="False"
+       MouseLeftButtonDown="Window_..."               -> PointerPressed, wired in the constructor
+       Click="BtnRefresh_Click" / "BtnClose_Click"    -> wired in the constructor
+       RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                                      -> RenderOptions.BitmapInterpolationMode="None"
+       FontFamily="Consolas, Courier New"             -> + ", monospace" (Linux fallback, as the
+                                                         other ported views do)
+       The Close button gained x:Name BtnClose, because handlers are wired in code-behind.
+
+     Buttons carry a TextBlock child rather than Content, the repo convention (CLAUDE.md trap 1);
+     neither label has an underscore, so that is convention here, not necessity.
+     Every string is a literal exactly as in the WPF original - there are no loc keys to carry
+     over, and no bindings, hence no x:DataType. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.LinkPhoneDialog"
+        Title="Link your phone" Height="560" Width="420"
+        WindowStartupLocation="CenterOwner" CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}"
+        SystemDecorations="None" TransparencyLevelHint="Transparent">
+
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" CornerRadius="10">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,15">
+                <TextBlock Text="Link your phone"
+                           FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="Scan this code with the CCP mobile app to sign in as this account."
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center"
+                           HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                <!-- QR -->
+                <Border Background="White" CornerRadius="8" Padding="10"
+                        HorizontalAlignment="Center" Margin="0,0,0,12">
+                    <Image x:Name="ImgQrCode" Width="220" Height="220"
+                           RenderOptions.BitmapInterpolationMode="None"/>
+                </Border>
+
+                <!-- Manual fallback code -->
+                <TextBlock Text="No camera? Enter this code in the app:"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" CornerRadius="6"
+                        Background="{DynamicResource PanelBgBrush}" Padding="20,10"
+                        HorizontalAlignment="Center" Margin="0,0,0,10">
+                    <TextBlock x:Name="TxtLinkCode" Text="--- ---"
+                               FontSize="28" FontWeight="Bold" Foreground="White"
+                               FontFamily="Consolas, Courier New, monospace"
+                               HorizontalAlignment="Center" TextAlignment="Center"/>
+                </Border>
+
+                <TextBlock x:Name="TxtStatus" Text="Fetching code..."
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,10"/>
+
+                <Button x:Name="BtnRefresh"
+                        Padding="14,8" HorizontalAlignment="Center"
+                        Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
+                        BorderThickness="0" FontSize="12" FontWeight="Bold" Cursor="Hand">
+                    <TextBlock Text="Get a new code"/>
+                </Button>
+            </StackPanel>
+
+            <!-- Close -->
+            <Button x:Name="BtnClose" Grid.Row="2"
+                    Padding="20,8" HorizontalAlignment="Right"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand">
+                <TextBlock Text="Close"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>
