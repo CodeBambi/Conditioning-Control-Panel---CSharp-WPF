@@ -4013,24 +4013,13 @@ namespace ConditioningControlPanel
                 // Restore the main window if update failed
                 RestoreHiddenWindows();
 
-                // Show error message - handle null owner
-                if (owner != null && owner.IsLoaded)
-                {
-                    MessageBox.Show(
-                        owner,
-                        $"Failed to download installer: {ex.Message}",
-                        "Update Failed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
-                }
-                else
-                {
-                    MessageBox.Show(
-                        $"Failed to download installer: {ex.Message}",
-                        "Update Failed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
-                }
+                // A bare OK box left the user stranded on the old build with nowhere to go, so
+                // support kept pasting the releases link by hand. Always offer the manual installer.
+                OfferManualUpdateDownload(
+                    owner,
+                    Loc.Get("title_update_failed"),
+                    Loc.Get("msg_update_download_failed"),
+                    ex.Message);
             }
             finally
             {
@@ -4047,21 +4036,12 @@ namespace ConditioningControlPanel
         /// can install it by hand. Without this, a failed silent install is invisible and the user
         /// stays stranded on the old version forever (#849).
         /// </summary>
-        private static void OfferManualUpdateDownload(Window? owner, string title, string message)
+        /// <param name="detail">Optional technical detail (an exception message) shown under the explanation.</param>
+        private static void OfferManualUpdateDownload(Window? owner, string title, string message, string? detail = null)
         {
             try
             {
-                var result = owner != null && owner.IsLoaded
-                    ? MessageBox.Show(owner, message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning)
-                    : MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
-
-                if (result != MessageBoxResult.Yes) return;
-
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = UpdateService.ReleasesPageUrl,
-                    UseShellExecute = true
-                });
+                UpdateFailedDialog.ShowFor(owner, title, message, detail);
             }
             catch (Exception ex)
             {

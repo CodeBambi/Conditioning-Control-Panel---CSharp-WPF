@@ -65,6 +65,15 @@ namespace ConditioningControlPanel
             return text.Trim();
         }
 
+        /// <summary>
+        /// Opens the GitHub releases page so the user can install the update by hand. The dialog
+        /// stays open - they may still want the automatic install if the browser route falls over.
+        /// </summary>
+        private void LinkManualDownload_Click(object sender, RoutedEventArgs e)
+        {
+            Helpers.BrowserLauncher.OpenUrlOrPrompt(UpdateService.ReleasesPageUrl, "open the download page");
+        }
+
         private void BtnLater_Click(object sender, RoutedEventArgs e)
         {
             InstallRequested = false;

@@ -1,0 +1,114 @@
+<Window x:Class="ConditioningControlPanel.UpdateFailedDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str title_update_failed}"
+        SizeToContent="Height" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Window.Resources>
+        <!-- Secondary button: same shape as the "Later" button on the update dialog -->
+        <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="18,12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6"
+                                Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#303050"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                <TextBlock Text="&#x26A0;" FontSize="26" Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <TextBlock x:Name="TxtTitle" Text="{loc:Str title_update_failed}" Foreground="{DynamicResource PinkBrush}"
+                           FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- What happened -->
+            <TextBlock x:Name="TxtMessage" Grid.Row="1"
+                       Foreground="#E0E0E0" FontSize="14" TextWrapping="Wrap" LineHeight="21" Margin="0,0,0,14"/>
+
+            <!-- Technical detail, only shown when we have one -->
+            <Border x:Name="DetailPanel" Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="6"
+                    Padding="12" Margin="0,0,0,14" Visibility="Collapsed">
+                <TextBlock x:Name="TxtDetail" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                           TextWrapping="Wrap" FontFamily="{DynamicResource Font.Mono}"/>
+            </Border>
+
+            <!-- Manual download hint -->
+            <TextBlock Grid.Row="3" Text="{loc:Str msg_update_manual_download_hint}"
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5" TextWrapping="Wrap"
+                       LineHeight="19" Margin="0,0,0,20"/>
+
+            <!-- Buttons. The primary action gets its own full-width row so long translations of
+                 "Download installer manually" cannot squeeze the secondary actions off the dialog. -->
+            <StackPanel Grid.Row="4">
+                <Button x:Name="BtnDownload" Content="{loc:Str btn_download_installer_manually}"
+                        Click="BtnDownload_Click" IsDefault="True">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Setter Property="FontSize" Value="14"/>
+                            <Setter Property="Padding" Value="18,12"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#FF8DC7"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                    <Button x:Name="BtnCopyLink" Content="{loc:Str btn_copy_link}" Margin="0,0,10,0"
+                            Style="{StaticResource SecondaryButtonStyle}" Click="BtnCopyLink_Click"/>
+                    <Button x:Name="BtnClose" Content="{loc:Str btn_close}"
+                            Style="{StaticResource SecondaryButtonStyle}" Click="BtnClose_Click" IsCancel="True"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
