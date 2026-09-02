@@ -1,0 +1,326 @@
+<!-- PORTED from ConditioningControlPanel/Windows/DescentCeremonyWindow.xaml.
+     Structure, ordering, spacing, x:Names and every resource key preserved. Deviations, all forced:
+
+       WindowStyle="None"                -> SystemDecorations="None"
+       WindowState="Maximized"           -> kept, plus a restore Width/Height, which is what the
+                                            headless render sizes its frame from
+       ResizeMode="NoResize"             -> CanResize="False"
+       TextOptions.TextFormattingMode    -> dropped; Avalonia has no WPF text-formatting modes
+       Style="{DynamicResource PinkButton}" -> Theme="{StaticResource PinkButton}" (and the same
+                                            for OutlineButton / SecondaryButton)
+       Visibility="Collapsed"            -> IsVisible="False"
+       RadiusX/RadiusY="0.85"            -> "85%"; GradientOrigin/Center "0.5,0.42" -> "50%,42%"
+       MinHeight="{Binding ActualHeight,
+                   ElementName=ActScroller}" -> "{Binding #ActScroller.Bounds.Height}"
+       GlowLayer's DoubleAnimation       -> a Window.Styles Animation on Border#GlowLayer, same
+                                            5.5s 0.22->0.42 SineEaseInOut breath, auto-reversed
+       <TranslateTransform/> on the       -> dropped: nothing in either head ever animated it, so
+       eyebrow                              it is a transform that only costs a layer
+
+     Deliberately NOT transparent, exactly as the original: "dimmed chrome" for a ceremony this
+     size means covering the chrome, not tinting it.
+
+     No offers. No prices. No tiers. No upsell. CONTRACTS §0.6, and it is not negotiable. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.DescentCeremonyWindow"
+        Title="The Descent"
+        SystemDecorations="None"
+        WindowState="Maximized"
+        Width="1280" Height="720"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="#FF0A0514"
+        UseLayoutRounding="True">
+
+    <Window.Styles>
+        <!-- A slow breath under the whole thing. Opacity only — no layout, nothing a compositor
+             can trip over. WPF ran this from OnLoaded with a DoubleAnimation; Avalonia's
+             declarative form is the same curve and needs no teardown on Closed. -->
+        <Style Selector="Border#GlowLayer">
+            <Style.Animations>
+                <Animation Duration="0:0:5.5" IterationCount="Infinite"
+                           PlaybackDirection="Alternate" Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.22"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.42"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </Window.Styles>
+
+    <Grid>
+        <!-- Backdrop: radial base -> wash -> vignette, the MantraWindow recipe -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="50%,42%" Center="50%,42%" RadiusX="85%" RadiusY="90%">
+                    <GradientStop Color="#FF241041" Offset="0"/>
+                    <GradientStop Color="#FF1A1A2E" Offset="0.55"/>
+                    <GradientStop Color="#FF0A0514" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border x:Name="GlowLayer" Opacity="0.30">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="50%,30%" Center="50%,30%" RadiusX="60%" RadiusY="45%">
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="#00FF69B4" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="75%" RadiusY="75%">
+                    <GradientStop Color="#00000000" Offset="0.45"/>
+                    <GradientStop Color="#99000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Content -->
+        <Grid x:Name="Stage" Margin="40" RowDefinitions="Auto,*,Auto">
+
+            <TextBlock Grid.Row="0"
+                       Text="THE DESCENT"
+                       HorizontalAlignment="Center"
+                       Margin="0,18,0,0"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource PinkBrush}"
+                       Opacity="0.85"/>
+
+            <!--
+              One act visible at a time; the code-behind swaps IsVisible.
+
+              THE ACT SCALES, IT DOES NOT CLIP (ccp-bugs #1109/#1110/#1111/#1115). Every size in
+              this window is a hardcoded DIP, and a maximized window on a 3840x2160 screen at 300%
+              scaling is only 1280x720 DIPs: small enough that the two door cards overflowed their
+              row and the choose buttons were cut off the bottom of the cards with no scrollbar and
+              no way to reach them with a mouse. The Viewbox shrinks the whole act to fit before
+              that can happen - DownOnly, so at every size where it already fit nothing moves by a
+              pixel - and the ScrollViewer under it is the floor: below ActMinHeight the act stops
+              shrinking and scrolls instead, because readable and scrollable beats legible to nobody.
+
+              ActHost's MinHeight is what keeps the composition: each act centres itself inside a
+              host as tall as the viewport, exactly as it did when it filled the row directly.
+            -->
+            <ScrollViewer Grid.Row="1" x:Name="ActScroller"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Focusable="False">
+            <Viewbox x:Name="ActBox"
+                     Stretch="Uniform" StretchDirection="DownOnly"
+                     HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid x:Name="ActHost" MinHeight="{Binding #ActScroller.Bounds.Height}">
+
+                <!-- ACT I - the intro -->
+                <StackPanel x:Name="ActIntro"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            MaxWidth="760">
+                    <TextBlock x:Name="IntroHeadline"
+                               FontSize="38" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock x:Name="IntroStanding"
+                               Margin="0,18,0,0"
+                               FontSize="14"
+                               Foreground="{DynamicResource PinkBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"
+                               Opacity="0.9"/>
+                    <TextBlock x:Name="IntroBody"
+                               Margin="0,28,0,0"
+                               FontSize="16" LineHeight="27"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <Button x:Name="BtnIntroContinue"
+                            TabIndex="1"
+                            Margin="0,40,0,0"
+                            HorizontalAlignment="Center"
+                            Padding="30,13"
+                            FontSize="15"
+                            Theme="{StaticResource PinkButton}"/>
+                </StackPanel>
+
+                <!-- ACT II - the two doors -->
+                <!-- MaxWidth matches the door grid below: inside the Viewbox the act is measured
+                     against an unbounded width, so the block needs a width of its own or a long
+                     headline would size the whole ceremony. -->
+                <Grid x:Name="ActChoice" IsVisible="False" MaxWidth="1080"
+                      RowDefinitions="Auto,*,Auto">
+
+                    <TextBlock Grid.Row="0"
+                               x:Name="ChoiceHeadline"
+                               Margin="0,10,0,0"
+                               FontSize="28" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextAlignment="Center" TextWrapping="Wrap"/>
+
+                    <Grid Grid.Row="1" MaxWidth="1080" VerticalAlignment="Center" Margin="0,24,0,0"
+                          ColumnDefinitions="*,28,*">
+
+                        <!-- Door A -->
+                        <Border Grid.Column="0"
+                                Background="#FF252542"
+                                CornerRadius="14"
+                                BorderBrush="{DynamicResource TransparentPink40Brush}"
+                                BorderThickness="1.5"
+                                Padding="30,28">
+                            <StackPanel>
+                                <TextBlock x:Name="RestoreTitle"
+                                           FontSize="24" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="RestoreKicker"
+                                           Margin="0,6,0,0"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource PinkBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Border Margin="0,18,0,0" Padding="14,10"
+                                        CornerRadius="8" Background="#FF1A1A2E">
+                                    <TextBlock x:Name="RestoreDelta"
+                                               FontSize="17" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               TextAlignment="Center" TextWrapping="Wrap"/>
+                                </Border>
+                                <TextBlock x:Name="RestoreBody"
+                                           Margin="0,18,0,0"
+                                           FontSize="14" LineHeight="23"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Button x:Name="BtnChooseRestore"
+                                        TabIndex="1"
+                                        Margin="0,24,0,0"
+                                        Padding="0,12"
+                                        FontSize="14"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Theme="{StaticResource PinkButton}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Door B -->
+                        <Border Grid.Column="2"
+                                Background="#FF252542"
+                                CornerRadius="14"
+                                BorderBrush="{DynamicResource TransparentPink40Brush}"
+                                BorderThickness="1.5"
+                                Padding="30,28">
+                            <StackPanel>
+                                <TextBlock x:Name="CycleTitle"
+                                           FontSize="24" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="CycleKicker"
+                                           Margin="0,6,0,0"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource PinkBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Border Margin="0,18,0,0" Padding="14,10"
+                                        CornerRadius="8" Background="#FF1A1A2E">
+                                    <TextBlock x:Name="CycleBonus"
+                                               FontSize="17" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               TextAlignment="Center" TextWrapping="Wrap"/>
+                                </Border>
+                                <TextBlock x:Name="CycleBody"
+                                           Margin="0,18,0,0"
+                                           FontSize="14" LineHeight="23"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           TextWrapping="Wrap"/>
+                                <Button x:Name="BtnChooseCycle"
+                                        TabIndex="2"
+                                        Margin="0,24,0,0"
+                                        Padding="0,12"
+                                        FontSize="14"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"
+                                        Theme="{StaticResource OutlineButton}"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Grid.Row="2"
+                               x:Name="BothDoorsFooter"
+                               MaxWidth="900"
+                               Margin="0,26,0,0"
+                               FontSize="13" LineHeight="21"
+                               Foreground="{DynamicResource TextDimBrush}"
+                               TextAlignment="Center" TextWrapping="Wrap"/>
+                </Grid>
+
+                <!-- ACT III - the one-way confirm -->
+                <StackPanel x:Name="ActConfirm"
+                            IsVisible="False"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            MaxWidth="640">
+                    <TextBlock x:Name="ConfirmHeadline"
+                               FontSize="30" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock x:Name="ConfirmBody"
+                               Margin="0,24,0,0"
+                               FontSize="15" LineHeight="26"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,38,0,0">
+                        <Button x:Name="BtnConfirmBack"
+                                TabIndex="1"
+                                Padding="26,12" FontSize="14"
+                                Theme="{StaticResource SecondaryButton}"/>
+                        <Button x:Name="BtnConfirmYes"
+                                TabIndex="2"
+                                Margin="16,0,0,0"
+                                Padding="26,12" FontSize="14"
+                                Theme="{StaticResource PinkButton}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="ConfirmError"
+                               IsVisible="False"
+                               Margin="0,20,0,0"
+                               FontSize="13"
+                               Foreground="#FFFF8080"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                </StackPanel>
+
+                <!-- ACT IV - the close -->
+                <StackPanel x:Name="ActDone"
+                            IsVisible="False"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            MaxWidth="640">
+                    <TextBlock x:Name="DoneHeadline"
+                               FontSize="34" FontWeight="Light"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <TextBlock x:Name="DoneBody"
+                               Margin="0,24,0,0"
+                               FontSize="16" LineHeight="27"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <Button x:Name="BtnDoneClose"
+                            TabIndex="1"
+                            Margin="0,40,0,0"
+                            HorizontalAlignment="Center"
+                            Padding="34,13" FontSize="15"
+                            Theme="{StaticResource PinkButton}"/>
+                </StackPanel>
+            </Grid>
+            </Viewbox>
+            </ScrollViewer>
+
+            <!-- The escape hatch. Closing before a choice is made costs nothing. -->
+            <StackPanel Grid.Row="2" x:Name="LaterHost" HorizontalAlignment="Center" Margin="0,0,0,14">
+                <Button x:Name="BtnLater"
+                        TabIndex="9"
+                        HorizontalAlignment="Center"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{DynamicResource TextDimBrush}"
+                        FontSize="13" Padding="10,6" Cursor="Hand"/>
+                <TextBlock x:Name="LaterHint"
+                           HorizontalAlignment="Center"
+                           FontSize="11"
+                           Foreground="{DynamicResource TextDimBrush}"
+                           Opacity="0.7"
+                           TextAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
