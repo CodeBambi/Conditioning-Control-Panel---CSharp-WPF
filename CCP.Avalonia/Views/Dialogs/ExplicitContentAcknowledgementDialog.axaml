@@ -1,0 +1,164 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/ExplicitContentAcknowledgementDialog.xaml.
+     Structure, order, spacing and every x:Name preserved. Deviations, all forced:
+       Style="{StaticResource X}"  -> Theme="{StaticResource X}"   (local ControlThemes below)
+       ChkAgeConfirm (implicit WPF CheckBox = dark dot)
+                                   -> local DlgCheckbox, a copy of Theme/Styles.xaml:DotCheckBoxStyle
+                                      with a Grid so the long label wraps
+       ResizeMode="NoResize"       -> CanResize="False"
+       Hyperlink                   -> HyperlinkButton NavigateUri (native; replaces Process.Start)
+       Click/Checked/Unchecked     -> wired in the constructor
+       Content="{loc:Str …}"       -> a <TextBlock> child (Avalonia parses "_" in Content as an
+                                      access key and every loc key here is snake_case) -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ExplicitContentAcknowledgementDialog"
+        Title="{loc:Str explicit_ack_title}"
+        Width="560"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of Dialogs/ExplicitContentAcknowledgementDialog.xaml:DlgHeader…DlgSecondaryButton, hoist when a second view needs it -->
+        <ControlTheme x:Key="DlgHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="22"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgBullet" TargetType="TextBlock" BasedOn="{StaticResource DlgBody}">
+            <Setter Property="Margin" Value="0,8,0,0"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="140"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <!-- WPF had no disabled trigger here; a disabled Accept looked identical to enabled.
+                 Keeping that would hide the gate on screen, so the fade is added deliberately. -->
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.35"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgPrimaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgSecondaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="#3A3A52"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgCheckbox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid ColumnDefinitions="Auto,*" Background="Transparent">
+                        <Border x:Name="dot" Width="16" Height="16" CornerRadius="8" Margin="0,0,10,0"
+                                Background="#3A3A48" BorderBrush="#5A5A6A" BorderThickness="1"
+                                VerticalAlignment="Center"/>
+                        <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          VerticalAlignment="Center"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Border#dot">
+                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#dot">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid Margin="32,28,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str explicit_ack_title}"/>
+
+            <TextBlock Theme="{StaticResource DlgBody}" Margin="0,18,0,0"
+                       Text="{loc:Str explicit_ack_body_intro}"/>
+
+            <Border Margin="0,18,0,0" Padding="16" CornerRadius="6"
+                    Background="#1F1F38"
+                    BorderBrush="{StaticResource PinkBrush}"
+                    BorderThickness="0,0,0,3">
+                <StackPanel>
+                    <TextBlock Theme="{StaticResource DlgBullet}" Margin="0,0,0,0">
+                        <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                        <Run Text="{loc:Str explicit_ack_body_age}"/>
+                    </TextBlock>
+                    <TextBlock Theme="{StaticResource DlgBullet}">
+                        <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                        <Run Text="{loc:Str explicit_ack_body_policy}"/>
+                    </TextBlock>
+                    <TextBlock Theme="{StaticResource DlgBullet}">
+                        <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                        <Run Text="{loc:Str explicit_ack_body_ai}"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <HyperlinkButton x:Name="LnkPolicy" Margin="0,16,0,0" Padding="0"
+                             Foreground="{StaticResource PinkBrush}"
+                             NavigateUri="https://app.cclabs.app/policies/prohibited-content">
+                <TextBlock Text="{loc:Str explicit_ack_policy_link}" FontSize="14"/>
+            </HyperlinkButton>
+        </StackPanel>
+
+        <!-- Required age-confirmation checkbox (C3 hardening) -->
+        <CheckBox x:Name="ChkAgeConfirm" Grid.Row="2"
+                  Theme="{StaticResource DlgCheckbox}"
+                  Margin="0,20,0,0">
+            <TextBlock TextWrapping="Wrap" Text="{loc:Str explicit_ack_checkbox}"/>
+        </CheckBox>
+
+        <!-- Button row -->
+        <Grid Grid.Row="3" Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BtnCancel" Grid.Column="1"
+                    Theme="{StaticResource DlgSecondaryButton}"
+                    Margin="0,0,10,0">
+                <TextBlock Text="{loc:Str explicit_ack_cancel}"/>
+            </Button>
+
+            <Button x:Name="BtnAccept" Grid.Column="2"
+                    Theme="{StaticResource DlgPrimaryButton}"
+                    IsEnabled="False">
+                <TextBlock Text="{loc:Str explicit_ack_accept}"/>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>
