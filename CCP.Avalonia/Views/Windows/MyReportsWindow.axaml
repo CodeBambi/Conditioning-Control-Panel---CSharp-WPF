@@ -1,0 +1,96 @@
+<!-- PORTED from ConditioningControlPanel/Windows/MyReportsWindow.xaml.
+     Structure, ordering and every resource key preserved. Deviations, all forced:
+
+       ResizeMode="CanResizeWithGrip"  -> CanResize="True"
+       Visibility="Collapsed"          -> IsVisible="False"
+       Click="…" inside DataTemplate   -> one Button.Click handler on the ItemsControl (a
+                                          DataTemplate has no name scope)
+       {Binding X, Mode=OneTime}       -> {Binding X} with x:DataType on the template
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case. See the porting notes in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Windows"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.MyReportsWindow"
+        Title="{loc:Str my_reports_title}"
+        Width="520" Height="480"
+        MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        Background="#0F0F1E"
+        Foreground="#E0E0E0"
+        CanResize="True">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="{loc:Str my_reports_title}"
+                       Foreground="{DynamicResource PinkBrush}"
+                       FontSize="20" FontWeight="Bold"/>
+            <TextBlock Text="{loc:Str my_reports_subtitle}"
+                       Foreground="#9898B0" FontSize="11" TextWrapping="Wrap"
+                       Margin="0,6,0,0"/>
+        </StackPanel>
+
+        <!-- List -->
+        <Border Grid.Row="1" Background="#14142A" BorderBrush="#3D3D60"
+                BorderThickness="1" CornerRadius="8" Padding="6">
+            <Grid>
+                <TextBlock x:Name="TxtEmpty" Text="{loc:Str my_reports_empty}"
+                           Foreground="#707080" FontSize="13" FontStyle="Italic"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" Margin="20"
+                           IsVisible="False"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ReportsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:MyReportsWindow+Row">
+                                <Border Background="#1A1A2E" BorderBrush="#2A2A44"
+                                        BorderThickness="1" CornerRadius="6"
+                                        Padding="10,8" Margin="2,3">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Token}"
+                                                       Foreground="White" FontFamily="Consolas, Courier New"
+                                                       FontSize="14" FontWeight="Bold"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding SubtitleText}"
+                                                       Foreground="#7A7A90" FontSize="11"
+                                                       Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Tag="{Binding Token}"
+                                                VerticalAlignment="Center" Cursor="Hand"
+                                                Background="#252540" Foreground="#D8D8E8"
+                                                BorderBrush="#3A3A58" BorderThickness="1"
+                                                Padding="14,5" Margin="10,0,0,0">
+                                            <TextBlock Text="{loc:Str btn_copy}"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- Footer -->
+        <Button Grid.Row="2" x:Name="BtnClose"
+                HorizontalAlignment="Right" Margin="0,12,0,0"
+                Background="{DynamicResource PinkBrush}" Foreground="White"
+                BorderThickness="0" Padding="24,8" Cursor="Hand"
+                FontWeight="SemiBold">
+            <TextBlock Text="{loc:Str btn_close}"/>
+        </Button>
+    </Grid>
+</Window>

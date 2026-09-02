@@ -1,0 +1,174 @@
+<!-- PORTED from ConditioningControlPanel/Windows/BugReportWindow.xaml.
+     Structure, ordering and every resource key preserved. Deviations, all forced:
+
+       Style="{StaticResource X}"        -> Theme="{StaticResource X}"; FormBox is a ControlTheme
+                                            BasedOn the default TextBox (trap 4 in CLAUDE.md)
+       ResizeMode="CanResizeWithGrip"    -> CanResize="True"
+       Visibility="Collapsed"            -> IsVisible="False"
+       VerticalScrollBarVisibility       -> ScrollViewer.VerticalScrollBarVisibility (attached)
+       IsReadOnlyCaretVisible            -> dropped, no Avalonia equivalent
+       Click / TextChanged / Checked     -> wired in the constructor
+       Title/TxtHeaderTitle/TxtPrivacyNotice/LblDescription lose {loc:Str}: they depend on
+       ReportKind and a local Text set does not clear an Avalonia binding, so a language
+       change would revert a suggestion dialog to bug wording. ApplyKind sets them.
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case. See the porting notes in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.BugReportWindow"
+        Width="760" Height="780"
+        WindowStartupLocation="CenterOwner"
+        Background="#0F0F1E"
+        Foreground="#E0E0E0"
+        CanResize="True"
+        MinWidth="560" MinHeight="560">
+    <Window.Resources>
+        <!-- ponytail: local copy of Windows/BugReportWindow.xaml:FormLabel/FormBox, hoist when a second view needs them -->
+        <ControlTheme x:Key="FormLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,10,0,4"/>
+        </ControlTheme>
+        <ControlTheme x:Key="FormBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Background" Value="#1A1A2E"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="#3D3D60"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,6">
+            <TextBlock x:Name="TxtHeaderTitle"
+                       Foreground="{DynamicResource PinkBrush}"
+                       FontSize="20" FontWeight="Bold"/>
+            <TextBlock x:Name="TxtPrivacyNotice"
+                       Foreground="#9898B0" FontSize="11" TextWrapping="Wrap"
+                       Margin="0,6,0,0"/>
+        </StackPanel>
+
+        <!-- Scrollable form body -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,8">
+            <StackPanel>
+                <TextBlock x:Name="LblDescription" Theme="{StaticResource FormLabel}"/>
+                <TextBox x:Name="TxtDescription" Theme="{StaticResource FormBox}"
+                         Height="80" MaxLength="4000"/>
+
+                <TextBlock x:Name="LblSteps" Text="{loc:Str bug_report_steps_label}" Theme="{StaticResource FormLabel}"/>
+                <TextBox x:Name="TxtSteps" Theme="{StaticResource FormBox}"
+                         Height="70" MaxLength="4000"/>
+
+                <TextBlock Text="{loc:Str bug_report_metadata_label}" Theme="{StaticResource FormLabel}"/>
+                <Border Background="#14142A" BorderBrush="#3D3D60" BorderThickness="1" CornerRadius="4" Padding="10,8">
+                    <TextBlock x:Name="TxtMetadataSummary" Foreground="#B0B0C8" FontSize="11"
+                               FontFamily="Consolas, Courier New" TextWrapping="Wrap"/>
+                </Border>
+
+                <CheckBox x:Name="ChkIncludeAppLog"
+                          Foreground="#D0D0E0" FontSize="12"
+                          Margin="0,14,0,0" IsChecked="False">
+                    <TextBlock Text="{loc:Str bug_report_include_log_checkbox}"/>
+                </CheckBox>
+
+                <TextBlock x:Name="TxtScrubberCounts" Foreground="#9898B0" FontSize="11"
+                           Margin="0,10,0,0" TextWrapping="Wrap"/>
+
+                <TextBlock Text="{loc:Str bug_report_preview_label}" Theme="{StaticResource FormLabel}"/>
+                <Border Background="#0A0A18" BorderBrush="#3D3D60" BorderThickness="1" CornerRadius="4">
+                    <TextBox x:Name="TxtPreview" IsReadOnly="True" TextWrapping="NoWrap"
+                             Background="Transparent" Foreground="#B0B0C8" BorderThickness="0"
+                             FontFamily="Consolas, Courier New" FontSize="11"
+                             Height="260"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer buttons -->
+        <Grid Grid.Row="2" Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TxtStatus" Grid.Column="0" Foreground="#9898B0" FontSize="11"
+                       VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <Button x:Name="BtnCancel" Grid.Column="1"
+                    Background="#1A1A2E" Foreground="#C0C0D0" BorderBrush="#3D3D60"
+                    BorderThickness="1" Padding="18,8" Margin="0,0,10,0" Cursor="Hand">
+                <TextBlock Text="{loc:Str bug_report_cancel}"/>
+            </Button>
+            <Button x:Name="BtnSend" Grid.Column="2"
+                    Background="{DynamicResource PinkBrush}" Foreground="White"
+                    BorderThickness="0" Padding="22,8" Cursor="Hand"
+                    FontWeight="SemiBold" IsEnabled="False">
+                <TextBlock Text="{loc:Str bug_report_send}"/>
+            </Button>
+        </Grid>
+
+        <!-- Success panel (#769). Covers the form once the report is filed so the report
+             number is selectable + copyable instead of vanishing with a MessageBox. -->
+        <Border x:Name="SuccessPanel" Grid.Row="0" Grid.RowSpan="3"
+                IsVisible="False"
+                Background="#0F0F1E" Margin="-20">
+            <Border Background="#14142A" BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="2" CornerRadius="12" Padding="24"
+                    Margin="34" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                <StackPanel>
+                    <TextBlock x:Name="TxtSuccessHeadline"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="18" FontWeight="Bold" TextWrapping="Wrap"/>
+
+                    <TextBlock x:Name="LblSuccessTokenLabel" Text="{loc:Str bug_report_token_label}"
+                               Theme="{StaticResource FormLabel}" Margin="0,18,0,4"/>
+                    <Grid x:Name="SuccessTokenRow">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtSuccessToken" Grid.Column="0"
+                                 IsReadOnly="True"
+                                 Background="#0A0A18" Foreground="#FFFFFF"
+                                 BorderBrush="#3D3D60" BorderThickness="1"
+                                 FontFamily="Consolas, Courier New" FontSize="16" FontWeight="Bold"
+                                 Padding="10,8" VerticalContentAlignment="Center"
+                                 TextWrapping="NoWrap" AcceptsReturn="False"/>
+                        <Button x:Name="BtnCopyToken" Grid.Column="1"
+                                Background="#1A1A2E" Foreground="#E0E0E0" BorderBrush="#3D3D60"
+                                BorderThickness="1" Padding="18,8" Margin="8,0,0,0" Cursor="Hand">
+                            <TextBlock x:Name="TxtCopyToken" Text="{loc:Str btn_copy}"/>
+                        </Button>
+                    </Grid>
+
+                    <TextBlock x:Name="TxtSuccessHint" Text="{loc:Str bug_report_token_hint}"
+                               Foreground="#9898B0" FontSize="12" TextWrapping="Wrap"
+                               Margin="0,14,0,0"/>
+
+                    <Button x:Name="BtnSuccessDone"
+                            HorizontalAlignment="Right" Margin="0,20,0,0"
+                            Background="{DynamicResource PinkBrush}" Foreground="White"
+                            BorderThickness="0" Padding="26,8" Cursor="Hand"
+                            FontWeight="SemiBold">
+                        <TextBlock Text="{loc:Str btn_done}"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</Window>
