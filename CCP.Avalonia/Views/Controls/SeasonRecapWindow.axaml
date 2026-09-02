@@ -1,0 +1,114 @@
+<!-- PORTED from ConditioningControlPanel/Controls/SeasonRecapWindow.xaml.
+     Structure, x:Names and spacing preserved. Deviations, all forced:
+
+       <Style x:Key TargetType="Button">   -> <ControlTheme> with the same Template; the
+                                              IsMouseOver trigger is a ^:pointerover selector
+       <ContentPresenter/>                 -> ContentPresenter Content="{TemplateBinding Content}"
+       Recap* StaticResources              -> local copies (they live on the card's resources now)
+       ResizeMode="NoResize"               -> CanResize="False"
+       Content set from code (Loc.Get)     -> a TextBlock child with {loc:Str}; the formatted
+                                              continue label stays Loc.GetF in the code-behind
+       Visibility="Collapsed"              -> IsVisible="False" -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Controls.SeasonRecapWindow"
+        Title="Season Recap"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource RecapVoidBrush}"
+        FontFamily="Segoe UI, Liberation Sans, sans-serif">
+    <Window.Resources>
+        <!-- ponytail: local copy of Resources/Theme/SeasonRecapCard.xaml: RecapVoid, RecapInk,
+             RecapInkDim, RecapLine, RecapVioletLite, RecapMagenta and their brushes; hoist when a
+             third view needs them -->
+        <Color x:Key="RecapVoid">#FF0A0414</Color>
+        <Color x:Key="RecapInk">#FFF3ECFF</Color>
+        <Color x:Key="RecapInkDim">#FFA78FD6</Color>
+        <Color x:Key="RecapLine">#2EB18CFF</Color>
+        <Color x:Key="RecapVioletLite">#FFB18CFF</Color>
+        <Color x:Key="RecapMagenta">#FFE84CF2</Color>
+        <SolidColorBrush x:Key="RecapVoidBrush" Color="{StaticResource RecapVoid}"/>
+        <SolidColorBrush x:Key="RecapInkBrush" Color="{StaticResource RecapInk}"/>
+        <SolidColorBrush x:Key="RecapInkDimBrush" Color="{StaticResource RecapInkDim}"/>
+        <SolidColorBrush x:Key="RecapLineBrush" Color="{StaticResource RecapLine}"/>
+        <SolidColorBrush x:Key="RecapVioletLiteBrush" Color="{StaticResource RecapVioletLite}"/>
+        <LinearGradientBrush x:Key="RecapStatusPillBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="{StaticResource RecapMagenta}" Offset="0"/>
+            <GradientStop Color="{StaticResource RecapVioletLite}" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Share pill button -->
+        <ControlTheme x:Key="SharePill" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource RecapInkBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="5,0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" CornerRadius="13" Padding="14,9"
+                            Background="#14B18CFF"
+                            BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="Background" Value="#29B18CFF"/>
+                <Setter Property="BorderBrush" Value="{StaticResource RecapVioletLiteBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- Continue button (primary) -->
+        <ControlTheme x:Key="ContinueBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="#FF160826"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" CornerRadius="13" Padding="22,11"
+                            Background="{StaticResource RecapStatusPillBrush}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="Opacity" Value="0.9"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <StackPanel Margin="26,22,26,20" HorizontalAlignment="Center">
+        <!-- live animated card -->
+        <Border x:Name="PART_CardHost" HorizontalAlignment="Center"/>
+
+        <!-- share row -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
+            <Button x:Name="BtnCopy" Theme="{StaticResource SharePill}"><TextBlock Text="{loc:Str recap_btn_copy}"/></Button>
+            <Button x:Name="BtnSave" Theme="{StaticResource SharePill}"><TextBlock Text="{loc:Str recap_btn_save}"/></Button>
+            <Button x:Name="BtnShareX" Theme="{StaticResource SharePill}"><TextBlock Text="{loc:Str recap_btn_share_x}"/></Button>
+            <Button x:Name="BtnShareReddit" Theme="{StaticResource SharePill}"><TextBlock Text="{loc:Str recap_btn_share_reddit}"/></Button>
+        </StackPanel>
+
+        <!-- in-window status line (the recap window sits above the MainWindow toast host, so
+             share confirmations surface here instead) -->
+        <TextBlock x:Name="PART_Status" FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap"
+                   Foreground="{StaticResource RecapInkDimBrush}" Margin="0,12,0,0"
+                   MaxWidth="420" IsVisible="False"/>
+
+        <!-- continue to next season -->
+        <Button x:Name="BtnContinue" Theme="{StaticResource ContinueBtn}"
+                HorizontalAlignment="Center" Margin="0,16,0,0">
+            <TextBlock x:Name="TxtContinue"/>
+        </Button>
+
+        <TextBlock x:Name="PART_Note" Text="{loc:Str recap_share_note}"
+                   FontSize="10.5" TextAlignment="Center" TextWrapping="Wrap"
+                   Foreground="{StaticResource RecapInkDimBrush}" Margin="0,12,0,0" MaxWidth="420"/>
+    </StackPanel>
+</Window>

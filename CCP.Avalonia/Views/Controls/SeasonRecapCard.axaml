@@ -1,0 +1,376 @@
+<!-- PORTED from ConditioningControlPanel/Controls/SeasonRecapCard.xaml.
+     Structure, order, spacing and every resource key preserved. Deviations, all forced:
+
+       Resources/Theme/SeasonRecapCard.xaml    -> the same keys as view-local resources below
+                                                  (ponytail: local copy, hoist when a second view
+                                                  needs them). StaticResource, not DynamicResource:
+                                                  the RecapTheme per-mod recolor is WPF-head
+                                                  runtime machinery and is not ported.
+       Gradient points "1,1"                   -> "100%,100%" (bare numbers are absolute pixels here)
+       x:Name on GradientStop / transforms     -> dropped (AVLN2000); the code-behind casts
+                                                  SpiralCanvas.RenderTransform / Holo.RenderTransform
+       Visibility="{Binding XVisibility}"      -> IsVisible="{Binding IsX}"
+       Image Source="{Binding path}"           -> Source="{Binding image}" (IImage; a string does not
+                                                  convert, and pack:// is WPF-only). Null placeholders.
+       RenderOptions.BitmapScalingMode         -> RenderOptions.BitmapInterpolationMode
+       SnapsToDevicePixels                     -> dropped
+       FontFamily="Segoe UI"                   -> "Segoe UI, Liberation Sans, sans-serif"
+                                                  (ponytail: under Inter the right column overran
+                                                  585px by ~80px; Arial metrics fit. Without
+                                                  Liberation Sans the generic fallback overflows
+                                                  again - hoist a bundled font when that bites) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.SeasonRecapCard"
+             x:DataType="local:SeasonRecapCardViewModel"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+             Width="1040" Height="585"
+             FontFamily="Segoe UI, Liberation Sans, sans-serif"
+             UseLayoutRounding="True">
+    <!-- 16:9 landscape, shareable. Wide two-column layout; the personalized verdict is enlarged
+         and sits above the right-column stats; supporter/OG status pills under the hero; the
+         seasonal neon art is a faded backdrop. Badges use the real dashboard feature icons. -->
+
+    <UserControl.Resources>
+        <!-- ponytail: local copy of Resources/Theme/SeasonRecapCard.xaml, hoist when a second view needs it -->
+        <!-- Structural darks / constants -->
+        <Color x:Key="RecapVoid">#FF0A0414</Color>
+        <Color x:Key="RecapPanel">#FF150A26</Color>
+        <Color x:Key="RecapPanelMid">#FF2A103F</Color>
+        <Color x:Key="RecapFoilCyan">#FF34E0E8</Color>
+        <Color x:Key="RecapGold">#FFFFD166</Color>
+        <Color x:Key="RecapInk">#FFF3ECFF</Color>
+        <Color x:Key="RecapInkDim">#FFA78FD6</Color>
+
+        <!-- Mod-driven accents (overridden per active mod by RecapTheme on WPF) -->
+        <Color x:Key="RecapViolet">#FF7C3AED</Color>
+        <Color x:Key="RecapVioletLite">#FFB18CFF</Color>
+        <Color x:Key="RecapMagenta">#FFE84CF2</Color>
+        <Color x:Key="RecapLine">#2EB18CFF</Color>
+        <Color x:Key="RecapAvatarInner">#FF3A1860</Color>
+        <Color x:Key="RecapStatFill">#0FB18CFF</Color>
+
+        <!-- Mod-driven alpha tints used by inline gradients on the card -->
+        <Color x:Key="RecapHeroTint">#3D7C3AED</Color>
+        <Color x:Key="RecapVerdictTintTop">#24E84CF2</Color>
+        <Color x:Key="RecapVerdictTintBottom">#147C3AED</Color>
+        <Color x:Key="RecapEdgeTint">#45E84CF2</Color>
+        <Color x:Key="RecapOgPillBg">#2EE84CF2</Color>
+        <Color x:Key="RecapOgPillBorder">#73E84CF2</Color>
+
+        <SolidColorBrush x:Key="RecapVoidBrush" Color="{StaticResource RecapVoid}"/>
+        <SolidColorBrush x:Key="RecapPanelBrush" Color="{StaticResource RecapPanel}"/>
+        <SolidColorBrush x:Key="RecapVioletBrush" Color="{StaticResource RecapViolet}"/>
+        <SolidColorBrush x:Key="RecapVioletLiteBrush" Color="{StaticResource RecapVioletLite}"/>
+        <SolidColorBrush x:Key="RecapMagentaBrush" Color="{StaticResource RecapMagenta}"/>
+        <SolidColorBrush x:Key="RecapFoilCyanBrush" Color="{StaticResource RecapFoilCyan}"/>
+        <SolidColorBrush x:Key="RecapGoldBrush" Color="{StaticResource RecapGold}"/>
+        <SolidColorBrush x:Key="RecapInkBrush" Color="{StaticResource RecapInk}"/>
+        <SolidColorBrush x:Key="RecapInkDimBrush" Color="{StaticResource RecapInkDim}"/>
+        <SolidColorBrush x:Key="RecapLineBrush" Color="{StaticResource RecapLine}"/>
+        <SolidColorBrush x:Key="RecapStatFillBrush" Color="{StaticResource RecapStatFill}"/>
+
+        <!-- Status pill: accent -> accent-light -->
+        <LinearGradientBrush x:Key="RecapStatusPillBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="{StaticResource RecapMagenta}" Offset="0"/>
+            <GradientStop Color="{StaticResource RecapVioletLite}" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Hero numerals: white -> accent-light -->
+        <LinearGradientBrush x:Key="RecapHeroTextBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Color="#FFFFFFFF" Offset="0"/>
+            <GradientStop Color="{StaticResource RecapVioletLite}" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Verdict handle: foil-cyan -> accent -> accent-light -->
+        <LinearGradientBrush x:Key="RecapNameBrush" StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Color="{StaticResource RecapFoilCyan}" Offset="0"/>
+            <GradientStop Color="{StaticResource RecapMagenta}" Offset="0.55"/>
+            <GradientStop Color="{StaticResource RecapVioletLite}" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Inner card background: radial accent-dark -> panel -> void -->
+        <RadialGradientBrush x:Key="RecapInnerBgBrush" GradientOrigin="50%,38%" Center="50%,38%"
+                             RadiusX="75%" RadiusY="60%">
+            <GradientStop Color="{StaticResource RecapPanelMid}" Offset="0"/>
+            <GradientStop Color="{StaticResource RecapPanel}" Offset="0.55"/>
+            <GradientStop Color="{StaticResource RecapVoid}" Offset="1"/>
+        </RadialGradientBrush>
+    </UserControl.Resources>
+
+    <Border x:Name="OuterFoil" CornerRadius="26" Padding="3">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="{StaticResource RecapFoilCyan}" Offset="0"/>
+                <GradientStop Color="{StaticResource RecapMagenta}" Offset="0.35"/>
+                <GradientStop Color="{StaticResource RecapVioletLite}" Offset="0.65"/>
+                <GradientStop Color="{StaticResource RecapFoilCyan}" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+        <Border.Effect>
+            <DropShadowEffect Color="{StaticResource RecapMagenta}" BlurRadius="40" OffsetX="0" OffsetY="0" Opacity="0.35"/>
+        </Border.Effect>
+
+        <Border x:Name="InnerCard" CornerRadius="23" ClipToBounds="True"
+                Background="{StaticResource RecapInnerBgBrush}">
+            <Grid>
+                <!-- Seasonal neon art backdrop (faded), mode-sensitive per active mod -->
+                <Image Source="{Binding BackgroundImage}" Stretch="UniformToFill"
+                       Opacity="0.20" IsHitTestVisible="False"/>
+
+                <!-- Hypnotic spiral (geometry built in code-behind), slow rotation, subtle over the art -->
+                <Canvas x:Name="SpiralCanvas" Opacity="0.22" RenderTransformOrigin="50%,50%"
+                        Width="820" Height="820" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Canvas.RenderTransform>
+                        <RotateTransform Angle="0"/>
+                    </Canvas.RenderTransform>
+                </Canvas>
+
+                <!-- Holographic sweep -->
+                <Rectangle x:Name="Holo" IsHitTestVisible="False" Opacity="0.85"
+                           Width="1340" Height="900" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                            <GradientStop Color="#0034E0E8" Offset="0.30"/>
+                            <GradientStop Color="#2634E0E8" Offset="0.45"/>
+                            <GradientStop Color="#33E84CF2" Offset="0.50"/>
+                            <GradientStop Color="#26B18CFF" Offset="0.55"/>
+                            <GradientStop Color="#00B18CFF" Offset="0.70"/>
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                    <Rectangle.RenderTransform>
+                        <TranslateTransform X="-260" Y="-200"/>
+                    </Rectangle.RenderTransform>
+                </Rectangle>
+
+                <!-- Legibility scrim so the faded art doesn't wash out text -->
+                <Rectangle IsHitTestVisible="False" Fill="#66000000"/>
+
+                <!-- ===================== CONTENT ===================== -->
+                <Grid Margin="34,24,34,22" RowDefinitions="Auto,*,Auto">
+
+                    <!-- ===== HEADER BAR ===== -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding SeasonLabel}" FontSize="17" FontWeight="Medium"
+                                       Foreground="{StaticResource RecapInkDimBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding SeasonNumberText}" FontSize="42" FontWeight="Black"
+                                       Foreground="{StaticResource RecapInkBrush}" VerticalAlignment="Center">
+                                <TextBlock.Effect><DropShadowEffect Color="{StaticResource RecapVioletLite}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.6"/></TextBlock.Effect>
+                            </TextBlock>
+                            <TextBlock Text="{Binding DateRangeText}" FontSize="16" FontWeight="Medium"
+                                       Foreground="{StaticResource RecapInkDimBrush}" VerticalAlignment="Bottom" Margin="16,0,0,9"/>
+                        </StackPanel>
+                        <Border Grid.Column="1" VerticalAlignment="Center" CornerRadius="999"
+                                Background="{StaticResource RecapStatusPillBrush}" Padding="17,8">
+                            <Border.Effect><DropShadowEffect Color="{StaticResource RecapMagenta}" BlurRadius="22" OffsetX="0" OffsetY="0" Opacity="0.7"/></Border.Effect>
+                            <TextBlock Text="{Binding StatusText}" FontSize="16" FontWeight="Bold" Foreground="#FF160826"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- ===== BODY ===== -->
+                    <Grid Grid.Row="1" Margin="0,16,0,12" ColumnDefinitions="396,*">
+
+                        <!-- LEFT: identity + hero + status -->
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="68" Height="68" CornerRadius="19"
+                                        BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                                    <Border.Background>
+                                        <RadialGradientBrush GradientOrigin="50%,40%" Center="50%,40%" RadiusX="60%" RadiusY="60%">
+                                            <GradientStop Color="{StaticResource RecapAvatarInner}" Offset="0"/>
+                                            <GradientStop Color="#FF170A2B" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Border.Background>
+                                    <Grid Width="40" Height="40">
+                                        <Ellipse Width="38" Height="38" Stroke="{StaticResource RecapVioletLiteBrush}" StrokeThickness="1.5"/>
+                                        <Ellipse Width="22" Height="22" Stroke="{StaticResource RecapVioletLiteBrush}" StrokeThickness="1.5"/>
+                                        <Ellipse Width="9" Height="9" Fill="{StaticResource RecapMagentaBrush}"/>
+                                    </Grid>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center" Margin="15,0,0,0">
+                                    <TextBlock Text="{Binding Handle}" FontSize="30" FontWeight="Bold"
+                                               Foreground="{StaticResource RecapInkBrush}" TextTrimming="CharacterEllipsis" MaxWidth="290"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <Rectangle Width="10" Height="10" RadiusX="2" RadiusY="2" Margin="0,0,7,0">
+                                            <Rectangle.Fill>
+                                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                    <GradientStop Color="{StaticResource RecapFoilCyan}" Offset="0"/>
+                                                    <GradientStop Color="{StaticResource RecapMagenta}" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Rectangle.Fill>
+                                            <Rectangle.RenderTransform><RotateTransform Angle="45" CenterX="5" CenterY="5"/></Rectangle.RenderTransform>
+                                        </Rectangle>
+                                        <TextBlock Text="{Binding TitleText}" FontSize="17" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource RecapVioletLiteBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- hero -->
+                            <Border Margin="0,16,0,0" CornerRadius="18" Padding="18,14,18,13"
+                                    BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                        <GradientStop Color="{StaticResource RecapHeroTint}" Offset="0"/>
+                                        <GradientStop Color="#3D0A0414" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding HeroLabel}" FontSize="15" FontWeight="Medium"
+                                               Foreground="{StaticResource RecapInkDimBrush}" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="HeroSeasonTime" FontSize="60" FontWeight="Black"
+                                               Foreground="{StaticResource RecapHeroTextBrush}" HorizontalAlignment="Center" Margin="0,2,0,0">
+                                        <TextBlock.Effect><DropShadowEffect Color="{StaticResource RecapVioletLite}" BlurRadius="28" OffsetX="0" OffsetY="0" Opacity="0.4"/></TextBlock.Effect>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding SessionsSubline}" FontSize="16"
+                                               Foreground="{StaticResource RecapInkDimBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    <Border Margin="0,11,0,0" Padding="0,10,0,0" BorderThickness="0,1,0,0" BorderBrush="{StaticResource RecapLineBrush}">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <TextBlock Text="{Binding AllTimeLabel}" FontSize="14" FontWeight="Medium"
+                                                       Foreground="{StaticResource RecapInkDimBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                            <TextBlock x:Name="HeroAllTime" FontSize="28" FontWeight="Black"
+                                                       Foreground="{StaticResource RecapGoldBrush}" VerticalAlignment="Center">
+                                                <TextBlock.Effect><DropShadowEffect Color="{StaticResource RecapGold}" BlurRadius="16" OffsetX="0" OffsetY="0" Opacity="0.35"/></TextBlock.Effect>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- status pills (supporter / OG) -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0"
+                                        IsVisible="{Binding IsStatusRowVisible}">
+                                <Border IsVisible="{Binding IsSupporter}" CornerRadius="999" Padding="13,6" Margin="0,0,8,0"
+                                        Background="#2EFFD166" BorderBrush="#73FFD166" BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="7" Height="7" Fill="{StaticResource RecapGoldBrush}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                        <TextBlock Text="{Binding SupporterLabel}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource RecapGoldBrush}"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border IsVisible="{Binding IsOg}" CornerRadius="999" Padding="13,6" BorderThickness="1">
+                                    <Border.Background><SolidColorBrush Color="{StaticResource RecapOgPillBg}"/></Border.Background>
+                                    <Border.BorderBrush><SolidColorBrush Color="{StaticResource RecapOgPillBorder}"/></Border.BorderBrush>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="7" Height="7" Fill="{StaticResource RecapMagentaBrush}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                        <TextBlock Text="{Binding OgLabel}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource RecapMagentaBrush}"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- RIGHT: verdict (big, on top) + stats + badges -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <!-- VERDICT (enlarged, above the stat boxes) -->
+                            <Border CornerRadius="16" Padding="18,13" Margin="0,0,0,12" BorderThickness="1">
+                                <Border.BorderBrush>
+                                    <SolidColorBrush Color="{StaticResource RecapEdgeTint}"/>
+                                </Border.BorderBrush>
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                        <GradientStop Color="{StaticResource RecapVerdictTintTop}" Offset="0"/>
+                                        <GradientStop Color="{StaticResource RecapVerdictTintBottom}" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <TextBlock FontSize="27" TextAlignment="Center" TextWrapping="Wrap" LineHeight="32"
+                                           Foreground="{StaticResource RecapInkBrush}" xml:space="preserve"><Run Text="{Binding VerdictBefore}"/><Run Text="{Binding VerdictName}" FontWeight="Black" Foreground="{StaticResource RecapNameBrush}"/><Run Text="{Binding VerdictAfter}"/></TextBlock>
+                            </Border>
+
+                            <!-- STAT GRID -->
+                            <UniformGrid Columns="2">
+                                <Border CornerRadius="14" Margin="0,0,5,5" Padding="16,11"
+                                        Background="{StaticResource RecapStatFillBrush}" BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding StatPeakRankLabel}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource RecapInkDimBrush}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <TextBlock x:Name="StatRank" FontSize="26" FontWeight="Bold" Foreground="{StaticResource RecapMagentaBrush}"/>
+                                            <TextBlock Text="{Binding PeakRankOfText}" FontSize="15" Foreground="{StaticResource RecapInkDimBrush}" VerticalAlignment="Bottom" Margin="7,0,0,4"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                                <Border CornerRadius="14" Margin="5,0,0,5" Padding="16,11"
+                                        Background="{StaticResource RecapStatFillBrush}" BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding StatPercentileLabel}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource RecapInkDimBrush}"/>
+                                        <TextBlock Text="{Binding PercentileText}" FontSize="26" FontWeight="Bold" Foreground="{StaticResource RecapGoldBrush}" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border CornerRadius="14" Margin="0,5,5,0" Padding="16,11"
+                                        Background="{StaticResource RecapStatFillBrush}" BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding StatDaysActiveLabel}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource RecapInkDimBrush}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <TextBlock Text="{Binding DaysActiveText}" FontSize="26" FontWeight="Bold" Foreground="{StaticResource RecapInkBrush}"/>
+                                            <TextBlock Text="{Binding DaysActiveOfText}" FontSize="15" Foreground="{StaticResource RecapInkDimBrush}" VerticalAlignment="Bottom" Margin="7,0,0,4"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                                <Border CornerRadius="14" Margin="5,5,0,0" Padding="16,11"
+                                        Background="{StaticResource RecapStatFillBrush}" BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding StatStreakLabel}" FontSize="14" FontWeight="Medium" Foreground="{StaticResource RecapInkDimBrush}"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <TextBlock Text="{Binding LongestStreakText}" FontSize="26" FontWeight="Bold" Foreground="{StaticResource RecapInkBrush}"/>
+                                            <TextBlock Text="{Binding StreakUnitText}" FontSize="15" Foreground="{StaticResource RecapInkDimBrush}" VerticalAlignment="Bottom" Margin="7,0,0,4"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </UniformGrid>
+
+                            <!-- PRESTIGE (lifetime points spent; hidden on pre-schema-2 snapshots) -->
+                            <TextBlock Text="{Binding PrestigeLineText}" IsVisible="{Binding IsPrestigeVisible}"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource RecapGoldBrush}" Margin="2,8,0,0"/>
+
+                            <!-- BADGES -->
+                            <Grid Margin="0,14,0,8">
+                                <TextBlock Text="{Binding BadgesTitle}" FontSize="18" FontWeight="SemiBold"
+                                           Foreground="{StaticResource RecapInkBrush}" HorizontalAlignment="Left"/>
+                                <TextBlock Text="{Binding FeaturesUsedText}" FontSize="15" FontWeight="Medium"
+                                           Foreground="{StaticResource RecapInkDimBrush}" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding TopBadges}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><UniformGrid Columns="6"/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:FeatureBadgeViewModel">
+                                        <StackPanel Margin="3,0" HorizontalAlignment="Center">
+                                            <Border Width="58" Height="58" CornerRadius="16"
+                                                    BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="60%,100%">
+                                                        <GradientStop Color="#FF2B1448" Offset="0"/>
+                                                        <GradientStop Color="#FF160A29" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <Image Source="{Binding Image}" Width="38" Height="38" Stretch="Uniform"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding Label}" FontSize="13" FontWeight="Medium"
+                                                       Foreground="{StaticResource RecapInkDimBrush}" HorizontalAlignment="Center"
+                                                       TextAlignment="Center" Margin="0,5,0,0" TextTrimming="CharacterEllipsis" MaxWidth="84"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ===== FOOTER (reset + brand) ===== -->
+                    <StackPanel Grid.Row="2">
+                        <TextBlock FontSize="16" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="940"
+                                   Foreground="{StaticResource RecapInkDimBrush}" xml:space="preserve"><Run Text="{Binding ResetBefore}"/><Run Text="{Binding ResetBold}" FontWeight="SemiBold" Foreground="{StaticResource RecapInkBrush}"/><Run Text="{Binding ResetAfter}"/></TextBlock>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
+                            <Ellipse Width="6" Height="6" Fill="{StaticResource RecapMagentaBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding BrandText}" FontSize="14" FontWeight="Medium"
+                                       Foreground="{StaticResource RecapInkDimBrush}" Margin="9,0,9,0"/>
+                            <Ellipse Width="6" Height="6" Fill="{StaticResource RecapMagentaBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>
