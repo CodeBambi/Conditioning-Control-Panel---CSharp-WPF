@@ -1,0 +1,405 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/CompanionPromptEditorDialog.xaml.
+     Deviations, all forced:
+       ResizeMode="CanResizeWithGrip"   -> CanResize="True"
+       <Style x:Key TargetType>         -> <ControlTheme x:Key TargetType>; PromptTextBox carries
+                                           BasedOn="{StaticResource {x:Type TextBox}}" and ResetButton
+                                           its own Template (trap 4). SectionHeader here shadows the
+                                           Theme/ one on purpose, exactly as the WPF local Style did.
+       Style="{StaticResource X}"       -> Theme="{StaticResource X}"
+       Visibility="Collapsed"           -> IsVisible="False"
+       NullOrEmptyToCollapsedConverter  -> {x:Static StringConverters.IsNotNullOrEmpty} (built in)
+       Content="{loc:Str …}" on Button and CheckBox -> a TextBlock child (trap 1)
+       Click / Checked / Unchecked / TextChanged -> wired in the constructor by x:Name
+       Inline TextBlock content         -> Text="…" (Avalonia keeps the source line breaks)
+       ControlTemplate.Triggers         -> ^:pointerover /template/ selector -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:models="clr-namespace:ConditioningControlPanel.Models;assembly=CCP.Core"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.CompanionPromptEditorDialog"
+        Title="{loc:Str dialog_customize_ai_companion}"
+        Width="700" Height="750"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="True">
+
+    <Window.Resources>
+        <!-- ponytail: local copies of CompanionPromptEditorDialog.xaml's four keyed styles, hoist
+             when a second view needs them -->
+        <ControlTheme x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+        </ControlTheme>
+
+        <ControlTheme x:Key="SectionDescription" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </ControlTheme>
+
+        <ControlTheme x:Key="PromptTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New, monospace"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        </ControlTheme>
+
+        <ControlTheme x:Key="ResetButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="20,15">
+            <StackPanel>
+                <Grid>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str label_customize_your_ai_companion}"
+                                   Foreground="{StaticResource PinkBrush}"
+                                   FontSize="20" FontWeight="Bold"/>
+                        <Border Background="#FF6B6B" CornerRadius="3" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str label_beta}" Foreground="White" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+                    <!-- Active Prompt Badge -->
+                    <Border x:Name="ActivePromptBadge" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="12,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str label_active}" Foreground="#707070" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtActivePromptName" Text="{loc:Str label_default}" Foreground="#9370DB"
+                                       FontSize="11" FontWeight="SemiBold" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+                <TextBlock Text="{loc:Str label_edit_the_prompts_that_control_how_your_compan}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <CheckBox x:Name="ChkUseCustom" Foreground="White" VerticalContentAlignment="Center">
+                        <TextBlock Text="{loc:Str btn_enable_custom_prompts}"/>
+                    </CheckBox>
+                    <TextBlock Text="{loc:Str label_uncheck_to_use_default_prompts}"
+                               Foreground="#606060" FontSize="11"
+                               VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Scrollable Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20">
+            <StackPanel x:Name="ContentPanel">
+
+                <!-- P1.3 PromptValidator: shown when a save flagged one or more fields.
+                     Save is still allowed; this banner names which fields tripped. -->
+                <Border x:Name="ValidatorBanner"
+                        IsVisible="False"
+                        Margin="0,0,0,12"
+                        Padding="10,8"
+                        CornerRadius="4"
+                        Background="#3D3520"
+                        BorderBrush="#E5C76B"
+                        BorderThickness="1">
+                    <TextBlock x:Name="TxtValidatorBanner"
+                               Foreground="#F0E2A6"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                </Border>
+
+                <!-- CCBill AI Addendum: content-policy banner. Full version on first display;
+                     after "Got it" is clicked it collapses to a non-dismissable slim reminder. -->
+                <Border x:Name="PolicyBannerFull"
+                        Margin="0,0,0,16"
+                        Padding="12"
+                        CornerRadius="4"
+                        Background="#3D3520"
+                        BorderBrush="#A98E3A"
+                        BorderThickness="1">
+                    <StackPanel>
+                        <DockPanel LastChildFill="True" Margin="0,0,0,6">
+                            <TextBlock Text="&#9888;"
+                                       FontSize="16"
+                                       Foreground="#E5C76B"
+                                       VerticalAlignment="Top"
+                                       Margin="0,0,8,0"
+                                       DockPanel.Dock="Left"/>
+                            <TextBlock Text="{loc:Str prompt_editor_policy_full}"
+                                       Foreground="#F0E2A6"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                            <Button x:Name="BtnPolicyReadFull"
+                                    Background="Transparent"
+                                    Foreground="#E5C76B"
+                                    BorderThickness="0"
+                                    FontSize="11"
+                                    Cursor="Hand"
+                                    Padding="8,4"
+                                    Margin="0,0,8,0">
+                                <TextBlock Text="{loc:Str prompt_editor_policy_read}"/>
+                            </Button>
+                            <Button x:Name="BtnPolicyGotIt"
+                                    Background="#A98E3A"
+                                    Foreground="White"
+                                    BorderThickness="0"
+                                    FontSize="11"
+                                    Cursor="Hand"
+                                    Padding="12,4">
+                                <TextBlock Text="{loc:Str prompt_editor_policy_got_it}"/>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Slim version: always visible after acknowledgement. -->
+                <Border x:Name="PolicyBannerSlim"
+                        IsVisible="False"
+                        Margin="0,0,0,12"
+                        Padding="10,6"
+                        CornerRadius="4"
+                        Background="#2A2520"
+                        BorderBrush="#A98E3A"
+                        BorderThickness="0,0,0,2">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock Text="&#9888;"
+                                   FontSize="13"
+                                   Foreground="#E5C76B"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"
+                                   DockPanel.Dock="Left"/>
+                        <Button x:Name="BtnPolicyReadSlim"
+                                Background="Transparent"
+                                Foreground="#E5C76B"
+                                BorderThickness="0"
+                                FontSize="11"
+                                Cursor="Hand"
+                                Padding="4,0"
+                                VerticalAlignment="Center"
+                                DockPanel.Dock="Right">
+                            <TextBlock Text="{loc:Str prompt_editor_policy_read}"/>
+                        </Button>
+                        <TextBlock Text="{loc:Str prompt_editor_policy_slim}"
+                                   Foreground="#C8B47A"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- Personality / behavior only — provider, model, host, and effect
+                     permissions all live in the AI Brain panel on the Companion tab. -->
+
+                <!-- Section 1: Personality -->
+                <Expander IsExpanded="True" Margin="0,0,0,15" HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="{loc:Str setting_personality_normal_mode}" Theme="{StaticResource SectionHeader}"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Theme="{StaticResource SectionDescription}"
+                                   Text="Define who your companion is. Their vibe, tone, and what topics they like to talk about. This is used when Slut Mode is OFF."/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox x:Name="TxtPersonality" Theme="{StaticResource PromptTextBox}" Height="120"/>
+                            <Button x:Name="ResetPersonality" Grid.Column="1" Theme="{StaticResource ResetButton}"
+                                    VerticalAlignment="Top" Margin="5,0,0,0">
+                                <TextBlock Text="{loc:Str btn_reset}"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
+                <!-- Section 2: Explicit Reaction -->
+                <Expander IsExpanded="False" Margin="0,0,0,15" HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="{loc:Str setting_explicit_topic_handling}" Theme="{StaticResource SectionHeader}"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Theme="{StaticResource SectionDescription}"
+                                   Text="How should your companion react when you mention explicit topics in Normal Mode? (In Slut Mode, this is ignored and they respond explicitly.)"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox x:Name="TxtExplicitReaction" Theme="{StaticResource PromptTextBox}" Height="100"/>
+                            <Button x:Name="ResetExplicitReaction" Grid.Column="1" Theme="{StaticResource ResetButton}"
+                                    VerticalAlignment="Top" Margin="5,0,0,0">
+                                <TextBlock Text="{loc:Str btn_reset}"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
+                <!-- Section 3: Slut Mode -->
+                <Expander IsExpanded="False" Margin="0,0,0,15" HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str setting_slut_mode_personality}" Theme="{StaticResource SectionHeader}"/>
+                            <TextBlock Text="{loc:Str label_patreon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Theme="{StaticResource SectionDescription}"
+                                   Text="Define the companion's personality when Slut Mode is enabled. This is more explicit and trigger-heavy. Requires Patreon Premium."/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox x:Name="TxtSlutMode" Theme="{StaticResource PromptTextBox}" Height="140"/>
+                            <Button x:Name="ResetSlutMode" Grid.Column="1" Theme="{StaticResource ResetButton}"
+                                    VerticalAlignment="Top" Margin="5,0,0,0">
+                                <TextBlock Text="{loc:Str btn_reset}"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
+                <!-- Section 4: Knowledge Base -->
+                <Expander IsExpanded="False" Margin="0,0,0,15" HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="{loc:Str setting_knowledge_base}" Theme="{StaticResource SectionHeader}"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Theme="{StaticResource SectionDescription}"
+                                   Text="Files, videos, and resources your companion knows about and can recommend. List audio files, video series, creators, etc."/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox x:Name="TxtKnowledgeBase" Theme="{StaticResource PromptTextBox}" Height="140"/>
+                            <Button x:Name="ResetKnowledgeBase" Grid.Column="1" Theme="{StaticResource ResetButton}"
+                                    VerticalAlignment="Top" Margin="5,0,0,0">
+                                <TextBlock Text="{loc:Str btn_reset}"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
+                <!-- Section 5: Context Reactions -->
+                <Expander IsExpanded="False" Margin="0,0,0,15" HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="{loc:Str setting_screen_awareness_reactions}" Theme="{StaticResource SectionHeader}"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Theme="{StaticResource SectionDescription}"
+                                   Text="How your companion reacts to different apps and websites you're viewing. The companion receives context like [App: Chrome | Title: Reddit - r/BambiSleep]."/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox x:Name="TxtContextReactions" Theme="{StaticResource PromptTextBox}" Height="180"/>
+                            <Button x:Name="ResetContextReactions" Grid.Column="1" Theme="{StaticResource ResetButton}"
+                                    VerticalAlignment="Top" Margin="5,0,0,0">
+                                <TextBlock Text="{loc:Str btn_reset}"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
+                <!-- Section 6: Output Rules -->
+                <Expander IsExpanded="False" Margin="0,0,0,15" HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <TextBlock Text="{loc:Str setting_output_rules}" Theme="{StaticResource SectionHeader}"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Theme="{StaticResource SectionDescription}"
+                                   Text="Control how long responses are, emoji usage, and response frequency. Keep responses short for a texting feel."/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox x:Name="TxtOutputRules" Theme="{StaticResource PromptTextBox}" Height="100"/>
+                            <Button x:Name="ResetOutputRules" Grid.Column="1" Theme="{StaticResource ResetButton}"
+                                    VerticalAlignment="Top" Margin="5,0,0,0">
+                                <TextBlock Text="{loc:Str btn_reset}"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Expander>
+
+                <!-- Section 7: Global Knowledge Base Links -->
+                <Expander IsExpanded="False" Margin="0,0,0,15" HorizontalAlignment="Stretch">
+                    <Expander.Header>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str setting_global_knowledge_base_links}" Theme="{StaticResource SectionHeader}"/>
+                            <TextBlock Text="{loc:Str label_all_personalities}" Foreground="#50C878" FontSize="11"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Theme="{StaticResource SectionDescription}"
+                                   Text="Add URLs to hypno content that your companion knows about and can recommend. These links apply to ALL personalities, regardless of which preset is active."/>
+
+                        <!-- Links List -->
+                        <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8" Margin="0,0,0,8">
+                            <ListBox x:Name="LstKnowledgeLinks" Height="120"
+                                     Background="Transparent" BorderThickness="0"
+                                     Foreground="White" FontSize="11"
+                                     SelectionMode="Single">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:KnowledgeBaseLink">
+                                        <StackPanel Margin="0,2">
+                                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Url}" Foreground="#707070" FontSize="10"/>
+                                            <TextBlock Text="{Binding Description}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                       TextWrapping="Wrap" IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
+
+                        <!-- Add/Remove Buttons -->
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="AddKnowledgeLink" Theme="{StaticResource ResetButton}" Padding="12,6">
+                                <TextBlock Text="{loc:Str btn_add_link}"/>
+                            </Button>
+                            <Button x:Name="RemoveKnowledgeLink" Theme="{StaticResource ResetButton}" Padding="12,6" Margin="8,0,0,0">
+                                <TextBlock Text="{loc:Str btn_remove_selected}"/>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Expander>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" Padding="20,15">
+            <Grid ColumnDefinitions="*,Auto">
+                <Button x:Name="BtnResetAll" Theme="{StaticResource ResetButton}" HorizontalAlignment="Left">
+                    <TextBlock Text="{loc:Str btn_reset_all_to_defaults}"/>
+                </Button>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnCancel" Theme="{StaticResource SecondaryButton}" Width="80" Margin="0,0,10,0">
+                        <TextBlock Text="{loc:Str btn_cancel}"/>
+                    </Button>
+                    <Button x:Name="BtnSave" Theme="{StaticResource ActionButton}" Width="80">
+                        <TextBlock Text="{loc:Str btn_save}"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
