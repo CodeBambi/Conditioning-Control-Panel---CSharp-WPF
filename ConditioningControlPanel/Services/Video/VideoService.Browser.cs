@@ -133,6 +133,10 @@ namespace ConditioningControlPanel.Services
                     // that swallows the cursor while the rest of the app still shows one reads as a
                     // frozen machine, and attention targets are clicked over this surface.
                     HideCursor = false,
+                    // The SAME flag SetupStrictHandlers is given below, not the live IsStrictActive
+                    // probe: the page wants one fixed answer at load time, and this is the value the
+                    // whole run is locked to.
+                    Strict = strict,
                     IsHostPaused = () => _gracePaused,
                     // Lock Card / Lockdown / Possession: every screen is covered on purpose, so a
                     // dead mirror is left black rather than uncovered mid-clip (the engine asks
@@ -328,23 +332,26 @@ namespace ConditioningControlPanel.Services
         /// video run, and the duck ref taken in PlayVideo is deliberately kept so CloseAll still
         /// balances it exactly once.
         ///
-        /// A failure AFTER playback genuinely started is NOT replayed: see the branch below.
+        /// A failure AFTER playback genuinely started is NOT replayed: see the branch below - unless
+        /// the clip is under a STRICT lock, where ending it would hand the user an exit and the same
+        /// clip is replayed through LibVLC instead.
         /// </summary>
-        private void FallbackToLibVlc(string reason)
+        private void FallbackToLibVlc(string reason, bool blameFile = false)
         {
-            // The two branches below are the pure policy in VideoSurfaceHealth.DecideBrowserFailure;
-            // this call site is the ONLY one that acts on it for the primary surface. (Secondary
-            // failures never reach here at all - the engine drops the mirror and keeps the session,
-            // which is DecideBrowserFailure's DropSecondary arm.)
+            // The branches below are the pure policy in VideoSurfaceHealth.DecideBrowserFailure; this
+            // call site is the ONLY one that acts on it for the primary surface. (Secondary failures
+            // never reach here at all - the engine drops the mirror and keeps the session, which is
+            // DecideBrowserFailure's DropSecondary arm.)
             var action = VideoSurfaceHealth.DecideBrowserFailure(
-                isPrimarySurface: true, alreadyFellBack: _browserFallbackDone, playbackStartedFired: _browserStartedFired);
+                isPrimarySurface: true, alreadyFellBack: _browserFallbackDone, playbackStartedFired: _browserStartedFired,
+                strictLock: _browserStrict, blamesFile: blameFile);
             if (action == VideoSurfaceHealth.BrowserFailureAction.Ignore) return;
             _browserFallbackDone = true;
 
             var path = _browserPath;
             var strict = _browserStrict;
 
-            // ---- mid-clip failure: end the run, never replay it ----
+            // ---- mid-clip failure, no strict lock: end the run, never replay it ----
             // VideoStarted has already gone out to seven subscribers; a replay would fire it a
             // second time and make the user rewatch the whole clip from 0 for a stall at the end.
             // The engine has already marked the file browser-unsafe when it blamed the file, so the
@@ -360,9 +367,20 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            App.Logger?.Warning("VideoService: browser playback failed for {File} ({Reason}) - replaying via LibVLC",
-                Path.GetFileName(path ?? "(none)"), reason);
-            VideoDiag.Log("VIDEO", $"browser FALLBACK ({reason}) - replaying {Path.GetFileName(path ?? "?")} via LibVLC");
+            if (_browserStartedFired)
+            {
+                // Only the strict arm reaches here mid-clip. Worth its own line: the user WILL see
+                // the clip restart, and this is the line that explains why the lock did not lift.
+                App.Logger?.Warning("VideoService: browser playback failed MID-CLIP for {File} ({Reason}) under a STRICT lock - replaying via LibVLC rather than releasing the lock",
+                    Path.GetFileName(path ?? "(none)"), reason);
+                VideoDiag.Log("VIDEO", $"browser MID-CLIP FAILURE ({reason}) under STRICT - replaying {Path.GetFileName(path ?? "?")} via LibVLC, the lock holds");
+            }
+            else
+            {
+                App.Logger?.Warning("VideoService: browser playback failed for {File} ({Reason}) - replaying via LibVLC",
+                    Path.GetFileName(path ?? "(none)"), reason);
+                VideoDiag.Log("VIDEO", $"browser FALLBACK ({reason}) - replaying {Path.GetFileName(path ?? "?")} via LibVLC");
+            }
 
             // Handing the clip back to LibVLC means the wedge ladder matters again. Re-arm it in
             // the pre-roll observation state BEFORE the handoff below - closing WebView2 HWNDs is
@@ -550,7 +568,10 @@ namespace ConditioningControlPanel.Services
             // Marked immediately (cheap, and the routing decision must not depend on the hop landing).
             if (blameFile && !string.IsNullOrEmpty(_browserPath))
                 BrowserUnsafeVideoCache.Add(_browserPath, reason);
-            PostAfterPageMessage(() => { if (_browserActive) FallbackToLibVlc(reason); });
+            // blameFile travels with the reason: mid-clip under a strict lock it is what tells a
+            // genuinely undecodable file (end the run) apart from a session-level fault such as the
+            // pause rule (102), which must never be a way out of the lock.
+            PostAfterPageMessage(() => { if (_browserActive) FallbackToLibVlc(reason, blameFile); });
         }
 
         private void OnBrowserClicked()

@@ -24,6 +24,12 @@
   const BG_RESYNC_GAP_MS = 4000;
   const BG_PLAY_RETRIES = 3;    // then give up on the backdrop (never on the clip)
 
+  // Unrequested-pause rule. One stray pause is an OS media key or a browser
+  // hiccup and is simply resumed; only a BURST of them means we are fighting the
+  // browser and will never win. See pauseLoopDetected.
+  const PAUSE_WINDOW_MS = 5000;
+  const PAUSE_WINDOW_MAX = 6;
+
   // Error codes 1-4 are MediaError.code verbatim (a real decode/network failure
   // => the file belongs in BrowserUnsafeVideoCache). 100+ are ours; only 100/101
   // mean "this file misbehaved", 102/103 are session-level.
@@ -101,11 +107,55 @@
     }
   }
 
+  // ---------- media-key guard (strict lock) ----------
+
+  // The focused WebView2 owns the OS media session, so a Bluetooth headset's
+  // play/pause tap (Sony WH-1000XM6 and friends) or a keyboard media key reaches
+  // the element through Chromium itself - it is already paused by the time our
+  // 'pause' listener runs, and under a strict lock nothing may interrupt the clip
+  // at all. Claiming every Media Session action with a no-op handler is the
+  // documented way to stop that: Chromium hands the action to the HANDLER instead
+  // of acting on the element, so the key becomes a no-op rather than a pause.
+  //
+  // Strict only. Outside the lock a pause is the user's business again, and the
+  // rolling pause rule below is enough on its own.
+  const MEDIA_KEY_ACTIONS = [
+    'play', 'pause', 'stop', 'seekbackward', 'seekforward', 'seekto',
+    'previoustrack', 'nexttrack',
+  ];
+
+  let mediaKeyGuardArmed = false;
+
+  function setMediaKeyGuard(on) {
+    const want = !!on;
+    if (mediaKeyGuardArmed === want) return;
+    if (!('mediaSession' in navigator) || !navigator.mediaSession
+        || typeof navigator.mediaSession.setActionHandler !== 'function') {
+      return; // older WebView2 runtime: the pause rule is the only lock we have
+    }
+    let claimed = 0;
+    MEDIA_KEY_ACTIONS.forEach((action) => {
+      try {
+        // A no-op function, never null: null hands the action straight back to
+        // Chromium, which is exactly the default we are here to suppress.
+        navigator.mediaSession.setActionHandler(action, want ? function () { } : null);
+        claimed++;
+      } catch (e) {
+        // This runtime does not know the action. The others still land, and every
+        // one of them is a separate key the headset can no longer press.
+      }
+    });
+    mediaKeyGuardArmed = want;
+    log('media-key guard ' + (want ? 'armed' : 'released')
+      + ' (' + claimed + '/' + MEDIA_KEY_ACTIONS.length + ' actions)');
+  }
+
   // ---------- teardown ----------
 
   /** Free both decoders NOW. Safe to call at any time, including with no session. */
   function teardown() {
     cur = null; // first, so the pause/error churn below reaches no handler
+    setMediaKeyGuard(false); // the lock belongs to the clip, not to the page
     clearAttention(); // targets belong to the clip that is going away
     stopTicker();
     lastTimeMs = -1;
@@ -239,6 +289,9 @@
     cur = {
       url: url,
       blur: !!d.blurBackground,
+      // Strict lock (Lock Card / Lockdown / Possession). The host stamps it on the
+      // load; absent means never strict, same default the C# side uses.
+      strict: !!d.strict,
       startAtMs: Number.isFinite(d.startAtMs) && d.startAtMs > 0 ? d.startAtMs : 0,
       startedAt: now,
       lastProgressAt: now,
@@ -248,6 +301,7 @@
       errored: false,
       hostPaused: false,
       unrequestedPauses: 0,
+      pauseStamps: [],
       startApplied: false,
       bgPlayFails: 0,
       bgResyncAt: 0,
@@ -255,6 +309,7 @@
     };
 
     document.body.classList.toggle('has-bg', cur.blur);
+    setMediaKeyGuard(cur.strict);
     applyVolume();
     applySink(d.sinkLabel);
 
@@ -433,9 +488,31 @@
     fail(code || ERR_BAD_LOAD, 'media error (' + name + ')' + detail);
   });
 
+  /**
+   * The rolling-window half of the anti-pause rule, kept pure so it can be
+   * reasoned about (and exercised) on its own.
+   *
+   * `stamps` is this load's list of unrequested-pause times and is TRIMMED IN
+   * PLACE: everything older than PAUSE_WINDOW_MS is dropped before the count is
+   * taken, so the list can never grow without bound over a long clip. Returns
+   * true only when the page should stop resuming and report ERR_PAUSE_LOOP.
+   *
+   * It used to be a per-load counter with no decay, and the SECOND unrequested
+   * pause anywhere in a clip was fatal - so two taps on a Bluetooth headset's
+   * play/pause, minutes apart, ended a Strict Lock video in v6.9.0. What the rule
+   * is actually guarding against is a browser that re-pauses us as fast as we
+   * resume, which is a burst, not a total.
+   */
+  function pauseLoopDetected(stamps, now) {
+    stamps.push(now);
+    const cutoff = now - PAUSE_WINDOW_MS;
+    while (stamps.length && stamps[0] < cutoff) stamps.shift();
+    return stamps.length > PAUSE_WINDOW_MAX;
+  }
+
   // Anti-pause. There is no user-facing pause on a mandatory video, so a pause we
-  // did not ask for is an interruption: resume it once, and if it happens again
-  // in the same load report an error rather than fighting the browser forever.
+  // did not ask for is an interruption: resume it, and only give up once they are
+  // arriving faster than we can answer rather than fighting the browser forever.
   fg.addEventListener('pause', () => {
     if (!cur || cur.errored || cur.ended || cur.hostPaused) return;
     if (fg.ended || fg.error) return; // 'ended'/'error' own those transitions
@@ -444,13 +521,14 @@
     const dur = fg.duration;
     if (Number.isFinite(dur) && dur > 0 && (fg.currentTime || 0) >= dur - 0.5) return;
     cur.unrequestedPauses++;
-    if (cur.unrequestedPauses === 1) {
-      log('unrequested pause - resuming');
+    if (!pauseLoopDetected(cur.pauseStamps, performance.now())) {
+      log('unrequested pause #' + cur.unrequestedPauses + ' - resuming');
       playEl(fg, 'fg');
       if (cur.blur) playEl(bg, 'bg');
       return;
     }
-    fail(ERR_PAUSE_LOOP, 'playback paused ' + cur.unrequestedPauses + ' times without a request');
+    fail(ERR_PAUSE_LOOP, 'playback paused ' + cur.pauseStamps.length + ' times in '
+      + PAUSE_WINDOW_MS + 'ms without a request');
   });
 
   // ---------- backdrop media events (never fatal) ----------
@@ -821,6 +899,9 @@
       get durationMs() { return Number.isFinite(fg.duration) ? Math.round(fg.duration * 1000) : 0; },
       get blur() { return !!(cur && cur.blur); },
       get unrequestedPauses() { return cur ? cur.unrequestedPauses : 0; },
+      get strict() { return !!(cur && cur.strict); },
+      get mediaKeyGuard() { return mediaKeyGuardArmed; },
+      pauseLoopDetected: pauseLoopDetected,
       get attentionCount() { return attn.size; },
       get errored() { return !!(cur && cur.errored); },
     },

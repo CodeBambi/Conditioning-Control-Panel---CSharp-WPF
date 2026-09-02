@@ -40,6 +40,14 @@ namespace ConditioningControlPanel.Services.Video.Browser
         /// <summary>Start position for the chaos random-segment mode. 0 = from the top.</summary>
         public long StartAtMs { get; init; }
 
+        /// <summary>
+        /// This clip runs under a strict lock, as a FIXED fact of the session rather than the live
+        /// probe <see cref="IsHostStrict"/> answers. It rides the page's <c>load</c> message, where
+        /// it arms the Media Session guard: a focused WebView2 owns the OS media session, so without
+        /// it a Bluetooth headset's play/pause tap pauses the element behind our backs.
+        /// </summary>
+        public bool Strict { get; init; }
+
         /// <summary>Runs on each window after construction and BEFORE Show() - the host's hook for
         /// strict handlers and anything that must be wired before the HWND is realized.</summary>
         public Action<Window, Screen, bool>? ConfigureBeforeShow { get; init; }
@@ -498,6 +506,10 @@ namespace ConditioningControlPanel.Services.Video.Browser
                     blurBackground = req.BlurBackground,
                     hideCursor = req.HideCursor,
                     startAtMs = req.StartAtMs,
+                    // Arms the page's Media Session guard (player.js setMediaKeyGuard), which is what
+                    // stops an OS/Bluetooth media key from pausing a video the user must not be able
+                    // to stop. Every window carries it: a mirror is just as pausable as the primary.
+                    strict = req.Strict,
                     // Audio-output routing by device label (#938 plumbing). Null = leave the page on
                     // the Windows default; the page treats every failure the same way and reports it
                     // back as {type:'sink'}.

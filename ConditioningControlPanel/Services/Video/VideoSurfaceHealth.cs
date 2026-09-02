@@ -120,12 +120,25 @@ namespace ConditioningControlPanel.Services
         /// Policy for a browser-engine surface failure. A secondary is a mirror and is never allowed
         /// to end the run; the primary carries the audio and the session, so its pre-first-frame
         /// failure replays through LibVLC and its mid-clip failure ends the run.
+        ///
+        /// <para>The one exception is the STRICT lock, and it is a content-lock integrity rule rather
+        /// than a playback nicety. Ending a clip mid-run releases the lock, so under strict a page
+        /// failure that does NOT blame the file is a way OUT of a video the user is not allowed to
+        /// stop - which is exactly how two taps on a Bluetooth headset's play/pause ended a Strict
+        /// Lock video in v6.9.0: the page's pause rule reported 102, nothing blamed the file, and
+        /// EndClip let the user go. A non-file failure under the lock hands the SAME clip to LibVLC
+        /// instead, so the cover stays on screen and the session runs on. A failure that DOES blame
+        /// the file still ends the run: replaying a file that cannot decode would only trap the user
+        /// against a clip that can never finish.</para>
         /// </summary>
-        internal static BrowserFailureAction DecideBrowserFailure(bool isPrimarySurface, bool alreadyFellBack, bool playbackStartedFired)
+        internal static BrowserFailureAction DecideBrowserFailure(bool isPrimarySurface, bool alreadyFellBack, bool playbackStartedFired,
+            bool strictLock = false, bool blamesFile = false)
         {
             if (!isPrimarySurface) return BrowserFailureAction.DropSecondary;
             if (alreadyFellBack) return BrowserFailureAction.Ignore;
-            return playbackStartedFired ? BrowserFailureAction.EndClip : BrowserFailureAction.FallbackWholeClip;
+            if (!playbackStartedFired) return BrowserFailureAction.FallbackWholeClip;
+            if (strictLock && !blamesFile) return BrowserFailureAction.FallbackWholeClip;
+            return BrowserFailureAction.EndClip;
         }
 
         /// <summary>What one tick of the browser engine's per-surface first-frame sweep should do
