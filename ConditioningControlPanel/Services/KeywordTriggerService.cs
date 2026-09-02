@@ -875,7 +875,7 @@ namespace ConditioningControlPanel.Services
             NeedsOcrConfirmation = false;
 
             if (!_isActive || _disposed) return;
-            // Live entitlement re-check (see OnKeyPressed). Placed ahead of the token diagnostic
+            // Live entitlement re-check (see OnKeyPressed). Placed ahead of the scan diagnostic
             // below on purpose: once access has lapsed, the user's screen contents are none of our
             // business - not even at log level.
             if (!HasAccess()) return;
@@ -886,37 +886,17 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // App scope, checked FIRST - ahead of the token diagnostic below on purpose. That
-            // diagnostic writes the scanned words to the log at Information level, and the whole
-            // point of excluding an app is that its contents are none of our business: logging them
-            // and then declining to act on them would be the wrong half of the promise. Dropping
-            // the entire scan is right rather than filtering word by word, because a blocked app is
-            // usually the thing filling the screen. The position guards are cleared so no streak
-            // survives the gap and nothing fires the instant focus returns.
+            // App scope, checked FIRST - ahead of the scan diagnostic below on purpose. The whole
+            // point of excluding an app is that its contents are none of our business, so an
+            // excluded app should not reach the matching pass or the counts it logs at all.
+            // Dropping the entire scan is right rather than filtering word by word, because a
+            // blocked app is usually the thing filling the screen. The position guards are cleared
+            // so no streak survives the gap and nothing fires the instant focus returns.
             if (!IsForegroundAppAllowed("OCR"))
             {
                 _ocrSeenCounts.Clear();
                 _highlightedOcrKeys.Clear();
                 return;
-            }
-
-            // Diagnostic: log the raw OCR tokens per scan so we can see exactly what
-            // Windows OCR returned (tokenization + casing). Helps debug issues like
-            // "GOOD BOY doesn't match" where OCR may merge all-caps into one token.
-            // Keep this short — log at most the first 40 tokens and truncate long ones.
-            if (App.Logger != null)
-            {
-                var snippet = new System.Text.StringBuilder();
-                int n = Math.Min(40, allWords.Count);
-                for (int i = 0; i < n; i++)
-                {
-                    if (i > 0) snippet.Append(' ');
-                    var t = allWords[i].Text ?? "";
-                    if (t.Length > 20) t = t.Substring(0, 20) + "…";
-                    snippet.Append('"').Append(t).Append('"');
-                }
-                if (allWords.Count > n) snippet.Append(" …+").Append(allWords.Count - n);
-                App.Logger.Information("OCR tokens ({Total}): {Tokens}", allWords.Count, snippet.ToString());
             }
 
             var settings = App.Settings?.Current;
@@ -965,6 +945,21 @@ namespace ConditioningControlPanel.Services
                     firedTriggers.Add(trigger);
                     matchedWords.AddRange(words);
                 }
+            }
+
+            // Diagnostic for keyword matching. This deliberately logs NO screen content: the
+            // tokens are whatever happened to be on the user's screen, and this file is
+            // logs/app-.log, which ships with every bug report. Counts still answer the question
+            // the old token dump was for ("62 tokens, 0 matches" points straight at tokenisation),
+            // and the keywords named here are the user's OWN configured trigger words - the
+            // matching loop above tests trigger.Keyword against the scan, so these are the
+            // needles, never the haystack. Debug keeps it off disk on a normal install
+            // (App.xaml.cs pins the sink floor to Information).
+            if (App.Logger != null)
+            {
+                App.Logger.Debug("OCR scan: {Total} token(s), {Matched} matched word(s), keyword(s): [{Keywords}]",
+                    allWords.Count, matchedWords.Count,
+                    firedTriggers.Count > 0 ? string.Join(",", firedTriggers.Select(t => t.Keyword)) : "none");
             }
 
             if (matchedWords.Count == 0 || firedTriggers.Count == 0)
