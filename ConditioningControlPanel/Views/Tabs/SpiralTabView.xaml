@@ -119,8 +119,17 @@
 
         <!-- The embed's slab. Empty until the spiral state builds one, and Hidden
              rather than Visible until that embed has navigated - see the airspace
-             note at the top of this file. -->
-        <Grid x:Name="EmbedHost" Visibility="Collapsed"/>
+             note at the top of this file.
+
+             THE 32px TOP INSET IS THE HELP CHIP'S AIRSPACE. A WebView2 is a native
+             child HWND and paints over every WPF element in the window whatever the
+             z-order says, so a "?" drawn on top of a full-bleed embed would simply
+             stop existing the moment the canvas revealed. Reserving a strip the
+             browser is never arranged into is the only way a WPF affordance survives
+             up here, and it costs the map 32px it was not using. The fog and the
+             reveal keep their full bleed: they are the two states with no browser
+             in them, and the chip is not shown in either. -->
+        <Grid x:Name="EmbedHost" Visibility="Collapsed" Margin="0,32,0,0"/>
 
         <!-- THE SPLASH. Opaque, because its whole job is to be the thing on screen
              while a browser is being built behind it. Drawn from a spiral the
@@ -186,5 +195,51 @@
                         IsHitTestVisible="False" ClipToBounds="True"/>
             </StackPanel>
         </Border>
+
+        <!-- THE "?" - what the Spiral actually is, for the people who walked in here
+             and found a map with no legend. Its CONTENT is the app's ordinary help
+             popover (Controls.HelpPopover, attached in code-behind), so it behaves
+             exactly like every other "?" in the app.
+
+             ITS SKIN IS NOT THE APP'S, AND THAT IS THE FILE'S LAW, NOT A PREFERENCE.
+             HelpButtonStyle is an 18px circle that hovers to the theme's hot accent,
+             which is the mod accent, which this room may never wear (see the header,
+             and SpiralRoomTests.TheFogEraWearsTheFusesOwnGoldAndNeverTheModAccent,
+             which pins it by refusing this file ANY resource lookup that is not a
+             font). So the chip is templated here in the fuse's own literal gold. Same
+             shape, same size, same cursor, same meaning; the room's colour.
+
+             DECLARED LAST so it is topmost over the splash and the waiting panel, and
+             it lives in the 32px EmbedHost reserves at the top so the browser cannot
+             paint it away. Collapsed by default: the code-behind shows it only in the
+             two states that are actually a room you are being asked to understand,
+             and never over the fog or the reveal, where there is nothing to click by
+             design. Content comes from Loc at attach time (BuildDescentHelpContent),
+             so it is localized in all nine languages on its first day.
+
+             No ToolTip on purpose: the popover and a ToolTip must never both render
+             off the same button (same rule as BtnIntakePassHelp). -->
+        <Button x:Name="BtnSpiralHelp" Visibility="Collapsed"
+                HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,8,14,0" Width="18" Height="18"
+                Background="Transparent" Cursor="Help">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="chip" Width="18" Height="18" CornerRadius="9"
+                            Background="#00E0B052" BorderBrush="#4DE0B052" BorderThickness="1">
+                        <TextBlock Text="?" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="#B8E0B052" Margin="0,-1,0,0"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="chip" Property="Background" Value="#22E0B052"/>
+                            <Setter TargetName="chip" Property="BorderBrush" Value="#99E0B052"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+
     </Grid>
 </UserControl>

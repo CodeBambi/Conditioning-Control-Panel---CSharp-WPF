@@ -8,6 +8,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Controls;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Descent;
@@ -413,6 +414,13 @@ namespace ConditioningControlPanel.Views.Tabs
         {
             _state = state;
 
+            // THE "?" FOLLOWS THE STATE. It belongs to the two states that are a room you
+            // are being asked to make sense of, and to neither of the two that are a
+            // ceremony: the fog says nothing is clickable and means it, and the reveal
+            // is a one-shot the user should not be able to interrupt with a help card.
+            // Attaching is idempotent and costs nothing until the button is actually shown.
+            ApplyHelpChip(state != SpiralRoomState.Fog && !_firstLight);
+
             switch (state)
             {
                 case SpiralRoomState.Fog:
@@ -479,6 +487,89 @@ namespace ConditioningControlPanel.Views.Tabs
                     break;
             }
         }
+
+        /// <summary>
+        /// Is the room actually SHOWING the spiral right now? The gate the first-open intro card
+        /// stands on, and it is deliberately the painted state rather than "does a block exist":
+        /// a card that explained banked days over a fog layer would be describing a map the user
+        /// has not been given yet, and one that fired mid-reveal would land on top of the single
+        /// moment this whole feature was built for.
+        /// </summary>
+        internal bool IsShowingSpiral => _state == SpiralRoomState.Spiral && !_firstLight;
+
+        // ============================== the "?" ==============================
+
+        /// <summary>Attached once per view; the popover itself is cheap but there is no reason
+        /// to rebuild it on every repaint, and this state is re-applied on every BlockChanged.</summary>
+        private bool _helpAttached;
+
+        /// <summary>
+        /// Show or hide the help chip, attaching its popover the first time it is wanted.
+        ///
+        /// <para>LAZY ON PURPOSE. A user who never reaches the spiral era never builds a
+        /// HelpContent, and a user still in the fog never has one attached to a button they
+        /// cannot see. Failure is swallowed the same way every other optional affordance in
+        /// this room fails: a missing "?" is a smaller problem than a room that would not
+        /// paint.</para>
+        /// </summary>
+        private void ApplyHelpChip(bool show)
+        {
+            try
+            {
+                if (BtnSpiralHelp == null) return;
+
+                if (!show)
+                {
+                    BtnSpiralHelp.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                if (!_helpAttached)
+                {
+                    _helpAttached = true;
+                    BtnSpiralHelp.ToolTip = null;   // popover and ToolTip must never double-render
+                    HelpPopover.Attach(BtnSpiralHelp, BuildDescentHelpContent());
+                }
+
+                BtnSpiralHelp.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex) { App.Logger?.Debug("[Spiral] help chip: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// What the Spiral IS, in the shape <c>HelpTooltipBuilder</c> renders: header, "What It
+        /// Does", tips, "How It Works".
+        ///
+        /// <para><b>Composed from Loc, not from HelpContentService.</b> The 56 topics in that
+        /// service are hardcoded English, which was survivable for topics that shipped years ago
+        /// and is not survivable for a topic shipping into nine languages this month. The pattern
+        /// followed here is MainWindow.UiUpdates.BuildIntakePassHelpContent - build the
+        /// <see cref="HelpContent"/> at attach time out of <c>Loc.Get</c> calls - so this topic is
+        /// translated on its first day and stays translated when the strings are revised.</para>
+        ///
+        /// <para>The mental model it has to leave behind, in this order: you earn XP anywhere, it
+        /// lands in today's jar, a fifth of a jar banks the day, and banked days are the only
+        /// thing that moves you down. The two guarantees underneath it are the tips and the
+        /// closing line: nothing resets ever again, and time away is paid back rather than
+        /// punished.</para>
+        /// </summary>
+        private static HelpContent BuildDescentHelpContent() => new()
+        {
+            SectionId = "Descent",
+            // The header icon is a plain TextBlock, which cannot render COLR/CPAL colour
+            // emoji - a BMP dingbat is the only glyph that survives. Same constraint the
+            // intake pass topic hit; the spiral's own glyph is drawn, not typed.
+            Icon = "◌",
+            Title = Loc.Get("help_descent_title"),
+            WhatItDoes = Loc.Get("help_descent_what"),
+            Tips = new List<string>
+            {
+                Loc.Get("help_descent_tip_1"),
+                Loc.Get("help_descent_tip_2"),
+                Loc.Get("help_descent_tip_3"),
+            },
+            HowItWorks = Loc.Get("help_descent_how"),
+        };
 
         /// <summary>
         /// The fog's readout: T-minus while the fuse is still burning, and a phrase once the instant
@@ -658,7 +749,10 @@ namespace ConditioningControlPanel.Views.Tabs
 
                 // ...and neither can anything else. The reveal is the one thing on screen for its
                 // three and a half seconds: no splash over it, no embers drifting through it, no
-                // waiting panel breathing underneath.
+                // waiting panel breathing underneath, and no "?" in the corner inviting a click
+                // through the middle of it. The chip comes back when the reveal hands the room
+                // over to the ordinary state selection.
+                ApplyHelpChip(false);
                 HideSplash(fade: false);
                 StopFogFx();
                 StopWaitingAmbience();

@@ -653,6 +653,40 @@ namespace ConditioningControlPanel
                 Footer = "Rolling out gradually. If you can see the jar, you are in."
             },
 
+            // THE VAT'S OTHER HALF. descent-vat above explains the jar; this one explains what
+            // filling it is FOR, and the two are deliberately separate cards because they are
+            // reached from different places by people at different points - the jar introduces
+            // itself on the Trainer Card, and this waits until someone actually walks into the
+            // Spiral Room. Fired from ShowTab("spiral") and gated on the room having painted
+            // the MAP (SpiralTabView.IsShowingSpiral), so it can never explain banked days over
+            // a fog layer or land on top of the first-light reveal.
+            //
+            // ENGLISH-ONLY, and that is a debt rather than a decision: every card in this
+            // registry is hardcoded English and matching the file beats being the one localized
+            // outlier in it. The help topic this ships alongside took the other road
+            // (SpiralTabView.BuildDescentHelpContent reads Loc), so the same explanation exists
+            // translated for anyone who opens the "?" - which is the mitigation, not the fix.
+            ["descent-spiral"] = new FeatureIntroContent
+            {
+                Key = "descent-spiral",
+                Glyph = "🌀",
+                RailTitle = "The Spiral",
+                Title = "🌀  The Spiral",
+                Tagline = "Every day you bank, you sink a little further.",
+                Accent = "#66E0C0",
+                Bullets = new[]
+                {
+                    // The middle clause is verbatim the canonical sentence (6.9.1's
+                    // profile_vat_tick_drain), so the tooltip on the jar and this card say the
+                    // same thing in the same words rather than two paraphrases of it.
+                    "The jar on your Trainer Card is today. A fifth of the jar banks the day, and banked days are the only thing that moves you down the Spiral.",
+                    "Seven stages are waiting at 1, 7, 21, 50, 100, 180 and 300 days, and the map lights up as you pass each one.",
+                    "A short day that banks counts the same as a long one, so showing up beats grinding.",
+                    "Nothing resets. September's wipe was the last one, and everything you've earned stays where it is."
+                },
+                Footer = "Open the Spiral from the rail any time, or from the plate on your Trainer Card."
+            },
+
             // v6.8.0, the One Account lane: the first card with a real CTA, because a card about
             // a DESTINATION must be able to take you there. Queued on the same settle path as
             // daily-free (MainWindow.TabNavigation.OnDashboardTabVisibilityChanged) and owned by

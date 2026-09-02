@@ -165,17 +165,24 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// "Day 12 · III" - the devotion day count and the stage numeral, and nothing
-        /// else. The day label reuses the existing localized "Day {0}" string rather
-        /// than minting an English one, and the stage stays a Roman numeral because
-        /// the stage NAMES (Curious … Eternal) remain an open owner decision with no
-        /// loc keys; inventing copy for them here is exactly what the rail refused to
-        /// do (see SpiralRailHost.StageNumeral).
+        /// "Day 12 · Downward" - the devotion day count and the stage's NAME, and
+        /// nothing else. The day label reuses the existing localized "Day {0}" string
+        /// rather than minting an English one.
+        ///
+        /// <para><b>The names are ruled now.</b> This used to read "Day 12 · III"
+        /// because the stage names were an open owner decision with no loc keys, and
+        /// inventing copy here would have been the client saying something the ceremony
+        /// had not agreed to. The owner locked the seven on 2026-08-11, web has been
+        /// shipping them since (cclabs-web src/lib/descent/stages.ts), and they are
+        /// localized here as <c>descent_stage_N_name</c> - so the numeral is no longer
+        /// the honest answer, it is only the smaller one. The rail badge keeps its
+        /// numeral because a 40px circle has room for a glyph and not for a word;
+        /// anywhere a word fits, the word wins.</para>
         /// </summary>
         private static string BuildSpiralSummary(DescentBlock block)
         {
             string day = string.Format(Loc.Get("programs_card_day"), block.DevotionDays);
-            return day + " · " + Controls.SpiralRailHost.StageNumeral(block.Stage?.N ?? 0);
+            return day + " · " + DescentStageCopy.Name(block.Stage?.N ?? 0);
         }
 
         // ============================== the door ==============================

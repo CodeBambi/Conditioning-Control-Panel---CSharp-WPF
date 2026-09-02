@@ -553,6 +553,16 @@ namespace ConditioningControlPanel
                         SpiralTab.Visibility = Visibility.Visible;
                         AnimateTabIn(SpiralTab);
                         SpiralTab.OnTabShown();
+
+                        // THE EXPLAINER, and OnTabShown above is what earns the right to ask.
+                        // That call re-reads every gate and paints the room, so IsShowingSpiral
+                        // is the room's own answer to "is there a map on screen" rather than a
+                        // second, drifting copy of the gate arithmetic here. A user in the fog
+                        // era or mid-reveal leaves the card unspent and gets it on the visit
+                        // where it would actually be describing something they can see - the
+                        // same "explain it where it exists" rule descent-vat follows on the
+                        // Trainer Card.
+                        if (SpiralTab.IsShowingSpiral) MaybeShowFeatureIntro("descent-spiral", "spiral");
                     }
                     break;
 
