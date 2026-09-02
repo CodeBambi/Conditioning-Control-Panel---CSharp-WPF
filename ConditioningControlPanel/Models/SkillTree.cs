@@ -20,13 +20,22 @@ public class SkillDefinition
     public string? SecretRequirementDesc { get; set; }
 
     /// <summary>
-    /// Permanent skills survive the seasonal reset (stat/analytics displays — the
-    /// "non-mechanical" nodes). Non-permanent (mechanical/XP-economy) skills are
-    /// removed by the server at season rollover and must be re-purchased.
-    /// Derived from <see cref="PermanentIds"/>, which must mirror the server's
-    /// authoritative PERMANENT_SKILL_IDS list.
+    /// EVERY skill is permanent. Once it is bought it stays bought, for the life of the account.
+    ///
+    /// <para>This used to be a split. Stat/analytics nodes were "permanent" and the mechanical
+    /// XP-economy nodes were "seasonal": the server dropped them at the monthly rollover and the
+    /// re-buy was the Prestige loop. The Descent ended monthly seasons on
+    /// <see cref="Services.Descent.DescentEpochs.SeasonsEndUtc"/> and the server now suppresses
+    /// the wipe permanently, so the seasonal half of that split describes a thing that cannot
+    /// happen again. It is folded in here rather than left to rot, because a dead branch that
+    /// still renders "this resets at the monthly rollover" at a user is a lie the UI keeps
+    /// telling on its own.</para>
+    ///
+    /// <para>Deliberately a constant rather than a <see cref="PermanentIds"/> lookup: the law is
+    /// "all of them", and stating it directly means a skill added tomorrow inherits it without
+    /// anyone remembering to touch a list.</para>
     /// </summary>
-    public bool IsPermanent => PermanentIds.Contains(Id);
+    public bool IsPermanent => true;
 
     /// <summary>
     /// Effect type identifier for applying the skill's bonus
@@ -66,13 +75,25 @@ public class SkillDefinition
         }
     }
 
-    /// <summary>Ids of all permanent (season-persistent) skills.</summary>
-    public static IReadOnlyList<string> PermanentIds { get; } =
-        new List<string>
-        {
-            "pink_hours", "ditzy_data", "hive_mind", "trophy_case", "popular_girl", "eternal_doll",
-            "ditzy_data_pro", "season_rewind", "bestie_records", "brain_drain_report", "certified_data_bimbo"
-        };
+    /// <summary>
+    /// Ids of all permanent skills, which since the Descent is simply every skill in
+    /// <see cref="All"/>.
+    ///
+    /// <para>The list is kept rather than deleted because sync code still reads it as a
+    /// "what survives" filter, and a filter that quietly keeps everything is a far safer shape
+    /// than ripping the concept out of half a dozen call sites at once. Made universal instead:
+    /// every <c>Where(PermanentIds.Contains)</c> in the codebase is now a no-op that cannot
+    /// drop a purchase, whichever path reaches it.</para>
+    ///
+    /// <para>Computed on first use, not in a field initializer, because static initializers run
+    /// in textual order and this sits above <see cref="All"/>: reading it eagerly would read a
+    /// null list. Worst case under a race is two identical arrays being built, which costs
+    /// nothing.</para>
+    /// </summary>
+    public static IReadOnlyList<string> PermanentIds =>
+        _permanentIds ??= All.ConvertAll(s => s.Id).AsReadOnly();
+
+    private static IReadOnlyList<string>? _permanentIds;
 
     /// <summary>
     /// All skill definitions in the bimbo enhancement tree

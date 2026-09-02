@@ -867,10 +867,23 @@ public class SkillTreeService : IDisposable
     #region Season Reset
 
     /// <summary>
-    /// Mirror the server's seasonal skill reset locally (called from ProfileSyncService when
-    /// a level_reset arrives). Permanent stat/analytics nodes (SkillDefinition.PermanentIds)
-    /// and the point balance survive; mechanical/XP-economy nodes are removed and must be
-    /// re-purchased — that re-buy is the Prestige loop.
+    /// Mirror the server's seasonal reset locally (called from ProfileSyncService when a
+    /// level_reset arrives). THIS NO LONGER TOUCHES THE SKILL TREE. Not one purchased node is
+    /// dropped by it, whatever the server sends.
+    ///
+    /// <para>It used to prune the tree to SkillDefinition.PermanentIds and leave the point
+    /// balance alone, so the mechanical nodes had to be re-bought every month and that re-buy
+    /// was the Prestige loop. The Descent ended monthly seasons on
+    /// <see cref="Services.Descent.DescentEpochs.SeasonsEndUtc"/>, the server suppresses the wipe
+    /// permanently, and the ceremony promised in as many words that nothing was wiped and nothing
+    /// will be. A prune that only ever fires when that promise has already been broken is not a
+    /// safety net, it is the second half of the accident, so it is gone.</para>
+    ///
+    /// <para>The method and its call sites are kept intact on purpose. The server can still emit
+    /// the flag from an old deploy or a replayed response, and there is real work left in here:
+    /// the streak and daily-quest latches genuinely do belong to a reset. Keeping the entry point
+    /// means that path stays wired and observable rather than silently unhandled, while the tree
+    /// it used to cut is simply no longer in scope.</para>
     /// </summary>
     public void OnSeasonReset()
     {
@@ -889,28 +902,15 @@ public class SkillTreeService : IDisposable
         // it would make the rebuilt streak's first milestone look already-paid.
         settings.LastPerfectWeekStreakAwarded = 0;
 
-        // Prune the tree to permanent nodes (fallback when the server didn't send the
-        // post-rollover list — with a new server the level_reset handler has already
-        // replaced UnlockedSkills and this is a no-op).
-        var owned = settings.UnlockedSkills ?? new List<string>();
-        var kept = owned.Where(id => SkillDefinition.PermanentIds.Contains(id)).ToList();
-        var removed = owned.Count - kept.Count;
-        if (removed > 0)
-        {
-            settings.UnlockedSkills = kept;
+        // THE TREE IS NOT TOUCHED. Every skill is permanent now, so there is nothing here to
+        // prune and no live effect to tear down: pink_rush and good_girl_streak stay owned, so
+        // their timers and shields stay exactly as the player left them. The count is logged so
+        // that if this path ever fires again it is obvious from the log what it did and did not
+        // do to the tree.
+        var owned = settings.UnlockedSkills?.Count ?? 0;
 
-            // Tear down live effects whose skills were just dropped
-            if (!HasSkill("pink_rush"))
-            {
-                _pinkRushCheckTimer.Stop();
-                if (settings.PinkRushActive) EndPinkRush();
-            }
-            if (!HasSkill("good_girl_streak"))
-                settings.StreakShieldsRemaining = 0;
-        }
-
-        App.Logger?.Information("Season reset: seasonal flags cleared, {Removed} mechanical skill(s) removed, {Kept} permanent kept",
-            removed, kept.Count);
+        App.Logger?.Information("Season reset: seasonal flags cleared, skill tree left intact ({Owned} skill(s) kept; skills are permanent since the Descent)",
+            owned);
         App.Settings?.Save();
 
         // Sync reset streak to server

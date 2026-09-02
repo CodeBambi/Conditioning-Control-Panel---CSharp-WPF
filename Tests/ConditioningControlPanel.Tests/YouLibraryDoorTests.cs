@@ -255,10 +255,15 @@ public class YouLibraryDoorTests
     {
         // The English copy is the reference register; the other eight follow their own term
         // (Talentbaum, 스킬 트리, 技能树, …), which is why only en is asserted by wording.
+        //
+        // msg_skill_seasonal_note used to be listed here and is not any more: the Descent folded
+        // every skill into permanent, so the seasonal note was retired from all nine files rather
+        // than left telling users about a rollover that cannot happen. The permanent note carries
+        // the whole job now, and it is still checked for the old register right below.
         var en = Language("en.json");
         foreach (var key in new[] { "tab_enhancements", "label_enhancement_tree_title",
                                     "tooltip_enhancement_tree", "dialog_purchase_enhancement",
-                                    "msg_skill_permanent_note", "msg_skill_seasonal_note",
+                                    "msg_skill_permanent_note",
                                     "skill_err_login_required", "tooltip_prestige",
                                     "label_log_in_with_discord_or_patreon_to_access_enha" })
         {
