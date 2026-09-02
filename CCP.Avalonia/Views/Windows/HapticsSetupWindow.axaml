@@ -1,0 +1,269 @@
+<!-- PORTED from ConditioningControlPanel/Windows/HapticsSetupWindow.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two
+     diff cleanly. Deviations, all forced:
+
+       WindowStyle="None" / ResizeMode="NoResize"  -> SystemDecorations="None" / CanResize="False"
+       AllowsTransparency="True"                   -> TransparencyLevelHint="Transparent" plus
+                                                      Background="Transparent" (the outer Border
+                                                      still paints DarkerBgBrush)
+       Visibility="Collapsed"                      -> IsVisible="False"
+       Content="{loc:Str ...}" on a Button         -> a TextBlock child (CLAUDE.md trap 1: Avalonia
+                                                      parses "_" in Content as an access key and
+                                                      every key here is snake_case)
+       Click="..."                                 -> wired in the constructor
+       pack:// guide screenshots                   -> placeholder frames, see the ponytail note
+       DataTemplate {Binding}                      -> same, with x:DataType="sys:String" because
+                                                      compiled bindings are on -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="using:System"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.HapticsSetupWindow"
+        Title="{loc:Str dialog_haptics_setup_guide}" Height="720" Width="520"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        CanResize="False">
+
+    <!-- Wizard v2: this used to be a read-only slideshow. It now WRITES the v2 provider
+         flags + the Lovense address and runs the real Connect, with live progress, the
+         resulting device list and an actionable error. On this head the writing and the
+         connecting are stubs (see the code-behind); the three pages, the chrome and the
+         device list are what is proved here. -->
+    <Border CornerRadius="12" Background="{DynamicResource DarkerBgBrush}"
+            BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="2">
+        <Grid RowDefinitions="Auto,*,Auto">
+
+            <!-- Header -->
+            <Grid Grid.Row="0" Background="{DynamicResource PanelBgBrush}" ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" Margin="15,10">
+                    <TextBlock x:Name="TxtTitle" Text="{loc:Str dialog_haptics_setup_guide}"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
+                </StackPanel>
+                <Button x:Name="BtnClose" Grid.Column="1" Width="30" Height="30"
+                        Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                        BorderThickness="0" FontSize="14" Cursor="Hand"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Margin="0,5,10,5">
+                    <TextBlock Text="X"/>
+                </Button>
+            </Grid>
+
+            <!-- Content -->
+            <Grid Grid.Row="1" Margin="20,16">
+
+                <!-- ===================== PAGE 1: pick a provider ===================== -->
+                <Grid x:Name="ProviderPage" IsVisible="True">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str wizard_pick_provider}" Foreground="White"
+                                   FontSize="16" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                        <TextBlock Text="{loc:Str wizard_pick_provider_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" TextAlignment="Center" TextWrapping="Wrap"
+                                   HorizontalAlignment="Center" MaxWidth="380" Margin="0,0,0,22"/>
+
+                        <Button x:Name="BtnSelectLovense" Width="330" Height="76" Margin="0,8"
+                                Background="#2D2D4A" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+                                Cursor="Hand" HorizontalContentAlignment="Left">
+                            <StackPanel Margin="14,0">
+                                <TextBlock Text="{loc:Str wizard_provider_lovense}" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="17" FontWeight="Bold"/>
+                                <TextBlock Text="{loc:Str wizard_provider_lovense_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" TextWrapping="Wrap" MaxWidth="290"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnSelectButtplug" Width="330" Height="76" Margin="0,8"
+                                Background="#2D2D4A" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="2"
+                                Cursor="Hand" HorizontalContentAlignment="Left">
+                            <StackPanel Margin="14,0">
+                                <TextBlock Text="{loc:Str wizard_provider_intiface}" Foreground="{DynamicResource SecondaryBrush}"
+                                           FontSize="17" FontWeight="Bold"/>
+                                <TextBlock Text="{loc:Str wizard_provider_intiface_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" TextWrapping="Wrap" MaxWidth="290"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="BtnSelectMock" Width="330" Height="76" Margin="0,8"
+                                Background="#2D2D4A" BorderBrush="#4A4A6A" BorderThickness="2"
+                                Cursor="Hand" HorizontalContentAlignment="Left">
+                            <StackPanel Margin="14,0">
+                                <TextBlock Text="{loc:Str wizard_provider_mock}" Foreground="White"
+                                           FontSize="17" FontWeight="Bold"/>
+                                <TextBlock Text="{loc:Str wizard_provider_mock_sub}" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" TextWrapping="Wrap" MaxWidth="290"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ======================= PAGE 2: setup steps ======================= -->
+                <ScrollViewer x:Name="GuidePage" IsVisible="False" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <!-- Lovense -->
+                        <StackPanel x:Name="LovenseGuide" IsVisible="False">
+                            <Border Background="{DynamicResource PinkBrush}" CornerRadius="4" Padding="8,4"
+                                    HorizontalAlignment="Left" Margin="0,0,0,10">
+                                <TextBlock Text="{loc:Str wizard_step_setup}" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                            </Border>
+                            <TextBlock Text="{loc:Str wizard_lovense_title}" Foreground="White"
+                                       FontSize="16" FontWeight="Bold" Margin="0,0,0,6"/>
+                            <TextBlock Text="{loc:Str wizard_lovense_steps}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13" LineHeight="20" Margin="0,0,0,12"/>
+                            <!-- ponytail: the four guide screenshots are pack:// resources in the WPF head and
+                                 this project ships no asset pipeline (the csproj includes Theme\**\*.xaml only,
+                                 and a port may not edit it). The frames are kept so the layout stays honest;
+                                 swap the placeholder for an Image when the PNGs become AvaloniaResource. -->
+                            <Border x:Name="ImgLovenseStep1" Background="#2D2D4A" CornerRadius="8" Padding="8"
+                                    Height="120" Margin="0,0,0,8">
+                                <TextBlock Text="lovense_step1.png" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="ImgLovenseStep2" Background="#2D2D4A" CornerRadius="8" Padding="8"
+                                    Height="120" Margin="0,0,0,12">
+                                <TextBlock Text="lovense_step2.png" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+
+                            <TextBlock Text="{loc:Str wizard_lovense_ip_label}" Foreground="White"
+                                       FontSize="13" FontWeight="Bold" Margin="0,0,0,4"/>
+                            <TextBox x:Name="TxtWizardLovenseIp" Background="{DynamicResource DarkerBgBrush}"
+                                     Foreground="White" CaretBrush="{DynamicResource PinkBrush}"
+                                     BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                                     Padding="8,6" FontSize="14" FontFamily="Consolas, Courier New"/>
+                            <TextBlock Text="{loc:Str wizard_lovense_ip_hint}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,6,0,0"/>
+                            <TextBlock Text="{loc:Str wizard_lovense_wifi_tip}" TextWrapping="Wrap"
+                                       Foreground="#FFD700" FontSize="12" Margin="0,10,0,0"/>
+                        </StackPanel>
+
+                        <!-- Intiface -->
+                        <StackPanel x:Name="ButtplugGuide" IsVisible="False">
+                            <Border Background="{DynamicResource SecondaryBrush}" CornerRadius="4" Padding="8,4"
+                                    HorizontalAlignment="Left" Margin="0,0,0,10">
+                                <TextBlock Text="{loc:Str wizard_step_setup}" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                            </Border>
+                            <TextBlock Text="{loc:Str wizard_intiface_title}" Foreground="White"
+                                       FontSize="16" FontWeight="Bold" Margin="0,0,0,6"/>
+                            <TextBlock Text="{loc:Str wizard_intiface_steps}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13" LineHeight="20" Margin="0,0,0,12"/>
+                            <Border x:Name="ImgButtplugStep1" Background="#2D2D4A" CornerRadius="8" Padding="8"
+                                    Height="120" Margin="0,0,0,8">
+                                <TextBlock Text="buttplug_step1.png" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="ImgButtplugStep2" Background="#2D2D4A" CornerRadius="8" Padding="8"
+                                    Height="120" Margin="0,0,0,12">
+                                <TextBlock Text="buttplug_step2.png" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="{loc:Str wizard_intiface_note}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                        </StackPanel>
+
+                        <!-- Mock -->
+                        <StackPanel x:Name="MockGuide" IsVisible="False">
+                            <Border Background="#4A4A6A" CornerRadius="4" Padding="8,4"
+                                    HorizontalAlignment="Left" Margin="0,0,0,10">
+                                <TextBlock Text="{loc:Str wizard_step_setup}" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                            </Border>
+                            <TextBlock Text="{loc:Str wizard_mock_title}" Foreground="White"
+                                       FontSize="16" FontWeight="Bold" Margin="0,0,0,6"/>
+                            <TextBlock Text="{loc:Str wizard_mock_body}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13" LineHeight="20"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ===================== PAGE 3: connect + test ===================== -->
+                <Grid x:Name="ConnectPage" IsVisible="False">
+                    <StackPanel VerticalAlignment="Top">
+                        <Border Background="{DynamicResource PinkBrush}" CornerRadius="4" Padding="8,4"
+                                HorizontalAlignment="Left" Margin="0,0,0,12">
+                            <TextBlock Text="{loc:Str wizard_step_connect}" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                        </Border>
+
+                        <TextBlock x:Name="TxtConnectStatus" Text="{loc:Str wizard_connect_ready}" Foreground="White"
+                                   FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                        <ProgressBar x:Name="ConnectProgress" Height="4" IsIndeterminate="True"
+                                     IsVisible="False" Margin="0,0,0,12"
+                                     Foreground="{DynamicResource PinkBrush}" Background="#2D2D4A" BorderThickness="0"/>
+
+                        <Border x:Name="ConnectResultBox" Background="#2D2D4A" CornerRadius="8" Padding="14"
+                                IsVisible="False">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtConnectResultTitle" Text="" Foreground="White"
+                                           FontSize="13" FontWeight="Bold" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                <ItemsControl x:Name="WizardDeviceList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="sys:String">
+                                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                                <Ellipse Width="7" Height="7" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                         Fill="{DynamicResource SuccessGreenBrush}"/>
+                                                <TextBlock Text="{Binding}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock x:Name="TxtConnectHint" Text="" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Button x:Name="BtnWizardTestBuzz" IsVisible="False"
+                                HorizontalAlignment="Left" Margin="0,16,0,0"
+                                Background="{DynamicResource PinkBrush}" Foreground="White" BorderThickness="0"
+                                Padding="18,9" FontSize="13" FontWeight="Bold" Cursor="Hand">
+                            <TextBlock Text="{loc:Str wizard_test_buzz}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- Footer -->
+            <Grid Grid.Row="2" Background="{DynamicResource PanelBgBrush}" ColumnDefinitions="*,Auto,*">
+
+                <Button x:Name="BtnPrevious"
+                        Grid.Column="0" HorizontalAlignment="Left"
+                        Background="#353555" Foreground="White"
+                        BorderThickness="0" Padding="20,10" Margin="15,10"
+                        FontSize="13" Cursor="Hand" IsVisible="False">
+                    <TextBlock Text="{loc:Str btn_previous}"/>
+                </Button>
+
+                <StackPanel x:Name="SlideIndicators" Grid.Column="1"
+                            Orientation="Horizontal" HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <Ellipse x:Name="Dot1" Width="10" Height="10" Fill="{DynamicResource PinkBrush}" Margin="5,0"/>
+                    <Ellipse x:Name="Dot2" Width="10" Height="10" Fill="{DynamicResource PanelAccentBrush}" Margin="5,0"/>
+                    <Ellipse x:Name="Dot3" Width="10" Height="10" Fill="{DynamicResource PanelAccentBrush}" Margin="5,0"/>
+                </StackPanel>
+
+                <Button x:Name="BtnNext"
+                        Grid.Column="2" HorizontalAlignment="Right"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                        BorderThickness="0" Padding="20,10" Margin="15,10"
+                        FontSize="13" Cursor="Hand" IsVisible="False">
+                    <TextBlock Text="{loc:Str btn_next}"/>
+                </Button>
+
+                <Button x:Name="BtnConnect"
+                        Grid.Column="2" HorizontalAlignment="Right"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                        BorderThickness="0" Padding="20,10" Margin="15,10"
+                        FontSize="13" FontWeight="Bold" Cursor="Hand" IsVisible="False">
+                    <TextBlock Text="{loc:Str btn_connect}"/>
+                </Button>
+
+                <Button x:Name="BtnDone"
+                        Grid.Column="2" HorizontalAlignment="Right"
+                        Background="#00AA00" Foreground="White"
+                        BorderThickness="0" Padding="20,10" Margin="15,10"
+                        FontSize="13" Cursor="Hand" IsVisible="False">
+                    <TextBlock Text="{loc:Str btn_done}"/>
+                </Button>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

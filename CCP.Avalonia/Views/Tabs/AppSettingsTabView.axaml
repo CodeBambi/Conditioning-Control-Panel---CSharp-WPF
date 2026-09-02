@@ -1,0 +1,252 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/AppSettingsTabView.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two
+     diff cleanly. Deviations, all forced:
+
+       <Style x:Key="SectionPill">      -> <ControlTheme x:Key="SectionPill">, Style="..." -> Theme="..."
+       ControlTemplate.Triggers         -> ^:pointerover / ^:checked nested selectors, and the
+                                           ContentPresenter carries Content/ContentTemplate
+                                           TemplateBindings (CLAUDE.md traps 4 and 6)
+       Image + EmojiToImageSource       -> <TextBlock Text="emoji"/>  (Avalonia draws colour emoji)
+       Visibility                       -> IsVisible
+       Click="SectionPill_Click"        -> wired in the constructor
+       ScrollChanged="..."              -> wired in the constructor
+
+     No {Binding} survives the emoji change, so the file needs no x:DataType. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:appset="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.AppSettings"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AppSettingsTabView"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1100">
+
+    <!-- ========================================================================
+         THE SETTINGS DOOR (UX restructure, Phase 2 · tab key "appsettings")
+
+         One vertical page, nine sections, one editor per setting. The left
+         mini-rail is a table of contents, not a tab strip: every section is
+         always instantiated and always in the scroll, so Ctrl+F-style hunting
+         works and a pill click is a scroll, never a swap. That is why nothing
+         here is lazy and nothing here is a TabControl.
+
+         QUIET SURFACE (PLAN §2.7, ground rule 8): no ambient loop is registered
+         for this view and none may be.
+         ======================================================================== -->
+
+    <UserControl.Resources>
+
+        <!-- ponytail: local copy of AppSettingsTabView.xaml:SectionPill, hoist when a second view needs it.
+
+             Mini-rail pill. A RadioButton so the group gives us single-selection
+             for free: the scroll-spy re-checks the pill the reader is looking at,
+             and a click scrolls. Deliberately calm - opacity and a 3px bar, the
+             same visual grammar as the nav rail's active indicator, no clock.
+             :checked is declared after :pointerover so checked wins on hover,
+             matching WPF's trigger order. -->
+        <ControlTheme x:Key="SectionPill" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="AppSettingsSections"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid Background="Transparent">
+                        <Border x:Name="PillFill" CornerRadius="8" Opacity="0"
+                                Background="{DynamicResource TransparentPink20Brush}"/>
+                        <Border x:Name="PillBar" Width="3" CornerRadius="2" Margin="0,5"
+                                HorizontalAlignment="Left" IsVisible="False"
+                                Background="{DynamicResource PinkBrush}"/>
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Margin="14,7,10,7" VerticalAlignment="Center"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#PillFill">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#PillFill">
+                <Setter Property="Opacity" Value="1"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#PillBar">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+            </Style>
+        </ControlTheme>
+
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ============================ page header ============================ -->
+        <Grid Grid.Row="0" Margin="4,2,4,14" ColumnDefinitions="Auto,*">
+            <TextBlock Grid.Column="0" Text="⚙️" FontSize="26" Margin="0,0,14,0" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtAppSettingsTitle" Text="{loc:Str set2_settings_title}"
+                           Foreground="White" FontSize="22" FontWeight="Bold"/>
+                <TextBlock Text="{loc:Str set2_settings_subtitle}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="13"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ====================== mini-rail + scrolling body ==================== -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+
+            <!-- Table of contents. Fixed width, does not scroll with the body. -->
+            <Border Grid.Column="0" Width="186" Margin="0,0,16,0" VerticalAlignment="Top"
+                    Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
+                    BorderThickness="1" CornerRadius="12" Padding="8,10">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str set2_rail_hint}" Margin="14,0,10,8"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               FontWeight="Bold" Opacity="0.85"/>
+
+                    <RadioButton x:Name="SectionPillGeneral" Tag="general" IsChecked="True"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueGeneralBrush}"/>
+                            <TextBlock Grid.Column="1" Text="🎀" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_general}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <RadioButton x:Name="SectionPillAudio" Tag="audio"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueAudioBrush}"/>
+                            <TextBlock Grid.Column="1" Text="🔊" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_audio}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <RadioButton x:Name="SectionPillDevices" Tag="devices"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueDevicesBrush}"/>
+                            <TextBlock Grid.Column="1" Text="📷" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_devices}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <RadioButton x:Name="SectionPillPerformance" Tag="performance"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHuePerformanceBrush}"/>
+                            <TextBlock Grid.Column="1" Text="⚡" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_performance}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <RadioButton x:Name="SectionPillNotifications" Tag="notifications"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueNotificationsBrush}"/>
+                            <TextBlock Grid.Column="1" Text="🔔" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_notifications}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <Border Height="1" Background="#2A2A46" Margin="10,7,10,7"/>
+
+                    <!-- EMI DESK. Sits between Notifications and Account: it is a companion
+                         preference, and it must NOT be last - the tail spacer at the bottom of the
+                         section stack is sized off the LAST section's height, and Updates is the
+                         one it was measured against. -->
+                    <RadioButton x:Name="SectionPillEmidesk" Tag="emidesk"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueEmiDeskBrush}"/>
+                            <TextBlock Grid.Column="1" Text="📺" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_emidesk}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <RadioButton x:Name="SectionPillAccount" Tag="account"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueAccountBrush}"/>
+                            <TextBlock Grid.Column="1" Text="💖" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_account}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <RadioButton x:Name="SectionPillData" Tag="data"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueDataBrush}"/>
+                            <TextBlock Grid.Column="1" Text="💾" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_data}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+
+                    <RadioButton x:Name="SectionPillUpdates" Tag="updates"
+                                 Theme="{StaticResource SectionPill}">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Ellipse Width="8" Height="8" Margin="0,0,8,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource SectionHueUpdatesBrush}"/>
+                            <TextBlock Grid.Column="1" Text="⬆️" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Str set2_section_updates}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </Grid>
+                    </RadioButton>
+                </StackPanel>
+            </Border>
+
+            <!-- The page itself. Sections are always instantiated (ground rule §2.3)
+                 and always in this stack, in rail order. -->
+            <ScrollViewer x:Name="SectionScroll" Grid.Column="1"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Padding="0,0,10,0">
+                <StackPanel x:Name="SectionStack">
+                    <appset:GeneralSettingsSection       x:Name="SectionGeneral"       Margin="0,0,0,10"/>
+                    <appset:AudioSettingsSection         x:Name="SectionAudio"         Margin="0,0,0,10"/>
+                    <appset:DevicesSettingsSection       x:Name="SectionDevices"       Margin="0,0,0,10"/>
+                    <appset:PerformanceSettingsSection   x:Name="SectionPerformance"   Margin="0,0,0,10"/>
+                    <appset:NotificationsSettingsSection x:Name="SectionNotifications" Margin="0,0,0,10"/>
+                    <appset:EmiDeskSettingsSection       x:Name="SectionEmidesk"       Margin="0,0,0,10"/>
+                    <appset:AccountSettingsSection       x:Name="SectionAccount"       Margin="0,0,0,10"/>
+                    <appset:DataSettingsSection          x:Name="SectionData"          Margin="0,0,0,10"/>
+                    <appset:UpdatesSettingsSection       x:Name="SectionUpdates"       Margin="0,0,0,10"/>
+
+                    <!-- Tail room so the last section can actually reach the top of the
+                         viewport when its pill is clicked. Without it "Updates" scrolls
+                         to wherever the content ends and the pill lies about where you are.
+                         The requirement is  spacer >= viewportHeight - heightOf(Updates);
+                         300 + ~415 covers the common maximised case. Transparent, so
+                         over-sizing costs nothing on a short window. -->
+                    <Border x:Name="SectionTailSpacer" Height="300" Background="Transparent"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>
