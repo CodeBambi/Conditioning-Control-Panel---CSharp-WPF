@@ -425,8 +425,7 @@ public class ModAwareVaultTests
         return dir!.FullName;
     }
 
-    private static string AppFile(params string[] parts)
-        => File.ReadAllText(Path.Combine(RepoRoot(), Path.Combine("ConditioningControlPanel", Path.Combine(parts))));
+    private static string AppFile(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     /// <summary>The source between two anchors, so a scrape fails loudly when the file is reorganized.</summary>
     private static string Body(string source, string from, string to)

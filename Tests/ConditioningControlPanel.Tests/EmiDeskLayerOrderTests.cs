@@ -30,17 +30,7 @@ namespace ConditioningControlPanel.Tests;
 [Collection(CompanionWpfRenderCollection.Name)]
 public class EmiDeskLayerOrderTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string Read(params string[] parts) =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", Path.Combine(parts)));
+    private static string Read(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     /// <summary>Runs a body against a freshly built widget, and always tears it down.</summary>
     private static void WithWidget(Action<EmiDeskWindow> body)
@@ -249,7 +239,11 @@ public class EmiDeskLayerOrderTests
             "the overlay must be authored after FaceLayer in the XAML source too, so a reader sees "
             + "the order without running anything");
 
-        var claude = Read("CLAUDE.md");
+        // Pinned to the WPF head on purpose. This is the head's own working doc, not product
+        // source, and any other root that grows a CLAUDE.md would make a multi-root probe
+        // ambiguous — a red test on someone else's unit, for a file that never moves.
+        var claude = File.ReadAllText(
+            Path.Combine(SourceRoots.RepoRoot, "ConditioningControlPanel", "CLAUDE.md"));
         Assert.Contains("outfit / skin layer is the TOPMOST thing", claude);
         Assert.Contains("OutfitOverImage", claude);
     }

@@ -20,17 +20,7 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class HeaderBannerTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+    private static string ReadSource(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     private static string MainWindowXaml() => ReadSource("MainWindow", "MainWindow.xaml");
 

@@ -29,8 +29,7 @@ public class WebNudgeTests
         return dir!.FullName;
     }
 
-    private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+    private static string ReadSource(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     // =====================================================================================
     //  1. the Web App door is a launcher, not a tab

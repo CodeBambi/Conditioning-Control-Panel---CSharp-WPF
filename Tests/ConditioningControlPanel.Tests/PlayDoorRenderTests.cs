@@ -345,8 +345,7 @@ public class PlayDoorRenderTests
     [Fact]
     public void PlayHeroMapFeedsEveryHeroBrush()
     {
-        var source = File.ReadAllText(Path.Combine(
-            RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml.cs"));
+        var source = SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml.cs");
 
         var start = source.IndexOf("var playHeroMap", StringComparison.Ordinal);
         Assert.True(start >= 0, "playHeroMap is gone from MainWindow.xaml.cs - the Play wall no longer repaints on a mod switch");

@@ -35,8 +35,7 @@ public class ModManagerWordmarkTests
         return dir!.FullName;
     }
 
-    private static string MainWindowXaml() =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "MainWindow", "MainWindow.xaml"));
+    private static string MainWindowXaml() => SourceRoots.ReadProductFile("MainWindow", "MainWindow.xaml");
 
     /// <summary>The whole &lt;Button x:Name="BtnManageMods"&gt; element, template included.</summary>
     private static string ButtonBlock()

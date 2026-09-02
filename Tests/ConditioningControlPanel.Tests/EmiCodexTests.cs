@@ -654,8 +654,7 @@ public class EmiCodexTests
     [Fact]
     public void The_offer_of_the_book_is_actually_fired_from_somewhere()
     {
-        var narrator = File.ReadAllText(
-            Path.Combine(AppDir(), "Services", "EmiDesk", "EmiTourNarrator.cs"));
+        var narrator = SourceRoots.ReadProductFile("Services", "EmiDesk", "EmiTourNarrator.cs");
         Assert.Contains("EmiCodex.MaybeOfferSoon(", narrator);
     }
 
@@ -688,8 +687,7 @@ public class EmiCodexTests
     [Fact]
     public void The_tour_ending_still_speaks_for_itself()
     {
-        var narrator = File.ReadAllText(
-            Path.Combine(AppDir(), "Services", "EmiDesk", "EmiTourNarrator.cs"));
+        var narrator = SourceRoots.ReadProductFile("Services", "EmiDesk", "EmiTourNarrator.cs");
         Assert.Contains("desk.Fire(\"tourFinished\")", narrator);
         Assert.Contains("desk.Fire(\"tourSkipped\")", narrator);
     }
@@ -702,10 +700,10 @@ public class EmiCodexTests
     [Fact]
     public void Neither_body_of_the_book_is_a_layered_window()
     {
-        var xaml = File.ReadAllText(Path.Combine(AppDir(), "Windows", "EmiCodexWindow.xaml"));
+        var xaml = SourceRoots.ReadProductFile("Windows", "EmiCodexWindow.xaml");
         Assert.Contains("AllowsTransparency=\"False\"", xaml);
 
-        var host = File.ReadAllText(Path.Combine(AppDir(), "Chaos", "ChaosWebViewHost.cs"));
+        var host = SourceRoots.ReadProductFile("Chaos", "ChaosWebViewHost.cs");
         Assert.Contains("AllowsTransparency = false", host);
     }
 
@@ -717,7 +715,7 @@ public class EmiCodexTests
     [Fact]
     public void The_bundle_is_mapped_deny()
     {
-        var src = File.ReadAllText(Path.Combine(AppDir(), "Services", "EmiDesk", "EmiCodex.cs"));
+        var src = SourceRoots.ReadProductFile("Services", "EmiDesk", "EmiCodex.cs");
         Assert.Contains("CoreWebView2HostResourceAccessKind.Deny", src);
         Assert.DoesNotContain("CoreWebView2HostResourceAccessKind.Allow", src);
     }
@@ -730,7 +728,7 @@ public class EmiCodexTests
     [Fact]
     public void The_codex_does_not_build_its_own_browser()
     {
-        var src = File.ReadAllText(Path.Combine(AppDir(), "Services", "EmiDesk", "EmiCodex.cs"));
+        var src = SourceRoots.ReadProductFile("Services", "EmiDesk", "EmiCodex.cs");
         Assert.Contains("new ChaosWebViewHost(", src);
         Assert.DoesNotContain("new WebView2", src);
         Assert.DoesNotContain("EnsureCoreWebView2Async", src);
@@ -744,7 +742,7 @@ public class EmiCodexTests
     [Fact]
     public void The_runtime_is_probed_before_anything_is_built()
     {
-        var src = File.ReadAllText(Path.Combine(AppDir(), "Services", "EmiDesk", "EmiCodex.cs"));
+        var src = SourceRoots.ReadProductFile("Services", "EmiDesk", "EmiCodex.cs");
         int probe = src.IndexOf("GetAvailableBrowserVersionString", StringComparison.Ordinal);
         int build = src.IndexOf("new ChaosWebViewHost(", StringComparison.Ordinal);
         Assert.True(probe > 0, "the WebView2 runtime is never probed");

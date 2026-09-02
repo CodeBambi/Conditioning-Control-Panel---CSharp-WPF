@@ -37,8 +37,8 @@ public class IntakeSpeechBridgeTests
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
 
-    private static string Host() => Read("Services", "Quiz", "IntakeHostService.cs");
-    private static string HostSpeech() => Read("Services", "Quiz", "IntakeHostService.Speech.cs");
+    private static string Host() => SourceRoots.ReadProductFile("Services", "Quiz", "IntakeHostService.cs");
+    private static string HostSpeech() => SourceRoots.ReadProductFile("Services", "Quiz", "IntakeHostService.Speech.cs");
     private static string Shim() => Read("Resources", "web", "intake", "web-shim.js");
     private static string Beats() => Read("Resources", "web", "intake", "render", "beats.js");
     private static string Boot() => Read("Resources", "web", "intake", "boot.js");

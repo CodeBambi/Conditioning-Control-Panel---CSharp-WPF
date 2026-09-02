@@ -556,8 +556,8 @@ public class AwarenessReviewFixTests : IDisposable
     [Fact]
     public void NoDenyListWriter_SeedsItselfFromTheRawSetting()
     {
-        var source = ReadSource("ConditioningControlPanel", "Views", "Controls", "Companion", "Runtime",
-            "AwarenessPrivacyRuntimeVm.cs");
+        var source = SourceRoots.ReadProductFile("Views", "Controls", "Companion", "Runtime",
+                                                 "AwarenessPrivacyRuntimeVm.cs");
 
         Assert.DoesNotContain("new List<string>(settings.AwarenessDenyList", source, StringComparison.Ordinal);
     }
@@ -706,7 +706,7 @@ public class AwarenessReviewFixTests : IDisposable
     [Fact]
     public void TheObserversEnabledPredicate_RequiresTheV2Consent()
     {
-        var source = ReadSource("ConditioningControlPanel", "Services", "Awareness", "AwarenessObserver.cs");
+        var source = SourceRoots.ReadProductFile("Services", "Awareness", "AwarenessObserver.cs");
         var predicate = Between(source, "public static bool IsEnabled", "/// <summary>\n        /// Starts the ledger");
 
         Assert.Contains("UseAwarenessV2", predicate, StringComparison.Ordinal);
@@ -769,7 +769,7 @@ public class AwarenessReviewFixTests : IDisposable
     [Fact]
     public void ThereIsExactlyOneAwarenessReplyParser()
     {
-        var source = ReadSource("ConditioningControlPanel", "Services", "Companion", "Brain", "AwarenessSpeech.cs");
+        var source = SourceRoots.ReadProductFile("Services", "Companion", "Brain", "AwarenessSpeech.cs");
 
         Assert.DoesNotContain("\"ALT:\"", source, StringComparison.Ordinal);
         Assert.Contains("AwarenessReactionService.Parse", source, StringComparison.Ordinal);
@@ -793,9 +793,6 @@ public class AwarenessReviewFixTests : IDisposable
 
     private static string LanguagesDir =>
         Path.Combine(RepoRoot, "ConditioningControlPanel", "Localization", "Languages");
-
-    private static string ReadSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot }.Concat(parts).ToArray()));
 
     private static string ReadEnglishKey(string key)
     {

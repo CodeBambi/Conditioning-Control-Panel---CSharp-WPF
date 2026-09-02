@@ -26,17 +26,7 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class EmiGestureAndPinWiringTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
-    private static string Read(params string[] parts) =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", Path.Combine(parts)));
+    private static string Read(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     // ---------------------------------------------------------------- the gestures
 
@@ -131,7 +121,8 @@ public class EmiGestureAndPinWiringTests
         // The hover glyph is her CARDS everywhere a user can read it.
         foreach (var lang in new[] { "en", "de", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN" })
         {
-            var json = Read("Localization", "Languages", lang + ".json");
+            var json = File.ReadAllText(Path.Combine(
+                SourceRoots.RepoRoot, "ConditioningControlPanel", "Localization", "Languages", lang + ".json"));
             foreach (var line in json.Split('\n'))
             {
                 if (!line.Contains("emi_desk", StringComparison.Ordinal)) continue;

@@ -80,7 +80,7 @@ public class EmiDeskFarewellTests
     [Fact]
     public void TheHostSaysGoodbyeBeforeItAnnouncesTheOpen()
     {
-        var path = Path.Combine(AppDir(), "Services", "Arcademy", "ArcademyHostService.cs");
+        var path = SourceRoots.FindProductFile("Services", "Arcademy", "ArcademyHostService.cs");
         Assert.True(File.Exists(path), "ArcademyHostService.cs is missing at " + path);
 
         var src = File.ReadAllText(path);

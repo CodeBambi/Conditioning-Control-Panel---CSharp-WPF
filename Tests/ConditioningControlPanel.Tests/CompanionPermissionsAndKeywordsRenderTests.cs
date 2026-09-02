@@ -381,7 +381,7 @@ public class CompanionPermissionsAndKeywordsRenderTests
                      Path.Combine("Views", "Controls", "Companion", "KeywordTriggersPanel.xaml")
                  })
         {
-            var xaml = File.ReadAllText(Path.Combine(SourceRoot(), relative));
+            var xaml = SourceRoots.ReadProductFile(relative);
             Assert.DoesNotContain("<Storyboard", xaml, StringComparison.Ordinal);
             Assert.DoesNotContain("RepeatBehavior", xaml, StringComparison.Ordinal);
             Assert.DoesNotContain("BeginStoryboard", xaml, StringComparison.Ordinal);
@@ -399,7 +399,7 @@ public class CompanionPermissionsAndKeywordsRenderTests
                      Path.Combine("Views", "Controls", "Companion", "KeywordTriggersPanel.xaml")
                  })
         {
-            var xaml = File.ReadAllText(Path.Combine(SourceRoot(), relative));
+            var xaml = SourceRoots.ReadProductFile(relative);
             Assert.DoesNotContain("CmbMicDevice", xaml, StringComparison.Ordinal);
             Assert.DoesNotContain("CmbWebcamDevice", xaml, StringComparison.Ordinal);
         }
@@ -411,8 +411,7 @@ public class CompanionPermissionsAndKeywordsRenderTests
         // PLAN §Phase-2's exit rule is one editor per property, and the six masters below live a few
         // hundred pixels above on the SAME page. Re-hosting them would put two editors for
         // ScreenOcrEnabled / KeywordGlobalCooldownSeconds / KeywordHighlightEnabled on one screen.
-        var xaml = File.ReadAllText(Path.Combine(SourceRoot(),
-            "Views", "Controls", "Companion", "KeywordTriggersPanel.xaml"));
+        var xaml = SourceRoots.ReadProductFile("Views", "Controls", "Companion", "KeywordTriggersPanel.xaml");
 
         foreach (var master in new[]
                  {
@@ -424,19 +423,5 @@ public class CompanionPermissionsAndKeywordsRenderTests
             Assert.False(xaml.Contains("x:Name=\"" + master + "\"", StringComparison.Ordinal),
                 $"{master} is a master that lives on the Awareness page above — the drawer must follow it, not duplicate it");
         }
-    }
-
-    private static string SourceRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(dir.FullName, "ConditioningControlPanel", "ConditioningControlPanel.csproj");
-            if (File.Exists(candidate)) return Path.GetDirectoryName(candidate)!;
-            dir = dir.Parent;
-        }
-
-        throw new DirectoryNotFoundException(
-            "ConditioningControlPanel project not found above " + AppContext.BaseDirectory);
     }
 }
