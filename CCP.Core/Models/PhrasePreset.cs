@@ -96,7 +96,7 @@ public class PhrasePreset : INotifyPropertyChanged
     /// </summary>
     public static PhrasePreset FromCurrentSettings(string name, int activePhraseCount)
     {
-        var settings = App.Settings.Current;
+        var settings = CoreSettings.Current;
         return new PhrasePreset
         {
             Name = name,
@@ -123,7 +123,7 @@ public class PhrasePreset : INotifyPropertyChanged
     /// </summary>
     public void ApplyToSettings()
     {
-        var settings = App.Settings.Current;
+        var settings = CoreSettings.Current;
         settings.DisabledPhraseIds = new HashSet<string>(DisabledPhraseIds);
         settings.RemovedPhraseIds = new HashSet<string>(RemovedPhraseIds);
         settings.CustomCompanionPhrases = CustomPhrases
@@ -144,7 +144,7 @@ public class PhrasePreset : INotifyPropertyChanged
     /// </summary>
     public void UpdateFromCurrentSettings(int activePhraseCount)
     {
-        var settings = App.Settings.Current;
+        var settings = CoreSettings.Current;
         DisabledPhraseIds = new HashSet<string>(settings.DisabledPhraseIds);
         RemovedPhraseIds = new HashSet<string>(settings.RemovedPhraseIds);
         CustomPhrases = settings.CustomCompanionPhrases

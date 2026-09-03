@@ -783,16 +783,23 @@ namespace ConditioningControlPanel.Models
 
         /// <summary>SAFETY: hard ceiling applied to every actuator after the master multiplier.
         /// 0.70 by default — full power is opt-in, not the accident you discover mid-session.</summary>
-        [JsonProperty("master_cap")] public double MasterCap { get; set; } = HapticMixer.DefaultMasterCap;
+        /// <summary>The mixer's defaults, kept with the settings that persist them so the settings
+        /// model can live in Core while the mixer, which drives real devices, stays in the head.
+        /// HapticMixer's own DefaultX constants alias these.</summary>
+        public const double DefaultMasterCap = 0.70;
+        public const int DefaultSoftRampMs = 800;
+        public const int DefaultMaxConcurrentPulses = 4;
+
+        [JsonProperty("master_cap")] public double MasterCap { get; set; } = DefaultMasterCap;
 
         /// <summary>Time for the continuous floor to climb from silence to its target.</summary>
-        [JsonProperty("soft_ramp_ms")] public int SoftRampMs { get; set; } = HapticMixer.DefaultSoftRampMs;
+        [JsonProperty("soft_ramp_ms")] public int SoftRampMs { get; set; } = DefaultSoftRampMs;
 
         /// <summary>Output loop rate. 10 Hz is the self-imposed Lovense LAN rate limit.</summary>
         [JsonProperty("output_hz")] public int OutputHz { get; set; } = 10;
 
         /// <summary>How many transient envelopes may overlap before the weakest gets evicted.</summary>
-        [JsonProperty("max_concurrent_pulses")] public int MaxConcurrentPulses { get; set; } = HapticMixer.DefaultMaxConcurrentPulses;
+        [JsonProperty("max_concurrent_pulses")] public int MaxConcurrentPulses { get; set; } = DefaultMaxConcurrentPulses;
 
         /// <summary>
         /// PHASE F — TEMPERAMENT DIAL. Stable lowercase key of a <see cref="HapticTemperament"/>

@@ -72,11 +72,11 @@ namespace ConditioningControlPanel.Services.Haptics.Core
         public const int IdleTickMs = 250;
         /// <summary>Time for the continuous floor to climb from silence to full. Safety, not taste:
         /// a session that resumes at 100% with no ramp is how people get hurt.</summary>
-        public const int DefaultSoftRampMs = 800;
+        public const int DefaultSoftRampMs = HapticSettingsV2.DefaultSoftRampMs;
         /// <summary>Hard ceiling on any single actuator, applied after the master multiplier.</summary>
-        public const double DefaultMasterCap = 0.70;
+        public const double DefaultMasterCap = HapticSettingsV2.DefaultMasterCap;
         /// <summary>Max simultaneously-active transient envelopes.</summary>
-        public const int DefaultMaxConcurrentPulses = 4;
+        public const int DefaultMaxConcurrentPulses = HapticSettingsV2.DefaultMaxConcurrentPulses;
         /// <summary>Lowest intensity that still maps to a real vibration level. LovenseProvider
         /// treats intensity &lt;= 0.05 as "off", so any floor of exactly 0.05 silences the device
         /// instead of keeping a faint buzz (#516).</summary>
