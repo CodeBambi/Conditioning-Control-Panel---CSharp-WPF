@@ -1,0 +1,183 @@
+<!-- PORTED from ConditioningControlPanel/Windows/BubbleCountResultWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                      -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"          -> CanResize="False"
+       Visibility="Collapsed"         -> IsVisible="False"
+       {DynamicResource PinkColor}    -> {StaticResource PinkColor}. An Effect is not in the
+                                         logical tree, so DynamicResource has no scope to resolve
+                                         through (same as MantraWindow).
+       DropShadowEffect ShadowDepth="0"
+                                      -> OffsetX="0" OffsetY="0"
+       <Button.Style> ControlTemplate -> a keyed ControlTheme in Window.Resources. The
+                                         ContentPresenter gained Content="{TemplateBinding Content}":
+                                         a bare presenter draws nothing in Avalonia (CLAUDE.md #6).
+       Content="{loc:Str btn_submit}" -> a TextBlock child. Avalonia parses "_" in Content as an
+                                         access key and every loc key here is snake_case.
+       Click="BtnSubmit_Click"        -> wired in the constructor, with the KeyDown / TextChanged /
+                                         PreviewTextInput handlers the WPF code-behind wired there.
+       WS_EX_TOOLWINDOW (code-behind) -> ShowInTaskbar="False", already on this window.
+       TextWrapping/TextAlignment     -> ADDED to the title, instruction and feedback blocks. The
+                                         head renders in Inter, which is wider than the original's
+                                         Comic Sans, and "🫧 How Many Bubbles? 🫧" at 40px overran
+                                         the card's MaxWidth="600" - the trailing emoji was cut off
+                                         in the first render. Wrapping keeps every glyph on screen
+                                         without changing the card geometry. -->
+
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.BubbleCountResultWindow"
+        Title="{loc:Str dialog_how_many_bubbles}"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        WindowState="Maximized"
+        Topmost="True"
+        ShowInTaskbar="False"
+        CanResize="False"
+        FontFamily="Comic Sans MS, Segoe UI">
+
+    <Window.Styles>
+        <!-- Fluent paints PART_BorderElement itself, and that setter sits on the template child, so
+             it outranks the TextBox's own Background/BorderBrush/BorderThickness in every state.
+             The values below are the WPF original's, verbatim.
+             ponytail: local copy, hoist to Theme/Styles.xaml when a second view needs it. -->
+        <Style Selector="TextBox.answer /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="#40FFFFFF"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="CornerRadius" Value="0"/>
+        </Style>
+    </Window.Styles>
+
+    <Window.Resources>
+        <!-- The WPF <Button.Style> inline ControlTemplate, setter for setter.
+             ponytail: local copy of ConditioningControlPanel/Windows/BubbleCountResultWindow.xaml's
+             inline Button style, hoist when a second view needs it. -->
+        <ControlTheme x:Key="SubmitButton" TargetType="Button">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="10"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid>
+        <!-- Semi-transparent background -->
+        <Rectangle Fill="#E0000000"/>
+
+        <!-- Content Card -->
+        <Border Background="#FF2D2D3A"
+                CornerRadius="20"
+                Padding="50"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                MinWidth="500"
+                MaxWidth="600">
+            <Border.Effect>
+                <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="30" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+            </Border.Effect>
+
+            <StackPanel>
+                <!-- Title -->
+                <TextBlock Text="{loc:Str label_how_many_bubbles}"
+                           FontSize="40"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource PinkBrush}"
+                           HorizontalAlignment="Center"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           Margin="0,0,0,20">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="12" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+
+                <!-- Instruction -->
+                <TextBlock Text="{loc:Str label_enter_the_number_of_bubbles_you_counted}"
+                           FontSize="18"
+                           Foreground="{DynamicResource PinkBrush}"
+                           HorizontalAlignment="Center"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           Margin="0,0,0,30"/>
+
+                <!-- Number Input -->
+                <TextBox x:Name="TxtAnswer"
+                         Classes="answer"
+                         FontSize="48"
+                         FontWeight="Bold"
+                         Foreground="White"
+                         Background="#40FFFFFF"
+                         BorderBrush="{DynamicResource PinkBrush}"
+                         BorderThickness="3"
+                         Padding="20,10"
+                         HorizontalAlignment="Center"
+                         MinWidth="200"
+                         TextAlignment="Center"
+                         MaxLength="3"/>
+
+                <!-- Attempts remaining -->
+                <TextBlock x:Name="TxtAttempts"
+                           Text="{loc:Str label_attempts_remaining_3}"
+                           FontSize="16"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center"
+                           Margin="0,20,0,0"/>
+
+                <!-- Feedback -->
+                <TextBlock x:Name="TxtFeedback"
+                           Text=""
+                           FontSize="20"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           Margin="0,15,0,0"
+                           IsVisible="False"/>
+
+                <!-- Submit Button -->
+                <Button x:Name="BtnSubmit"
+                        Theme="{StaticResource SubmitButton}"
+                        FontSize="24"
+                        FontWeight="Bold"
+                        Foreground="White"
+                        Background="{DynamicResource PinkBrush}"
+                        BorderThickness="0"
+                        Padding="40,15"
+                        Margin="0,30,0,0"
+                        Cursor="Hand"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="{loc:Str btn_submit}"/>
+                </Button>
+
+                <!-- Strict Mode Indicator -->
+                <TextBlock x:Name="TxtStrict"
+                           Text="{loc:Str label_strict_mode_must_answer_correctly}"
+                           FontSize="14"
+                           Foreground="#FF6B6B"
+                           HorizontalAlignment="Center"
+                           Margin="0,20,0,0"
+                           IsVisible="False"/>
+
+                <!-- ESC Hint -->
+                <TextBlock x:Name="TxtEscHint"
+                           Text="{loc:Str label_press_esc_to_skip_won_t_earn_xp}"
+                           FontSize="12"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center"
+                           Margin="0,15,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
