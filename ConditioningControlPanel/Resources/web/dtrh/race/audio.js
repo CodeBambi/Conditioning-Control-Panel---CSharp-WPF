@@ -230,6 +230,51 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     fade(next, 1, prev ? CROSSFADE_SEC : 0.8);
     log('track ' + name + ' in (' + roomId + ')' + (prev ? ', ' + prev.name + ' out, crossfade ' + CROSSFADE_SEC + 's' : ''));
   }
+  // ---- the speed bed + drift sparks: loops under the music, outside the voice cap ----
+  // wind = lowpassed noise whose cutoff and gain follow speed (boost and air open it up);
+  // hum = a triangle under 200 Hz that climbs with speed; sparks = highpassed noise that
+  // crackles (random gain per frame) only while drifting. All three ride bedBus, which the
+  // duck pulls to 0 with the music.
+  let bed = null, bedBus = null;
+  function ensureBed() {
+    if (bed || !ensureGraph()) return !!bed;
+    try {
+      bedBus = ctx.createGain(); bedBus.gain.value = music.duckTo < 1 ? 0 : 1; bedBus.connect(master);
+      const mk = (type, f, q) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+      const wind = ctx.createBufferSource(); wind.buffer = noise; wind.loop = true;
+      const windLp = mk('lowpass', 200, 0.9), windGain = ctx.createGain(); windGain.gain.value = 0;
+      wind.connect(windLp); windLp.connect(windGain); windGain.connect(bedBus);
+      const hum = ctx.createOscillator(); hum.type = 'triangle'; hum.frequency.value = 50;
+      const humLp = mk('lowpass', 180, 0.7), humGain = ctx.createGain(); humGain.gain.value = 0;
+      hum.connect(humLp); humLp.connect(humGain); humGain.connect(bedBus);
+      const sparks = ctx.createBufferSource(); sparks.buffer = noise; sparks.loop = true;
+      const sparksHp = mk('highpass', 4500, 0.8), sparksGain = ctx.createGain(); sparksGain.gain.value = 0;
+      sparks.connect(sparksHp); sparksHp.connect(sparksGain); sparksGain.connect(bedBus);
+      wind.start(); hum.start(); sparks.start(0, 0.5);   // sparks read the noise from another offset so the two never correlate
+      bed = { wind, windLp, windGain, hum, humGain, sparks, sparksGain };
+    } catch (e) { bed = null; log('bed failed: ' + e); }
+    return !!bed;
+  }
+  function bedUpdate(k) {
+    if (!bed && isMuted()) return;   // nothing is built under mute; once built it runs on (master is 0)
+    if (!ensureBed()) return;
+    const now = ctx.currentTime, tc = 0.08;
+    const v = clamp((k.speed - KART_MIN_SPEED) / (KART_MAX_SPEED - KART_MIN_SPEED), 0, 1);
+    const boost = k.boostSec > 0 ? 1 : 0, air = k.airborne ? 1 : 0;
+    try {
+      bed.windLp.frequency.setTargetAtTime(160 + 1300 * Math.pow(v, 1.4) + 500 * boost + 400 * air, now, tc);
+      bed.windGain.gain.setTargetAtTime((0.012 + 0.05 * v + 0.03 * boost) * (1 + 0.4 * air), now, tc);
+      bed.hum.frequency.setTargetAtTime(46 + 64 * v + 12 * boost, now, tc);
+      bed.humGain.gain.setTargetAtTime((0.022 + 0.02 * v) * (1 - 0.6 * air), now, tc);
+      bed.sparksGain.gain.setTargetAtTime(k.drift && !k.airborne ? 0.03 + Math.random() * 0.045 : 0, now, 0.03);
+    } catch (e) { /* a param never breaks the run */ }
+  }
+  function stopBed() {
+    if (!bed) return;
+    try { bed.wind.stop(); bed.hum.stop(); bed.sparks.stop(); bedBus.disconnect(); } catch (e) { /* ignore */ }
+    bed = null; bedBus = null;
+  }
+
   /** Room colour on the music only: lowpass under fraught state, the Undertow and tea time; highpass in the Grey Ward. */
   function colour(roomId, fraught, timeScale) {
     let lp = 20000, hp = 20;
@@ -246,6 +291,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     music.duckTo = to; music.duckWhy = to < 1 ? why : null;
     if (musicDuck && ctx) { try { musicDuck.gain.setTargetAtTime(to, ctx.currentTime, to < 1 ? 0.15 : 0.4); } catch (e) { /* ignore */ } }
     else if (music.cur) fade(music.cur, music.cur.vol, 0.4);
+    if (bedBus && ctx) { try { bedBus.gain.setTargetAtTime(to < 1 ? 0 : 1, ctx.currentTime, to < 1 ? 0.1 : 0.4); } catch (e) { /* ignore */ } }
   }
   function stopMusic() {
     for (const t of tracks.values()) { clearInterval(t.fadeTimer); clearTimeout(t.pauseTimer); try { t.el.pause(); t.el.removeAttribute('src'); t.el.load(); } catch (e) { /* ignore */ } }
@@ -399,6 +445,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     if (edge.d != null && w.layout && w.layout.featuresBetween) { for (const f of w.layout.featuresBetween(edge.d, k.d)) if (f.type === 'loop') wheelSwoosh(); }
     edge.d = k.d;
     edge.drift = !!k.drift;
+    bedUpdate(k);
   }
 
   // ---- duck / mute / dispose ----
@@ -427,7 +474,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     offMute();
     setDucked(false);
     for (const v of voices.splice(0)) { try { v.src.stop(); } catch (e) { /* ignore */ } }
-    stopMusic();
+    stopMusic(); stopBed();
     try { master && master.disconnect(); } catch (e) { /* ignore */ }
     master = null;
   }

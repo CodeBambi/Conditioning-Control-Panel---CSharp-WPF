@@ -31,6 +31,16 @@ per-frame edges (airborne, boost, drift, the Big Wheel span, the room).
   (`?autostart=1`), the track retries on the next pointer/key. A missing file marks the track dead,
   re-rolls that room from what is left, and never throws.
 
+## The speed bed
+
+Three loops under the music, outside the voice cap, on their own `bedBus` (the duck pulls it to
+0 with the music): **wind** = lowpassed noise, cutoff 160 Hz -> 1.46 kHz and gain 0.012 -> 0.062
+with normalised speed (`(speed - KART_MIN_SPEED) / (KART_MAX_SPEED - KART_MIN_SPEED)`), boost
+adds +500 Hz / +0.03, airborne opens it another 400 Hz and +40%; **hum** = a triangle at
+46 -> 110 Hz under a 180 Hz lowpass, gain 0.022 -> 0.042, thinned in the air; **sparks** =
+noise above 4.5 kHz whose gain is re-rolled every frame between 0.03 and 0.075 while drifting
+on the ground, 0 otherwise (that is the crackle). Nothing here is built while muted.
+
 ## Event map
 
 | beat | source | in-page (WebAudio) | host leg (`sfx` name) |
