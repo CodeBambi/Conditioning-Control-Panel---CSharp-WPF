@@ -1,0 +1,369 @@
+<!-- PORTED from ConditioningControlPanel/Windows/EmiDesk/EmiOptionsWindow.xaml.
+     Structure, ordering, spacing, x:Names and every colour literal preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" +
+                                                   TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                    -> CanResize="False"
+       Visibility="Hidden"                      -> dropped. A WPF Window declared Hidden is still
+                                                   constructed and realised; an Avalonia Window is
+                                                   simply not on screen until Show(), which is the
+                                                   same "created folded" the panel relies on.
+       WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE      -> ShowInTaskbar="False" + ShowActivated="False".
+         (stamped in OnSourceInitialized)          See the code-behind for what that does and does
+                                                   NOT buy back.
+       <Style x:Key TargetType>                 -> <ControlTheme x:Key TargetType> with the SAME
+                                                   Template; ControlTemplate.Triggers become
+                                                   ^:pointerover / ^:checked / ^:disabled selectors
+       <ContentPresenter/>                      -> ContentPresenter Content="{TemplateBinding Content}"
+                                                   (CLAUDE.md trap 6 - a bare presenter draws nothing)
+       StrokeStartLineCap + StrokeEndLineCap    -> StrokeLineCap (Avalonia has the one property)
+       ToolTip="..."                            -> ToolTip.Tip="..."
+       English literal Text/Content             -> {loc:Str <the key the WPF Localize() used>}. The
+                                                   WPF original writes the literal in markup and
+                                                   overwrites it from Localize() with Loc.Get; on
+                                                   Avalonia a local .Text assignment survives a
+                                                   language change and the binding does not, so the
+                                                   sixteen keys move into the markup verbatim.
+
+     Buttons and radio segments carry a TextBlock rather than a string Content: Avalonia parses "_"
+     in Content as an access key and every loc key here is snake_case. See CLAUDE.md.
+     The root Border is Top-aligned so SizeToContent="Height" still reads as a compact card under
+     the render harness, which forces a Height onto any window that declares none. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:ctl="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiOptionsWindow"
+        Title="EMI"
+
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        CanResize="False"
+        SizeToContent="Height"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        Topmost="True"
+        Width="392">
+
+    <!--
+        HER OPTIONS.
+
+        The gear top-left opens this. It is the third sibling window in the feature and it follows
+        the same recipe as the other two, none of which is optional: SystemDecorations None +
+        TransparencyLevelHint Transparent + ShowActivated False + ShowInTaskbar False + Topmost.
+        That combination is what makes her a desktop ornament rather than a window - she never
+        steals focus and never appears in the task switcher.
+
+        THE CONSEQUENCE, and it shapes what can be in here: this window is not meant to hold
+        keyboard focus. Everything is therefore mouse-driven. There is no text box, and the summon
+        chord is SHOWN rather than captured (a capture needs key events this window can never
+        receive) with a pointer to the settings tab, which can.
+
+        EVERY BRUSH IS A LITERAL. This window has no resource dictionary behind it, so a
+        StaticResource reaching for MainWindow's palette would be the cross-dictionary lookup the
+        Velvet Kit work was bitten by.
+
+        The forbidden word is on EMI's fence and a checker rejects it: the ring is her CARDS,
+        everywhere a user can read it.
+    -->
+
+    <Window.Resources>
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiOptionsWindow.xaml:EmiPanelButton, hoist when a second view needs it -->
+        <ControlTheme x:Key="EmiPanelButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFF2FA"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="BorderBrush" Value="#4A3A63"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Chrome">
+                <Setter Property="Background" Value="#33294F"/>
+                <Setter Property="BorderBrush" Value="#FF69B4"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.42"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- A switch, drawn as a pill. A CheckBox rather than a ToggleButton so the automation
+             peers and the keyboard semantics stay honest even though this window has no keyboard. -->
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiOptionsWindow.xaml:EmiPanelSwitch, hoist when a second view needs it -->
+        <ControlTheme x:Key="EmiPanelSwitch" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="Track" Width="40" Height="20" CornerRadius="10"
+                            Background="#22203A" BorderBrush="#4A3A63" BorderThickness="1">
+                        <Ellipse x:Name="Knob" Width="14" Height="14"
+                                 HorizontalAlignment="Left" Margin="2,0,0,0"
+                                 Fill="#7C7396"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <!-- checked before hover, the order the WPF triggers ran in: the other way round,
+                 moving the pointer onto a switch that is already on takes its pink edge off. -->
+            <Style Selector="^:checked /template/ Border#Track">
+                <Setter Property="Background" Value="#4A2A55"/>
+                <Setter Property="BorderBrush" Value="#FF69B4"/>
+            </Style>
+            <Style Selector="^:checked /template/ Ellipse#Knob">
+                <Setter Property="Fill" Value="#FF69B4"/>
+                <Setter Property="HorizontalAlignment" Value="Right"/>
+                <Setter Property="Margin" Value="0,0,2,0"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#Track">
+                <Setter Property="BorderBrush" Value="#8CFF69B4"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- One notch of the spice scale. Three of them are the 0..2 the lines file filters on;
+             a segmented row rather than a ComboBox because a ComboBox drops a Popup, and a popup
+             in a click-away window is a click the dismissal hook has to be taught to forgive. -->
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiOptionsWindow.xaml:EmiPanelSegment, hoist when a second view needs it -->
+        <ControlTheme x:Key="EmiPanelSegment" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#C6BEDC"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Seg" CornerRadius="5" Margin="0,0,4,0"
+                            Background="#22203A" BorderBrush="#4A3A63" BorderThickness="1"
+                            Padding="9,4">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Seg">
+                <Setter Property="BorderBrush" Value="#8CFF69B4"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#Seg">
+                <Setter Property="Background" Value="#4A2A55"/>
+                <Setter Property="BorderBrush" Value="#FF69B4"/>
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="#FFF2FA"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiOptionsWindow.xaml:EmiPanelLabel, hoist when a second view needs it -->
+        <ControlTheme x:Key="EmiPanelLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E7E1F5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiOptionsWindow.xaml:EmiPanelSectionHeader, hoist when a second view needs it -->
+        <ControlTheme x:Key="EmiPanelSectionHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FF69B4"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,14,0,6"/>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="#F21A1A2E" BorderBrush="#FF69B4" BorderThickness="1" CornerRadius="10"
+            VerticalAlignment="Top">
+        <Grid Margin="16,13,16,14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title bar. The x here dismisses the PANEL, never her: sending her away is the x on
+                 her body, and one click that could mean either would be the wrong one half the time. -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtTitle" Grid.Column="0"
+                           Text="{loc:Str emi_desk_opt_title}"
+                           Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <Button x:Name="BtnPanelClose" Grid.Column="1"
+                        Width="22" Height="22" Padding="0"
+                        Cursor="Hand" Focusable="False"
+                        ToolTip.Tip="{loc:Str emi_desk_opt_close}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Grid Background="Transparent">
+                                <Ellipse x:Name="Disc" Fill="#00000000" Stroke="#4A3A63" StrokeThickness="1"/>
+                                <Path Data="M 7,7 L 15,15 M 15,7 L 7,15"
+                                      Stroke="#C6BEDC" StrokeThickness="1.6"
+                                      StrokeLineCap="Round"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover /template/ Ellipse#Disc">
+                            <Setter Property="Stroke" Value="#FF69B4"/>
+                        </Style>
+                    </Button.Styles>
+                </Button>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" x:Name="Scroller"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="0,10,0,0">
+                <StackPanel>
+
+                    <!-- 1. THE CARDS. First, and a whole-width button, because the six-dot glyph
+                            that used to sit where the gear now is was the ring's only visible way
+                            in. A right click on her body still opens it; this is the one you can
+                            find without being told. -->
+                    <Button x:Name="BtnOpenCards"
+                            Theme="{StaticResource EmiPanelButton}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Background="#3A2350" BorderBrush="#FF69B4">
+                        <TextBlock Text="{loc:Str emi_desk_tip_cards}"/>
+                    </Button>
+                    <TextBlock x:Name="TxtCardsHint"
+                               Text="{loc:Str emi_desk_opt_cards_hint}"
+                               Foreground="#9C93B8" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,5,0,0"/>
+
+                    <!-- 2. HER OPTIONS. Every row here is an AppSettings key that already exists
+                            and is already read at the moment it matters. Nothing in this panel
+                            invents a setting with no behaviour behind it. -->
+                    <TextBlock x:Name="TxtHeadOptions" Text="{loc:Str emi_desk_opt_head_options}"
+                               Theme="{StaticResource EmiPanelSectionHeader}"/>
+
+                    <!-- the summon chord: shown, not captured. See the header comment. -->
+                    <Grid MinHeight="30">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="LblHotkey" Grid.Column="0" Text="{loc:Str emi_desk_opt_hotkey}"
+                                   Theme="{StaticResource EmiPanelLabel}" Margin="0,0,10,0"/>
+                        <Border Grid.Column="1" CornerRadius="5" Padding="9,3"
+                                Background="#22203A" BorderBrush="#4A3A63" BorderThickness="1">
+                            <TextBlock x:Name="TxtHotkey" Text="Ctrl+Alt+E"
+                                       Foreground="#FFF2FA" FontSize="11"/>
+                        </Border>
+                    </Grid>
+                    <TextBlock x:Name="TxtHotkeyHint"
+                               Text="{loc:Str emi_desk_opt_hotkey_hint}"
+                               Foreground="#9C93B8" FontSize="10.5"
+                               TextWrapping="Wrap" Margin="0,3,0,0"/>
+
+                    <!-- her size: the same DIP width the corner grip writes -->
+                    <Grid MinHeight="30" Margin="0,9,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="LblWidth" Grid.Column="0" Text="{loc:Str emi_desk_opt_width}"
+                                   Theme="{StaticResource EmiPanelLabel}" Margin="0,0,10,0"/>
+                        <Slider x:Name="SldWidth" Grid.Column="1"
+                                Minimum="152" Maximum="420"
+                                IsSnapToTickEnabled="True" TickFrequency="4"
+                                Focusable="False" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtWidth" Grid.Column="2" Text="220"
+                                   Foreground="#9C93B8" FontSize="11"
+                                   VerticalAlignment="Center" Margin="8,0,0,0"
+                                   MinWidth="26" TextAlignment="Right"/>
+                    </Grid>
+
+                    <!-- the mute arbiter -->
+                    <Grid MinHeight="30" Margin="0,9,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="LblMute" Grid.Column="0" Text="{loc:Str emi_desk_opt_mute}"
+                                   Theme="{StaticResource EmiPanelLabel}" Margin="0,0,10,0"/>
+                        <CheckBox x:Name="ChkMute" Grid.Column="1"
+                                  Theme="{StaticResource EmiPanelSwitch}"/>
+                    </Grid>
+
+                    <!-- the spice ceiling, 0..2 -->
+                    <Grid MinHeight="30" Margin="0,9,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="LblSpice" Grid.Column="0" Text="{loc:Str emi_desk_opt_spice}"
+                                   Theme="{StaticResource EmiPanelLabel}" Margin="0,0,10,0"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Right">
+                            <RadioButton x:Name="SpiceInnocent" GroupName="Spice"
+                                         Theme="{StaticResource EmiPanelSegment}">
+                                <TextBlock Text="{loc:Str emi_desk_spice_innocent}"/>
+                            </RadioButton>
+                            <RadioButton x:Name="SpiceSuggestive" GroupName="Spice"
+                                         Theme="{StaticResource EmiPanelSegment}">
+                                <TextBlock Text="{loc:Str emi_desk_spice_suggestive}"/>
+                            </RadioButton>
+                            <RadioButton x:Name="SpiceAnything" GroupName="Spice" Margin="0"
+                                         Theme="{StaticResource EmiPanelSegment}">
+                                <TextBlock Text="{loc:Str emi_desk_spice_anything}"/>
+                            </RadioButton>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- may she ask -->
+                    <Grid MinHeight="30" Margin="0,9,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="LblOffers" Grid.Column="0" Text="{loc:Str emi_desk_opt_offers}"
+                                   Theme="{StaticResource EmiPanelLabel}" Margin="0,0,10,0"/>
+                        <CheckBox x:Name="ChkOffers" Grid.Column="1"
+                                  Theme="{StaticResource EmiPanelSwitch}"/>
+                    </Grid>
+
+                    <!-- the glass -->
+                    <Grid MinHeight="30" Margin="0,9,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="LblGlass" Grid.Column="0" Text="{loc:Str emi_desk_opt_glass}"
+                                   Theme="{StaticResource EmiPanelLabel}" Margin="0,0,10,0"/>
+                        <CheckBox x:Name="ChkGlass" Grid.Column="1"
+                                  Theme="{StaticResource EmiPanelSwitch}"/>
+                    </Grid>
+
+                    <!-- 3. HER RING. The same control the settings tab hosts, writing the same
+                            EmiState.Pins through the same EmiSuggester. Header shown here: this
+                            panel has no other place to put the count or the reset. -->
+                    <TextBlock x:Name="TxtHeadRing" Text="{loc:Str emi_desk_opt_head_ring}"
+                               Theme="{StaticResource EmiPanelSectionHeader}"/>
+                    <ctl:EmiRingPicker x:Name="RingPicker"/>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>
