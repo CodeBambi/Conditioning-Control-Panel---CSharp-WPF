@@ -518,15 +518,17 @@ public class EmiKnockLinesFileTests
     private static System.Text.Json.JsonElement Moments()
     {
         var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !System.IO.Directory.Exists(
-                   System.IO.Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
+        // The solution file is the repo marker. Not a folder name: the build output can carry
+        // folders that share a name with a repo folder, and a finder that stops there reads
+        // the wrong tree.
+        while (dir != null && !System.IO.File.Exists(
+                   System.IO.Path.Combine(dir.FullName, "ConditioningControlPanel.sln")))
         {
             dir = dir.Parent;
         }
         Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
 
-        var path = System.IO.Path.Combine(dir!.FullName, "ConditioningControlPanel",
-                                          "Resources", "emi", "desk-lines.json");
+        var path = System.IO.Path.Combine(dir!.FullName, "Assets", "emi", "desk-lines.json");
         Assert.True(System.IO.File.Exists(path), "desk-lines.json is missing at " + path);
 
         var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));

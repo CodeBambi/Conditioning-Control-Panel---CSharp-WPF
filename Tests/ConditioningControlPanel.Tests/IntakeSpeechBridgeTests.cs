@@ -34,14 +34,17 @@ public class IntakeSpeechBridgeTests
         return dir!.FullName;
     }
 
+    private static string ReadAsset(params string[] parts) =>
+        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "Assets" }.Concat(parts).ToArray()));
+
     private static string Read(params string[] parts) =>
         File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
 
     private static string Host() => SourceRoots.ReadProductFile("Services", "Quiz", "IntakeHostService.cs");
     private static string HostSpeech() => SourceRoots.ReadProductFile("Services", "Quiz", "IntakeHostService.Speech.cs");
-    private static string Shim() => Read("Resources", "web", "intake", "web-shim.js");
-    private static string Beats() => Read("Resources", "web", "intake", "render", "beats.js");
-    private static string Boot() => Read("Resources", "web", "intake", "boot.js");
+    private static string Shim() => ReadAsset("web", "intake", "web-shim.js");
+    private static string Beats() => ReadAsset("web", "intake", "render", "beats.js");
+    private static string Boot() => ReadAsset("web", "intake", "boot.js");
 
     // ---- IntakeSpeechPolicy: availability reasons, in the app's reporting order ----
 

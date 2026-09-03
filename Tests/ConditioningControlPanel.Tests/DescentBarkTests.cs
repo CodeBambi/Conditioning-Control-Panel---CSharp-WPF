@@ -450,7 +450,7 @@ public class DescentBarkTests
 
     private static List<JObject> LoadRules(string pack)
     {
-        var parts = new List<string> { RepoRoot(), "ConditioningControlPanel", "Resources", "sounds", "companion_audio" };
+        var parts = new List<string> { RepoRoot(), "Assets", "sounds", "companion_audio" };
         if (pack.Length > 0) { parts.Add("mods"); parts.Add(pack); }
         parts.Add("bark_rules.json");
         var path = Path.Combine(parts.ToArray());

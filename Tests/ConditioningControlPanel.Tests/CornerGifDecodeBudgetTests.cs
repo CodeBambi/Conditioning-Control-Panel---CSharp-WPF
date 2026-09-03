@@ -32,7 +32,7 @@ public class CornerGifDecodeBudgetTests
     }
 
     private static string Asset(string name)
-        => Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", name);
+        => Path.Combine(RepoRoot(), "Assets", name);
 
     private static long FrameBytes(System.Collections.Generic.List<System.Windows.Media.Imaging.BitmapSource> frames)
     {
@@ -107,7 +107,7 @@ public class CornerGifDecodeBudgetTests
     public void CornerAssetIsPackagedAsAResource()
     {
         var csproj = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "ConditioningControlPanel.csproj"));
-        Assert.Contains(@"<Resource Include=""Resources\spiral_corner.gif"" />", csproj);
+        Assert.Contains(@"<Resource Include=""..\Assets\spiral_corner.gif"" Link=""Resources\spiral_corner.gif"" />", csproj);
     }
 
     // =====================================================================================

@@ -175,6 +175,13 @@ Pure `git mv`, zero content edits, namespace unchanged. Verify with `git diff -M
 rename at 100% similarity, then build both projects. If Core rejects the file, leave it in the head
 and record why — a partial move is a correct outcome, not a failure.
 
+## Where the art lives
+
+`/Assets` at the repo root, not inside any head. Every head LINKS what it needs with `Link=` so the
+logical path stays the same on all of them; nobody copies bytes and no head depends on another to
+get a picture. See `Assets/README.md` for the item shapes and for what the Avalonia head
+deliberately leaves out.
+
 ## Stacked PRs
 
 Every change to this repo lands as a layer of the port's stacked-PR chain, never as a direct push

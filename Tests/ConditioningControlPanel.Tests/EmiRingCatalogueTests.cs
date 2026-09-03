@@ -80,7 +80,7 @@ public class EmiRingCatalogueTests
         // logged null and a flat hue tile - the same silent failure this file exists to catch. The
         // arcademy card shipped as that tile for a whole build before anyone noticed (QA
         // 2026-08-29), so the paths are checked against the tree instead of against a play-test.
-        var res = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        var res = Path.Combine(RepoRoot(), "Assets");
         foreach (var t in EmiTargets.All)
         {
             if (string.IsNullOrWhiteSpace(t.ThumbPath)) continue;

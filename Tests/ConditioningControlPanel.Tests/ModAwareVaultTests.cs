@@ -236,10 +236,10 @@ public class ModAwareVaultTests
     {
         var csproj = AppFile("ConditioningControlPanel.csproj");
 
-        Assert.Contains(@"<Resource Include=""Resources\exclusives\*.png"" />", csproj, StringComparison.Ordinal);
+        Assert.Contains(@"<Resource Include=""..\Assets\exclusives\*.png"" Link=""Resources\exclusives\%(RecursiveDir)%(Filename)%(Extension)"" />", csproj, StringComparison.Ordinal);
         Assert.DoesNotContain(@"<Content Include=""assets\exclusives\*.png"">", csproj, StringComparison.Ordinal);
 
-        Assert.True(File.Exists(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources",
+        Assert.True(File.Exists(Path.Combine(RepoRoot(), "Assets",
                                              "exclusives", "vault_backdrop.png")),
             "the vault backdrop is not in Resources\\exclusives - the mod editor already declares that key");
     }
@@ -304,7 +304,7 @@ public class ModAwareVaultTests
         Assert.Contains("\"bambitakeover\"", fork, StringComparison.Ordinal);
 
         // Both cuts must exist, or the fork paints a hole on one mod.
-        var features = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "features");
+        var features = Path.Combine(RepoRoot(), "Assets", "features");
         Assert.True(File.Exists(Path.Combine(features, "bambi takeover.png")));
         Assert.True(File.Exists(Path.Combine(features, "takeover.png")));
     }

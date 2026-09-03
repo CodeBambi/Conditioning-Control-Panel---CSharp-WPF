@@ -242,7 +242,7 @@ public class CompanionAvatarArtTests
     {
         // A missing bust is not a crash, it is a blank ring - which the null-resolve rule above
         // deliberately hides. This is the assertion that would not hide it.
-        var resources = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        var resources = Path.Combine(RepoRoot(), "Assets");
         Assert.True(File.Exists(Path.Combine(resources, Bust)), $"{Bust} is missing from Resources/");
 
         for (int set = 2; set <= 5; set++)

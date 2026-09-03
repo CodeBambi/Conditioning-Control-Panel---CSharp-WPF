@@ -518,7 +518,7 @@ public class EmiCodexTests
     /// alive. Cheap enough at this size, and it keeps every reader below to one line.</summary>
     private static JsonElement LinesFile()
     {
-        var path = Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json");
+        var path = Path.Combine(RepoRoot(), "Assets", "emi", "desk-lines.json");
         Assert.True(File.Exists(path), path);
         return JsonDocument.Parse(File.ReadAllText(path)).RootElement.Clone();
     }
@@ -635,7 +635,7 @@ public class EmiCodexTests
     [Fact]
     public void The_book_offer_is_not_deferred()
     {
-        var path = Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json");
+        var path = Path.Combine(RepoRoot(), "Assets", "emi", "desk-lines.json");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         if (!doc.RootElement.TryGetProperty("deferred", out var d) || d.ValueKind != JsonValueKind.Array) return;
         foreach (var item in d.EnumerateArray())

@@ -170,7 +170,7 @@ public class ModAwareDecodedArtTests
     public void EveryDoorMedallionIsNamedAndItsArtIsOnDisk()
     {
         var xaml = AppFile("MainWindow", "MainWindow.xaml");
-        var resources = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        var resources = Path.Combine(RepoRoot(), "Assets");
 
         foreach (var (name, path) in NavDoorArt)
         {

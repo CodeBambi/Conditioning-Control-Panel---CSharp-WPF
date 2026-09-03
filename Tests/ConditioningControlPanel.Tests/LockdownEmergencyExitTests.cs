@@ -100,6 +100,13 @@ public class LockdownEmergencyExitTests
             $"Could not locate the app project walking up from {AppContext.BaseDirectory}");
     }
 
+    private static string Asset(params string[] parts)
+    {
+        var path = Path.Combine(AppDir(), "..", "Assets", Path.Combine(parts));
+        Assert.True(File.Exists(path), $"missing asset file: {path}");
+        return File.ReadAllText(path);
+    }
+
     private static string Source(params string[] parts)
     {
         var path = Path.Combine(AppDir(), Path.Combine(parts));
@@ -109,7 +116,7 @@ public class LockdownEmergencyExitTests
 
     private static string LockdownSource() => SourceRoots.ReadProductFile("Services", "Haptics", "LockdownService.cs");
     private static string HostSource() => SourceRoots.ReadProductFile("Services", "EmergencyExit", "EmergencyExitHostService.cs");
-    private static string GameSource(string id) => Source("Resources", "web", "emergency-exit", "games", id + ".js");
+    private static string GameSource(string id) => Asset("web", "emergency-exit", "games", id + ".js");
 
     /// <summary>The body of a method, from its signature to the next method at the same indent.</summary>
     private static string Body(string source, string signature)

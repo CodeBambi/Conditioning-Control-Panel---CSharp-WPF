@@ -93,7 +93,7 @@ public class ModAwarePremiumPlateTests
     public void TheArtIsOnDisk(string view, string art, string heroBrush, string sideBrush)
     {
         _ = view; _ = heroBrush; _ = sideBrush;
-        var file = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources",
+        var file = Path.Combine(RepoRoot(), "Assets",
             art.Replace('/', Path.DirectorySeparatorChar));
         Assert.True(File.Exists(file), $"{art} is missing from Resources/ - a blank plate on a default install");
     }
@@ -208,7 +208,7 @@ public class ModAwarePremiumPlateTests
     [Fact]
     public void BothTakeoverBaseFilesShipWithTheApp()
     {
-        var resources = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        var resources = Path.Combine(RepoRoot(), "Assets");
         Assert.True(File.Exists(Path.Combine(resources, "features", "takeover.png")));
         Assert.True(File.Exists(Path.Combine(resources, "features", "bambi takeover.png")));
     }

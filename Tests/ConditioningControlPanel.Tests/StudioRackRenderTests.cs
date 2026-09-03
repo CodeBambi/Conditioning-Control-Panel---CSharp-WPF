@@ -477,7 +477,7 @@ public class StudioRackRenderTests
 
     private static IEnumerable<string> BuiltInModRuleFiles()
     {
-        var root = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "sounds",
+        var root = Path.Combine(RepoRoot(), "Assets", "sounds",
                                 "companion_audio", "mods");
         var files = Directory.GetDirectories(root, "builtin-*")
                              .Select(d => Path.Combine(d, "bark_rules.json"))

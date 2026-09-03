@@ -102,7 +102,7 @@ public class EmiRingCardFitTests
     [Fact]
     public void The_shipped_pixel_font_advances_exactly_one_em_per_glyph()
     {
-        var ttf = App("Resources", "emi", "fonts", "PressStart2P-latin.ttf");
+        var ttf = Path.Combine(RepoRoot(), "Assets", "emi", "fonts", "PressStart2P-latin.ttf");
         Assert.True(File.Exists(ttf), "the bundled pixel font is gone: " + ttf);
 
         var face = new GlyphTypeface(new Uri(ttf));

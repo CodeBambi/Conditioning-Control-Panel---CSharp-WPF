@@ -596,7 +596,7 @@ L'utente ha **piena libertà di prompt** sia per le personalità del companion c
 | `webcam-calibration.json` | stesso APPDATA folder | Calibrazione webcam (numbers only) |
 | `knowledge.json` | `assets/knowledge.json` o `%APPDATA%/.../assets/` | Knowledge service facts (al momento vuoto: `[{ "Files":[], "Triggers":[], "Kinks":[] }]`) |
 | Asset prompts | `ConditioningControlPanel/assets/prompts/*.json` (shipped) | Personality preset shippati (Soft Hypnotist, Strict Domme, Chaotic Gremlin, Elegant Mistress) |
-| Awareness presets | `ConditioningControlPanel/Resources/AwarenessPresets/*.json` (shipped) + user-created in settings | Built-in 4 preset + custom |
+| Awareness presets | `Assets/AwarenessPresets/*.json` (shipped) + user-created in settings | Built-in 4 preset + custom |
 | Default Ollama host | `CompanionPromptSettings.AiOllamaHost` default `"http://localhost:11434/"` | Configurable via `LocalAiSetupWizard.xaml` |
 | Cloud proxy URL | `Services/AiService.cs:26` `const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app"` | **Hardcoded**, non configurable |
 | cclabs-web URL | `Services/CatalogueService.cs:36` `const string CclabsBaseUrl = "https://app.cclabs.app"` | Hardcoded |

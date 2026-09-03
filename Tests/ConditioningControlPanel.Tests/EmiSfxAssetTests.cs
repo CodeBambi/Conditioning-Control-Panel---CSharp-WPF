@@ -31,7 +31,7 @@ public class EmiSfxAssetTests
     }
 
     private static string SoundsDir() =>
-        Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "sounds");
+        Path.Combine(RepoRoot(), "Assets", "sounds");
 
     /// <summary>
     /// The chains, read straight off the service so the two cannot drift. Reading the real

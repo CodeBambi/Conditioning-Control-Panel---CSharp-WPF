@@ -259,7 +259,7 @@ public class EmiBookCardsTests
     [Fact]
     public void Margin_faces_come_from_the_shipped_set()
     {
-        var lines = File.ReadAllText(Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json"));
+        var lines = File.ReadAllText(Path.Combine(RepoRoot(), "Assets", "emi", "desk-lines.json"));
         foreach (var c in EmiBookCards.All)
         {
             Assert.False(string.IsNullOrWhiteSpace(c.MarginFace));

@@ -376,7 +376,7 @@ public class ShortWalkTourTests : IDisposable
     public void EveryShortWalkStepHasItsOwnMoment()
     {
         var moments = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json"))).RootElement.GetProperty("moments");
+            Path.Combine(AppDir(), "..", "Assets", "emi", "desk-lines.json"))).RootElement.GetProperty("moments");
 
         var svc = new TutorialService();
         svc.Start(TutorialType.ShortWalk);
@@ -396,7 +396,7 @@ public class ShortWalkTourTests : IDisposable
     public void TheStepFallbackMomentExists()
     {
         var moments = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json"))).RootElement.GetProperty("moments");
+            Path.Combine(AppDir(), "..", "Assets", "emi", "desk-lines.json"))).RootElement.GetProperty("moments");
 
         Assert.True(moments.TryGetProperty(EmiTourNarrator.StepFallbackMoment, out _),
             EmiTourNarrator.StepFallbackMoment + " is missing from desk-lines.json");

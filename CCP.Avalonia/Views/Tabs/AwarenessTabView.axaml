@@ -86,10 +86,21 @@
                              ImageSource from it by ElementName binding. This head ships no
                              bitmap yet, so the carrier stays as a zero-size Image with no
                              Source and the two plates draw the hue wash. -->
-                        <Image x:Name="ImgAwarenessFeature" Width="0" Height="0" IsVisible="False"/>
+                        <Image x:Name="ImgAwarenessFeature" Width="0" Height="0" IsVisible="False"
+                               Source="avares://CCP.Avalonia/Resources/features/awareness.png"/>
 
+                        <!-- The hero plate now paints the real feature art, as the WPF original
+                             does, and keeps the same geometry, mask and scrim over it. The hue
+                             wash stays underneath so a missing or mod-swapped bitmap degrades to
+                             what this head drew before rather than to a hole. -->
                         <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
                                 Background="{StaticResource TabHueWashBrush}">
+                            <Border CornerRadius="0,16,16,0">
+                                <Border.Background>
+                                    <ImageBrush Source="avares://CCP.Avalonia/Resources/features/awareness.png"
+                                                Stretch="UniformToFill" AlignmentX="Right"/>
+                                </Border.Background>
+                            </Border>
                             <Border.OpacityMask>
                                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
                                     <GradientStop Color="#00000000" Offset="0"/>

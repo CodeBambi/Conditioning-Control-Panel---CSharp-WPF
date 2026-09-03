@@ -1,7 +1,7 @@
 // One-shot utility that synthesizes the four bundled Awareness Engine preset
 // sound effects using NAudio. Run once during implementation; the resulting
 // .wav files are committed under
-//   ConditioningControlPanel/Resources/AwarenessPresets/audio/
+//   Assets/AwarenessPresets/audio/
 // and loaded at runtime via KeywordTriggerService.ResolveAudioPath.
 //
 // Usage:
@@ -25,7 +25,7 @@ internal static class Program
     private static readonly string OutputDir = Path.Combine(
         AppContext.BaseDirectory,
         "..", "..", "..", "..", "..",
-        "ConditioningControlPanel", "Resources", "AwarenessPresets", "audio");
+        "Assets", "AwarenessPresets", "audio");
 
     public static int Main()
     {

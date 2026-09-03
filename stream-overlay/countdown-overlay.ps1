@@ -22,7 +22,7 @@ param(
     [string]$Title   = "Stream starting in",
     [string]$Sub     = "Good girls wait patiently",
     [string]$LiveText = "WE'RE LIVE",
-    [string]$LogoPath = "$PSScriptRoot\..\ConditioningControlPanel\Resources\logo.png"
+    [string]$LogoPath = "$PSScriptRoot\..\Assets\logo.png"
 )
 
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
