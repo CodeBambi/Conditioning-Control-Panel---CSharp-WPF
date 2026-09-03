@@ -10,6 +10,31 @@ dotnet build
 dotnet run
 ```
 
+## Cross-Platform Port Collaboration (agreed 2026-09-03)
+
+A contractor (GitHub `ObviouslyNotMich`) is porting the app to Avalonia. Rules so the two sides do not
+trip over each other:
+
+| Area | Owner |
+|------|-------|
+| `CCP.Core/`, `CCP.Avalonia/`, `CCP.VR/`, Linux CI jobs | contractor |
+| `ConditioningControlPanel/`, `Tests/`, server, web, mobile | CodeBambi (and Claude sessions) |
+
+- **Port work lands on `avalonia/main`.** The contractor merges their own `port/*` branches there
+  without review. Once a week ONE merge-up PR `avalonia/main -> main` is reviewed as a unit. It must
+  contain only files under the contractor's directories (additive). It is the only exception to the
+  600-line cap.
+- **Seam PRs** (anything touching both a contractor directory and `ConditioningControlPanel/`): under
+  200 changed lines, based on `main` directly, labelled `seam`, reviewed within a day.
+- **Structural moves** (mass renames such as the `/Assets` move) land only the day after a release
+  tag, never during a hotfix week, and never with red CI.
+- **Coordination issue:** the pinned "Port coordination" issue on this repo gets three lines from
+  each side at the start of a session: what merged, what is in flight, which files under the other
+  side's directories will be touched next. Read it before starting WPF work.
+- **Claude sessions:** never edit files under the contractor's directories; never merge a contractor
+  PR that touches `ConditioningControlPanel/` unless it carries the `seam` label; check the
+  coordination issue for "touching next" before opening a WPF PR.
+
 ## Quick File Reference
 
 ### Version Locations (ALL must be updated for releases)
