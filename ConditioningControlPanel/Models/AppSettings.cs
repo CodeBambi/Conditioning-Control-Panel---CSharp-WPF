@@ -4378,6 +4378,25 @@ namespace ConditioningControlPanel.Models
             set { _pinkFilterOpacity = Math.Clamp(value, 0, 50); OnPropertyChanged(); }
         }
 
+        // Breathe (suggestions thread 1537106473534885938, Nova + Wobberjockey): the tint swells
+        // in and out around PinkFilterOpacity instead of sitting flat. Off by default - a steady
+        // tint is still what most people expect when they tick the filter on.
+        private bool _pinkFilterBreathe = false;
+        public bool PinkFilterBreathe
+        {
+            get => _pinkFilterBreathe;
+            set { _pinkFilterBreathe = value; OnPropertyChanged(); }
+        }
+
+        // Seconds for one full in-and-out cycle. Clamped here so a hand-edited settings file can
+        // never hand the animation a zero or negative duration.
+        private int _pinkFilterBreatheSeconds = 6;
+        public int PinkFilterBreatheSeconds
+        {
+            get => _pinkFilterBreatheSeconds;
+            set { _pinkFilterBreatheSeconds = Math.Clamp(value, 4, 12); OnPropertyChanged(); }
+        }
+
         private bool _pinkFilterLinkRamp = false;
         public bool PinkFilterLinkRamp
         {

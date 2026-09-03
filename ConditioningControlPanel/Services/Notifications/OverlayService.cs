@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.ComponentModel;
@@ -1278,6 +1279,7 @@ public class OverlayService : IDisposable
         {
             var (fr, fg, fb) = GetFilterRgb();
             GetPinkLayer().Show(fr, fg, fb, opacityPercent / 100.0);
+            ApplyPinkBreathe();
             return;
         }
         try
@@ -1291,6 +1293,7 @@ public class OverlayService : IDisposable
                 var w = CreatePinkFilterForScreen(screen, opacityPercent);
                 if (w != null) _pinkFilterWindows.Add(w);
             }
+            ApplyPinkBreathe();
         }
         catch (Exception ex)
         {
@@ -1331,6 +1334,7 @@ public class OverlayService : IDisposable
             var (fr, fg, fb) = GetFilterRgb();
             GetPinkLayer().Show(fr, fg, fb, s.PinkFilterOpacity / 100.0);
             _lastAppliedPinkOpacity = s.PinkFilterOpacity / 100.0;
+            ApplyPinkBreathe();
             App.Logger?.Debug("Pink filter started on compositor layer at opacity {Opacity}%", s.PinkFilterOpacity);
             return;
         }
@@ -1351,7 +1355,9 @@ public class OverlayService : IDisposable
                 }
             }
 
-            App.Logger?.Debug("Pink filter started on {Count} screens at opacity {Opacity}%", 
+            ApplyPinkBreathe();
+
+            App.Logger?.Debug("Pink filter started on {Count} screens at opacity {Opacity}%",
                 _pinkFilterWindows.Count, settings.PinkFilterOpacity);
         }
         catch (Exception ex)
@@ -1425,12 +1431,64 @@ public class OverlayService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Breathe (suggestions thread 1537106473534885938 - Nova asked for a soft constant flash,
+    /// Wobberjockey for an in-and-out breath). The BASE opacity keeps living in the brush alpha,
+    /// so ramps, timed holds and the 500ms settings sync all stay exactly as they were; breathe
+    /// only rides the Border's element opacity on top of that, which WPF animates on the
+    /// composition thread for free. Idempotent, and a no-op when nothing is on screen.
+    /// </summary>
+    private void ApplyPinkBreathe()
+    {
+        var s = App.Settings?.Current;
+        bool on = s?.PinkFilterBreathe == true && PinkShowing;
+        double seconds = Math.Clamp(s?.PinkFilterBreatheSeconds ?? 6, 4, 12);
+
+        if (_pinkLayer != null) _pinkLayer.SetBreathe(on, seconds);
+
+        foreach (var window in _pinkFilterWindows)
+        {
+            if (window.Content is not Border border) continue;
+            if (!on)
+            {
+                border.BeginAnimation(UIElement.OpacityProperty, null); // hand the property back
+                border.Opacity = 1.0;
+                continue;
+            }
+            // Half a period each way: AutoReverse makes the round trip the full period.
+            var anim = new DoubleAnimation(
+                Compositor.PinkTintLayer.BreatheFloor, 1.0,
+                new Duration(TimeSpan.FromSeconds(seconds / 2.0)))
+            {
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
+            border.BeginAnimation(UIElement.OpacityProperty, anim);
+        }
+    }
+
+    /// <summary>Re-apply breathe after the user flips the toggle or drags the period slider.
+    /// Safe at any time: with the tint down it just clears whatever was running.</summary>
+    public void RefreshPinkBreathe()
+    {
+        try { ApplyPinkBreathe(); }
+        catch (Exception ex) { App.Logger?.Debug("RefreshPinkBreathe: {E}", ex.Message); }
+    }
+
     internal void StopPinkFilter()
     {
+        _pinkLayer?.SetBreathe(false, 6); // drop the pulse before the layer parks
         _pinkLayer?.Hide(); // both paths cleared unconditionally - the flag may have flipped mid-run
         foreach (var window in _pinkFilterWindows.ToList())
         {
-            try { window.Close(); }
+            try
+            {
+                // Release the animation first: a Forever clock left running on a closing
+                // window keeps the element alive for the rest of the process.
+                if (window.Content is Border b) b.BeginAnimation(UIElement.OpacityProperty, null);
+                window.Close();
+            }
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to close pink filter window: {Error}", ex.Message);
