@@ -1,0 +1,184 @@
+<!-- PORTED from ConditioningControlPanel/Windows/MantraWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                      -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       <Storyboard> resources         -> dropped. Avalonia has no Storyboard; the five here are all
+                                         begun from code (pulse / shake / letter-pulse / wrong-shake
+                                         / glow), and every trigger for them is a MantraService
+                                         event, which this port stubs. See the code-behind.
+       RadialGradientBrush 0.5,0.5 /
+       RadiusX="0.7"                  -> "50%,50%" / "70%" plus an explicit GradientOrigin. A bare
+                                         pair is ABSOLUTE pixels in Avalonia, which collapses the
+                                         ramp to one pixel; WPF's GradientOrigin defaulted to Center.
+       DropShadowEffect ShadowDepth   -> OffsetX="0" OffsetY="0"
+       {DynamicResource PinkColor}    -> {StaticResource PinkColor}. A GradientStop and an Effect
+                                         are not in the logical tree, so DynamicResource has no
+                                         scope to resolve through.
+       ScaleTransform CenterX/CenterY -> dropped (no such properties; centre is the default) and
+       RenderTransformOrigin 0.5,0.5  -> "50%,50%", same absolute-vs-relative trap as above.
+       x:Name on a brush / gradient stop / effect / transform
+                                      -> dropped. Avalonia only name-scopes StyledElements, so
+                                         BaseBrush, BaseCenter, BaseEdge, WashCenter, MantraGlow,
+                                         MantraScale, MantraTranslate and InputBorderBrush would
+                                         not compile (AVLN2000). The code-behind reaches them
+                                         through their owning control instead, which is why the
+                                         base layer and the input border gained x:Names.
+       Visibility="Collapsed"         -> IsVisible="False"
+       ContextMenu="{x:Null}"         -> ContextFlyout="{x:Null}"
+       AllowDrop="False"              -> DragDrop.AllowDrop="False"
+       KeyDown= / Loaded= / TextChanged= / PreviewKeyDown=
+                                      -> wired in the constructor -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.MantraWindow"
+        Title="{loc:Str dialog_mantra_lab}"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        WindowState="Maximized"
+        Background="Black"
+        Topmost="True">
+
+    <Window.Styles>
+        <!-- Fluent's TextBox paints PART_BorderElement opaque on hover and focus, and that setter
+             sits on the template child, so it outranks the TextBox's own Background="Transparent".
+             The window focuses TxtInput on load, so without this the input reads as a black slab
+             over the wash - the WPF original never changed background on focus.
+             ponytail: local copy, hoist to Theme/Styles.xaml when a second view needs it. -->
+        <Style Selector="TextBox.transparent /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid>
+        <!-- Layer 0: Radial gradient base -->
+        <Border x:Name="BaseLayer">
+            <Border.Background>
+                <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,50%"
+                                     RadiusX="70%" RadiusY="70%">
+                    <GradientStop Color="#1A0A2E" Offset="0"/>
+                    <GradientStop Color="#0A0514" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Layer 1: Color wash overlay (intensity tied to streak) -->
+        <Border x:Name="ColorWashOverlay" Opacity="0">
+            <Border.Background>
+                <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,50%" RadiusX="60%" RadiusY="60%">
+                    <GradientStop Color="#6633AA" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Layer 2: Glow overlay (pulsing) -->
+        <Border x:Name="GlowOverlay" Opacity="0">
+            <Border.Background>
+                <RadialGradientBrush Center="50%,60%" GradientOrigin="50%,60%" RadiusX="40%" RadiusY="40%">
+                    <GradientStop Color="{StaticResource PinkColor}" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Layer 3: Vignette -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,50%" RadiusX="80%" RadiusY="80%">
+                    <GradientStop Color="Transparent" Offset="0.4"/>
+                    <GradientStop Color="#80000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Content Grid -->
+        <Grid Margin="40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Top: Counters -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                <StackPanel Margin="30,0">
+                    <TextBlock Text="{loc:Str label_reps}" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock x:Name="TxtCompletions" Text="0" Foreground="White" FontSize="36" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtTarget" Text="/10" Foreground="#606080" FontSize="24" VerticalAlignment="Bottom" Margin="2,0,0,4"/>
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Margin="30,0">
+                    <TextBlock Text="{loc:Str label_streak}" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtStreak" Text="0" Foreground="{DynamicResource PinkBrush}" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Margin="30,0">
+                    <TextBlock Text="{loc:Str label_best}" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtBestStreak" Text="0" Foreground="{DynamicResource SecondaryBrush}" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Center: Mantra text (Inlines populated in code-behind) -->
+            <Viewbox Grid.Row="1" MaxWidth="1400" MaxHeight="300" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtMantra"
+                           FontSize="72" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap"
+                           MaxWidth="1400" Padding="20"
+                           RenderTransformOrigin="50%,50%">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#9966CC" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                    </TextBlock.Effect>
+                    <TextBlock.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform/>
+                            <TranslateTransform/>
+                        </TransformGroup>
+                    </TextBlock.RenderTransform>
+                </TextBlock>
+            </Viewbox>
+
+            <!-- Bottom: Input area -->
+            <Border x:Name="InputBorder" Grid.Row="2" Background="#20FFFFFF" CornerRadius="12" Padding="20,14"
+                    HorizontalAlignment="Center" MaxWidth="800" MinWidth="500" Margin="0,0,0,40"
+                    BorderThickness="1.5">
+                <Border.BorderBrush>
+                    <SolidColorBrush Color="#40FF69B4"/>
+                </Border.BorderBrush>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtInput" Grid.Column="0" Classes="transparent"
+                             Background="Transparent" Foreground="White" FontSize="22"
+                             BorderThickness="0" CaretBrush="{DynamicResource PinkBrush}"
+                             VerticalAlignment="Center"
+                             ContextFlyout="{x:Null}"
+                             DragDrop.AllowDrop="False"/>
+                    <TextBlock Grid.Column="1" Text="{loc:Str label_esc_to_exit}" Foreground="{DynamicResource PanelAccentBrush}" FontSize="11"
+                               VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Session complete overlay -->
+        <Border x:Name="CompletionOverlay" Background="#E0000000" IsVisible="False">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="{loc:Str label_session_complete}" Foreground="{DynamicResource PinkBrush}" FontSize="48" FontWeight="Bold"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="30" OffsetX="0" OffsetY="0" Opacity="0.8"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock x:Name="TxtCompletionStats" Text="" Foreground="{DynamicResource SecondaryBrush}" FontSize="22"
+                           HorizontalAlignment="Center" Margin="0,16,0,0"/>
+                <TextBlock Text="{loc:Str label_press_any_key_to_close}" Foreground="#606080" FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,24,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
