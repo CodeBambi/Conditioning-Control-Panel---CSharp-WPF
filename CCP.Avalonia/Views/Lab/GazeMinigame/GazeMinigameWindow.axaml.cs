@@ -43,10 +43,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
     ///    carried over); its folder is not linked into this head's csproj, so it currently logs
     ///    a miss. The other four reward effects have no seam yet.
     ///  - <c>App.Webcam</c> / <c>App.Flash</c> / <c>App.Haptics</c> / <c>App.Bubbles</c> /
-    ///    <c>App.MindWipe</c> / <c>App.Overlay</c> / <c>WebcamCalibrationWindow</c>, LibVLC
-    ///    (<c>VideoView</c> + the whole stop/detach/dispose dance and its message pump), NAudio
-    ///    and XamlAnimatedGif are all head-side; each is a stub. Gaze never changes side, so a
-    ///    round resolves on its display cap.
+    ///    <c>App.MindWipe</c> / <c>App.Overlay</c>, LibVLC (<c>VideoView</c> + the whole
+    ///    stop/detach/dispose dance and its message pump), NAudio and XamlAnimatedGif are all
+    ///    head-side; each is a stub. <c>WebcamCalibrationWindow</c> is NOT - this head ships it,
+    ///    with the same <c>ShowDialogWithRecalibrate</c> static, so the banner's calibrate action
+    ///    is wired.
+    ///  - <b>Start is disabled, deliberately.</b> The gaze tracker is the whole game and it is
+    ///    head-side. Without it <c>_currentSide</c> is never anything but <c>None</c>, so neither
+    ///    accumulator moves, every round runs to its display cap and resolves on
+    ///    <c>_correctMs >= _wrongMs</c> - which is <c>0 >= 0</c>. That is not "resolves on the
+    ///    cap": it is GOOD GIRL, the reward effect and the jingle on every round, for a stare that
+    ///    never happened. So the setup screen, its packs, sliders, chips, warnings and the
+    ///    calibration dialog are all live, and Start states why it cannot run. Everything past it
+    ///    (countdown, gameplay, feedback, results, the ESC quit confirmation) is intact but
+    ///    unreachable until a tracker seam exists.
     ///  - <c>MessageBox.Show</c> -> this head's <c>Views/Dialogs/MessageDialog.ConfirmAsync</c>,
     ///    so the mid-run "quit the session?" confirmation is raised again (awaited, hence the
     ///    re-test of <c>_gameRunning</c> after it).
@@ -103,6 +113,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         /// <c>App.Logger</c> calls that become Serilog's static <c>Log</c>. <b>Move it to
         /// CCP.Core/Lab/GazeMinigame/ and DELETE this twin</b>, which also restores Load/Save (and
         /// with them the persisted difficulty, chips, sliders and pack roles).</para>
+        /// <para>Do NOT instead teach this twin to read and write the real file. Both heads share
+        /// <c>{UserData}/gaze-minigame-settings.json</c>, and the twin is not shape-compatible with
+        /// it: it has no <c>Packs</c> list, so a Save would silently drop the user's remembered
+        /// Focus/Ignore assignments, and it carries no <c>StringEnumConverter</c>, so the two enums
+        /// would round-trip as integers the WPF head reads back as the wrong members. A losing
+        /// writer is worse than the defaults.</para>
         /// </summary>
         private sealed class GazeMinigameSettings
         {
@@ -350,11 +366,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             DiscoverLibrary();
             UpdateDifficultyChips();
 
-            // Proactive calibration nudge so the user fixes it before staring at a
-            // Start button that would otherwise bounce them. In WPF this was gated on
-            // App.Webcam?.Calibration == null.
-            // ponytail: needs WebcamTrackingService, wired when it moves to Core.
-            ShowReadyBanner("Tip: run a 16-point gaze calibration before playing so the game can tell which side you're looking at.", showCalibrateAction: true);
+            // WPF showed a "run a calibration first" nudge here, gated on
+            // App.Webcam?.Calibration == null. On this head the blocker is one step earlier -
+            // there is no tracker at all - so the banner states that instead. The calibrate
+            // action still opens the real calibration window.
+            ShowReadyBanner(NoTrackerReason, showCalibrateAction: true);
         }
 
         /// <summary>Rescan content folders, preserving the current role assignments.</summary>
@@ -368,6 +384,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             // Until then the strip shows the sample library so the gallery, both zones and the
             // Start gating all draw.
             _library.AddRange(SampleLibrary());
+
+            // The extraPaths branch of GazePackLibrary.Discover, inlined so "+ Add folder" is not
+            // a button that validates a folder and then throws it away. Dies with the twin when
+            // GazePackLibrary moves to Core.
+            foreach (var custom in _customPaths)
+            {
+                var full = NormPath(custom);
+                if (_library.Any(p => NormPath(p.Path) == full)) continue;
+                var pack = AssetPack.FromFolder(full);
+                if (pack != null) _library.Add(pack);
+            }
 
             foreach (var pack in _library)
             {
@@ -605,6 +632,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         /// for this session.</summary>
         private void SaveSelection() => _settings.Save();
 
+        /// <summary>Why Start is disabled on this head, stated once so the summary line, the
+        /// opening banner and the post-calibration banner cannot drift apart. Phrased as a
+        /// missing capability rather than something the user forgot to do - there is no
+        /// calibration they could run that would make the game playable here.</summary>
+        /// <summary>Whether a gaze tracker is reachable from this head. Constant false until a
+        /// tracker seam exists; a single named gate so restoring one is one edit, not a hunt.</summary>
+        private static bool HasGazeTracker => false;
+
+        private const string NoTrackerReason =
+            "This build has no webcam gaze tracker yet, so the game can't tell which side you're looking at — Start stays off until one is available.";
+
         private void RefreshSetupState()
         {
             var focus = _library.FirstOrDefault(p => RoleOf(p) == GazePackRole.Focus);
@@ -622,6 +660,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 if (!sharedImages && !sharedVideos)
                     reason = "Focus and Ignore don't share a content type — pick sets that both have images, or both have videos.";
             }
+
+            // The last gate, and on this head the permanent one: the gaze tracker. Checked after
+            // the selection reasons so the user still gets useful feedback while picking packs.
+            if (reason == null && !HasGazeTracker) reason = NoTrackerReason;
 
             _btnStartGame.IsEnabled = reason == null;
             if (reason == null)
@@ -880,11 +922,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             _btnReadyBannerAction.IsVisible = false;
         }
 
-        private void BtnReadyBannerAction_Click(object? sender, RoutedEventArgs e)
+        private async void BtnReadyBannerAction_Click(object? sender, RoutedEventArgs e)
         {
-            // Currently the only banner action is "open calibration".
-            // ponytail: needs WebcamCalibrationWindow + App.Webcam, wired when they move to Core.
-            ShowReadyBanner("Still not calibrated — run a 16-point gaze calibration so the game can read which side you're looking at.", showCalibrateAction: true);
+            // Currently the only banner action is "open calibration". This head ships
+            // WebcamCalibrationWindow with the same ShowDialogWithRecalibrate loop, so the real
+            // window opens; an earlier note claiming it had no such static was wrong.
+            // async void: same top-level catch as BeginCountdown.
+            try
+            {
+                await Views.Windows.WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
+            }
+            catch (Exception ex) { Log.Warning(ex, "GazeMinigame: calibration dialog failed"); }
+
+            // WPF re-read App.Webcam?.Calibration here and hid the banner when it was set. There
+            // is nothing to re-read, and the calibration window's own sampling loop is stubbed, so
+            // saying "still not calibrated" would blame the user for the head's gap. Restate the
+            // real reason instead.
+            ShowReadyBanner(NoTrackerReason, showCalibrateAction: true);
         }
 
         private void BtnStartGame_Click(object? sender, RoutedEventArgs e)
@@ -905,10 +959,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             _packs.Add(focusPack);
             _packs.AddRange(ignorePacks);
 
-            // The WPF version gated Start on, in order: webcam consent (WebcamConsentDialog),
-            // App.Webcam != null, an off-UI-thread App.Webcam.Start(), and a loaded gaze
-            // calibration — each failure staying on this screen with a banner.
-            // ponytail: needs WebcamTrackingService, wired when it moves to Core.
+            // WPF's webcam preconditions sat here, in order: consent (WebcamConsentDialog),
+            // App.Webcam != null, an off-UI-thread App.Webcam.Start(), then a loaded gaze
+            // calibration — each failure staying on this screen with a banner. All four collapse
+            // to the single HasGazeTracker gate below, which runs after round generation so a bad
+            // Advanced-settings combination still reports itself.
+            //
+            // ponytail: needs WebcamTrackingService (ConditioningControlPanel/Services/Webcam/).
+            // The consent prompt is deliberately NOT restored ahead of it: WebcamConsentGiven /
+            // WebcamConsentVersion live in the shared AppSettings, so asking here would record a
+            // grant for a camera this head never opens and pre-consent the WPF head. Restore it
+            // with the tracker, as WebcamConsent.IsCurrent(CoreSettings.Current) plus this head's
+            // Views/Dialogs/WebcamConsentDialog — awaited, since the answer must land first.
 
             // All good — generate rounds, persist settings, advance.
             try
@@ -927,6 +989,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
 
             _settings.Save();
+
+            // The tracker gate. Deliberately AFTER round generation so a bad Advanced-settings
+            // combination still surfaces its own message; the run itself stops here.
+            if (!HasGazeTracker)
+            {
+                ShowReadyBanner(NoTrackerReason, showCalibrateAction: true);
+                return;
+            }
+
             HideReadyBanner();
 
             // WPF also suspended the main-session FlashService here so its random flashes
@@ -1436,8 +1507,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         // WPF subscribed to App.Webcam's OnGazeSide / OnFaceLost / OnFaceFound. OnGazeSide
         // rather than the screen-projected OnGazeMove, because it already runs through the
         // calibrated left/right classifier with hysteresis and a 3-frame stability filter.
-        // ponytail: needs WebcamTrackingService, wired when it moves to Core. Until then
-        // _currentSide stays None and a round resolves on its display cap.
+        // ponytail: needs WebcamTrackingService. It owns a camera, so it does not "move to
+        // Core" - it needs a seam, and there is none. Until then _currentSide is None forever,
+        // which is why Start is gated (see the class header for what that silently produced).
         // OnFaceFound/OnFaceLost were the only writers of _faceLost; without the service the
         // face is simply never lost.
         private void EnsureWebcamSubscribed() => _faceLost = false;
