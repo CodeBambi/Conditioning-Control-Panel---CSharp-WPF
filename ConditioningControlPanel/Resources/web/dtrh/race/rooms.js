@@ -19,7 +19,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { makeRng } from './consts.js';
+import { makeRng, CAM_BACK } from './consts.js';
 import { biomeById } from '../game/biomes.js';
 import { createRoomProps, pixelTex } from './roomProps.js';
 
@@ -242,8 +242,12 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   const wedgeMat = mat(new THREE.MeshLambertMaterial({ map: wedgeTex, color: wedgeTex ? 0xffffff : 0xf6e7c8 }));
   const pinkGlow = mat(new THREE.MeshLambertMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.9 }));
   const gold = mat(new THREE.MeshLambertMaterial({ color: 0xf2c14e, emissive: 0xf2c14e, emissiveIntensity: 0.6 }));
-  // the air line is marked by PAIRS of gold cubes either side of the arc (never on the camera seat)
+  // the air line is marked by PAIRS of gold cubes either side of the arc. A dot hides while it would
+  // sit between the camera seat and the cup (from DOT_BEHIND to DOT_NEAR of the kart) and fades back
+  // in over DOT_NEAR..DOT_FAR ahead, so the low chase camera never has gold in its face mid-jump.
   const AIR_DOTS = 10, AIR_X = 2.4;
+  const DOT_NEAR = 6, DOT_FAR = 11, DOT_BEHIND = -(CAM_BACK + 2.5);
+  const airBase = [], airD = [];   // per dot: its resting matrix and wrapped depth
   const wedges = new THREE.InstancedMesh(track(wedgeGeometry(KERB_OUT, 4, 0.8)), wedgeMat, Math.max(1, ramps.length));
   const lips = new THREE.InstancedMesh(track(new THREE.BoxGeometry(KERB_OUT * 2 + 0.1, 0.2, 0.3)), pinkGlow, Math.max(1, ramps.length));
   const airDots = new THREE.InstancedMesh(track(new THREE.BoxGeometry(0.3, 0.3, 0.3)), gold, Math.max(1, ramps.length * AIR_DOTS));
@@ -253,10 +257,13 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     lips.setMatrixAt(i, roadMatrix(r.d, 0, 0.85, 0, 1, _m));
     for (let k = 0; k < AIR_DOTS; k++) {
       const prog = (Math.floor(k / 2) + 1) / (AIR_DOTS / 2 + 1), side = k & 1 ? AIR_X : -AIR_X;
-      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(r.d + prog * r.airLen, side, 0.5 + r.height * Math.sin(Math.PI * prog), prog * 2, 1, _m));
+      const dd = r.d + prog * r.airLen;
+      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(dd, side, 0.5 + r.height * Math.sin(Math.PI * prog), prog * 2, 1, _m));
+      airBase.push(_m.clone()); airD.push(layout.wrap(dd));
     }
   });
   wedges.count = ramps.length; lips.count = ramps.length; airDots.count = ramps.length * AIR_DOTS;
+  const airK = new Float32Array(airBase.length).fill(1);   // each dot's current scale (1 = resting)
   // boost pad: full lane width, 3 m long, chevrons that run forward (texture offset), cyan glow
   const PAD_W = 2.4, PAD_L = 3.0;
   const padTex = pixelTex(24, 30, (c, w, h) => {
@@ -313,6 +320,18 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
       dirty = true;
     });
     if (dirty) cubeMesh.instanceMatrix.needsUpdate = true;
+    // air-line dots: gone while they would sit between the seat and the cup, back over DOT_NEAR..DOT_FAR
+    let adirty = false;
+    for (let i = 0; i < airD.length; i++) {
+      const rel = layout.wrap(airD[i] - d + total / 2) - total / 2;   // signed, kart-relative metres
+      let k = 1;
+      if (rel > DOT_BEHIND && rel < DOT_FAR) k = rel < DOT_NEAR ? 0 : (rel - DOT_NEAR) / (DOT_FAR - DOT_NEAR);
+      if (k === airK[i]) continue;
+      airK[i] = k;
+      airDots.setMatrixAt(i, _m.copy(airBase[i]).scale(_s.setScalar(Math.max(k, 0.0001))));
+      adirty = true;
+    }
+    if (adirty) airDots.instanceMatrix.needsUpdate = true;
     cubeMat.emissiveIntensity = 0.25 + 0.2 * (0.5 + 0.5 * Math.sin(t * 3));
     if (padTex) padTex.offset.y = (t * 1.6) % 1;          // the chevrons run forward
     padMat.color.setScalar(0.85 + 0.15 * Math.sin(t * 6));

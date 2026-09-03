@@ -33,7 +33,7 @@ const LANE_STEP = 3.2;        // metres between bubbles in a lane line
 const VIEW_AHEAD = 150;       // sprites beyond this are hidden, not freed
 const MISS_BEHIND = 6;        // a treat this far behind the kart unpopped = miss
 const DROP_BEHIND = 12;       // freed once this far behind
-const PASS_FADE_M = 2.4;      // metres behind the pop box over which a passed bubble fades away
+const PASS_FADE_M = 1.6;      // metres behind the pop box over which a passed bubble fades away (before it balloons into the seat)
 const RAIN_FALL = 4, RAIN_REST = 2, RAIN_FIZZLE = 0.5;
 const POP_ANIM = 0.14;
 const PRISM_REACH = 8;        // prism chain-pops neighbours within this many metres
