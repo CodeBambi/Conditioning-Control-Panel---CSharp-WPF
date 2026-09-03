@@ -59,6 +59,7 @@ namespace ConditioningControlPanel.Views.Tabs
         internal CheckBox ChkNoPanic => SectionDevices.ChkNoPanic;
         internal Button BtnPanicKey => SectionDevices.BtnPanicKey;
         internal CheckBox ChkPanicOverridesAll => SectionDevices.ChkPanicOverridesAll;
+        internal CheckBox ChkPanicSinglePress => SectionDevices.ChkPanicSinglePress;
         internal Button BtnPauseKey => SectionDevices.BtnPauseKey;
 
         // ── global hotkey launchers (labels repainted by MainWindow.SessionIO.cs) ──────────

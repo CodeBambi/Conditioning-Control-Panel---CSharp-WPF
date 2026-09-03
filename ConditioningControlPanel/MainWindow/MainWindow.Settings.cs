@@ -76,6 +76,7 @@ namespace ConditioningControlPanel
             AppSettingsTab.ChkStartHidden.IsChecked = s.StartMinimized;
             AppSettingsTab.ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
             if (AppSettingsTab.ChkPanicOverridesAll != null) AppSettingsTab.ChkPanicOverridesAll.IsChecked = s.PanicOverridesAll;
+            if (AppSettingsTab.ChkPanicSinglePress != null) AppSettingsTab.ChkPanicSinglePress.IsChecked = s.PanicSinglePress;
             UpdatePauseKeyButton();
             // Offline mode lives on Settings · Data now (its System-popup twin is read-only).
             AppSettingsTab.ChkOfflineMode.IsChecked = s.OfflineMode;

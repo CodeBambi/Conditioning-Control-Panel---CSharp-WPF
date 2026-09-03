@@ -1734,14 +1734,25 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Panic key: Restarted autonomy after skipping current action");
                 }
 
-                // Restore window - always show and bring to front
-                Show();
-                WindowState = WindowState.Normal;
-                Activate();
-                Topmost = true;  // Temporarily topmost to ensure it's visible
-                Topmost = false; // Then disable topmost
-                App.Overlay?.NotifyTopWindowClosed();
-                ShowAvatarTube();
+                // Suggestion thread 1541736938703167550 (beebee): a panic press must never put the
+                // control panel front-and-center. It used to Activate() and flip Topmost, so the
+                // one thing the user was hiding jumped over whatever they alt-tabbed to. The
+                // window is still restored if it was minimised - it just does not steal focus.
+                if (Services.Safety.PanicPolicy.HidesEverything(App.Settings?.Current))
+                {
+                    // Single-press panic: hide everything instead. The tray icon brings it back.
+                    VideoDiag.Log("PANIC", "single-press panic - hiding every CCP window");
+                    try { _avatarTubeWindow?.HideTube(); } catch { }
+                    Hide();
+                    App.Overlay?.NotifyTopWindowClosed();
+                }
+                else
+                {
+                    Show();
+                    WindowState = WindowState.Normal;
+                    App.Overlay?.NotifyTopWindowClosed();
+                    ShowAvatarTube();
+                }
 
                 if (sessionWasPaused)
                 {

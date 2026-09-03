@@ -172,6 +172,11 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             if (Window.GetWindow(this) is MainWindow mw) mw.ChkPanicOverridesAll_Changed(sender, e);
         }
 
+        private void ChkPanicSinglePress_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ChkPanicSinglePress_Changed(sender, e);
+        }
+
         private void BtnPauseKey_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw) mw.BtnPauseKey_Click(sender, e);

@@ -266,6 +266,14 @@ namespace ConditioningControlPanel.Services
         private readonly List<GracePauseOverlayWindow> _graceOverlays = new();
         /// <summary>Seconds the video stays paused before it resumes on its own.</summary>
         internal const int GraceWindowSeconds = 60;
+
+        // ---- "Strict Lock is on" notice (#nsfw-chat 2026-08-31, Spitfire) ----
+        private readonly List<StrictLockNoticeWindow> _strictNotices = new();
+        private DateTime _lastStrictNoticeUtc = DateTime.MinValue;
+        /// <summary>How long the line stays up. Long enough to read twice, short enough to leave.</summary>
+        private static readonly TimeSpan StrictNoticeLife = TimeSpan.FromSeconds(5);
+        /// <summary>Key-repeat and a mashed panic key both arrive as a burst; one line answers all of it.</summary>
+        private static readonly TimeSpan StrictNoticeThrottle = TimeSpan.FromSeconds(3);
         /// <summary>
         /// Dedup window for ONE physical panic keystroke (see <see cref="TryGracePauseFromPanic"/>).
         /// Far below any human rapid double-tap, far above the dispatcher latency between the window
@@ -1606,6 +1614,7 @@ namespace ConditioningControlPanel.Services
             _strictActive = false;
             CancelPendingRetry();
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
+            CloseStrictNotices();   // the label must never outlive the lock it describes
             try
             {
                 CloseAll(synchronous: false);
@@ -2288,6 +2297,7 @@ namespace ConditioningControlPanel.Services
             _strictActive = false;
             CancelPendingRetry();
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
+            CloseStrictNotices();   // the label must never outlive the lock it describes
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
@@ -4931,7 +4941,15 @@ namespace ConditioningControlPanel.Services
                 // WedgeStallMs: a strict lock is only defensible while the app is actually
                 // responding, and #765 is a user staring at a frozen fullscreen frame that refuses
                 // Alt+F4 with no way to reach Task Manager behind it.
-                win.Closing += (s, e) => { if (_videoPlaying && !_isCleaningUp && !_wedgeStallSeen) e.Cancel = true; };
+                win.Closing += (s, e) =>
+                {
+                    if (_videoPlaying && !_isCleaningUp && !_wedgeStallSeen)
+                    {
+                        e.Cancel = true;
+                        // The veto is unchanged; it just stopped being silent (Spitfire, 08-31).
+                        ShowStrictLockNotice("close vetoed");
+                    }
+                };
                 win.PreviewKeyDown += (s, e) =>
                 {
                     // #735: in strict mode Escape may PAUSE, never escape. When Escape is NOT the
@@ -4975,12 +4993,20 @@ namespace ConditioningControlPanel.Services
                     {
                         try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.SystemKey); }
                         catch { /* never let the haunt break key suppression */ }
+                        // ...and say which setting is doing the swallowing. The Possession line only
+                        // exists during a lockdown; this one answers the plain strict-lock case.
+                        ShowStrictLockNotice("escape swallowed");
                     }
 
                     // In strict mode, block panic key, Alt+F4, and system keys
                     if (e.Key.ToString() == App.Settings.Current.PanicKey || e.Key == Key.System ||
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
+                    {
                         e.Handled = true;
+                        // The panic key and Alt+F4 are the two things a trapped user reaches for.
+                        // Blocking them stays; blocking them WORDLESSLY was the hour Spitfire lost.
+                        if (e.Key != Key.System) ShowStrictLockNotice("panic key or Alt+F4 blocked");
+                    }
                 };
                 // In strict mode the window is already Topmost — reactivation causes a
                 // focus-stealing loop that interferes with LibVLC's child HWND rendering
@@ -6076,6 +6102,62 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning("VideoService: failed to show grace pause overlay - {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Say out loud that Strict Lock is what just refused a keypress or a close.
+        ///
+        /// <para>#nsfw-chat 2026-08-31: Spitfire sat through an hour of a video that would not
+        /// dismiss and needed two other members to work out that Force Strict Lock was on. Every
+        /// door out of a strict video is deliberately shut; none of them said why, so a working
+        /// lock and a hung app looked identical from the chair.</para>
+        ///
+        /// <para>Purely a label. It changes no veto, consumes no key and is click-through, so the
+        /// lock is exactly as strong after this as before it. Throttled, because the calls arrive
+        /// on key-repeat. Never throws - a failure here must not disturb playback.</para>
+        /// </summary>
+        internal void ShowStrictLockNotice(string reason)
+        {
+            try
+            {
+                if (!_strictActive || !_videoPlaying || _isCleaningUp) return;
+
+                var nowUtc = DateTime.UtcNow;
+                if (nowUtc - _lastStrictNoticeUtc < StrictNoticeThrottle) return;
+                _lastStrictNoticeUtc = nowUtc;
+
+                CloseStrictNotices();
+                VideoDiag.Log("STRICT", $"showing the strict-lock notice ({reason})");
+
+                foreach (var win in _windows.ToList())
+                {
+                    Screen screen;
+                    try { screen = ScreenForWindow(win); }
+                    catch { continue; }
+                    if (screen == null) continue;
+                    _strictNotices.Add(new StrictLockNoticeWindow(screen, StrictNoticeLife));
+                }
+
+                if (_strictNotices.Count == 0)
+                {
+                    var primary = Screen.PrimaryScreen;
+                    if (primary != null) _strictNotices.Add(new StrictLockNoticeWindow(primary, StrictNoticeLife));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: strict-lock notice failed - {Error}", ex.Message);
+            }
+        }
+
+        private void CloseStrictNotices()
+        {
+            foreach (var n in _strictNotices.ToList())
+            {
+                try { n.Close(); }
+                catch (Exception ex) { App.Logger?.Debug("VideoService: failed to close strict notice - {Error}", ex.Message); }
+            }
+            _strictNotices.Clear();
         }
 
         private void CloseGraceOverlays()

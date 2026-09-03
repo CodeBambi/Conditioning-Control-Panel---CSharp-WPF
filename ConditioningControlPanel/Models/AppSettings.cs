@@ -2447,6 +2447,27 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
+        /// "Single-press panic" (suggestion thread 1541736938703167550 - beebee, escalated by Mort
+        /// and Wobberjockey). OFF by default: Mort's point stands, the two-tap ladder came from
+        /// other people's requests and flipping it for everybody would break their app.
+        ///
+        /// <para>ON: one press is the whole emergency stop. Every surface goes down (this forces
+        /// the <see cref="PanicOverridesAll"/> behaviour on whatever that switch says), and then
+        /// the main window and the companion tube HIDE instead of being restored. The old panic
+        /// pulled the control panel to the front on press one, which is the opposite of what
+        /// somebody mashing a panic key wants: "I want to hide it from view, not show it
+        /// front-and-center to anyone who happens to walk in."</para>
+        ///
+        /// <para>The tray icon still restores everything, so nobody is locked out of their app.</para>
+        /// </summary>
+        private bool _panicSinglePress = false;
+        public bool PanicSinglePress
+        {
+            get => _panicSinglePress;
+            set { _panicSinglePress = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
         /// Optional second binding that ONLY does the #735 "grace pause": while a mandatory video is
         /// really on screen it parks it behind a Paused/Resume card and touches nothing else. Empty
         /// (the default) means unbound. Bound with the same capture UI as <see cref="PanicKey"/>.

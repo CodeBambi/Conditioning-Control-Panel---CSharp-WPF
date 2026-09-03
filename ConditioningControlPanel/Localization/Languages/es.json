@@ -4937,5 +4937,13 @@
   "label_gaze_interaction": "Interacción con la mirada",
   "label_stare_to_pop": "Mirar para reventar",
   "tooltip_bubble_gaze_pop": "Mira una burbuja durante 1 segundo para reventarla sin hacer clic. Solo afecta a las burbujas; los flashes tienen su propio interruptor en la página de Flashes.",
-  "label_gaze_needs_calibration": "Necesita la cámara encendida y el seguimiento ocular calibrado. Configúralo en Play, Mirada Fija."
+  "label_gaze_needs_calibration": "Necesita la cámara encendida y el seguimiento ocular calibrado. Configúralo en Play, Mirada Fija.",
+  "video_strict_lock_notice": "El bloqueo estricto está activado. Este vídeo se reproduce hasta el final.",
+  "tooltip_lockdown_force_strict_lock": "Activa el bloqueo estricto durante todo el bloqueo y lo deja como estaba al terminar. Mientras está activo, los vídeos obligatorios no se pueden saltar: Escape, Alt+F4 y la tecla de pánico no hacen nada hasta que acaba el clip.",
+  "xp_chip_cycle_bonus": "+{0}% de XP · Ceremonia del 1 de septiembre",
+  "xp_chip_cycle_bonus_tip": "Volviste a descender en la Ceremonia del 1 de septiembre, así que cada punto de XP que ganes vale un {0}% más, para siempre.",
+  "setting_panic_single_press": "Pánico de una sola pulsación",
+  "tooltip_panic_single_press": "Una pulsación y se acabó: todo se detiene y todas las ventanas se ocultan. Sin paso de pausa, y el panel nunca salta al frente.",
+  "tooltip_stop_panic_key": "Detenerlo todo. Tecla de pánico: {0}",
+  "tooltip_stop_no_panic_key": "Detenerlo todo. Tu tecla de pánico está desactivada."
 }

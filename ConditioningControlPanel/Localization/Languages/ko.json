@@ -4944,5 +4944,13 @@
   "label_gaze_interaction": "시선 조작",
   "label_stare_to_pop": "응시해서 터뜨리기",
   "tooltip_bubble_gaze_pop": "버블을 약 1초간 바라보면 클릭하지 않아도 터집니다. 버블에만 적용되며, 플래시는 플래시 페이지에 별도 스위치가 있습니다.",
-  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요."
+  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요.",
+  "video_strict_lock_notice": "엄격 잠금이 켜져 있습니다. 이 영상은 끝까지 재생됩니다.",
+  "tooltip_lockdown_force_strict_lock": "락다운 동안 엄격 잠금을 켜고, 끝나면 원래 설정으로 되돌립니다. 켜져 있는 동안에는 필수 영상을 건너뛸 수 없습니다. 클립이 끝날 때까지 Escape, Alt+F4, 패닉 키 모두 아무 반응이 없습니다.",
+  "xp_chip_cycle_bonus": "+{0}% XP · 9월 1일 의식",
+  "xp_chip_cycle_bonus_tip": "9월 1일 의식에서 다시 내려가기를 선택했습니다. 획득하는 모든 XP가 영구적으로 {0}% 더 많아집니다.",
+  "setting_panic_single_press": "한 번 누르는 패닉",
+  "tooltip_panic_single_press": "한 번만 누르면 끝입니다. 모든 것이 멈추고 모든 창이 숨겨집니다. 일시정지 단계도 없고, 제어판이 앞으로 튀어나오지도 않습니다.",
+  "tooltip_stop_panic_key": "전부 정지. 패닉 키: {0}",
+  "tooltip_stop_no_panic_key": "전부 정지. 패닉 키가 꺼져 있습니다."
 }

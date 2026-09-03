@@ -546,6 +546,25 @@
                                   Checked="ChkPanicOverridesAll_Changed" Unchecked="ChkPanicOverridesAll_Changed"/>
                     </Grid>
 
+                    <!-- Single-press panic (thread 1541736938703167550). Off by default. On, the
+                         press also HIDES every CCP window instead of restoring the panel. -->
+                    <Grid Margin="0,0,0,6" ToolTip="{loc:Str tooltip_panic_single_press}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <helpers:EmojiTextBlock Text="{loc:Str setting_panic_single_press}"
+                                                    Style="{StaticResource SettingLabel}" FontSize="12"/>
+                            <TextBlock Text="{loc:Str tooltip_panic_single_press}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="ChkPanicSinglePress" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkPanicSinglePress_Changed" Unchecked="ChkPanicSinglePress_Changed"/>
+                    </Grid>
+
                     <!-- Optional pause-key rebind. Same capture pattern as the panic key above;
                          unbound by default, and Escape during capture clears it again. -->
                     <Grid MinHeight="34" Margin="0,0,0,6" ToolTip="{loc:Str tooltip_pause_key}">

@@ -59,8 +59,17 @@ namespace ConditioningControlPanel.Services.Safety
         }
 
         /// <summary>Reads the master switch off settings, defaulting to ON when settings are missing
-        /// (a panic with no settings loaded should still stop everything).</summary>
-        internal static bool OverrideEnabled(AppSettings? settings) => settings?.PanicOverridesAll != false;
+        /// (a panic with no settings loaded should still stop everything).
+        /// <para><see cref="AppSettings.PanicSinglePress"/> outranks it: "one press does the lot"
+        /// cannot mean anything else, so it turns the override on even when the master is off.</para>
+        /// </summary>
+        internal static bool OverrideEnabled(AppSettings? settings)
+            => settings == null || settings.PanicSinglePress || settings.PanicOverridesAll;
+
+        /// <summary>Whether this press should HIDE every CCP window rather than restore the control
+        /// panel. Only single-press panic does; the default panic still brings the app back so the
+        /// user can see what stopped.</summary>
+        internal static bool HidesEverything(AppSettings? settings) => settings?.PanicSinglePress == true;
 
         /// <summary>
         /// Whether the press may still advance the double-press "exit the app" counter. The two

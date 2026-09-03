@@ -4937,5 +4937,13 @@
   "label_gaze_interaction": "視線操作",
   "label_stare_to_pop": "見つめて割る",
   "tooltip_bubble_gaze_pop": "バブルを約1秒見つめると、クリックせずに割れます。対象はバブルのみです。フラッシュにはフラッシュページに専用のスイッチがあります。",
-  "label_gaze_needs_calibration": "ウェブカメラの起動と視線追跡のキャリブレーションが必要です。Play のフォーカスゲイズで設定してください。"
+  "label_gaze_needs_calibration": "ウェブカメラの起動と視線追跡のキャリブレーションが必要です。Play のフォーカスゲイズで設定してください。",
+  "video_strict_lock_notice": "厳格ロックがオンです。この動画は最後まで再生されます。",
+  "tooltip_lockdown_force_strict_lock": "ロックダウンの間だけ厳格ロックをオンにし、終了後に元の設定へ戻します。オンの間、必須動画はスキップできません。クリップが終わるまで Escape、Alt+F4、パニックキーはどれも効きません。",
+  "xp_chip_cycle_bonus": "+{0}% XP · 9月1日の儀式",
+  "xp_chip_cycle_bonus_tip": "9月1日の儀式でもう一度降りることを選びました。獲得するXPはすべて永久に{0}%多くなります。",
+  "setting_panic_single_press": "ワンプッシュ・パニック",
+  "tooltip_panic_single_press": "一度押すだけで終わりです。すべてが停止し、すべてのウィンドウが隠れます。一時停止の段階はなく、コントロールパネルが前面に出ることもありません。",
+  "tooltip_stop_panic_key": "すべて停止。パニックキー: {0}",
+  "tooltip_stop_no_panic_key": "すべて停止。パニックキーはオフになっています。"
 }

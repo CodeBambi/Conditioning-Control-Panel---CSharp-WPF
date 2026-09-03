@@ -4945,5 +4945,13 @@
   "label_gaze_interaction": "Interação por olhar",
   "label_stare_to_pop": "Olhar para estourar",
   "tooltip_bubble_gaze_pop": "Olhe para uma bolha por cerca de 1 segundo para estourá-la, sem clicar. Vale só para bolhas; os flashes têm o próprio interruptor na página de Flashes.",
-  "label_gaze_needs_calibration": "Precisa da webcam ligada e do rastreamento ocular calibrado. Configure em Play, Olhar Focado."
+  "label_gaze_needs_calibration": "Precisa da webcam ligada e do rastreamento ocular calibrado. Configure em Play, Olhar Focado.",
+  "video_strict_lock_notice": "O bloqueio estrito está ligado. Este vídeo vai até o fim.",
+  "tooltip_lockdown_force_strict_lock": "Liga o bloqueio estrito durante todo o lockdown e devolve a sua configuração depois. Enquanto está ligado, vídeos obrigatórios não podem ser pulados: Escape, Alt+F4 e a tecla de pânico não fazem nada até o clipe acabar.",
+  "xp_chip_cycle_bonus": "+{0}% de XP · Cerimônia de 1º de setembro",
+  "xp_chip_cycle_bonus_tip": "Você desceu de novo na Cerimônia de 1º de setembro, então cada ponto de XP que você ganha vale {0}% a mais, para sempre.",
+  "setting_panic_single_press": "Pânico com um toque",
+  "tooltip_panic_single_press": "Um toque e acabou: tudo para e todas as janelas somem. Sem etapa de pausa, e o painel nunca pula para a frente.",
+  "tooltip_stop_panic_key": "Parar tudo. Tecla de pânico: {0}",
+  "tooltip_stop_no_panic_key": "Parar tudo. Sua tecla de pânico está desligada."
 }

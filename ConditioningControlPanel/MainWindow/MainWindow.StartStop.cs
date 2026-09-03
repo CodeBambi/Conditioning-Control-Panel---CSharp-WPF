@@ -930,6 +930,24 @@ namespace ConditioningControlPanel
             App.Settings.Save();
         }
 
+        /// <summary>
+        /// "Stop everything. Panic key: Esc" - or the plain stop line when the panic key is off.
+        /// Reads the live binding every time the button is repainted, so a rebind shows up without
+        /// a restart. Never throws: a tooltip must not be able to break the START/STOP button.
+        /// </summary>
+        private static string PanicKeyHintForStopButton()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                var key = s?.PanicKey;
+                if (s?.PanicKeyEnabled != true || string.IsNullOrWhiteSpace(key))
+                    return Loc.Get("tooltip_stop_no_panic_key");
+                return Loc.GetF("tooltip_stop_panic_key", key.Trim());
+            }
+            catch { return Loc.Get("tooltip_stop_no_panic_key"); }
+        }
+
         private void UpdateStartButton()
         {
             // Don't overwrite the remote control label while controller is connected
@@ -950,6 +968,12 @@ namespace ConditioningControlPanel
                     }
                 };
 
+                // Suggestion thread 1541736938703167550 (CodeBambi's own idea, seconded by
+                // Wobberjockey): the STOP button is where people look in a hurry, so it is where
+                // the panic key should be written down. Nobody should have to open Settings to
+                // find out which key saves them.
+                BtnStart.ToolTip = PanicKeyHintForStopButton();
+
                 // Also update Presets tab button using direct reference
                 if (TxtPresetsStatus != null)
                 {
@@ -958,6 +982,7 @@ namespace ConditioningControlPanel
             }
             else
             {
+                BtnStart.ToolTip = null;
                 BtnStart.Background = FindResource("PinkBrush") as SolidColorBrush;
                 BtnStart.Content = new StackPanel
                 {

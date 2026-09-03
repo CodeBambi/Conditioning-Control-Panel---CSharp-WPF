@@ -5521,5 +5521,13 @@
   "label_gaze_interaction": "Gaze interaction",
   "label_stare_to_pop": "Stare to pop",
   "tooltip_bubble_gaze_pop": "Look at a bubble for about 1 second to pop it, no clicking. Covers bubbles only; flashes have their own switch on the Flashes page.",
-  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze."
+  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze.",
+  "video_strict_lock_notice": "Strict Lock is on. This one plays to the end.",
+  "tooltip_lockdown_force_strict_lock": "Turns Strict Lock on for the whole lockdown and puts it back the way you had it afterwards. While it is on, mandatory videos cannot be skipped: Escape, Alt+F4 and the panic key all do nothing until the clip ends.",
+  "xp_chip_cycle_bonus": "+{0}% XP · Ceremony of Sept 1",
+  "xp_chip_cycle_bonus_tip": "You descended again at the Ceremony of Sept 1, so every point of XP you earn is worth {0}% more, permanently.",
+  "setting_panic_single_press": "Single-press panic",
+  "tooltip_panic_single_press": "One press and it is over: everything stops and every window hides. No pause step, and the control panel never jumps to the front.",
+  "tooltip_stop_panic_key": "Stop everything. Panic key: {0}",
+  "tooltip_stop_no_panic_key": "Stop everything. Your panic key is switched off."
 }
