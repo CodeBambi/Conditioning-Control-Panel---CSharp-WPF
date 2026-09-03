@@ -7,7 +7,11 @@
        Image of an emoji (EmojiToImageSource) -> TextBlock with the emoji
        Content="{loc:Str ...}" on Button ->  a <TextBlock> child (trap 1: "_" is an access key)
        feat:AdaptiveSideArt.CollapseBelow -> dropped (attached behaviour lives in the WPF head)
-       Click/Checked handlers            ->  wired in code-behind (porting convention) -->
+       Click/Checked handlers            ->  wired in code-behind (porting convention)
+       TxtNoPanicState / TxtOfflineModeState / TxtStartupVideo lost their {loc:Str} default.
+       LoadFromSettings chooses the key and sets .Text, and an Avalonia {loc:Str} is a live
+       OneWay binding that survives a local value and overwrites it on the next language
+       change - so the read-out has to own the property outright. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -129,7 +133,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_no_panic}" Foreground="#FF6B6B"
                                            FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" x:Name="TxtNoPanicState" Text="{loc:Str set2_chip_off}"
+                                <TextBlock Grid.Column="1" x:Name="TxtNoPanicState" Text=""
                                            Foreground="{StaticResource TextMutedBrush}" FontSize="11"
                                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                            HorizontalAlignment="Right" Margin="10,0,10,0"/>
@@ -149,7 +153,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str setting_offline_mode}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" x:Name="TxtOfflineModeState" Text="{loc:Str set2_chip_off}"
+                                <TextBlock Grid.Column="1" x:Name="TxtOfflineModeState" Text=""
                                            Foreground="{StaticResource TextMutedBrush}" FontSize="11"
                                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                            HorizontalAlignment="Right" Margin="10,0,10,0"/>
@@ -169,7 +173,7 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{loc:Str label_startup_video}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" x:Name="TxtStartupVideo" Text="{loc:Str label_random}"
+                                <TextBlock Grid.Column="1" x:Name="TxtStartupVideo" Text=""
                                            Foreground="{DynamicResource PinkBrush}" FontSize="12"
                                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                            HorizontalAlignment="Right" Margin="10,0,10,0"/>
