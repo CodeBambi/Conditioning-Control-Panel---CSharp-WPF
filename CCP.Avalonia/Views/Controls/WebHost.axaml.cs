@@ -1,8 +1,10 @@
 using System;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls
 {
@@ -16,6 +18,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// WebKitGTK or WPE WebKit on Linux - and this control is the single place the head touches
     /// it, so those three hosts have one seam to move onto rather than three.
     ///
+    /// Beyond <see cref="Source"/> it surfaces the two things a hosted page has to be driven and
+    /// fenced with: <see cref="AllowNavigation"/> (NativeWebView.NavigationStarted, whose args
+    /// carry a settable Cancel — so a per-navigation allowlist that also catches redirects is
+    /// possible here, unlike what the first pass of these views assumed) and
+    /// <see cref="InvokeScriptAsync"/>. NativeWebView additionally offers WebMessageReceived,
+    /// NewWindowRequested, NavigationCompleted, GoBack/GoForward, Stop and Refresh; nothing needs
+    /// them yet, so they are not wrapped. It has NO zoom factor, no document-created script
+    /// injection, and no fullscreen-element signal.
+    ///
     /// The whole point is the fallback. A Linux box without webkit2gtk installed is the DEFAULT,
     /// not the exception, and a web view with no engine paints nothing: the render proof would
     /// show a blank region and pass. So availability is probed BEFORE anything is constructed, and
@@ -28,6 +39,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             AvaloniaProperty.Register<WebHost, Uri?>(nameof(Source));
 
         public Uri? Source { get => GetValue(SourceProperty); set => SetValue(SourceProperty, value); }
+
+        /// <summary>
+        /// Per-navigation gate. Return false to cancel. Runs for EVERY navigation the engine
+        /// starts — the first one and every redirect, in-page link and script-driven hop after it —
+        /// which is what makes it the replacement for WebView2's <c>NavigationStarting</c> allowlist
+        /// rather than a one-shot check on <see cref="Source"/>.
+        ///
+        /// Set it BEFORE assigning <see cref="Source"/>: the gate is read at navigation time, and a
+        /// Source assigned first can start navigating before the predicate is in place.
+        /// Null means "allow everything", which is the right default for a host that is only ever
+        /// pointed at pages the app itself chose.
+        /// </summary>
+        public Func<Uri, bool>? AllowNavigation { get; set; }
+
+        /// <summary>
+        /// True when THIS instance built an adapter. <see cref="IsAvailable"/> is the process-wide
+        /// probe; the constructor can still fail after it passes, and a caller about to drive the
+        /// page through script needs to know about this control, not about the machine.
+        /// </summary>
+        public bool HasEngine => _web is not null;
+
+        /// <summary>
+        /// Runs JS in the current page and returns its result, or null when there is no engine.
+        /// The stand-in for <c>CoreWebView2.ExecuteScriptAsync</c>.
+        ///
+        /// The two adapters do NOT agree on the return shape: WebView2 hands back a JSON literal
+        /// (a string result arrives quoted), WebKitGTK hands back the raw value. Callers that read
+        /// the result must tolerate both — see <c>EnhancementPlayerWindow.Unquote</c>.
+        ///
+        /// There is no equivalent of <c>AddScriptToExecuteOnDocumentCreatedAsync</c>, so anything
+        /// that must be present before the page's own scripts run has no seam here.
+        /// </summary>
+        public async Task<string?> InvokeScriptAsync(string javaScript)
+        {
+            if (_web is null || string.IsNullOrEmpty(javaScript)) return null;
+            try { return await _web.InvokeScript(javaScript); }
+            catch (Exception ex)
+            {
+                Log.Debug("WebHost: InvokeScript failed: {Error}", ex.Message);
+                return null;
+            }
+        }
 
         /// <summary>
         /// True when some adapter is both installed and able to host a native control. Probed once
@@ -62,6 +115,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 try
                 {
                     _web = new NativeWebView();
+                    // Subscribed once, here, rather than when a caller sets AllowNavigation: the
+                    // gate has to be live for the FIRST navigation too, and a caller that assigns
+                    // the predicate and the Source in that order would otherwise race the engine.
+                    _web.NavigationStarted += OnNavigationStarted;
                     _webSlot.Children.Add(_web);
                 }
                 catch (Exception ex)
@@ -77,6 +134,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
             _fallback.IsVisible = _web is null;
             ApplySource();
+        }
+
+        private void OnNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
+        {
+            var gate = AllowNavigation;
+            if (gate is null) return;
+            var target = e.Request;
+            // No URL to judge: refuse. A navigation the gate cannot see is exactly the one a
+            // hostile page would use to slip past it.
+            if (target is null) { e.Cancel = true; return; }
+            if (gate(target)) return;
+            e.Cancel = true;
+            // Host + path only: a signed media URL's query string must not reach the log.
+            Log.Warning("WebHost: navigation blocked to {Host}{Path}", target.Host, target.AbsolutePath);
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
