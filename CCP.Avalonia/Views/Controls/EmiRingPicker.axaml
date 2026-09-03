@@ -1,0 +1,117 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/EmiRingPicker.xaml.
+     Structure, x:Names and every literal brush preserved. Deviations, all forced:
+
+       <Style x:Key TargetType>            -> <ControlTheme x:Key TargetType> (keyed styles are
+                                              ControlThemes; every brush stays a literal, for the
+                                              same two-hosts reason the WPF file documents)
+       ControlTemplate.Triggers           -> ^:pointerover / ^:checked / ^:disabled selectors with
+                                              /template/ part selectors, hover-then-checked order kept
+       <ContentPresenter/>                -> ContentPresenter Content="{TemplateBinding Content}"
+       Visibility="Collapsed"             -> IsVisible="False"
+       Content="Let her choose" (code-set) -> a TextBlock child with {loc:Str emi_desk_ring_reset}
+                                              (Avalonia parses "_" in Content as an access key) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.EmiRingPicker"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="380">
+
+    <!-- ================================================================
+         HER RING, THE PIN PICKER.
+
+         One control for her options panel and the settings tab, so there is
+         exactly one front end onto the one pin store (EmiState.Pins, written
+         through EmiSuggester). The header row is optional: the settings tab
+         draws its own and sets ShowHeader="False".
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <!-- One target in the picker: the card art, its name on a dark strip, and a pink frame
+             plus a dot when it is pinned. The selectors are ordered hover-then-checked on purpose:
+             the other way round, moving the pointer over a pinned tile would take its pink frame off. -->
+        <ControlTheme x:Key="EmiRingTile" TargetType="ToggleButton">
+            <Setter Property="Width" Value="92"/>
+            <Setter Property="Height" Value="66"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Shell" CornerRadius="6" BorderThickness="2"
+                            BorderBrush="#33FFFFFF" Background="#FF1A1A2E"
+                            ClipToBounds="True">
+                        <Grid>
+                            <ContentPresenter Content="{TemplateBinding Content}"/>
+                            <Ellipse x:Name="Dot" Width="9" Height="9" Margin="0,4,4,0"
+                                     HorizontalAlignment="Right" VerticalAlignment="Top"
+                                     Fill="#FFFF69B4" Stroke="#FF0E0E1C" StrokeThickness="1.5"
+                                     IsVisible="False"/>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Shell">
+                <Setter Property="BorderBrush" Value="#8CFF69B4"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#Shell">
+                <Setter Property="BorderBrush" Value="#FFFF69B4"/>
+            </Style>
+            <Style Selector="^:checked /template/ Ellipse#Dot">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.42"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="EmiPickerButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFF2FA"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="BorderBrush" Value="#4A3A63"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Chrome">
+                <Setter Property="Background" Value="#33294F"/>
+                <Setter Property="BorderBrush" Value="#FF69B4"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.42"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid x:Name="HeaderRow" Margin="0,0,0,6" ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="TxtHint" Grid.Column="0"
+                       Foreground="#9C93B8" FontSize="11"
+                       TextWrapping="Wrap" VerticalAlignment="Center"
+                       Margin="0,0,10,0"/>
+            <Button x:Name="BtnReset" Grid.Column="1"
+                    Theme="{StaticResource EmiPickerButton}"
+                    VerticalAlignment="Center">
+                <TextBlock Text="{loc:Str emi_desk_ring_reset}"/>
+            </Button>
+        </Grid>
+        <WrapPanel x:Name="PnlRing" Orientation="Horizontal"/>
+    </StackPanel>
+</UserControl>
