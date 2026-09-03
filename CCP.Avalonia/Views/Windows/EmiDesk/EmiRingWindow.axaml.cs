@@ -73,12 +73,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///  - <b>The DPI.</b> <c>PresentationSource…TransformToDevice</c> and the
     ///    <c>System.Drawing.Graphics</c> fallback become <c>Screens.ScreenFromWindow(this).Scaling</c>;
     ///    <c>System.Windows.Forms.Screen.FromPoint</c> becomes <c>Screens.ScreenFromPoint</c>.
-    ///  - <b>The animations.</b> <c>BeginAnimation</c> becomes Avalonia <c>Animation</c> objects run
-    ///    from code with <c>FillMode.Forward</c>, cancelled through one <c>CancellationTokenSource</c>
-    ///    per opening instead of a null <c>BeginAnimation</c> per property. WPF's
-    ///    <c>BackEase.Amplitude</c> has no Avalonia equivalent - <c>BackEaseOut</c> is fixed at
-    ///    roughly amplitude 1.0, three times the settle the owner tuned this to - so the pop's move
-    ///    uses <c>CubicEaseOut</c> and loses the overshoot rather than exaggerating it.
+    ///  - <b>The animations.</b> <c>BeginAnimation</c> becomes <see cref="Tween"/>, a timer that
+    ///    writes the value, cancelled through one <c>CancellationTokenSource</c> per opening instead
+    ///    of a null <c>BeginAnimation</c> per property. It is NOT an Avalonia <c>Animation</c>, and
+    ///    the first cut of this port was: <c>RunAsync</c> on a <c>ScaleTransform</c> throws, so the
+    ///    pop, the fold and the hover grow were all silently inert. Read <see cref="Tween"/> before
+    ///    reaching for <c>Animation</c> here again. WPF's <c>BackEase.Amplitude</c> has no Avalonia
+    ///    equivalent - <c>BackEaseOut</c> is fixed at roughly amplitude 1.0, three times the settle
+    ///    the owner tuned this to - so the pop's move uses <c>CubicEaseOut</c> and loses the
+    ///    overshoot rather than exaggerating it.
     ///  - <b>PinToggled is dropped.</b> The WPF ring declares the event and never raises it,
     ///    because <c>EmiDeskWindow.Ring.cs</c> subscribes for the pin-nudge latch and the pin is
     ///    made from her options menu. Neither end of that exists on this head yet, so it would be
@@ -247,8 +250,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         /// <summary>
         /// Every animation of the current opening. WPF cleared animations one property at a time with
-        /// <c>BeginAnimation(prop, null)</c>; Avalonia's <c>Animation.RunAsync</c> takes a token, so
-        /// one source cancels the whole pop or fold at once.
+        /// <c>BeginAnimation(prop, null)</c>; here one source cancels the whole pop or fold at once,
+        /// and each <see cref="Tween"/> stops its own timer when it sees the token go.
         /// </summary>
         private CancellationTokenSource? _anim;
 
@@ -872,8 +875,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 // overlapping tweens on the same transform settle on the one that ends last, which
                 // is always the newer.
                 double to = on ? HoverScale : 1.0;
-                Tween(ScaleTransform.ScaleXProperty, sc.ScaleX, to, 110, 0, new LinearEasing()).RunAsync(sc);
-                Tween(ScaleTransform.ScaleYProperty, sc.ScaleY, to, 110, 0, new LinearEasing()).RunAsync(sc);
+                Tween(v => sc.ScaleX = v, sc.ScaleX, to, 110, 0, new LinearEasing());
+                Tween(v => sc.ScaleY = v, sc.ScaleY, to, 110, 0, new LinearEasing());
 
                 // The frame lights to FULL pink under the pointer. A pinned card is already full, so
                 // its own assignment is a no-op rather than a special case. The BrushTransition set
@@ -944,21 +947,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>One property, from A to B. The Avalonia twin of WPF's
         /// <c>BeginAnimation(prop, new DoubleAnimation(from, to, dur) { BeginTime, EasingFunction })</c>.
         /// <c>FillMode.Forward</c> is what makes the end value stick the way WPF's does.</summary>
-        private static Animation Tween(AvaloniaProperty prop, double from, double to,
-                                       double ms, double delayMs, Easing ease)
+        /// <summary>The tween tick, in ms. One timer per animated property, as WPF had one clock.</summary>
+        private const int TweenTickMs = 16;
+
+        /// <summary>
+        /// Drive one value from <paramref name="from"/> to <paramref name="to"/> and hand each
+        /// sample to <paramref name="apply"/>.
+        ///
+        /// <para><b>This used to build an <c>Animation</c> and it never once ran.</b> Every card
+        /// animation here targets a <c>ScaleTransform</c> or a <c>TranslateTransform</c>, and
+        /// <c>Animation.RunAsync(someTransform)</c> resolves to <c>TransformAnimator</c>, which
+        /// casts its target to <c>Visual</c> and throws <c>InvalidCastException</c> - straight into
+        /// the <c>catch</c> around the loop, taking the card's opacity fade with it. So the pop, the
+        /// fold and the hover grow were ALL inert, and every one of them logged at Debug and looked
+        /// fine in a render. Measured 2026-09-04, alongside the same failure in
+        /// <c>EmiDeskWindow</c>'s click squash and drag pendulum.</para>
+        ///
+        /// <para>Avalonia's supported road is a <c>TransformOperations</c> setter on the VISUAL, and
+        /// a card cannot take it: its <c>TransformGroup</c> holds a scale and a translate that the
+        /// hover and the pop drive independently. So the value is written by a timer, which is what
+        /// the widget's own drag lean has always done.</para>
+        ///
+        /// <para><paramref name="from"/> is applied at once, before the delay, because that is what
+        /// the callers were relying on <c>FillMode.Forward</c> plus a base value to do.</para>
+        /// </summary>
+        private void Tween(Action<double> apply, double from, double to,
+                           double ms, double delayMs, Easing ease, CancellationToken token = default)
         {
-            return new Animation
+            try
             {
-                Duration = TimeSpan.FromMilliseconds(ms),
-                Delay = TimeSpan.FromMilliseconds(delayMs),
-                Easing = ease,
-                FillMode = FillMode.Forward,
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(prop, from) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(prop, to) } },
-                },
-            };
+                apply(from);
+                if (ms <= 0) { apply(to); return; }
+
+                var started = DateTime.UtcNow;
+                DispatcherTimer? timer = null;
+                timer = new DispatcherTimer(
+                    TimeSpan.FromMilliseconds(TweenTickMs), DispatcherPriority.Render, (_, _) =>
+                    {
+                        try
+                        {
+                            if (token.IsCancellationRequested || _closingForGood) { timer!.Stop(); return; }
+                            double t = (DateTime.UtcNow - started).TotalMilliseconds - delayMs;
+                            if (t < 0) return;                       // still in the stagger
+                            double p = Math.Min(1, t / ms);
+                            apply(from + (to - from) * ease.Ease(p));
+                            if (p >= 1) timer!.Stop();
+                        }
+                        catch (Exception ex)
+                        {
+                            timer!.Stop();
+                            Log.Debug(ex, "[EmiDesk] ring tween step failed");
+                        }
+                    });
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] ring tween failed to start");
+            }
         }
 
         private void PlayPop()
@@ -988,17 +1034,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     double dy = _cy - (Canvas.GetTop(card) + CardH / 2.0);
                     double begin = i * PopStaggerMs;
 
-                    // Base values first: during a delayed animation's delay the property still shows
-                    // its base value, so a card that starts at its final spot would flash there.
-                    tr.X = dx; tr.Y = dy;
-                    sc.ScaleX = PopFromScale; sc.ScaleY = PopFromScale;
-                    card.Opacity = 0;
-
-                    Tween(TranslateTransform.XProperty, dx, 0, PopMs, begin, move).RunAsync(tr, token);
-                    Tween(TranslateTransform.YProperty, dy, 0, PopMs, begin, move).RunAsync(tr, token);
-                    Tween(ScaleTransform.ScaleXProperty, PopFromScale, 1.0, PopMs, begin, grow).RunAsync(sc, token);
-                    Tween(ScaleTransform.ScaleYProperty, PopFromScale, 1.0, PopMs, begin, grow).RunAsync(sc, token);
-                    Tween(Visual.OpacityProperty, 0, 1, FadeMs, begin, fadeEase).RunAsync(card, token);
+                    // Each tween writes its From at once, before the stagger runs down, so a card
+                    // waiting its turn sits balled up at her middle rather than flashing at the spot
+                    // it is about to fly to.
+                    Tween(v => tr.X = v, dx, 0, PopMs, begin, move, token);
+                    Tween(v => tr.Y = v, dy, 0, PopMs, begin, move, token);
+                    Tween(v => sc.ScaleX = v, PopFromScale, 1.0, PopMs, begin, grow, token);
+                    Tween(v => sc.ScaleY = v, PopFromScale, 1.0, PopMs, begin, grow, token);
+                    Tween(v => card.Opacity = v, 0, 1, FadeMs, begin, fadeEase, token);
                 }
             }
             catch (Exception ex)
@@ -1047,11 +1090,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     // Every animation carries a From, read off where the card already is: cancelling
                     // the pop above leaves each property at its last animated value, and starting
                     // from that is what keeps a fold mid-pop continuous.
-                    Tween(TranslateTransform.XProperty, tr.X, dx, FoldMs, begin, move).RunAsync(tr, token);
-                    Tween(TranslateTransform.YProperty, tr.Y, dy, FoldMs, begin, move).RunAsync(tr, token);
-                    Tween(ScaleTransform.ScaleXProperty, sc.ScaleX, PopFromScale, FoldMs, begin, shrink).RunAsync(sc, token);
-                    Tween(ScaleTransform.ScaleYProperty, sc.ScaleY, PopFromScale, FoldMs, begin, shrink).RunAsync(sc, token);
-                    Tween(Visual.OpacityProperty, card.Opacity, 0, FoldFadeMs, begin, fadeEase).RunAsync(card, token);
+                    Tween(v => tr.X = v, tr.X, dx, FoldMs, begin, move, token);
+                    Tween(v => tr.Y = v, tr.Y, dy, FoldMs, begin, move, token);
+                    Tween(v => sc.ScaleX = v, sc.ScaleX, PopFromScale, FoldMs, begin, shrink, token);
+                    Tween(v => sc.ScaleY = v, sc.ScaleY, PopFromScale, FoldMs, begin, shrink, token);
+                    Tween(v => card.Opacity = v, card.Opacity, 0, FoldFadeMs, begin, fadeEase, token);
                 }
 
                 double total = (n <= 1 ? 0 : (n - 1) * FoldStaggerMs) + FoldMs + FoldTailMs;

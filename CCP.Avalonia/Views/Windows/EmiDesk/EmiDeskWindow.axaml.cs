@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Avalonia;
 using Avalonia.Animation;
@@ -9,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -23,11 +25,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///
     /// <para>PORTED from <c>ConditioningControlPanel/Windows/EmiDesk/EmiDeskWindow.xaml.cs</c> -
     /// and that file is ONE of eight partials of the WPF class. Six of the other seven
-    /// (<c>.Alive</c>, <c>.Bubble</c>, <c>.Fx</c>, <c>.Glass</c>, <c>.Props</c>, <c>.Ring</c>) are
-    /// still ahead, so every member this file calls into them is a one-line <c>ponytail:</c> stub
-    /// below rather than an invention. <c>.React</c> is the exception: its physical half - the click
-    /// squash and the drag wobble - needs nothing that is not already here, so it is REAL, in the
-    /// "she feels the pointer" region below, and only its pat (a chain) is still a stub. The
+    /// (<c>.Alive</c>, <c>.Bubble</c>, <c>.Glass</c>, <c>.Props</c>, <c>.Ring</c>) are still ahead,
+    /// so every member this file calls into them is a one-line <c>ponytail:</c> stub below rather
+    /// than an invention. Two are exceptions and are REAL here. <c>.React</c>'s physical half - the
+    /// click squash and the drag wobble - needs nothing that is not already here, and only its pat
+    /// (a chain) is still a stub. <c>.Fx</c> - the summon and the dismiss - is whole: it plays two
+    /// chains that no-op on this head and is otherwise self-contained, so she arrives and leaves
+    /// with the smoke, the CRT stutter and the sparkle scatter. Nothing CALLS either of those two
+    /// entry points yet; that is <c>EmiDeskService</c>'s job. The
     /// <c>partial void ...Core(...)</c> seams are kept VERBATIM: with no implementing partial they
     /// compile to nothing, which is exactly what B2 and B3 need to plug into later without editing
     /// this file.</para>
@@ -246,10 +251,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private string _pose = "idle";
         private DateTime _petCooldownUntil = DateTime.MinValue;
         private bool _petArmed;
-        // ponytail: set by EmiDeskWindow.Fx.cs around the summon / dismiss transitions, which is
-        // not part of this layer - hence the explicit initialiser. Every gate that reads it is
-        // ported, so the moment that partial lands the locks work.
-        private bool _transiting = false;
+        // Written by the summon / dismiss FX region below, which is the whole of what ever moved
+        // it on the WPF head. Every gate that reads it was already ported, so the locks are live.
+        private bool _transiting;
         private bool _closingForGood;
         private string? _outfit;
 
@@ -1595,9 +1599,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private static readonly SquashCurve SquashEase = new();
 
-        /// <summary>Sine-in-out as a cubic bezier - WPF's <c>SineEase{EaseInOut}</c> per pendulum
-        /// segment, which here is a <c>KeySpline</c> because a keyframe carries no easing.</summary>
-        private static KeySpline SineInOut() => new(0.445, 0.05, 0.55, 0.95);
+        /// <summary>WPF's <c>SineEase{EaseInOut}</c>, per pendulum segment.</summary>
+        private static double SineInOut(double u) => 0.5 - 0.5 * Math.Cos(Math.PI * u);
+
+        /// <summary>The tween tick. The same 16 ms the drag sampler runs on.</summary>
+        private const int TweenTickMs = 16;
+
+        /// <summary>
+        /// AVALONIA CANNOT ANIMATE A TRANSFORM OBJECT, AND IT DOES NOT SAY SO OUT LOUD.
+        /// <c>new Animation { … Setter(ScaleTransform.ScaleXProperty, v) }.RunAsync(someTransform)</c>
+        /// resolves to <c>TransformAnimator</c>, which casts its target to <c>Visual</c> and throws
+        /// <c>InvalidCastException</c> - into whatever <c>catch</c> is nearest. Measured 2026-09-04:
+        /// EVERY such call in this file threw, so the click squash and the drag-release pendulum
+        /// had shipped wholly inert and silent about it. A PNG cannot show that; only running it
+        /// with the catch opened up can.
+        ///
+        /// <para>Avalonia's supported road is a <c>TransformOperations</c> setter on the VISUAL, and
+        /// this window cannot take it: <c>BodyRoot</c> carries four INDEPENDENT transform slots on
+        /// purpose (see the ctor), and a single operations string would have each animation stamping
+        /// on the other three. So the transforms are driven the way the drag sampler already drives
+        /// the lean - a timer that writes the property.</para>
+        ///
+        /// <para><paramref name="apply"/> is handed the RAW 0..1 progress and eases it itself: two
+        /// of the four callers here are discrete step tables, not curves. It is called once at 0
+        /// before the clock starts, so there is never a frame at a stale value, and exactly once at
+        /// 1 - which is what makes the end state a written value rather than an animation's fill.</para>
+        /// </summary>
+        private void Tween(double ms, CancellationToken token, Action<double> apply)
+        {
+            try
+            {
+                apply(0);
+                if (ms <= 0) { apply(1); return; }
+
+                var started = DateTime.UtcNow;
+                DispatcherTimer? timer = null;
+                timer = new DispatcherTimer(
+                    TimeSpan.FromMilliseconds(TweenTickMs), DispatcherPriority.Render, (_, _) =>
+                    {
+                        try
+                        {
+                            if (token.IsCancellationRequested || _closingForGood) { timer!.Stop(); return; }
+                            double p = Math.Min(1, (DateTime.UtcNow - started).TotalMilliseconds / ms);
+                            apply(p);
+                            if (p >= 1) timer!.Stop();
+                        }
+                        catch (Exception ex)
+                        {
+                            timer!.Stop();
+                            Log.Debug(ex, "[EmiDesk] tween step failed");
+                        }
+                    });
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] tween failed to start");
+            }
+        }
 
         /// <summary>The squash's own animations. Cancelled and restarted rather than layered: a
         /// second click mid-bump replaces the first, exactly as WPF's BeginAnimation did.</summary>
@@ -1620,34 +1679,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 var cts = new CancellationTokenSource();
                 _squashAnim = cts;
 
-                // REST IS THE BASE VALUE and FillMode.None reverts to it, so a squash that finishes
-                // - or one the next click cancels - lands on 1 rather than freezing her compressed.
-                _squashScale.ScaleX = 1;
-                _squashScale.ScaleY = 1;
-
+                // REST IS WHERE THE CURVE ENDS, not a fill mode: SquashCurve returns 0 at both
+                // ends, so the last tick writes 1 and a squash that finishes - or one the next
+                // click cancels - lands at rest rather than freezing her compressed.
                 double total = SquashDownMs + SquashUpMs;
-                Squash(ScaleTransform.ScaleXProperty, SquashX, total, cts.Token);
-                Squash(ScaleTransform.ScaleYProperty, SquashY, total, cts.Token);
+                Tween(total, cts.Token, p =>
+                {
+                    double e = SquashEase.Ease(p);
+                    _squashScale.ScaleX = 1 + (SquashX - 1) * e;
+                    _squashScale.ScaleY = 1 + (SquashY - 1) * e;
+                });
             }
             catch (Exception ex)
             {
                 Log.Debug(ex, "[EmiDesk] click squash failed");
             }
-        }
-
-        private void Squash(AvaloniaProperty prop, double peak, double ms, CancellationToken token)
-        {
-            new Animation
-            {
-                Duration = TimeSpan.FromMilliseconds(ms),
-                Easing = SquashEase,
-                FillMode = FillMode.None,
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(prop, 1.0) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(prop, peak) } },
-                },
-            }.RunAsync(_squashScale, token);
         }
 
         // ---- the drag wobble ------------------------------------------------------
@@ -1825,31 +1871,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 var cts = new CancellationTokenSource();
                 _wobbleSettle = cts;
 
-                // THE LEAN SHE HAD is the base value, and FillMode.Forward holds the final 0 after
-                // the last keyframe. Both halves of that matter: an animation does not take the
-                // property until its clock first ticks, so a base of 0 would snap her upright for
-                // the frame between this call and the first swing; and Forward is what stops
-                // FillMode.None from handing her back that same lean when the pendulum ends.
-                //
-                // The held 0 outlives the animation, which is exactly why every road out of the
-                // settle - BeginWobble, EndWobble's snap, TearDownReactions - cancels the token and
-                // then WRITES the angle, in that order. Cancelling alone would expose this stale
-                // base again.
-                _wobbleRotate.Angle = a;
-
-                new Animation
+                // THE LEAN SHE HAD is where the pendulum starts, and it ends on a written 0 - the
+                // tween's last tick, not an animation's fill. That is why every road out of the
+                // settle - BeginWobble, EndWobble's snap, TearDownReactions - still cancels the
+                // token and THEN writes the angle, in that order: cancelling alone leaves whatever
+                // tick landed last standing.
+                (double At, double Angle)[] swing =
                 {
-                    Duration = TimeSpan.FromMilliseconds(WobbleSettleMs),
-                    FillMode = FillMode.Forward,
-                    Children =
-                    {
-                        Swing(0.00, a),
-                        Swing(0.30, -a * 0.55),
-                        Swing(0.58, a * 0.28),
-                        Swing(0.82, -a * 0.12),
-                        Swing(1.00, 0.0),
-                    },
-                }.RunAsync(_wobbleRotate, cts.Token);
+                    (0.00, a), (0.30, -a * 0.55), (0.58, a * 0.28), (0.82, -a * 0.12), (1.00, 0.0),
+                };
+
+                Tween(WobbleSettleMs, cts.Token, p =>
+                {
+                    int i = 0;
+                    while (i < swing.Length - 2 && p >= swing[i + 1].At) i++;
+                    double span = swing[i + 1].At - swing[i].At;
+                    double u = span > 0 ? Math.Min(1, Math.Max(0, (p - swing[i].At) / span)) : 1;
+                    _wobbleRotate.Angle = swing[i].Angle
+                        + (swing[i + 1].Angle - swing[i].Angle) * SineInOut(u);
+                });
             }
             catch (Exception ex)
             {
@@ -1857,13 +1897,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _wobbleLive = false;
             }
         }
-
-        private static KeyFrame Swing(double cue, double angle) => new()
-        {
-            Cue = new Cue(cue),
-            KeySpline = SineInOut(),
-            Setters = { new Setter(RotateTransform.AngleProperty, angle) },
-        };
 
         /// <summary><see cref="DipScale"/>, never zero. It already guards; this only spares the
         /// wobble's two hot lines the second check.</summary>
@@ -1916,12 +1949,432 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
         }
 
+        // ---------------------------------------------------------------- summon / dismiss FX
+
+        // PORTED from ConditioningControlPanel/Windows/EmiDesk/EmiDeskWindow.Fx.cs, the seventh
+        // partial of the WPF class and the only one of the six still missing whose whole dependency
+        // set was already in this file. It needs no EmiDesk service: the two chains it plays
+        // (`wake`, `wink`) go through PlayChain, which on this head runs its continuation straight
+        // away, so she arrives and leaves with the smoke, the CRT and the sparkles but without the
+        // little line either end. That degradation is visible and honest, not silent.
+        //
+        // NOTHING ON THIS HEAD CALLS RunSummon OR RunDismiss YET. Both are EmiDeskService's to call
+        // (App.EmiDesk, which moves with the app shell), and the hover x's Dismiss() below is a stub
+        // for the same reason. What this region buys today is that _transiting and InputLocked are
+        // finally WRITTEN by something - every gate that reads them was already ported - and that
+        // FinishSummon and SweepFx stop being no-ops that the pat path and ShutDown called into the
+        // dark.
+
+        private const int SmokeLeadMs = 380;      // smoke starts, she appears this long after
+        private const int CrtOnMs = 220;          // the power-on stutter
+        private const int CrtOffMs = 230;         // the power-off collapse
+        private const int FxLifeMs = 900;         // a burst's container is swept this long after it starts
+
+        /// <summary>Every burst's container, so one sweep can drop them all.</summary>
+        private readonly List<Control> _fxLayers = new();
+
+        /// <summary>One sweep timer for every burst: a per-chip completion handler would be 22
+        /// closures fighting the same collection.</summary>
+        private DispatcherTimer? _fxSweepTimer;
+
+        /// <summary>The CRT's own token, so the power-off can cut a power-on that is still running
+        /// and the dismiss can cut both.</summary>
+        private CancellationTokenSource? _crtAnim;
+
+        /// <summary>True between the wake chain starting and <see cref="FinishSummon"/>.</summary>
+        private bool _summonChainLive;
+
+        private Action? _summonDone;
+
+        /// <summary>
+        /// Bring her in: smoke bomb, CRT power-on, then the <c>wake</c> chain. Input is locked for
+        /// the whole transition so a click cannot land mid-CRT and open a ring onto a 2 % tall EMI.
+        /// </summary>
+        public void RunSummon(Action? done = null)
+        {
+            try
+            {
+                if (_closingForGood) return;
+                _transiting = true;
+                InputLocked = true;
+
+                CancelChain();
+                StopIdleBeats();
+                OnBubbleTextCore(null);
+                TearDownReactions();
+
+                // The window goes up first (the smoke has to be somewhere), but she does not.
+                //
+                // WPF used Visibility.Hidden here, which still takes part in layout; Avalonia has no
+                // third state and IsVisible=false is Collapsed. It is harmless in this one spot and
+                // only here: BodyRoot carries an explicit Width/Height from ApplyBodyWidth and is
+                // Center-aligned inside a Grid whose own size is set on the window, so nothing
+                // re-flows when it drops out and nothing moves when it comes back.
+                _bodyRoot.IsVisible = false;
+                SetCrt(0.02, 0.02);
+                Show();
+                Opacity = 1;
+
+                Burst(spark: false);
+
+                After(SmokeLeadMs, () =>
+                {
+                    SetPose("idle");
+                    DrawFace("-_-");
+                    _bodyRoot.IsVisible = true;
+                    CrtOn();
+
+                    After(CrtOnMs + 20, () =>
+                    {
+                        _transiting = false;
+                        InputLocked = false;
+
+                        // Her entrance is CUTTABLE from here on. A pat that lands during it ends it
+                        // through FinishSummon so the idle beats still start and the caller's
+                        // continuation still runs: the chain is interruptible, the bookkeeping is
+                        // not.
+                        _summonDone = done;
+                        _summonChainLive = true;
+                        PlayChain("wake", FinishSummon);
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] summon FX failed, showing her plain");
+                try
+                {
+                    _transiting = false;
+                    InputLocked = false;
+                    _bodyRoot.IsVisible = true;
+                    SetCrt(1, 1);
+                    Show();
+                    RestartIdleBeats();
+                    done?.Invoke();
+                }
+                catch { /* nothing left to try */ }
+            }
+        }
+
+        /// <summary>
+        /// End the summon exactly once, however it ended: the wake chain ran out, or a pat cut it.
+        /// Idempotent, because those two can arrive in either order and sometimes both.
+        /// </summary>
+        internal void FinishSummon()
+        {
+            if (!_summonChainLive) return;
+            _summonChainLive = false;
+            var done = _summonDone;
+            _summonDone = null;
+            try { RestartIdleBeats(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] idle beats failed to restart after the summon"); }
+            try { done?.Invoke(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] summon continuation threw"); }
+        }
+
+        /// <summary>
+        /// Send her away: a wink, the CRT collapse, a sparkle scatter, then hide. She always gets
+        /// the wink first, so leaving never reads as a crash.
+        /// </summary>
+        public void RunDismiss(Action? done = null)
+        {
+            try
+            {
+                if (!IsVisible)
+                {
+                    done?.Invoke();
+                    return;
+                }
+
+                _transiting = true;
+                InputLocked = true;
+                StopIdleBeats();
+                DisarmPet();
+                CancelChain();
+                TearDownReactions();
+
+                try { OnTearDownCore(); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] tear-down seam threw"); }
+
+                PlayChain("wink", () =>
+                {
+                    if (_closingForGood) { FinishDismiss(done); return; }
+                    CrtOff();
+                    After(CrtOffMs, () =>
+                    {
+                        _bodyRoot.IsVisible = false;
+                        Burst(spark: true);
+                        After(FxLifeMs, () => FinishDismiss(done));
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] dismiss FX failed, hiding her plain");
+                FinishDismiss(done);
+            }
+        }
+
+        private void FinishDismiss(Action? done)
+        {
+            try
+            {
+                SweepFx(all: true);
+                OnBubbleTextCore(null);
+                Hide();
+                _bodyRoot.IsVisible = true;
+                SetCrt(1, 1);
+                _transiting = false;
+                InputLocked = false;
+                SetPose("idle");
+                DrawFace(RestFace);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] dismiss finish failed");
+            }
+            finally
+            {
+                try { done?.Invoke(); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] dismiss callback threw"); }
+            }
+        }
+
+        // ---- the CRT --------------------------------------------------------------
+
+        /// <summary>
+        /// The power-on: a dot, a horizontal line, then the picture. FOUR DISCRETE STEPS, no easing,
+        /// because a smooth interpolation reads as a modern zoom and this is meant to be a CRT.
+        /// WPF wrote them as <c>DiscreteDoubleKeyFrame</c>s; <see cref="Tween"/> is handed the raw
+        /// progress, so a step table needs no interpolation to defeat.
+        /// </summary>
+        private void CrtOn()
+            => BeginCrt(CrtOnMs, new[]
+            {
+                (0.00, 0.02, 0.02),   // a dot
+                (0.30, 1.00, 0.03),   // a horizontal line
+                (0.65, 1.00, 0.06),   // the line thickens
+                (1.00, 1.00, 1.00),   // the picture
+            });
+
+        /// <summary>The power-off: the picture collapses to a line, then to a dot.</summary>
+        private void CrtOff()
+            => BeginCrt(CrtOffMs, new[]
+            {
+                (0.00, 1.00, 1.00),
+                (0.45, 1.00, 0.06),
+                (0.80, 0.35, 0.03),
+                (1.00, 0.02, 0.02),
+            });
+
+        private void BeginCrt(int ms, (double At, double X, double Y)[] steps)
+        {
+            try
+            {
+                CancelCrt();
+                var cts = new CancellationTokenSource();
+                _crtAnim = cts;
+                Tween(ms, cts.Token, p =>
+                {
+                    var step = steps[0];
+                    foreach (var k in steps) if (p >= k.At) step = k;
+                    _crtScale.ScaleX = step.X;
+                    _crtScale.ScaleY = step.Y;
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] CRT animation failed");
+            }
+        }
+
+        /// <summary>
+        /// Put the CRT scale somewhere and mean it: cancel whatever is driving it, THEN write. The
+        /// last step of a ladder holds after its timer stops - WPF's <c>FillBehavior.HoldEnd</c> -
+        /// so a write without the cancel would be overwritten by the next tick.
+        /// </summary>
+        private void SetCrt(double x, double y)
+        {
+            CancelCrt();
+            _crtScale.ScaleX = x;
+            _crtScale.ScaleY = y;
+        }
+
+        private void CancelCrt()
+        {
+            try { _crtAnim?.Cancel(); _crtAnim?.Dispose(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] CRT cancel failed"); }
+            _crtAnim = null;
+        }
+
+        // ---- the particles --------------------------------------------------------
+
+        /// <summary>One chip in flight: where it is going, and how long it has to get there.</summary>
+        private readonly record struct FxChip(TranslateTransform Shift, Rectangle Node, double Dx, double Dy, double LifeMs);
+
+        private static readonly CubicEaseOut ChipEase = new();
+
+        /// <summary>
+        /// One pixel burst at her centre. Smoke on the way in (dark chips, a wider throw), sparks on
+        /// the way out (pink chips, tighter and faster). Ported from
+        /// <c>docs/emi-desk/reference/pitch-demo.js smoke()</c>: the count, the radius, the upward
+        /// bias and the 380 + rand(320) ms lifetimes are its numbers.
+        ///
+        /// <para>WPF gave every chip three <c>DoubleAnimation</c>s of its own - 66 clocks per burst.
+        /// Here the whole burst rides ONE tween and each chip reads its own progress off it, which
+        /// is both cheaper and the only shape available: the throw is on a
+        /// <see cref="TranslateTransform"/>, which Avalonia cannot animate (see
+        /// <see cref="Tween"/>).</para>
+        /// </summary>
+        private void Burst(bool spark)
+        {
+            try
+            {
+                double cx = (double.IsNaN(Width) ? Bounds.Width : Width) / 2.0;
+                double cy = (double.IsNaN(Height) ? Bounds.Height : Height) / 2.0;
+                if (cx <= 0 || cy <= 0)
+                {
+                    cx = OverlayPadX + _bodyWidth / 2.0;
+                    cy = OverlayPad + _bodyWidth * BodyAspect / 2.0;
+                }
+
+                int n = spark ? 14 : 22;
+
+                var layer = new Canvas { IsHitTestVisible = false, ClipToBounds = false };
+                _overlayCanvas.Children.Add(layer);
+                _fxLayers.Add(layer);
+
+                // Immutable on purpose - WPF froze the same three brushes. Nothing here ever
+                // recolours a chip, so one brush per colour serves the whole burst.
+                var pink = new ImmutableSolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+                var ink = new ImmutableSolidColorBrush(Color.FromRgb(0x2A, 0x24, 0x46));
+                var cream = new ImmutableSolidColorBrush(Color.FromRgb(0xF5, 0xF0, 0xE1));
+
+                var rng = Random.Shared;
+                var chips = new List<FxChip>(n);
+                double longest = 1;
+
+                for (int i = 0; i < n; i++)
+                {
+                    double ang = rng.NextDouble() * Math.PI * 2;
+                    double r = (spark ? 30 : 22) + rng.NextDouble() * 40;
+                    double dx = Math.Cos(ang) * r;
+                    double dy = Math.Sin(ang) * r - (spark ? 10 : 20);
+                    int life = 380 + rng.Next(320);
+                    double size = spark ? 3 + rng.Next(2) : 4 + rng.Next(3);
+
+                    var shift = new TranslateTransform();
+                    var chip = new Rectangle
+                    {
+                        Width = size,
+                        Height = size,
+                        Fill = spark
+                            ? (rng.NextDouble() < 0.35 ? cream : pink)
+                            : (rng.NextDouble() < 0.30 ? pink : ink),
+                        IsHitTestVisible = false,
+                        UseLayoutRounding = true,
+                        RenderTransform = shift,
+                    };
+                    Canvas.SetLeft(chip, cx - size / 2.0);
+                    Canvas.SetTop(chip, cy - size / 2.0);
+                    layer.Children.Add(chip);
+
+                    chips.Add(new FxChip(shift, chip, dx, dy, life));
+                    longest = Math.Max(longest, life);
+                }
+
+                Tween(longest, CancellationToken.None, p =>
+                {
+                    double elapsed = p * longest;
+                    foreach (var c in chips)
+                    {
+                        double q = ChipEase.Ease(Math.Min(1, elapsed / c.LifeMs));
+                        c.Shift.X = c.Dx * q;
+                        c.Shift.Y = c.Dy * q;
+                        c.Node.Opacity = 1 - q;
+                    }
+                });
+
+                _fxSweepTimer ??= new DispatcherTimer(DispatcherPriority.Background)
+                {
+                    Interval = TimeSpan.FromMilliseconds(FxLifeMs)
+                };
+                _fxSweepTimer.Tick -= OnFxSweepDue;
+                _fxSweepTimer.Tick += OnFxSweepDue;
+                _fxSweepTimer.Stop();
+                _fxSweepTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] particle burst failed");
+            }
+        }
+
+        private void OnFxSweepDue(object? sender, EventArgs e)
+        {
+            try
+            {
+                _fxSweepTimer?.Stop();
+                SweepFx(all: true);
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] FX sweep failed"); }
+        }
+
+        /// <summary>Drop spent FX layers. <paramref name="all"/> false is reserved for a partial
+        /// sweep, exactly as in the WPF original - nothing passes it today.</summary>
+        private void SweepFx(bool all = false)
+        {
+            try
+            {
+                if (_fxLayers.Count == 0) return;
+                foreach (var layer in _fxLayers)
+                {
+                    try { _overlayCanvas.Children.Remove(layer); }
+                    catch { /* already gone */ }
+                }
+                if (all) _fxLayers.Clear();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] SweepFx failed");
+            }
+        }
+
+        /// <summary>
+        /// A one-shot dispatcher delay that cannot outlive her. Every FX step goes through here so
+        /// there is one place where the shutdown guard lives; WPF checked
+        /// <c>Application.Current.Dispatcher.HasShutdownStarted</c>, and <c>_closingForGood</c> is
+        /// this head's twin of it - ShutDown and the Closed handler both set it.
+        /// </summary>
+        private void After(int ms, Action act)
+        {
+            try
+            {
+                DispatcherTimer.RunOnce(() =>
+                {
+                    try
+                    {
+                        if (_closingForGood) return;
+                        act();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Debug(ex, "[EmiDesk] deferred FX step failed");
+                    }
+                }, TimeSpan.FromMilliseconds(Math.Max(1, ms)), DispatcherPriority.Background);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] After({Ms}) failed", ms);
+            }
+        }
+
         // ---------------------------------------------------------------- sibling-partial stubs
 
         // Everything below lives in one of the seven OTHER partials of the WPF class, none of which
         // is part of this layer. Each is kept as a named no-op so the ported half of the widget
         // still reads as the same code and the later layers have the exact call sites to fill in.
-        // React.cs is no longer one of them: its physical half is real, above.
+        // React.cs and Fx.cs are no longer among them: both are real, above.
 
         /// <summary>ponytail: EmiDeskWindow.Alive.cs - the 100 ms gaze/idle poll. Starts with her.</summary>
         private void StartAlive() { }
@@ -1943,19 +2396,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs EmiState.NotePet() - the pat counter behind her affection state.</summary>
         private void CountPat() { }
 
-        /// <summary>ponytail: EmiDeskWindow.Fx.cs - ends the summon chain early so a click can land.</summary>
-        private void FinishSummon() { }
-
-        /// <summary>ponytail: EmiDeskWindow.Fx.cs - sweeps spent FX visuals off OverlayHost.</summary>
-        private void SweepFx(bool all = false) { }
-
         /// <summary>ponytail: EmiDeskWindow.Ring.cs - folds the card fan.</summary>
         private void CloseRing() { }
 
-        /// <summary>ponytail: EmiDeskWindow.Props.cs - lays the held plate out at the current width.</summary>
+        /// <summary>
+        /// ponytail: EmiDeskWindow.Props.cs, and the note this used to carry was wrong about where
+        /// the blocker is. <c>EmiProps</c> - the anchor, the three plates, their sizes, the hold and
+        /// the rise - is ALREADY IN CORE (CCP.Core/Services/EmiDesk/EmiProps.cs) and is pure, so
+        /// LayoutProp / ShowProp / HideProp / the rise port arithmetic for arithmetic. What stops
+        /// them is the ART: <c>EmiProps.Path</c> probes
+        /// <c>Resources/web/arcademy/art/emi/props/*.png</c> beside the exe, and CCP.Avalonia.csproj
+        /// links no <c>Assets/web/</c> tree at all, so every lookup returns null and the whole beat
+        /// is a silent no-op by the WPF original's own design. Take the csproj link and the port in
+        /// ONE layer, or the port draws nothing and says nothing about why. The beat that starts it
+        /// (RunPropBeat) additionally needs a chain, so it is two blockers, not one.
+        /// </summary>
         private void LayoutProp() { }
 
-        /// <summary>ponytail: EmiDeskWindow.Props.cs - takes the held plate off.</summary>
+        /// <inheritdoc cref="LayoutProp"/>
         private void HideProp() { }
 
         /// <summary>ponytail: EmiDeskWindow.Bubble.cs - drops the voice hooks.</summary>
