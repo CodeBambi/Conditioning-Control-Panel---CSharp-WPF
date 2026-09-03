@@ -1,0 +1,167 @@
+<!-- PORTED from ConditioningControlPanel/Windows/SettingsPaletteWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                      -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"          -> CanResize="False"
+       FontFamily="Segoe UI"          -> dropped (Windows-only face; the head's own font is used)
+       <Style x:Key TargetType>       -> <ControlTheme x:Key TargetType>
+       ItemContainerStyle             -> ItemContainerTheme
+       ControlTemplate.Triggers       -> ^:pointerover / ^:selected selectors
+       bare <ContentPresenter/>       -> Content/ContentTemplate TemplateBindings (Avalonia's
+                                         presenter does not find its content: trap 6)
+       EventSetter PreviewMouseLeftButtonUp
+                                      -> one PointerReleased handler on the ListBox, wired in the
+                                         constructor (a ControlTheme has no EventSetter, and
+                                         template content has no name scope to FindControl through)
+       Visibility="Collapsed"         -> IsVisible="False"
+       {Binding ContextVisibility}    -> IsVisible="{Binding HasContext}" (Avalonia binds a bool)
+       DropShadowEffect ShadowDepth="4"
+                                      -> OffsetX/OffsetY 2.8 (WPF's default 315-degree direction at
+                                         depth 4 lands there; Avalonia's effect has no polar form)
+       Deactivated / PreviewKeyDown / Loaded
+                                      -> wired in the constructor; PreviewKeyDown becomes a
+                                         tunnelling KeyDown handler, so the TextBox does not eat
+                                         Up/Down/Enter before the palette sees them
+       PaletteRow (nested class)      -> top-level class in this namespace, so the ItemTemplate's
+                                         x:DataType can name it under compiled bindings -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Windows"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.SettingsPaletteWindow"
+        Title="Command Palette"
+        Width="620" Height="470"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Foreground="{DynamicResource TextLightBrush}">
+
+    <Window.Styles>
+        <!-- Fluent's TextBox paints PART_BorderElement, and that setter sits on the template child,
+             so it outranks the TextBox's own Background="Transparent". The WPF original stayed
+             transparent over its host Border in every state.
+             ponytail: local copy of the same override in MediaHistoryWindow.axaml, hoist to
+             Theme/Styles.xaml when a third view needs it. -->
+        <Style Selector="TextBox.transparent /template/ Border#PART_BorderElement">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Styles>
+
+    <Window.Resources>
+        <!-- Local, because the palette is the only consumer. Everything colour-wise resolves
+             from Theme/Brushes.xaml so a mod/theme swap carries. -->
+        <ControlTheme x:Key="PaletteRowStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Margin" Value="6,1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <!-- Single click activates: a palette row is a destination, not a selection. The
+                 handler lives on the ListBox; see the header note. -->
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="rowBorder" Background="Transparent" CornerRadius="7"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Stretch"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#rowBorder">
+                <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+            </Style>
+            <Style Selector="^:selected /template/ Border#rowBorder">
+                <Setter Property="Background" Value="{DynamicResource AccentTintedBgHoverBrush}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Margin="14">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" BlurRadius="26" OffsetX="2.8" OffsetY="2.8" Opacity="0.55"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Search field -->
+            <Border Grid.Row="0" Background="{DynamicResource SurfaceBgBrush}"
+                    CornerRadius="12,12,0,0" Padding="14,11"
+                    BorderBrush="#2A2A46" BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🔎" FontSize="15" VerticalAlignment="Center"
+                               Margin="0,0,10,0"/>
+                    <Grid Grid.Column="1">
+                        <TextBox x:Name="TxtQuery" Classes="transparent"
+                                 Background="Transparent" BorderThickness="0"
+                                 Foreground="{DynamicResource TextLightBrush}"
+                                 CaretBrush="{DynamicResource PinkBrush}"
+                                 FontSize="16" VerticalContentAlignment="Center"/>
+                        <TextBlock x:Name="TxtPlaceholder" IsHitTestVisible="False"
+                                   Text="{loc:Str set2_palette_placeholder}"
+                                   Foreground="{DynamicResource TextDimBrush}"
+                                   FontSize="16" VerticalAlignment="Center"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Results -->
+            <ListBox x:Name="ListResults" Grid.Row="1" Background="Transparent" BorderThickness="0"
+                     Margin="0,6,0,6"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ItemContainerTheme="{StaticResource PaletteRowStyle}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PaletteRow">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Glyph}" FontSize="15"
+                                       VerticalAlignment="Center" Margin="0,0,11,0"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding Label}" FontSize="13"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Context}" FontSize="11"
+                                           Foreground="{DynamicResource TextDimBrush}"
+                                           TextTrimming="CharacterEllipsis"
+                                           IsVisible="{Binding HasContext}"/>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- Empty state (shown instead of the list when nothing matches) -->
+            <TextBlock x:Name="TxtEmpty" Grid.Row="1" IsVisible="False"
+                       Text="{loc:Str set2_palette_no_results}"
+                       Foreground="{DynamicResource TextDimBrush}" FontSize="13"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+            <!-- Footer hint -->
+            <Border Grid.Row="2" Background="{DynamicResource SurfaceBgBrush}"
+                    CornerRadius="0,0,12,12" Padding="14,7"
+                    BorderBrush="#2A2A46" BorderThickness="0,1,0,0">
+                <TextBlock x:Name="TxtHint" Text="{loc:Str set2_palette_hint}"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
