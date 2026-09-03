@@ -120,10 +120,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // a profile lookup on the Discord tab and a browser hop. Left unhooked rather than
             // hooked to something that cannot answer.
 
-            // The WPF tab is gated by MainWindow.UpdateTrophyCaseColumns(); there is no skill
-            // service on this head yet, so the streak column is switched on so it is actually
-            // covered by the render proof rather than sitting invisible.
-            // ponytail: needs SkillService, wired when it moves to Core.
+            // WPF derives this from the viewer's own skills: UpdateTrophyCaseColumns
+            // (MainWindow.Leaderboard.cs:1432) sets it from App.SkillTree.HasSkill("trophy_case")
+            // and re-runs the moment the skill is bought. Core has no skill seam to ask - it
+            // carries AddXP and TrackBubbleCountResult and nothing else - so this head cannot
+            // derive it. Forced ON rather than off on purpose: the Streak column and the
+            // tooltip's Best Session line are then covered by the render proof instead of
+            // sitting invisible, and neither is a gate on anything.
+            // ponytail: needs ConditioningControlPanel/Services/Progression/SkillTreeService.cs
+            // behind a Core seam.
             ShowTrophyStats = true;
 
             Loaded += OnLeaderboardTabLoaded;
@@ -271,7 +276,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// the WPF head. It is a date literal, not a service, and dropping the guard instead would
         /// re-introduce exactly the bug it exists to stop - a countdown promising a season end that
         /// can never arrive.
-        /// ponytail: local copy of DescentEpochs.SeasonsEndUtc, delete when Descent moves to Core.
+        /// ponytail: local copy of DescentEpochs.SeasonsEndUtc -
+        /// ConditioningControlPanel/Services/Descent/DescentMigration.cs, still head-side and not
+        /// in Core in any form. Delete this literal when that type reaches Core.
         /// </summary>
         private static readonly DateTime SeasonsEndUtc = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -295,8 +302,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
 
-            // ponytail: needs App.QuestDefinitions.SeasonTitle, wired when it moves to Core. The
-            // WPF fallback for a missing title is section_seasons, which is what shows here.
+            // ponytail: WPF prefers App.QuestDefinitions.SeasonTitle and falls back to
+            // section_seasons when it is blank - that service is
+            // ConditioningControlPanel/Services/Progression/QuestDefinitionService.cs, head-side,
+            // with no Core twin. The fallback is what shows here.
             _txtSeason.Text = Loc.Get("section_seasons");
 
             if (SeasonsHaveEnded)
