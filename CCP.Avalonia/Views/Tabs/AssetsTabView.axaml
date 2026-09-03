@@ -1,0 +1,638 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/AssetsTabView.xaml.
+     Structure, order, spacing and every resource key are preserved so the two can be compared
+     directly. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"           -> Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       <Style x:Key TargetType>             -> <ControlTheme x:Key TargetType>; the Button one keeps a
+                                               Template whose ContentPresenter binds Content, or it
+                                               draws nothing (CLAUDE.md trap 6)
+       Visibility="Collapsed"               -> IsVisible="False"
+       Visibility="{Binding X, Converter=   -> IsVisible="{Binding X}" / "{Binding !X}"  (Avalonia binds
+         {StaticResource BoolToVisibility}}"   IsVisible to a bool directly; Inverse -> ! )
+       helpers:EmojiTextBlock               -> TextBlock (Avalonia renders colour emoji natively)
+       Image + EmojiToImageSource           -> TextBlock with the emoji itself, same reason
+       ToolTip="…"                          -> ToolTip.Tip="…"
+       Content="{loc:Str snake_case}"       -> a <TextBlock> child: Avalonia's Button parses `_` in
+                                               Content as an access key (CLAUDE.md trap 1)
+       Border.Style DataTrigger IsExternal  -> Classes.external + a selector in UserControl.Styles
+       TreeView.Resources <Style TreeViewItem> -> TreeView.Styles selectors; a keyed ControlTheme would
+                                               replace Fluent's template wholesale (trap 4)
+       HierarchicalDataTemplate             -> TreeDataTemplate (same ItemsSource contract)
+       ComboBox DisplayMemberPath /          -> ItemTemplate; Avalonia has neither path property, so the
+         SelectedValuePath                     preset id stays on the item VM
+       MultiBinding StringFormat            -> one VM property (CountsDisplay); the format string was
+                                               hardcoded English in the WPF XAML and is kept verbatim
+       RenderOptions.BitmapScalingMode      -> RenderOptions.BitmapInterpolationMode
+       Image Source="{Binding url-string}"  -> Source="{Binding …Image}" (IImage; a string does not
+                                               convert, and pack:// is WPF-only). Null placeholders.
+       pack://…/Resources/discord.png       -> a text glyph; this head ships no image assets yet
+       hover:HoverPop.IsEnabled             -> dropped (the behavior is not ported)
+       ScrollBar restyle in .Resources      -> dropped; Fluent's scrollbars draw, and a full ScrollBar
+                                               ControlTheme belongs in Theme/, which this layer owns none of
+       GridSplitter                         -> same control, ResizeDirection stated explicitly
+       TxtThumbnailsEmpty (always present)  -> IsVisible="{Binding HasNoThumbnails}"; WPF toggles it from
+                                               MainWindow, and without the bind it covers the tiles
+       Click / MouseEnter / SelectionChanged-> not wired: EVERY handler in the WPF code-behind forwards to
+                                               MainWindow (see the code-behind for the list) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AssetsTabView"
+             x:DataType="vm:AssetsTabViewModel">
+    <UserControl.Resources>
+        <!-- Chips for custom subreddits and for the blocklist: the same pill language as
+             AchievementFilterChip (which the niche toggles use directly) plus the hover-✕ from
+             the companion tab's deny chips. Both keys are read from the code that fills the
+             remote media picker, so they stay in the UserControl's own dictionary. -->
+        <!-- The one "verified" orange, shared verbatim with the web pickers (#F0A04B, locked
+             2026-08-23). It lives here rather than in Theme/ because nothing outside this panel
+             has a verified subreddit to paint: a theme key with exactly one reader is a key
+             everyone has to keep in their head for nothing. -->
+        <SolidColorBrush x:Key="RemoteSubVerifiedBrush" Color="#FFF0A04B"/>
+        <!-- Soft coral for the inline sub errors. NOT DangerBrush (#E53935): that red is the
+             app's destructive-action alarm, and "we could not find that sub" is a hint. -->
+        <SolidColorBrush x:Key="RemoteSubErrorBrush" Color="#FFFF8A80"/>
+        <ControlTheme x:Key="RemoteChipBorder" TargetType="Border">
+            <Setter Property="CornerRadius" Value="13"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Background" Value="#26FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </ControlTheme>
+        <ControlTheme x:Key="RemoteChipCloseButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="#FFFFB0BE"/>
+            <Setter Property="Margin" Value="7,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="7" Padding="3,1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="#33FF69B4"/>
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="White"/>
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- WPF: Border.Style DataTrigger IsExternal=True -> orange border on the pack card -->
+        <Style Selector="Border.packCard.external">
+            <Setter Property="BorderBrush" Value="#FFA500"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto" MaxHeight="340"/>
+            <RowDefinition Height="5"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header with title and actions -->
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="{loc:Str section_assets_content_packs}" Theme="{StaticResource SectionHeader}"
+                           FontSize="18" VerticalAlignment="Center"/>
+                <Button x:Name="HelpBtnAssets" Theme="{StaticResource HelpButtonStyle}"
+                        VerticalAlignment="Center" Margin="8,0,0,0" Tag="Assets"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnRefreshPacks" Theme="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                        ToolTip.Tip="{loc:Str tooltip_refresh_available_packs}" IsVisible="False">
+                    <TextBlock Text="{loc:Str btn_refresh_2}"/>
+                </Button>
+                <Button x:Name="BtnDeleteDownloadedPacks" Theme="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                        ToolTip.Tip="{loc:Str tooltip_delete_all_downloaded_content_packs_your_loca}" IsVisible="False">
+                    <TextBlock Text="{loc:Str btn_delete_downloaded_packs}"/>
+                </Button>
+                <Button x:Name="BtnRefreshAssets" Theme="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                        ToolTip.Tip="{loc:Str tooltip_refresh_assets}">
+                    <TextBlock Text="{loc:Str btn_refresh_2}"/>
+                </Button>
+                <Button x:Name="BtnGetPacks" Theme="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                        ToolTip.Tip="{loc:Str tooltip_get_packs}">
+                    <TextBlock Text="{loc:Str btn_get_packs}"/>
+                </Button>
+                <Button x:Name="BtnOpenAssetsFolder" Theme="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                        ToolTip.Tip="{loc:Str tooltip_open_assets_folder_in_explorer}">
+                    <TextBlock Text="{loc:Str btn_open_folder}"/>
+                </Button>
+                <!-- MainWindow.AssetsFx pulses this button when media has been logged since the
+                     log was last opened. Event-driven: a fixed 3-cycle animation fired on tab
+                     show, never a standing loop. -->
+                <Button x:Name="BtnMediaLog" Theme="{StaticResource OutlineButton}" Padding="12,6"
+                        ToolTip.Tip="{loc:Str tooltip_media_log}">
+                    <TextBlock Text="{loc:Str btn_media_log}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- MEDIA SOURCE: local folders, Reddit via Scrolller, or both.
+             Every control here is populated and wired from MainWindow.Assets.cs
+             (InitializeRemoteMediaPicker) rather than declaring handlers: the chip rows are built
+             from FypOnlineCoordinator.Catalog and from live settings lists, so the same code that
+             fills them owns their events. The rows below stay empty until that code moves. -->
+        <Border Grid.Row="1" Theme="{StaticResource SectionPanel}" Padding="12">
+            <StackPanel>
+                <TextBlock Text="{loc:Str section_media_source}" Theme="{StaticResource SectionHeader}"
+                           Margin="0,0,0,2"/>
+                <TextBlock Text="{loc:Str label_media_source_hint}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                <!-- Own assets / Reddit / Both. Radio behaviour is enforced in code so the
+                     chips can share AchievementFilterChip with the niche row below. -->
+                <WrapPanel x:Name="RemoteSourceChips"/>
+
+                <!-- Everything below is dead weight while the source is "local", so it only
+                     unfolds once remote media is actually in play. -->
+                <StackPanel x:Name="RemoteMediaDetails" IsVisible="False">
+
+                    <!-- Mix ratio: only meaningful in "Both" -->
+                    <Grid x:Name="RemoteRatioRow" Margin="0,4,0,2" IsVisible="False">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str label_remote_mix}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Slider x:Name="SliderRemoteRatio" Grid.Column="1"
+                                Theme="{StaticResource PinkSlider}"
+                                Minimum="5" Maximum="95" Value="30" Height="22"
+                                IsSnapToTickEnabled="True" TickFrequency="5"
+                                VerticalAlignment="Center" MaxWidth="320"
+                                ToolTip.Tip="{loc:Str tooltip_remote_mix}"/>
+                        <TextBlock x:Name="TxtRemoteRatio" Grid.Column="2"
+                                   Text="30%" Foreground="{DynamicResource PinkBrush}" FontSize="11"
+                                   FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </Grid>
+
+                    <!-- Niches. These edit FypOnlineNiches, the SAME selection the For You feed
+                         uses — one taxonomy, one selection, two surfaces (AppSettings). -->
+                    <TextBlock Text="{loc:Str label_remote_niches}" Theme="{StaticResource SettingLabel}"
+                               FontSize="12" Margin="0,6,0,2"/>
+                    <TextBlock Text="{loc:Str label_remote_niches_shared}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <WrapPanel x:Name="RemoteNicheChips"/>
+
+                    <!-- One grey, collapsed line per CHECKED niche, listing the subreddits it
+                         actually resolves to. A WrapPanel cannot host a full-width row, so this
+                         is a sibling StackPanel rather than another chip. Expansion state is
+                         session-only - a disclosure triangle is not worth a settings key. -->
+                    <StackPanel x:Name="RemoteNicheSubs" Margin="0,2,0,0"/>
+
+                    <!-- Custom subreddits. The chips below are the LIBRARY (every sub kept
+                         anywhere in the app, AppSettings.RemoteSubLibrary): a lit pill is in
+                         this machine's media pool, a dashed one is kept but unused here, and
+                         the X forgets the name everywhere at once. -->
+                    <TextBlock Text="{loc:Str label_remote_custom_subs}" Theme="{StaticResource SettingLabel}"
+                               FontSize="12" Margin="0,6,0,2"/>
+                    <TextBlock Text="{loc:Str label_remote_custom_subs_kept}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBox x:Name="TxtRemoteCustomSub" Width="200"
+                                 Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
+                                 FontSize="11" Padding="6,4" VerticalAlignment="Center"
+                                 ToolTip.Tip="{loc:Str tooltip_remote_custom_sub_add}"/>
+                        <Button x:Name="BtnRemoteAddSub" Theme="{StaticResource SmallPinkButton}"
+                                Padding="10,4" FontSize="11" Margin="6,0,0,0">
+                            <TextBlock Text="{loc:Str btn_add}"/>
+                        </Button>
+                    </StackPanel>
+                    <!-- Inline, non-blocking. This replaced a modal MessageBox: a typo in a
+                         subreddit name does not deserve a dialog, and the probe result (not
+                         found / offline) has nowhere else to land. -->
+                    <TextBlock x:Name="TxtRemoteSubError"
+                               Foreground="{StaticResource RemoteSubErrorBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,0,0,6" IsVisible="False"/>
+                    <WrapPanel x:Name="RemoteCustomSubChips"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- TOP: Content Packs Section (hidden — most packs live outside the app now; use BtnGetPacks instead) -->
+        <Border x:Name="PacksSection" Grid.Row="2" Theme="{StaticResource SectionPanel}" Padding="12" IsVisible="False">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,6">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str label_community_content_packs}"
+                                   Theme="{StaticResource SectionHeader}"/>
+                        <Button x:Name="HelpBtnPacks" Theme="{StaticResource HelpButtonStyle}"
+                                VerticalAlignment="Center" Margin="8,0,0,0" Tag="ContentPacks"/>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Str label_after_downloading_a_pack_just_drag_and_drop_t}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontStyle="Italic"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- Horizontal scrolling pack cards -->
+                <ScrollViewer x:Name="PacksScrollViewer" Grid.Row="1"
+                              HorizontalScrollBarVisibility="Visible"
+                              VerticalScrollBarVisibility="Disabled"
+                              Padding="0,0,0,8">
+                    <StackPanel Orientation="Horizontal">
+                        <!-- Dynamic Pack Cards -->
+                        <ItemsControl x:Name="PackCardsItemsControl" ItemsSource="{Binding Packs}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PackCardViewModel">
+                                    <Border Classes="packCard" Classes.external="{Binding IsExternal}"
+                                            Width="192" Height="240" Margin="0,0,10,0" CornerRadius="8"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="72"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Preview Image (rotating for installed packs, static otherwise) -->
+                                            <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True"
+                                                    Background="{DynamicResource DarkerBgBrush}">
+                                                <Grid>
+                                                    <!-- Rotating preview image from pack content (installed packs with loaded previews) -->
+                                                    <Image Source="{Binding CurrentPreviewImage}"
+                                                           Stretch="UniformToFill" RenderOptions.BitmapInterpolationMode="HighQuality"
+                                                           IsVisible="{Binding HasPreviewImages}"/>
+                                                    <!-- Static preview image (fallback when no dynamic previews) -->
+                                                    <Image Source="{Binding PreviewImage}"
+                                                           Stretch="UniformToFill" RenderOptions.BitmapInterpolationMode="HighQuality"
+                                                           IsVisible="{Binding !HasPreviewImages}"/>
+                                                    <!-- "No Preview" text shows only when no dynamic or static preview exists -->
+                                                    <TextBlock Text="{loc:Str label_no_preview}" FontSize="14"
+                                                               Foreground="{DynamicResource TextDimBrush}"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               IsVisible="{Binding !HasAnyPreview}"/>
+                                                    <!-- Size badge -->
+                                                    <Border Background="{DynamicResource PinkBrush}" CornerRadius="4" Padding="8,3"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                                        <TextBlock Text="{Binding SizeDisplay}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                                    </Border>
+                                                    <!-- Installed badge -->
+                                                    <Border Background="#4CAF50" CornerRadius="4" Padding="6,2"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                                            IsVisible="{Binding IsDownloaded}">
+                                                        <TextBlock Text="{loc:Str label_installed}" FontSize="8" FontWeight="Bold" Foreground="White"/>
+                                                    </Border>
+                                                    <!-- Manual download badge for external packs -->
+                                                    <Border Background="#FFA500" CornerRadius="4" Padding="6,2"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                                            IsVisible="{Binding ShowExternalButtons}">
+                                                        <TextBlock Text="{loc:Str label_manual_download}" FontSize="8" FontWeight="Bold" Foreground="White"/>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Info section -->
+                                            <Grid Grid.Row="1" Margin="6,3,6,3">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="Bold"
+                                                           Foreground="{DynamicResource TextLightBrush}" FontSize="11"
+                                                           Margin="0,0,0,1"/>
+                                                <TextBlock Grid.Row="1" Text="{Binding Description}"
+                                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="9"
+                                                           TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                                           MaxHeight="60" VerticalAlignment="Top"
+                                                           ToolTip.Tip="{Binding Description}"/>
+                                                <TextBlock Grid.Row="2" Text="{Binding CountsDisplay}"
+                                                           Foreground="{DynamicResource PinkBrush}" FontSize="8"
+                                                           Margin="0,1,0,3" FontWeight="SemiBold"/>
+
+                                                <!-- Action Buttons -->
+                                                <Grid Grid.Row="3">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="4"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <!-- Install/Uninstall Button -->
+                                                    <Button Grid.Column="0" Tag="{Binding}"
+                                                            Theme="{StaticResource SmallPinkButton}"
+                                                            Padding="4,4" IsEnabled="{Binding IsNotDownloading}">
+                                                        <TextBlock Text="{Binding DownloadButtonText}"/>
+                                                    </Button>
+                                                    <!-- Activate/Deactivate Button (only visible when downloaded) -->
+                                                    <Button Grid.Column="2" Tag="{Binding}"
+                                                            Theme="{StaticResource SmallPinkButton}"
+                                                            Padding="4,4" IsVisible="{Binding IsDownloaded}">
+                                                        <TextBlock Text="{Binding ActivateButtonText}"/>
+                                                    </Button>
+                                                </Grid>
+
+                                                <!-- Progress bar -->
+                                                <ProgressBar Grid.Row="4" Height="4" Margin="0,6,0,0"
+                                                             Minimum="0" Maximum="100" Value="{Binding DownloadProgress}"
+                                                             Foreground="{DynamicResource PinkBrush}"
+                                                             Background="{DynamicResource DarkerBgBrush}"
+                                                             IsVisible="{Binding IsDownloading}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Creator Card: Join Discord -->
+                        <Border Width="176" Height="240" Margin="0,0,10,0" CornerRadius="8"
+                                Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#5865F2" BorderThickness="2">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="72"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Discord Preview -->
+                                <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#5865F2">
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="🎮" FontSize="34" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Info section -->
+                                <Grid Grid.Row="1" Margin="8,4,8,4">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Text="{loc:Str label_create_your_own_pack}" FontWeight="Bold"
+                                               Foreground="{DynamicResource TextLightBrush}" FontSize="12"
+                                               Margin="0,0,0,2"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str label_are_you_a_content_creator_join_our_discord_to}"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                               TextWrapping="Wrap" MaxHeight="52" VerticalAlignment="Top"/>
+                                    <TextBlock Grid.Row="2" Text="Get featured in the app"
+                                               Foreground="#5865F2" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold"/>
+
+                                    <!-- Button -->
+                                    <Button Grid.Row="3" Background="#5865F2" Foreground="White" BorderThickness="0"
+                                            Padding="8,4" FontSize="11" FontWeight="SemiBold" Cursor="Hand"
+                                            HorizontalAlignment="Stretch">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                      Foreground="{TemplateBinding Foreground}"
+                                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                        <!-- Wraps: the localized label is wider than the 176px card,
+                                             and a clipped call to action is worse than two lines. -->
+                                        <TextBlock Text="{loc:Str label_join_discord}" TextWrapping="Wrap"
+                                                   TextAlignment="Center"/>
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- Splitter (hidden alongside PacksSection) -->
+        <GridSplitter x:Name="PacksSplitter" Grid.Row="3" Height="5" ResizeDirection="Rows"
+                      HorizontalAlignment="Stretch" Background="Transparent"
+                      Cursor="SizeNorthSouth" IsVisible="False"/>
+
+        <!-- BOTTOM: Interactive File Browser -->
+        <Border Grid.Row="4" Theme="{StaticResource SectionPanel}" Padding="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str section_asset_browser}" Theme="{StaticResource SectionHeader}"/>
+                        <Button x:Name="HelpBtnAssetBrowser" Theme="{StaticResource HelpButtonStyle}"
+                                VerticalAlignment="Center" Margin="8,0,0,0" Tag="AssetBrowser"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtAssetCounts" Text="{loc:Str label_0_images_0_videos}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- Action bar with preset selector -->
+                <Grid Grid.Row="1" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: Select/Deselect buttons -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Button Theme="{StaticResource OutlineButton}" Padding="10,4" FontSize="11" Margin="0,0,6,0">
+                            <TextBlock Text="{loc:Str btn_select_all}"/>
+                        </Button>
+                        <Button Theme="{StaticResource OutlineButton}" Padding="10,4" FontSize="11">
+                            <TextBlock Text="{loc:Str btn_deselect_all}"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Right: Preset selector -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str label_preset_2}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox x:Name="CmbAssetPresets" Width="180" FontSize="11"
+                                  Theme="{StaticResource DarkComboBoxStyle}"
+                                  ItemsSource="{Binding Presets}" SelectedIndex="0">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:AssetPresetViewModel">
+                                    <TextBlock Text="{Binding DisplayText}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button x:Name="BtnSaveAssetPreset" Theme="{StaticResource SmallPinkButton}"
+                                Padding="8,4" FontSize="11" Margin="6,0,0,0"
+                                ToolTip.Tip="{loc:Str tooltip_save_current_selection_as_a_new_preset}">
+                            <TextBlock Text="{loc:Str btn_save_as}"/>
+                        </Button>
+                        <Button x:Name="BtnUpdateAssetPreset" Theme="{StaticResource OutlineButton}"
+                                Padding="8,4" FontSize="11" Margin="4,0,0,0"
+                                ToolTip.Tip="{loc:Str tooltip_update_selected_preset_with_current_selection}">
+                            <TextBlock Text="{loc:Str btn_update}"/>
+                        </Button>
+                        <Button x:Name="BtnDeleteAssetPreset" Theme="{StaticResource OutlineButton}"
+                                Padding="8,4" FontSize="11" Margin="4,0,0,0"
+                                ToolTip.Tip="{loc:Str tooltip_delete_selected_preset}">
+                            <TextBlock Text="{loc:Str btn_delete}"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Split view: TreeView on left, Thumbnails on right -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="280"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- LEFT: Folder TreeView -->
+                    <Border Grid.Column="0" Background="{DynamicResource DarkerBgBrush}" CornerRadius="6" Padding="4">
+                        <TreeView x:Name="AssetTreeView" Background="Transparent" BorderThickness="0"
+                                  ItemsSource="{Binding Folders}"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                  ScrollViewer.VerticalScrollBarVisibility="Visible">
+                            <TreeView.Styles>
+                                <Style Selector="TreeViewItem" x:DataType="vm:AssetFolderViewModel">
+                                    <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                                    <Setter Property="FontSize" Value="12"/>
+                                    <Setter Property="Padding" Value="2"/>
+                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                </Style>
+                                <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+                                    <Setter Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+                                </Style>
+                                <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
+                                    <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                                </Style>
+                            </TreeView.Styles>
+                            <TreeView.ItemTemplate>
+                                <TreeDataTemplate x:DataType="vm:AssetFolderViewModel" ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                        <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                  IsThreeState="False"
+                                                  VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="📁" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding FileCountDisplay}"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </TreeDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </Border>
+
+                    <!-- Splitter -->
+                    <GridSplitter Grid.Column="1" Width="5" ResizeDirection="Columns"
+                                  HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWestEast"/>
+
+                    <!-- RIGHT: Thumbnail Preview Grid -->
+                    <Border Grid.Column="2" Background="{DynamicResource DarkerBgBrush}" CornerRadius="6" Padding="4">
+                        <Grid>
+                            <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl x:Name="ThumbnailsItemsControl" ItemsSource="{Binding Thumbnails}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AssetThumbnailViewModel">
+                                            <Border Width="100" Height="120" Margin="4" CornerRadius="6"
+                                                    Background="{DynamicResource SurfaceBgBrush}"
+                                                    BorderBrush="{DynamicResource PanelAccentBrush}"
+                                                    BorderThickness="2" Cursor="Hand">
+                                                <Border.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="{loc:Str section_preview}"/>
+                                                        <Separator/>
+                                                        <MenuItem Header="{loc:Str section_open_in_explorer}"/>
+                                                    </ContextMenu>
+                                                </Border.ContextMenu>
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="*"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <!-- Thumbnail image -->
+                                                    <Border Grid.Row="0" CornerRadius="6,6,0,0" ClipToBounds="True"
+                                                            Background="{DynamicResource DarkerBgBrush}">
+                                                        <Grid>
+                                                            <!-- Video placeholder icon (shows when IsVideo and no thumbnail) -->
+                                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                        IsVisible="{Binding IsVideo}">
+                                                                <TextBlock Text="🎬" FontSize="26" HorizontalAlignment="Center"/>
+                                                                <TextBlock Text="{loc:Str label_video}" FontSize="9"
+                                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                                           HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                                            </StackPanel>
+                                                            <!-- Image thumbnail (for images, or video if we had one) -->
+                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                            <!-- Loading indicator -->
+                                                            <TextBlock Text="⏳" FontSize="14"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                       IsVisible="{Binding IsLoadingThumbnail}"/>
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <!-- Checkbox overlay -->
+                                                    <CheckBox Grid.Row="0" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                              HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                              Margin="4"/>
+
+                                                    <!-- Filename -->
+                                                    <Border Grid.Row="1" Background="#303050" CornerRadius="0,0,6,6" Padding="4,2">
+                                                        <TextBlock Text="{Binding Name}" FontSize="9"
+                                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   ToolTip.Tip="{Binding Name}"/>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <!-- Empty state -->
+                            <TextBlock x:Name="TxtThumbnailsEmpty"
+                                       Text="{loc:Str label_select_a_folder_to_view_its_contents}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       IsVisible="{Binding HasNoThumbnails}"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
