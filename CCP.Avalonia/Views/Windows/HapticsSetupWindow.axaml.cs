@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.Haptics;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -14,10 +16,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// test. The navigation, the per-provider guide switching, the accent recolouring and the dot
     /// indicators are all view state and are ported for real.
     ///
-    /// What is NOT ported: everything that reaches a service. <c>App.Settings</c>,
-    /// <c>App.Haptics</c>, <c>App.Patreon</c>, <c>App.DailyFree</c> and <c>App.Mods</c> do not
-    /// exist on this head, so <see cref="ApplyProviderSettings"/>, the connect and the test buzz
-    /// are stubs and <see cref="AccentFor"/> uses the WPF fallback hexes. Each is marked.
+    /// The settings half is restored against the seams: the Lovense address seeds from and writes
+    /// back to <see cref="CoreSettings"/>, <see cref="ApplyProviderSettings"/> writes the same v2
+    /// provider flags the WPF original does, and <see cref="AccentFor"/> asks <see cref="CoreMods"/>
+    /// for the accent, so the wizard is now themed by the active mod exactly as on Windows. (The
+    /// colours therefore differ from the pre-seam render: those were WPF's App.Mods-is-null
+    /// fallbacks, which never fired in the real app.)
+    ///
+    /// What is still NOT ported: the device half. <c>App.Haptics</c> (HapticService) and
+    /// <c>PatreonService</c> have no seam in Core, so the connect, the premium gate and the test
+    /// buzz are stubs. Each is marked.
     ///
     /// Strings that the WPF code-behind ASSIGNS to a control carrying <c>{loc:Str}</c> are bound
     /// here instead (<see cref="BindLoc"/>): Avalonia keeps the XAML binding alive under a local
@@ -36,8 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             InitializeComponent();
 
-            // ponytail: needs App.Settings (HapticsSettings.LovenseUrl), wired when it moves to Core.
-            TxtWizardLovenseIp.Text = "";
+            TxtWizardLovenseIp.Text = CoreSettings.Current.Haptics?.LovenseUrl ?? "";
 
             BtnClose.Click += (_, _) => Close();
             BtnSelectLovense.Click += (_, _) => Select(WizardProvider.Lovense);
@@ -81,19 +88,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             UpdateChrome();
         }
 
-        /// <summary>Writes the v2 provider flags plus the Lovense address in the WPF head.</summary>
+        /// <summary>
+        /// Writes the v2 provider flags (the truth the device manager reads) plus the Lovense
+        /// address, and keeps the legacy single-choice enum in step for old code paths. The WPF
+        /// body verbatim, with <c>App.Settings</c> read through <see cref="CoreSettings"/>.
+        /// </summary>
         private void ApplyProviderSettings()
         {
-            // ponytail: needs App.Settings (HapticsSettings.V2 provider flags, LovenseUrl) and
-            // Services.Haptics.HapticProviderType, wired when they move to Core.
+            var settings = CoreSettings.Current.Haptics;
+            if (settings == null) return;
+            settings.EnsureV2Migrated();
+
+            var v2 = settings.V2;
+            switch (_provider)
+            {
+                case WizardProvider.Lovense:
+                    v2.Provider("lovense").Enabled = true;
+                    settings.Provider = HapticProviderType.Lovense;
+                    var typed = (TxtWizardLovenseIp.Text ?? "").Trim();
+                    if (typed.Length > 0) settings.LovenseUrl = typed;   // mirrors into v2 provider url
+                    break;
+                case WizardProvider.Buttplug:
+                    v2.Provider("buttplug").Enabled = true;
+                    settings.Provider = HapticProviderType.Buttplug;
+                    break;
+                case WizardProvider.Mock:
+                    v2.Provider("mock").Enabled = true;
+                    settings.Provider = HapticProviderType.Mock;
+                    break;
+            }
+
+            CoreSettings.Save();
         }
 
         // ------------------------------------------------------------------ page 3
 
         private void BtnConnect_Click()
         {
-            // ponytail: needs App.Haptics (ConnectAsync/ConnectedDevices), App.Patreon and
-            // App.DailyFree for the premium gate, wired when they move to Core. Until then the
+            // ponytail: needs ConditioningControlPanel/Services/Haptics/HapticService.cs
+            // (ConnectAsync/ConnectedDevices) and ConditioningControlPanel/Services/Account/
+            // PatreonService.cs (HasPremiumAccess) for the premium gate - neither has a seam among
+            // the ten in Core, and DailyFreeService alone cannot answer the gate. Until then the
             // page shows a placeholder result so the device-list template is actually exercised.
             // The real handler also has a failure path: ShowResult(false, "wizard_connect_failed",
             // <"wizard_fail_hint_lovense" | "wizard_fail_hint_intiface" | "wizard_fail_hint_generic">,
@@ -127,7 +162,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnWizardTestBuzz_Click()
         {
-            // ponytail: needs App.Haptics (TestAsync), wired when it moves to Core.
+            // ponytail: needs HapticService.TestAsync
+            // (ConditioningControlPanel/Services/Haptics/HapticService.cs); no seam in Core.
             BindLoc(TxtConnectHint, "wizard_test_failed");
         }
 
@@ -166,13 +202,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Dot3.Fill = (int)_page >= 3 ? accent : inactive;
         }
 
+        /// <summary>
+        /// The active mod's accent, through <see cref="CoreMods"/> - what <c>App.Mods</c> answered
+        /// on WPF. Both properties are non-null and swallow provider faults, so there is no null
+        /// branch to keep; unseeded they give the CCP-default hexes.
+        /// </summary>
         private static IBrush AccentFor(WizardProvider provider)
         {
-            // ponytail: needs App.Mods (GetAccentColorHex/GetSecondaryColorHex), wired when it
-            // moves to Core. The hexes are the WPF fallbacks.
-            var hex = provider == WizardProvider.Buttplug ? "#9B59B6" : "#FF69B4";
+            var hex = provider == WizardProvider.Buttplug
+                ? CoreMods.SecondaryColorHex
+                : CoreMods.AccentColorHex;
             try { return new SolidColorBrush(Color.Parse(hex)); }
-            catch { return Brushes.HotPink; }
+            catch (Exception ex)
+            {
+                Log.Debug("HapticsSetupWindow: unparseable accent {Hex}: {E}", hex, ex.Message);
+                return Brushes.HotPink;
+            }
         }
 
         /// <summary>

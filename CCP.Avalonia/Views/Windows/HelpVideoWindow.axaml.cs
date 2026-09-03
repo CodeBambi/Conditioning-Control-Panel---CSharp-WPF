@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -7,6 +8,7 @@ using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -17,11 +19,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///
     /// PORTED from ConditioningControlPanel/Windows/HelpVideoWindow.xaml.cs. Deviations:
     ///  - LibVLCSharp.WPF's VideoView, the MediaPlayer and the whole load/loop/mute/dispose block
-    ///    are gone: they are the WPF head's, hung off Services.VideoService.SharedLibVLC, and no
-    ///    service may move in this layer. StartClip is the ponytail stub below. The fail-soft path
-    ///    the original already had - hidden video surface, caption and link still shown - is
-    ///    exactly what that stub produces, so the window is correct, just always silent.
-    ///  - App.Logger is the head's; the catch blocks swallow as before.
+    ///    are gone: they are the WPF head's, hung off
+    ///    ConditioningControlPanel/Services/Video/VideoService.cs (SharedLibVLC), and there is no
+    ///    Avalonia video surface on this head. Everything up to the player - resolving the clip
+    ///    path and proving the file exists - is restored, so StartClip takes the fail-soft branch
+    ///    the original already had: hidden video surface, caption and link still shown.
+    ///  - App.Logger becomes Serilog's static Log, as everywhere else on this head.
     ///  - DragMove() -> BeginMoveDrag(e); PreviewKeyDown -> KeyDown (tunnelling has no twin, and
     ///    nothing in this window consumes Escape first).
     ///
@@ -33,6 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // already open, exactly as the WPF original did to keep two players off the box.
         private static HelpVideoWindow? _current;
 
+        private readonly string? _clipPath;
         private readonly string? _fullTutorialUrl;
         private readonly string? _whatItDoes;
         private bool _captionShown;
@@ -101,13 +105,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 btnFullTutorial.IsVisible = true;
             }
 
+            if (content.HasClip)
+            {
+                _clipPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                    "Resources", "tutorial_videos", content.ClipFile!);
+            }
+
             // Handlers live here rather than in markup, per the porting convention.
             btnFullTutorial.Click += (_, _) => BtnFullTutorial_Click();
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
             this.FindControl<Border>("Titlebar")!.PointerPressed += Titlebar_PointerPressed;
             KeyDown += OnKeyDown;
 
-            StartClip(content);
+            StartClip();
         }
 
         /// <summary>
@@ -124,9 +134,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _current = win;
                 if (owner is not null) win.Show(owner); else win.Show();
             }
-            catch
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger, wired when logging moves to Core
+                Log.Error(ex, "HelpVideoWindow: failed to open");
             }
         }
 
@@ -153,13 +163,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _captionShown = true;
         }
 
-        private void StartClip(HelpContent content)
+        private void StartClip()
         {
-            // ponytail: needs Services.VideoService (LibVLC) and an Avalonia video surface, wired
-            // when the player moves to Core. Until then this takes the fail-soft branch the WPF
-            // original already had for a missing clip: video surface stays hidden, caption and
-            // link still show. VideoContainer is IsVisible="False" in the markup.
-            _ = content;
+            // Fail soft: no clip configured, or file missing -> leave video hidden. Restored from
+            // the WPF original, which logged a Warning here because an absent clip meant a
+            // misconfigured topic. On this head it is the steady state - Resources/tutorial_videos
+            // is Content in the WPF head and is never laid down beside CCP.Avalonia - so Debug,
+            // not a Warning a triager has to learn to ignore.
+            if (string.IsNullOrEmpty(_clipPath) || !File.Exists(_clipPath))
+            {
+                if (!string.IsNullOrEmpty(_clipPath))
+                    Log.Debug("HelpVideoWindow: clip not found: {Path}", _clipPath);
+                ShowWhatItDoesFallback();
+                return;
+            }
+
+            // ponytail: playback itself needs LibVLCSharp.WPF's VideoView plus
+            // ConditioningControlPanel/Services/Video/VideoService.cs (SharedLibVLC) - both WPF
+            // head-side, and this head has no video surface to parent a player into. So a clip
+            // that IS on disk still takes the WPF "LibVLC not available" branch, which is this
+            // same fail-soft: surface hidden (VideoContainer is IsVisible="False" in the markup),
+            // caption and link shown.
+            Log.Debug("HelpVideoWindow: no video surface on this head; hiding video for {Path}", _clipPath);
             ShowWhatItDoesFallback();
         }
 
@@ -170,9 +195,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Process.Start(new ProcessStartInfo(_fullTutorialUrl) { UseShellExecute = true });
             }
-            catch
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger, wired when logging moves to Core
+                Log.Error(ex, "HelpVideoWindow: failed to open tutorial url {Url}", _fullTutorialUrl);
             }
         }
 
@@ -194,8 +219,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         protected override void OnClosed(EventArgs e)
         {
             // Drop the single-instance reference if it points at us (whether we were closed by the
-            // user or superseded by a newer help video). The WPF player teardown that followed has
-            // no counterpart until StartClip is wired.
+            // user or superseded by a newer help video). The WPF player teardown that followed
+            // (VideoView detach, MediaPlayer stop/dispose, Media dispose) has nothing to tear down
+            // here - StartClip never builds one.
             if (ReferenceEquals(_current, this)) _current = null;
             base.OnClosed(e);
         }

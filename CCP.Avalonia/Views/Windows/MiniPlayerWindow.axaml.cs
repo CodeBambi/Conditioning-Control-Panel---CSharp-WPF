@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -15,14 +16,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///
     /// PORTED from ConditioningControlPanel/Windows/MiniPlayerWindow.xaml.cs. Deviations:
     ///  - LibVLCSharp.WPF (VideoView/MediaPlayer/Media) and XamlAnimatedGif are both WPF-only
-    ///    packages, and Services.VideoService.SharedLibVLC still lives in the WPF head. So
-    ///    LoadVideo, LoadGif's animation, the position timer, seeking and play/pause are stubs;
+    ///    packages, and SharedLibVLC lives in ConditioningControlPanel/Services/Video/VideoService.cs.
+    ///    So LoadVideo, LoadGif's animation, the position timer, seeking and play/pause are stubs;
     ///    each is marked. Everything that is view-only - the chrome, the drag, Escape/Space/
     ///    arrow key routing, the play glyph, the time formatting - is ported for real.
     ///  - LoadImage IS real: Avalonia's Bitmap loads from a path with no WPF dependency, and a
     ///    GIF falls back to its first frame through it, exactly as the WPF catch block did.
     ///  - MessageBox.Show has no Avalonia equivalent and no package may be added; the failure
-    ///    paths log to the console and close, which is what the user saw anyway.
+    ///    paths log through Serilog and close, which is the same outcome the user saw.
     ///  - PreviewMouseDown/Up become plain PointerPressed/PointerReleased. The tunnelling pass
     ///    existed to beat the Thumb to the event; Avalonia's Slider raises these on the way out
     ///    too, and the flag they set is only read by the position timer.
@@ -70,7 +71,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             PointerPressed += Window_PointerPressed;
             KeyDown += Window_KeyDown;
 
-            // ponytail: placeholder state, needs Services.VideoService (LibVLC) to move to Core.
+            // ponytail: placeholder state, for the same missing player LoadVideo names
+            // (SharedLibVLC in ConditioningControlPanel/Services/Video/VideoService.cs).
             // Without it nothing ever calls LoadFile here, and an all-collapsed window renders as
             // a black rectangle that proves nothing. This is the state LoadVideo leaves behind
             // one line in - overlay up, transport visible - so --render-view draws the real
@@ -114,11 +116,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void LoadVideo(string filePath)
         {
-            // ponytail: needs Services.VideoService.SharedLibVLC plus a non-WPF VideoView, wired
-            // when it moves to Core. The WPF original built a MediaPlayer here, hung Playing/
-            // Paused/EndReached/LengthChanged off it, parented a VideoView into VideoContainer
-            // and started a 100ms DispatcherTimer to drive SeekSlider. Until then the window
-            // shows the transport in its loading state and nothing plays.
+            // ponytail: needs SharedLibVLC from ConditioningControlPanel/Services/Video/VideoService.cs
+            // plus a non-WPF video surface to parent a player into; neither exists on this head.
+            // The WPF original built a MediaPlayer here, hung Playing/Paused/EndReached/
+            // LengthChanged off it, parented a VideoView into VideoContainer and started a 100ms
+            // DispatcherTimer to drive SeekSlider.
+            //
+            // This IS the WPF "libVLC == null" branch, which said so and closed the window. It is
+            // kept open instead so the transport draws for --render-view; the spinner therefore
+            // never resolves and nothing plays.
+            Log.Warning("MiniPlayerWindow: {Msg} ({Path})",
+                Loc.Get("msg_video_playback_not_available_libvlc_not_initi"), filePath);
             _videoContainer.IsVisible = true;
             _loadingOverlay.IsVisible = true;
             _videoControls.IsVisible = true;
@@ -129,9 +137,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void LoadGif(string filePath)
         {
-            // ponytail: needs an Avalonia GIF animator (XamlAnimatedGif is WPF-only). The WPF
-            // original set AnimationBehavior's SourceUri/AutoStart/RepeatBehavior here and fell
-            // back to LoadImage on failure - which is the still first frame, so take it directly.
+            // ponytail: needs an animated-GIF renderer; XamlAnimatedGif is WPF-only and Avalonia
+            // 12 has none built in, so this would be a new package - out of scope for a view layer.
+            // The WPF original set AnimationBehavior's SourceUri/AutoStart/RepeatBehavior here and
+            // fell back to LoadImage on failure - the still first frame - so take that directly.
             LoadImage(filePath);
         }
 
@@ -147,15 +156,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             catch (Exception ex)
             {
-                // ponytail: needs App.Logger and a message box, both still in the WPF head.
-                Console.Error.WriteLine("MiniPlayerWindow: Failed to load image: " + ex.Message);
+                // WPF also showed a MessageBox; this head has no stand-in, so the log is the
+                // whole report. Closing is the WPF behaviour and is what matters to the user.
+                Log.Error(ex, "MiniPlayerWindow: Failed to load image");
                 Close();
             }
         }
 
         private void UpdateTimeDisplay()
         {
-            // ponytail: needs the MediaPlayer for Time/Length; the format is the WPF one verbatim.
+            // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its note) for
+            // Time/Length; the format is the WPF one verbatim.
             var current = TimeSpan.Zero;
             var total = TimeSpan.Zero;
 
@@ -164,8 +175,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void TogglePlayPause()
         {
-            // ponytail: needs the MediaPlayer to Pause()/Play(); the glyph swap is the view half
-            // of the WPF Playing/Paused handlers and is kept so the button is not inert.
+            // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its note) to
+            // Pause()/Play(); the glyph swap is the view half of the WPF Playing/Paused handlers
+            // and is kept so the button is not inert.
             _isPlaying = !_isPlaying;
             _btnPlayPause.Content = _isPlaying ? "⏸" : "▶";
         }
@@ -181,7 +193,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void SeekToSliderPosition()
         {
-            // ponytail: needs the MediaPlayer; Position is a 0-1 float of SeekSlider.Value / 100.
+            // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its note);
+            // Position is a 0-1 float of SeekSlider.Value / 100.
             _ = Math.Clamp(_seekSlider.Value / 100.0, 0.0, 1.0);
         }
 
@@ -206,11 +219,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     e.Handled = true;
                     break;
                 case Key.Left:
-                    // ponytail: needs the MediaPlayer - this was Time -= 5000ms.
+                    // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its
+                    // note) - this was Time -= 5000ms.
                     e.Handled = true;
                     break;
                 case Key.Right:
-                    // ponytail: needs the MediaPlayer - this was Time += 5000ms, clamped to Length.
+                    // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its
+                    // note) - this was Time += 5000ms, clamped to Length.
                     e.Handled = true;
                     break;
             }

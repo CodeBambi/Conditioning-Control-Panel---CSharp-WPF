@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Avalonia.Controls;
@@ -9,6 +10,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -139,18 +141,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void LoadRandomCard()
         {
-            // ponytail: needs ModResourceResolver.ResolveImage, wired when it moves to Core. Nothing
-            // resolves a card yet, so the host Border collapses - which is the WPF null path, not a
-            // blank plate. CardImages is kept because the mod path names are the compat surface.
+            // ponytail: needs ConditioningControlPanel/Services/ModResourceResolver.cs
+            // (ResolveImage), which is WPF head-side - it returns a System.Windows.Media.ImageSource
+            // and reads App.LiveEvent / App.Mods - AND Cards/*.png, which CCP.Avalonia.csproj does
+            // not link as an AvaloniaResource. Nothing resolves a card, so the host Border
+            // collapses: that is the WPF null path, not a blank plate. CardImages stays because the
+            // mod path names are the compat surface.
             _ = CardImages;
             this.FindControl<Border>("CardBorder")!.IsVisible = false;
         }
 
+        /// <summary>
+        /// The WPF body verbatim, against the seams: <c>App.Settings.Current</c> is
+        /// <see cref="CoreSettings.Current"/> and <c>App.Audio</c> is <see cref="CoreAudio"/>.
+        /// Silent on this head for two reasons that are both the WPF no-op branch: the sound files
+        /// are Content in the WPF head and are not laid down beside CCP.Avalonia, so every probe
+        /// misses; and nothing seeds <c>CoreAudio.PlayOneShotProvider</c> here, so the seam fires
+        /// its finished callback and returns.
+        /// </summary>
         private void PlayCompletionSound()
         {
-            // ponytail: needs App.Audio + App.Settings.Current.MasterVolume, wired when they move to
-            // Core. The WPF version probes Resources/sounds/lvup.mp3 and friends and plays a
-            // volume-curved one-shot.
+            try
+            {
+                var soundPaths = new[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "lvup.mp3"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "lvlup.mp3"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "lvlup.mp3"),
+                };
+
+                var soundPath = soundPaths.FirstOrDefault(File.Exists);
+                if (soundPath != null)
+                {
+                    var masterVolume = CoreSettings.Current.MasterVolume / 100f;
+                    var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
+                    CoreAudio.PlayOneShot(soundPath, Math.Max(0.01f, curvedVolume), "session-complete");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to play completion sound");
+            }
         }
 
         private void MediaRow_Click(object? sender, RoutedEventArgs e)
@@ -158,10 +189,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (e.Source is not Control c) return;
             if (c.Tag as string is not { Length: > 0 } path) return;
 
-            // ponytail: needs Helpers.ExplorerLauncher.RevealInExplorer (Win32 shell) plus a
-            // MessageBox for the "file is gone" case, wired when a portable file-reveal lands in
-            // Core. Until then the row is inert rather than opening the wrong thing.
-            _ = path;
+            try
+            {
+                // WPF's Helpers/ExplorerLauncher.cs SELECTS the file in Explorer (a Win32 shell
+                // call, head-only). The portable half of that is opening the containing folder,
+                // which is what every other opener on this head does.
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                {
+                    Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                    return;
+                }
+
+                // Neither the file nor its folder survived (#998). WPF said so in a MessageBox;
+                // this head has no MessageBox stand-in, so it is logged.
+                Log.Information("SessionCompleteWindow: media file and its folder are both gone: {Path}", path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "SessionCompleteWindow: failed to open file location {Path}", path);
+            }
         }
 
         /// <summary>The one close path, kept from the WPF original.</summary>
