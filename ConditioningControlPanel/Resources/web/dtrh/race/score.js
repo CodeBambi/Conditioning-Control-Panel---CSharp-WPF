@@ -14,12 +14,17 @@
  *                                      FULL_CIRCLE_POPS or more inverted pops pays the "full circle"
  *   trick(points, name)                a ramp trick: points * mult, emits `trick`
  *   drainNotes()                       the HUD lines onScore cannot phrase itself ([{text, kind, mood, sfx}])
+ *   lap(sec) -> {sec, text, pb, best, prevBest}   a timed lap from kart.js; best lap kept in localStorage
+ *   pace(frac, sec)                    a quarter split; on best-lap pace state.hotlap goes true, and the
+ *                                      first golden popped while hot pays "hot lap" (once a lap)
  * ==========================================================================*/
 
 import { MULT_LADDER, COMBO_HOLD_SEC } from './consts.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
 
 const BEST_KEY = 'race.best';
+const BEST_LAP_KEY = 'race.bestLap';
+const HOT_LAP_BONUS = 100, HOT_LAP_SLACK_SEC = 0.15;
 const NEAR_MISS_POINTS = 25;
 const JACKPOT_COMBOS = [25, 50, 100];           // combo rungs that fire a major jackpot on their own
 const JACKPOT_BONUS = { minor: 100, major: 250, royal: 1000 };
@@ -29,11 +34,21 @@ const ladderMult = (combo) => { let m = 1; for (const [at, mult] of MULT_LADDER)
 const ladderStep = (combo) => MULT_LADDER.some(([at]) => at === combo && at > 0);
 function loadBest() { try { const v = Number(localStorage.getItem(BEST_KEY)); return isFinite(v) && v > 0 ? v : 0; } catch (e) { return 0; } }
 function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* private mode */ } }
+function loadBestLap() { try { const v = Number(localStorage.getItem(BEST_LAP_KEY)); return isFinite(v) && v > 0 ? v : 0; } catch (e) { return 0; } }
+function saveBestLap(v) { try { localStorage.setItem(BEST_LAP_KEY, String(v)); } catch (e) { /* private mode */ } }
+/** "1:42.3" (minutes only when there are any). */
+export function fmtLap(sec) {
+  sec = Math.max(0, Number(sec) || 0);
+  const m = Math.floor(sec / 60), s = sec - m * 60;
+  return m > 0 ? `${m}:${s.toFixed(1).padStart(4, '0')}` : s.toFixed(1);
+}
 
 export function createScore() {
   const state = { score: 0, combo: 0, mult: 1, bank: 0, banked: 0, best: loadBest(),
     popped: 0, treats: 0, effects: 0, nearMisses: 0, bestCombo: 0,
-    inverted: false, invertedPops: 0, tricks: 0, trickPoints: 0 };
+    inverted: false, invertedPops: 0, tricks: 0, trickPoints: 0,
+    laps: 0, lastLap: 0, bestLap: loadBestLap(), hotlap: false };
+  let hotPaid = false;   // the hot lap note, once a lap
   const notes = [];
   const note = (text, kind = 'pop', mood = null, sfx = null) => { notes.push({ text, kind, mood, sfx }); };
   let hold = 0;          // seconds of combo left before it lets go
@@ -73,6 +88,12 @@ export function createScore() {
     state.score += gain + bonus; state.popped++;
     if (k && k.kind === 'effect') state.effects++; else state.treats++;
     if (inverted) { state.invertedPops++; if (bonus > 0) note(`upside down +${bonus}`, 'pop'); }
+    if (state.hotlap && !hotPaid && kindId === 'golden') {
+      hotPaid = true;
+      const hot = Math.round(HOT_LAP_BONUS * state.mult);
+      state.score += hot;
+      note(`hot lap +${hot}`, 'jackpot', 'smug', 'streak_milestone');
+    }
     emit({ type: 'pop', kindId, points, gain, bonus, inverted, combo: state.combo, mult: state.mult, score: state.score });
     emit({ type: 'combo', combo: state.combo, step, mult: state.mult, hold });
     if (JACKPOT_COMBOS.includes(state.combo)) jackpot('major');
@@ -90,6 +111,23 @@ export function createScore() {
       note(`full circle +${gain}`, 'jackpot', 'jackpot', 'golden_pop');
       emit({ type: 'fullCircle', gain, pops: state.invertedPops, score: state.score });
     }
+  }
+  /** A timed lap: the best lap lives next to the best score. Never a penalty for a slow one. */
+  function lap(sec) {
+    sec = Number(sec) || 0;
+    const prevBest = state.bestLap;
+    const pb = sec > 0 && (prevBest === 0 || sec < prevBest);
+    if (pb) { state.bestLap = sec; saveBestLap(sec); }
+    state.laps++; state.lastLap = sec; state.hotlap = false; hotPaid = false;
+    const r = { sec, text: fmtLap(sec), pb, best: state.bestLap, prevBest };
+    emit({ type: 'lap', lap: state.laps, ...r });
+    return r;
+  }
+  /** A quarter split at `frac` of the lap, `sec` in: hot when on best-lap pace. */
+  function pace(frac, sec) {
+    frac = Number(frac) || 0; sec = Number(sec) || 0;
+    state.hotlap = state.bestLap > 0 && frac > 0 && sec <= state.bestLap * frac + HOT_LAP_SLACK_SEC;
+    return state.hotlap;
   }
   /** A ramp trick landed in the ledger: points * mult, never a combo step (the pops own the ladder). */
   function trick(points, name) {
@@ -134,12 +172,12 @@ export function createScore() {
   function reset() {
     touchBest();
     Object.assign(state, { score: 0, combo: 0, mult: 1, bank: 0, banked: 0, popped: 0, treats: 0, effects: 0, nearMisses: 0, bestCombo: 0,
-      inverted: false, invertedPops: 0, tricks: 0, trickPoints: 0 });
-    hold = 0; freezeSec = 0; boost = 1; boostSec = 0; notes.length = 0;
+      inverted: false, invertedPops: 0, tricks: 0, trickPoints: 0, laps: 0, lastLap: 0, hotlap: false });
+    hold = 0; freezeSec = 0; boost = 1; boostSec = 0; notes.length = 0; hotPaid = false;
   }
 
   return {
-    state, pop, miss, nearMiss, bank, jackpot, tick, reset, setInverted, trick,
+    state, pop, miss, nearMiss, bank, jackpot, tick, reset, setInverted, trick, lap, pace,
     onEvent(cb) { if (typeof cb === 'function') cbs.push(cb); },
     /** Pending HUD notes (upside down, full circle, ...), oldest first; the queue empties. */
     drainNotes() { return notes.splice(0, notes.length); },
@@ -169,8 +207,14 @@ if (typeof process !== 'undefined' && process.env && process.env.RACE_SELFCHECK)
   s.setInverted(true); const g = s.pop(10, 'treat'); console.assert(g === 20 && s.state.score === 20, 'inverted pop doubles');
   s.pop(10, 'treat'); s.pop(10, 'treat'); s.setInverted(false);
   console.assert(s.state.score === 20 + 40 + 40 + 300 * 2 && ev.includes('fullCircle'), 'full circle');
-  console.assert(s.drainNotes().map((n) => n.text).join('|') === 'upside down +20|upside down +40|upside down +40|full circle +600' && s.drainNotes().length === 0, 'notes drain once');
+  console.assert(s.drainNotes().map((n) => n.text).join('|') === 'upside down +10|upside down +20|upside down +20|full circle +600' && s.drainNotes().length === 0, 'notes drain once');
   console.assert(s.pop(10, 'treat', { inverted: true }) === 40 && s.pop(10, 'treat') === 20, 'opts.inverted overrides');
   console.assert(s.trick(150, 'spin left') === 300 && s.state.tricks === 1, 'trick pays points * mult');
+  // laps: the first is a pb by definition, a faster one is a pb, a slower one is not; hot lap pays once
+  const l1 = s.lap(102.3), l2 = s.lap(101.0), l3 = s.lap(140);
+  console.assert(l1.pb && l1.prevBest === 0 && l2.pb && !l3.pb && s.state.bestLap === 101 && l1.text === '1:42.3' && fmtLap(59.96) === '60.0', 'laps + pb');
+  console.assert(s.pace(0.5, 50.5) === true && s.state.hotlap && s.pace(0.75, 80) === false, 'pace: hot at half, cold at three quarters');
+  s.pace(0.75, 75.5); s.drainNotes(); const sc = s.state.score; s.pop(50, 'golden'); s.pop(50, 'golden');
+  console.assert(s.drainNotes().filter((n) => n.text.startsWith('hot lap')).length === 1 && s.state.score >= sc + 300, 'hot lap once a lap');
   console.log('score.js self-check ok', s.state);
 }

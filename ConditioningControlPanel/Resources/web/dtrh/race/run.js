@@ -307,6 +307,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'trick': { const g = w.score.trick(e.points, e.name); hud.toast(`${e.name} +${g}`, 'pop'); sfx('chain_pop', 0.8); poke('smug', 0.6); break; }
       case 'landing': if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost'); if (e.clean) sfx('surface', 0.5); } break;
       case 'inverted': w.score.setInverted(e.on); if (e.on) { hud.toast('upside down', 'effect'); poke('shock', 0.8); } break;
+      case 'lap': { const r = w.score.lap(e.sec); hud.toast(`lap ${r.text}`, 'item'); if (r.pb && r.prevBest > 0) { hud.toast('pb!', 'jackpot'); sfx('pb_fanfare', 0.9); poke('jackpot', 1.5); } break; }
+      case 'split': w.score.pace(e.frac, e.sec); break;
     }
   }
 

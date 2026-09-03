@@ -11,6 +11,8 @@
 //   { type:'trick', name, points, streak }   a ramp trick was thrown (one per launch): 'spin left' | 'spin right' | 'backflip'
 //   { type:'landing', clean, trick, streak } touched down; clean = not on the kerb; a clean trick landing boosts
 //   { type:'inverted', on }           roll past 120 degrees (inside THE BIG WHEEL) began / ended; state.inverted mirrors it
+//   { type:'lap', lap, sec }          the Tea Garden gate crossed again: a timed lap (the first crossing only starts the clock)
+//   { type:'split', frac, sec }       a quarter mark of the lap (0.25 / 0.5 / 0.75) passed at `sec` into the lap
 
 import * as THREE from 'three';
 import {
@@ -85,6 +87,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     boostSec: 0, slowMult: 1, slowSec: 0, lap: 0,
     driftSec: 0, driftTier: 0, scrub: false,
     inverted: false, roll: 0, trick: null, trickStreak: 0,
+    lapSec: 0, lapsTimed: 0,
   };
   const rig = createEmiRig({ scene, reducedMotion });
   const group = rig.group;
@@ -104,6 +107,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
   let vx = 0, lean = 0, pitch = 0, elapsed = 0, lastRampD = -1, driftSide = 1, camReady = false, camX = 0, camH = 0;
   let camBoost = 0, steerS = 0, hopT = 0, scrubSec = 0, sparkAcc = 0, driftWas = false;
   let airWas = false, steerWas = 0, trickArmed = false, trickKind = null, trickDir = 1, trickT = 1;
+  let gateLay = null, gateD = 0, lapTimed = false, lapMark = 0;
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
   const ctx = { t: 0, up: _up, right: _right, tangent: _fwd, speedNorm: 0, airborne: false, steerVel: 0, drift: false, driftSide: 1, driftTier: 0 };
   const listeners = [];
@@ -248,6 +252,29 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     airWas = state.airborne; steerWas = inp.steer;
   }
 
+  /** The lap clock runs gate to gate (the Tea Garden gate in chunk 0; d = 0 when a layout has none). */
+  function gateFor(lay, atD) {
+    if (lay !== gateLay) {
+      const c = lay.chunks && lay.chunks[0], g = c && c.features && c.features.find((f) => f.type === 'gate');
+      gateLay = lay; gateD = g ? g.d : 0;
+      if (Math.abs(atD - gateD) < 1e-6) { lapTimed = true; state.lapSec = 0; lapMark = 0; }   // spawned on the gate: the clock runs from here
+    }
+    return gateD;
+  }
+  function stepLaps(dt, lay, prevD) {
+    const g = gateFor(lay, prevD);
+    if (lapTimed) state.lapSec += dt;
+    const crossed = prevD <= state.d ? (g > prevD && g <= state.d) : (g > prevD || g <= state.d);
+    if (crossed) {
+      if (lapTimed) { state.lapsTimed++; emit({ type: 'lap', lap: state.lapsTimed, sec: state.lapSec }); }
+      lapTimed = true; state.lapSec = 0; lapMark = 0;
+      return;
+    }
+    if (!lapTimed) return;
+    const prog = lay.wrap(state.d - g) / lay.totalDepth;
+    for (const f of [0.25, 0.5, 0.75]) if (prog >= f && lapMark < f) { lapMark = f; emit({ type: 'split', frac: f, sec: state.lapSec }); }
+  }
+
   function stepTierSparks(dt) {
     if (!tierSparks) return;
     const on = state.drift && state.driftTier > 0 && !state.airborne;
@@ -335,6 +362,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     state.d = d;
     stepRamps(dt, lay, prevD);
     stepTricks(dt, inp, driftPress);
+    stepLaps(dt, lay, prevD);
     place(lay, stepHop(dt));
     stepCamera(dt, lay);
     stepTierSparks(dt);
