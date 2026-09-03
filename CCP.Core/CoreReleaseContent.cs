@@ -24,6 +24,41 @@ namespace ConditioningControlPanel
         public static volatile Func<string, InstalledPackStamp?>? StampProvider;
         public static volatile Func<string, ContentPackInfo?>? PackInfoProvider;
 
+        /// <summary>
+        /// The running build's version string and its patch notes. Every head seeds both: the
+        /// Windows head from <c>UpdateService</c> (the hardcoded release constants the installer
+        /// flow keys on), the Avalonia head from its own assembly. Core cannot read the version
+        /// itself - <c>Assembly.GetEntryAssembly()</c> is the head, or null when hosted, and
+        /// <c>typeof(X).Assembly</c> changes meaning the moment a type moves - so an unseeded
+        /// head answers "0.0.0" and no notes rather than reporting the engine's own identity as
+        /// the app's.
+        /// </summary>
+        public static volatile Func<string?>? AppVersionProvider;
+        public static volatile Func<string?>? PatchNotesProvider;
+
+        public static string AppVersion
+        {
+            get
+            {
+                try
+                {
+                    var seeded = AppVersionProvider?.Invoke();
+                    if (!string.IsNullOrWhiteSpace(seeded)) return seeded!;
+                }
+                catch { /* fall through to the unseeded answer */ }
+                return "0.0.0";
+            }
+        }
+
+        /// <summary>Empty when no head has seeded notes; never null.</summary>
+        public static string PatchNotes
+        {
+            get
+            {
+                try { return PatchNotesProvider?.Invoke() ?? ""; } catch { return ""; }
+            }
+        }
+
         public static InstalledPackStamp? GetStampFor(string packId)
         {
             try { return StampProvider?.Invoke(packId); } catch { return null; }

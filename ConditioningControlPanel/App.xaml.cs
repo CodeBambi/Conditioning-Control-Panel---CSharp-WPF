@@ -294,6 +294,10 @@ namespace ConditioningControlPanel
             // The downloadable packs: the pack service seeds what the mod service reads.
             CoreReleaseContent.StampProvider = ReleaseContentService.GetStampFor;
             CoreReleaseContent.PackInfoProvider = id => ReleaseContent?.GetPackInfo(id);
+            // The build's own release identity, for the views (Settings ▸ Updates, phrase-backup
+            // stamps) that need a version string or the installed build's notes and nothing else.
+            CoreReleaseContent.AppVersionProvider = () => Services.UpdateService.AppVersion;
+            CoreReleaseContent.PatchNotesProvider = () => Services.UpdateService.CurrentPatchNotes;
             // Audio and AI availability, for the views that only need to play a sound or duck,
             // and for the engine code that shapes content by whether an AI provider is usable.
             CoreAudio.PlayOneShotProvider = (path, volume, tag, onStarted, onFinished) => Audio?.PlayOneShot(path, volume, tag, onStarted, onFinished);

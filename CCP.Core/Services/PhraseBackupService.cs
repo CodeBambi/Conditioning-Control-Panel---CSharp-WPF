@@ -74,7 +74,7 @@ namespace ConditioningControlPanel.Services
             {
                 ["schema"] = Schema,
                 ["exported_at"] = DateTime.UtcNow.ToString("o"),
-                ["app_version"] = Services.UpdateService.AppVersion,
+                ["app_version"] = CoreReleaseContent.AppVersion,
                 ["phrases"] = phrases,
             };
 

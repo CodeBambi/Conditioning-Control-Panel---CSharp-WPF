@@ -46,6 +46,13 @@ namespace ConditioningControlPanel.Avalonia
                 // out one default instance, which is what the renders bind against.
                 Settings = new SettingsService();
                 CoreSettings.ServiceProvider = () => Settings;
+
+                // Core cannot read the running build's version - the entry assembly is whichever
+                // head started the process, and Core is not it. Reading the version is a head job,
+                // so this head reports its own; unseeded, CoreReleaseContent answers "0.0.0".
+                var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                CoreReleaseContent.AppVersionProvider = () =>
+                    version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
                 desktop.MainWindow = new Views.Windows.MainShellWindow();
             }
             base.OnFrameworkInitializationCompleted();
