@@ -1,0 +1,304 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/LoginDialog.xaml.
+     Structure, ordering, spacing and every x:Name / resource key preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       WindowStyle="None" / AllowsTransparency="True" -> SystemDecorations="None" /
+                                                         TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                          -> CanResize="False"
+       Visibility="Collapsed"                         -> IsVisible="False"
+       MouseLeftButtonDown="…"                        -> PointerPressed, wired in the constructor
+       Click="…"                                      -> wired in the constructor
+       helpers:EmojiTextBlock                         -> TextBlock (Avalonia renders colour emoji
+                                                         natively; see CLAUDE.md)
+       PasswordBox                                    -> TextBox PasswordChar="●" (Avalonia has no
+                                                         PasswordBox; .Password becomes .Text)
+       TextBox CharacterCasing="Upper"                -> a TextChanged handler in code-behind
+                                                         (Avalonia's TextBox has no CharacterCasing)
+       FontFamily="Consolas, Courier New"             -> + ", monospace" (Linux fallback, as the
+                                                         other ported views do)
+       Cursor="IBeam"                                 -> Cursor="Ibeam" (Avalonia's spelling)
+       Content="{loc:Str …}"                          -> a <TextBlock> child (Avalonia parses "_" in
+                                                         Content as an access key and every loc key
+                                                         here is snake_case - CLAUDE.md trap 1)
+
+     Fluent's Button is content-sized and left-aligned where WPF's stretched, so the five provider
+     buttons gained HorizontalAlignment="Stretch" + HorizontalContentAlignment="Center".
+
+     The TxtAccountToggle Runs sit on one line with an explicit <Run Text=" "/> between them:
+     Avalonia drops the inter-element whitespace WPF kept, which is the same gap the WPF
+     code-behind added by hand ( + " " ) when it rebuilt the inlines. The code-behind rebinds
+     those two Runs by index rather than rebuilding Inlines, and the hardcoded colours it used
+     (#B0B0B0 / #FF69B4) become the theme keys they were copies of.
+
+     BtnAccountSubmit's label gained x:Name TxtAccountSubmitLabel, and TxtAccountToggle's two
+     clickable siblings gained x:Names (BtnAccountBack, BtnDeviceCodeCancel), because handlers and
+     the key swaps are wired in code-behind.
+
+     Every string is a loc key copied verbatim from the WPF XAML; the literal English strings in
+     the SubscribeStar and device-code blocks were literals there too and stay literals here. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.LoginDialog"
+        Title="{loc:Str btn_login}" Height="560" Width="420"
+        WindowStartupLocation="CenterOwner" CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}"
+        SystemDecorations="None" TransparencyLevelHint="Transparent">
+
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" CornerRadius="10">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <TextBlock Text="{loc:Str login_welcome}"
+                           FontSize="28" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="{loc:Str login_choose_method}"
+                           FontSize="13" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <!-- Provider Selection (Initial State) -->
+            <StackPanel x:Name="ProviderPanel" Grid.Row="2" VerticalAlignment="Center">
+                <Button x:Name="BtnLoginDiscord"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#5865F2" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str label_text_6}" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="{loc:Str login_discord}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="BtnLoginPatreon"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#FF424D" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str label_text_7}" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="{loc:Str login_patreon}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="BtnLoginSubscribeStar"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#009E8F" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="★" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="Login with SubscribeStar" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="BtnLoginAccount"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="{DynamicResource AccentTintedBgBrush}" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str label_text_3}" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="{loc:Str login_anonymous}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- SP3: Sign in via Web (device-code flow). -->
+                <Button x:Name="BtnLoginDeviceCode"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#9333EA" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Sign in via Web" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+            </StackPanel>
+
+            <!-- Account Login/Register Panel -->
+            <StackPanel x:Name="AccountPanel" Grid.Row="2" IsVisible="False" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtAccountTitle" Text="{loc:Str btn_login}"
+                           FontSize="16" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+                <!-- Invite code field (register mode only) -->
+                <TextBlock x:Name="LblInviteCodeHint"
+                           Text="{loc:Str label_for_an_invite_code_please_ask_a_discord_mod_a}"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"
+                           IsVisible="False"/>
+                <TextBlock x:Name="LblInviteCode" Text="{loc:Str login_invite_code}"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"
+                           IsVisible="False"/>
+                <TextBox x:Name="TxtInviteCode" FontSize="14" Padding="10,8"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                         MaxLength="8" HorizontalAlignment="Stretch" IsVisible="False"/>
+
+                <!-- Display name field (login mode only) -->
+                <TextBlock x:Name="LblDisplayName" Text="{loc:Str login_display_name}"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"
+                           IsVisible="False"/>
+                <TextBox x:Name="TxtLoginDisplayName" FontSize="14" Padding="10,8"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                         MaxLength="30" HorizontalAlignment="Stretch" IsVisible="False"/>
+
+                <!-- Password -->
+                <TextBlock x:Name="LblPassword" Text="{loc:Str login_password}"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,10,0,4"/>
+                <TextBox x:Name="TxtPassword" FontSize="14" Padding="10,8" PasswordChar="●"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                         MaxLength="128"/>
+
+                <!-- Confirm password (register mode only) -->
+                <TextBlock x:Name="LblPasswordConfirm" Text="{loc:Str login_confirm_password}"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,10,0,4"
+                           IsVisible="False"/>
+                <TextBox x:Name="TxtPasswordConfirm" FontSize="14" Padding="10,8" PasswordChar="●"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                         MaxLength="128" IsVisible="False"/>
+
+                <TextBlock x:Name="TxtAccountError" FontSize="11" Margin="0,8,0,0"
+                           Foreground="Orange" Text="" TextWrapping="Wrap"
+                           HorizontalAlignment="Center"/>
+
+                <Button x:Name="BtnAccountSubmit"
+                        Padding="30,12" Margin="0,15,0,0"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                        Cursor="Hand" HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtAccountSubmitLabel" Text="{loc:Str btn_login}"/>
+                </Button>
+
+                <TextBlock x:Name="TxtAccountToggle" Margin="0,12,0,0"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Cursor="Hand"><Run Text="{loc:Str label_don_t_have_an_account}"/><Run Text=" "/><Run Text="{loc:Str btn_create_account}" Foreground="{DynamicResource PinkBrush}" TextDecorations="Underline"/></TextBlock>
+
+                <TextBlock x:Name="BtnAccountBack" Text="{loc:Str btn_back}" Margin="0,10,0,0"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Cursor="Hand"/>
+            </StackPanel>
+
+            <!-- Username Entry Panel (for new accounts) -->
+            <StackPanel x:Name="UsernamePanel" Grid.Row="2" IsVisible="False" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtUsernameTitle" Text="{loc:Str label_choose_your_display_name}"
+                           FontSize="16" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                <TextBlock x:Name="TxtUsernameSubtitle" Text="{loc:Str label_this_will_be_shown_on_the_leaderboard}"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+                <TextBox x:Name="TxtUsername" FontSize="18" Padding="12,10"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
+                         MaxLength="30"
+                         HorizontalAlignment="Stretch"/>
+
+                <TextBlock x:Name="TxtAvailability" FontSize="11" Margin="0,8,0,0"
+                           Foreground="{DynamicResource TextMutedBrush}" Text="{loc:Str label_enter_a_unique_name_3_30_characters}"
+                           HorizontalAlignment="Center"/>
+
+                <Button x:Name="BtnConfirmUsername"
+                        Padding="30,12" Margin="0,20,0,0"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                        Cursor="Hand" IsEnabled="False"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="{loc:Str btn_confirm}"/>
+                </Button>
+            </StackPanel>
+
+            <!-- Loading Panel -->
+            <StackPanel x:Name="LoadingPanel" Grid.Row="2" IsVisible="False"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtLoadingMessage" Text="{loc:Str login_connecting}"
+                           FontSize="16" Foreground="White" HorizontalAlignment="Center"/>
+                <ProgressBar IsIndeterminate="True" Width="200" Height="4" Margin="0,15,0,0"
+                             Foreground="{DynamicResource PinkBrush}" Background="{DynamicResource AccentTintedBgBrush}"/>
+            </StackPanel>
+
+            <!-- SP3: Device-Code Panel -->
+            <StackPanel x:Name="DeviceCodePanel" Grid.Row="2" IsVisible="False"
+                        VerticalAlignment="Center">
+                <TextBlock Text="Sign in via Web"
+                           FontSize="18" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                <TextBlock Text="We've opened your browser to finish sign-in. Complete it there, then come back to this window. It's okay to leave this open."
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"
+                           TextAlignment="Center"/>
+
+                <TextBlock Text="Your code:"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <Border BorderBrush="#9333EA" BorderThickness="2" CornerRadius="6"
+                        Background="{DynamicResource PanelBgBrush}" Padding="20,12"
+                        HorizontalAlignment="Center" Margin="0,0,0,12">
+                    <TextBlock x:Name="TxtDeviceCode" Text="------"
+                               FontSize="32" FontWeight="Bold" Foreground="White"
+                               FontFamily="Consolas, Courier New, monospace"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+                </Border>
+
+                <!-- Manual fallback: if the browser launch failed, the user can read this URL and
+                     open it themselves. Selectable so they can copy. -->
+                <TextBlock Text="Or open this URL manually:"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtVerificationUrl"
+                         IsReadOnly="True"
+                         BorderThickness="0" Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                         FontSize="12" FontFamily="Consolas, Courier New, monospace"
+                         HorizontalAlignment="Center" Margin="0,0,0,12"
+                         Cursor="Ibeam"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
+                    <Button x:Name="BtnDeviceCodeCopy"
+                            Padding="14,6" Margin="0,0,8,0"
+                            Background="{DynamicResource AccentTintedBgBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" Cursor="Hand">
+                        <TextBlock Text="Copy code"/>
+                    </Button>
+                    <Button x:Name="BtnDeviceCodeOpenBrowser"
+                            Padding="14,6"
+                            Background="{DynamicResource AccentTintedBgBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" Cursor="Hand">
+                        <TextBlock Text="Open browser again"/>
+                    </Button>
+                </StackPanel>
+
+                <TextBlock x:Name="TxtDeviceStatus" Text="Waiting for browser confirmation..."
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"
+                           TextAlignment="Center" TextWrapping="Wrap"/>
+                <ProgressBar x:Name="DeviceProgressBar" IsIndeterminate="True"
+                             Width="200" Height="3" Margin="0,0,0,15"
+                             Foreground="#9333EA" Background="{DynamicResource AccentTintedBgBrush}"/>
+
+                <TextBlock x:Name="BtnDeviceCodeCancel" Text="Cancel" Margin="0,0,0,0"
+                           FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                           HorizontalAlignment="Center" Cursor="Hand"/>
+            </StackPanel>
+
+            <!-- Cancel Button -->
+            <Button x:Name="BtnCancel" Grid.Row="3"
+                    Padding="20,8" HorizontalAlignment="Right"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand">
+                <TextBlock Text="{loc:Str btn_cancel}"/>
+            </Button>
+        </Grid>
+    </Border>
+</Window>
