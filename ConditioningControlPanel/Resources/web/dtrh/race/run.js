@@ -130,6 +130,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const w = { layout, tunnel, fx, dresser, walls, kart, score, field, items, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
+    kart.onEvent((e) => onKart(w, e));
     score.onEvent((e) => onScore(w, e));
     items.onEvent((e) => onItem(w, e));
     pixel.retexture(scene);
@@ -294,6 +295,15 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
         else if (e.id === 'rabbit_foot') S.jackpotBias = 1;
         else if (e.id === 'magnet') { S.magnet = false; w.field.setReach(1); w.kart.setReach(1); }
         break;
+    }
+  }
+
+  // ---- kart events (drift turbo, tricks, the wheel, laps) ----
+  const TURBO = ['', 'mini turbo', 'super turbo', 'ultra turbo'];
+  function onKart(w, e) {
+    switch (e.type) {
+      case 'driftTier': sfx('ui_click', 0.3 + 0.15 * e.tier); break;
+      case 'driftBoost': hud.toast(TURBO[e.tier] || 'turbo', 'pop'); sfx('tunnel_powerup_collect', 0.5 + 0.15 * e.tier); if (e.tier >= 2) shake.shake(0.12 * e.tier, 160); poke(e.tier >= 3 ? 'smug' : 'streamed', 1.0); break;
     }
   }
 
