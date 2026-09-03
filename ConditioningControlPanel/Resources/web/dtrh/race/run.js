@@ -22,6 +22,7 @@ import { createScreenShake } from '../game/screenShake.js';
 import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, makeRng } from './consts.js';
 import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
+import { createWalls } from './walls.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
 import { createBubbleField } from './bubbles.js';
 import { createKart } from './kart.js';
@@ -111,6 +112,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     scene.add(tunnel.mesh);
     const fx = createFx({ scene, layout, tunnelMat: tunnel.material, particleFog: false });
     const dresser = createRoomDresser({ scene, layout });
+    const walls = createWalls({ scene, layout, media, renderer, camera, rng });
     const kart = createKart({ scene, layout, reducedMotion });
     const score = createScore();
     const getRoom = () => {
@@ -120,7 +122,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     };
     const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
     const items = createItems({ kart, bubbles: field, score, fx, hud, payload: payloadFx, rng });
-    const w = { layout, tunnel, fx, dresser, kart, score, field, items, rng };
+    const w = { layout, tunnel, fx, dresser, walls, kart, score, field, items, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     score.onEvent((e) => onScore(w, e));
@@ -130,7 +132,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function teardown() {
     if (!W) return;
-    try { W.field.dispose(); W.kart.dispose(); W.dresser.dispose(); W.fx.dispose(); } catch (e) { /* half-built world */ }
+    try { W.field.dispose(); W.kart.dispose(); W.walls.dispose(); W.dresser.dispose(); W.fx.dispose(); } catch (e) { /* half-built world */ }
     scene.remove(W.tunnel.mesh); W.tunnel.dispose();
     W = null;
   }
@@ -262,6 +264,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     w.fx.update(ks.d, wdt, S.t, S.intensity, S.rush);
     scene.background.lerp(scene.fog.color, Math.min(1, dt * 1.5));
     w.dresser.update(ks.d);
+    w.walls.update(ks.d, wdt);
 
     // camera + the cup light
     k.camera(camOut);
