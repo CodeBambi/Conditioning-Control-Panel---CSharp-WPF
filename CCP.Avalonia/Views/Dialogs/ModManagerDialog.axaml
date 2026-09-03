@@ -1,0 +1,320 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/ModManagerDialog.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       AllowsTransparency="True" / WindowStyle="None"
+                                      -> TransparencyLevelHint="Transparent" + SystemDecorations="None"
+       Background="{x:Null}"/Transparent on the Window stays Transparent (the rounded Border below
+                                         is what paints)
+       ResizeMode="NoResize"          -> CanResize="False"
+       Visibility="Collapsed"         -> IsVisible="False"
+       ItemContainerStyle             -> ItemContainerTheme + a keyed ControlTheme
+       <Style x:Key TargetType>       -> <ControlTheme x:Key TargetType>, applied with Theme=
+       ControlTemplate.Triggers       -> ^:pointerover / ^:disabled nested selectors
+       <ContentPresenter/>            -> Content="{TemplateBinding Content}" (trap 6: a bare
+                                         presenter draws nothing in Avalonia)
+       ToolTip="..."                  -> ToolTip.Tip="..."
+       MouseLeftButtonDown= / Click=  -> wired in the constructor (BeginMoveDrag / handlers)
+       ProgressBar Foreground         -> ProgressBar has no Foreground on Avalonia's Fluent theme;
+                                         the indicator colour rides on the ppBar style below.
+
+     The four inline Button.Styles in the WPF file collapse to three themes: the templates are
+     identical and only the hover setter differs, so one theme per hover behaviour is the whole
+     difference (ModActionButton = Opacity 0.85, ModPinkButton = #FF1493 + disabled 0.5,
+     ModBarButton = PanelAccentHoverBrush).
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case (trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ModManagerDialog"
+        Title="{loc:Str dialog_mod_manager}"
+        Height="500" Width="700"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+    <Window.Styles>
+        <!-- ponytail: local copy of ConditioningControlPanel/Dialogs/ModManagerDialog.xaml:PackProgress
+             (WPF set Foreground="{DynamicResource PinkBrush}" straight on the ProgressBar; Avalonia's
+             Fluent template paints PART_Indicator instead). Hoist when a second view needs it. -->
+        <Style Selector="ProgressBar.packBar /template/ Border#PART_Indicator">
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <Window.Resources>
+        <!-- The WPF ListBox.ItemContainerStyle, setters and template verbatim. -->
+        <ControlTheme x:Key="ModListRow" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}" Margin="2">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="#2A2A4A"/>
+            </Style>
+            <Style Selector="^:selected /template/ Border#Bd">
+                <Setter Property="Background" Value="#353560"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ConditioningControlPanel/Dialogs/ModManagerDialog.xaml:
+             BtnActivate/BtnShare/BtnTubeFit/BtnUninstall inline Button.Style. Hoist when a second
+             view needs it. -->
+        <ControlTheme x:Key="ModActionButton" TargetType="Button">
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="Opacity" Value="0.85"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ModManagerDialog.xaml:BtnDownloadPack / BtnCreate inline
+             Button.Style (same template, hover -> #FF1493; BtnDownloadPack also dims when
+             disabled). Hoist when a second view needs it. -->
+        <ControlTheme x:Key="ModPinkButton" TargetType="Button">
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="Background" Value="#FF1493"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Border#bd">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ModManagerDialog.xaml:BtnBrowseCatalogue/BtnInstall/BtnExport
+             inline Button.Style. Hoist when a second view needs it. -->
+        <ControlTheme x:Key="ModBarButton" TargetType="Button">
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- The WPF close button used the stock template with a transparent background; Fluent's
+             stock Button paints a hover plate, so it gets the flat template too.
+             ponytail: local copy of ModManagerDialog.xaml:BtnClose, hoist when a second view
+             needs it. -->
+        <ControlTheme x:Key="ModCloseButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="Background" Value="#2A2A4A"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Border Grid.Row="0" x:Name="TitleBar" Background="{DynamicResource PanelBgBrush}" CornerRadius="12,12,0,0" Padding="20,12">
+                <Grid>
+                    <TextBlock Text="{loc:Str dialog_mod_manager}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="BtnClose" Content="X" Theme="{StaticResource ModCloseButton}"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Foreground="{DynamicResource TextMutedBrush}" FontSize="16" FontWeight="Bold"
+                            Padding="8,2"
+                            Width="30" Height="30"/>
+                </Grid>
+            </Border>
+
+            <!-- Main Content -->
+            <Grid Grid.Row="1" Margin="15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Mod List -->
+                <Border Grid.Column="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Margin="0,0,10,0" Padding="5">
+                    <ListBox x:Name="ModList" Background="Transparent" BorderThickness="0"
+                             ItemContainerTheme="{StaticResource ModListRow}"
+                             Foreground="White" FontSize="13"/>
+                </Border>
+
+                <!-- Details Panel -->
+                <Border Grid.Column="1" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="20">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="DetailsPanel" IsVisible="False">
+                            <TextBlock x:Name="TxtModName" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,5"/>
+                            <TextBlock x:Name="TxtModAuthor" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtModVersion" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
+                            <TextBlock x:Name="TxtModDescription" FontSize="13" Foreground="#C0C0C0" TextWrapping="Wrap" Margin="0,0,0,15"/>
+
+                            <!-- Read-only art summary. The manifest's previewImage had never been
+                                 rendered anywhere in the app before this; it is a mod-relative path
+                                 inside the mod's own folder, so both rows are hidden for built-ins
+                                 and anything without an InstalledPath. -->
+                            <Border x:Name="PreviewImagePanel" Background="{DynamicResource PanelAccentBrush}"
+                                    CornerRadius="8" Padding="6" Margin="0,0,0,10"
+                                    HorizontalAlignment="Left" IsVisible="False">
+                                <Image x:Name="ImgModPreview" MaxWidth="260" MaxHeight="146" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock x:Name="TxtArtOverrides" FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
+                                       TextWrapping="Wrap" Margin="0,0,0,15" IsVisible="False"/>
+
+                            <!-- Content pack row: built-in mods whose media (voice lines, portraits,
+                                 DTRH barks) lives in a release-hosted pack that is not downloaded yet.
+                                 Hidden entirely on full/dev installs and for user mods. -->
+                            <Border x:Name="PackPanel" Background="{DynamicResource PanelAccentBrush}" CornerRadius="8"
+                                    Padding="12" Margin="0,0,0,15" IsVisible="False">
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtPackState" Text="{loc:Str modmgr_pack_not_downloaded}"
+                                               Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{loc:Str modmgr_pack_hint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                               TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                    <ProgressBar x:Name="PackProgress" Classes="packBar" Height="6" Minimum="0" Maximum="100" Value="0"
+                                                 Background="#252542"
+                                                 BorderThickness="0" Margin="0,10,0,0" IsVisible="False"/>
+                                    <Button x:Name="BtnDownloadPack" Theme="{StaticResource ModPinkButton}"
+                                            Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="SemiBold"
+                                            HorizontalAlignment="Left" Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Theme Color Preview -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="{loc:Str label_theme}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <Border x:Name="ThemeColorPreview" Width="20" Height="20" CornerRadius="4" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="TxtThemeColor" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Companion Info -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="{loc:Str label_companion}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="TxtCompanion" FontSize="12" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Active Indicator -->
+                            <TextBlock x:Name="TxtActiveIndicator" Text="{loc:Str label_currently_active}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="#4CAF50" Margin="0,10,0,10" IsVisible="False"/>
+
+                            <!-- Action Buttons -->
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button x:Name="BtnActivate" Theme="{StaticResource ModActionButton}"
+                                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                                        Margin="0,0,10,0">
+                                    <TextBlock Text="{loc:Str btn_activate}"/>
+                                </Button>
+                                <Button x:Name="BtnShare" Theme="{StaticResource ModActionButton}"
+                                        Background="{DynamicResource PanelAccentBrush}" Foreground="#B084DC"
+                                        Margin="0,0,10,0"
+                                        IsVisible="False">
+                                    <TextBlock Text="{loc:Str btn_share_mod}"/>
+                                </Button>
+                                <Button x:Name="BtnTubeFit" Theme="{StaticResource ModActionButton}"
+                                        ToolTip.Tip="{loc:Str tooltip_tube_fit}"
+                                        Background="{DynamicResource PanelAccentBrush}" Foreground="#B084DC"
+                                        Margin="0,0,10,0"
+                                        IsVisible="False">
+                                    <TextBlock Text="{loc:Str btn_tube_fit}"/>
+                                </Button>
+                                <Button x:Name="BtnUninstall" Theme="{StaticResource ModActionButton}"
+                                        Background="{DynamicResource PanelAccentBrush}" Foreground="#FF6B6B">
+                                    <TextBlock Text="{loc:Str btn_uninstall}"/>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- Bottom Bar -->
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnBrowseCatalogue" Theme="{StaticResource ModBarButton}"
+                            ToolTip.Tip="{loc:Str tooltip_browse_mod_catalogue}"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="#B084DC"
+                            Margin="0,0,10,0">
+                        <TextBlock Text="{loc:Str btn_browse_mod_catalogue}"/>
+                    </Button>
+                    <Button x:Name="BtnInstall" Theme="{StaticResource ModBarButton}"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="White"
+                            Margin="0,0,10,0">
+                        <TextBlock Text="{loc:Str btn_install_from_file}"/>
+                    </Button>
+                    <Button x:Name="BtnExport" Theme="{StaticResource ModBarButton}"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="White"
+                            Margin="0,0,10,0">
+                        <TextBlock Text="{loc:Str btn_export_current}"/>
+                    </Button>
+                    <Button x:Name="BtnCreate" Theme="{StaticResource ModPinkButton}"
+                            Background="{DynamicResource PinkBrush}" Foreground="White"
+                            Margin="0,0,10,0" FontWeight="SemiBold">
+                        <TextBlock Text="{loc:Str btn_create_new_2}"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
