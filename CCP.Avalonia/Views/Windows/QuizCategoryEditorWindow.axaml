@@ -1,0 +1,285 @@
+<!-- PORTED from ConditioningControlPanel/Windows/QuizCategoryEditorWindow.xaml.
+     Structure, x:Names, ordering, spacing and every loc key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" / AllowsTransparency  -> SystemDecorations="None" / TransparencyLevelHint
+       DropShadowEffect ShadowDepth="0"         -> dropped; Avalonia's effect has OffsetX/Y, both 0
+       DynamicResource on a shadow Color        -> StaticResource (SeasonRecapCard/QuizReportWindow
+                                                   precedent: an effect Color is not a styled prop)
+       TextBox.Resources <Style TargetType=     -> CornerRadius="8" on the TextBox itself; the WPF
+         "Border"> CornerRadius hack               hack existed because WPF's TextBox has no such
+                                                   property, Avalonia's does
+       ComboBox.ItemContainerStyle              -> <ComboBox.Styles> with a ComboBoxItem selector;
+         + Trigger IsHighlighted                   the trigger becomes ComboBoxItem:pointerover.
+                                                   A Style (not a ControlTheme) only sets
+                                                   properties, so trap 4 in CLAUDE.md does not bite
+       SystemColors.WindowBrushKey override     -> dropped; that resource key is WPF-only and the
+                                                   dropdown popup is already dark in this theme
+       ComboBoxItem IsSelected="True"           -> SelectedIndex="0" on the ComboBox
+       LinearGradientBrush 0,0 -> 1,1           -> "0%,0%" -> "100%,100%"; bare numbers are
+                                                   ABSOLUTE pixels in Avalonia
+       Visibility="Collapsed"                   -> IsVisible="False"
+       MouseLeftButtonDown / MouseEnter/Leave   -> PointerPressed / PointerEntered / PointerExited,
+       KeyDown / SelectionChanged in markup        all wired in the constructor
+       {loc:Str} on TxtTitle and TxtPreviewHint -> set from code instead. Both are ALSO assigned
+                                                   from the code-behind, and Avalonia keeps a
+                                                   binding alive under a local value where WPF
+                                                   cleared it, so the assignment would be undone on
+                                                   the next language change. See CLAUDE.md.
+
+     The Cancel border gained an x:Name (BtnCancel) and the close X gained BtnClose, because their
+     handlers are wired in the ctor. Buttons carry a TextBlock child rather than Content: Avalonia
+     parses "_" in Content as an access key and every loc key here is snake_case. See CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.QuizCategoryEditorWindow"
+        Title="{loc:Str dialog_custom_quiz_category}"
+        Width="700" Height="750"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+    <Border CornerRadius="16" Margin="8" BorderThickness="1.5">
+        <Border.Background>
+            <SolidColorBrush Color="#F0151530"/>
+        </Border.Background>
+        <Border.BorderBrush>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#60FF69B4" Offset="0"/>
+                <GradientStop Color="#609B59B6" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.BorderBrush>
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="20" Opacity="0.6"/>
+        </Border.Effect>
+
+        <Grid Margin="28,20" RowDefinitions="Auto,*,Auto">
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,16">
+                <Grid>
+                    <TextBlock x:Name="TxtTitle" FontSize="22" FontWeight="Bold"
+                               Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Left">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="15" Opacity="0.3"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <!-- Close button -->
+                    <TextBlock x:Name="BtnClose" Text="X" FontSize="18" FontWeight="Bold" Foreground="#606080"
+                               HorizontalAlignment="Right" VerticalAlignment="Top" Cursor="Hand"/>
+                </Grid>
+                <TextBlock Text="{loc:Str label_design_your_own_quiz_theme_with_custom_archet}"
+                           Foreground="#606080" FontSize="13" Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <!-- Scrollable content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled" Margin="0,0,-8,0" Padding="0,0,8,0">
+                <StackPanel>
+                    <!-- Category Name -->
+                    <TextBlock Text="{loc:Str label_category_name}" Foreground="#808090" FontSize="11" FontWeight="Bold"
+                               Margin="0,0,0,4"/>
+                    <TextBox x:Name="TxtName" MaxLength="30" FontSize="15" Foreground="White"
+                             Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1"
+                             Padding="10,8" CaretBrush="White" CornerRadius="8"/>
+
+                    <!-- Description -->
+                    <TextBlock Text="{loc:Str label_description}" Foreground="#808090" FontSize="11" FontWeight="Bold"
+                               Margin="0,14,0,4"/>
+                    <TextBox x:Name="TxtDescription" MaxLength="200" FontSize="13" Foreground="White"
+                             Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1"
+                             Padding="10,8" CaretBrush="White" TextWrapping="Wrap" CornerRadius="8"
+                             AcceptsReturn="False" Height="50"/>
+
+                    <!-- Color picker -->
+                    <TextBlock Text="{loc:Str label_accent_color}" Foreground="#808090" FontSize="11" FontWeight="Bold"
+                               Margin="0,14,0,6"/>
+                    <WrapPanel x:Name="ColorPicker" Orientation="Horizontal"/>
+
+                    <!-- Template dropdown -->
+                    <TextBlock Text="{loc:Str label_start_from_template}" Foreground="#808090" FontSize="11" FontWeight="Bold"
+                               Margin="0,14,0,4"/>
+                    <ComboBox x:Name="CboTemplate" FontSize="13" Foreground="White"
+                              Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1"
+                              Padding="8,6" SelectedIndex="0" HorizontalAlignment="Stretch">
+                        <ComboBox.Styles>
+                            <Style Selector="ComboBoxItem">
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Background" Value="{DynamicResource DarkerBgBrush}"/>
+                                <Setter Property="Padding" Value="8,6"/>
+                            </Style>
+                            <Style Selector="ComboBoxItem:pointerover">
+                                <Setter Property="Background" Value="#30FF69B4"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Style>
+                        </ComboBox.Styles>
+                        <ComboBoxItem Content="{loc:Str btn_blank_write_your_own}" Tag=""/>
+                        <ComboBoxItem Content="{loc:Str btn_copy_from_sissy}" Tag="sissy"/>
+                        <ComboBoxItem Content="{loc:Str btn_copy_from_bambi}" Tag="bambi"/>
+                        <ComboBoxItem Content="{loc:Str btn_copy_from_obedience}" Tag="obedience"/>
+                        <ComboBoxItem Content="{loc:Str btn_copy_from_mindlessness}" Tag="mindlessness"/>
+                        <ComboBoxItem Content="{loc:Str btn_copy_from_submission}" Tag="submission"/>
+                    </ComboBox>
+
+                    <!-- CCBill AI Addendum: content-policy banner above the editable AI prompt. -->
+                    <Border x:Name="PolicyBannerFull"
+                            Margin="0,14,0,0"
+                            Padding="12" CornerRadius="4"
+                            Background="#3D3520"
+                            BorderBrush="#A98E3A" BorderThickness="1">
+                        <StackPanel>
+                            <DockPanel LastChildFill="True" Margin="0,0,0,6">
+                                <TextBlock Text="&#9888;" FontSize="16" Foreground="#E5C76B"
+                                           VerticalAlignment="Top" Margin="0,0,8,0"
+                                           DockPanel.Dock="Left"/>
+                                <TextBlock Text="{loc:Str prompt_editor_policy_full}"
+                                           Foreground="#F0E2A6" FontSize="12" TextWrapping="Wrap"
+                                           VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                                <Button x:Name="BtnPolicyReadFull"
+                                        Background="Transparent" Foreground="#E5C76B"
+                                        BorderThickness="0" FontSize="11" Cursor="Hand"
+                                        Padding="8,4" Margin="0,0,8,0">
+                                    <TextBlock Text="{loc:Str prompt_editor_policy_read}"/>
+                                </Button>
+                                <Button x:Name="BtnPolicyGotIt"
+                                        Background="#A98E3A" Foreground="White"
+                                        BorderThickness="0" FontSize="11" Cursor="Hand"
+                                        Padding="12,4">
+                                    <TextBlock Text="{loc:Str prompt_editor_policy_got_it}"/>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="PolicyBannerSlim" IsVisible="False"
+                            Margin="0,14,0,0"
+                            Padding="10,6" CornerRadius="4" Background="#2A2520"
+                            BorderBrush="#A98E3A" BorderThickness="0,0,0,2">
+                        <DockPanel LastChildFill="True">
+                            <TextBlock Text="&#9888;" FontSize="13" Foreground="#E5C76B"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"
+                                       DockPanel.Dock="Left"/>
+                            <Button x:Name="BtnPolicyReadSlim"
+                                    Background="Transparent" Foreground="#E5C76B"
+                                    BorderThickness="0" FontSize="11" Cursor="Hand"
+                                    Padding="4,0" VerticalAlignment="Center"
+                                    DockPanel.Dock="Right">
+                                <TextBlock Text="{loc:Str prompt_editor_policy_read}"/>
+                            </Button>
+                            <TextBlock Text="{loc:Str prompt_editor_policy_slim}"
+                                       Foreground="#C8B47A" FontSize="11" TextWrapping="Wrap"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- P1.3 PromptValidator warning banner. Hidden until Save is clicked. -->
+                    <Border x:Name="ValidatorBanner"
+                            IsVisible="False"
+                            Margin="0,14,0,0"
+                            Padding="10,8"
+                            CornerRadius="4"
+                            Background="#3D3520"
+                            BorderBrush="#E5C76B"
+                            BorderThickness="1">
+                        <TextBlock x:Name="TxtValidatorBanner"
+                                   Foreground="#F0E2A6"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+
+                    <!-- System prompt -->
+                    <TextBlock Text="{loc:Str label_system_prompt}" Foreground="#808090" FontSize="11" FontWeight="Bold"
+                               Margin="0,14,0,4"/>
+                    <TextBlock Text="{loc:Str label_this_is_the_ai_instruction_that_generates_qui}"
+                               Foreground="#505060" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBox x:Name="TxtPrompt" FontSize="12" Foreground="#C0C0D0"
+                             Background="#10FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1"
+                             Padding="10,8" CaretBrush="White" TextWrapping="Wrap" CornerRadius="8"
+                             AcceptsReturn="True" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             Height="160" FontFamily="Consolas, Courier New"/>
+
+                    <!-- Archetypes -->
+                    <TextBlock Text="{loc:Str label_archetypes_5_tiers}" Foreground="#808090" FontSize="11" FontWeight="Bold"
+                               Margin="0,16,0,6"/>
+                    <TextBlock Text="{loc:Str label_define_the_personality_names_assigned_at_each}"
+                               Foreground="#505060" FontSize="11" Margin="0,0,0,8"/>
+
+                    <!-- Column headers -->
+                    <Grid Margin="0,0,0,4" ColumnDefinitions="*,55,55,*">
+                        <TextBlock Text="{loc:Str section_name}" Foreground="#606070" FontSize="10" Grid.Column="0" Margin="4,0,0,0"/>
+                        <TextBlock Text="{loc:Str label_min_2}" Foreground="#606070" FontSize="10" Grid.Column="1" Margin="4,0,0,0"/>
+                        <TextBlock Text="{loc:Str label_max}" Foreground="#606070" FontSize="10" Grid.Column="2" Margin="4,0,0,0"/>
+                        <TextBlock Text="{loc:Str label_description_2}" Foreground="#606070" FontSize="10" Grid.Column="3" Margin="4,0,0,0"/>
+                    </Grid>
+
+                    <StackPanel x:Name="ArchetypeRows"/>
+
+                    <!-- Preview button -->
+                    <Border x:Name="BtnPreview" Cursor="Hand" CornerRadius="8" Margin="0,16,0,0"
+                            Padding="12,8" HorizontalAlignment="Left" BorderThickness="1">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#309B59B6"/>
+                        </Border.BorderBrush>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str section_preview}" Foreground="{DynamicResource SecondaryBrush}" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="TxtPreviewHint" Foreground="#505060" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Preview result -->
+                    <Border x:Name="PreviewResultPanel" IsVisible="False" CornerRadius="8"
+                            Margin="0,8,0,0" Padding="12,10"
+                            Background="#10FFFFFF" BorderBrush="#209B59B6" BorderThickness="1">
+                        <TextBlock x:Name="TxtPreviewResult" FontSize="12" Foreground="#A0A0B0"
+                                   TextWrapping="Wrap" FontFamily="Consolas, Courier New"/>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Bottom buttons -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,4">
+                <!-- Delete button (only for editing existing) -->
+                <Border x:Name="BtnDelete" Cursor="Hand" CornerRadius="8" Padding="16,10"
+                        Margin="0,0,10,0" IsVisible="False" BorderThickness="1">
+                    <Border.Background>
+                        <SolidColorBrush Color="#15FF4444"/>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <SolidColorBrush Color="#30FF4444"/>
+                    </Border.BorderBrush>
+                    <TextBlock Text="{loc:Str btn_delete}" Foreground="#FF6666" FontSize="14" FontWeight="SemiBold"/>
+                </Border>
+
+                <!-- Cancel -->
+                <Border x:Name="BtnCancel" Cursor="Hand" CornerRadius="8" Padding="16,10" Margin="0,0,10,0"
+                        BorderThickness="1">
+                    <Border.Background>
+                        <SolidColorBrush Color="#15FFFFFF"/>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <SolidColorBrush Color="#20FFFFFF"/>
+                    </Border.BorderBrush>
+                    <TextBlock Text="{loc:Str btn_cancel}" Foreground="#808090" FontSize="14" FontWeight="SemiBold"/>
+                </Border>
+
+                <!-- Save -->
+                <Border x:Name="BtnSave" Cursor="Hand" CornerRadius="8" Padding="20,10" BorderThickness="1">
+                    <Border.Background>
+                        <SolidColorBrush Color="#25FF69B4"/>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <SolidColorBrush Color="#50FF69B4"/>
+                    </Border.BorderBrush>
+                    <TextBlock x:Name="TxtSave" Text="{loc:Str label_save_category}" Foreground="{DynamicResource PinkBrush}"
+                               FontSize="14" FontWeight="Bold"/>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
