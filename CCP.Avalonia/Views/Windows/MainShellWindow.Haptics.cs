@@ -1,94 +1,87 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.Haptics.cs (1158 lines).
+// PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.Haptics.cs (1,158 lines) -
+// the Haptics page's entire brain on WPF: 34 forwarding handlers from HapticsTabView land here.
+// ONE member is restored, and it is the only one in the file that does not need a control:
+// BtnHapticsHelp_Click, which opens the setup wizard. CCP.Avalonia/Views/Windows/
+// HapticsSetupWindow.axaml.cs is a real port - three pages, the provider guides, the mod accent,
+// and the Lovense address read from and written back to CoreSettings - and NOTHING ON THIS HEAD
+// OPENED IT. Now something can. (Uncalled: see the caller note below.)
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// THE REST IS BLOCKED ON THE PAGE, NOT ON THE PORT - the correction this file needed. The old
+// header said "wholesale stub, every member reaches App.* / a device", which sent the reader
+// looking for HapticService. The nearer truth: CCP.Avalonia/Views/Tabs/HapticsTabView.axaml IS
+// PORTED - the whole page, all four DataTemplates, its ControlThemes and its HapticStatusDot. It
+// is simply NOT HOSTED: CCP.Avalonia/Views/Tabs/StudioTabView.axaml:249 still carries a Border
+// placard named PanelHaptics, whose own comment ("HapticsTabView is not ported to this head yet")
+// is now stale. Until that Border becomes <tabs:HapticsTabView x:Name="PanelHaptics"/>, every
+// control lookup from this partial resolves to null and every member restored here would be a
+// silent no-op - the x:Name hazard one level further out.
+// MainShellWindow.TabFxTakeoverLabStatus.cs:296 reaches through the same two hops and says so too.
 //
-// Members dropped (78):
-//   private bool _hapticsTabBuilt
-//   private readonly ObservableCollection<HapticProviderChipVm> _hapticProviderChips
-//   private readonly ObservableCollection<HapticRoutingGroupVm> _hapticRoutingGroups
-//   private readonly ObservableCollection<HapticToyCardVm> _hapticToyCards
-//   private string _hapticToyCardsShape
-//   private readonly HapticRowExpansionScope _hapticRowScope
-//   private DispatcherTimer? _hapticSliderDebounce
-//   private DispatcherTimer? _hapticLiveStatusTimer
-//   private static HapticSettings HapticCfg
-//   internal void InitializeHapticsTab(…)
-//   private void OnHapticRoutingRowChanged(…)
-//   private void OnHapticDevicesChanged(…)
-//   private void OnHapticConnectionChanged(…)
-//   private void OnHapticActivity(…)
-//   private void HapticsRunOnUi(…)
-//   private static void SafeRun(…)
-//   internal void RefreshHapticToys(…)
-//   private static string BuildHapticToyShapeSignature(…)
-//   internal void RefreshHapticConnectionUi(…)
-//   internal void RefreshAudioSyncCardVisibility(…)
-//   private void OnHapticsTabVisibilityChanged(…)
-//   private void StartHapticLiveStatusTimer(…)
-//   private void StopHapticLiveStatusTimer(…)
-//   internal void RefreshHapticLiveStatus(…)
-//   internal void RefreshHapticRoutingRows(…)
-//   internal void LoadHapticsSettingsToUi(…)
-//   private void LoadHapticTemperamentToUi(…)
-//   private void LoadHapticToyInputToUi(…)
-//   private void ApplyHapticToyInputEnabledState(…)
-//   private static void SetSliderEnabled(…)
-//   private void LoadHapticMediaExtrasToUi(…)
-//   private void LoadHapticAudioDspToUi(…)
-//   private static void SetDspSlider(…)
-//   private static string FormatDsp(…)
-//   internal void ChkHapticsEnabled_Changed(…)
-//   internal void ChkHapticProvider_Changed(…)
-//   internal void TxtHapticUrl_TextChanged(…)
-//   internal void TxtHapticIntifaceUrl_TextChanged(…)
-//   internal void ChkHapticAutoConnect_Changed(…)
-//   internal async void BtnHapticConnect_Click(…)
-//   internal void BtnHapticPanic_Click(…)
-//   internal async void BtnHapticTest_Click(…)
-//   internal async void BtnHapticToyTest_Click(…)
-//   internal void BtnHapticsHelp_Click(…)
-//   internal void SliderHapticIntensity_ValueChanged(…)
-//   internal void SliderHapticMaxPower_ValueChanged(…)
-//   internal void SliderHapticDtrhAmbient_Changed(…)
-//   internal void CmbHapticDtrhDensity_SelectionChanged(…)
-//   private RadioButton?[] HapticTemperamentChips
-//   internal void RbHapticTemperament_Checked(…)
-//   internal void ChkHapticToyInput_Changed(…)
-//   internal void ChkHapticToyAttentionCheck_Changed(…)
-//   internal void SliderHapticOverrideCooldown_Changed(…)
-//   internal void ChkHapticFunScript_Changed(…)
-//   internal void ChkHapticFunScriptVibe_Changed(…)
-//   internal void ChkHapticLuminance_Changed(…)
-//   internal void SliderHapticLuminance_Changed(…)
-//   internal void ChkHapticBandSplit_Changed(…)
-//   internal void SliderDspSensitivity_Changed(…)
-//   internal void SliderDspSmoothing_Changed(…)
-//   internal void SliderDspBass_Changed(…)
-//   internal void SliderDspRms_Changed(…)
-//   internal void SliderDspOnset_Changed(…)
-//   internal void SliderDspMax_Changed(…)
-//   private void OnDspSliderChanged(…)
-//   internal void BtnDspReset_Click(…)
-//   internal void SliderVideoHapticDelay_Changed(…)
-//   internal void SliderVideoHapticPower_Changed(…)
-//   internal void SliderAudioSyncLatency_Changed(…)
-//   internal void SliderAudioSyncIntensity_Changed(…)
-//   internal void CmbPatternMode_SelectionChanged(…)
-//   internal void SliderPatternIntensity_Changed(…)
-//   internal void PatternPreviewCanvas_SizeChanged(…)
-//   private VibrationMode SelectedPatternMode
-//   private double SelectedPatternIntensity
-//   private void UpdateHapticPatternPreview(…)
-//   private void RefreshPatternToyPicker(…)
-//   internal async void BtnPatternPlay_Click(…)
+// AND DO NOT CALL SetHapticsStatusPulse FROM HERE. The entry point exists and names this file as
+// the caller it waits for, but what it reports is `haptics.IsConnected` and there is no haptic
+// service here to be connected. A dot breathing "device connected" over no device is the failure
+// this port refuses on principle, and on a page whose subject is hardware that touches the user it
+// is the worst place to make it. Wire it from RefreshHapticConnectionUi when that is real.
+//
+// A SECOND TRAP FOR THE SETTINGS HALF. HapticSettings and HapticSettingsV2 ARE in Core
+// (CCP.Core/Models/HapticSettings.cs), so the ~30 editors below look free. They are not: the page
+// has no LoadHapticsSettingsToUi pass here, so its controls start on MARKUP defaults, and Avalonia
+// raises IsCheckedChanged/ValueChanged on a PROGRAMMATIC set as well as a user one - restore an
+// editor first and the tab's first layout writes the markup default over the user's saved value.
+// WPF is safe only because MainWindow loads settings in first, guarded by _isLoading. Restore the
+// load pass (with that guard and compare-before-write) FIRST, then the editors.
+//
+// Blocked, grouped (77 members):
+//   * the device transport and the mixer - App.Haptics (Services/Haptics/HapticService.cs),
+//     HapticDeviceManager, HapticMixer, DtrhHapticDirector, MockHapticProvider, none with a Core
+//     seam: OnHapticDevicesChanged, OnHapticConnectionChanged, OnHapticActivity,
+//     RefreshHapticConnectionUi, RefreshHapticLiveStatus, Start/StopHapticLiveStatusTimer,
+//     _hapticLiveStatusTimer, BtnHapticConnect_Click, BtnHapticPanic_Click, BtnHapticTest_Click,
+//     BtnHapticToyTest_Click, BtnPatternPlay_Click, RefreshPatternToyPicker, RefreshHapticToys,
+//     BuildHapticToyShapeSignature, _hapticToyCardsShape.
+//   * the row view models - Views/Controls/HapticUiModels.cs's four types expose
+//     System.Windows.Visibility, so they cannot move as-is (HapticsTabView seeds its own *Sample
+//     twins): the three ObservableCollections, _hapticRowScope, OnHapticRoutingRowChanged,
+//     RefreshHapticRoutingRows.
+//   * the page host (see above) - InitializeHapticsTab, _hapticsTabBuilt,
+//     OnHapticsTabVisibilityChanged, RefreshAudioSyncCardVisibility, HapticsRunOnUi (=
+//     Dispatcher.UIThread.Post), SafeRun, SetSliderEnabled, HapticCfg, _hapticSliderDebounce.
+//   * the settings editors, blocked on the load pass above and not on a service (~35): every
+//     Chk*_Changed, Txt*_TextChanged, Slider*_Changed/_ValueChanged, Cmb*_SelectionChanged,
+//     RbHapticTemperament_Checked, HapticTemperamentChips, the four Load*ToUi helpers,
+//     ApplyHapticToyInputEnabledState, SetDspSlider, FormatDsp, BtnDspReset_Click,
+//     OnDspSliderChanged, SelectedPatternMode, SelectedPatternIntensity.
+//   * the pattern preview - UpdateHapticPatternPreview and PatternPreviewCanvas_SizeChanged draw
+//     Services/Haptics/Core/HapticPatterns.cs curves onto a Canvas: the drawing is portable, the
+//     curve source is not.
+//
+// CALLER STILL MISSING for the one restored member: HapticsTabView.axaml.cs carries the WPF
+// forward as a stub. `(TopLevel.GetTopLevel(this) as MainShellWindow)?.BtnHapticsHelp_Click(sender,
+// e)` is the whole of it - reachable once StudioTabView hosts the page. Neither file is this
+// layer's.
+
+using System;
+using Avalonia.Interactivity;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // No member of this partial is referenced from MainShellWindow.axaml.
+        /// <summary>
+        /// Opens the haptics setup wizard. async void and awaited rather than blocking: Avalonia's
+        /// ShowDialog is awaitable where WPF's blocks, and it needs an explicit owner.
+        ///
+        /// <para>WPF follows the dialog with LoadHapticsSettingsToUi + RefreshHapticToys(force),
+        /// because the wizard rewrites provider flags and the Lovense address behind the page. Both
+        /// are omitted here rather than approximated: neither exists on this head (see the header),
+        /// and the wizard's writes go to CoreSettings, so nothing is lost - the page will read them
+        /// whenever it gains a load pass.</para>
+        /// </summary>
+        internal async void BtnHapticsHelp_Click(object? sender, RoutedEventArgs e)
+        {
+            try { await new HapticsSetupWindow().ShowDialog(this); }
+            catch (Exception ex) { Log.Error(ex, "HapticsSetupWindow failed"); }
+        }
     }
 }

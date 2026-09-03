@@ -1,84 +1,84 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.ChromeFx.cs (914 lines).
+// PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.ChromeFx.cs (914 lines) -
+// PR-1 of the FX overhaul, the shell's own chrome: tab transitions, the nav rail's glow and icon
+// nudge, the START button sheen and the XP meter.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// ONE member is live, and it is the one MainShellWindow.axaml actually names:
+// StartSheenHost_SizeChanged. Not decoration - it is the CLIP that keeps the sheen band inside the
+// START button's rounded rect, and without it the band pokes out of the corners the moment
+// anything sweeps it. Fully portable: WPF's RectangleGeometry(rect, 8, 8) is spelled the same in
+// Avalonia 12 (Controls/TierFxBorder.cs:673 makes the same call).
 //
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
+// NOTHING ELSE IN THIS FILE HAS AN ENTRY POINT ON THIS HEAD - the honest reason the rest is a note
+// and not a shortage of Avalonia. WPF's whole chrome-FX lifecycle hangs off InitializeChromeFx(),
+// called from MainWindow's constructor; this window's three lifecycle overrides are already taken
+// (OnLoaded -> .Marquee.cs, OnAttachedToVisualTree -> .NavRail.cs, OnOpened -> .WorkAreaFit.cs)
+// and the constructor lives in MainShellWindow.axaml.cs. A fourth override is a compile error, not
+// a design choice. So the loops below would be dead code a render cannot disprove - exactly the
+// failure the port has already hit once, where three animations threw into a catch and the badge
+// was inert and silent about it. When a chrome-FX init hook exists, restore in this order
+// (62 members):
 //
-// Members dropped (63):
-//   private const int TabFadeOutMs
-//   private const int TabFadeInMs
-//   private const double TabSlidePx
-//   private const double NavIconHoverScale
-//   private const int NavIconHoverMs
-//   private const double NavGlowMinOpacity
-//   private const double NavGlowMaxOpacity
-//   private const double NavGlowBreathSeconds
-//   private const double StartGlowMinOpacity
-//   private const double StartGlowMaxOpacity
-//   private const double StartGlowBreathSeconds
-//   private const double StartSheenSeconds
-//   private const int StartSheenIntervalSeconds
-//   private const double BannerSheenSeconds
-//   private const int BannerSheenMinGapSeconds
-//   private const double XpSheenSeconds
-//   private bool _chromeFxInitialized
-//   private bool _chromeFxWindowActive
-//   private string _pendingTabKey
-//   private string _activeTabKey
-//   private UIElement? _activeTabElement
-//   private Button? _navGlowButton
-//   private Button? _navGlowDoor
-//   private FrameworkElement? _navActiveBar
-//   private DispatcherTimer? _startSheenTimer
-//   private DateTime _lastBannerSheenUtc
-//   private DispatcherTimer? _staggerCleanupTimer
-//   private List<FrameworkElement>? _staggeredElements
-//   private double _lastXpShown
-//   private int _lastXpLevelShown
-//   private IEnumerable<Button> NavButtons
-//   internal void InitializeChromeFx(…)
-//   private void OnChromeFxWindowStateish(…)
-//   internal void RefreshChromeFx(…)
-//   private bool ChromeAmbientAllowed
-//   private void ApplyChromeFxLoops(…)
-//   private void AnimateTabIn(…)
-//   private void SlideTabIn(…)
-//   private void FadeOutgoingTab(…)
-//   private static void CollapseOutgoingTab(…)
-//   private static TranslateTransform? EnsureTabTranslate(…)
-//   private static void ResetTabSlide(…)
-//   private void StaggerTabCards(…)
-//   private void StaggerCleanupTimer_Tick(…)
-//   private void CancelStaggerCleanup(…)
-//   private static List<FrameworkElement> FindStaggerTargets(…)
-//   private void NavButton_MouseEnter(…)
-//   private void NavButton_MouseLeave(…)
-//   private void NudgeNavIcon(…)
-//   private static ScaleTransform? EnsureIconScale(…)
-//   private Button? NavButtonForTab(…)
-//   private void ApplyNavActiveGlow(…)
-//   private static FrameworkElement? SetNavIndicator(…)
-//   private void ApplyNavGlowBreath(…)
-//   private void ApplyStartButtonGlow(…)
-//   private void StartSheenHost_SizeChanged(…)
-//   private void SweepStartSheen(…)
-//   private void SweepSheen(…)
-//   private static void ParkSheen(…)
-//   private void AnimateXpDisplay(…)
-//   private void FillXpBarTo(…)
-//   private void ApplyXpSheen(…)
-//   internal void SweepBannerSheen(…)
+//   1. the gate. ChromeAmbientAllowed is `_chromeFxWindowActive && MotionFx.AllowAmbientLoops`;
+//      Services/MotionFx.cs is not in Core, so the portable half is IsActive && not-minimised -
+//      exactly MainShellWindow.TabFxTakeoverLabStatus.cs's Pr4aAmbientAllowed. Reuse it.
+//   2. the sheens - SweepSheen, SweepStartSheen, SweepBannerSheen, ApplyXpSheen, ParkSheen,
+//      _startSheenTimer, _lastBannerSheenUtc, and the Start/Banner/Xp sheen constants. One-shot
+//      TranslateTransform slides plus an opacity fade: an Avalonia keyframe Animation cancelled
+//      through a CancellationTokenSource, the pattern .DeeperFx.cs already uses. The band, its
+//      SkewTransform and its FxGlowColor stop are already in the axaml.
+//   3. the breathing glows - ApplyNavGlowBreath, ApplyStartButtonGlow and their six
+//      Min/MaxOpacity/BreathSeconds constants. PlaybackDirection.Alternate +
+//      IterationCount.Infinite over the effect's Opacity, per CLAUDE.md.
+//   4. the tab transition and card stagger - AnimateTabIn, SlideTabIn, FadeOutgoingTab,
+//      CollapseOutgoingTab, EnsureTabTranslate, ResetTabSlide, StaggerTabCards,
+//      StaggerCleanupTimer_Tick, CancelStaggerCleanup, FindStaggerTargets, _pendingTabKey,
+//      _activeTabKey, _activeTabElement, _staggerCleanupTimer, _staggeredElements, TabFadeOutMs/
+//      TabFadeInMs/TabSlidePx. Caller is ShowTab, which today snaps panels on and off and says so.
+//   5. the nav rail's hover and active state - NavButtons, NavButton_MouseEnter/MouseLeave,
+//      NudgeNavIcon, EnsureIconScale, NavButtonForTab, ApplyNavActiveGlow, SetNavIndicator,
+//      _navGlowButton/_navGlowDoor/_navActiveBar, NavIconHoverScale/NavIconHoverMs.
+//      .TabNavigation.cs already records that nothing highlights the active rail item;
+//      ApplyNavActiveGlow is that missing piece.
+//   6. the XP meter - AnimateXpDisplay, FillXpBarTo, _lastXpShown, _lastXpLevelShown. A width
+//      tween plus a number roll, portable on its own; its caller is MainWindow.Progression's XP
+//      refresh, which is not on this head.
+//
+// Gone for good, not deferred: _chromeFxWindowActive / OnChromeFxWindowStateish's three
+// subscriptions are re-expressed by Pr4aAmbientAllowed and AmbientFxCanvas.Evaluate().
+
+using System;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Media;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.ChromeFx.cs; wired when they move to Core.
-        private void StartSheenHost_SizeChanged(object? sender, global::Avalonia.Controls.SizeChangedEventArgs e) { }
+        /// <summary>Corner radius of the START button, and therefore of the sheen host's clip.
+        /// Must MATCH the button's own rounding or the band's corners show through.</summary>
+        private const double StartSheenCornerRadius = 8;
 
+        /// <summary>
+        /// Clips the START sheen host to the button's rounded rect, so the band cannot poke out of
+        /// the corners as it sweeps. Named by MainShellWindow.axaml:2682 and driven by layout, so
+        /// this is live whether or not the sweep itself is ever restored - and it has to be: the
+        /// host is a sibling overlay sharing the button's cell, not button content, so nothing
+        /// else clips it.
+        /// </summary>
+        private void StartSheenHost_SizeChanged(object? sender, SizeChangedEventArgs e)
+        {
+            try
+            {
+                if (sender is not Control host) return;
+                var size = e.NewSize;
+                if (size.Width <= 0 || size.Height <= 0) { host.Clip = null; return; }
+                host.Clip = new RectangleGeometry(
+                    new Rect(0, 0, size.Width, size.Height),
+                    StartSheenCornerRadius, StartSheenCornerRadius);
+            }
+            catch (Exception ex) { Log.Debug("StartSheenHost_SizeChanged: {E}", ex.Message); }
+        }
     }
 }
