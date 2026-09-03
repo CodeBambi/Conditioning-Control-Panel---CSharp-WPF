@@ -1,0 +1,119 @@
+<!-- PORTED from ConditioningControlPanel/Features/FeaturePopupWindow.xaml.
+     Structure, order, spacing and every resource key preserved. Deviations, all forced:
+
+       WindowStyle="None"          -> WindowDecorations="None"
+       ResizeMode="NoResize"       -> CanResize="False"
+       AllowsTransparency="False"  -> dropped (Avalonia default)
+       Visibility="Collapsed"      -> IsVisible="False"
+       RenderOptions.BitmapScalingMode -> RenderOptions.BitmapInterpolationMode
+       ToolTip="..."               -> ToolTip.Tip="..."
+       Button.Template + IsMouseOver trigger -> the CloseButton ControlTheme below with a
+                                      :pointerover /template/ style (Avalonia has no triggers)
+       MouseLeftButtonDown / Click / PreviewKeyDown -> wired in the constructor -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Features.FeaturePopupWindow"
+        Title="Feature"
+        Width="520" Height="640"
+        MinWidth="420" MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="False"
+        WindowDecorations="None"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of FeaturePopupWindow.xaml:BtnClose inline template, hoist when a second view needs it -->
+        <ControlTheme x:Key="CloseButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="0">
+                        <TextBlock Text="✕"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="14"
+                                   Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource DangerBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="White"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Titlebar -->
+            <Border Grid.Row="0" x:Name="Titlebar"
+                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Icon -->
+                    <Border Grid.Column="0"
+                            Width="28" Height="28"
+                            Margin="14,10,10,10"
+                            CornerRadius="6"
+                            Background="{DynamicResource TransparentPinkBrush}">
+                        <Grid>
+                            <Image x:Name="ImgIcon" Width="20" Height="20"
+                                   Stretch="Uniform"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                            <TextBlock x:Name="TxtGlyph"
+                                       FontSize="16"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       IsVisible="False"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Title -->
+                    <TextBlock Grid.Column="1"
+                               x:Name="TxtTitle"
+                               Text="Feature"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="15"
+                               FontWeight="SemiBold"/>
+
+                    <!-- Close button -->
+                    <Button Grid.Column="2"
+                            x:Name="BtnClose"
+                            Theme="{StaticResource CloseButton}"
+                            Cursor="Hand"
+                            Width="38" Height="38"
+                            ToolTip.Tip="Close (Esc)"/>
+                </Grid>
+            </Border>
+
+            <!-- Content host -->
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="16">
+                <ContentControl x:Name="ContentHost"/>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

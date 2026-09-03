@@ -1,0 +1,61 @@
+<!-- PORTED from ConditioningControlPanel/Features/AppInfoFeatureControl.xaml.
+     Structure, order, spacing and every resource key preserved. Deviations, all forced:
+
+       Style="{StaticResource OutlineButton}" -> Theme="{StaticResource OutlineButton}"
+       Content="{loc:Str key}"                -> a <TextBlock> child (Avalonia parses "_" in
+                                                 Content as an access key; keys are snake_case)
+       Click="X"                              -> wired in the constructor -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.AppInfoFeatureControl">
+
+    <StackPanel>
+        <!-- Version header -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="20,20" Margin="0,0,0,12">
+            <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="{loc:Str label_app_info}"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="20" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock x:Name="TxtVersion" Text=""
+                           Foreground="White"
+                           FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock x:Name="TxtProduct" Text=""
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="11"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Phase 2: this control is About + support only.
+             · The reparented account sections host (ExternalSectionsHost) is gone — the login /
+               linking / cloud-backup / privacy cards live permanently in Settings · Account.
+             · BtnCheckUpdates moved to Settings · Updates, which also shows the patch notes.
+             Everything below is unchanged and still self-contained. -->
+
+        <Button x:Name="BtnReportBug"
+                Theme="{StaticResource OutlineButton}"
+                Padding="14,12" FontSize="14"
+                Margin="0,0,0,8">
+            <TextBlock Text="{loc:Str btn_report_bug}"/>
+        </Button>
+
+        <Button x:Name="BtnSuggestion"
+                Theme="{StaticResource OutlineButton}"
+                Padding="14,12" FontSize="14"
+                Margin="0,0,0,8">
+            <TextBlock Text="{loc:Str btn_suggestion}"/>
+        </Button>
+
+        <!-- #769: report numbers persist, so they can be looked up long after the success panel. -->
+        <Button x:Name="BtnMyReports"
+                Theme="{StaticResource OutlineButton}"
+                Padding="14,12" FontSize="14">
+            <TextBlock Text="{loc:Str btn_my_reports}"/>
+        </Button>
+    </StackPanel>
+</UserControl>
