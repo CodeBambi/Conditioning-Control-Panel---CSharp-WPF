@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Windows;
+
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
 {
@@ -124,7 +125,7 @@ namespace ConditioningControlPanel.Services
     public sealed record ArtSlotBinding(
         string ResourcePath,
         string SurfaceId,
-        Rect ShippedViewbox,
+        ArtViewbox ShippedViewbox,
         bool Framable = true);
 
     /// <summary>
@@ -238,43 +239,43 @@ namespace ConditioningControlPanel.Services
         private static readonly ArtSlotBinding[] _bindings =
         {
             // Rail chips — rects from SettingsTabView.xaml's Art* ImageBrush resources.
-            new("features/takeover.png",       SurfaceRailChip, new Rect(0,    0.06, 1,    0.54)),
-            new("features/awareness.png",      SurfaceRailChip, new Rect(0.02, 0.05, 0.40, 0.43)),
-            new("features/vibe.png",           SurfaceRailChip, new Rect(0,    0.07, 1,    0.61)),
-            new("features/lab_quiz_hero.png",  SurfaceRailChip, new Rect(0.22, 0.04, 0.62, 0.66)),
-            new("features/remote_control.png", SurfaceRailChip, new Rect(0.60, 0.03, 0.35, 0.62)),
-            new("features/fyp.png",            SurfaceRailChip, new Rect(0.20, 0.33, 0.50, 0.545)),
+            new("features/takeover.png",       SurfaceRailChip, new ArtViewbox(0,    0.06, 1,    0.54)),
+            new("features/awareness.png",      SurfaceRailChip, new ArtViewbox(0.02, 0.05, 0.40, 0.43)),
+            new("features/vibe.png",           SurfaceRailChip, new ArtViewbox(0,    0.07, 1,    0.61)),
+            new("features/lab_quiz_hero.png",  SurfaceRailChip, new ArtViewbox(0.22, 0.04, 0.62, 0.66)),
+            new("features/remote_control.png", SurfaceRailChip, new ArtViewbox(0.60, 0.03, 0.35, 0.62)),
+            new("features/fyp.png",            SurfaceRailChip, new ArtViewbox(0.20, 0.33, 0.50, 0.545)),
             // The two taller launchers.
-            new("features/blink_trainer.png",  SurfaceRailCard, new Rect(0.05, 0.06, 0.44, 0.72)),
-            new("lockdown_icon.png",           SurfaceRailCard, new Rect(0.08, 0,    0.25, 1)),
+            new("features/blink_trainer.png",  SurfaceRailCard, new ArtViewbox(0.05, 0.06, 0.44, 0.72)),
+            new("lockdown_icon.png",           SurfaceRailCard, new ArtViewbox(0.08, 0,    0.25, 1)),
 
             // Play door cards — PlayTabView.xaml. Only Goon carried a rect; the rest were a bare
-            // UniformToFill, which is the full-image window and is what Rect(0,0,1,1) means.
+            // UniformToFill, which is the full-image window and is what ArtViewbox(0,0,1,1) means.
             // Goon keeps its rect for OUR art but is not framable: Stretch=Uniform over a plate.
             // Its plate is one of the two overridden to 168, hence playCardTall — the aspect is moot
             // for a non-framable pair (the shipped rect is used verbatim and mod art gets the whole
             // image), but a row that lies about its own shape is a trap for whoever reads it next.
-            new("features/goon_game.png",           SurfacePlayCardTall, new Rect(0.03, 0.22, 0.94, 0.68), Framable: false),
-            new("features/lab_gaze_hero.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
-            new("features/lab_focusgaze_hero.png",  SurfacePlayCard, new Rect(0, 0, 1, 1)),
-            new("features/lab_quiz_hero.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
-            new("features/blink_trainer.png",       SurfacePlayCard, new Rect(0, 0, 1, 1)),
+            new("features/goon_game.png",           SurfacePlayCardTall, new ArtViewbox(0.03, 0.22, 0.94, 0.68), Framable: false),
+            new("features/lab_gaze_hero.png",       SurfacePlayCard, new ArtViewbox(0, 0, 1, 1)),
+            new("features/lab_focusgaze_hero.png",  SurfacePlayCard, new ArtViewbox(0, 0, 1, 1)),
+            new("features/lab_quiz_hero.png",       SurfacePlayCard, new ArtViewbox(0, 0, 1, 1)),
+            new("features/blink_trainer.png",       SurfacePlayCard, new ArtViewbox(0, 0, 1, 1)),
             // Remote's plate overrides the style height to 168 (PlayTabView.xaml:645).
-            new("features/remote_control.png",      SurfacePlayCardTall, new Rect(0, 0, 1, 1)),
-            new("features/fyp.png",                 SurfacePlayCard, new Rect(0, 0, 1, 1)),
-            new("lockdown_icon.png",                SurfacePlayCard, new Rect(0, 0, 1, 1)),
-            new("features/justdrop.png",            SurfacePlayCard, new Rect(0, 0, 1, 1)),
+            new("features/remote_control.png",      SurfacePlayCardTall, new ArtViewbox(0, 0, 1, 1)),
+            new("features/fyp.png",                 SurfacePlayCard, new ArtViewbox(0, 0, 1, 1)),
+            new("lockdown_icon.png",                SurfacePlayCard, new ArtViewbox(0, 0, 1, 1)),
+            new("features/justdrop.png",            SurfacePlayCard, new ArtViewbox(0, 0, 1, 1)),
             // NOT a card plate at all: a fixed 216-wide column in the Loom strip.
-            new("features/loom.png",                SurfaceLoomStrip, new Rect(0, 0, 1, 1)),
+            new("features/loom.png",                SurfaceLoomStrip, new ArtViewbox(0, 0, 1, 1)),
 
             // Play hero banner.
-            new("features/dtrh.png", SurfacePlayHero, new Rect(0, 0, 1, 1)),
+            new("features/dtrh.png", SurfacePlayHero, new ArtViewbox(0, 0, 1, 1)),
 
             // Page headers. lab_quiz_hero paints the narrow Intake strip, NOT the wide permissions
             // plate — the two were one id until the review caught that a single preview cannot be
             // right for a 3.5:1 tile and a 5:1 plate at once.
-            new("features/lab_quiz_hero.png",     SurfaceIntakeStrip, new Rect(0, 0, 1, 1)),
-            new("features/lab_aimemory_hero.png", SurfacePageHeader,  new Rect(0, 0, 1, 1)),
+            new("features/lab_quiz_hero.png",     SurfaceIntakeStrip, new ArtViewbox(0, 0, 1, 1)),
+            new("features/lab_aimemory_hero.png", SurfacePageHeader,  new ArtViewbox(0, 0, 1, 1)),
         };
 
         /// <summary>Every (path, surface) pair the app frames.</summary>
@@ -302,7 +303,7 @@ namespace ConditioningControlPanel.Services
                                && b.SurfaceId == surfaceId && b.Framable);
 
         /// <summary>The shipped rect for a pair, or null when the pair is not in the table.</summary>
-        public static Rect? ShippedViewbox(string resourcePath, string surfaceId) =>
+        public static ArtViewbox? ShippedViewbox(string resourcePath, string surfaceId) =>
             _bindings.FirstOrDefault(b =>
                 string.Equals(b.ResourcePath, resourcePath, StringComparison.OrdinalIgnoreCase)
                 && b.SurfaceId == surfaceId)?.ShippedViewbox;
@@ -323,13 +324,13 @@ namespace ConditioningControlPanel.Services
         /// <param name="framing">The stored centre and zoom. Null yields the full-fill window.</param>
         /// <param name="sourceAspect">Source image width ÷ height, in pixels.</param>
         /// <param name="surfaceAspect">The frame's width ÷ height.</param>
-        public static Rect ToViewbox(ModArtFraming? framing, double sourceAspect, double surfaceAspect)
+        public static ArtViewbox ToViewbox(ModArtFraming? framing, double sourceAspect, double surfaceAspect)
         {
             // A non-finite or absurd aspect (a zero-height decode, a corrupt header) must not
             // produce a NaN rect — WPF renders nothing at all for one, which reads as "the mod's
             // art is missing" rather than "the crop maths broke".
             if (!IsUsable(sourceAspect) || !IsUsable(surfaceAspect))
-                return new Rect(0, 0, 1, 1);
+                return new ArtViewbox(0, 0, 1, 1);
 
             var zoom = framing == null ? 1.0 : framing.Zoom;
             if (double.IsNaN(zoom) || double.IsInfinity(zoom)) zoom = 1.0;
@@ -365,7 +366,7 @@ namespace ConditioningControlPanel.Services
             var x = Math.Clamp(cx - w / 2.0, 0.0, Math.Max(0.0, 1.0 - w));
             var y = Math.Clamp(cy - h / 2.0, 0.0, Math.Max(0.0, 1.0 - h));
 
-            return new Rect(x, y, w, h);
+            return new ArtViewbox(x, y, w, h);
         }
 
         /// <summary>
@@ -388,22 +389,22 @@ namespace ConditioningControlPanel.Services
         /// </param>
         /// <param name="sourceAspect">Source image width ÷ height in pixels.</param>
         /// <param name="framing">The mod's framing for this pair, or null if it supplied none.</param>
-        public static Rect ResolveViewbox(string resourcePath, string surfaceId, bool isModSupplied,
+        public static ArtViewbox ResolveViewbox(string resourcePath, string surfaceId, bool isModSupplied,
                                           double sourceAspect, ModArtFraming? framing)
         {
             if (!isModSupplied)
-                return ShippedViewbox(resourcePath, surfaceId) ?? new Rect(0, 0, 1, 1);
+                return ShippedViewbox(resourcePath, surfaceId) ?? new ArtViewbox(0, 0, 1, 1);
 
             var surface = FindSurface(surfaceId);
             if (surface == null)
-                return new Rect(0, 0, 1, 1);
+                return new ArtViewbox(0, 0, 1, 1);
 
             // A non-framable pair takes the whole image rather than a crop window, whatever a
             // hand-edited mod.json claims: the surface letterboxes onto a plate, so a window would
             // be shrunk inside it instead of filling it. The editor never offers one, so this is
             // purely the guard for a manifest written by hand.
             if (framing != null && !IsFramable(resourcePath, surfaceId))
-                return new Rect(0, 0, 1, 1);
+                return new ArtViewbox(0, 0, 1, 1);
 
             return ToViewbox(framing, sourceAspect, surface.AspectRatio);
         }

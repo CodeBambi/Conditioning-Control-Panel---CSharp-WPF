@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Models;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
@@ -54,7 +55,7 @@ public class ModArtFramingTests
     public void ToViewbox_AtZoomOne_MatchingAspects_IsTheWholeImage()
     {
         var rect = ModArtFramingRegistry.ToViewbox(null, sourceAspect: 1.5, surfaceAspect: 1.5);
-        Assert.Equal(new Rect(0, 0, 1, 1), rect);
+        Assert.Equal(new ArtViewbox(0, 0, 1, 1), rect);
     }
 
     [Fact]
@@ -109,7 +110,7 @@ public class ModArtFramingTests
     public void ToViewbox_ZoomIsClampedBothWays()
     {
         var under = ModArtFramingRegistry.ToViewbox(new ModArtFraming { Zoom = 0.1 }, 2.0, 2.0);
-        Assert.Equal(new Rect(0, 0, 1, 1), under);   // below 1 is meaningless, treated as 1
+        Assert.Equal(new ArtViewbox(0, 0, 1, 1), under);   // below 1 is meaningless, treated as 1
 
         var over = ModArtFramingRegistry.ToViewbox(new ModArtFraming { Zoom = 1e9 }, 2.0, 2.0);
         var atMax = ModArtFramingRegistry.ToViewbox(
@@ -132,7 +133,7 @@ public class ModArtFramingTests
         // missing" rather than "the crop maths broke" — so a corrupt decode must degrade to the
         // full image, not to an empty window.
         var rect = ModArtFramingRegistry.ToViewbox(new ModArtFraming(), sourceAspect, surfaceAspect);
-        Assert.Equal(new Rect(0, 0, 1, 1), rect);
+        Assert.Equal(new ArtViewbox(0, 0, 1, 1), rect);
     }
 
     [Fact]
@@ -173,7 +174,7 @@ public class ModArtFramingTests
             isModSupplied: false, sourceAspect: 1.79,
             framing: new ModArtFraming { CenterX = 0.1, CenterY = 0.9, Zoom = 4.0 });
 
-        Assert.Equal(new Rect(0, 0.06, 1, 0.54), rect);
+        Assert.Equal(new ArtViewbox(0, 0.06, 1, 0.54), rect);
     }
 
     [Fact]
@@ -184,7 +185,7 @@ public class ModArtFramingTests
         // with nothing declared they get an honest centre crop they can predict.
         const string path = "features/takeover.png";
         var shipped = ModArtFramingRegistry.ShippedViewbox(path, ModArtFramingRegistry.SurfaceRailChip);
-        Assert.Equal(new Rect(0, 0.06, 1, 0.54), shipped!.Value);
+        Assert.Equal(new ArtViewbox(0, 0.06, 1, 0.54), shipped!.Value);
 
         var rect = ModArtFramingRegistry.ResolveViewbox(
             path, ModArtFramingRegistry.SurfaceRailChip,
@@ -218,7 +219,7 @@ public class ModArtFramingTests
             "features/fyp.png", "surfaceFromTheFuture",
             isModSupplied: true, sourceAspect: 1.79, framing: new ModArtFraming { Zoom = 3 });
 
-        Assert.Equal(new Rect(0, 0, 1, 1), rect);
+        Assert.Equal(new ArtViewbox(0, 0, 1, 1), rect);
     }
 
     // ── Table guards: catch a typo in the registry rather than on someone's screen ──
@@ -443,7 +444,7 @@ public class ModArtFramingTests
     /// returns null when the element has no Viewbox at all (a bare UniformToFill, which means the
     /// whole image and is not something the registry mirrors).
     /// </summary>
-    private static Rect? ExtractViewbox(string xaml, string anchor)
+    private static ArtViewbox? ExtractViewbox(string xaml, string anchor)
     {
         var at = xaml.IndexOf(anchor, StringComparison.Ordinal);
         if (at < 0) return null;
@@ -455,14 +456,14 @@ public class ModArtFramingTests
         var m = Regex.Match(window, @"Viewbox\s*=\s*""\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*""");
         if (!m.Success) return null;
 
-        return new Rect(
+        return new ArtViewbox(
             double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture),
             double.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture),
             double.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture),
             double.Parse(m.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    private static void AssertRectsMatch(Rect registry, Rect xaml, string what)
+    private static void AssertRectsMatch(ArtViewbox registry, ArtViewbox xaml, string what)
     {
         Assert.True(Math.Abs(registry.X - xaml.X) < 1e-9
                     && Math.Abs(registry.Y - xaml.Y) < 1e-9
