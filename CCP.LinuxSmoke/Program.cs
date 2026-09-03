@@ -54,6 +54,13 @@ namespace ConditioningControlPanel.LinuxSmoke
                 CoreSettingsHooks.NotifySettingChanged("Anything");
                 Check("CoreSettingsHooks tolerates no listener", true);
                 Check("CoreMods.ModeDisplayName is null when no mod layer is up", CoreMods.ModeDisplayName == null);
+                // The settings model itself is in Core now (wire/07). Unseeded, the seam hands out one
+                // default instance rather than null, so Core code that reads a setting never trips.
+                Check("CoreSettings.HasProvider is false with no head", !CoreSettings.HasProvider);
+                Check("CoreSettings.Current is a default instance, not null", CoreSettings.Current is not null);
+                Check("CoreSettings.Current is stable across reads", ReferenceEquals(CoreSettings.Current, CoreSettings.Current));
+                Check("CoreMods.MakeModAware passes text through with no mod layer", CoreMods.MakeModAware("Bambi") == "Bambi");
+                Check("AwarenessIntensity.Current reads the ship default unseeded", Services.Awareness.AwarenessIntensityProfile.Current == Services.Awareness.AwarenessIntensity.Chatty);
                 // The subreddit rule moved from the online coordinator into Core with no test of its own.
                 Check("SubredditName strips r/", Services.Fyp.SubredditName.Sanitize("r/gonewild") == "gonewild");
                 Check("SubredditName keeps the last /r/ segment", Services.Fyp.SubredditName.Sanitize("https://reddit.com/r/Bar_1/") == "Bar_1");

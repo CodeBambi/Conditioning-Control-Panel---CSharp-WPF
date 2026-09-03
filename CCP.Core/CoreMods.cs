@@ -66,6 +66,17 @@ namespace ConditioningControlPanel
             get { try { return ModeDisplayNameProvider?.Invoke(); } catch { return null; } }
         }
 
+        /// <summary>Rewrites mod-specific vocabulary in a user-facing string for the active mod, or
+        /// null to leave it alone. Session names and descriptions go through this.</summary>
+        public static volatile Func<string, string?>? MakeModAwareProvider;
+
+        /// <summary>The string adjusted for the active mod, or the input unchanged when no mod
+        /// layer is up. Faults are swallowed - see <see cref="ActiveModToken"/>.</summary>
+        public static string MakeModAware(string text)
+        {
+            try { return MakeModAwareProvider?.Invoke(text) ?? text; } catch { return text; }
+        }
+
         /// <summary>Collective override, or null. Faults are swallowed - see <see cref="ActiveModToken"/>.</summary>
         public static string? CollectiveOverride
         {

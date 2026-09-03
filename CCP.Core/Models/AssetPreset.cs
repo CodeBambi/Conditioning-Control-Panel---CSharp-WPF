@@ -126,7 +126,7 @@ public class AssetPreset : INotifyPropertyChanged
         return new AssetPreset
         {
             Name = name,
-            DisabledAssetPaths = new HashSet<string>(App.Settings.Current.DisabledAssetPaths),
+            DisabledAssetPaths = new HashSet<string>(CoreSettings.Current.DisabledAssetPaths),
             EnabledImageCount = imageCount,
             EnabledVideoCount = videoCount,
             CreatedAt = DateTime.Now,
@@ -139,7 +139,7 @@ public class AssetPreset : INotifyPropertyChanged
     /// </summary>
     public void ApplyToSettings()
     {
-        App.Settings.Current.DisabledAssetPaths = new HashSet<string>(DisabledAssetPaths);
+        CoreSettings.Current.DisabledAssetPaths = new HashSet<string>(DisabledAssetPaths);
         LastUsed = DateTime.Now;
     }
 
@@ -148,7 +148,7 @@ public class AssetPreset : INotifyPropertyChanged
     /// </summary>
     public void UpdateFromCurrentSettings(int imageCount, int videoCount)
     {
-        DisabledAssetPaths = new HashSet<string>(App.Settings.Current.DisabledAssetPaths);
+        DisabledAssetPaths = new HashSet<string>(CoreSettings.Current.DisabledAssetPaths);
         EnabledImageCount = imageCount;
         EnabledVideoCount = videoCount;
         LastUsed = DateTime.Now;

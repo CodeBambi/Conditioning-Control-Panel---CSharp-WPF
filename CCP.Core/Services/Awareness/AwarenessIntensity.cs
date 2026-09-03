@@ -59,15 +59,15 @@ namespace ConditioningControlPanel.Services.Awareness
         public static bool RareEnabled(AwarenessIntensity intensity) => intensity != AwarenessIntensity.Off;
 
         /// <summary>
-        /// Reads the setting without throwing headlessly (App.Settings is null in tests and during
-        /// early startup). Missing settings read as the ship default rather than as Off, because a
-        /// null settings object is a startup-ordering fact, not a user preference.
+        /// Reads the setting without throwing headlessly (no head has seeded CoreSettings in tests
+        /// and during early startup). Missing settings read as the ship default rather than as
+        /// Off, because an unseeded settings seam is a startup-ordering fact, not a user preference.
         /// </summary>
         public static AwarenessIntensity Current
         {
             get
             {
-                try { return App.Settings?.Current?.AwarenessIntensity ?? AwarenessIntensity.Chatty; }
+                try { return CoreSettings.HasProvider ? CoreSettings.Current.AwarenessIntensity : AwarenessIntensity.Chatty; }
                 catch { return AwarenessIntensity.Chatty; }
             }
         }

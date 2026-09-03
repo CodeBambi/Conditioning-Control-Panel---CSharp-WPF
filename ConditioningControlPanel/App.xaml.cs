@@ -274,6 +274,10 @@ namespace ConditioningControlPanel
             CoreMods.PetNameOverrideProvider = () => Mods?.GetPetNameOverride();
             CoreMods.CollectiveOverrideProvider = () => Mods?.GetCollectiveOverride();
             CoreMods.ModeDisplayNameProvider = () => Mods?.GetModeDisplayName();
+            CoreMods.MakeModAwareProvider = text => Mods?.MakeModAware(text);
+            // The settings model now lives in Core; Core code reads the live instance through
+            // this. Settings is created later in OnStartup; the delegate reads it lazily.
+            CoreSettings.CurrentProvider = () => Settings?.Current;
 
             // The settings model's outward hooks. Bark and the mod service attach later in
             // startup; the delegates read them lazily, so seeding here is order-safe.
