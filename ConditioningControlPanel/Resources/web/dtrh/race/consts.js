@@ -38,6 +38,9 @@ export const COMBO_HOLD_SEC = 4.0;
 /** Seconds for the run intensity to ramp from 0 to 1 (gates which bubble kinds may appear). */
 export const INTENSITY_RAMP_SEC = 360;
 
+/** The opening is treats only: no effect bubble rolls before this, then they trickle in over the next minute. */
+export const TREATS_ONLY_SEC = 45;
+
 /** The cup + EMI rig scale (the pitch demo cup read tiny at the chase camera). */
 export const KART_SCALE = 1.35;
 
