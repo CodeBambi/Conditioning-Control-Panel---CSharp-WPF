@@ -340,7 +340,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track features crossed this frame
     for (const f of lay.featuresBetween(prevD, ks.d)) {
       if (f.type === 'boost' && !ks.airborne && Math.abs(f.x - ks.x) <= 1.2) { k.applyBoost(1.6); sfx('tunnel_powerup_collect', 0.8); shake.shake(0.25, 200); poke('streamed', 1.2); }
-      else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2) { if (w.items.roll(w.score.state.mult)) sfx('ui_click', 0.5); }
+      else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2 && w.dresser.breakItemBox(f)) { shake.shake(0.2, 120); if (w.items.roll(w.score.state.mult)) sfx('ui_click', 0.5); }
       else if (f.type === 'gate') enterRoom(w, f.room);
     }
     if (S.wasAirborne && !ks.airborne) { shake.shake(0.8, 300); poke('smug', 0.7); }

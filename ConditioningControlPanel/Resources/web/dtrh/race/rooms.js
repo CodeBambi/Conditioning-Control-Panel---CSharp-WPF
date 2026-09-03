@@ -10,7 +10,8 @@
  * with running chevrons, bobbing sugar-cube item boxes, and the diegetic props from
  * race/roomProps.js. update(d) culls rooms out of sight and animates what is near
  * the kart; applyRoom(fx, roomId, fadeSec) hands the room's biome style to
- * fx.applyRegionGrade; dispose() tears it all down.
+ * fx.applyRegionGrade; breakItemBox(feature) smashes a crossed sugar cube (pooled
+ * shards, a white flash, regrowth after RESPAWN_SEC); dispose() tears it all down.
  *
  * Every position goes through layout.toWorld(d, x, h) and every orientation through
  * layout.frameAtDepth(d). Draw calls: 6 for the furniture + 21 for the props (27).
@@ -294,7 +295,75 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   const cubeMesh = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), cubeMat, Math.max(1, cubes.length));
   cubes.forEach((c, i) => cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75, 0, 1, _m)));
   cubeMesh.count = cubes.length;
-  for (const m of [wedges, lips, airDots, padMesh, cubeMesh]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
+  // a crossed cube BREAKS: it hides, throws SHARDS_PER pieces of itself (pooled, world space,
+  // gravity along the local up) with a white flash on its spot, and grows back after RESPAWN_SEC.
+  const cubeIndex = new Map(cubes.map((c, i) => [c, i]));
+  const cubeBrokenAt = new Float64Array(Math.max(1, cubes.length)).fill(-1);   // -1 = intact
+  const RESPAWN_SEC = 8, REGROW_SEC = 0.5, SHARD_TTL = 0.65, SHARDS_PER = 8, SHARD_N = 48, FLASH_N = 4, FLASH_SEC = 0.22;
+  const shards = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE * 0.24, CUBE * 0.24, CUBE * 0.24)), cubeMat, SHARD_N);
+  const shard = []; for (let i = 0; i < SHARD_N; i++) shard.push({ life: 0, age: 0, spin: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), g: new THREE.Vector3(), axis: new THREE.Vector3(0, 1, 0) });
+  let shardCursor = 0, shardsLive = 0;
+  const flashMat = mat(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  const flashes = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), flashMat, FLASH_N);
+  const flash = []; for (let i = 0; i < FLASH_N; i++) flash.push({ life: 0, m: new THREE.Matrix4() });
+  let flashCursor = 0, flashesLive = 0;
+  const _q = new THREE.Quaternion(), _up = new THREE.Vector3(), _hide = new THREE.Vector3(0, -999, 0);
+  const hideAll = (mesh, n) => { for (let i = 0; i < n; i++) mesh.setMatrixAt(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); };
+  hideAll(shards, SHARD_N); hideAll(flashes, FLASH_N);
+  let lastT = -1;
+  /** Break the cube for feature f (or its index). Returns true when it was intact, false when
+   *  it was already broken (the run brain hands out an item only on true). */
+  function breakItemBox(f) {
+    const i = typeof f === 'number' ? f : cubeIndex.get(f);
+    if (i == null || cubeBrokenAt[i] >= 0) return false;
+    const c = cubes[i];
+    cubeBrokenAt[i] = now() - t0;
+    cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75, 0, 0.0001, _m)); cubeMesh.instanceMatrix.needsUpdate = true;
+    const fr = layout.frameAtDepth(c.d); _up.copy(fr.up);
+    layout.toWorld(c.d, c.x, CUBE * 0.75, _p);
+    for (let k = 0; k < SHARDS_PER; k++) {
+      const s = shard[shardCursor]; shardCursor = (shardCursor + 1) % SHARD_N;
+      if (s.life <= 0) shardsLive++;
+      s.life = SHARD_TTL; s.age = 0;
+      s.p.copy(_p).addScaledVector(fr.right, (rng() - 0.5) * CUBE * 0.6).addScaledVector(_up, (rng() - 0.5) * CUBE * 0.6).addScaledVector(fr.tangent, (rng() - 0.5) * CUBE * 0.6);
+      s.v.copy(fr.right).multiplyScalar((rng() - 0.5) * 7).addScaledVector(_up, 2.5 + rng() * 4).addScaledVector(fr.tangent, 1 + rng() * 5);
+      s.g.copy(_up).multiplyScalar(-14);
+      s.axis.set(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize(); s.spin = (rng() - 0.5) * 24;
+    }
+    const fl = flash[flashCursor]; flashCursor = (flashCursor + 1) % FLASH_N;
+    if (fl.life <= 0) flashesLive++;
+    fl.life = FLASH_SEC; roadMatrix(c.d, c.x, CUBE * 0.75, 0, 1, fl.m);
+    return true;
+  }
+  function updateBreaks(t) {
+    const dt = lastT < 0 ? 0 : Math.min(0.05, t - lastT); lastT = t;
+    if (shardsLive > 0) {                   // shards fly, spin and shrink out
+      let live = 0;
+      for (let i = 0; i < SHARD_N; i++) {
+        const s = shard[i];
+        if (s.life <= 0) continue;
+        s.life -= dt; s.age += dt;
+        if (s.life <= 0) { shards.setMatrixAt(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); continue; }
+        live++;
+        s.v.addScaledVector(s.g, dt); s.p.addScaledVector(s.v, dt);
+        shards.setMatrixAt(i, _m.compose(s.p, _q.setFromAxisAngle(s.axis, s.spin * s.age), _s.setScalar(0.4 + 0.6 * (s.life / SHARD_TTL))));
+      }
+      shardsLive = live; shards.instanceMatrix.needsUpdate = true;
+    }
+    if (flashesLive > 0) {                  // the flash: a white cube on the spot that swells and vanishes
+      let live = 0;
+      for (let i = 0; i < FLASH_N; i++) {
+        const fl = flash[i];
+        if (fl.life <= 0) continue;
+        fl.life -= dt;
+        if (fl.life <= 0) { flashes.setMatrixAt(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); continue; }
+        live++;
+        flashes.setMatrixAt(i, _m.copy(fl.m).scale(_s.setScalar(1.15 + 0.9 * (1 - fl.life / FLASH_SEC))));
+      }
+      flashesLive = live; flashes.instanceMatrix.needsUpdate = true;
+    }
+  }
+  for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards, flashes]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
   if (wedges.instanceColor) wedges.instanceColor.needsUpdate = true;
 
   // ---- diegetic props: grounded, voxel, animated near the kart (race/roomProps.js) ------
@@ -314,12 +383,20 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     const t = now() - t0;
     props.update(d, t);
     let dirty = false;
-    cubes.forEach((c, i) => {
-      if (wrapDist(c.d, d) > ANIM) return;
-      cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75 + 0.18 * Math.sin(t * 2 + i), t * 1.1 + i, 1, _m));
+    for (let i = 0; i < cubes.length; i++) {
+      const c = cubes[i], since = cubeBrokenAt[i] >= 0 ? t - cubeBrokenAt[i] : -1;
+      if (since >= 0 && since < RESPAWN_SEC) continue;                       // hidden, matrix already written
+      let scale = 1;
+      if (since >= 0) {                                                       // growing back
+        const u = Math.min(1, (since - RESPAWN_SEC) / REGROW_SEC);
+        scale = u < 1 ? Math.max(0.0001, 1.12 * Math.sin(u * Math.PI * 0.5)) : 1;
+        if (u >= 1) cubeBrokenAt[i] = -1;
+      } else if (wrapDist(c.d, d) > ANIM) continue;
+      cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75 + 0.18 * Math.sin(t * 2 + i), t * 1.1 + i, scale, _m));
       dirty = true;
-    });
+    }
     if (dirty) cubeMesh.instanceMatrix.needsUpdate = true;
+    updateBreaks(t);
     // air-line dots: gone while they would sit between the seat and the cup, back over DOT_NEAR..DOT_FAR
     let adirty = false;
     for (let i = 0; i < airD.length; i++) {
@@ -352,8 +429,8 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     for (const m of mats) m.dispose();
     for (const t of texes) t.dispose();
     props.dispose();
-    for (const m of [wedges, lips, airDots, padMesh, cubeMesh]) m.dispose();
+    for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards, flashes]) m.dispose();
   }
 
-  return { update, applyRoom, dispose, group, spans, rooms: specs };
+  return { update, applyRoom, breakItemBox, dispose, group, spans, rooms: specs };
 }
