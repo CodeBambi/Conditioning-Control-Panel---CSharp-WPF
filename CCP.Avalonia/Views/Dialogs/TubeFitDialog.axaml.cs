@@ -9,6 +9,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using ConditioningControlPanel.Avalonia.Views.AvatarTube;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
@@ -42,7 +43,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    seam. Nothing loading falls back to the pose glyph and a nominal
     ///    <see cref="PlaceholderPixelWidth"/>x<see cref="PlaceholderPixelHeight"/>, so the preview
     ///    is never blank.
-    ///  - Still head-side, with a note: the tube window's <c>RefreshTubeLayout()</c>. The tube
+    ///  - <b>Save and Reset hot-refresh the live tube.</b>
+    ///    <c>AvatarTubeWindow.RefreshTubeLayout()</c> is on this head now, and
+    ///    <c>AvatarTubeWindow.Live</c> is the App.AvatarWindow twin that finds the open one, so the
+    ///    edit lands on screen while the dialog is still up instead of waiting for the tube's next
+    ///    construction. Null when no tube is open, which is a no-op rather than a failure. The tube
     ///    frame itself stays the placeholder capsule - that is markup this layer does not own.
     ///  - WPF's <c>LayoutTransform</c> has no Avalonia twin on a plain control, so the avatar scale
     ///    is a <c>RenderTransform</c> about the centre. It does not grow the parent Border, so a
@@ -473,9 +478,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 "(scale {Scale:0.00}, attached {OffX}/{OffY}, detached {DetX}/{DetY})",
                 _modId, _scale, _offsetX, _offsetY, _detachedOffsetX, _detachedOffsetY);
 
-            // ponytail: needs the tube window's RefreshTubeLayout() to re-read the override live.
-            // CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs has no such method yet, so
-            // the saved layout is picked up on the tube's next construction rather than at once.
+            // Hot-refresh the open tube, exactly as WPF's App.AvatarWindow?.RefreshTubeLayout()
+            // does. Both sides read the same EffectiveTubeLayout, so this dialog's preview and the
+            // live tube now settle on the same numbers the instant Save is pressed.
+            AvatarTubeWindow.Live?.RefreshTubeLayout();
             Close();
         }
 
@@ -486,7 +492,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             Log.Information("[TubeFit] Reset tube layout to mod default for mod {ModId}", _modId);
 
-            // ponytail: needs RefreshTubeLayout() - see BtnSave_Click.
+            AvatarTubeWindow.Live?.RefreshTubeLayout();
 
             // Reload the working values from the mod's shipped manifest so the preview follows.
             LoadWorkingValues(ManifestLayout());

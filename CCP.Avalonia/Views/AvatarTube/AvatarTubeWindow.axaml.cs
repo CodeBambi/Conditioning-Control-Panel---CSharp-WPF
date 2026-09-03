@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -313,6 +315,24 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _possessionGlitchTimer?.Stop();
             base.OnClosed(e);
         }
+
+        // =========================================================================================
+        //  Locating the live tube. WPF's App.AvatarWindow twin: the WPF head keeps a field on its
+        //  Application subclass, which is exactly the static service locator Core is not allowed to
+        //  have, so this head asks the window list instead.
+        // =========================================================================================
+
+        /// <summary>
+        /// The tube that is currently OPEN, or null. Avalonia's desktop lifetime populates
+        /// <c>Windows</c> on <c>Show()</c> and drops the entry on close, so this cannot go stale the
+        /// way a hand-maintained static field can - there is no lifecycle bookkeeping to get wrong,
+        /// and a constructed-but-never-shown tube (the <c>--render-view</c> path) is correctly not
+        /// "live". Null on a headless render and before the shell builds one, which every caller
+        /// treats as "there is nothing to refresh".
+        /// </summary>
+        public static AvatarTubeWindow? Live =>
+            (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+                ?.Windows.OfType<AvatarTubeWindow>().FirstOrDefault();
 
         // =========================================================================================
         //  Thread marshalling. WPF's own-thread mode (AppSettings.AvatarOwnThread) has no Avalonia
@@ -1394,14 +1414,21 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <summary>Step through the unlocked avatar sets with the title-box arrows.</summary>
         private void SelectAvatarSet(int delta)
         {
-            // ponytail: the three things a SWITCH needs are here now (LoadAvatarPoses,
-            // ApplyAvatarTransform, UpdateTitleDisplay); the LIST of sets to step through is not.
-            // App.Mods.IsAvatarSetSupported and GetCustomAvatarSets (ModService.cs) decide which
-            // sets the active mod actually ships art for, and stepping onto a set with no PNG would
-            // leave the tube empty under a caption naming a persona who is not drawn. Both arrows
-            // are IsVisible=False in the XAML until WPF's UpdateNavigationArrows runs, so nothing
-            // reaches this today - the tube shows CoreSettings.Current.SelectedAvatarSet and stays
-            // on it.
+            // The old note here named App.Mods.IsAvatarSetSupported / GetCustomAvatarSets as the
+            // blocker. That is STALE: both are one-liners over ModManifest.SupportedAvatarSets and
+            // .CustomAvatarSets (ModService.cs:1268/1289), and the whole manifest is in Core -
+            // CoreMods.InstalledMods[ActiveModId].Manifest answers both today. The list of sets is
+            // not what is missing.
+            //
+            // ponytail: what is missing is the COMPANION COUPLING. WPF's SwitchToAvatarSet
+            // (AvatarTubeWindow.Avatar.cs:395) persists SelectedAvatarSet and switches the active
+            // companion in the same beat for sets 4+, because the tube's caption reads the persona
+            // behind the SET. CoreModsHooks.SwitchCompanion is the seam and no head seeds it, so an
+            // arrow here would write a shared setting and leave the app's active companion pointing
+            // somewhere else - a second writer for one setting, which is the trap this port keeps
+            // hitting. Both arrows are IsVisible=False in the XAML (WPF's UpdateNavigationArrows is
+            // what reveals them), so nothing reaches this today: the tube shows
+            // CoreSettings.Current.SelectedAvatarSet and stays on it.
         }
 
         /// <summary>Refresh the context menu's checkmarks and the remote-emote item swap.</summary>
