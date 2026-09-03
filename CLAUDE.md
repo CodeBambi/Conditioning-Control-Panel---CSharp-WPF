@@ -12,6 +12,9 @@ and VR (Quest 2/3, Steam Frame). The Windows app must look and behave exactly as
 ConditioningControlPanel.sln
   CCP.Core/                    net8.0            <- the engine. No WPF, no WinForms, no Win32.
   ConditioningControlPanel/    net8.0-windows    <- WPF head (Windows)
+  CCP.Avalonia/                net8.0            <- Avalonia head (Linux)
+  CCP.VR/                      net8.0            <- VR head (Quest / Steam Frame)
+  CCP.LinuxSmoke/              net8.0            <- headless proof that Core runs off Windows
   Tests/ConditioningControlPanel.Tests/          <- existing suite (Windows-only)
   Tests/CCP.Core.Tests/        net8.0            <- engine tests, run on Linux CI
 ```
@@ -62,7 +65,10 @@ add a second copy of the logic — that is the exact failure this structure exis
 On Linux, building the Windows head works and is the normal way to verify a change:
 
 ```bash
+export DOTNET_ROLL_FORWARD=Major                            # SDK 10 host, net8.0 projects
+bash .github/scripts/core-guards.sh                         # the greps the compiler cannot do
 dotnet build CCP.Core/CCP.Core.csproj -c Release            # portability proof
+dotnet build CCP.Avalonia/CCP.Avalonia.csproj -c Release    # the Linux head
 dotnet build ConditioningControlPanel.sln -c Release \
     -p:EnableWindowsTargeting=true \
     -p:ValidateExecutableReferencesMatchSelfContained=false  # both flags required
@@ -74,6 +80,27 @@ self-contained itself, which the .NET 10 SDK rejects with `NETSDK1151`. Do not "
 a `.csproj` — it changes what ships. Do not use `-p:SelfContained=true` either: `-p:` sets a *global*
 property, so it also hits `Tests/CCP.Core.Tests`, which has no `RuntimeIdentifier` by design, and
 that combination fails with `NETSDK1191`.
+
+`DOTNET_ROLL_FORWARD=Major` is needed because no 8.0 runtime is installed alongside the .NET 10 SDK,
+so `dotnet run` on any of these projects otherwise refuses to start. It affects running, not building.
+
+Three runners prove behaviour rather than compilation, and each answers a different question:
+
+```bash
+dotnet run --project CCP.LinuxSmoke/CCP.LinuxSmoke.csproj -c Release          # Core, no head at all
+dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --smoke   # head links + strings
+dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --nav-check
+```
+
+CI runs the first two; `--nav-check` is local-only, and is the one check that exercises a *click*
+rather than a frame — run it after touching a `MainShellWindow` partial or `NavCheck`.
+
+**`CCP.LinuxSmoke` used to exit 0 even when an assertion printed `[FAIL]`.** Every check sat in a
+block whose last line was `return 0`, so a broken seam printed a failure, incremented the counter and
+still left the ubuntu job green — CI could not have caught a seam regression. Fixed at
+`CCP.LinuxSmoke/Program.cs:163`, and worth recording as a shape: *a proof that cannot fail is not a
+proof.* Any assertion added to any of these runners must be verified to actually fail when the thing
+it asserts is broken — break it once on purpose and watch the exit code.
 
 The Windows test suite cannot execute on Linux (`win-x64` testhost). Compile-verify locally; CI runs
 it on `windows-latest`.
@@ -90,7 +117,7 @@ Measured on the first ported view (`Views/Tabs/AchievementsTabView`). The mappin
 | `Panel.ZIndex` | `ZIndex` |
 | `{loc:Str key}` | `{loc:Str key}` unchanged, with `xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"` (the Avalonia twin lives in the head; the strings come from Core) |
 
-Three things that will bite, all found by rendering rather than by reading:
+Things that will bite, all found by rendering or running rather than by reading:
 
 1. **Avalonia's `Button` parses `_` in `Content` as an access key.** `btn_visit_patreon` renders as
    "btnvisit_patreon" with a stray underline. WPF only does this with `RecognizesAccessKey`, so it
@@ -129,6 +156,17 @@ Three things that will bite, all found by rendering rather than by reading:
    button. Found porting `SeasonRecapCard`; every `ControlTheme` in `Theme/Styles.xaml` carries
    the binding for this reason.
 
+7. **`AvaloniaXamlLoader.Load(this)` does not assign `x:Name` fields.** Only the generated
+   `InitializeComponent()` does. `CCP.Avalonia/Views/Windows/MainShellWindow.axaml.cs:87` loads the
+   first way, so every generated field on that window — `AppSettingsTab`, `StudioTab`,
+   `MainTutorialOverlay` — is permanently null. `SomeTab?.DoThing()` therefore compiles, renders,
+   reviews clean and is a silent no-op forever: the `?.` reads as a safe guard and is actually the
+   bug hiding. Found by a `--nav-check` crash, not by reading. On that window the only sanctioned
+   way for any partial to reach a control is the `Named<T>(name)` helper in
+   `MainShellWindow.TabNavigation.cs`; never a bare `x:Name` field. In any NEW file, call
+   `InitializeComponent()`. The same trap had already produced a NullReferenceException in
+   `PerformanceSettingsSection`, so this is the second time it has bitten.
+
 Two more that bite on setting text from code, both because Avalonia keeps a binding alive under a
 local value where WPF would have cleared it: assigning `.Text` to a control that carries
 `{loc:Str}` is undone on the next language change, so choose the key in code and bind it instead;
@@ -150,6 +188,23 @@ dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render-all
 Read the PNG. A raw `snake_case` key, an empty region where a button sits, or a swallowed
 underscore is a failed port, whatever the compiler said. There is no WPF render on Linux, so
 fidelity against the original is not what this proves; drawing, strings and templates are.
+`--render-all` fails if any one view throws, which is why CI runs it and uploads the frames.
+
+### Restoring the logic a ported view is missing
+
+Each view was copied across with its logic cut out and a `// ponytail:` note left in its place
+naming what was missing. **A `ponytail:` note is a claim about the past, not the present.** Most say
+"wired when X moves to Core" and X moved layers ago — four waves of restoration found the majority of
+them stale. The procedure is always the same: grep `CCP.Core` for what the note names and believe the
+grep, never the note.
+
+The stub *count* is not a progress bar either. One wave that made thirteen feature cards work raised
+it from 1,267 to 1,288, because restoring a view turns one vague note into four precise ones. Count
+files still carrying notes, or count distinct named blockers:
+
+```bash
+grep -rl "ponytail:" CCP.Avalonia --include="*.cs" --include="*.axaml" | wc -l
+```
 
 ## What actually remains in the UI
 
@@ -174,6 +229,14 @@ Bucket A is where to work first: a third of the UI, and the procedure is already
 Pure `git mv`, zero content edits, namespace unchanged. Verify with `git diff -M --stat` showing a
 rename at 100% similarity, then build both projects. If Core rejects the file, leave it in the head
 and record why — a partial move is a correct outcome, not a failure.
+
+**The guard scan does not tell you whether a file can move.** `core-guards.sh` greps `CCP.Core/` only
+— it never reads a candidate still sitting in the head — and even then it counts *forbidden APIs*,
+not *type coupling*. Copy `ModService.cs` into Core and the guard flags exactly one line
+(`App.Settings`), while the compiler finds ten head-only types it has no pattern for
+(`AvatarTubeWindow`, `SessionEngine`, `UpdateService`, `BambiSprite`, …). So dry-run the move — copy
+the file in, build Core, read the errors, delete the copy — *before* promising the move in a layer.
+That is thirty seconds and it is the only honest estimate.
 
 ## Where the art lives
 
