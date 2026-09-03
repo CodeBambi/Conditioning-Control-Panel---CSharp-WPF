@@ -20,7 +20,7 @@
  *
  *   createPixelizer({ renderer, canvas, block, log }) ->
  *     { block, setBlock(n), cycle(), resize(w, h), render(scene, camera),
- *       filterTexture(tex), retexture(scene), label(), stats }
+ *       filterTexture(tex), retexture(scene), label(), stats, dispose() }
  *
  * PIXEL_STEPS is the P-key cycle: off, 2, 3, 4, 6 screen pixels per block.
  * Put an object on the crisp layer with `obj.layers.set(CRISP_LAYER)`.
@@ -207,9 +207,12 @@ export function createPixelizer({ renderer, canvas, block = PIXEL_DEFAULT, log =
 
   function label() { return cur > 0 ? `pixels ${cur}` : 'pixels off'; }
 
+  /** Free the render target and the blit material (call from the race's dispose). */
+  function dispose() { dropTarget(); blitMat.dispose(); blitGeo.dispose(); }
+
   return {
     get block() { return cur; },
-    setBlock, cycle, resize, render, filterTexture, retexture, label, stats,
+    setBlock, cycle, resize, render, filterTexture, retexture, label, stats, dispose,
   };
 }
 
