@@ -198,4 +198,133 @@
     </Style>
   </ControlTheme>
 
+  <!-- Controls.xaml:198. The animated on/off switch every settings and privacy row uses.
+       Deviations beyond the usual Style->ControlTheme / Trigger->pseudo-class mapping, all forced:
+
+         TranslateTransform x:Name="thumbTranslate"  ->  RenderTransform="translateX(...)"
+         ScaleTransform     x:Name="sparkScale"      ->  RenderTransform="scale(...)"
+             AVLN2000: Avalonia can only name a StyledElement, so neither transform could keep its
+             x:Name and neither can be an animation target. Animating RenderTransform with a
+             TransformOperations value is the Avalonia idiom and also sidesteps the runtime trap
+             that an animation setter targeting ScaleTransform.ScaleX compiles and then throws
+             InvalidCastException.
+
+         Storyboard EnterActions/ExitActions  ->  Transitions (the knob slide, the track fade and
+             the spark's growth) plus one keyframe Animation (the spark's opacity decay, which is
+             a one-shot and runs when :checked starts matching, exactly like the WPF
+             EnterActions storyboard). A Transition is inherently two-way, which is what the first
+             three want. RenderTransform HAS to be a transition rather than a keyframe: Avalonia
+             registers no keyframe animator for it - see the note on the spark below.
+
+         BackEase Amplitude="0.6" / "0.35"    ->  BackEaseOut. Avalonia's easings take no
+             amplitude, so the overshoot is whatever BackEaseOut gives. The 43.4-of-44 sum in the
+             comment below still holds for the resting position; only the overshoot peak differs.
+
+         Separate enter/exit durations        ->  one duration per property. WPF used 0.34 in /
+             0.30 out on the knob and 0.28 both ways on the track; a Transition has a single
+             duration, so the knob keeps the 0.34 enter value.
+
+         Spark exit (0.08s fade to 0)         ->  dropped. Unchecking stops the style matching, so
+             the spark snaps back to its parked Opacity="0" - the same "cut it dead" intent the
+             WPF comment states, minus the 80ms ramp. -->
+  <ControlTheme x:Key="ToggleStyle" TargetType="CheckBox">
+    <Setter Property="Template">
+      <ControlTemplate TargetType="CheckBox">
+        <Grid x:Name="toggleRoot">
+          <Border x:Name="track" Width="44" Height="22" CornerRadius="11" Cursor="Hand"
+                  Background="{DynamicResource PanelAccentBrush}"
+                  BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
+          <!-- The ON skin, faded in over the OFF one. Same geometry as the track. -->
+          <Border x:Name="trackOn" Width="44" Height="22" CornerRadius="11" Cursor="Hand"
+                  Opacity="0"
+                  Background="{DynamicResource PinkBrush}"
+                  BorderBrush="{DynamicResource TransparentPink40Brush}" BorderThickness="1">
+            <Border.Transitions>
+              <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.28"/>
+              </Transitions>
+            </Border.Transitions>
+          </Border>
+          <!-- Knob: overshoot lands it just shy of the track's inner edge
+               (3 + 22 + ~2.4 + 16 = 43.4 of 44) - do not raise the amplitude
+               without re-checking that sum. -->
+          <Border x:Name="thumb" Width="16" Height="16" CornerRadius="8"
+                      Background="White" HorizontalAlignment="Left" Margin="3,0,0,0"
+                      RenderTransform="translateX(0px)">
+            <Border.Transitions>
+              <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.34">
+                  <TransformOperationsTransition.Easing>
+                    <BackEaseOut/>
+                  </TransformOperationsTransition.Easing>
+                </TransformOperationsTransition>
+              </Transitions>
+            </Border.Transitions>
+          </Border>
+          <!-- Spark: parked invisible at the ON edge (centre x = 33, where the knob
+               lands). Scales from its own centre, so it never moves anything. -->
+          <Ellipse x:Name="spark" Width="12" Height="12" Fill="White"
+                   HorizontalAlignment="Left" VerticalAlignment="Center"
+                   Margin="27,0,0,0" Opacity="0" IsHitTestVisible="False"
+                   RenderTransformOrigin="50%,50%"
+                   RenderTransform="scale(0.4)">
+            <Ellipse.Transitions>
+              <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.45">
+                  <TransformOperationsTransition.Easing>
+                    <QuadraticEaseOut/>
+                  </TransformOperationsTransition.Easing>
+                </TransformOperationsTransition>
+              </Transitions>
+            </Ellipse.Transitions>
+          </Ellipse>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:checked /template/ Border#trackOn">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="^:checked /template/ Border#thumb">
+      <Setter Property="RenderTransform" Value="translateX(22px)"/>
+    </Style>
+    <Style Selector="^:checked /template/ Ellipse#spark">
+      <!-- The 0.4 -> 3 growth is a Setter + the transition above, NOT a keyframe: Avalonia ships
+           no keyframe animator for RenderTransform, and an <Animation> touching it dies at
+           TEMPLATE APPLY time with "No animator registered for the property RenderTransform" -
+           i.e. the toggle takes the whole window down before it ever draws. Found by rendering.
+           The opacity decay below is genuinely keyframed (three WPF LinearDoubleKeyFrames), and
+           Opacity does have a built-in animator. -->
+      <Setter Property="RenderTransform" Value="scale(3)"/>
+      <Style.Animations>
+        <Animation Duration="0:0:0.45" FillMode="Forward">
+          <KeyFrame Cue="0%">
+            <Setter Property="Opacity" Value="0"/>
+          </KeyFrame>
+          <KeyFrame Cue="13%">
+            <Setter Property="Opacity" Value="0.9"/>
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="Opacity" Value="0"/>
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
+    <!-- A locked toggle used to be pixel-identical to a live one (users read the two as "a bit
+         lost graphically"), because nothing here reacted to IsEnabled. Dim the whole template
+         root rather than the individual parts: trackOn's Opacity is driven by the :checked state
+         above, so a per-part setter would be fighting it on exactly the ON state that most needs
+         the cue. -->
+    <Style Selector="^:disabled /template/ Grid#toggleRoot">
+      <Setter Property="Opacity" Value="0.4"/>
+    </Style>
+    <Style Selector="^:disabled /template/ Border#track">
+      <Setter Property="Cursor" Value="Arrow"/>
+    </Style>
+    <Style Selector="^:disabled /template/ Border#trackOn">
+      <Setter Property="Cursor" Value="Arrow"/>
+    </Style>
+  </ControlTheme>
+
 </ResourceDictionary>
