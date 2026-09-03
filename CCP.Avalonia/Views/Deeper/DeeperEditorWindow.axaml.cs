@@ -2083,9 +2083,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             }
         }
 
-        /// <summary>ponytail: needs Helpers.ExplorerLauncher.RevealInExplorer (Windows shell).</summary>
-        private void BtnLinkedJsonOpenFolder_Click(object? sender, RoutedEventArgs e)
-            => Log.Debug("DeeperEditor: reveal-in-file-manager needs a Linux launcher: {Path}", _filePath ?? "");
+        /// <summary>
+        /// WPF called Helpers.ExplorerLauncher.RevealInExplorer, a Win32 explorer/cmd chain.
+        /// Avalonia's TopLevel.Launcher is the native twin and opens the platform file manager -
+        /// xdg-open on Linux, Explorer on Windows. It opens the containing FOLDER rather than
+        /// selecting the file, which is the most the cross-platform API offers.
+        /// </summary>
+        private async void BtnLinkedJsonOpenFolder_Click(object? sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_filePath)) return;
+            try
+            {
+                var dir = IOPath.GetDirectoryName(_filePath!);
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+                await Launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(dir!));
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: could not open the project folder"); }
+        }
 
         /// <summary>ponytail: needs App.EnhancementLibrary + an open dialog.</summary>
         private void BtnLinkedJsonSwap_Click(object? sender, RoutedEventArgs e)

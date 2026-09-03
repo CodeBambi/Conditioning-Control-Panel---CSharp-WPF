@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     //                               on Window; the drawer is measured on the next layout pass)
     //   ScrollViewer.ScrollToTop -> Offset = new Vector(x, 0)
     //   GridSplitter DragCompleted args -> Avalonia's Thumb.DragCompleted (VectorEventArgs)
-    //   App.Settings             -> stubbed, see ApplyPersistedSidebarWidth
+    //   App.Settings             -> CoreSettings (AppSettings.DeeperEditorSidebarWidth is in Core)
     //
     // Sidebar restructure plumbing: metadata drawer expand/collapse, the selection summary strip,
     // GridSplitter persistence and the inspector auto-scroll.
@@ -198,24 +198,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         // Sidebar splitter - persist width
         // -----------------------------------------------------------------
 
-        /// <summary>
-        /// Applied during Loaded so the editor opens at the user's last chosen width.
-        /// ponytail: needs App.Settings (AppSettings.DeeperEditorSidebarWidth), wired when the
-        /// settings service moves to Core. Until then the column keeps its 380 px XAML default,
-        /// which is what the WPF fallback used anyway.
-        /// </summary>
         /// <summary>The resizable sidebar column. WPF reached it through its x:Name; Avalonia
         /// only generates fields for Controls, so it is indexed off the named body Grid.</summary>
         private ColumnDefinition? SidebarColumn =>
             MainBodyGrid?.ColumnDefinitions is { Count: > 2 } cols ? cols[2] : null;
 
+        /// <summary>
+        /// Applied during Loaded so the editor opens at the user's last chosen width. The stale
+        /// note here said this needed App.Settings; AppSettings.DeeperEditorSidebarWidth is in
+        /// Core and CoreSettings.Current is never null, so it reads the real value.
+        /// </summary>
         public void ApplyPersistedSidebarWidth()
         {
             try
             {
                 var col = SidebarColumn;
                 if (col == null) return;
-                int w = 380;
+                int w = CoreSettings.Current.DeeperEditorSidebarWidth;
+                if (w <= 0) w = 380;
                 if (w < 320) w = 320;
                 if (w > 520) w = 520;
                 col.Width = new GridLength(w, GridUnitType.Pixel);
@@ -224,8 +224,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>
-        /// ponytail: needs App.Settings to persist the dragged width; the drag itself is live
-        /// (Avalonia's GridSplitter writes the ColumnDefinition), only the save is missing.
+        /// The drag itself is Avalonia's GridSplitter writing the ColumnDefinition; this persists
+        /// where it landed, so the next editor session opens at the same width.
         /// </summary>
         private void SidebarSplitter_DragCompleted(object? sender, VectorEventArgs e)
         {
@@ -236,9 +236,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 int w = (int)Math.Round(col.ActualWidth);
                 if (w < 320) w = 320;
                 if (w > 520) w = 520;
-                // App.Settings.Current.DeeperEditorSidebarWidth = w; App.Settings.Save();
+                if (CoreSettings.Current.DeeperEditorSidebarWidth == w) return;
+                CoreSettings.Current.DeeperEditorSidebarWidth = w;
+                CoreSettings.Save();
             }
-            catch { }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: sidebar width would not persist"); }
         }
 
         // -----------------------------------------------------------------
