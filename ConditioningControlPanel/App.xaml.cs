@@ -285,6 +285,19 @@ namespace ConditioningControlPanel
             CoreMods.PinkRushDescriptionProvider = () => Mods?.GetPinkRushDescription();
             CoreMods.FilterColorRgbProvider = () => Mods?.GetFilterColorRgb();
             CoreMods.DefaultSubliminalPoolProvider = () => Mods?.GetDefaultSubliminalPool();
+            // Mod art. ResolveUri already walks event skin -> active mod -> embedded and hands
+            // back a file:// URI for the first two and a pack:// one for the third, so "is there
+            // an override" is "did it come back as a file", answered in ONE pass of the chain.
+            // Core only ever wants the override, never our pack:// fallback - the other heads
+            // package their shipped art differently.
+            CoreModArt.OverridePathProvider = resourcePath =>
+            {
+                var uri = Services.ModResourceResolver.ResolveUri(resourcePath);
+                return uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+                    ? new Uri(uri).LocalPath
+                    : null;
+            };
+            CoreModArt.HasAvatarPortraitsProvider = Services.AvatarPortraitLoader.HasManifestForActiveMod;
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.ServiceProvider = () => Settings;
