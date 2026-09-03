@@ -31,8 +31,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    reference it, so <see cref="Offer"/>, <see cref="Choices"/> and <see cref="Copy"/> below
     ///    are local stand-ins carrying the fields and strings this window actually reads. The copy
     ///    is placeholder — the real sentences come back when DescentCeremonyCopy moves to Core.
-    ///  - <c>App.Settings</c>, <c>App.DescentMigration.ApplyChoice</c> and
-    ///    <c>App.AvatarWindow.GigglePriority</c> are stubs for the same reason.
+    ///  - <c>App.Settings</c> is NOT a stub any more: the player level comes from
+    ///    <c>CoreSettings.Current.PlayerLevel</c>, so the standing line and the closing act carry
+    ///    the real number. <c>DescentMigrationService.ApplyChoice</c> and the companion's
+    ///    <c>GigglePriority</c> are still head-side, and each keeps a note.
     ///  - The GlowLayer breath is a declarative Animation in the XAML, so the <c>Closed</c> teardown
     ///    of it disappears; <c>OnLoaded</c> shrinks to the companion's opening line, which it also
     ///    spoke in the original.
@@ -97,8 +99,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // Both doors are priced BEFORE the user sees either, from the same pure function the
             // submit will use — so the number on the card is the number they get, not an estimate.
-            // ponytail: needs DescentMigration.Resolve (WPF head, Services/Descent), wired when it
-            // moves to Core. The sample offer carries the level the resolve would have produced.
+            // ponytail: needs DescentMigration.Resolve(string, DescentMigrationOffer).Level in
+            // ConditioningControlPanel/Services/Descent/DescentMigration.cs, which also holds
+            // DescentMigrationOffer and DescentMigrationChoices. Core carries only the persisted
+            // flags (AppSettings.DescentMigrationCompleted / .DescentMigrationChoice), not the
+            // relevel maths. The sample offer carries the level the resolve would have produced.
             _restoreLevel = _offer.ResolvedRestoreLevel;
 
             PopulateCopy();
@@ -128,8 +133,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void PopulateCopy()
         {
-            // ponytail: needs App.Settings.Current.PlayerLevel, wired when settings move to Core.
-            var currentLevel = _offer.PlayerLevel;
+            var currentLevel = CoreSettings.Current.PlayerLevel;
 
             this.FindControl<TextBlock>("IntroHeadline")!.Text = Copy.IntroHeadline;
             this.FindControl<TextBlock>("IntroStanding")!.Text = Copy.IntroStanding(
@@ -259,7 +263,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _committed = true;
 
-            var level = _offer.PlayerLevel;
+            var level = CoreSettings.Current.PlayerLevel;
             _doneBody.Text = Copy.DoneBody(choice!, level);
             ShowAct(_actDone);
 
@@ -272,8 +276,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private bool ApplyChoice(string choice)
         {
-            // ponytail: needs App.DescentMigration.ApplyChoice(choice, offer), wired when
-            // Services/Descent moves to Core. Never make this return true before it is real —
+            // ponytail: needs DescentMigrationService.ApplyChoice(string, DescentMigrationOffer)
+            // in ConditioningControlPanel/Services/Descent/DescentMigrationService.cs, which is
+            // where the local relevel, the epoch flip and the keepsakes live. Never return true
+            // before it is real —
             // a faked commit on an irreversible choice is the one bug this surface cannot survive.
             Log.Warning("[Descent] ApplyChoice({Choice}) is not wired on this head — nothing was committed.", choice);
             return false;
@@ -293,7 +299,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private static void Say(string line)
         {
-            // ponytail: needs App.AvatarWindow.GigglePriority, wired when the companion moves to Core.
+            // ponytail: needs GigglePriority(line, playSound, aiGenerated) — the WPF head's
+            // AvatarTubeWindow has it; CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs does
+            // not, and there is no companion seam in Core.
             Log.Debug("[Descent] Companion line (not yet spoken on this head): {Line}", line);
         }
 
@@ -303,14 +311,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// The fields of <c>DescentMigrationOffer</c> this window reads, plus the resolved restore
-        /// level and the player level it took off App.Settings.
-        /// ponytail: replaced by the real DescentMigrationOffer when Services/Descent moves to Core.
+        /// level. The player's own level is no longer here — it comes from
+        /// <c>CoreSettings.Current.PlayerLevel</c>, as it did from App.Settings on WPF.
+        /// ponytail: replaced by the real DescentMigrationOffer (Services/Descent/DescentMigration.cs)
+        /// when it moves to Core.
         /// </summary>
         public sealed class Offer
         {
             public double TotalXpEarned { get; init; }
             public int DevotionDays { get; init; }
-            public int PlayerLevel { get; init; }
             public int ResolvedRestoreLevel { get; init; }
 
             /// <summary>Internal, so no production caller can ship the render sample.</summary>
@@ -318,12 +327,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 TotalXpEarned = 184_500,
                 DevotionDays = 213,
-                PlayerLevel = 47,
                 ResolvedRestoreLevel = 38,
             };
         }
 
-        /// <summary>ponytail: mirrors DescentMigrationChoices; the two literals are the wire values.</summary>
+        /// <summary>ponytail: mirrors DescentMigrationChoices
+        /// (ConditioningControlPanel/Services/Descent/DescentMigration.cs); the two literals are
+        /// the wire values.</summary>
         private static class Choices
         {
             public const string Restore = "restore";
@@ -335,12 +345,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// PLACEHOLDER COPY. The real sentences live in DescentCeremonyCopy in the WPF head; the
         /// short constants are verbatim, the multi-paragraph bodies are stood in for so the acts
         /// render with real text rather than blank panels.
-        /// ponytail: needs DescentCeremonyCopy, wired when it moves to Core — this class deletes
-        /// itself entirely at that point.
+        /// ponytail: needs DescentCeremonyCopy
+        /// (ConditioningControlPanel/Services/Descent/DescentCeremonyCopy.cs) — this class deletes
+        /// itself entirely when that moves to Core.
         /// </summary>
         private static class Copy
         {
-            /// <summary>ponytail: mirrors DescentMigration.CycleXpBonus (1.10).</summary>
+            /// <summary>ponytail: mirrors DescentMigration.CycleXpBonus (1.10), in
+            /// ConditioningControlPanel/Services/Descent/DescentMigration.cs.</summary>
             private const double CycleXpBonus = 1.10;
 
             public const string IntroHeadline = "The last season has ended.";

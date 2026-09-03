@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -6,14 +7,16 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
     /// <summary>
     /// "Tube Fit" editor — a WYSIWYG preview of how the ACTIVE mod's avatar PNG sits inside the
     /// avatar tube, with an Attached/Detached switch and scale/offset sliders. The result is saved
-    /// as a per-mod user override (never into the mod itself) and the live tube window is
-    /// hot-refreshed.
+    /// as a per-mod user override in <see cref="AppSettings.TubeLayoutOverridesByMod"/> (never into
+    /// the mod itself) and the live tube window is hot-refreshed.
     ///
     /// The preview replicates the real tube's geometry: the tube window is a 780x1020 rect holding a
     /// Uniform Viewbox over a 780x1080 design canvas, so content renders at 1020/1080 and anything
@@ -21,12 +24,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// and the margin formulas below are copied from AvatarTubeWindow.ApplyTubeLayoutOffsets.
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/TubeFitDialog.xaml.cs. Deviations:
-    ///  - <c>App.Settings</c> / <c>App.Mods</c> / <c>App.AvatarWindow</c> / <c>App.Logger</c>,
-    ///    <c>Services.ModResourceResolver</c>, <c>Services.AvatarPortraitLoader</c> and the
-    ///    <c>ModTubeLayout</c> model all live in the WPF head, so the load / save / reset paths are
-    ///    stubs and the five working values start at their defaults. Everything between them - the
-    ///    sliders, the mode switch, the margin maths, the transforms and the readouts - is the real
-    ///    ported logic and runs.
+    ///  - <b>The whole value path is real.</b> <c>ModTubeLayout</c>,
+    ///    <c>AppSettings.TubeLayoutOverridesByMod</c>, <c>ModManifest.TubeLayout</c>,
+    ///    <c>SelectedAvatarSet</c>, <c>AvatarTubeDetached</c> and <c>BuiltInMods.LockedId</c> are
+    ///    all in Core, so load / save / reset persist for real against <see cref="CoreSettings"/>
+    ///    and <see cref="CoreMods"/>. The mod's shipped manifest layout is read through
+    ///    <c>CoreMods.InstalledMods[ActiveModId].Manifest.TubeLayout</c>, which is what
+    ///    <c>ModService.ActiveMod</c> hands back.
+    ///  - Still head-side, each with a note: <c>AvatarPortraitLoader.HasManifestForActiveMod()</c>,
+    ///    <c>ModResourceResolver.ResolveImage / .HasModOverride</c> and the tube window's
+    ///    <c>RefreshTubeLayout()</c>.
     ///  - The two <c>Image</c> elements are placeholder Borders (the head ships no Resources/ PNGs);
     ///    the avatar box is sized from <see cref="PlaceholderPixelWidth"/>/<see cref="PlaceholderPixelHeight"/>
     ///    by the same uniform-fit formula the real readout uses.
@@ -68,6 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private bool _detachedMode;
         private bool _suppressSliderEvents;
 
+        private readonly string _modId;
         private readonly int _avatarSet;
         private readonly bool _portraitMode;
         private readonly string[] _poses = { "🧍", "🙋", "💃", "🧎" };
@@ -93,10 +101,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             AvaloniaXamlLoader.Load(this);
 
-            // ponytail: needs App.Mods / App.Settings / Services.AvatarPortraitLoader, wired when
-            // they move to Core. Defaults are the first-run state: built-in mod, avatar set 1, no
-            // portrait manifest, attached tube.
-            _avatarSet = 1;
+            _modId = CoreMods.ActiveModId;
+            _avatarSet = Math.Max(1, CoreSettings.Current.SelectedAvatarSet);
+            // ponytail: needs AvatarPortraitLoader.HasManifestForActiveMod()
+            // (ConditioningControlPanel/Services/AvatarPortraitLoader.cs). It reads a per-mod
+            // portrait manifest off disk; no Core equivalent, so this head is always legacy-pose.
             _portraitMode = false;
 
             _rbAttached = this.FindControl<RadioButton>("RbAttached")!;
@@ -129,9 +138,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnReset")!.Click += (_, _) => BtnReset_Click();
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close();
 
-            LoadWorkingValues();
+            LoadWorkingValues(EffectiveLayout());
 
             // Start on whatever state the real tube is in, so the preview matches what the user sees.
+            _detachedMode = CoreSettings.Current.AvatarTubeDetached;
             _suppressSliderEvents = true;
             if (_detachedMode) _rbDetached.IsChecked = true; else _rbAttached.IsChecked = true;
             _suppressSliderEvents = false;
@@ -145,17 +155,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         // ============================================================
 
         /// <summary>
-        /// ponytail: needs AppSettings.TubeLayoutOverridesByMod and ModManifest.TubeLayout (both
-        /// WPF-head models), wired when they move to Core. The clamps are the original's, so the
-        /// call site does not change when the real layout is handed in.
+        /// The layout currently in force for this mod: the user's saved override wins, else the mod
+        /// manifest's tubeLayout, else null (all defaults). Mirrors ModService.EffectiveTubeLayout.
         /// </summary>
-        private void LoadWorkingValues()
+        private ModTubeLayout? EffectiveLayout()
         {
-            _offsetX = Math.Clamp(0, -1000, 1000);
-            _detachedOffsetX = Math.Clamp(0, -1000, 1000);
-            _scale = Math.Clamp(1.0, 0.1, 3.0);
-            _offsetY = Math.Clamp(0, -500, 500);
-            _detachedOffsetY = Math.Clamp(0, -500, 500);
+            if (CoreSettings.Current.TubeLayoutOverridesByMod?.TryGetValue(_modId, out var userLayout) == true
+                && userLayout != null)
+                return userLayout;
+
+            return ManifestLayout();
+        }
+
+        /// <summary>The active mod's shipped layout. <c>CoreMods.InstalledMods</c> unseeded is the
+        /// built-in CCP default, which is what ModService answers with no mod layer up.</summary>
+        private ModTubeLayout? ManifestLayout() =>
+            CoreMods.InstalledMods.TryGetValue(_modId, out var pkg) ? pkg?.Manifest?.TubeLayout : null;
+
+        private void LoadWorkingValues(ModTubeLayout? layout)
+        {
+            _offsetX = Math.Clamp(layout?.AvatarOffsetX ?? 0, -1000, 1000);
+            _detachedOffsetX = Math.Clamp(layout?.AvatarDetachedOffsetX ?? 0, -1000, 1000);
+            _scale = Math.Clamp(layout?.AvatarScale ?? 1.0, 0.1, 3.0);
+            _offsetY = Math.Clamp(layout?.AvatarOffsetY ?? 0, -500, 500);
+            _detachedOffsetY = Math.Clamp(layout?.AvatarDetachedOffsetY ?? 0, -500, 500);
         }
 
         /// <summary>
@@ -181,9 +204,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         // AVATAR POSES
         // ============================================================
 
-        // ponytail: LoadPoses() needs Services.ModResourceResolver.ResolveImage plus the embedded
-        // Resources/avatar*_pose*.png; wired when the resolver moves to Core. Until then the four
-        // slots are placeholder glyphs, so the stepper and the "Pose n/4" readout still work.
+        // ponytail: LoadPoses() needs ModResourceResolver.ResolveImage
+        // (ConditioningControlPanel/Services/ModResourceResolver.cs) plus the embedded
+        // Resources/avatar*_pose*.png. Until then the four slots are placeholder glyphs, so the
+        // stepper and the "Pose n/4" readout still work.
         private void StepPose(int delta)
         {
             _poseIndex = (_poseIndex + _poses.Length + delta) % _poses.Length;
@@ -198,12 +222,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// True when the active mod overrides tube.png but not tube2.png — in that case the detached
         /// state uses the mod's tube.png AND the attached margins, exactly like the real tube
         /// (AvatarTubeWindow.ModOverridesAttachedTubeOnly, bug report #172).
-        /// ponytail: needs Services.ModResourceResolver.HasModOverride, wired when it moves to Core.
+        /// ponytail: needs ModResourceResolver.HasModOverride("tube.png"/"tube2.png")
+        /// (ConditioningControlPanel/Services/ModResourceResolver.cs).
         /// </summary>
         private static bool ModOverridesAttachedTubeOnly() => false;
 
         private void UpdatePreview()
         {
+          try
+          {
             bool useAttachedLayout = !_detachedMode || ModOverridesAttachedTubeOnly();
 
             // Tube frame
@@ -246,6 +273,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _previewAvatarBorder.RenderTransform = BuildBorderTransform();
 
             UpdateReadouts(maxW, maxH);
+          }
+          catch (Exception ex)
+          {
+            Log.Warning(ex, "[TubeFit] Failed to update preview");
+          }
         }
 
         private ITransform? BuildBorderTransform()
@@ -262,8 +294,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
 
             // Locked's set 1 ("The Lure") art reads smaller than the other stages.
-            // ponytail: needs App.Mods.ActiveModId == BuiltInMods.LockedId, wired when ModService
-            // moves to Core.
+            if (_modId == BuiltInMods.LockedId)
+                return new ScaleTransform(1.06, 1.06);
+
             return null;
         }
 
@@ -334,19 +367,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void BtnSave_Click()
         {
-            // ponytail: needs AppSettings.TubeLayoutOverridesByMod + App.Settings.Save() +
-            // App.AvatarWindow.RefreshTubeLayout(), all WPF-head; wired when they move to Core.
-            // The five working values below are what gets written.
+            var settings = CoreSettings.Current;
+
+            settings.TubeLayoutOverridesByMod ??= new Dictionary<string, ModTubeLayout>();
+            settings.TubeLayoutOverridesByMod[_modId] = new ModTubeLayout
+            {
+                AvatarOffsetX = _offsetX,
+                AvatarDetachedOffsetX = _detachedOffsetX,
+                AvatarScale = _scale,
+                AvatarOffsetY = _offsetY,
+                AvatarDetachedOffsetY = _detachedOffsetY
+            };
+            // The dictionary was mutated in place, so no INPC auto-save fired - persist explicitly.
+            CoreSettings.Save();
+
+            Log.Information("[TubeFit] Saved tube layout override for mod {ModId} " +
+                "(scale {Scale:0.00}, attached {OffX}/{OffY}, detached {DetX}/{DetY})",
+                _modId, _scale, _offsetX, _offsetY, _detachedOffsetX, _detachedOffsetY);
+
+            // ponytail: needs the tube window's RefreshTubeLayout() to re-read the override live.
+            // CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs has no such method yet, so
+            // the saved layout is picked up on the tube's next construction rather than at once.
             Close();
         }
 
         private void BtnReset_Click()
         {
-            // ponytail: needs App.Settings (drop the override, save) and
-            // App.AvatarWindow.RefreshTubeLayout(); wired when they move to Core. The view-local
-            // half - reload the working values from the mod's shipped manifest and follow with the
-            // preview - is real and runs.
-            LoadWorkingValues();
+            if (CoreSettings.Current.TubeLayoutOverridesByMod?.Remove(_modId) == true)
+                CoreSettings.Save();
+
+            Log.Information("[TubeFit] Reset tube layout to mod default for mod {ModId}", _modId);
+
+            // ponytail: needs RefreshTubeLayout() - see BtnSave_Click.
+
+            // Reload the working values from the mod's shipped manifest so the preview follows.
+            LoadWorkingValues(ManifestLayout());
             PushSlidersFromWorkingValues();
             UpdatePreview();
         }

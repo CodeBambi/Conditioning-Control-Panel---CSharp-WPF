@@ -21,13 +21,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// master volume.
     ///
     /// PORTED from ConditioningControlPanel/Windows/LayeredAudioWindow.xaml.cs. Deviations:
-    ///  - App.Settings and App.LayeredAudio are both still in the WPF head, so the track list is
-    ///    an in-memory placeholder seeded with two sample tracks, and every Save/Start/Stop/
-    ///    Restart/SetVolumeLive call is a marked stub. The card building, the toggles, the
-    ///    dim-when-off body, the empty state and its master-on warning are ported for real -
-    ///    they are the whole point of this window and none of them touches a service.
+    ///  - The settings half is REAL: the track list, the master enable, the master volume and the
+    ///    audio-only switch all read and write <see cref="CoreSettings"/>, which carries
+    ///    AudioLayers / AudioLayersEnabled / AudioLayersMasterVolume / AudioOnlySession.
+    ///  - What is still missing is the MIXER, and only the mixer. <c>CoreAudio</c> is a one-shot
+    ///    seam (PlayOneShot / Duck / Unduck / DuckGeneration) with no multi-track surface, so
+    ///    <c>LayeredAudioService.Start/Stop/Restart/SetMasterVolumeLive/SetTrackVolumeLive</c>
+    ///    (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs) have no Core equivalent.
+    ///    Each of those five call sites keeps a note; everything around them runs.
     ///  - The file picker uses Avalonia's StorageProvider (async) instead of
-    ///    Microsoft.Win32.OpenFileDialog, and adds to the placeholder list.
+    ///    Microsoft.Win32.OpenFileDialog.
     ///  - The static Open(DependencyObject) helper is DROPPED. Its three jobs - best-effort
     ///    Owner, single-instance re-surface, and EnsureOnScreen against SystemParameters'
     ///    virtual-desktop metrics - are WPF window-manager repairs with no caller in this head.
@@ -47,15 +50,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // handlers must stay inert until LoadMasterControls owns the flag.
         private bool _loading = true;
 
-        // ponytail: needs App.Settings.Current.AudioLayers, wired when settings move to Core.
-        // Two sample tracks so --render-view draws the row cards rather than the empty state;
-        // the empty state and its master-on warning are still reachable by removing both.
-        private readonly List<AudioLayerTrack> _tracks = new()
-        {
-            new AudioLayerTrack { Path = "/music/rain-loop.mp3", Volume = 70, Enabled = true },
-            new AudioLayerTrack { Path = "/music/deep-hum.ogg", Volume = 45, Enabled = false },
-        };
-
         private readonly CheckBox _chkMasterEnable, _chkAudioOnly;
         private readonly Slider _sliderMaster;
         private readonly TextBlock _txtMaster;
@@ -72,7 +66,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _slotsPanel = this.FindControl<StackPanel>("SlotsPanel")!;
 
             _saveDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-            _saveDebounce.Tick += (_, _) => { _saveDebounce.Stop(); SaveSettings(); };
+            _saveDebounce.Tick += (_, _) => { _saveDebounce.Stop(); CoreSettings.Save(); };
 
             _chkMasterEnable.IsCheckedChanged += (_, _) => ChkMasterEnable_Changed();
             _chkAudioOnly.IsCheckedChanged += (_, _) => ChkAudioOnly_Changed();
@@ -84,17 +78,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             BuildRows();
         }
 
-        private List<AudioLayerTrack> Tracks() => _tracks;
+        /// <summary>The persisted track list, materialised on first use exactly as WPF did.</summary>
+        private static List<AudioLayerTrack> Tracks()
+        {
+            var s = CoreSettings.Current;
+            var list = s.AudioLayers ?? new List<AudioLayerTrack>();
+            if (s.AudioLayers == null) s.AudioLayers = list;
+            return list;
+        }
 
         private void LoadMasterControls()
         {
             _loading = true;
-            // ponytail: needs App.Settings.Current (AudioLayersEnabled / AudioLayersMasterVolume /
-            // AudioOnlySession). The XAML defaults stand in until settings move to Core.
-            _chkMasterEnable.IsChecked = true;
-            _sliderMaster.Value = 70;
+            var s = CoreSettings.Current;
+            _chkMasterEnable.IsChecked = s.AudioLayersEnabled;
+            _sliderMaster.Value = s.AudioLayersMasterVolume;
             _txtMaster.Text = $"{(int)_sliderMaster.Value}%";
-            _chkAudioOnly.IsChecked = false;
+            _chkAudioOnly.IsChecked = s.AudioOnlySession;
             _loading = false;
         }
 
@@ -236,8 +236,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 track.Volume = (int)e.NewValue;
                 volValue.Text = $"{track.Volume}%";
-                // ponytail: needs App.LayeredAudio.SetTrackVolumeLive - live per-track gain, no
-                // graph rebuild, so drags stay smooth.
+                // ponytail: needs LayeredAudioService.SetTrackVolumeLive(AudioLayerTrack, int)
+                // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs) - live per-track
+                // gain with no graph rebuild. CoreAudio has no multi-track surface.
                 SaveDebounced();
             }));
             Grid.SetColumn(volSlider, 1);
@@ -260,7 +261,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             remove.Click += (_, _) =>
             {
-                Tracks().Remove(track);
+                var list = Tracks();
+                list.Remove(track);
+                CoreSettings.Current.AudioLayers = list;
                 BuildRows();
                 ApplyStructural();
             };
@@ -286,9 +289,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             });
             if (files.Count == 0) return;
 
+            var list = Tracks();
             foreach (var file in files)
-                Tracks().Add(new AudioLayerTrack { Path = file.TryGetLocalPath() ?? file.Name, Volume = 70, Enabled = true });
+                list.Add(new AudioLayerTrack { Path = file.TryGetLocalPath() ?? file.Name, Volume = 70, Enabled = true });
 
+            CoreSettings.Current.AudioLayers = list;
             BuildRows();
             ApplyStructural();
         }
@@ -296,8 +301,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ChkMasterEnable_Changed()
         {
             if (_loading) return;
-            // ponytail: needs App.Settings (AudioLayersEnabled) and App.LayeredAudio.Start/Stop.
-            SaveSettings();
+            var s = CoreSettings.Current;
+            s.AudioLayersEnabled = _chkMasterEnable.IsChecked ?? false;
+            CoreSettings.Save();
+
+            // ponytail: needs LayeredAudioService.Start() / .Stop()
+            // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs). The setting is
+            // persisted either way, so the mixer picks it up when this head gets one.
 
             // The empty-state warning above depends on this toggle.
             if (Tracks().Count == 0) BuildRows();
@@ -306,28 +316,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ChkAudioOnly_Changed()
         {
             if (_loading) return;
-            // ponytail: needs App.Settings (AudioOnlySession).
-            SaveSettings();
+            CoreSettings.Current.AudioOnlySession = _chkAudioOnly.IsChecked ?? false;
+            CoreSettings.Save();
         }
 
         private void SliderMaster_Changed(object? sender, RangeBaseValueChangedEventArgs e)
         {
             if (_loading) return;
-            // ponytail: needs App.Settings (AudioLayersMasterVolume) and
-            // App.LayeredAudio.SetMasterVolumeLive.
+            CoreSettings.Current.AudioLayersMasterVolume = (int)e.NewValue;
             _txtMaster.Text = $"{(int)e.NewValue}%";
+            // ponytail: needs LayeredAudioService.SetMasterVolumeLive()
+            // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs).
             SaveDebounced();
         }
 
         /// <summary>A structural change (add/remove/enable): rebuild the mixer if it's on.</summary>
         private void ApplyStructural()
         {
-            SaveSettings();
-            // ponytail: needs App.LayeredAudio.Restart when AudioLayersEnabled is true.
+            CoreSettings.Save();
+            // ponytail: needs LayeredAudioService.Restart() when AudioLayersEnabled is true
+            // (ConditioningControlPanel/Services/Audio/LayeredAudioService.cs).
         }
-
-        /// <summary>ponytail: needs App.Settings.Save, wired when settings move to Core.</summary>
-        private void SaveSettings() { }
 
         private void SaveDebounced()
         {
