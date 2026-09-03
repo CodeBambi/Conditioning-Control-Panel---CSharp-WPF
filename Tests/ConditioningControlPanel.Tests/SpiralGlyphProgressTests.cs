@@ -135,7 +135,12 @@ public class SpiralGlyphProgressTests
     [Fact]
     public void TheGlyphTakesItsAccentFromTheModChain()
     {
-        var src = AppFile("Controls", "SpiralGlyph.cs");
+        // Pinned to the WPF head on purpose. This layer adds a second SpiralGlyph under
+        // CCP.Avalonia/Controls/, so FindProductFile now sees two copies and refuses to guess —
+        // which is exactly what it is for. The assertion below is about WPF's SetResourceReference,
+        // an API with no Avalonia twin, so this test means the WPF copy and only that one.
+        var src = File.ReadAllText(Path.Combine(
+            SourceRoots.RepoRoot, "ConditioningControlPanel", "Controls", "SpiralGlyph.cs"));
 
         // SetResourceReference, never a ctor-baked SolidColorBrush: the second one is right
         // exactly once and wrong for every mod switch after it.
