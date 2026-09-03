@@ -53,7 +53,7 @@ function makeDotTex() {
   } catch (e) { return null; }
 }
 
-export function createBubbleField({ scene, layout, media, getIntensity, getRoom }) {
+export function createBubbleField({ scene, layout, media, getIntensity, getRoom, onTexture }) {
   void media;   // reserved: flash media is drawn by payloadFx at pop time, never here
   const T = layout.totalDepth;
   /** Signed depth from `from` to `d`, folded into (-T/2, T/2] so the start line is nothing special. */
@@ -75,6 +75,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
     loader.load(k.sprite, (tex) => {
       if (disposed) { tex.dispose(); return; }
       tex.colorSpace = THREE.SRGBColorSpace;
+      if (onTexture) { try { onTexture(tex); } catch (e) { /* the look never breaks the field */ } }
       texOf[k.id] = tex;
       for (const s of pool) if (s.alive && s.kindId === k.id) { s.mat.map = tex; s.mat.needsUpdate = true; }
     }, undefined, () => { /* keep the dot */ });

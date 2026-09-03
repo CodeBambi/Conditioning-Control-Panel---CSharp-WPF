@@ -29,6 +29,8 @@ import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
 import { createItems } from './items.js';
 import { createInput } from './input.js';
+import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
+import { createSpeedFx } from './speed.js';
 
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6, FOV_BASE = 72;
 const EFFECT_SEC = { flash: 1.5, subliminal: 3, overlay: 6, glitch: 3, bambiFreeze: 1.6, gifCascade: 5, video: 9 };
@@ -47,7 +49,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   // ---- renderer / scene / camera (engine/scene.js pattern, pitch-demo look) ----
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, alpha: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.maxDpr, 1.5));
+  // the big-pixel look: low internal resolution, nearest upscale; host settings.pixel / ?pixel=N override, 0 = off
+  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? PIXEL_DEFAULT : settings.pixel });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12261f);
@@ -58,7 +61,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   scene.add(cupLight);
   function resize() {
     const w = root.clientWidth || window.innerWidth, h = root.clientHeight || window.innerHeight;
-    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    pixel.resize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize); resize();
 
@@ -69,6 +72,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
   const input = createInput();
+  const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
   const camOut = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
   const _v = new THREE.Vector3();
 
@@ -108,13 +112,14 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       if (!r || S.jackpotBias === 1) return r;
       return { ...r, bubbleBias: { ...r.bubbleBias, golden: (r.bubbleBias.golden == null ? 1 : r.bubbleBias.golden) * S.jackpotBias } };
     };
-    const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom });
+    const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, onTexture: pixel.filterTexture });
     const items = createItems({ kart, bubbles: field, score, fx, hud, payload: payloadFx, rng });
     const w = { layout, tunnel, fx, dresser, kart, score, field, items, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     score.onEvent((e) => onScore(w, e));
     items.onEvent((e) => onItem(w, e));
+    pixel.retexture(scene);
     return w;
   }
   function teardown() {
@@ -258,6 +263,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const fovT = FOV_BASE + (reducedMotion ? 5 : 12) * S.fovBoost + (ks.drift && !reducedMotion ? 3 : 0) - (S.timeScale < 1 ? 4 : 0);
     if (Math.abs(fovT - S.fov) > 0.05) { S.fov += (fovT - S.fov) * Math.min(1, dt * 6); camera.fov = S.fov; camera.updateProjectionMatrix(); }
     cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.6);
+    speedFx.update(dt, ks, lay);
 
     // EMI: calm cruise, streamed on boost, fraught under a stack, pokes on top
     if (S.moodHold > 0) { S.moodHold -= dt; if (S.moodHold <= 0) S.moodHeld = null; }
@@ -330,7 +336,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- host + input wiring ----
   bridge.on('pause', (m) => setPaused(!!(m && m.on)));
   bridge.on('payout-result', (m) => { if (payoutResolve) payoutResolve(m); });
-  input.onAction((a) => { if (a === 'item') { if (W && S.running && !S.paused) W.items.use(); } else if (a === 'brake') brake(); });
+  function cyclePixel() { pixel.cycle(); pixel.retexture(scene); hud.toast(pixel.label(), 'item'); }
+  input.onAction((a) => { if (a === 'item') { if (W && S.running && !S.paused) W.items.use(); } else if (a === 'brake') brake(); else if (a === 'pixel') cyclePixel(); });
   const onVis = () => { last = 0; };
   document.addEventListener('visibilitychange', onVis);
 
@@ -354,7 +361,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     document.removeEventListener('visibilitychange', onVis);
     if (payoutResolve) payoutResolve(null);
     teardown();
-    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose();
+    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose();
     scene.clear(); renderer.dispose();
     setFlip(false);
   }

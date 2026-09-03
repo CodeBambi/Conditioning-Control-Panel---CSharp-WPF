@@ -2,12 +2,13 @@
  * race/input.js - the wheel. Implements CONTRACT.md "race/run.js + raceBoot.js"
  * (PR 5, integration): the one place keyboard and gamepad are read.
  *
- * Keyboard: arrows / WASD steer + accel + brake, Shift drift, E item, Esc brake.
+ * Keyboard: arrows / WASD steer + accel + brake, Shift drift, E item, Esc brake,
+ * P cycles the pixel look.
  * Gamepad (navigator.getGamepads, standard map): left stick steer, RT accel,
  * LT brake, A drift, X item, Start brake.
  *
  *   read() -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool }
- *   onAction(cb)   cb('item' | 'brake'), edge-triggered, never repeats on hold
+ *   onAction(cb)   cb('item' | 'brake' | 'pixel'), edge-triggered, never repeats on hold
  *   dispose()
  *
  * Law II (input honesty): nothing here ever remaps an axis. accel defaults to 1
@@ -41,6 +42,7 @@ export function createInput({ target = window } = {}) {
       if (e.repeat) { if (KEYS[code]) e.preventDefault(); return; }
       if (code === 'KeyE') { fire('item'); return; }
       if (code === 'Escape') { fire('brake'); return; }
+      if (code === 'KeyP') { fire('pixel'); return; }
       if (!KEYS[code]) return;
       down.add(KEYS[code]);
       e.preventDefault();
