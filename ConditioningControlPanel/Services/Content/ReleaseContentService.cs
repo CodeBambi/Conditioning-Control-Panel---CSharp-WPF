@@ -67,11 +67,11 @@ namespace ConditioningControlPanel.Services
 
         public const string PackAudioBase = "audio-base";
         public const string PackAudioWeb = "audio-web";
-        public const string PackModBambi = "mod-bambi";
-        public const string PackModSissy = "mod-sissy";
-        public const string PackModLocked = "mod-locked";
-        public const string PackModDrone = "mod-drone";
-        public const string PackModInfection = "mod-infection";
+        public const string PackModBambi = CoreReleaseContent.PackModBambi;
+        public const string PackModSissy = CoreReleaseContent.PackModSissy;
+        public const string PackModLocked = CoreReleaseContent.PackModLocked;
+        public const string PackModDrone = CoreReleaseContent.PackModDrone;
+        public const string PackModInfection = CoreReleaseContent.PackModInfection;
 
         /// <summary>Audio group: baseline voice (auto) + web-engine audio (lazy).</summary>
         public static readonly IReadOnlyList<string> AudioPackIds = new[] { PackAudioBase, PackAudioWeb };
@@ -756,7 +756,8 @@ namespace ConditioningControlPanel.Services
                     packId, info.ContentVersion, target);
 
                 SetState(ReleaseContentState.Idle);
-                try { PackInstalled?.Invoke(this, packId); } catch { }
+                try { PackInstalled?.Invoke(this, packId);
+                CoreReleaseContent.RaisePackInstalled(this, packId); } catch { }
                 return true;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)

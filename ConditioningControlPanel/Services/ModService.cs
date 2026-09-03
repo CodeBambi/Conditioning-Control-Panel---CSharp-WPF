@@ -29,7 +29,7 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class ModService
     {
-        private static readonly ILogger? _log = App.Logger;
+        private static readonly ILogger? _log = Log.Logger;
 
         private ModPackage _activeMod;
         private readonly ModPackage _baseMod; // Always CCP Default — neutral fallback for missing fields
@@ -80,7 +80,7 @@ namespace ConditioningControlPanel.Services
 
         public ModService()
         {
-            _modsFolder = Path.Combine(App.UserDataPath, "mods");
+            _modsFolder = Path.Combine(CorePaths.UserData, "mods");
             Directory.CreateDirectory(_modsFolder);
 
             // Register built-in mods. CCP Default is the neutral baseline + fallback chain root.
@@ -156,11 +156,11 @@ namespace ConditioningControlPanel.Services
             // backup immediately so the changes survive a restart.
             BindToCurrentSettings();
 
-            // A cloud restore / reset swaps App.Settings.Current for a brand-new AppSettings
+            // A cloud restore / reset swaps CoreSettings.Current for a brand-new AppSettings
             // instance. Without re-binding, we'd stay subscribed to the discarded instance and
             // every pool edit would silently fail to reach the per-mod backup — so the user's
             // subliminal/bouncing-text/lock-card phrases would vanish on the next restart.
-            if (App.Settings != null)
+            if (CoreSettings.HasProvider)
                 App.Settings.CurrentReplaced += OnSettingsReplaced;
         }
 
@@ -169,11 +169,11 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// (Re)attach <see cref="CurrentSettings_PropertyChanged"/> to the live
-        /// <c>App.Settings.Current</c>, detaching from any previous instance first. Idempotent.
+        /// <c>CoreSettings.Current</c>, detaching from any previous instance first. Idempotent.
         /// </summary>
         private void BindToCurrentSettings()
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null || ReferenceEquals(settings, _subscribedSettings)) return;
 
             if (_subscribedSettings != null)
@@ -242,7 +242,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void MigrateLegacyHypnotubeLinks()
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null) return;
 
             void Migrate(string modId, string? legacy, string defaults)
@@ -861,24 +861,24 @@ namespace ConditioningControlPanel.Services
             // (observed 2026-08-13, Bambi → Drone).
             try
             {
-                if (App.Settings?.Current != null)
+                if (CoreSettings.Current != null)
                 {
-                    App.Settings.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
-                    App.Settings.Save();
+                    CoreSettings.Current.PersonaVoiceFenceUtc = DateTime.UtcNow;
+                    CoreSettings.Save();
                 }
-                App.Brain?.OnModSwitched();
+                CoreModsHooks.ModSwitched?.Invoke();
             }
             catch (Exception ex) { _log?.Debug("ActivateMod: companion voice fence failed: {E}", ex.Message); }
 
             // If the active companion isn't supported by the new mod, fall back to first supported companion
-            if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
+            if (CoreModsHooks.ActiveCompanionProvider?.Invoke() is { } activeCompanion && !IsCompanionSupported(activeCompanion))
             {
                 // Find first supported companion
                 foreach (Models.CompanionId cid in Enum.GetValues(typeof(Models.CompanionId)))
                 {
                     if (IsCompanionSupported(cid))
                     {
-                        App.Companion.SwitchCompanion(cid);
+                        CoreModsHooks.SwitchCompanion?.Invoke(cid);
                         _log?.Information("Auto-switched companion to {CompanionId} (previous not supported by new mod)", cid);
                         break;
                     }
@@ -925,7 +925,7 @@ namespace ConditioningControlPanel.Services
         // colour", it does not repaint the chrome out from under the user's mod.
 
         /// <summary>The active event's accent, or null. Already validated as #RRGGBB(AA).</summary>
-        private static string? EventAccentHex => App.LiveEvent?.AccentHex;
+        private static string? EventAccentHex => CoreModsHooks.EventAccentHexProvider?.Invoke();
 
         /// <summary>
         /// Event first, then whatever the mod chain would have said. Split out and
@@ -1161,7 +1161,7 @@ namespace ConditioningControlPanel.Services
             // A per-mod user override (edited in Settings → Hypnotube Links) wins over the
             // shipped pool, so the user fully controls what the companion may suggest for THIS
             // mod. Falls back to the mod's DefaultVideoLinks, then the base mod's.
-            if (App.Settings?.Current?.VideoLinksByMod?.TryGetValue(_activeMod.Id, out var userLinks) == true
+            if (CoreSettings.Current?.VideoLinksByMod?.TryGetValue(_activeMod.Id, out var userLinks) == true
                 && userLinks != null && userLinks.Count > 0)
                 return userLinks;
 
@@ -1176,7 +1176,7 @@ namespace ConditioningControlPanel.Services
         /// changing behaviour for users who never touched the pool.
         /// </summary>
         public bool HasUserVideoLinkOverride() =>
-            App.Settings?.Current?.VideoLinksByMod?.ContainsKey(_activeMod.Id) == true;
+            CoreSettings.Current?.VideoLinksByMod?.ContainsKey(_activeMod.Id) == true;
 
         /// <summary>
         /// Persists the user's edited video link pool for the active mod, or clears the override
@@ -1184,7 +1184,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void SetUserVideoLinks(Dictionary<string, string>? links)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null) return;
             settings.VideoLinksByMod ??= new Dictionary<string, Dictionary<string, string>>();
             if (links == null || links.Count == 0)
@@ -1299,7 +1299,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private Models.ModTubeLayout? EffectiveTubeLayout()
         {
-            if (App.Settings?.Current?.TubeLayoutOverridesByMod?.TryGetValue(ActiveModId, out var userLayout) == true
+            if (CoreSettings.Current?.TubeLayoutOverridesByMod?.TryGetValue(ActiveModId, out var userLayout) == true
                 && userLayout != null)
                 return userLayout;
 
@@ -1427,16 +1427,16 @@ namespace ConditioningControlPanel.Services
             };
 
             // Include current subliminal pool from settings
-            manifest.SubliminalPool = App.Settings?.Current?.SubliminalPool != null
-                ? new Dictionary<string, bool>(App.Settings.Current.SubliminalPool)
+            manifest.SubliminalPool = CoreSettings.Current?.SubliminalPool != null
+                ? new Dictionary<string, bool>(CoreSettings.Current.SubliminalPool)
                 : GetDefaultSubliminalPool();
 
-            manifest.LockCardPhrases = App.Settings?.Current?.LockCardPhrases != null
-                ? new Dictionary<string, bool>(App.Settings.Current.LockCardPhrases)
+            manifest.LockCardPhrases = CoreSettings.Current?.LockCardPhrases != null
+                ? new Dictionary<string, bool>(CoreSettings.Current.LockCardPhrases)
                 : GetDefaultLockCardPhrases();
 
-            manifest.CustomTriggers = App.Settings?.Current?.CustomTriggers != null
-                ? new List<string>(App.Settings.Current.CustomTriggers)
+            manifest.CustomTriggers = CoreSettings.Current?.CustomTriggers != null
+                ? new List<string>(CoreSettings.Current.CustomTriggers)
                 : GetDefaultCustomTriggers();
 
             // Include all phrase categories from active mod
@@ -1577,8 +1577,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static readonly (string RelativePath, string BuiltInId, string PackId)[] _bundledBuiltInMods =
         {
-            ("DroneMod/drone-mode.ccpmod", BuiltInMods.DronificationId, ReleaseContentService.PackModDrone),
-            ("InfectionMod/infection-control.ccpmod", BuiltInMods.InfectionControlId, ReleaseContentService.PackModInfection),
+            ("DroneMod/drone-mode.ccpmod", BuiltInMods.DronificationId, CoreReleaseContent.PackModDrone),
+            ("InfectionMod/infection-control.ccpmod", BuiltInMods.InfectionControlId, CoreReleaseContent.PackModInfection),
         };
 
         /// <summary>
@@ -1593,7 +1593,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static readonly (string RelativePath, string BuiltInId, string PackId, ModManifest Manifest)[] _bundledResourceMods =
         {
-            ("LockedMod/locked-resources.ccpmod", BuiltInMods.LockedId, ReleaseContentService.PackModLocked, BuiltInMods.Locked),
+            ("LockedMod/locked-resources.ccpmod", BuiltInMods.LockedId, CoreReleaseContent.PackModLocked, BuiltInMods.Locked),
         };
 
         /// <summary>Where a built-in mod's .ccpmod archive was actually found.</summary>
@@ -1701,7 +1701,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var root = Path.Combine(App.UserDataPath, "builtin_mods");
+                var root = Path.Combine(CorePaths.UserData, "builtin_mods");
                 Directory.CreateDirectory(root);
                 return root;
             }
@@ -1824,10 +1824,10 @@ namespace ConditioningControlPanel.Services
         private static IEnumerable<string> PackCcpmodCandidates(string relativePath, string packId)
         {
             var fileName = Path.GetFileName(relativePath);
-            var root = ContentLocator.ContentRoot;   // == ReleaseContentService.ContentRoot
+            var root = ContentLocator.ContentRoot;   // == ContentLocator.ContentRoot
             if (string.IsNullOrEmpty(root) || string.IsNullOrEmpty(fileName)) yield break;
 
-            var info = App.ReleaseContent?.GetPackInfo(packId);
+            var info = CoreReleaseContent.GetPackInfo(packId);
             if (info?.Ccpmods != null)
             {
                 foreach (var packEntry in info.Ccpmods)
@@ -1870,7 +1870,7 @@ namespace ConditioningControlPanel.Services
                     // tree and its stamp agree from here on.
                     if (installed == null) return true;
 
-                    var want = ReleaseContentService.GetStampFor(source.PackId);
+                    var want = CoreReleaseContent.GetStampFor(source.PackId);
                     if (want == null) return false;   // pack never stamped — trust what is on disk
                     if (installed.ContentVersion != want.ContentVersion) return true;
                     if (!string.IsNullOrEmpty(want.Sha256)
@@ -1925,7 +1925,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var packStamp = source.FromPack ? ReleaseContentService.GetStampFor(source.PackId) : null;
+                var packStamp = source.FromPack ? CoreReleaseContent.GetStampFor(source.PackId) : null;
                 var stamp = new BuiltInModPackStamp
                 {
                     ContentVersion = packStamp?.ContentVersion ?? 0,
@@ -2083,7 +2083,7 @@ namespace ConditioningControlPanel.Services
                             if (_activeMod is not null
                                 && string.Equals(_activeMod.Id, builtInId, StringComparison.OrdinalIgnoreCase))
                             {
-                                try { App.Bark?.ReloadRules(); }
+                                try { CoreModsHooks.ReloadBarkRules?.Invoke(); }
                                 catch (Exception ex) { _log?.Debug("ModService: bark reload failed: {Error}", ex.Message); }
                             }
 
@@ -2214,12 +2214,12 @@ namespace ConditioningControlPanel.Services
             // manifest we were running on.
             try
             {
-                if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
+                if (CoreModsHooks.ActiveCompanionProvider?.Invoke() is { } activeCompanion && !IsCompanionSupported(activeCompanion))
                 {
                     foreach (Models.CompanionId cid in Enum.GetValues(typeof(Models.CompanionId)))
                     {
                         if (!IsCompanionSupported(cid)) continue;
-                        App.Companion.SwitchCompanion(cid);
+                        CoreModsHooks.SwitchCompanion?.Invoke(cid);
                         _log?.Information("Auto-switched companion to {CompanionId} (previous not supported by the adopted package)", cid);
                         break;
                     }
@@ -2249,16 +2249,16 @@ namespace ConditioningControlPanel.Services
 
         #region Release content packs (mid-session arrival)
 
-        private ReleaseContentService? _releaseContent;
+        private bool _releaseContentAttached;
 
         /// <summary>Pack id ↔ built-in mod id for the per-mod content packs.</summary>
         private static readonly (string PackId, string ModId)[] _packToMod =
         {
-            (ReleaseContentService.PackModBambi, BuiltInMods.BambiSleepId),
-            (ReleaseContentService.PackModSissy, BuiltInMods.SissyHypnoId),
-            (ReleaseContentService.PackModLocked, BuiltInMods.LockedId),
-            (ReleaseContentService.PackModDrone, BuiltInMods.DronificationId),
-            (ReleaseContentService.PackModInfection, BuiltInMods.InfectionControlId),
+            (CoreReleaseContent.PackModBambi, BuiltInMods.BambiSleepId),
+            (CoreReleaseContent.PackModSissy, BuiltInMods.SissyHypnoId),
+            (CoreReleaseContent.PackModLocked, BuiltInMods.LockedId),
+            (CoreReleaseContent.PackModDrone, BuiltInMods.DronificationId),
+            (CoreReleaseContent.PackModInfection, BuiltInMods.InfectionControlId),
         };
 
         /// <summary>Built-in mod id a content pack delivers, or null (audio packs map to no mod).</summary>
@@ -2280,18 +2280,17 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Subscribes to <see cref="ReleaseContentService.PackInstalled"/> so a pack that lands
+        /// Subscribes to <see cref="CoreReleaseContent.PackInstalled"/> so a pack that lands
         /// mid-session takes effect without a restart. Wired from App startup rather than the ctor:
         /// ModService is built long before ReleaseContentService exists. Idempotent.
         /// </summary>
-        public void AttachReleaseContent(ReleaseContentService? releaseContent)
+        public void AttachReleaseContent()
         {
             try
             {
-                if (releaseContent == null || ReferenceEquals(releaseContent, _releaseContent)) return;
-                if (_releaseContent != null) _releaseContent.PackInstalled -= OnReleasePackInstalled;
-                _releaseContent = releaseContent;
-                releaseContent.PackInstalled += OnReleasePackInstalled;
+                if (_releaseContentAttached) return;
+                CoreReleaseContent.PackInstalled += OnReleasePackInstalled;
+                _releaseContentAttached = true;
                 _log?.Information("ModService: listening for content-pack installs");
             }
             catch (Exception ex)
@@ -2431,7 +2430,7 @@ namespace ConditioningControlPanel.Services
 
         private void SaveCurrentPoolsToSettings(string modId)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null) return;
 
             settings.SubliminalPoolByMod ??= new Dictionary<string, Dictionary<string, bool>>();
@@ -2479,7 +2478,7 @@ namespace ConditioningControlPanel.Services
 
         private void RestorePoolsFromSettings(string modId)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null) return;
 
             // Restore saved customizations, or fall back to mod defaults
