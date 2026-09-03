@@ -139,7 +139,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// ponytail: a private re-statement of Services/Auth/SecurityHelper.IsPersonalFolderRoot,
-        /// which is in the WPF head's assembly and so unreachable from here. Same rule, same
+        /// which is in the WPF head's assembly and so unreachable from here. Same rule minus the
+        /// four Common* special folders (empty on Linux, and this head's reason to exist), same
         /// fail-closed default (an unreadable path is treated as personal). Delete this and call
         /// the shared one the day SecurityHelper moves to Core.
         /// </summary>

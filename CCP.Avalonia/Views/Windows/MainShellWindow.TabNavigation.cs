@@ -3,11 +3,12 @@
 //
 // What is REAL here: ShowTab (hide every tab panel, show one), the door accordion (one door's
 // entry panel open at a time, the door that owns the tab), and every rail/door click handler
-// the XAML names, each of which is now one ShowTab call - exactly what it is in WPF.
+// the XAML names, each of which is now one ShowTab call - exactly what it is in WPF. SwitchTabFx
+// is real too, and runs inside ShowTab (MainShellWindow.AmbientFx.cs).
 //
 // What is NOT, on purpose, each named so it is not lost silently:
-//   - The transition choreography (AnimateTabIn, SwitchTabFx, the Stop*Shimmer/Pulse/Motion
-//     calls) and the door open/close height animation. ponytail: panels snap open (Height =
+//   - The transition choreography (AnimateTabIn, the Stop*Shimmer/Pulse/Motion calls) and the
+//     door open/close height animation. ponytail: panels snap open (Height =
 //     NaN) and shut (0); the WPF MeasureDoorPanel + NavDoorExpandMs tween returns with the FX
 //     partials.
 //   - Per-tab side effects on the way in (RefreshPresetsList, spending HasSeenProgramsTab and

@@ -23,7 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// General owns the startup four and the startup video, Settings ▸ Devices owns the panic key,
     /// Settings ▸ Data owns offline mode. This panel shows them and links there.</para>
     ///
-    /// <para>The three "configure in settings" buttons and the assets-folder picker now call the
+    /// <para>The four "configure in settings" buttons (three handlers - General is on both the
+    /// startup and the video row) and the assets-folder picker now call the
     /// shell's real entry points (<c>MainShellWindow.OpenAppSettingsSection</c>,
     /// <c>OpenDeviceSettings</c>, <c>RequestPickAssetsFolder</c>). Opening the assets folder is
     /// <see cref="CorePaths.EffectiveAssets"/> plus the platform launcher.</para>
