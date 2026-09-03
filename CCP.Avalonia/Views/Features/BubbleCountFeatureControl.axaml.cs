@@ -43,9 +43,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             Loaded += (_, _) => RebindToCurrentSettings();
             Unloaded += (_, _) => Unhook();
 
-            // ponytail: WPF also repaints the hero and side plates on ModChanged through
-            // Services/ModResourceResolver.cs (WPF head) from Resources/features/Bubble_count.png.
-            // The Avalonia .axaml drops both plates deliberately, so nothing here to repaint yet.
+            // ponytail: the mod-aware hero and side plates are still missing, but no longer for
+            // the reason the old note gave. CoreModArt.OverridePath("features/Bubble_count.png")
+            // answers the portable half now, and the built-in art DOES ship on this head
+            // (CCP.Avalonia.csproj links ..\Assets\features\*.png to
+            // avares://CCP.Avalonia/Resources/features/). What is missing is somewhere to paint:
+            // BubbleCountFeatureControl.axaml gives neither plate an x:Name, so this file has no
+            // control to reach. Name them and ApplyFeatureArt + a CoreMods.ModChanged
+            // subscription land here; TubeFitDialog.TryLoadImage is the decode pattern.
 
             RebindToCurrentSettings();
         }
@@ -109,9 +114,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             s.BubbleCountEnabled = on;
             CoreSettings.Save();
 
-            // ponytail: WPF live-applies here - App.BubbleCount.Start()/Stop(), gated on
-            // App.IsEngineRunning. BubbleCountService (ConditioningControlPanel/Services/) and
-            // App.IsEngineRunning (ConditioningControlPanel/App.xaml.cs) are both still head-side.
+            // The gate is real; what it gates is not. CoreSession.IsEngineRunning is the seam the
+            // WPF head fills from App.IsEngineRunning, so the "only live-apply while a session is
+            // actually running" rule is now enforced here rather than described in a comment. On
+            // this head it answers false (App.axaml.cs seeds no session engine), so the body never
+            // runs - and it would have nothing to run anyway.
+            if (CoreSession.IsEngineRunning)
+            {
+                // ponytail: WPF calls App.BubbleCount.Start() / Stop() here. BubbleCountService
+                // (ConditioningControlPanel/Services/BubbleCountService.cs) is still head-side -
+                // it owns the challenge window - so there is no portable call to make yet.
+            }
         }
 
         private void SliderFreq_Changed(object? sender, RangeBaseValueChangedEventArgs e)
