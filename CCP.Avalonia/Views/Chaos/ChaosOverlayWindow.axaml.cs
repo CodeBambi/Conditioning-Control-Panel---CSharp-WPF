@@ -67,7 +67,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// head, which this project may not reference. They are stubbed in the Stubs region below,
     /// shaped so every call site ports unchanged. <c>ChaosBoon</c>, <c>ChaosRarity</c>,
     /// <c>ChaosRank</c> and the run snapshot are local stand-ins for the same reason;
-    /// <c>ChaosConversation</c> and friends are already in Core and are used for real.</para>
+    /// <c>ChaosConversation</c> and friends are already in Core and are used for real, as is
+    /// <c>ChaosMetaState</c> — the recap reads the real save MODEL; only its store is head-side.</para>
     ///
     /// <para><b>The parameterless constructor draws a sample recap.</b> WPF's showed an empty
     /// transparent window - every panel starts collapsed and a service drives it - and there is no
@@ -1333,19 +1334,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             public static int Progress(string id) => 0;
         }
 
-        private sealed class MetaState
-        {
-            public bool SeenSkipDebut { get; set; }
-            public int RunsCompleted { get; set; } = 3;
-            public long BestScore { get; set; } = 17_050;
-            public long Sparks { get; set; } = 1_120;
-            public int LastRankSeen { get; set; }
-        }
-
+        /// <summary>The save model is ALREADY in Core (<see cref="ChaosMetaState"/>), so the
+        /// recap reads the real one rather than a five-field copy of it — the five members below
+        /// are all this view touches. What is still missing is the STORE: <c>ChaosMetaStore</c>
+        /// loads and writes chaos_meta.json in the WPF head, so this instance is a fresh
+        /// in-memory state seeded to a played save, and <see cref="Save"/> is a no-op.
+        /// ponytail: needs a ChaosMeta seam; the swap is then this one initializer.</summary>
         private static class ChaosMeta
         {
             public const int FIRST_FALL_BONUS = 100;
-            public static readonly MetaState State = new();
+            public static readonly ChaosMetaState State = new()
+            {
+                RunsCompleted = 3,
+                BestScore = 17_050,
+                Sparks = 1_120,
+            };
             public static void Save() { }
             public static MetaGoal? NextGoal() => new() { Name = "porcelain mask", Cost = 1_500, Affordable = true };
         }
