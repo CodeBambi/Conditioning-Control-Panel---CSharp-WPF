@@ -30,7 +30,7 @@ import { createRaceHud } from './hud.js';
 import { createItems } from './items.js';
 import { createInput } from './input.js';
 
-const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6;
+const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6, FOV_BASE = 72;
 const EFFECT_SEC = { flash: 1.5, subliminal: 3, overlay: 6, glitch: 3, bambiFreeze: 1.6, gifCascade: 5, video: 9 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
@@ -52,7 +52,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12261f);
   scene.fog = new THREE.FogExp2(0x12261f, FOG_DENSITY);
-  const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 400);
+  const camera = new THREE.PerspectiveCamera(FOV_BASE, 1, 0.1, 400);
   scene.add(new THREE.AmbientLight(0x8a70a8, 1.0));
   const cupLight = new THREE.PointLight(0xff69b4, 1.4, 14);
   scene.add(cupLight);
@@ -76,7 +76,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const S = {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
-    flip: false, spawnT: 1.5, rainT: 8, tunnelTime: 0, rush: 0, fov: 72, gates: 0, room: null,
+    flip: false, spawnT: 1.5, rainT: 8, tunnelTime: 0, rush: 0, fov: 72, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed,
   };
   let W = null;                       // the world: everything that is rebuilt on "again"
@@ -125,7 +125,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function resetRunState(runSeed) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
-      jackpotBias: 1, parasol: false, magnet: false, spawnT: 1.5, rainT: 8, rush: 0, gates: 0, room: null,
+      jackpotBias: 1, parasol: false, magnet: false, spawnT: 1.5, rainT: 8, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed });
     setFlip(false); trail.length = 0;
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.item(null, 'no item yet');
@@ -156,6 +156,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
   function onPop(w, p) {
+    w.kart.pulseTarget();
     if (p.kind === 'treat') return treat(w, p);
     if (S.parasol) { S.parasol = false; hud.toast('parasol', 'item'); return treat(w, p); }
     w.score.pop(p.points, p.id);
@@ -251,9 +252,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // camera + the cup light
     k.camera(camOut);
     camera.position.copy(camOut.pos); camera.up.copy(camOut.up); camera.lookAt(camOut.look);
-    const fovT = 72 + (ks.boostSec > 0 ? 6 : 0) - (S.timeScale < 1 ? 4 : 0);
-    if (Math.abs(fovT - S.fov) > 0.05) { S.fov += (fovT - S.fov) * Math.min(1, dt * 4); camera.fov = S.fov; camera.updateProjectionMatrix(); }
-    cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.2);
+    // FOV kick: boost snaps wide (to ~84) and eases back slowly; drift adds a smaller one; tea_time narrows
+    const boostT = ks.boostSec > 0 ? 1 : 0;
+    S.fovBoost += (boostT - S.fovBoost) * Math.min(1, dt * (boostT ? 9 : 2.2));
+    const fovT = FOV_BASE + (reducedMotion ? 5 : 12) * S.fovBoost + (ks.drift && !reducedMotion ? 3 : 0) - (S.timeScale < 1 ? 4 : 0);
+    if (Math.abs(fovT - S.fov) > 0.05) { S.fov += (fovT - S.fov) * Math.min(1, dt * 6); camera.fov = S.fov; camera.updateProjectionMatrix(); }
+    cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.6);
 
     // EMI: calm cruise, streamed on boost, fraught under a stack, pokes on top
     if (S.moodHold > 0) { S.moodHold -= dt; if (S.moodHold <= 0) S.moodHeld = null; }

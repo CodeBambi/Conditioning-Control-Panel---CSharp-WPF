@@ -109,29 +109,41 @@ export function createEmiRig({ scene, reducedMotion = false }) {
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.045, 10, 24, Math.PI), porcelain); handle.position.set(0.62, 0.42, 0); handle.rotation.z = -Math.PI / 2; body.add(handle);
 
   // ---- the tea: the only mirror she has. Her face shows in it, reversed. ----
-  const teaCanvas = document.createElement('canvas'); teaCanvas.width = teaCanvas.height = 96;
+  // The chase camera sits low and ~6 m back, so a flat surface is a sliver. The reflection is the
+  // NEAR half of the tea only: it pivots at the near rim and leans up toward EMI (the tea looks up
+  // at you), which turns the band between the rim and her body toward the camera. The far half
+  // stays flat under her. The emoticon is drawn in that band; canvas bottom = the near (camera) side.
+  const TEA_PX = 128, TEA_TILT = 0.5, TEA_R = 0.46;   // rad: near edge at the rim, chord lifted
+  const teaCanvas = document.createElement('canvas'); teaCanvas.width = teaCanvas.height = TEA_PX;
   const teaTex = new THREE.CanvasTexture(teaCanvas); teaTex.magFilter = THREE.NearestFilter; teaTex.minFilter = THREE.LinearFilter;
   let faceDrawn = '';
   function drawTea(face) {
     if (face === faceDrawn) return; faceDrawn = face;
     const g = teaCanvas.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = '#B23282'; g.fillRect(0, 0, 96, 96);
-    const rg = g.createRadialGradient(48, 48, 6, 48, 48, 50); rg.addColorStop(0, 'rgba(255,140,200,.55)'); rg.addColorStop(1, 'rgba(120,20,80,.3)');
-    g.fillStyle = rg; g.fillRect(0, 0, 96, 96);
-    g.translate(96, 0); g.scale(-1, 1);                        // mirrored: it is a reflection
-    g.fillStyle = '#FF9BD0'; g.font = '600 ' + (face.length > 4 ? 15 : 24) + 'px "Noto Sans Mono", "JetBrains Mono", Consolas, monospace';
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(face, 48, 50);
+    const c = TEA_PX / 2;
+    g.fillStyle = '#B23282'; g.fillRect(0, 0, TEA_PX, TEA_PX);
+    const rg = g.createRadialGradient(c, c * 1.4, 6, c, c * 1.4, c * 1.1); rg.addColorStop(0, 'rgba(255,140,200,.6)'); rg.addColorStop(1, 'rgba(120,20,80,.3)');
+    g.fillStyle = rg; g.fillRect(0, 0, TEA_PX, TEA_PX);
+    g.translate(TEA_PX, 0); g.scale(-1, 1);                    // mirrored: it is a reflection
+    g.font = '700 ' + (face.length > 4 ? 22 : 34) + 'px "Noto Sans Mono", "JetBrains Mono", Consolas, monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 5; g.strokeStyle = 'rgba(70,10,50,.85)'; g.strokeText(face, c, c * 1.44);
+    g.fillStyle = '#FFE3F3'; g.fillText(face, c, c * 1.44);
     teaTex.needsUpdate = true;
   }
   drawTea(MOODS.calm.face);
-  const reflection = new THREE.Mesh(new THREE.CircleGeometry(0.46, 32), new THREE.MeshBasicMaterial({ map: teaTex }));
-  reflection.rotation.set(-Math.PI / 2, 0, Math.PI); reflection.position.y = 0.655; body.add(reflection);
+  const teaTilt = new THREE.Group(); teaTilt.position.set(0, 0.69, -TEA_R); teaTilt.rotation.x = -TEA_TILT; body.add(teaTilt);
+  // geometry y < 0 is the canvas bottom = the near half (thetaStart PI); the partial circle keeps full-disc UVs
+  const reflection = new THREE.Mesh(new THREE.CircleGeometry(TEA_R, 32, Math.PI, Math.PI), new THREE.MeshBasicMaterial({ map: teaTex, side: THREE.DoubleSide }));
+  reflection.rotation.set(-Math.PI / 2, 0, Math.PI); reflection.position.set(0, 0, TEA_R); teaTilt.add(reflection);
   const teaMat = new THREE.MeshStandardMaterial({ color: 0xC94A9A, roughness: 0.15, metalness: 0.2, transparent: true, opacity: 0.35 });
-  const tea = new THREE.Mesh(new THREE.CircleGeometry(0.47, 32), teaMat);
+  const tea = new THREE.Mesh(new THREE.CircleGeometry(TEA_R + 0.01, 32), teaMat);
   tea.rotation.set(-Math.PI / 2, 0, Math.PI); tea.position.y = 0.66; body.add(tea);
 
   // ---- EMI: a living pixel CRT seen from behind, gripping the rim ----
-  const emi = new THREE.Group(); emi.position.y = 0.8; emi.scale.setScalar(1.25); body.add(emi);
+  // she sits a little forward in the cup so the near band of tea is wide enough to hold her face
+  const EMI_Z = 0.12;
+  const emi = new THREE.Group(); emi.position.set(0, 0.82, EMI_Z); emi.scale.setScalar(1.25); body.add(emi);
   const crt = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, 0.34), navy); emi.add(crt);
   const ventMat = new THREE.MeshStandardMaterial({ map: ventTexture(), roughness: 0.8 });
   const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.06), ventMat); back.position.z = -0.19; emi.add(back);
@@ -142,8 +154,8 @@ export function createEmiRig({ scene, reducedMotion = false }) {
   const screenLight = new THREE.PointLight(PINK, 0.9, 3); screenLight.position.set(0, 0, 0.5); emi.add(screenLight);
   const armGeo = new THREE.CylinderGeometry(0.035, 0.03, 0.42, 8), handGeo = new THREE.SphereGeometry(0.06, 10, 8);
   for (const sd of [-1, 1]) {
-    const arm = new THREE.Mesh(armGeo, navyDark); arm.position.set(sd * 0.3, -0.1, 0.25); arm.rotation.set(-0.9, 0, sd * 0.35); emi.add(arm);
-    const hand = new THREE.Mesh(handGeo, glove); hand.position.set(sd * 0.36, -0.22, 0.44); emi.add(hand);
+    const arm = new THREE.Mesh(armGeo, navyDark); arm.position.set(sd * 0.3, -0.1, 0.25 - EMI_Z / 1.25); arm.rotation.set(-0.9, 0, sd * 0.35); emi.add(arm);
+    const hand = new THREE.Mesh(handGeo, glove); hand.position.set(sd * 0.36, -0.22, 0.44 - EMI_Z / 1.25); emi.add(hand);
   }
   const antenna = new THREE.Group(); antenna.position.y = 0.21; emi.add(antenna);
   const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.22, 8), stemMat); stem.position.y = 0.11; antenna.add(stem);
@@ -190,8 +202,9 @@ export function createEmiRig({ scene, reducedMotion = false }) {
     beadMat.emissiveIntensity = m === MOODS.jackpot ? 1.4 : 0.9;
     screenMat.opacity = 0.6 + 0.25 * Math.sin(t * 4);
 
-    // the tea swirls; the face in it is text and nothing else
+    // the tea swirls and leans up a touch more the faster the cup goes; the face in it is text and nothing else
     tea.rotation.z = reflection.rotation.z = Math.PI + Math.sin(t * 1.3) * 0.05;
+    teaTilt.rotation.x = -(TEA_TILT + 0.1 * Math.max(0, ctx.speedNorm - 0.65) / 0.35);
     let face = fraught > 0.6 && (m === MOODS.calm || m === MOODS.smug) ? MOODS.fraught.face : m.face;
     if (face === MOODS.calm.face) { if (t > blinkAt) blinkAt = t + 5.2; else if (t > blinkAt - 0.11) face = '-_-'; }
     drawTea(face);

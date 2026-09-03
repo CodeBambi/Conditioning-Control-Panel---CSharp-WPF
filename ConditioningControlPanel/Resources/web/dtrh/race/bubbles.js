@@ -13,7 +13,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H } from './consts.js';
+import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H } from './consts.js';
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
 import { makeSfxPlayer } from '../engine/audioBus.js';
 import { getLevel } from '../engine/audioLevels.js';
@@ -27,11 +27,11 @@ const BURST_SFX = 'Burst.mp3';
 
 const CAP = 160;              // live bubbles, recycled farthest-first when full
 const SHARD_CAP = 64;
-const LANE_H = 0.9;
 const LANE_STEP = 3.2;        // metres between bubbles in a lane line
 const VIEW_AHEAD = 150;       // sprites beyond this are hidden, not freed
 const MISS_BEHIND = 6;        // a treat this far behind the kart unpopped = miss
 const DROP_BEHIND = 12;       // freed once this far behind
+const PASS_FADE_M = 2.4;      // metres behind the pop box over which a passed bubble fades away
 const RAIN_FALL = 4, RAIN_REST = 2, RAIN_FIZZLE = 0.5;
 const POP_ANIM = 0.14;
 const PRISM_REACH = 8;        // prism chain-pops neighbours within this many metres
@@ -273,7 +273,11 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
       s.sprite.visible = rel > -DROP_BEHIND && rel < VIEW_AHEAD;
       if (s.sprite.visible) {
         layout.toWorld(s.d, s.x, s.h, s.sprite.position);
-        s.sprite.scale.setScalar(s.size * s.scale);
+        // a bubble that slipped past the pop box fades and shrinks before it can balloon into the
+        // low chase camera (the seat is only ~6 m back)
+        const gone = s.popT < 0 && rel < -POP_HIT_D ? clamp(1 + (rel + POP_HIT_D) / PASS_FADE_M, 0, 1) : 1;
+        if (gone < 1) s.mat.opacity = Math.min(s.mat.opacity, gone);
+        s.sprite.scale.setScalar(s.size * s.scale * (0.6 + 0.4 * gone));
       }
     }
     for (const sh of shards) {
