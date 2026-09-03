@@ -265,7 +265,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
         if (rel < -MISS_BEHIND && rel > -DROP_BEHIND - 40 && !s.missed) {
           s.missed = true;
           const k = KIND_BY_ID[s.kindId];
-          if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d });
+          if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d, x: s.x, h: s.h });
         }
         if (rel < -DROP_BEHIND && rel > -DROP_BEHIND - 40) { freeSlot(s); continue; }
         if (Math.abs(rel) < POP_HIT_D && Math.abs(s.x - kart.x) < POP_HIT_X && Math.abs(s.h - kart.h) < POP_HIT_H) pop(s);
