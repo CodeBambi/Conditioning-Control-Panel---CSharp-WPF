@@ -1,0 +1,131 @@
+<!-- PORTED from ConditioningControlPanel/Windows/WebcamLoadingSplash.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" / AllowsTransparency="True" -> SystemDecorations="None" /
+                                                         TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                          -> CanResize="False"
+       MouseLeftButtonDown="Window_..."               -> PointerPressed, wired in the constructor
+       Border.Effect DropShadowEffect                 -> BoxShadow="3.5 3.5 20 0 #99000000"
+                                                         (Direction 315 + ShadowDepth 5 = 3.5,3.5;
+                                                          Opacity 0.6 = alpha 0x99)
+       ScaleTransform x:Name="ProgressScale"          -> unnamed; FindControl only finds Controls,
+                                                         so the code-behind reaches it through
+                                                         ProgressFill.RenderTransform
+       DoubleAnimation on ScaleX (SetProgress)        -> a DoubleTransition on the transform: the
+                                                         code-behind just assigns ScaleX
+       DoubleAnimation on Opacity (StartPulse)        -> the Border.pulse style animation below,
+                                                         toggled by a class from code-behind
+       <Border.CornerRadius><CornerRadius .../>       -> CornerRadius="4" (all four were 4)
+       RenderTransformOrigin Point 0,0.5              -> "0%,50%" (Avalonia reads a bare number
+                                                         as pixels)
+       FontFamily="Segoe UI"                          -> "Segoe UI, Liberation Sans, sans-serif",
+                                                         as the other ported views do
+
+     Every string is a literal exactly as in the WPF original - no loc keys, no bindings, hence
+     no x:DataType. ScaleX stays 0: MainWindow.LabTab's InstallWebcamLoadingSplash calls
+     SetProgress immediately after Show(), so an empty bar is the true first frame. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WebcamLoadingSplash"
+        Title="Starting Eye Tracking"
+        Height="200" Width="420"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True">
+
+    <Window.Styles>
+        <!-- The WPF StartPulse() DoubleAnimation, verbatim: 1.0 -> 0.55 over 900ms, autoreversed
+             forever on a sine ease. StopPulse() removes the class. -->
+        <Style Selector="Border.pulse">
+            <Style.Animations>
+                <Animation Duration="0:0:0.9" IterationCount="INFINITE"
+                           PlaybackDirection="Alternate" Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.55"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+            BoxShadow="3.5 3.5 20 0 #99000000">
+
+        <Grid Margin="28,18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="&#x1F441;" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock Text="Starting Eye Tracking"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource PinkBrush}"
+                           VerticalAlignment="Center"
+                           FontFamily="Segoe UI, Liberation Sans, sans-serif"/>
+            </StackPanel>
+
+            <!-- Loading status -->
+            <TextBlock x:Name="TxtStatus"
+                       Grid.Row="1"
+                       Text="Preparing eye-tracking engine…"
+                       FontSize="12"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       HorizontalAlignment="Center"
+                       Margin="0,12,0,12"
+                       FontFamily="Segoe UI, Liberation Sans, sans-serif"/>
+
+            <!-- Progress bar -->
+            <Grid Grid.Row="2" Height="8">
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4"/>
+                <Border x:Name="ProgressFill" CornerRadius="4" RenderTransformOrigin="0%,50%">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                            <GradientStop Color="#DA70D6" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Border.RenderTransform>
+                        <ScaleTransform ScaleX="0" ScaleY="1">
+                            <ScaleTransform.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="ScaleX" Duration="0:0:0.18" Easing="QuadraticEaseOut"/>
+                                </Transitions>
+                            </ScaleTransform.Transitions>
+                        </ScaleTransform>
+                    </Border.RenderTransform>
+                </Border>
+            </Grid>
+
+            <!-- Hint -->
+            <TextBlock Grid.Row="3"
+                       Text="First run can take a few seconds while the camera warms up and the AI models load."
+                       FontSize="11"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"
+                       Margin="0,14,0,0"
+                       FontFamily="Segoe UI, Liberation Sans, sans-serif"/>
+
+            <!-- Drag affordance -->
+            <TextBlock Grid.Row="4"
+                       Text="drag to move"
+                       FontSize="9"
+                       Foreground="#555555"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom"
+                       Margin="0,8,0,0"
+                       FontFamily="Segoe UI, Liberation Sans, sans-serif"/>
+        </Grid>
+    </Border>
+</Window>
