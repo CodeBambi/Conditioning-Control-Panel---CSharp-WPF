@@ -211,6 +211,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             ApplyUnlocks();
             ShowTab("loadout");
             _btnMenuStory.IsEnabled = StoryModeEnabled;   // greyed until story ships
+            UpdateMuteIcon(CoreSettings.Current.ChaosMenuMusicMuted);
             ShowMenuView();      // the main menu is the landing view; the dollhouse waits behind it
             SetupMenuMotion();   // ponytail stub — see the method
         }
@@ -648,7 +649,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             // Active-use toys carry their trigger: the keybind (when equipped) or a generic hint.
             if (b.IsActiveUse && !rankLocked)
             {
-                string key = _cmbAccKey1.SelectedItem as string ?? "Q";
+                string key = CoreSettings.Current.ChaosAccessoryKey1;
                 string useHint = b.UseCooldownSec > 0 ? $"{b.UseCooldownSec:0}s cooldown" : "limited uses";
                 mid.Children.Add(new TextBlock
                 {
@@ -772,8 +773,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private void AccKey_Changed(object? sender, SelectionChangedEventArgs e)
         {
-            // ponytail: needs App.Settings to persist the bind, wired when it moves to Core.
-            // The shelf rows print the chosen key, so they are rebuilt either way.
+            var s = CoreSettings.Current;
+            if (_cmbAccKey1.SelectedItem is string k1) s.ChaosAccessoryKey1 = k1;
+            if (_cmbAccKey2.SelectedItem is string k2) s.ChaosAccessoryKey2 = k2;
+            CoreSettings.Save();   // SaveToSettings never carried the binds; nothing else saves here
+            // The shelf rows print the chosen key, so they are rebuilt — after the write, so they
+            // read what was just persisted. Skipped while the ctor is loading.
             if (IsLoaded) BuildLifetimeBoons();
         }
 
@@ -1431,18 +1436,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private static readonly string[] KeyOptions = { "Q", "E", "R", "F", "Z", "X", "C", "V", "1", "2", "3", "4" };
 
-        /// <summary>WPF read every knob off <c>App.Settings.Current</c> and fell back to
-        /// <see cref="LoadDefaults"/> when settings were missing. There is no AppSettings on this
-        /// head yet, so this IS the fallback path — plus the two accessory-key combos, which WPF
-        /// filled only on the settings path and which would otherwise render empty.
-        /// ponytail: needs App.Settings, wired when it moves to Core.</summary>
+        /// <summary>WPF read every knob off <c>App.Settings.Current</c>, falling back to
+        /// <see cref="LoadDefaults"/> when the settings service was missing. Here it is
+        /// <see cref="CoreSettings.Current"/>, which is never null — unseeded it is one shared
+        /// default <c>AppSettings</c>, so a headless render reads the model's own defaults — and
+        /// that fallback branch is gone. <see cref="LoadDefaults"/> is now what it is in WPF: the
+        /// DEFAULTS button's path, nothing else.</summary>
         private void LoadFromSettings()
         {
+            var s = CoreSettings.Current;
+
+            SetSegment(_grpDifficulty, s.ChaosDifficulty);
+            SetSegment(_grpLength, s.ChaosRunDurationSec.ToString());
+            SetSegment(_grpMotion, s.ChaosMotionMode);
+            _waves = s.ChaosWaveCount; _txtWaves.Text = _waves.ToString();
+
+            var enabled = s.ChaosEnabledVariants;   // null = all
+            foreach (var t in _grpPool.Children.OfType<ToggleButton>())
+                t.IsChecked = enabled == null || enabled.Contains(t.Tag?.ToString() ?? "");
+
+            _chkShake.IsChecked = s.ChaosScreenShakeEnabled;
+            _sldShake.Value = s.ChaosShakeIntensity;
+            _chkFlashes.IsChecked = s.ChaosColorFlashesEnabled;
+            _chkSkiaFx.IsChecked = s.ChaosSkiaFxEnabled;
+            _chkPinTop.IsChecked = s.ChaosPinOnTop;
+            _chkSharedHost.IsChecked = s.ChaosBubbleSharedHost;
+            _sldEffect.Value = s.ChaosEffectIntensity;
+            _chkBoonDraft.IsChecked = s.ChaosBoonDraftEnabled;
+            _chkCurses.IsChecked = s.ChaosAllowCurses;
+            _chkDarters.IsChecked = s.ChaosDartersEnabled;
+            _chkAnnouncer.IsChecked = s.ChaosAnnouncerEnabled;
+            _chkNarrative.IsChecked = s.NarrativeModeEnabled;
+            _chkBackdrop.IsChecked = s.BackdropEnabled;
+            _sldBackdropOpacity.Value = s.BackdropOpacity;
+            _chkTunnel.IsChecked = s.ChaosTunnelEnabled;
+
+            // Accessory keybinds (future active-use; the binds persist now so loadouts feel real).
             _cmbAccKey1.ItemsSource = KeyOptions;
             _cmbAccKey2.ItemsSource = KeyOptions;
-            _cmbAccKey1.SelectedItem = "Q";
-            _cmbAccKey2.SelectedItem = "E";
-            LoadDefaults();
+            _cmbAccKey1.SelectedItem = KeyOptions.Contains(s.ChaosAccessoryKey1) ? s.ChaosAccessoryKey1 : "Q";
+            _cmbAccKey2.SelectedItem = KeyOptions.Contains(s.ChaosAccessoryKey2) ? s.ChaosAccessoryKey2 : "E";
+
             ApplyExtremeGate();
         }
 
@@ -1459,8 +1493,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     "a deeper door. she sells the key in the Toybox: finish enough relentless "
                     + "descents, reach Devoted, then train it.");
             ApplyDifficultyPillTips(extremeUnlocked: unlocked);
-            if (!unlocked && _segExtreme.IsChecked == true) SetSegment(_grpDifficulty, "Hard");
+            if (!unlocked && _segExtreme.IsChecked == true)
+            {
+                // WPF's gate reads the real ChaosMeta, so its clamp IS the truth and persisting it
+                // is correct. Here Sample.ExtremeUnlocked is a hard-false stand-in, so the clamp is
+                // a guess about a save this head cannot read: it must show on screen and must never
+                // be written over a real saved "Extreme". Same mechanism WPF uses for its reveal
+                // clamps (_diffAutoClamped); a real click on a pill clears it.
+                SetSegment(_grpDifficulty, "Hard");
+                _diffAutoClamped = true;
+            }
         }
+
+        /// <summary>The difficulty on screen was clamped by a gate rather than chosen:
+        /// <see cref="SaveToSettings"/> must not persist it over the saved choice.</summary>
+        private bool _diffAutoClamped;
 
         /// <summary>What each pill actually changes, on hover — pay multiplier, spawn pace, field
         /// size — so picking a difficulty is a choice instead of a mystery. The locked Inescapable
@@ -1492,9 +1539,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             foreach (var t in _grpPool.Children.OfType<ToggleButton>()) t.IsChecked = true;
             _chkShake.IsChecked = true; _sldShake.Value = 0.8;
             _chkFlashes.IsChecked = true; _sldEffect.Value = 0.85;
-            _chkSkiaFx.IsChecked = true;
-            _chkPinTop.IsChecked = true;
-            _chkSharedHost.IsChecked = false;
+            // Enhanced FX / keep-on-top / shared host are deliberately NOT reset here, as in WPF:
+            // DEFAULTS restores the run setup, not the performance knobs. (The stub reset them
+            // because it had no settings to load; it now does.)
             _chkBoonDraft.IsChecked = true; _chkCurses.IsChecked = true;
             _chkDarters.IsChecked = true;
             _chkAnnouncer.IsChecked = true;
@@ -1504,10 +1551,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _chkTunnel.IsChecked = false;
         }
 
-        /// <summary>ponytail: needs App.Settings, wired when it moves to Core. WPF wrote every
-        /// knob back on FALL IN and on leaving the dollhouse; nothing persists on this head.</summary>
-        private void SaveToSettings() =>
-            Log.Debug("ChaosHub: run setup not persisted; no App.Settings on this head yet");
+        /// <summary>Every knob back onto <see cref="CoreSettings.Current"/> — called on FALL IN
+        /// and on leaving the dollhouse, exactly where WPF called it. One addition: WPF left the
+        /// write to disk to the app-level save, and nothing else saves settings on this head, so
+        /// this asks for the debounced save itself.</summary>
+        private void SaveToSettings()
+        {
+            var s = CoreSettings.Current;
+
+            // Gate fallbacks are visual only — never persist them over the saved choice.
+            if (!_diffAutoClamped) s.ChaosDifficulty = GetSegment(_grpDifficulty) ?? "Easy";
+            if (int.TryParse(GetSegment(_grpLength), out var len)) s.ChaosRunDurationSec = len;
+            s.ChaosMotionMode = GetSegment(_grpMotion) ?? "Mixed";
+            s.ChaosWaveCount = _waves;
+
+            var pool = _grpPool.Children.OfType<ToggleButton>().ToList();
+            var checkd = pool.Where(t => t.IsChecked == true)
+                             .Select(t => t.Tag?.ToString() ?? "").Where(x => x.Length > 0).ToList();
+            s.ChaosEnabledVariants = (checkd.Count == 0 || checkd.Count == pool.Count) ? null : checkd;
+
+            s.ChaosScreenShakeEnabled = _chkShake.IsChecked == true;
+            s.ChaosShakeIntensity = _sldShake.Value;
+            s.ChaosColorFlashesEnabled = _chkFlashes.IsChecked == true;
+            s.ChaosSkiaFxEnabled = _chkSkiaFx.IsChecked == true;
+            s.ChaosPinOnTop = _chkPinTop.IsChecked == true;
+            s.ChaosBubbleSharedHost = _chkSharedHost.IsChecked == true;
+            s.ChaosEffectIntensity = _sldEffect.Value;
+            s.ChaosBoonDraftEnabled = _chkBoonDraft.IsChecked == true;
+            s.ChaosAllowCurses = _chkCurses.IsChecked == true;
+            s.ChaosDartersEnabled = _chkDarters.IsChecked == true;
+            s.ChaosAnnouncerEnabled = _chkAnnouncer.IsChecked == true;
+            s.NarrativeModeEnabled = _chkNarrative.IsChecked == true;
+            s.BackdropEnabled = _chkBackdrop.IsChecked == true;
+            s.BackdropOpacity = _sldBackdropOpacity.Value;
+            s.ChaosTunnelEnabled = _chkTunnel.IsChecked == true;
+
+            CoreSettings.Save();
+        }
 
         // ============================ run-setup controls ============================
 
@@ -1517,6 +1597,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             if (!btn.IsEnabled) { btn.IsChecked = false; return; }   // locked (Extreme)
             if (btn.Parent is not Panel grp) return;
             foreach (var t in grp.Children.OfType<ToggleButton>()) t.IsChecked = ReferenceEquals(t, btn);
+            if (ReferenceEquals(grp, _grpDifficulty)) _diffAutoClamped = false;   // a real choice again
         }
 
         private void Stepper_Click(object? sender, RoutedEventArgs e)
@@ -1804,15 +1885,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         // ============================ menu music ============================
 
-        /// <summary>WPF drove a NAudio loop with fades and a master-volume hook. There is no
-        /// audio stack on this head, so the button only swaps its icon.
-        /// ponytail: needs the audio service, wired when it moves to Core.</summary>
-        private bool _menuMuted;
+        /// <summary>WPF drove a NAudio loop with fades and a master-volume hook. There is still
+        /// no looping-audio capability on this head — <c>CoreAudio</c> is one-shot only — so the
+        /// track does not play. The MUTE STATE is real: read from and written to
+        /// <c>AppSettings.ChaosMenuMusicMuted</c>, so the icon is right the moment the hub opens
+        /// and the choice outlives the window, exactly as in WPF.
+        /// ponytail: needs a looping/fading audio seam for the track itself.</summary>
+        private void UpdateMuteIcon(bool muted) => _menuMuteIcon.Text = muted ? "🔇" : "🔊";
 
         private void BtnMenuMute_Click(object? sender, RoutedEventArgs e)
         {
-            _menuMuted = !_menuMuted;
-            _menuMuteIcon.Text = _menuMuted ? "🔇" : "🔊";
+            bool muted = !CoreSettings.Current.ChaosMenuMusicMuted;
+            CoreSettings.Current.ChaosMenuMusicMuted = muted;
+            CoreSettings.Save();
+            UpdateMuteIcon(muted);
         }
 
         // ============================ window chrome (move / fullscreen) ============================
@@ -1843,6 +1929,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             Log.Debug("ChaosHub: guide requested; ChaosIntroWindow is not on this head yet");
 
         // ============================ helpers ============================
+
+        private static string? GetSegment(Panel grp) =>
+            grp.Children.OfType<ToggleButton>().FirstOrDefault(t => t.IsChecked == true)?.Tag?.ToString();
 
         private static void SetSegment(Panel grp, string? tag)
         {
