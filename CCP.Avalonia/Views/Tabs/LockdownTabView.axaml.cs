@@ -3,20 +3,24 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
     /// PORTED from ConditioningControlPanel/Views/Tabs/LockdownTabView.xaml.cs.
     ///
-    /// The view-only half is carried over intact: the intensity pills still behave as radio
-    /// buttons, the master switch still greys the Possession block rather than hiding it, and the
-    /// Emergency Exit slab still sinks under the finger. Everything that reads or writes
-    /// AppSettings, forwards to MainWindow, or opens the exit games is a stub - those live behind
-    /// App.* in the WPF head and get wired when they move to Core.
+    /// <para>The settings half is restored against <see cref="CoreSettings"/>: the Possession
+    /// master switch, the three intensity pills, tripwires / warden / photosafe and the four
+    /// Safeties all read and write <c>AppSettings</c> for real, one for one with the WPF bodies,
+    /// and the master switch still greys the Possession block rather than hiding it.</para>
+    ///
+    /// <para><b>Nothing here enforces a lockdown.</b> Activate, the gate unlock, the secret exit
+    /// and the timer taps are forwarders into <c>MainWindow.Lab.cs</c> / <c>LockdownService</c>,
+    /// which are Win32 and head-side; the Emergency Exit slab needs
+    /// <c>EmergencyExitHostService</c>. Those stay stubs and each says so at its own body.</para>
     /// </summary>
     public partial class LockdownTabView : UserControl
     {
@@ -24,31 +28,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// True while LoadPossessionSettings is writing the controls, so the change handlers do not
         /// write the value they were just given straight back into settings (and, worse, re-enter
         /// through the master switch's grey-out pass).
+        ///
+        /// Starts true: the XAML wires <c>IsCheckedChanged</c> itself, so a handler can fire from
+        /// inside InitializeComponent, before any field is assigned and before the seed has run.
+        /// Cleared by the first LoadPossessionSettings.
         /// </summary>
-        private bool _loadingPossession;
-
-        /// <summary>Stands in for AppSettings.LockdownPossessionIntensity so a tab re-show does not
-        /// throw the user's pick away. Delete with the stub in LoadPossessionSettings.</summary>
-        private int _intensity = 1;
-
-        // The compiled-XAML x:Name fields are only populated by the generated
-        // InitializeComponent(); this head loads its views with AvaloniaXamlLoader.Load, so every
-        // control the code touches is resolved by name here, as in AdornedAvatar and EmiRingPicker.
-        private readonly StackPanel _possessionBlock;
-        private readonly CheckBox _chkPossessionEnabled;
-        private readonly ToggleButton _btnPossGentle;
-        private readonly ToggleButton _btnPossEerie;
-        private readonly ToggleButton _btnPossFullDoki;
+        private bool _loadingPossession = true;
 
         public LockdownTabView()
         {
-            AvaloniaXamlLoader.Load(this);
+            // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
+            // x:Name fields this code-behind reads.
+            InitializeComponent();
 
-            _possessionBlock = this.FindControl<StackPanel>("PossessionBlock")!;
-            _chkPossessionEnabled = this.FindControl<CheckBox>("ChkPossessionEnabled")!;
-            _btnPossGentle = this.FindControl<ToggleButton>("BtnPossGentle")!;
-            _btnPossEerie = this.FindControl<ToggleButton>("BtnPossEerie")!;
-            _btnPossFullDoki = this.FindControl<ToggleButton>("BtnPossFullDoki")!;
+            LoadPossessionSettings();
 
             // Tabs are shown and hidden rather than rebuilt, so the first attach fires once.
             // Re-read on every show for the same reason BambiTakeoverTabView does: something else
@@ -62,16 +55,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (e.Property == IsVisibleProperty && IsVisible) LoadPossessionSettings();
             };
 
-            // ponytail: placeholder for the render proof. On WPF the active panel is flipped by
-            // MainWindow.Lab.cs when a lockdown starts; nothing on this head does that yet, so the
-            // Emergency Exit slab would be unreachable and unproven. Delete this line and the
-            // sample readout below the moment the host moves to Core.
-            this.FindControl<StackPanel>("LockdownActivePanel")!.IsVisible = true;
-            this.FindControl<TextBlock>("TxtPossessionRung")!.Text =
+            // ponytail: placeholder for the render proof, NOT a settings-driven state. On WPF the
+            // Setup/Active swap is driven by a RUNNING lockdown (MainWindow.Lab.cs:760/835, off
+            // App.Lockdown), and the rung readout is hooked only for the duration of one
+            // (HookPossessionReadout). Neither has a Core seam, so without this line the Emergency
+            // Exit slab would be unreachable and unproven. Delete it when the host lands.
+            LockdownActivePanel.IsVisible = true;
+            TxtPossessionRung.Text =
                 Loc.GetF("lockdown_poss_readout_fmt", Loc.Get("lockdown_poss_rung_1"));
-            var pips = this.FindControl<StackPanel>("PossessionPips")!;
-            for (var i = 0; i < pips.Children.Count; i++)
-                if (pips.Children[i] is Border pip)
+            for (var i = 0; i < PossessionPips.Children.Count; i++)
+                if (PossessionPips.Children[i] is Border pip)
                     pip.Background = new SolidColorBrush(Color.Parse(i <= 1 ? "#FF8A5C" : "#33FF8A5C"));
         }
 
@@ -80,19 +73,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Paints every control on the card from AppSettings. Never writes anything back.</summary>
         private void LoadPossessionSettings()
         {
-            // ponytail: needs AppSettings, wired when it moves to Core. The WPF body reads
-            // LockdownPossessionEnabled / TripwiresEnabled / WardenEnabled / Photosafe and the four
-            // safeties, then calls the two Apply* helpers below - which ARE ported, so once the
-            // settings object lands this is eight assignments and nothing else.
             try
             {
+                var s = CoreSettings.Current;
+
                 _loadingPossession = true;
-                ApplyIntensityPills(_intensity);
-                ApplyPossessionEnabledLook(_chkPossessionEnabled.IsChecked == true);
+
+                Set(ChkPossessionEnabled, s.LockdownPossessionEnabled);
+                Set(ChkPossTripwires, s.LockdownTripwiresEnabled);
+                Set(ChkPossWarden, s.LockdownWardenEnabled);
+                Set(ChkPossPhotosafe, s.LockdownPhotosafe);
+
+                Set(ChkLockdownStrict, s.LockdownForceStrictLock);
+                Set(ChkLockdownNoPanic, s.LockdownDisablePanicKey);
+                Set(ChkLockdownSysKeys, s.LockdownBlockSystemKeys);
+                Set(ChkLockdownDose, s.LockdownDoseKeeperEnabled);
+
+                ApplyIntensityPills(s.LockdownPossessionIntensity);
+                ApplyPossessionEnabledLook(s.LockdownPossessionEnabled);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Lockdown card: failed to load possession settings");
             }
             finally
             {
                 _loadingPossession = false;
+            }
+
+            // Assign only on a real difference: Avalonia raises IsCheckedChanged on a programmatic
+            // set too, and every handler below is a live editor.
+            static void Set(CheckBox box, bool value)
+            {
+                if ((box.IsChecked ?? false) != value) box.IsChecked = value;
             }
         }
 
@@ -100,63 +113,115 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// one cannot turn the setting off, because there is no "no intensity".</summary>
         private void ApplyIntensityPills(int intensity)
         {
-            _btnPossGentle.IsChecked = intensity == 0;
-            _btnPossEerie.IsChecked = intensity == 1;
-            _btnPossFullDoki.IsChecked = intensity == 2;
+            BtnPossGentle.IsChecked = intensity == 0;
+            BtnPossEerie.IsChecked = intensity == 1;
+            BtnPossFullDoki.IsChecked = intensity == 2;
         }
 
         /// <summary>Greys rather than hides: see the XAML comment on the Possession block.</summary>
         private void ApplyPossessionEnabledLook(bool on)
         {
-            if (_possessionBlock == null) return;
-            _possessionBlock.IsEnabled = on;
-            _possessionBlock.Opacity = on ? 1.0 : 0.4;
+            if (PossessionBlock == null) return;
+            PossessionBlock.IsEnabled = on;
+            PossessionBlock.Opacity = on ? 1.0 : 0.4;
         }
 
         private void ChkPossessionEnabled_Changed(object? sender, RoutedEventArgs e)
         {
             if (_loadingPossession) return;
-            // ponytail: needs AppSettings (LockdownPossessionEnabled + Save), wired when it moves
-            // to Core. The grey-out is view-only, so it works now.
-            ApplyPossessionEnabledLook(_chkPossessionEnabled.IsChecked == true);
+            try
+            {
+                var s = CoreSettings.Current;
+                s.LockdownPossessionEnabled = ChkPossessionEnabled.IsChecked == true;
+                ApplyPossessionEnabledLook(s.LockdownPossessionEnabled);
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Lockdown card: failed to write LockdownPossessionEnabled");
+            }
         }
 
         private void PossIntensity_Click(object? sender, RoutedEventArgs e)
         {
             if (_loadingPossession) return;
+            try
+            {
+                // Tag carries the value so all three pills share one handler and the mapping lives
+                // next to the label the user actually reads.
+                if (sender is not ToggleButton tb || tb.Tag is not string tag || !int.TryParse(tag, out var value))
+                    return;
 
-            // Tag carries the value so all three pills share one handler and the mapping lives
-            // next to the label the user actually reads.
-            if (sender is not ToggleButton tb || tb.Tag is not string tag || !int.TryParse(tag, out var value))
-                return;
+                var s = CoreSettings.Current;
+                s.LockdownPossessionIntensity = value;
 
-            // ponytail: needs AppSettings (LockdownPossessionIntensity + Save), wired when it moves
-            // to Core. The radio behaviour is view-only, so it works now.
-            _intensity = value;
-            _loadingPossession = true;
-            try { ApplyIntensityPills(_intensity); }
-            finally { _loadingPossession = false; }
+                _loadingPossession = true;
+                try { ApplyIntensityPills(s.LockdownPossessionIntensity); }
+                finally { _loadingPossession = false; }
+
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Lockdown card: failed to write LockdownPossessionIntensity");
+            }
         }
 
-        // ponytail: the four handlers below need AppSettings (LockdownTripwiresEnabled,
-        // LockdownWardenEnabled, LockdownPhotosafe, and the four safeties read together), wired
-        // when it moves to Core. Nothing about them is view-only, so the bodies are empty rather
-        // than half-right.
-        private void ChkPossTripwires_Changed(object? sender, RoutedEventArgs e) { }
+        private void ChkPossTripwires_Changed(object? sender, RoutedEventArgs e)
+            => WriteFlag(v => CoreSettings.Current.LockdownTripwiresEnabled = v,
+                         ChkPossTripwires, "LockdownTripwiresEnabled");
 
-        private void ChkPossWarden_Changed(object? sender, RoutedEventArgs e) { }
+        private void ChkPossWarden_Changed(object? sender, RoutedEventArgs e)
+            => WriteFlag(v => CoreSettings.Current.LockdownWardenEnabled = v,
+                         ChkPossWarden, "LockdownWardenEnabled");
 
-        private void ChkPossPhotosafe_Changed(object? sender, RoutedEventArgs e) { }
+        private void ChkPossPhotosafe_Changed(object? sender, RoutedEventArgs e)
+            => WriteFlag(v => CoreSettings.Current.LockdownPhotosafe = v,
+                         ChkPossPhotosafe, "LockdownPhotosafe");
+
+        /// <summary>One box, one flag, one save - the shape three of the toggles share.</summary>
+        private void WriteFlag(Action<bool> write, CheckBox box, string name)
+        {
+            if (_loadingPossession) return;
+            try
+            {
+                write(box.IsChecked == true);
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Lockdown card: failed to write {Setting}", name);
+            }
+        }
 
         /// <summary>
         /// All four safeties share one handler: they are read together on Activate and none of them
         /// does anything until then, so there is nothing per-toggle to react to.
         /// </summary>
-        private void ChkLockdownSafety_Changed(object? sender, RoutedEventArgs e) { }
+        private void ChkLockdownSafety_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_loadingPossession) return;
+            try
+            {
+                var s = CoreSettings.Current;
+                s.LockdownForceStrictLock = ChkLockdownStrict.IsChecked == true;
+                s.LockdownDisablePanicKey = ChkLockdownNoPanic.IsChecked == true;
+                s.LockdownBlockSystemKeys = ChkLockdownSysKeys.IsChecked == true;
+                s.LockdownDoseKeeperEnabled = ChkLockdownDose.IsChecked == true;
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Lockdown card: failed to write the lockdown safeties");
+            }
+        }
 
         // ==== forwarded to MainWindow ====================================================
-        // ponytail: all four need the MainWindow lockdown partials (MainWindow.Lab.cs), wired when
-        // they move to Core. On WPF each one is Window.GetWindow(this) is MainWindow mw -> mw.<same>.
+        // All four need LockdownService and the MainWindow lockdown partials (MainWindow.Lab.cs).
+        // Starting a lockdown is Win32 - strict lock, the panic-key and system-key hooks, the
+        // always-on-top cage - so it is head-side by construction and no Core seam is planned.
+        // On WPF each body is `Window.GetWindow(this) is MainWindow mw -> mw.<same handler>`.
+        // NOTHING on this head enforces a lockdown; these are inert on purpose.
 
         private void BtnActivateLockdown_Click(object? sender, RoutedEventArgs e) { }
 
@@ -172,13 +237,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // so its animations live here, on the view, and answer only to the photosafe setting.
 
         /// <summary>
-        /// Starts the slow ember breath under the slab.
-        /// ponytail: needs AppSettings (LockdownPhotosafe) plus a named target for the glow, wired
-        /// when settings move to Core. Avalonia cannot name an Effect (AVLN2000), so the WPF
-        /// storyboard on EEGlow.Opacity/BlurRadius becomes either a keyframe Animation over a
-        /// pseudo-class on the plate Border or a swapped DropShadowEffect instance - decide that
-        /// when there is a setting to gate it with. POSSESSION.md: photosafe means no flicker, not
-        /// no colour, so the resting glow in the XAML is already the correct photosafe state.
+        /// Starts the slow ember breath under the slab. Called by the host when the active panel
+        /// is shown.
+        /// ponytail: the gate is readable now (<c>CoreSettings.Current.LockdownPhotosafe</c>), but
+        /// the target is not: Avalonia cannot name an Effect (AVLN2000), so the WPF storyboard on
+        /// EEGlow.Opacity/BlurRadius has to become a keyframe Animation over a pseudo-class on the
+        /// plate Border, or a swapped DropShadowEffect instance - an XAML change, and the XAML is
+        /// not this layer's. POSSESSION.md: photosafe means no flicker, not no colour, so the
+        /// resting glow already in the XAML is the correct photosafe state, which is why an
+        /// unstarted pulse is a safe stub rather than a missing one.
         /// </summary>
         internal void StartEmergencyExitPulse() { }
 
@@ -194,9 +261,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>
         /// Opens the Emergency Exit games.
-        /// ponytail: needs EmergencyExitHostService, wired when it moves to Core. The host owns
-        /// everything after that line - the tripwire, the game pick, the verdict and whether the
-        /// lockdown actually ends (Services/EmergencyExit/EMERGENCY_EXIT.md).
+        /// ponytail: needs EmergencyExitHostService, which owns windows and so stays head-side. The
+        /// host owns everything after that line - the tripwire, the game pick, the verdict and
+        /// whether the lockdown actually ends (Services/EmergencyExit/EMERGENCY_EXIT.md).
         /// </summary>
         private void BtnEmergencyExit_Click(object? sender, RoutedEventArgs e) { }
     }
