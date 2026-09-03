@@ -191,7 +191,7 @@ public class PossessionBarkRulesTests
 
     private static List<JObject> LoadRules(string pack)
     {
-        var path = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "sounds",
+        var path = Path.Combine(RepoRoot(), "Assets", "sounds",
                                 "companion_audio", "mods", pack, "bark_rules.json");
         Assert.True(File.Exists(path), $"missing bark pack: {path}");
         // Strict parse on purpose: Newtonsoft is lenient about a lot, but a malformed pack must fail

@@ -84,7 +84,7 @@ public class StrictMediaKeyLockTests
     [Fact]
     public void PlayerPage_ArmsTheMediaKeyGuardFromTheLoadMessage()
     {
-        var js = ReadProduct("ConditioningControlPanel", "Resources", "web", "player", "player.js");
+        var js = ReadProduct("Assets", "web", "player", "player.js");
 
         // The flag, read exactly as C# writes it, and the guard hung off it.
         Assert.Contains("strict: !!d.strict", js);
@@ -115,7 +115,7 @@ public class StrictMediaKeyLockTests
     [Fact]
     public void PlayerPage_CountsUnrequestedPausesInARollingWindow()
     {
-        var js = ReadProduct("ConditioningControlPanel", "Resources", "web", "player", "player.js");
+        var js = ReadProduct("Assets", "web", "player", "player.js");
 
         // The rule and its tunables.
         Assert.Contains("const PAUSE_WINDOW_MS = 5000;", js);

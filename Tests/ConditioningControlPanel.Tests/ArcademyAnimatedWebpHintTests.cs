@@ -141,7 +141,7 @@ public class ArcademyAnimatedWebpHintTests
     }
 
     private static string ReadWebSource(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel", "Resources", "web", "arcademy" }
+        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "Assets", "web", "arcademy" }
             .Concat(parts).ToArray()));
 
     /// <summary>Every page-side "does this url cost a decoder and a clock" test, by file. They are

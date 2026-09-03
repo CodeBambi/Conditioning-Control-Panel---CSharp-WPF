@@ -248,6 +248,9 @@ public sealed class EmiLineEngine
                 if (File.Exists(a)) return a;
                 var b = Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources", "emi", "desk-lines.json");
                 if (File.Exists(b)) return b;
+                // The art and data moved to the shared /Assets root; a dev run from the source tree finds it there.
+                var c = Path.Combine(dir.FullName, "Assets", "emi", "desk-lines.json");
+                if (File.Exists(c)) return c;
             }
         }
         catch (Exception ex)

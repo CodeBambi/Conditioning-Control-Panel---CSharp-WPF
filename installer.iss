@@ -66,7 +66,7 @@ UsePreviousPrivileges=yes
 ; Output settings
 OutputDir=.\installer-output
 OutputBaseFilename=ConditioningControlPanel-{#MyAppVersion}-Setup
-SetupIconFile=ConditioningControlPanel\Resources\app.ico
+SetupIconFile=Assets\app.ico
 
 ; Compression
 Compression=lzma2/ultra64

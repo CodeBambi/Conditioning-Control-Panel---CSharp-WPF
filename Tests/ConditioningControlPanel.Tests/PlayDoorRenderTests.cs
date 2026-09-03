@@ -387,7 +387,7 @@ public class PlayDoorRenderTests
         // The paths are resolved through ModResourceResolver at runtime, which falls back to the
         // embedded copy when no mod overrides them. A renamed or missing fallback is a blank card
         // on the default install and a broken contract for every .ccpmod on disk.
-        var root = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources");
+        var root = Path.Combine(RepoRoot(), "Assets");
         foreach (var (brush, path) in HeroBrushes)
         {
             var full = Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
@@ -699,7 +699,7 @@ public class PlayDoorRenderTests
 
     private static IEnumerable<string> BuiltInModRuleFiles()
     {
-        var root = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Resources", "sounds",
+        var root = Path.Combine(RepoRoot(), "Assets", "sounds",
                                 "companion_audio", "mods");
         var files = Directory.GetDirectories(root, "builtin-*")
                              .Select(d => Path.Combine(d, "bark_rules.json"))

@@ -101,7 +101,7 @@ public class EmiDeskFarewellTests
     [Fact]
     public void WhenThePoolExistsItIsASpeakingMoment()
     {
-        var path = Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json");
+        var path = Path.Combine(RepoRoot(), "Assets", "emi", "desk-lines.json");
         Assert.True(File.Exists(path), "desk-lines.json is missing at " + path);
 
         using var doc = JsonDocument.Parse(File.ReadAllText(path));

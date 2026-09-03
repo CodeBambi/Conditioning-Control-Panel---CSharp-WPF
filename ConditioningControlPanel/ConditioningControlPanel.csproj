@@ -14,7 +14,7 @@
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
     <Copyright>Copyright © 2024-2026 CodeBambi</Copyright>
-    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <ApplicationIcon>..\Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -218,12 +218,12 @@
          file degrades to "no decoration" instead of failing a Resource URI at runtime.
          Remove from the default None glob first so the no-copy None item doesn't
          suppress this Content copy. -->
-    <None Remove="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json" />
+    <None Remove="..\Assets\cosmetics\**\*.png;..\Assets\cosmetics\*.json" />
     <!-- The art pipeline leaves downscale sanity checks (<id>_104.png, <id>_28.png) and
          placement guides (<id>_guide.png) beside the finals. Only ids the registry names
          are ever loaded, so those would ship as dead weight - keep them out of the build. -->
-    <Content Include="Resources\cosmetics\**\*.png;Resources\cosmetics\*.json"
-             Exclude="Resources\cosmetics\**\*_28.png;Resources\cosmetics\**\*_104.png;Resources\cosmetics\**\*_guide.png">
+    <Content Include="..\Assets\cosmetics\**\*.png;..\Assets\cosmetics\*.json" Link="Resources\cosmetics\%(RecursiveDir)%(Filename)%(Extension)"
+             Exclude="..\Assets\cosmetics\**\*_28.png;..\Assets\cosmetics\**\*_104.png;..\Assets\cosmetics\**\*_guide.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -253,105 +253,105 @@
 
   <ItemGroup>
     <!-- App icon -->
-    <Resource Include="Resources\app.ico" />
-    <Resource Include="Resources\february.png" />
-    <Resource Include="Resources\february_drone.png" />
-    <Resource Include="Resources\logo.png" />
-    <Resource Include="Resources\logo2.png" />
+    <Resource Include="..\Assets\app.ico" Link="Resources\app.ico" />
+    <Resource Include="..\Assets\february.png" Link="Resources\february.png" />
+    <Resource Include="..\Assets\february_drone.png" Link="Resources\february_drone.png" />
+    <Resource Include="..\Assets\logo.png" Link="Resources\logo.png" />
+    <Resource Include="..\Assets\logo2.png" Link="Resources\logo2.png" />
     <!-- Weekly Intake Pass card art, one per niche (see Services\Quiz\IntakeNiche.cs).
          These must stay listed explicitly: there is no Resources\**\*.png glob, and a missing
          entry makes the pack:// URI fail at RUNTIME while the build still succeeds. -->
-    <Resource Include="Resources\intake\pass_card_bambi.png" />
-    <Resource Include="Resources\intake\pass_card_sissy.png" />
-    <Resource Include="Resources\intake\pass_card_drone.png" />
-    <Resource Include="Resources\intake\pass_card_circe.png" />
-    <Resource Include="Resources\intake\pass_card_infection.png" />
+    <Resource Include="..\Assets\intake\pass_card_bambi.png" Link="Resources\intake\pass_card_bambi.png" />
+    <Resource Include="..\Assets\intake\pass_card_sissy.png" Link="Resources\intake\pass_card_sissy.png" />
+    <Resource Include="..\Assets\intake\pass_card_drone.png" Link="Resources\intake\pass_card_drone.png" />
+    <Resource Include="..\Assets\intake\pass_card_circe.png" Link="Resources\intake\pass_card_circe.png" />
+    <Resource Include="..\Assets\intake\pass_card_infection.png" Link="Resources\intake\pass_card_infection.png" />
     <!-- THE VAT's faucet (planning/one-descent/mockups/faucet.png, chroma-cut to
          alpha, spout tip at 90.6% / 98.9%). Same rule as the intake cards above:
          no glob, so a missing entry fails the pack:// URI at RUNTIME only. -->
-    <Resource Include="Resources\descent\faucet.png" />
-    <Resource Include="Resources\bubble.png" />
-    <Resource Include="Resources\speechbubble1.png" />
-    <Resource Include="Resources\speechbubble2.png" />
-    <Resource Include="Resources\discord.png" />
-    <Resource Include="Resources\lockdown_icon.png" />
+    <Resource Include="..\Assets\descent\faucet.png" Link="Resources\descent\faucet.png" />
+    <Resource Include="..\Assets\bubble.png" Link="Resources\bubble.png" />
+    <Resource Include="..\Assets\speechbubble1.png" Link="Resources\speechbubble1.png" />
+    <Resource Include="..\Assets\speechbubble2.png" Link="Resources\speechbubble2.png" />
+    <Resource Include="..\Assets\discord.png" Link="Resources\discord.png" />
+    <Resource Include="..\Assets\lockdown_icon.png" Link="Resources\lockdown_icon.png" />
     <!-- The Emergency Exit button face (Views\Tabs\LockdownTabView.xaml). No Resources\**\*.png
          glob exists, so this line is what keeps the pack:// URI resolvable; without it the
          Image simply renders nothing and the XAML-drawn slab underneath carries the button. -->
-    <Resource Include="Resources\lockdown\emergency_exit.png" />
-    <Resource Include="Resources\spiral.gif" />
+    <Resource Include="..\Assets\lockdown\emergency_exit.png" Link="Resources\lockdown\emergency_exit.png" />
+    <Resource Include="..\Assets\spiral.gif" Link="Resources\spiral.gif" />
     <!-- Corner-overlay spiral: the same loop pre-scaled to 360x240. The corner GIF draws at
          70-300px and used to fall back to the 2400x1600 spiral above, which the render thread then
          resampled every frame on a layered window - the program-day freeze. -->
-    <Resource Include="Resources\spiral_corner.gif" />
-    <Resource Include="Resources\Patreon tier1.png" />
-    <Resource Include="Resources\Patreon tier2.png" />
-    <Resource Include="Resources\Patreon tier3.png" />
-    <Resource Include="Resources\Pink filter.webp" />
-    <Resource Include="Resources\prime subject.webp" />
+    <Resource Include="..\Assets\spiral_corner.gif" Link="Resources\spiral_corner.gif" />
+    <Resource Include="..\Assets\Patreon tier1.png" Link="Resources\Patreon tier1.png" />
+    <Resource Include="..\Assets\Patreon tier2.png" Link="Resources\Patreon tier2.png" />
+    <Resource Include="..\Assets\Patreon tier3.png" Link="Resources\Patreon tier3.png" />
+    <Resource Include="..\Assets\Pink filter.webp" Link="Resources\Pink filter.webp" />
+    <Resource Include="..\Assets\prime subject.webp" Link="Resources\prime subject.webp" />
 
     <!-- Content Pack preview images -->
-    <Resource Include="Resources\pack1.png" />
-    <Resource Include="Resources\pack2.png" />
+    <Resource Include="..\Assets\pack1.png" Link="Resources\pack1.png" />
+    <Resource Include="..\Assets\pack2.png" Link="Resources\pack2.png" />
     
     <!-- Avatar Tube images - MUST be Resource for pack:// URIs to work -->
-    <Resource Include="Resources\tube.png" />
-    <Resource Include="Resources\tube2.png" />
+    <Resource Include="..\Assets\tube.png" Link="Resources\tube.png" />
+    <Resource Include="..\Assets\tube2.png" Link="Resources\tube2.png" />
     <!-- TUBE GLASS: MIDNIGHT (Prize Counter restock). Conditioned on Exists() because the art
          lands separately from the wiring: without the condition a build made before the PNGs are
          dropped in fails outright, and with it the same build simply falls back to the standard
          pane (AvatarTubeWindow.SetTubeStyle resolves null -> standard). Drop the two files in and
          the next build picks them up with no csproj edit. -->
-    <Resource Include="Resources\tube_midnight.png" Condition="Exists('Resources\tube_midnight.png')" />
-    <Resource Include="Resources\tube2_midnight.png" Condition="Exists('Resources\tube2_midnight.png')" />
+    <Resource Include="..\Assets\tube_midnight.png" Link="Resources\tube_midnight.png" Condition="Exists('..\Assets\tube_midnight.png')" />
+    <Resource Include="..\Assets\tube2_midnight.png" Link="Resources\tube2_midnight.png" Condition="Exists('..\Assets\tube2_midnight.png')" />
     
     <!-- Avatar Set 1: Default (Level 1-19) -->
-    <Resource Include="Resources\avatar_pose1.png" />
-    <Resource Include="Resources\avatar_pose2.png" />
-    <Resource Include="Resources\avatar_pose3.png" />
-    <Resource Include="Resources\avatar_pose4.png" />
+    <Resource Include="..\Assets\avatar_pose1.png" Link="Resources\avatar_pose1.png" />
+    <Resource Include="..\Assets\avatar_pose2.png" Link="Resources\avatar_pose2.png" />
+    <Resource Include="..\Assets\avatar_pose3.png" Link="Resources\avatar_pose3.png" />
+    <Resource Include="..\Assets\avatar_pose4.png" Link="Resources\avatar_pose4.png" />
     
     <!-- Avatar Set 2: Level 20+ (Neon/Circuit style) -->
-    <Resource Include="Resources\avatar2_pose1.png" />
-    <Resource Include="Resources\avatar2_pose2.png" />
-    <Resource Include="Resources\avatar2_pose3.png" />
-    <Resource Include="Resources\avatar2_pose4.png" />
+    <Resource Include="..\Assets\avatar2_pose1.png" Link="Resources\avatar2_pose1.png" />
+    <Resource Include="..\Assets\avatar2_pose2.png" Link="Resources\avatar2_pose2.png" />
+    <Resource Include="..\Assets\avatar2_pose3.png" Link="Resources\avatar2_pose3.png" />
+    <Resource Include="..\Assets\avatar2_pose4.png" Link="Resources\avatar2_pose4.png" />
     
     <!-- Avatar Set 3: Level 50+ (Marionette/Puppet style) -->
-    <Resource Include="Resources\avatar3_pose1.png" />
-    <Resource Include="Resources\avatar3_pose2.png" />
-    <Resource Include="Resources\avatar3_pose3.png" />
-    <Resource Include="Resources\avatar3_pose4.png" />
+    <Resource Include="..\Assets\avatar3_pose1.png" Link="Resources\avatar3_pose1.png" />
+    <Resource Include="..\Assets\avatar3_pose2.png" Link="Resources\avatar3_pose2.png" />
+    <Resource Include="..\Assets\avatar3_pose3.png" Link="Resources\avatar3_pose3.png" />
+    <Resource Include="..\Assets\avatar3_pose4.png" Link="Resources\avatar3_pose4.png" />
     
     <!-- Avatar Set 4: Level 50-124 (Sunglasses/Glamour style) -->
-    <Resource Include="Resources\avatar4_pose1.png" />
-    <Resource Include="Resources\avatar4_pose2.png" />
-    <Resource Include="Resources\avatar4_pose3.png" />
-    <Resource Include="Resources\avatar4_pose4.png" />
+    <Resource Include="..\Assets\avatar4_pose1.png" Link="Resources\avatar4_pose1.png" />
+    <Resource Include="..\Assets\avatar4_pose2.png" Link="Resources\avatar4_pose2.png" />
+    <Resource Include="..\Assets\avatar4_pose3.png" Link="Resources\avatar4_pose3.png" />
+    <Resource Include="..\Assets\avatar4_pose4.png" Link="Resources\avatar4_pose4.png" />
 
     <!-- Avatar Set 5: Level 125-149 (Brainwashed Slavedoll) -->
-    <Resource Include="Resources\avatar5_pose1.png" />
-    <Resource Include="Resources\avatar5_pose2.png" />
-    <Resource Include="Resources\avatar5_pose3.png" />
-    <Resource Include="Resources\avatar5_pose4.png" />
+    <Resource Include="..\Assets\avatar5_pose1.png" Link="Resources\avatar5_pose1.png" />
+    <Resource Include="..\Assets\avatar5_pose2.png" Link="Resources\avatar5_pose2.png" />
+    <Resource Include="..\Assets\avatar5_pose3.png" Link="Resources\avatar5_pose3.png" />
+    <Resource Include="..\Assets\avatar5_pose4.png" Link="Resources\avatar5_pose4.png" />
 
     <!-- Avatar Set 6: Level 150+ (Platinum Puppet) -->
-    <Resource Include="Resources\avatar6_pose1.png" />
-    <Resource Include="Resources\avatar6_pose2.png" />
-    <Resource Include="Resources\avatar6_pose3.png" />
-    <Resource Include="Resources\avatar6_pose4.png" />
+    <Resource Include="..\Assets\avatar6_pose1.png" Link="Resources\avatar6_pose1.png" />
+    <Resource Include="..\Assets\avatar6_pose2.png" Link="Resources\avatar6_pose2.png" />
+    <Resource Include="..\Assets\avatar6_pose3.png" Link="Resources\avatar6_pose3.png" />
+    <Resource Include="..\Assets\avatar6_pose4.png" Link="Resources\avatar6_pose4.png" />
 
     <!-- Avatar Set 7: Level 75+ (Bambi Cow) -->
-    <Resource Include="Resources\avatar7_pose1.png" />
-    <Resource Include="Resources\avatar7_pose2.png" />
-    <Resource Include="Resources\avatar7_pose3.png" />
-    <Resource Include="Resources\avatar7_pose4.png" />
+    <Resource Include="..\Assets\avatar7_pose1.png" Link="Resources\avatar7_pose1.png" />
+    <Resource Include="..\Assets\avatar7_pose2.png" Link="Resources\avatar7_pose2.png" />
+    <Resource Include="..\Assets\avatar7_pose3.png" Link="Resources\avatar7_pose3.png" />
+    <Resource Include="..\Assets\avatar7_pose4.png" Link="Resources\avatar7_pose4.png" />
 
     <!-- Animated Avatars - uncomment when GIF files are added to Resources
-    <Resource Include="Resources\animated1_1.gif" />
-    <Resource Include="Resources\animated2_1.gif" />
-    <Resource Include="Resources\animated3_1.gif" />
-    <Resource Include="Resources\animated4_1.gif" />
+    <Resource Include="..\Assets\animated1_1.gif" Link="Resources\animated1_1.gif" />
+    <Resource Include="..\Assets\animated2_1.gif" Link="Resources\animated2_1.gif" />
+    <Resource Include="..\Assets\animated3_1.gif" Link="Resources\animated3_1.gif" />
+    <Resource Include="..\Assets\animated4_1.gif" Link="Resources\animated4_1.gif" />
     -->
 
     <!-- Animated companion emotes (transparent looping GIF, 15fps) + per-set mapping.
@@ -359,54 +359,54 @@
          To add a pose/mod: drop Resources\<folder>\ (clips + emotes.json), add a line to the
          registry below, and add a <Resource> include here. See tools/avatar-emotes/README.md.
          Embedded as Resource so pack:// URIs resolve in the single-file build (~30 MB / pose). -->
-    <Resource Include="Resources\avatar_emotes_registry.json" />
-    <Resource Include="Resources\circe_emotes\*.gif" />
-    <Resource Include="Resources\circe_emotes\emotes.json" />
+    <Resource Include="..\Assets\avatar_emotes_registry.json" Link="Resources\avatar_emotes_registry.json" />
+    <Resource Include="..\Assets\circe_emotes\*.gif" Link="Resources\circe_emotes\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Resource Include="..\Assets\circe_emotes\emotes.json" Link="Resources\circe_emotes\emotes.json" />
     <!-- Circe level emote sets: avatar set 2 = L2 (The Claim/key), 3 = L3 (The Pull/spiral), 4 = L4 (The Bind/chain). -->
-    <Resource Include="Resources\circe_emotes_p2\*.gif" />
-    <Resource Include="Resources\circe_emotes_p2\emotes.json" Condition="Exists('Resources\circe_emotes_p2\emotes.json')" />
-    <Resource Include="Resources\circe_emotes_p3\*.gif" />
-    <Resource Include="Resources\circe_emotes_p3\emotes.json" Condition="Exists('Resources\circe_emotes_p3\emotes.json')" />
-    <Resource Include="Resources\circe_emotes_p4\*.gif" />
-    <Resource Include="Resources\circe_emotes_p4\emotes.json" Condition="Exists('Resources\circe_emotes_p4\emotes.json')" />
+    <Resource Include="..\Assets\circe_emotes_p2\*.gif" Link="Resources\circe_emotes_p2\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Resource Include="..\Assets\circe_emotes_p2\emotes.json" Link="Resources\circe_emotes_p2\emotes.json" Condition="Exists('..\Assets\circe_emotes_p2\emotes.json')" />
+    <Resource Include="..\Assets\circe_emotes_p3\*.gif" Link="Resources\circe_emotes_p3\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Resource Include="..\Assets\circe_emotes_p3\emotes.json" Link="Resources\circe_emotes_p3\emotes.json" Condition="Exists('..\Assets\circe_emotes_p3\emotes.json')" />
+    <Resource Include="..\Assets\circe_emotes_p4\*.gif" Link="Resources\circe_emotes_p4\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Resource Include="..\Assets\circe_emotes_p4\emotes.json" Link="Resources\circe_emotes_p4\emotes.json" Condition="Exists('..\Assets\circe_emotes_p4\emotes.json')" />
     <!-- Avatar-0 (blonde) emote set: shared by BambiSleep + Sissy at avatar set 1. -->
-    <Resource Include="Resources\avatar0_emotes\*.gif" />
-    <Resource Include="Resources\avatar0_emotes\emotes.json" Condition="Exists('Resources\avatar0_emotes\emotes.json')" />
-    <Resource Include="Resources\avatar0_emotes\clip_timing.json" Condition="Exists('Resources\avatar0_emotes\clip_timing.json')" />
+    <Resource Include="..\Assets\avatar0_emotes\*.gif" Link="Resources\avatar0_emotes\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Resource Include="..\Assets\avatar0_emotes\emotes.json" Link="Resources\avatar0_emotes\emotes.json" Condition="Exists('..\Assets\avatar0_emotes\emotes.json')" />
+    <Resource Include="..\Assets\avatar0_emotes\clip_timing.json" Link="Resources\avatar0_emotes\clip_timing.json" Condition="Exists('..\Assets\avatar0_emotes\clip_timing.json')" />
 
     <!-- Achievement images -->
-    <Resource Include="Resources\achievements\*.png" />
+    <Resource Include="..\Assets\achievements\*.png" Link="Resources\achievements\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Skill tree images (individual skill files) -->
-    <Resource Include="Resources\skills\*.png" />
+    <Resource Include="..\Assets\skills\*.png" Link="Resources\skills\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Twemoji SVG set for color-emoji rendering across the UI.
          ~4000 files, ~19 MB on disk, MIT/CC-BY 4.0. Source: github.com/jdecked/twemoji.
          Resolved at runtime via Helpers/EmojiImage.cs (codepoint -> pack:// URI). -->
-    <Resource Include="Resources\Twemoji\*.svg" />
+    <Resource Include="..\Assets\Twemoji\*.svg" Link="Resources\Twemoji\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Feature images - embedded as Resource for pack:// URIs to work -->
-    <Resource Include="Resources\features\*.png" />
+    <Resource Include="..\Assets\features\*.png" Link="Resources\features\%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
          MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
-    <Resource Include="Resources\nav\*.png" />
+    <Resource Include="..\Assets\nav\*.png" Link="Resources\nav\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Training Programs art: day mood plates and program sigils.
          SINGLE LEVEL on purpose - a Resources\programs\<sub>\ folder would compile fine and then
          fail at runtime with a broken pack:// URI, because nothing here globs recursively. -->
-    <Resource Include="Resources\programs\*.png" />
+    <Resource Include="..\Assets\programs\*.png" Link="Resources\programs\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Velvet Vault room art. Resource, NOT Content: ModResourceResolver's last link is a
          pack:// URI, so a Content-only file resolves to nothing once the mod and event probes
          miss (that is exactly how this backdrop was unreachable to mods before). -->
-    <Resource Include="Resources\exclusives\*.png" />
+    <Resource Include="..\Assets\exclusives\*.png" Link="Resources\exclusives\%(RecursiveDir)%(Filename)%(Extension)" />
 
     <!-- Profile hero banners (CosmeticsCatalog.Banners). Resource, NOT Content: the banner
          loader is pack:// only, and these must never fall under the Resources\cosmetics\**
          Content glob that ships the wardrobe art loose on disk. -->
-    <Resource Include="Resources\banners\*.png" />
+    <Resource Include="..\Assets\banners\*.png" Link="Resources\banners\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -419,18 +419,18 @@
 
   <ItemGroup>
     <!-- Haptics setup guide images -->
-    <Resource Include="Resources\haptics_guide\*.png" />
+    <Resource Include="..\Assets\haptics_guide\*.png" Link="Resources\haptics_guide\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Session completion card images -->
-    <Resource Include="Resources\Cards\*.png" />
+    <Resource Include="..\Assets\Cards\*.png" Link="Resources\Cards\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Bespoke per-quest art (one PNG per quest id), bundled in-app so quests
          render without any CDN dependency. Loaded via pack:// by quest id. -->
-    <Resource Include="Resources\quests\*.png" />
+    <Resource Include="..\Assets\quests\*.png" Link="Resources\quests\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- ==========================================================================================
@@ -497,21 +497,21 @@
          Microsoft.Common.CurrentVersion.targets, which the SDK imports AFTER this file's body,
          so it evaluates to empty here (it only works inside a <Target>, like the one below). -->
     <ContentPackSoundsExcludeAbs>
-      $(MSBuildProjectDirectory)\Resources\sounds\flashes_audio\**\*.mp3;
-      $(MSBuildProjectDirectory)\Resources\sounds\flashes_audio\**\*.wav;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.wav;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
-      $(MSBuildProjectDirectory)\Resources\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
+      $(MSBuildProjectDirectory)\..\Assets\sounds\flashes_audio\**\*.mp3;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\flashes_audio\**\*.wav;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.mp3;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.wav;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.ogg;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-bambisleep\**\*.m4a;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.mp3;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.wav;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.ogg;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-locked\**\*.m4a;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.mp3;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.wav;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.ogg;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.m4a;
+      $(MSBuildProjectDirectory)\..\Assets\sounds\companion_audio\mods\builtin-sissyhypno\**\*.png
     </ContentPackSoundsExcludeAbs>
     <ContentPackWebExclude>
       Resources\web\intake\assets\vo\**\*.mp3;
@@ -520,10 +520,10 @@
       Resources\web\dtrh\assets\**\*.mp3
     </ContentPackWebExclude>
     <ContentPackWebExcludeAbs>
-      $(MSBuildProjectDirectory)\Resources\web\intake\assets\vo\**\*.mp3;
-      $(MSBuildProjectDirectory)\Resources\web\intake\assets\sfx\**\*.mp3;
-      $(MSBuildProjectDirectory)\Resources\web\intake\assets\music\**\*.mp3;
-      $(MSBuildProjectDirectory)\Resources\web\dtrh\assets\**\*.mp3
+      $(MSBuildProjectDirectory)\..\Assets\web\intake\assets\vo\**\*.mp3;
+      $(MSBuildProjectDirectory)\..\Assets\web\intake\assets\sfx\**\*.mp3;
+      $(MSBuildProjectDirectory)\..\Assets\web\intake\assets\music\**\*.mp3;
+      $(MSBuildProjectDirectory)\..\Assets\web\dtrh\assets\**\*.mp3
     </ContentPackWebExcludeAbs>
     <!-- The four arcademy *demo.html browser harnesses. Listed once here and referenced by
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
@@ -536,17 +536,17 @@
       Resources\web\arcademy\shell\recordsroom.demo.html
     </ArcademyHarnessExclude>
     <ArcademyHarnessExcludeAbs>
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\annex\demo.html;
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\vn\demo.html;
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\emi\demo.html;
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html
+      $(MSBuildProjectDirectory)\..\Assets\web\arcademy\annex\demo.html;
+      $(MSBuildProjectDirectory)\..\Assets\web\arcademy\vn\demo.html;
+      $(MSBuildProjectDirectory)\..\Assets\web\arcademy\emi\demo.html;
+      $(MSBuildProjectDirectory)\..\Assets\web\arcademy\shell\recordsroom.demo.html
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Sound files - must be copied to output and publish for file system access.
          Audio listed in $(ContentPackSoundsExclude) ships as a downloadable pack instead. -->
-    <Content Include="Resources\sounds\**\*" Exclude="$(ContentPackSoundsExclude)">
+    <Content Include="..\Assets\sounds\**\*" Link="Resources\sounds\%(RecursiveDir)%(Filename)%(Extension)" Exclude="$(ContentPackSoundsExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -556,7 +556,7 @@
          missing, oversized, malformed or hostile override falls back to this copy rather than to a
          prompt with no angle cards and no persona digest.
          See Services\Awareness\AwarenessAngleCards.cs. -->
-    <EmbeddedResource Include="Resources\sounds\companion_audio\awareness_angles.json" />
+    <EmbeddedResource Include="..\Assets\sounds\companion_audio\awareness_angles.json" Link="Resources\sounds\companion_audio\awareness_angles.json" />
     <!-- Endless three.js "rabbit hole" tunnel background (HTML/JS + vendored three.js) and the
          DtRH browser game (Resources\web\dtrh). Served to a WebView2 via virtual hosts, so they
          must live on disk in the output. Remove from the default None glob first so a no-copy
@@ -567,50 +567,48 @@
          development. Nothing in the app or the page graph links them (only two comments name
          them), so they are dead weight in the installer and a stray unversioned entry point in
          the virtual host. Excluded, not deleted: they are how those layers get worked on. -->
-    <None Remove="Resources\web\**\*" />
-    <Content Include="Resources\web\**\*"
-             Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
-                      $(ArcademyHarnessExclude);
-                      $(ContentPackWebExclude)">
+    <None Remove="..\Assets\web\**\*" />
+    <Content Include="..\Assets\web\**\*" Link="Resources\web\%(RecursiveDir)%(Filename)%(Extension)"
+             Exclude="..\Assets\web\**\CLAUDE.md;..\Assets\web\**\CAPTCHA_*.md;..\Assets\web\**\BUILD_PLAN.md;$(ArcademyHarnessExclude);$(ContentPackWebExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- EMI desk lines (Resources\emi\desk-lines.json): read from disk at runtime by the desk
          line engine, so it ships next to the exe like the web assets above. -->
-    <Content Include="Resources\emi\**\*.json">
+    <Content Include="..\Assets\emi\**\*.json" Link="Resources\emi\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- EMI desk fonts (Resources\emi\fonts\*.ttf): loaded through a FontFamily base URI at
          runtime, not as a WPF Resource, so they ship beside the exe exactly like the lines file. -->
-    <Content Include="Resources\emi\**\*.ttf">
+    <Content Include="..\Assets\emi\**\*.ttf" Link="Resources\emi\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- Subliminal audio files -->
-    <Content Include="Resources\sub_audio\**\*">
+    <Content Include="..\Assets\sub_audio\**\*" Link="Resources\sub_audio\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- Awareness Engine preset packs -->
-    <Content Include="Resources\AwarenessPresets\**\*">
+    <Content Include="..\Assets\AwarenessPresets\**\*" Link="Resources\AwarenessPresets\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- Deeper demo enhancements (seeded into user's library on first launch) -->
-    <Content Include="Resources\DeeperDemos\**\*">
+    <Content Include="..\Assets\DeeperDemos\**\*" Link="Resources\DeeperDemos\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- Webcam tracking ONNX models (offline-only, no network calls).
          README.md documents required files; .onnx binaries dropped in by build process. -->
-    <Content Include="Resources\Models\**\*">
+    <Content Include="..\Assets\Models\**\*" Link="Resources\Models\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -623,7 +621,7 @@
     </Content>
     <!-- Bundled tutorial video clips (short, low-res, muted loops) played by
          HelpVideoWindow. File-based access via LibVLC requires disk copy. -->
-    <Content Include="Resources\tutorial_videos\**\*">
+    <Content Include="..\Assets\tutorial_videos\**\*" Link="Resources\tutorial_videos\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -651,16 +649,14 @@
       <!-- The excludes below MUST mirror the <Content> items above, or this target silently
            re-copies the stripped audio (and the arcademy harness pages) back into the publish
            tree. That is why both live in properties. See docs/CONTENT_PACKS_PLAN.md §6. -->
-      <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" Exclude="$(ContentPackSoundsExcludeAbs)" />
-      <WebFiles Include="$(ProjectDir)Resources\web\**\*"
-                Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;
-                         $(ContentPackWebExcludeAbs);
-                         $(ArcademyHarnessExcludeAbs)" />
-      <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
-      <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
-      <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />
+      <SoundFiles Include="$(ProjectDir)..\Assets\sounds\**\*" Exclude="$(ContentPackSoundsExcludeAbs)" />
+      <WebFiles Include="$(ProjectDir)..\Assets\web\**\*"
+                Exclude="$(ProjectDir)..\Assets\web\**\CLAUDE.md;$(ProjectDir)..\Assets\web\**\CAPTCHA_*.md;$(ProjectDir)..\Assets\web\**\BUILD_PLAN.md;$(ContentPackWebExcludeAbs);$(ArcademyHarnessExcludeAbs)" />
+      <SubAudioFiles Include="$(ProjectDir)..\Assets\sub_audio\**\*" />
+      <AwarenessPresetFiles Include="$(ProjectDir)..\Assets\AwarenessPresets\**\*" />
+      <DeeperDemoFiles Include="$(ProjectDir)..\Assets\DeeperDemos\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
-      <TutorialVideoFiles Include="$(ProjectDir)Resources\tutorial_videos\**\*" />
+      <TutorialVideoFiles Include="$(ProjectDir)..\Assets\tutorial_videos\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(WebFiles)" DestinationFolder="$(PublishDir)Resources\web\%(RecursiveDir)" SkipUnchangedFiles="true" />

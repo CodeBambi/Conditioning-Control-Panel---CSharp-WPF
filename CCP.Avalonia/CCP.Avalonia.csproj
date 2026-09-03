@@ -42,6 +42,60 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The app's art, LINKED from the shared /Assets root that every head draws on. One set of
+      bytes on disk, one place to edit them, and no head owns them - the WPF head links them the
+      same way and is not a dependency of this one. CCP.VR and a future mobile head add their own
+      link with whatever item type they need; nothing here has to change for them.
+
+      The logical path is preserved on both sides, so a reference reads the same on either head:
+
+          WPF       pack://application:,,,/Resources/features/awareness.png
+          Avalonia  avares://CCP.Avalonia/Resources/features/awareness.png
+
+      Scoped to what the views actually name, measured from the 113 pack:// URIs in the WPF
+      source - about 33 MB. Deliberately NOT the whole 1.3 GB Resources tree:
+
+        - Twemoji (4,009 files, 19 MB) is not needed at all. Avalonia renders COLR/CPAL colour
+          emoji natively, which is why the ported views draw a plain TextBlock where WPF needed
+          an SVG. Packaging it would ship a fallback nothing reaches for.
+        - achievements/ is 70 files and 38 MB; six are referenced. skills/ is 27 files; one is.
+          Those two are listed file by file rather than globbed, so the assembly does not carry
+          32 MB no view asks for.
+        - Audio, video, models and mod assets are Content in the WPF head - loaded off disk at
+          runtime, not compiled in - so they are not resources here either.
+
+      Folders where the views use everything are globbed, so a new file is picked up without a
+      csproj edit. Folders where they use a fraction are explicit, so growth stays a decision.
+    -->
+    <AvaloniaResource Include="..\Assets\quests\**\*"
+                      Link="Resources\quests\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\nav\**\*"
+                      Link="Resources\nav\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\intake\**\*"
+                      Link="Resources\intake\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\haptics_guide\**\*"
+                      Link="Resources\haptics_guide\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\lockdown\**\*"
+                      Link="Resources\lockdown\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\descent\**\*"
+                      Link="Resources\descent\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\features\*.png"
+                      Link="Resources\features\%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\Assets\*.png"
+                      Link="Resources\%(Filename)%(Extension)" />
+
+    <!-- Sparse folders: only what a view names. -->
+    <AvaloniaResource Include="..\Assets\achievements\10_hours_pink.png" Link="Resources\achievements\10_hours_pink.png" />
+    <AvaloniaResource Include="..\Assets\achievements\lv_10.png" Link="Resources\achievements\lv_10.png" />
+    <AvaloniaResource Include="..\Assets\achievements\pop_the_Thought.png" Link="Resources\achievements\pop_the_Thought.png" />
+    <AvaloniaResource Include="..\Assets\achievements\retinal_burn.png" Link="Resources\achievements\retinal_burn.png" />
+    <AvaloniaResource Include="..\Assets\achievements\spiral_eyes.png" Link="Resources\achievements\spiral_eyes.png" />
+    <AvaloniaResource Include="..\Assets\achievements\total_lockdown.png" Link="Resources\achievements\total_lockdown.png" />
+    <AvaloniaResource Include="..\Assets\skills\pink_rush.png" Link="Resources\skills\pink_rush.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
   </ItemGroup>
 

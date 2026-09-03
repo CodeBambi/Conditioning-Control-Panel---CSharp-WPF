@@ -198,7 +198,7 @@ public class AchievementCatalogTests
         while (dir != null)
         {
             var candidate = Path.Combine(
-                dir.FullName, "ConditioningControlPanel", "Resources", "cosmetics", "registry.json");
+                dir.FullName, "Assets", "cosmetics", "registry.json");
             if (File.Exists(candidate)) return candidate;
             dir = dir.Parent;
         }

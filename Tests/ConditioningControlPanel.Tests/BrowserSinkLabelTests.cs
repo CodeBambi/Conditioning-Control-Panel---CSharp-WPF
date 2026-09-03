@@ -107,7 +107,7 @@ public class BrowserSinkLabelTests
     [Fact]
     public void PlayerPage_CarriesTheSinkContract()
     {
-        var js = ReadProduct("ConditioningControlPanel", "Resources", "web", "player", "player.js");
+        var js = ReadProduct("Assets", "web", "player", "player.js");
 
         // The load message's field, read exactly as C# writes it.
         Assert.Contains("applySink(d.sinkLabel)", js);

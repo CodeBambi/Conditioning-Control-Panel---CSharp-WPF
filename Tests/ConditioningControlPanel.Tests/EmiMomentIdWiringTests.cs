@@ -55,7 +55,7 @@ public class EmiMomentIdWiringTests
 
     private static Vocabulary LoadVocabulary()
     {
-        var path = Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json");
+        var path = Path.Combine(RepoRoot(), "Assets", "emi", "desk-lines.json");
         Assert.True(File.Exists(path), "desk-lines.json is missing at " + path);
 
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
@@ -250,7 +250,7 @@ public class EmiMomentIdWiringTests
     [Fact]
     public void EveryUntilReleasedHoldHasAReleasePath()
     {
-        var path = Path.Combine(AppDir(), "Resources", "emi", "desk-lines.json");
+        var path = Path.Combine(RepoRoot(), "Assets", "emi", "desk-lines.json");
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
 
         var needRelease = new List<string>();
