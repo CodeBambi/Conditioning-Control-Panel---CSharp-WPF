@@ -1,0 +1,252 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/MicConsentDialog.xaml.
+     Structure, order, spacing and every x:Name preserved. The WPF original has no loc keys -
+     every string is English in the XAML - so the English is copied verbatim, not keyed.
+     Deviations, all forced:
+       Style="{StaticResource X}"    -> Theme="{StaticResource X}"  (local ControlThemes below)
+       ControlTemplate.Triggers      -> ^:pointerover / ^:disabled styles inside the theme
+       DlgCheckbox BasedOn implicit  -> local copy of Theme/Styles.xaml:DotCheckBoxStyle with a
+                                        Grid instead of a StackPanel, so long labels wrap
+       ResizeMode="NoResize"         -> CanResize="False"
+       Visibility="Collapsed"        -> IsVisible="False"
+       Hyperlink                     -> HyperlinkButton NavigateUri (native; replaces Process.Start)
+       Click/Checked/TextChanged     -> wired in the constructor
+       whitespace between <Run>s     -> moved inside the Run text (Avalonia drops it) -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.MicConsentDialog"
+        Title="Microphone — Privacy and Consent"
+        Width="640" Height="620"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of Dialogs/MicConsentDialog.xaml:DlgHeader…DlgCheckbox, hoist when a second view needs it -->
+        <ControlTheme x:Key="DlgHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgSub" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#B0B0B0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="22"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgPromise" TargetType="TextBlock" BasedOn="{StaticResource DlgBody}">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Chrome">
+                <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.35"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgPrimaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgSecondaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="#3A3A52"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgCheckbox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,8,0,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid ColumnDefinitions="Auto,*" Background="Transparent">
+                        <Border x:Name="dot" Width="16" Height="16" CornerRadius="8" Margin="0,0,10,0"
+                                Background="#3A3A48" BorderBrush="#5A5A6A" BorderThickness="1"
+                                VerticalAlignment="Center"/>
+                        <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          VerticalAlignment="Center"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ Border#dot">
+                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#dot">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid Margin="32,28,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Step indicator -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,20">
+            <Ellipse x:Name="DotStep1" Width="10" Height="10" Margin="4,0" Fill="{StaticResource PinkBrush}"/>
+            <Ellipse x:Name="DotStep2" Width="10" Height="10" Margin="4,0" Fill="#3A3A52"/>
+            <Ellipse x:Name="DotStep3" Width="10" Height="10" Margin="4,0" Fill="#3A3A52"/>
+        </StackPanel>
+
+        <!-- ─── STEP 1 — What this enables ─── -->
+        <ScrollViewer x:Name="PanelStep1" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="Voice — &quot;say it for me&quot;"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="Optional. Off by default. Lets her hear you say things back."/>
+
+                <TextBlock Theme="{StaticResource DlgBody}" Margin="0,24,0,0"
+                           Text="With this on, during Takeover she can ask you to repeat a phrase out loud — and actually listen for it. She knows the phrase already, so all the app checks is whether you said it, and loudly enough. Recognition runs entirely on your computer using a small offline model bundled with the app — no internet is used."/>
+
+                <TextBlock Theme="{StaticResource DlgBody}" Margin="0,16,0,0" FontWeight="SemiBold" Foreground="{StaticResource PinkBrush}"
+                           Text="How the mic is used:"/>
+
+                <TextBlock Theme="{StaticResource DlgBody}" Margin="14,8,0,0">
+                    <Run FontWeight="Bold">• Only when she asks (default)</Run>
+                    <LineBreak/>
+                    <Run>The mic opens for a few seconds right after she prompts you, then closes again. It is not listening the rest of the time.</Run>
+                </TextBlock>
+
+                <TextBlock Theme="{StaticResource DlgBody}" Margin="14,12,0,0">
+                    <Run FontWeight="Bold">• Always-on wake word (separate opt-in)</Run>
+                    <LineBreak/>
+                    <Run>A &quot;Hey Bambi&quot;-style trigger that keeps the mic open is available later as its own setting — it is NOT enabled by this consent.</Run>
+                </TextBlock>
+
+                <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,0" Foreground="#9090A8" FontStyle="Italic"
+                           Text="The next screen explains exactly what happens to the audio — and what never does. Read it carefully."/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ─── STEP 2 — Privacy contract ─── -->
+        <ScrollViewer x:Name="PanelStep2" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
+            <StackPanel>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="Your voice stays on this computer."/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="Always. Read each line."/>
+
+                <Border Margin="0,24,0,0" Padding="20" CornerRadius="6" Background="#1F1F38" BorderBrush="{StaticResource PinkBrush}" BorderThickness="0,0,0,3">
+                    <StackPanel>
+                        <TextBlock Theme="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                            <Run>Audio is </Run>
+                            <Run FontWeight="Bold">never transmitted</Run>
+                            <Run> — not to our server, not to Patreon, not to any third party.</Run>
+                        </TextBlock>
+                        <TextBlock Theme="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                            <Run>Audio is processed in memory and </Run>
+                            <Run FontWeight="Bold">immediately discarded. </Run>
+                            <Run>No recording, no clip, no file is ever written to disk.</Run>
+                        </TextBlock>
+                        <TextBlock Theme="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                            <Run>Only a </Run>
+                            <Run FontWeight="Bold">match score </Run>
+                            <Run>(did you say the phrase, and how loud) is used — never the raw audio.</Run>
+                        </TextBlock>
+                        <TextBlock Theme="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                            <Run>Recognition runs </Run>
+                            <Run FontWeight="Bold">offline </Run>
+                            <Run>with a model bundled in the app. </Run>
+                            <Run FontWeight="Bold">No internet connection is used or required.</Run>
+                        </TextBlock>
+                        <TextBlock Theme="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                            <Run>By default the mic opens </Run>
+                            <Run FontWeight="Bold">only during a prompt</Run>
+                            <Run>, for a few seconds — not continuously.</Run>
+                        </TextBlock>
+                        <TextBlock Theme="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
+                            <Run>You can disable this </Run>
+                            <Run FontWeight="Bold">instantly </Run>
+                            <Run>with the panic key, the in-app toggle, or by closing the app.</Run>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Theme="{StaticResource DlgBody}" Margin="0,18,0,0" Foreground="#B8B8C8"
+                           Text="Want to verify? The source code for this feature is public."/>
+                <HyperlinkButton x:Name="LnkSource" Padding="0" Foreground="{StaticResource PinkBrush}"
+                                 NavigateUri="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/Speech/SpeechService.cs">
+                    <TextBlock Text="View on GitHub →" FontSize="14"/>
+                </HyperlinkButton>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ─── STEP 3 — Explicit consent ─── -->
+        <ScrollViewer x:Name="PanelStep3" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
+            <StackPanel>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="Confirm consent"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="Each box must be checked. None are pre-checked."/>
+
+                <CheckBox x:Name="ChkConsent1" Theme="{StaticResource DlgCheckbox}" Margin="0,24,0,0">
+                    <TextBlock TextWrapping="Wrap" Text="I understand my voice stays on this device and is never transmitted."/>
+                </CheckBox>
+                <CheckBox x:Name="ChkConsent2" Theme="{StaticResource DlgCheckbox}">
+                    <TextBlock TextWrapping="Wrap" Text="I understand audio is processed in memory and never saved to disk."/>
+                </CheckBox>
+                <CheckBox x:Name="ChkConsent3" Theme="{StaticResource DlgCheckbox}">
+                    <TextBlock TextWrapping="Wrap" Text="I consent to the microphone opening while Takeover is running and prompting me to speak."/>
+                </CheckBox>
+
+                <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,8" FontWeight="SemiBold"
+                           Text="Type ENABLE in capitals to confirm:"/>
+                <TextBox x:Name="TxtConfirm" FontSize="14" Padding="10,8" Background="#1F1F38" Foreground="White"
+                         BorderBrush="#3A3A52" BorderThickness="1" CaretBrush="White"/>
+
+                <TextBlock x:Name="TxtConfirmHint" Theme="{StaticResource DlgBody}" Margin="0,8,0,0" Foreground="#8888A0" FontStyle="Italic"
+                           Text="Waiting for: 3 checkboxes + ENABLE typed."/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Button row -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BtnCancel" Grid.Column="0" Theme="{StaticResource DlgSecondaryButton}" HorizontalAlignment="Left"
+                    Content="Cancel"/>
+
+            <Button x:Name="BtnBack" Grid.Column="1" Theme="{StaticResource DlgSecondaryButton}" Margin="0,0,8,0"
+                    Content="← Back" IsVisible="False"/>
+
+            <Button x:Name="BtnNext" Grid.Column="2" Theme="{StaticResource DlgPrimaryButton}"
+                    Content="I want to know more →"/>
+
+            <Button x:Name="BtnEnable" Grid.Column="2" Theme="{StaticResource DlgPrimaryButton}"
+                    Content="Enable Voice" IsEnabled="False" IsVisible="False"/>
+        </Grid>
+    </Grid>
+</Window>

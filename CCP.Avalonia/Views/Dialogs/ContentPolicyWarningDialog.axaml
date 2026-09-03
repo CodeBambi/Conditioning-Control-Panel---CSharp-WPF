@@ -1,0 +1,94 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/ContentPolicyWarningDialog.xaml.
+     Structure, order, spacing and every x:Name preserved. Deviations, all forced:
+       Style="{StaticResource X}"  -> Theme="{StaticResource X}"   (local ControlThemes below)
+       ResizeMode="NoResize"       -> CanResize="False"
+       Hyperlink                   -> HyperlinkButton NavigateUri (native; replaces Process.Start)
+       Click="Handler"             -> wired in the constructor
+       Content="{loc:Str …}"       -> a <TextBlock> child (Avalonia parses "_" in Content as an
+                                      access key and every loc key here is snake_case) -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ContentPolicyWarningDialog"
+        Title="{loc:Str policy_warning_title}"
+        Width="540"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of Dialogs/ContentPolicyWarningDialog.xaml:DlgHeader…DlgButton, hoist when a second view needs it -->
+        <ControlTheme x:Key="DlgHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E5C76B"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="22"/>
+        </ControlTheme>
+        <ControlTheme x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Background" Value="#A98E3A"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid Margin="32,28,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str policy_warning_title}"/>
+
+            <TextBlock x:Name="TxtBodyCount"
+                       Theme="{StaticResource DlgBody}"
+                       Margin="0,18,0,0"/>
+
+            <TextBlock Theme="{StaticResource DlgBody}" Margin="0,14,0,0"
+                       Text="{loc:Str policy_warning_body_explain}"/>
+
+            <TextBlock Theme="{StaticResource DlgBody}" Margin="0,14,0,0"
+                       Text="{loc:Str policy_warning_body_link}"/>
+
+            <HyperlinkButton x:Name="LnkPolicy" Margin="0,8,0,0" Padding="0"
+                             Foreground="#E5C76B"
+                             NavigateUri="https://app.cclabs.app/policies/prohibited-content">
+                <TextBlock Text="{loc:Str moderation_policy_link}" FontSize="14"/>
+            </HyperlinkButton>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,24,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BtnOk" Grid.Column="1"
+                    Theme="{StaticResource DlgButton}"
+                    IsDefault="True">
+                <TextBlock Text="{loc:Str policy_warning_ok}"/>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>
