@@ -1,9 +1,31 @@
 // PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.BankFx.cs (923 lines).
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// The blanket header this file shipped with is replaced: no member here touches WebView2 or Win32,
+// and the real blocker is one type plus one missing event source.
+//
+// THE BANK IS THE XP DRIP. Awards land in an accumulator that holds them back, then flies a burst
+// of tokens from wherever the XP was earned to the header's XP counter, which pops when they land.
+// Three things hold the whole file up:
+//   * BankAccumulator - ConditioningControlPanel/Services/BankAccumulator.cs, still in the WPF
+//     head. It owns the hold/release POLICY (what is a drip and what is a flood), so writing one
+//     here would be a second copy of the rule that decides how fast XP appears - exactly the
+//     duplication CCP.Core exists to prevent. It is a plain service and looks movable, but that is
+//     a Core layer's call, not a head layer's.
+//   * OnBankXpChanged / OnBankXpAwarded - CCP.Core/CoreProgression.cs is an AddXP provider only
+//     and raises no XpChanged or XpAwarded event, so there is nothing on this head to subscribe
+//     to. Same source blocker as the profile bubble's live reactions.
+//   * TryHoldXpDisplay / ReleaseXpHold / StepBankCounter / PopXpCounter / FlashXpBarOnBankLanding -
+//     the counter these drive (MainShellWindow.axaml's TxtXP and XPBar) is still the XAML's static
+//     "0/70 XP". Holding and stepping a display nothing else writes would report a drip that is
+//     not happening.
+//
+// What is NOT a blocker, recorded so the next layer does not re-derive it: AmbientFxCanvas is a
+// full port on this head and can fly the tokens (EnsureBankLayer, LaunchBankFlight,
+// OnBankTokenLanded, AbortBankFlight); PlayBankThud maps onto CoreAudio; DispatcherTimer,
+// Stopwatch and the origin/target resolution (TryResolveBankTarget, TryResolveBankOrigin,
+// TryBankAnchorCenter, TryBankAnchorBounds, IsFiniteBankPoint) are portable as written, with WPF's
+// TransformToAncestor becoming Visual.TranslatePoint. InitializeBankFx and ShutdownBankFx would be
+// called from the window constructor and OnClosing.
 //
 // Members dropped (56):
 //   private const double BankBoxPadPx
