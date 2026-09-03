@@ -1,9 +1,27 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.LeaderboardFx.cs (405 lines).
+// PORTED-AS-A-NOTE from ConditioningControlPanel/MainWindow/MainWindow.LeaderboardFx.cs (405 lines).
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// Nothing is wired here. The Leaderboard tab carries no AmbientFxCanvas - both of its effects are
+// data-driven decoration, and the data is the blocker in each case:
+//
+//   * the podium glow breath (PodiumGlowMinOpacity..MaxOpacity over PodiumGlowSeconds on the #1
+//     card). The host exists - LeaderboardTabView.axaml:531, ItemsControl x:Name="PodiumHost" -
+//     but ApplyPodiumFx picks the glow card out of the generated containers, and the containers
+//     on this head are placeholder rows. A breath on a sample card is decoration attached to
+//     nothing, and it would need re-attaching on every real refresh anyway.
+//   * the rank flash (CollectMovedRows -> FlashMovedRows, a staggered rise+fade on up to
+//     RankFlashMaxRows rows that CHANGED position since the last pull). This one is not merely
+//     unattached, it is undefined: "moved" is a diff between two service pulls, and
+//     Services.LeaderboardEntry plus the leaderboard client are still in the WPF head. With no
+//     previous pull to diff against, every row is either always flashing or never - and the
+//     first is the failure mode a reviewer would never catch from a screenshot.
+//
+// Neither is storyboard-only: Avalonia can express both (an Animation over OpacityProperty for
+// the breath, per-row Animations with a start delay for the stagger). They are blocked on the
+// leaderboard service, and they should land in the same layer that brings it.
+//
+// LeaderboardAmbientAllowed and the Activated/Deactivated/StateChanged parking funnel go with
+// them: both loops are plain animations rather than canvases, so unlike the two tabs this batch
+// turned on they cannot lean on AmbientFxCanvas.Evaluate() for their gate.
 //
 // Members dropped (30):
 //   private const double PodiumGlowMinOpacity
