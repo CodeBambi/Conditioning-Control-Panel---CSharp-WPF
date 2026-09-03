@@ -1,0 +1,59 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AppSettings/NotificationsSettingsSection.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved. Deviations:
+
+       Style="{StaticResource X}"    -> Theme="{StaticResource X}"
+       ToolTip="..."                 -> ToolTip.Tip="..."
+       Checked=/Unchecked=           -> IsCheckedChanged, wired in the constructor
+       x:FieldModifier="internal"    -> dropped -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.NotificationsSettingsSection"
+             d:DesignWidth="760"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_notifications}" Theme="{StaticResource SectionHeader}"/>
+
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,12"
+                BorderBrush="{StaticResource SectionHueNotificationsBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueNotificationsWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueNotificationsBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <Grid MinHeight="34" ColumnDefinitions="*,Auto" ToolTip.Tip="{loc:Str tooltip_intake_nudge_enabled}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueNotificationsBrush}"
+                                   Text="{loc:Str label_intake_nudge_enabled}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkIntakeNudge"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="True"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_intake_nudge_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <Grid MinHeight="34" Margin="0,10,0,0" ColumnDefinitions="*,Auto"
+                          ToolTip.Tip="{loc:Str tooltip_suppress_perk_notifications}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueNotificationsBrush}"
+                                   Text="{loc:Str label_suppress_perk_notifications}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkSuppressPerkNotifications"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="False"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="{loc:Str set2_suppress_perk_notifications_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+    </StackPanel>
+</UserControl>
