@@ -165,7 +165,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void UpdateTimeDisplay()
         {
-            // ponytail: needs the MediaPlayer for Time/Length; the format is the WPF one verbatim.
+            // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its note) for
+            // Time/Length; the format is the WPF one verbatim.
             var current = TimeSpan.Zero;
             var total = TimeSpan.Zero;
 
@@ -174,8 +175,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void TogglePlayPause()
         {
-            // ponytail: needs the MediaPlayer to Pause()/Play(); the glyph swap is the view half
-            // of the WPF Playing/Paused handlers and is kept so the button is not inert.
+            // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its note) to
+            // Pause()/Play(); the glyph swap is the view half of the WPF Playing/Paused handlers
+            // and is kept so the button is not inert.
             _isPlaying = !_isPlaying;
             _btnPlayPause.Content = _isPlaying ? "⏸" : "▶";
         }
@@ -191,7 +193,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void SeekToSliderPosition()
         {
-            // ponytail: needs the MediaPlayer; Position is a 0-1 float of SeekSlider.Value / 100.
+            // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its note);
+            // Position is a 0-1 float of SeekSlider.Value / 100.
             _ = Math.Clamp(_seekSlider.Value / 100.0, 0.0, 1.0);
         }
 
@@ -216,11 +219,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     e.Handled = true;
                     break;
                 case Key.Left:
-                    // ponytail: needs the MediaPlayer - this was Time -= 5000ms.
+                    // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its
+                    // note) - this was Time -= 5000ms.
                     e.Handled = true;
                     break;
                 case Key.Right:
-                    // ponytail: needs the MediaPlayer - this was Time += 5000ms, clamped to Length.
+                    // ponytail: needs the LibVLCSharp MediaPlayer LoadVideo would build (see its
+                    // note) - this was Time += 5000ms, clamped to Length.
                     e.Handled = true;
                     break;
             }

@@ -166,11 +166,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void StartClip()
         {
             // Fail soft: no clip configured, or file missing -> leave video hidden. Restored from
-            // the WPF original, which logged the same warning for a configured-but-absent clip.
+            // the WPF original, which logged a Warning here because an absent clip meant a
+            // misconfigured topic. On this head it is the steady state - Resources/tutorial_videos
+            // is Content in the WPF head and is never laid down beside CCP.Avalonia - so Debug,
+            // not a Warning a triager has to learn to ignore.
             if (string.IsNullOrEmpty(_clipPath) || !File.Exists(_clipPath))
             {
                 if (!string.IsNullOrEmpty(_clipPath))
-                    Log.Warning("HelpVideoWindow: clip not found: {Path}", _clipPath);
+                    Log.Debug("HelpVideoWindow: clip not found: {Path}", _clipPath);
                 ShowWhatItDoesFallback();
                 return;
             }
@@ -181,7 +184,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // that IS on disk still takes the WPF "LibVLC not available" branch, which is this
             // same fail-soft: surface hidden (VideoContainer is IsVisible="False" in the markup),
             // caption and link shown.
-            Log.Warning("HelpVideoWindow: no video surface on this head; hiding video for {Path}", _clipPath);
+            Log.Debug("HelpVideoWindow: no video surface on this head; hiding video for {Path}", _clipPath);
             ShowWhatItDoesFallback();
         }
 
