@@ -277,7 +277,7 @@ namespace ConditioningControlPanel
             CoreMods.MakeModAwareProvider = text => Mods?.MakeModAware(text);
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
-            CoreSettings.CurrentProvider = () => Settings?.Current;
+            CoreSettings.ServiceProvider = () => Settings;
             CoreSettingsHooks.CloudBackup = () =>
                 HasCloudIdentity && ProfileSync != null ? ProfileSync.BackupSettingsAsync() : Task.CompletedTask;
 
