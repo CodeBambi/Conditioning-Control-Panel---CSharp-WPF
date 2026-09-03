@@ -1,0 +1,169 @@
+<!-- PORTED from ConditioningControlPanel/Windows/FeatureIntroPopup.xaml.
+     Structure, ordering, spacing, x:Names and every comment preserved. Copy is hardcoded English in
+     the original (see the class doc on FeatureIntros) so there are no loc keys to carry across.
+     Deviations, all forced, and all the same ones ProgramsIntroPopup took next door:
+
+       WindowStyle="None" + AllowsTransparency -> SystemDecorations="None" +
+                                                  TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                   -> CanResize="False"
+       DropShadowEffect ShadowDepth="0"        -> OffsetX="0" OffsetY="0", and the x:Name is gone:
+                                                  an Effect is not in the name scope, so the
+                                                  code-behind reaches it through CardBorder.Effect
+       LinearGradientBrush "0,0" / "0.3,1"     -> "0%,0%" / "30%,100%". Avalonia's RelativePoint
+                                                  parses a bare pair as ABSOLUTE pixels, so the WPF
+                                                  spelling would have drawn a 0.3px gradient.
+       Panel.ZIndex                            -> ZIndex
+       <Style x:Key TargetType="Button">       -> <ControlTheme> with the same Template; the
+                                                  IsMouseOver/IsPressed triggers are ^:pointerover /
+                                                  ^:pressed selectors. The two inline button styles
+                                                  in the original are byte-identical, so they are
+                                                  one keyed theme here worn by both buttons.
+       <ContentPresenter/>                     -> ContentPresenter Content="{TemplateBinding Content}"
+                                                  (CLAUDE.md trap 6)
+       Visibility="Collapsed"                  -> IsVisible="False"
+       PreviewKeyDown / MouseLeftButtonDown    -> KeyDown / PointerPressed, wired in the constructor
+       Click="..."                             -> wired in the constructor -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.FeatureIntroPopup"
+        Title="Feature Intro"
+        Width="620" SizeToContent="Height" MaxHeight="640"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- The WPF inline <Button.Style> carried by BtnAction and BtnDismiss alike, setters
+             verbatim. Background is overwritten from code with the card accent (a local value
+             beats a theme setter), which is exactly what the WPF original does. -->
+        <ControlTheme x:Key="CardButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}"
+                            CornerRadius="18" Padding="16,6">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- The WPF <Style.Triggers> IsMouseOver setter on the ✕ button. -->
+        <Style Selector="Button.closeX:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+
+    <Border x:Name="CardBorder" Background="#F0151530" CornerRadius="14"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <!-- Two columns, same skeleton as ProgramsIntroPopup: glyph rail left, explainer right.
+             The rail is a large emoji glyph over an accent glow rather than a bitmap, so any
+             feature gets a dressed card without shipping art for it. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Glyph rail -->
+            <Border Grid.Column="0" Width="172" CornerRadius="12,0,0,12" ClipToBounds="True">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="30%,100%">
+                        <GradientStop Color="#3C2159" Offset="0"/>
+                        <GradientStop Color="#252542" Offset="0.55"/>
+                        <GradientStop Color="#1A1A2E" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+
+                <Grid>
+                    <!-- Ambient accent wash behind the glyph; Fill set in code from the accent. -->
+                    <Rectangle x:Name="RailGlow" Margin="8"/>
+
+                    <TextBlock x:Name="RailGlyph"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="0,0,0,30"
+                               FontSize="64" TextAlignment="Center"/>
+
+                    <TextBlock x:Name="TxtRailTitle" VerticalAlignment="Bottom"
+                               Margin="12,0,12,18"
+                               FontSize="14" FontWeight="Bold"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+
+                    <!-- Hairline seam so the rail reads as part of the card. -->
+                    <Rectangle x:Name="RailSeam" Width="1" HorizontalAlignment="Right" Fill="#55FF69B4"/>
+                </Grid>
+            </Border>
+
+            <!-- Close button -->
+            <Button x:Name="BtnCloseX" Classes="closeX"
+                    Content="✕"
+                    Grid.Column="1"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="28" Height="28" Margin="0,8,12,0"
+                    Padding="0"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand"
+                    ZIndex="1"/>
+
+            <StackPanel Grid.Column="1" Margin="24,22,24,20" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtTitle"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontWeight="Bold" FontSize="21"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,4"/>
+
+                <TextBlock x:Name="TxtTagline"
+                           Foreground="#CCD5D5E5" FontSize="13"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,16"/>
+
+                <!-- Bullet rows are built in code from the intro content (see BuildBullets):
+                     same accent-glyph row layout ProgramsIntroPopup authors statically. -->
+                <StackPanel x:Name="BulletsHost" Margin="0,0,0,6"/>
+
+                <TextBlock x:Name="TxtFooter" Foreground="#99AAAABB" FontSize="12"
+                           TextWrapping="Wrap" LineHeight="18"
+                           Margin="0,4,0,16"/>
+
+                <!-- v6.8.0: an optional CTA ahead of the dismiss button (built for the
+                     one-account card). Collapsed unless the content carries both an ActionLabel
+                     and an OnAction, so every existing card renders exactly as before. When the
+                     CTA is present, code-behind gives it the accent fill and steps the dismiss
+                     button back to a quiet ghost. -->
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnAction" Theme="{StaticResource CardButtonStyle}"
+                            IsVisible="False"
+                            Height="37" MinWidth="132" Margin="0,0,12,0"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="SemiBold"/>
+                    <Button x:Name="BtnDismiss" Theme="{StaticResource CardButtonStyle}"
+                            Content="Got it"
+                            Height="37" MinWidth="132"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="SemiBold"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
