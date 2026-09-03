@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using IOPath = System.IO.Path;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -15,6 +16,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -27,15 +29,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// background gradient, the progress dots, the category-button builder, the answer hover and
     /// flash, the loading-dots ticker and the whole surrender easter egg. Deviations:
     ///
-    ///  - <c>QuizService</c> / <c>QuizSessionGenerator</c> / <c>SessionFileService</c> live in the
-    ///    WPF head, not in CCP.Core, so every call into them is a stub carrying a ponytail comment.
+    ///  - <b>Wired against the seams:</b> <c>App.Settings</c> is <see cref="CoreSettings"/> (the
+    ///    <c>UseLocalAi</c> error wording and the whole <c>LatestQuiz*</c> companion hand-off),
+    ///    <c>App.Audio</c> is <see cref="CoreAudio"/> (the giggle, the chime, GOOD GIRL, the result
+    ///    sting and the surrender duck/unduck) and <c>App.Logger</c> is Serilog's static
+    ///    <c>Log</c>. The question flow, scoring, timers, formatting and visual state are the WPF
+    ///    original's.
+    ///  - <c>QuizService</c> (<c>ConditioningControlPanel/Services/Quiz/QuizService.cs</c>),
+    ///    <c>QuizSessionGenerator</c> and <c>SessionFileService</c> are still in the WPF head, so
+    ///    the AI round trip, the category store, the history file and the session export are what
+    ///    remains stubbed; each stub names its exact symbol.
     ///    <c>QuizQuestion</c> and <c>QuizResult</c> are copied below, trimmed to what this view
     ///    reads (the TextEditorDialog / QuizReportWindow / QuizCategoryEditorWindow precedent);
     ///    <c>QuizCategoryDefinition</c>, <c>QuizAnswerRecord</c> and <c>QuizCategory</c> are already
     ///    declared beside this class by those two ports and are REUSED, not re-declared.
-    ///  - NAudio's drone loop, <c>App.Audio</c>, <c>App.Flash</c>/<c>Bubbles</c>/<c>Subliminal</c>/
-    ///    <c>MindWipe</c>, <c>App.Settings</c>, <c>App.Logger</c> and <c>App.AvatarWindow</c> are
-    ///    all head-only; the <c>LoopStream</c> wrapper and the WaveOutEvent pool went with them.
+    ///  - NAudio's drone loop, <c>App.Flash</c>/<c>Bubbles</c>/<c>Subliminal</c>/<c>MindWipe</c> and
+    ///    <c>App.AvatarWindow</c> stay head-only; the <c>LoopStream</c> wrapper and the WaveOutEvent
+    ///    pool went with them. There is no XP call to port: WPF awards quiz XP through
+    ///    <c>QuizService.RaiseQuizCompleted</c> -> <c>GamificationBridge</c>, both head-side, so a
+    ///    <c>CoreProgression.AddXP</c> here would be a second, divergent copy of bridge logic.
     ///  - <c>Microsoft.Win32.SaveFileDialog</c> -> Avalonia's <c>IStorageProvider</c> is available,
     ///    but there is no session to export while the generator is stubbed, so the handler is too.
     ///  - WPF <c>Storyboard</c>/<c>DoubleAnimation</c> -> Avalonia <c>Animation</c>, run against the
@@ -60,6 +72,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool _isTrickQuestion;
         private bool _isSurrenderEasterEgg;
         private QuizQuestion? _savedNextQuestion;
+        /// <summary>What WPF read off <c>QuizService.CurrentCategoryDefinition</c>: the category
+        /// this run was started over, which the result panel's companion hand-off needs.</summary>
+        private QuizCategoryDefinition? _currentCategoryDefinition;
+        private long _surrenderDuckGen;
         private readonly DispatcherTimer _loadingDotsTimer;
         private int _loadingDotCount;
         private readonly Ellipse[] _progressDots = new Ellipse[10];
@@ -82,6 +98,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         };
 
         private static readonly Random _random = new();
+
+        private static readonly string[] GiggleFiles = new[]
+        {
+            "giggle1.MP3", "giggle2.MP3", "giggle3.MP3", "giggle4.MP3",
+            "giggle5.mp3", "giggle6.wav", "giggle7.mp3", "giggle8.mp3"
+        };
+        private static readonly string[] ChimeFiles = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
 
         private static readonly (string Question, string Answer)[] TrickQuestions = new[]
         {
@@ -131,12 +154,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             IsOpen = true;
 
-            // ponytail: needs App.AvatarWindow.SetMuteAvatar - WPF muted the avatar for the whole
-            // run so her z-order work could not cover the quiz. Wired when the avatar moves to Core.
+            // ponytail: needs AvatarWindow.IsMuted / SetMuteAvatar from
+            // ConditioningControlPanel/Windows/AvatarWindow.xaml.cs - WPF muted the avatar for the
+            // whole run so her z-order work could not cover the quiz, and restored the previous
+            // state on close. This head's avatar is AvatarTubeWindow, which carries no mute yet.
 
             AvaloniaXamlLoader.Load(this);
-            // ponytail: needs App.Audio for the looping "00 Bimbo Drone.mp3" playDrone track (NAudio
-            // WaveOutEvent + the LoopStream wrapper); wired when audio moves to Core.
+            // ponytail: the playDrone track (Resources/sounds/"00 Bimbo Drone.mp3") is a LOOP over a
+            // NAudio WaveOutEvent plus App.Audio.ApplyPreferredDevice. CoreAudio offers PlayOneShot
+            // only, which expresses neither, so this waits on a looping-playback seam. Deliberately
+            // NOT faked with a one-shot: the drone would play once and go silent while the quiz ran
+            // on, which is a worse lie than no drone at all.
             _ = playDrone;
 
             _rootGrid = this.FindControl<Grid>("RootGrid")!;
@@ -377,8 +405,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(null);
             if (await editor.ShowDialog<bool>(this) && editor.Result != null)
             {
-                // ponytail: needs QuizService.SaveCustomCategory; wired when the quiz service moves
-                // to Core. The rebuild below still runs, so the list refreshes (from the stub).
+                // ponytail: needs QuizService.SaveCustomCategory from
+                // ConditioningControlPanel/Services/Quiz/QuizService.cs to write the new category
+                // into custom_quiz_categories.json. The rebuild below still runs, so the list
+                // refreshes (from the stub).
                 BuildCategoryButtons();
             }
         }
@@ -391,8 +421,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var editor = new QuizCategoryEditorWindow(catDef);
             if (await editor.ShowDialog<bool>(this))
             {
-                // ponytail: needs QuizService.SaveCustomCategory when editor.Result is non-null.
-                // If Result is null, it was deleted (handled inside editor)
+                // ponytail: needs QuizService.SaveCustomCategory from
+                // ConditioningControlPanel/Services/Quiz/QuizService.cs when editor.Result is
+                // non-null. If Result is null, it was deleted (handled inside editor)
                 BuildCategoryButtons();
             }
         }
@@ -471,7 +502,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtLoadingFlavor.Text = flavorText ?? LoadingFlavors[_random.Next(LoadingFlavors.Length)];
             _loadingDotsTimer.Start();
             ShowPanel(_loadingPanel);
-            // ponytail: needs App.Audio.PlayOneShot for the random giggle; wired with audio in Core.
+            PlayRandomGiggle();
         }
 
         private static void ShuffleAnswers(QuizQuestion question)
@@ -511,13 +542,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             _loadingDotsTimer.Stop();
 
-            // ponytail: needs QuizService.SaveEntry to persist a QuizHistoryEntry, App.Settings for
-            // the LatestQuiz* companion hand-off (category id, score percentage, profile text and
-            // the "You are a (.+?)." archetype regex) and QuizService.RaiseQuizCompleted for the
-            // GamificationBridge hook. perfect = >= PerfectScorePercent, passed = >= 60 - both are
-            // defined here because the quiz has no native pass/perfect concept. Wired when the quiz
-            // service and settings move to Core.
-            _ = PerfectScorePercent;
+            var catDef = _currentCategoryDefinition;
+
+            // ponytail: needs QuizHistoryEntry + QuizService.SaveEntry from
+            // ConditioningControlPanel/Services/Quiz/QuizService.cs to append this run to
+            // quiz_history.json. Head-side, so nothing is recorded and savedEntry stays null -
+            // which is also what gates BuildTrendDisplay and the session generation below, exactly
+            // as it does in WPF on a save failure.
+
+            // Latest quiz result for the companion hand-off. WPF mutates settings here and lets
+            // the next debounced save carry it; mirrored, so no extra write is introduced.
+            try
+            {
+                var settings = CoreSettings.Current;
+                settings.LatestQuizCategoryId = catDef?.Id ?? result.Category.ToString();
+                settings.LatestQuizScorePercentage = result.MaxScore > 0
+                    ? (int)Math.Round((double)result.TotalScore / result.MaxScore * 100) : 0;
+                settings.LatestQuizProfileText = result.ProfileText;
+
+                // Extract archetype from profile text
+                var archetypeMatch = System.Text.RegularExpressions.Regex.Match(
+                    result.ProfileText, @"You are a (.+?)\.");
+                settings.LatestQuizArchetype = archetypeMatch.Success
+                    ? archetypeMatch.Groups[1].Value : "";
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "QuizWindow: Failed to save quiz result to settings");
+            }
 
             _txtFinalScore.Text = Loc.GetF("quiz_final_score", result.TotalScore, result.MaxScore);
 
@@ -534,24 +586,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _txtProfileText.Text = result.ProfileText;
 
+            // ponytail: needs QuizService.RaiseQuizCompleted from
+            // ConditioningControlPanel/Services/Quiz/QuizService.cs - the static event
+            // GamificationBridge listens on for the quiz achievements (and, through it, the XP
+            // award). perfect = >= PerfectScorePercent, passed = >= 60, both defined here because
+            // the quiz has no native pass/perfect concept; "perfect" is deliberately not full
+            // marks, because several categories score on a profile curve where the top answer is
+            // subjective. Both the event and the bridge are head-side; calling CoreProgression.AddXP
+            // from here instead would be a second, divergent copy of the bridge's award rules.
+            _ = PerfectScorePercent;
+
             BuildTrendDisplay();
 
             ShowPanel(_resultPanel);
-            // ponytail: needs App.Audio.PlayOneShot for result.mp3; wired with audio in Core.
+            PlayResultSound();
         }
 
         private void BtnTrySession_Click()
         {
-            // ponytail: needs QuizSessionGenerator + SessionFileService to build and export the
-            // quiz-shaped Session, and a save-file picker (Avalonia's IStorageProvider) to place it.
-            // The border stays IsHitTestVisible="False" until that lands, so this cannot fire.
+            // ponytail: needs QuizSessionGenerator (ConditioningControlPanel/Services/Quiz/
+            // QuizSessionGenerator.cs) and SessionFileService (ConditioningControlPanel/Services/
+            // Session/SessionFileService.cs) to build and export the quiz-shaped Session, plus a
+            // save-file picker - Avalonia's IStorageProvider covers that half. Both services are
+            // head-side. The border stays IsHitTestVisible="False", so this cannot fire.
         }
 
         /// <summary>
         /// The "your journey" line under the result. ponytail: needs QuizService.LoadHistory /
-        /// GetScoreTrend / TrendKey / DisplayName for the real numbers; wired when the quiz service
-        /// moves to Core. The header and panel stay hidden until then, exactly as they do on a first
-        /// quiz, so nothing draws half-built.
+        /// GetScoreTrend / TrendKey / DisplayName from
+        /// ConditioningControlPanel/Services/Quiz/QuizService.cs, plus the QuizHistoryEntry this
+        /// run would have been saved as. All head-side. The header and panel stay hidden until
+        /// then, exactly as they do on a first quiz, so nothing draws half-built - a trend line
+        /// over one invented number would be a control that lies about the user's history.
         /// </summary>
         private void BuildTrendDisplay()
         {
@@ -574,14 +640,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private static string QuizGenerationFailedMessage()
         {
-            // ponytail: needs App.Settings.Current.CompanionPrompt.UseLocalAi to pick the Ollama
-            // wording; wired when settings move to Core. The cloud line is the default in WPF too.
-            const bool useLocal = false;
-#pragma warning disable CS0162 // unreachable while the setting is stubbed to false
+            bool useLocal = CoreSettings.Current.CompanionPrompt?.UseLocalAi == true;
             return useLocal
                 ? "Couldn't generate the quiz. Make sure Ollama is running and your model is pulled (Companion → AI), then try again."
                 : "Couldn't generate the quiz. The AI might be busy or you've hit your daily limit. Try again in a moment.";
-#pragma warning restore CS0162
         }
 
         // ============ ANIMATIONS ============
@@ -657,8 +719,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _isProcessing = true;
             _answerHistory.Clear();
-            _totalScore = 0;
-            _questionNumber = 0;
             ShowLoading("Preparing your quiz...");
 
             try
@@ -673,9 +733,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ShowError(QuizGenerationFailedMessage());
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger for the "Failed to start quiz" line.
+                Log.Error(ex, "QuizWindow: Failed to start quiz");
                 ShowError("Something went wrong starting the quiz. Please try again.");
             }
             finally
@@ -698,9 +758,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     await HandleSurrenderClickAsync();
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    // ponytail: needs App.Logger for the "Surrender easter egg failed" line.
+                    Log.Error(ex, "QuizWindow: Surrender easter egg failed");
                     try { ExitSurrenderMode(); } catch { }
                     if (_savedNextQuestion != null)
                     {
@@ -733,10 +793,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // Flash the selected answer
             await FlashSelectedAnswer(border);
-            if (_isTrickQuestion) _isTrickQuestion = false;
-            // ponytail: needs App.Audio for the GOOD GIRL / chime one-shots, and App.Flash /
-            // App.Bubbles / App.Subliminal / App.MindWipe for TriggerRandomEffect's four-way roll
-            // plus its independent ~25% mindwipe. Wired when those services move to Core.
+            if (_isTrickQuestion)
+            {
+                _isTrickQuestion = false;
+                PlayGoodGirl();
+            }
+            else
+            {
+                PlayRandomChime();
+            }
+            // ponytail: TriggerRandomEffect - App.Flash.TriggerFlashOnce / App.Bubbles.SpawnOnce /
+            // App.Subliminal.FlashSubliminal for the four-way roll, plus App.MindWipe.AudioFileCount
+            // and TriggerOnce for the independent ~25% mindwipe. All four are desktop-wide overlay
+            // windows on ConditioningControlPanel/App.xaml.cs with no seam and no Avalonia twin;
+            // porting one branch alone would make the roll silently uneven rather than absent.
 
             var questionNum = _questionNumber;
 
@@ -773,8 +843,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                                 EnterSurrenderMode();
                                 return; // finally block sets _isProcessing = false
                             }
-                            catch (Exception)
+                            catch (Exception ex2)
                             {
+                                Log.Error(ex2, "QuizWindow: EnterSurrenderMode failed");
                                 _isSurrenderEasterEgg = false;
                                 _savedNextQuestion = null;
                                 // Fall through to show the real question normally
@@ -795,9 +866,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger for the "Failed to process answer" line.
+                Log.Error(ex, "QuizWindow: Failed to process answer");
                 ShowError("Something went wrong. Please try again.");
             }
             finally
@@ -851,9 +922,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnPlayAgain_Click()
         {
-            // ponytail: needs QuizService.Reset(); the local counters below are its stand-in.
+            // ponytail: needs QuizService.Reset() from
+            // ConditioningControlPanel/Services/Quiz/QuizService.cs to clear the AI conversation
+            // history; the local counters below are its stand-in for everything this window owns.
             _totalScore = 0;
             _questionNumber = 0;
+            _currentCategoryDefinition = null;
             _currentQuestion = null;
             _isSurrenderEasterEgg = false;
             _savedNextQuestion = null;
@@ -904,12 +978,55 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtLoadingDots.Text = Loc.Get("label_generating_3") + new string('.', _loadingDotCount);
         }
 
+        // ============ AUDIO ============
+
+        /// <summary>
+        /// The WPF body against the seam: <c>App.Audio.PlayOneShot</c> is
+        /// <see cref="CoreAudio.PlayOneShot"/> and <c>App.Settings.Current.MasterVolume</c> is
+        /// <see cref="CoreSettings"/>. Silent on this head today for the two reasons that are both
+        /// the WPF no-op branch: Resources/sounds is Content in the WPF head and is not laid down
+        /// beside CCP.Avalonia, so <c>File.Exists</c> misses; and nothing seeds
+        /// <c>CoreAudio.PlayOneShotProvider</c>, so the seam fires its finished callback and
+        /// returns. Both are honest silence, not a lie about playback.
+        /// </summary>
+        private static void PlaySound(string fileName, float multiplier)
+        {
+            try
+            {
+                var path = IOPath.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", fileName);
+                if (!System.IO.File.Exists(path)) return;
+                CoreAudio.PlayOneShot(path, GetVolume(multiplier), "quiz-sfx");
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("QuizWindow: sound {File} failed: {Error}", fileName, ex.Message);
+            }
+        }
+
+        /// <summary>Master volume on the app's ^1.5 perceptual curve - the WPF formula verbatim.</summary>
+        private static float GetVolume(float multiplier)
+        {
+            var master = CoreSettings.Current.MasterVolume / 100f;
+            return (float)Math.Pow(master * multiplier, 1.5);
+        }
+
+        private static void PlayRandomGiggle() => PlaySound(GiggleFiles[_random.Next(GiggleFiles.Length)], 0.5f);
+
+        private static void PlayRandomChime() => PlaySound(ChimeFiles[_random.Next(ChimeFiles.Length)], 0.5f);
+
+        private static void PlayGoodGirl() => PlaySound("GOOD GIRL.mp3", 0.5f);
+
+        private static void PlayResultSound() => PlaySound("result.mp3", 1f);
+
         // ============ QUIZ SERVICE STUBS ============
 
         /// <summary>
-        /// ponytail: needs QuizService.GetAllCategories() - the five built-ins plus whatever the
-        /// user saved. Placeholder data until the quiz service moves to Core; the last entry is
-        /// deliberately NOT built-in so the "Edit" affordance is exercised too.
+        /// ponytail: needs QuizService.GetAllCategories() from
+        /// ConditioningControlPanel/Services/Quiz/QuizService.cs - GetBuiltInCategories() (five
+        /// definitions carrying ~600 lines of system prompt) plus LoadCustomCategories() over
+        /// custom_quiz_categories.json. Both head-side. The placeholder below keeps the same shape;
+        /// the last entry is deliberately NOT built-in so the "Edit" affordance is exercised too.
         /// </summary>
         private static List<QuizCategoryDefinition> GetAllCategories() => new()
         {
@@ -921,25 +1038,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new() { Id = "custom_sample", Name = "Velvet Fog", Description = "A slow, warm slide into agreeable emptiness.", Color = "#2ECC71", IsBuiltIn = false },
         };
 
-        /// <summary>ponytail: needs QuizService.StartQuizAsync(catDef) - the AI round trip that
-        /// returns question 1. Null is the WPF "couldn't generate" path, so the error panel and its
-        /// provider-aware copy stay exercised.</summary>
-        private static Task<QuizQuestion?> StartQuizAsync(QuizCategoryDefinition catDef)
+        /// <summary>
+        /// ponytail: needs QuizService.StartQuizAsync(catDef) from
+        /// ConditioningControlPanel/Services/Quiz/QuizService.cs - the AI round trip (proxy or
+        /// Ollama, wrapped by SafetyComposer and screened by the moderation layer) that returns
+        /// question 1. Head-side, so this returns null, which is the WPF "couldn't generate" path:
+        /// the error panel and its provider-aware copy stay exercised.
+        ///
+        /// <para>The bookkeeping AROUND the round trip is the service's own and is restored here,
+        /// so the flow is right the moment a real question arrives: StartQuizAsync zeroes TotalScore
+        /// and sets QuestionNumber to 1 as it hands back question 1. Leaving QuestionNumber at 0,
+        /// as the first cut did, puts the "last question" test one answer late.</para>
+        /// </summary>
+        private Task<QuizQuestion?> StartQuizAsync(QuizCategoryDefinition catDef)
         {
-            _ = catDef;
+            _currentCategoryDefinition = catDef;
+            _totalScore = 0;
+            _questionNumber = 1;
             return Task.FromResult<QuizQuestion?>(null);
         }
 
-        /// <summary>ponytail: needs QuizService.SubmitAnswerAndGetNextAsync.</summary>
+        /// <summary>ponytail: needs QuizService.SubmitAnswerAndGetNextAsync from
+        /// ConditioningControlPanel/Services/Quiz/QuizService.cs. The scoring and the question
+        /// counter below are the service's, verbatim.</summary>
         private Task<QuizQuestion?> SubmitAnswerAndGetNextAsync(int answerIndex, int points)
         {
             _ = answerIndex;
+            if (_questionNumber >= 10) return Task.FromResult<QuizQuestion?>(null);
             _totalScore += points;
             _questionNumber++;
             return Task.FromResult<QuizQuestion?>(null);
         }
 
-        /// <summary>ponytail: needs QuizService.SubmitFinalAnswerAndGetResultAsync.</summary>
+        /// <summary>ponytail: needs QuizService.SubmitFinalAnswerAndGetResultAsync from
+        /// ConditioningControlPanel/Services/Quiz/QuizService.cs - the second AI round trip that
+        /// writes the archetype profile.</summary>
         private Task<QuizResult?> SubmitFinalAnswerAndGetResultAsync(int answerIndex, int points)
         {
             _ = answerIndex;
@@ -963,8 +1096,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void EnterSurrenderMode()
         {
-            // ponytail: needs App.Audio.Duck(95)/DuckGeneration and the drone volume mute; wired
-            // when audio moves to Core.
+            // Duck audio heavily. WPF also muted the drone here; there is no drone on this head
+            // (see the ctor note), so there is nothing to mute.
+            _surrenderDuckGen = CoreAudio.DuckGeneration;
+            CoreAudio.Duck(95);
 
             // Stop timers
             _loadingDotsTimer.Stop();
@@ -1071,7 +1206,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void ExitSurrenderMode()
         {
-            // ponytail: needs App.Audio.Unduck(_surrenderDuckGen) and the drone volume restore.
+            // Unduck audio (the drone volume restore has nothing to restore here).
+            CoreAudio.Unduck(_surrenderDuckGen);
 
             // Restart gradient timer (resumes normal palette cycling)
             _gradientTimer.Start();
@@ -1158,8 +1294,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _loadingDotsTimer.Stop();
             _gradientTimer.Stop();
-            // ponytail: needs App.Audio to stop the drone and drain the WaveOutEvent pool, and
-            // App.AvatarWindow.SetMuteAvatar(false) to restore the avatar's mute state.
+            // ponytail: needs the drone's WaveOutEvent/AudioFileReader pair to stop and dispose -
+            // nothing starts one here yet (see the ctor note) - and AvatarWindow.SetMuteAvatar from
+            // ConditioningControlPanel/Windows/AvatarWindow.xaml.cs to restore the avatar's
+            // pre-quiz mute state. Both head-side.
+
+            // Deliberate divergence from WPF: it ducks to 95 in EnterSurrenderMode and only unducks
+            // in ExitSurrenderMode, so closing the window (Escape) while the surrender screen is up
+            // leaves the whole app ducked with no window left to undo it. This layer is what brings
+            // the duck to this head, so it does not bring that with it. Unduck is generation-scoped,
+            // so a stale generation is a no-op.
+            if (_isSurrenderEasterEgg) CoreAudio.Unduck(_surrenderDuckGen);
 
             base.OnClosed(e);
         }
