@@ -1,0 +1,326 @@
+<!-- PORTED from ConditioningControlPanel/Windows/EmiDesk/EmiDeskWindow.xaml. Structure, layer
+     order, sizes and every colour preserved so the two diff cleanly. Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" +
+                                                   TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                    -> CanResize="False"
+       SnapsToDevicePixels                      -> dropped (no Avalonia twin; UseLayoutRounding
+                                                   is the one that matters)
+       Visibility="Hidden"                      -> dropped. Avalonia windows are created hidden
+                                                   and IsVisible="False" on a root Window fights
+                                                   Show(). EmiDeskService still summons her.
+       RenderOptions.BitmapScalingMode="Nearest"-> RenderOptions.BitmapInterpolationMode="None"
+       StrokeStartLineCap/StrokeEndLineCap      -> StrokeLineCap (Avalonia has one cap)
+       Cursor="SizeNWSE"                        -> Cursor="BottomRightCorner"
+       ToolTip="..." set from Loc.Get in code   -> ToolTip.Tip="{loc:Str ...}", same four keys,
+                                                   so a language change re-renders them
+       RenderTransformOrigin="0.5,0.55"         -> "50%,55%". Avalonia reads a bare number as
+                                                   ABSOLUTE PIXELS; the % is load-bearing.
+       <TransformGroup x:Name=...>              -> built in the code-behind. FindControl is
+                                                   constrained to Control, and a Transform is not
+                                                   one, so naming them here buys nothing.
+       <emi:EmiFace/>                           -> a mono TextBlock placeholder. See below.
+
+     The window is a pad bigger than EMI on every side so her FX have room; that pad is
+     Background-less on purpose. ponytail: on X11 a transparent Avalonia window still EATS the
+     clicks that fell through the pad on Windows (layered-window alpha hit-testing), and
+     Platform/X11Overlay.SetClickThrough is whole-window only - shaping input to the BodyRoot rect
+     needs an input-shape-region API the shim does not have yet. Its own layer. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiDeskWindow"
+        Title="EMI"
+
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        CanResize="False"
+        SizeToContent="Manual"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        Topmost="True"
+        Focusable="False"
+        Width="460" Height="458">
+
+    <!--
+        THE WIDGET SURFACE.
+
+        The window is deliberately BIGGER than EMI: `OverlayPad` DIPs of fully transparent air on
+        every side, so the summon smoke, the sparkle scatter and her speech bubble have room to fly
+        outside her silhouette without a second window. Empty air is `Background`-less
+        (`{x:Null}`), which neither WPF nor Avalonia hit-tests, so a click on the padding falls
+        through to whatever is behind her - on Windows. See the ponytail note above for X11.
+
+        Layer order, bottom to top:
+          BodyRoot    her silhouette; the ONLY hit-testable region (Background="Transparent")
+            BodyPlaceholder the stand-in silhouette (see below)
+            BodyImage the pose PNG
+            FaceLayer the face canvas and, over it, the glass
+            OutfitOverImage the garment's own art, ABOVE the face and the glass (THE SKIN LAW)
+            PropImage the thing she is holding, nearer the camera than the garment
+            BtnClose  the hover x
+            BtnGear   the hover gear (opens her options; her cards live in there too)
+            BtnHelp   the hover ?, directly under the gear (opens her book)
+            ResizeGrip the corner handle
+          OverlayHost the summon/dismiss FX
+          BubbleHost  the speech bubble
+
+        Every size in here is a placeholder: ApplyBodyWidth() drives the real numbers off the body
+        PNG's 859 x 869 aspect and the glass rect from emi.css.
+    -->
+    <Grid x:Name="Root" Background="{x:Null}">
+
+        <Grid x:Name="BodyRoot"
+              HorizontalAlignment="Center" VerticalAlignment="Center"
+              Background="Transparent"
+              RenderTransformOrigin="50%,55%">
+            <!-- Four transform slots, authored together in the code-behind so no animation has to
+                 re-parent another and none of them can stamp on another's value:
+                   CrtScale     the summon / dismiss power-on and the bounce / thud pulses
+                   SquashScale  the click squash-and-stretch
+                   WobbleRotate the drag sway and its release pendulum. Its centre is set in
+                                ApplyBodyWidth so she swings from the HEAD, not the middle
+                   MoveShift    the nod / droop / shiver offsets
+                 The rotate sits above the scales on purpose: a squash applied after a rotation
+                 would shear her rather than squash her. -->
+
+            <!-- THE STAND-IN SILHOUETTE. Her body art is resolved at runtime by
+                 EmiChains.BodyPath, which is a WPF-head service and has not moved to Core, so on
+                 this head BodyImage has no Source and BodyRoot would draw nothing at all - a
+                 transparent window rendering an empty PNG and passing.
+                 ponytail: placeholder art, needs EmiChains (Services/EmiDesk/EmiChains.cs); SetPose
+                 hides this the moment a real pose bitmap lands. -->
+            <Border x:Name="BodyPlaceholder"
+                    Background="#E60E0E1C"
+                    BorderBrush="#FF69B4"
+                    BorderThickness="2"
+                    CornerRadius="16"
+                    IsHitTestVisible="False"/>
+
+            <Image x:Name="BodyImage"
+                   Stretch="Fill"
+                   IsHitTestVisible="False"
+                   RenderOptions.BitmapInterpolationMode="None"/>
+
+            <!-- The glass. Positioned in code from the emi.css fractions; nothing in here is
+                 hit-testable, because a glass click is resolved geometrically in the body's own
+                 pointer-released handler (a hit-testable overlay would eat the drag). -->
+            <Canvas x:Name="FaceLayer" IsHitTestVisible="False" ClipToBounds="False">
+                <!-- THE FACE. In WPF this is <emi:EmiFace/>, a 517-line DrawingContext renderer
+                     that draws the mood string as pixel glyphs in #FF69B4 (fill + stroke).
+                     ponytail: needs EmiFace (Services/EmiDesk/EmiFace.cs) and EmiPixel, neither in
+                     Core; until then the mood string is drawn as mono text at the same size, in the
+                     same colour, on the same GazeShift transform, so the glass is never blank.
+
+                     THE GAZE LEAN (ALIVE wave A): the face glyph slides up to three DIPs toward the
+                     cursor on its OWN transform, so the lean composes with the body's CRT scale,
+                     click squash and drag wobble instead of fighting them. -->
+                <TextBlock x:Name="FaceView"
+                           Text="0_0"
+                           FontFamily="Noto Sans Mono,DejaVu Sans Mono,Consolas,monospace"
+                           FontWeight="Bold"
+                           Foreground="#FF69B4"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+                <Canvas x:Name="GlassCanvas" IsHitTestVisible="False"/>
+            </Canvas>
+
+            <!-- THE OUTFIT OVERLAY. THE SKIN LAW, and the reason this node is HERE and not one
+                 line higher: the outfit/skin layer is the TOPMOST thing in EMI's composition,
+                 above the face canvas and above the glass. Face art may never paint over a
+                 garment - a collar buried under her screen is the bug this slot exists to make
+                 impossible (owner, 2026-08-30).
+
+                 It is a sibling of BodyImage inside BodyRoot on purpose, so it inherits every
+                 transform the body gets - the CRT squash, the click squash, the drag wobble, the
+                 move offsets - exactly as BodyImage does, and needs no geometry of its own.
+
+                 It costs NOTHING at rest: no Source, hidden, never hit-tested. Only SetOutfit puts
+                 art on it. The three chrome affordances below draw OVER it: they are window chrome,
+                 not art, and a hover x hidden under a hat is a widget nobody can close. -->
+            <Image x:Name="OutfitOverImage"
+                   Stretch="Fill"
+                   IsVisible="False"
+                   IsHitTestVisible="False"
+                   RenderOptions.BitmapInterpolationMode="None"/>
+
+            <!-- THE THING SHE IS HOLDING (idle beat). One plate at her right hand - a phone, a
+                 clipboard, a punch card - shown for a couple of seconds by a fidget and taken
+                 straight back off.
+
+                 IT DRAWS OVER THE GARMENT, and that is not a breach of THE SKIN LAW. The law says
+                 no face art may bury a skin; a held object is not face art and it is not a skin -
+                 it is nearer the camera than she is. The chrome below still draws over it.
+
+                 WPF gave it a private PropTilt / PropRise transform pair. Dropped here with the
+                 layout code that drove them: LayoutProp lives in EmiDeskWindow.Props.cs, which is
+                 not part of this port. -->
+            <Image x:Name="PropImage"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Stretch="Fill"
+                   IsVisible="False"
+                   IsHitTestVisible="False"
+                   RenderTransformOrigin="100%,100%"
+                   RenderOptions.BitmapInterpolationMode="None"/>
+
+            <!-- THE THREE CHIPS, and why each one is a chip inside a bigger button.
+
+                 Owner report, 2026-08-30: "I gotta hover EMI and be fast enough to catch those
+                 buttons before they disappear." Half of that is the fade, which is a hover REGION
+                 with a grace timer now (EmiChromeHover, in Core); the other half is that an 18 DIP
+                 round target tucked into a corner is a small thing to land on.
+
+                 So each button is `chip + 2 x ChipPad` DIPs of Background="Transparent" HIT AREA
+                 with the drawn chip inset inside it by the button's Padding. THE DRAWN GLYPH DID
+                 NOT GROW; only the air around it did. ApplyBodyWidth computes that padding
+                 ASYMMETRICALLY so the hit area never sticks out past BodyRoot into the
+                 click-through air.
+
+                 The 140 ms fade is a Transitions entry rather than WPF's four DoubleAnimation
+                 objects: FadeChrome now assigns Opacity and the transition does the rest. -->
+
+            <!-- The hover x. 18 DIP of drawn chip, top right of the silhouette, invisible until the
+                 pointer is on her. No double-click dismiss anywhere: it would delay the ring click. -->
+            <Button x:Name="BtnClose"
+                    Width="18" Height="18" Padding="0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Opacity="0" Cursor="Hand"
+                    Focusable="False"
+                    ToolTip.Tip="{loc:Str emi_desk_tip_close}">
+                <Button.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.14"/>
+                    </Transitions>
+                </Button.Transitions>
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                                <Path Data="M 5,5 L 13,13 M 13,5 L 5,13"
+                                      Stroke="#FF69B4" StrokeThickness="2"
+                                      StrokeLineCap="Round"/>
+                            </Grid>
+                        </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- HER GEAR: 18 DIP of drawn chip, top LEFT, the mirror of the x and on the same hover
+                 fade. It opens EmiOptionsWindow - which carries "Open her cards" as its first
+                 action, because nothing on a desktop advertises a right click. Right-click on her
+                 body still opens the ring directly; that gesture is unchanged.
+
+                 The gear is eight axis-aligned rectangles on a 16 x 16 grid - a hollow square hub
+                 and four teeth - and never a circle: she is a pixel CRT mascot and a smooth
+                 anti-aliased cog beside her reads as somebody else's icon set. EdgeMode Aliased
+                 keeps the rectangle edges hard when Stretch scales them, and it is set on the Path
+                 alone so the chip's Ellipse still draws round. The subpaths deliberately do not
+                 overlap, so the EvenOdd default leaves the hub's centre empty. -->
+            <Button x:Name="BtnGear"
+                    Width="18" Height="18" Padding="0"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Opacity="0" Cursor="Hand"
+                    Focusable="False"
+                    ToolTip.Tip="{loc:Str emi_desk_tip_gear}">
+                <Button.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.14"/>
+                    </Transitions>
+                </Button.Transitions>
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                                <Path Fill="#FF69B4" Stretch="Uniform" Margin="4"
+                                      RenderOptions.EdgeMode="Aliased"
+                                      Data="M 2,2 h12 v4 h-12 z  M 2,10 h12 v4 h-12 z
+                                            M 2,6 h4 v4 h-4 z    M 10,6 h4 v4 h-4 z
+                                            M 6,0 h4 v2 h-4 z    M 6,14 h4 v2 h-4 z
+                                            M 0,6 h2 v4 h-2 z    M 14,6 h2 v4 h-2 z"/>
+                            </Grid>
+                        </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- HER BOOK: the third chip, 18 DIP, top left and directly UNDER the gear.
+
+                 The owner could not find the book at all (2026-08-30): it existed only as the
+                 seventh entry on a ring nothing advertises. A manual you cannot reach is not a
+                 manual, so it gets the one glyph every piece of software on earth has trained
+                 people to read as help.
+
+                 It sits UNDER the gear rather than beside it because both top corners are already
+                 spoken for. ApplyBodyWidth offsets it by exactly the gear's full hit height, so the
+                 two hit areas cannot overlap at any body width.
+
+                 The ? is a Path on the same 16 x 16 aliased grid as the gear, not a TextBlock: a
+                 glyph from whatever font resolved would be the one smooth anti-aliased shape on a
+                 pixel mascot. -->
+            <Button x:Name="BtnHelp"
+                    Width="18" Height="18" Padding="0"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Opacity="0" Cursor="Hand"
+                    Focusable="False"
+                    ToolTip.Tip="{loc:Str emi_desk_tip_help}">
+                <Button.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.14"/>
+                    </Transitions>
+                </Button.Transitions>
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Ellipse Fill="#E60E0E1C" Stroke="#FF69B4" StrokeThickness="1.5"/>
+                                <Path Fill="#FF69B4" Stretch="Uniform" Margin="4"
+                                      RenderOptions.EdgeMode="Aliased"
+                                      Data="M 4,0 h8 v2 h-8 z   M 4,2 h2 v2 h-2 z
+                                            M 10,2 h2 v4 h-2 z  M 6,6 h6 v2 h-6 z
+                                            M 6,8 h2 v3 h-2 z   M 6,13 h2 v2 h-2 z"/>
+                            </Grid>
+                        </Grid>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- The corner resize handle: 152 to 420 DIP, aspect locked.
+
+                 Unlike the hover x this one is ALWAYS faintly lit while she is out (owner call,
+                 QA 2026-08-29): a grip at Opacity=0 is a grip nobody can find, and she is the only
+                 widget on the desktop with no window chrome to hint at a corner. It rests at
+                 GripRestOpacity and goes solid when the pointer is on her (FadeChrome). The Border
+                 is the HIT AREA (22 DIP and up, scaled in ApplyBodyWidth); the glyph inside stays a
+                 12 DIP pixel corner so a bigger target does not mean a bigger drawing. -->
+            <Border x:Name="ResizeGrip"
+                    Width="22" Height="22"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Background="Transparent"
+                    Opacity="0.35"
+                    Cursor="BottomRightCorner"
+                    ToolTip.Tip="{loc:Str emi_desk_tip_grip}">
+                <Border.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity" Duration="0:0:0.14"/>
+                    </Transitions>
+                </Border.Transitions>
+                <Path x:Name="ResizeGlyph"
+                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                      Width="12" Height="12"
+                      Stretch="None"
+                      Data="M 1,11 L 11,1 M 5,11 L 11,5 M 9,11 L 11,9"
+                      Stroke="#FF69B4" StrokeThickness="1.5"
+                      StrokeLineCap="Round"/>
+            </Border>
+        </Grid>
+
+        <Canvas x:Name="OverlayCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
+        <Canvas x:Name="BubbleCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
+    </Grid>
+</Window>
