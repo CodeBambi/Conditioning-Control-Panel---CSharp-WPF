@@ -1,0 +1,534 @@
+<!-- PORTED from ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameWindow.xaml.
+     Structure, ordering, colours and every literal string preserved. There are no loc keys in
+     the WPF original (every string there is a literal), so none are invented here.
+
+     Deviations, all forced:
+
+       Visibility="Collapsed"                    -> IsVisible="False"
+       <Style x:Key TargetType>                  -> <ControlTheme x:Key TargetType> + a Template
+                                                    (a property-only ControlTheme on a templated
+                                                    control leaves Template null and draws nothing)
+       Style="{StaticResource X}"                -> Theme="{StaticResource X}"
+       LinearGradientBrush "0,0"/"1,1"           -> "0%,0%"/"100%,100%" (Avalonia reads unitless
+                                                    points as absolute pixels -> a 1px gradient)
+       Image + EmojiToImageSource converter      -> a plain TextBlock; Avalonia renders colour
+                                                    emoji natively (see CLAUDE.md)
+       AllowDrop="True"                          -> DragDrop.AllowDrop="True"; the Drop/DragOver/
+                                                    DragLeave handlers are added in code-behind
+       DropShadowEffect ShadowDepth="0"          -> OffsetX="0" OffsetY="0"
+       x:Name on TranslateTransform / effect     -> dropped (AVLN2000: only a StyledElement can
+                                                    carry x:Name); both are reached from code
+                                                    through their owner instead
+       Click / ValueChanged / SelectionChanged
+       / KeyDown / Closing attributes            -> wired in the constructor, per the convention
+                                                    the other ported windows use
+
+     The four button styles were local to the WPF window, so they stay local here. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame.GazeMinigameWindow"
+        Title="Gaze Minigame"
+        Width="1100" Height="720"
+        MinWidth="900" MinHeight="600"
+        Background="Black"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <!-- ponytail: local copy of Lab/GazeMinigame/GazeMinigameWindow.xaml:TitleBg,
+             hoist when a second view needs it. -->
+        <LinearGradientBrush x:Key="TitleBg" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#1A1A2E" Offset="0"/>
+            <GradientStop Color="#252542" Offset="0.5"/>
+            <GradientStop Color="#3A1A2E" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- ponytail: local copy of Lab/GazeMinigame/GazeMinigameWindow.xaml:PrimaryBtn,
+             hoist when a second view needs it. -->
+        <ControlTheme x:Key="PrimaryBtn" TargetType="Button">
+            <Setter Property="Background" Value="#FF69B4"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <!-- WPF's stock button chrome greys itself out when IsEnabled is false; the
+                 replacement template would not, and Start ships disabled. -->
+            <Style Selector="^:disabled /template/ Border#border">
+                <Setter Property="Opacity" Value="0.45"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of Lab/GazeMinigame/GazeMinigameWindow.xaml:SecondaryBtn,
+             hoist when a second view needs it. -->
+        <ControlTheme x:Key="SecondaryBtn" TargetType="Button">
+            <Setter Property="Background" Value="#33333A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="18,10"/>
+            <Setter Property="BorderBrush" Value="#FF69B4"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <!-- Small toolbar button (Add folder / Rescan).
+             ponytail: local copy of Lab/GazeMinigame/GazeMinigameWindow.xaml:ToolBtn,
+             hoist when a second view needs it. -->
+        <ControlTheme x:Key="ToolBtn" TargetType="Button">
+            <Setter Property="Background" Value="#22222E"/>
+            <Setter Property="Foreground" Value="#DDDDDD"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="BorderBrush" Value="#44444F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+
+        <!-- Difficulty chip. The selected state is written straight onto the button from
+             code-behind (UpdateDifficultyChips), so the template MUST TemplateBind
+             Background / BorderBrush or the selection would never show.
+             ponytail: local copy of Lab/GazeMinigame/GazeMinigameWindow.xaml:DiffChip,
+             hoist when a second view needs it. -->
+        <ControlTheme x:Key="DiffChip" TargetType="Button">
+            <Setter Property="Background" Value="#22222E"/>
+            <Setter Property="Foreground" Value="#CCCCCC"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="18,7"/>
+            <Setter Property="BorderBrush" Value="#44444F"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid>
+        <!-- ─── Setup screen (named TitleScreen so ShowScreen + other screens are unchanged) ─── -->
+        <Grid x:Name="TitleScreen" Background="{StaticResource TitleBg}">
+            <Grid Margin="28,22,28,22">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>   <!-- header -->
+                    <RowDefinition Height="Auto"/>   <!-- content toolbar -->
+                    <RowDefinition Height="Auto"/>   <!-- library strip -->
+                    <RowDefinition Height="*"/>      <!-- focus/ignore zones -->
+                    <RowDefinition Height="Auto"/>   <!-- difficulty + advanced -->
+                    <RowDefinition Height="Auto"/>   <!-- banner -->
+                    <RowDefinition Height="Auto"/>   <!-- start row -->
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
+                    <TextBlock Text="👁" FontSize="36" Width="46" Height="46" Margin="0,0,12,0"
+                               TextAlignment="Center" VerticalAlignment="Center"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Gaze Training" Foreground="White" FontSize="26" FontWeight="Bold"/>
+                        <TextBlock Text="Drag a set into Focus and one or more into Ignore, then hold your eyes on the focus content to win."
+                                   Foreground="#AAAAAA" FontSize="12"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Content toolbar -->
+                <Grid Grid.Row="1" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="YOUR CONTENT" Foreground="#888888" FontSize="11" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" x:Name="BtnAddFolder" Content="+ Add folder"
+                            Theme="{StaticResource ToolBtn}"/>
+                    <Button Grid.Column="2" x:Name="BtnRescan" Content="⟳ Rescan"
+                            Theme="{StaticResource ToolBtn}"/>
+                </Grid>
+
+                <!-- Library strip (drop here to un-assign a pack) -->
+                <Border Grid.Row="2" x:Name="LibraryZone" Background="#0F0F1A" BorderBrush="#33333A"
+                        BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,12"
+                        DragDrop.AllowDrop="True">
+                    <Grid>
+                        <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto"
+                                      MaxHeight="158">
+                            <WrapPanel x:Name="LibraryPanel" Orientation="Horizontal"/>
+                        </ScrollViewer>
+                        <StackPanel x:Name="LibraryEmptyState" IsVisible="False"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16">
+                            <TextBlock Text="No content sets found"
+                                       Foreground="#CCCCCC" FontSize="14" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Margin="0,6,0,10"
+                                       Foreground="#888888" FontSize="12"
+                                       Text="Make at least two folders of images (or videos) — one to focus on, one or more to ignore — inside your assets folder, then Rescan. You can also use “+ Add folder” to point anywhere."/>
+                            <Button x:Name="BtnOpenAssets" Content="Open assets folder"
+                                    Theme="{StaticResource ToolBtn}" Margin="0"
+                                    HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Focus / Ignore drop zones -->
+                <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" x:Name="FocusZone" Margin="0,0,6,0"
+                            Background="#170F1A" BorderBrush="#FF69B4" BorderThickness="1.5" CornerRadius="8"
+                            DragDrop.AllowDrop="True">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="👁 FOCUS ON" Foreground="#FF69B4" FontWeight="Bold" FontSize="13"/>
+                                <TextBlock Text="   the one set to stare at" Foreground="#9A7488" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <Grid>
+                                    <WrapPanel x:Name="FocusPanel"/>
+                                    <TextBlock x:Name="FocusPlaceholder" Text="Drag one set here"
+                                               Foreground="#664A59" FontStyle="Italic" FontSize="13"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="0,24,0,0" IsHitTestVisible="False"/>
+                                </Grid>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="1" x:Name="IgnoreZone" Margin="6,0,0,0"
+                            Background="#1A1014" BorderBrush="#FF8080" BorderThickness="1.5" CornerRadius="8"
+                            DragDrop.AllowDrop="True">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="🚫 IGNORE" Foreground="#FF8080" FontWeight="Bold" FontSize="13"/>
+                                <TextBlock Text="   distractions to look away from" Foreground="#9A7070" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <Grid>
+                                    <WrapPanel x:Name="IgnorePanel"/>
+                                    <TextBlock x:Name="IgnorePlaceholder" Text="Drag one or more sets here"
+                                               Foreground="#664A4A" FontStyle="Italic" FontSize="13"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="0,24,0,0" IsHitTestVisible="False"/>
+                                </Grid>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Difficulty + advanced settings -->
+                <StackPanel Grid.Row="4" Margin="0,12,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Difficulty" Foreground="#CCCCCC" FontSize="12"
+                                   VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <Button x:Name="BtnDiffEasy" Content="Easy" Theme="{StaticResource DiffChip}" Tag="Easy"/>
+                        <Button x:Name="BtnDiffNormal" Content="Normal" Theme="{StaticResource DiffChip}" Tag="Normal"/>
+                        <Button x:Name="BtnDiffHard" Content="Hard" Theme="{StaticResource DiffChip}" Tag="Hard"/>
+                    </StackPanel>
+
+                    <!-- Avalonia's Expander theme sizes itself and its content to the header
+                         rather than filling the row the way WPF's does, so both alignments are
+                         stated; without them the whole advanced panel renders ~285px wide. -->
+                    <Expander x:Name="AdvancedExpander" Header="Advanced settings"
+                              HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                              Foreground="#AAAAAA" FontSize="12" Margin="0,8,0,0">
+                        <Border Background="#0F0F1A" BorderBrush="#33333A" BorderThickness="1"
+                                CornerRadius="6" Padding="14" Margin="0,6,0,0">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                          MaxHeight="240">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Image count" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Grid.Column="1" x:Name="TxtImageCountVal" Text="8"
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderImageCount" Minimum="0" Maximum="20" Value="8"
+                                            TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Margin="0,0,0,16"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Video count" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Grid.Column="1" x:Name="TxtVideoCountVal" Text="2"
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderVideoCount" Minimum="0" Maximum="10" Value="2"
+                                            TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Margin="0,0,0,16"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Image duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Grid.Column="1" x:Name="TxtImageDurVal" Text="5"
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderImageDur" Minimum="2" Maximum="10" Value="5"
+                                            TickFrequency="1" IsSnapToTickEnabled="True"
+                                            Margin="0,0,0,16"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Video max duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Grid.Column="1" x:Name="TxtVideoDurVal" Text="30"
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderVideoDur" Minimum="10" Maximum="120" Value="30"
+                                            TickFrequency="5" IsSnapToTickEnabled="True"
+                                            Margin="0,0,0,16"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Pass time (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Grid.Column="1" x:Name="TxtPassTimeVal" Text="3"
+                                                   Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderPassTime" Minimum="3" Maximum="30" Value="3"
+                                            TickFrequency="1" IsSnapToTickEnabled="True"/>
+                                    <TextBlock x:Name="TxtPassTimeWarn" Text=""
+                                               Foreground="#FFB347" FontSize="11" FontStyle="Italic"
+                                               Margin="0,4,0,0" TextWrapping="Wrap" IsVisible="False"/>
+
+                                    <Rectangle Height="1" Fill="#33333A" Margin="0,16,0,12"/>
+
+                                    <TextBlock Text="Vibration"
+                                               Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="CboVibration"
+                                              BorderBrush="#33333A"
+                                              Padding="6,4" Margin="0,0,0,4"
+                                              HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="None" Tag="None"/>
+                                        <ComboBoxItem Content="On correct (reward)" Tag="OnCorrect"/>
+                                        <ComboBoxItem Content="On wrong (punishment)" Tag="OnWrong"/>
+                                    </ComboBox>
+                                    <TextBlock x:Name="TxtVibrationStatus" Text=""
+                                               Foreground="#888888" FontSize="10" FontStyle="Italic"
+                                               Margin="0,0,0,12"/>
+
+                                    <TextBlock Text="Reward effect (on correct)"
+                                               Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="CboReward"
+                                              BorderBrush="#33333A"
+                                              Padding="6,4" Margin="0,0,0,8"
+                                              HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="None" Tag="None"/>
+                                        <ComboBoxItem Content="Flashes (small burst)" Tag="Flashes"/>
+                                        <ComboBoxItem Content="Bubbles (4–5)" Tag="Bubbles"/>
+                                        <ComboBoxItem Content="Audio clip" Tag="Audio"/>
+                                        <ComboBoxItem Content="Mind wipe" Tag="MindWipe"/>
+                                        <ComboBoxItem Content="Overlay pulse" Tag="OverlayPulse"/>
+                                    </ComboBox>
+
+                                    <Grid x:Name="RewardAudioRow" IsVisible="False">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Audio clip:" Foreground="#CCCCCC"
+                                                   FontSize="11" VerticalAlignment="Center" Margin="6,0,8,0"/>
+                                        <ComboBox Grid.Column="1" x:Name="CboRewardAudio"
+                                                  BorderBrush="#33333A"
+                                                  Padding="6,4"
+                                                  HorizontalAlignment="Stretch"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Press F11 to toggle fullscreen during the game."
+                                               Foreground="#666666" FontSize="10" FontStyle="Italic"
+                                               Margin="0,16,0,0"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </Expander>
+                </StackPanel>
+
+                <!-- Status / precondition banner -->
+                <Border Grid.Row="5" x:Name="ReadyBanner" IsVisible="False"
+                        Background="#3A1A1A" BorderBrush="#FF8080" BorderThickness="1"
+                        CornerRadius="4" Padding="12" Margin="0,12,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TxtReadyBanner" Grid.Column="0" Text=""
+                                   Foreground="#FFC8C8" FontSize="13" TextWrapping="Wrap"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="BtnReadyBannerAction" Grid.Column="1" Content="Calibrate"
+                                Theme="{StaticResource SecondaryBtn}" Margin="12,0,0,0"
+                                IsVisible="False"/>
+                    </Grid>
+                </Border>
+
+                <!-- Start row -->
+                <Grid Grid.Row="6" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" x:Name="TxtSelectionSummary" VerticalAlignment="Center"
+                               Foreground="#888888" FontSize="12" TextWrapping="Wrap" Margin="0,0,16,0"
+                               Text="Pick a Focus set and at least one Ignore set."/>
+                    <Button Grid.Column="1" x:Name="BtnStartGame" Content="Start ▶"
+                            Theme="{StaticResource PrimaryBtn}" Padding="40,12" FontSize="16"
+                            IsEnabled="False"/>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- ─── Countdown screen ─── -->
+        <Grid x:Name="CountdownScreen" Background="Black" IsVisible="False">
+            <TextBlock x:Name="TxtCountdown" Text="3"
+                       Foreground="#FF69B4" FontSize="320" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="60" OffsetX="0" OffsetY="0" Opacity="0.7"/>
+                </TextBlock.Effect>
+            </TextBlock>
+        </Grid>
+
+        <!-- ─── Gameplay screen ─── -->
+        <Grid x:Name="GameplayScreen" Background="Black" IsVisible="False">
+            <Grid x:Name="GameplayPairGrid">
+                <!-- The shake reaches this through GameplayPairGrid.RenderTransform;
+                     x:Name on a Transform is AVLN2000. -->
+                <Grid.RenderTransform>
+                    <TranslateTransform X="0" Y="0"/>
+                </Grid.RenderTransform>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" x:Name="LeftPane" Background="#050505" Margin="6" ClipToBounds="True"/>
+                <Grid Grid.Column="1" x:Name="RightPane" Background="#050505" Margin="6" ClipToBounds="True"/>
+            </Grid>
+
+            <!-- Round info (top) -->
+            <Border Background="#88000000" CornerRadius="4" Padding="10,4"
+                    HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0">
+                <TextBlock x:Name="TxtRoundInfo" Text="Round 1 / 10"
+                           Foreground="White" FontFamily="Consolas, Courier New" FontSize="13"/>
+            </Border>
+
+            <!-- Inter-round feedback card. Shown ONLY after the panes are cleared and any
+                 video players are disposed — otherwise a native video surface paints over
+                 this in-window TextBlock. -->
+            <Grid x:Name="FeedbackCard" Background="Black" IsVisible="False" Opacity="0">
+                <!-- The glow colour follows the outcome, so the effect is built in
+                     ShowFullscreenFeedbackAsync; x:Name on an effect is AVLN2000. -->
+                <TextBlock x:Name="TxtFeedback" Text=""
+                           FontSize="240" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+        </Grid>
+
+        <!-- ─── Results screen ─── -->
+        <Grid x:Name="ResultsScreen" Background="{StaticResource TitleBg}" IsVisible="False">
+            <Grid Margin="40">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Session complete"
+                           Foreground="White" FontSize="32" FontWeight="Bold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="1" x:Name="TxtResultsHeadline"
+                           Text="—"
+                           Foreground="#FF69B4" FontSize="22" FontWeight="SemiBold"
+                           Margin="0,12,0,16" HorizontalAlignment="Center"/>
+
+                <Border Grid.Row="2" Background="#0F0F1A" BorderBrush="#33333A"
+                        BorderThickness="1" CornerRadius="6" Padding="14">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ResultsList"/>
+                    </ScrollViewer>
+                </Border>
+
+                <Grid Grid.Row="3" Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" x:Name="BtnResultsClose" Content="Close"
+                            Theme="{StaticResource SecondaryBtn}"/>
+                    <Button Grid.Column="2" x:Name="BtnResultsPlayAgain" Content="Play again"
+                            Theme="{StaticResource PrimaryBtn}"
+                            Padding="32,10"/>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
