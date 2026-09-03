@@ -1,0 +1,126 @@
+<!-- PORTED from ConditioningControlPanel/Windows/LayeredAudioWindow.xaml.
+     Structure, ordering, spacing and every literal colour preserved so the two diff cleanly.
+     The original carries no {loc:Str} at all - every string is hard-coded English there, so
+     inventing keys here would be a fidelity loss, not a gain. Deviations, all forced:
+
+       Style="{DynamicResource X}"     -> Theme="{StaticResource X}"  (ToggleStyle and
+                                          OutlineButton are ControlThemes in Theme/Styles.xaml)
+       ResizeMode="CanResizeWithGrip" -> CanResize="True"   (Avalonia has no resize grip)
+       Checked/Unchecked              -> ToggleButton.IsCheckedChanged, wired in the ctor
+       ValueChanged / Click           -> wired in the ctor
+
+     Buttons keep Content: none of these strings contains an underscore, so Avalonia's
+     access-key parsing has nothing to swallow. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LayeredAudioWindow"
+        Title="Audio Layers"
+        Width="480" Height="660"
+        WindowStartupLocation="CenterOwner"
+        Background="#0F0F1E"
+        Foreground="#E0E0E0"
+        CanResize="True"
+        MinWidth="420" MinHeight="480">
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="🎧 Audio Layers"
+                   Foreground="{DynamicResource PinkBrush}"
+                   FontSize="20"
+                   FontWeight="SemiBold"/>
+
+        <TextBlock Grid.Row="1"
+                   Text="Build your own looping soundscape — add several audio files and they all play together, each on its own volume. Everything mixes through one output so it stays light. Turn the master on to hear it now; it also plays automatically for audio-only sessions."
+                   Foreground="#A0A0B0"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Margin="0,6,0,14"/>
+
+        <!-- Master enable + master volume -->
+        <Border Grid.Row="2"
+                Background="#1A1A2E" BorderBrush="#3D3D60" BorderThickness="1"
+                CornerRadius="10" Padding="14,12" Margin="0,0,0,10">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Play layered audio"
+                               Foreground="White" FontSize="14" FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                    <CheckBox Grid.Column="1" x:Name="ChkMasterEnable"
+                              Theme="{StaticResource ToggleStyle}"
+                              VerticalAlignment="Center"/>
+                </Grid>
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Master" Foreground="#B0B0C0" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <Slider Grid.Column="1" x:Name="SliderMaster"
+                            Minimum="0" Maximum="100" Value="70"
+                            VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" x:Name="TxtMaster" Text="70%"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="12"
+                               FontWeight="SemiBold" Width="40" TextAlignment="Right"
+                               VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- #668 Audio-Only Hypno session mode -->
+                <Border Background="#12121F" BorderBrush="#2E2E4A" BorderThickness="1"
+                        CornerRadius="8" Padding="10,8" Margin="0,12,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Audio-only session"
+                                       Foreground="White" FontSize="13" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkAudioOnly"
+                                      Theme="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Text="When on, starting a session hides the visuals (flashes, spiral, video, mini-games) and plays only this layered audio."
+                                   Foreground="#8A8A9A" FontSize="11" TextWrapping="Wrap"
+                                   Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Add track -->
+        <Button Grid.Row="3"
+                x:Name="BtnAddTrack"
+                Content="➕  Add audio file…"
+                Theme="{StaticResource OutlineButton}"
+                Padding="12,8"
+                HorizontalAlignment="Left"
+                Margin="0,0,0,10"/>
+
+        <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="SlotsPanel"/>
+        </ScrollViewer>
+
+        <Button Grid.Row="5"
+                x:Name="BtnClose"
+                Content="Done"
+                Theme="{StaticResource OutlineButton}"
+                Padding="16,8"
+                HorizontalAlignment="Right"
+                Margin="0,14,0,0"/>
+    </Grid>
+</Window>

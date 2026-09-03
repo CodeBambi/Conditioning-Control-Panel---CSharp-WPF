@@ -1,0 +1,127 @@
+<!-- PORTED from ConditioningControlPanel/Windows/MiniPlayerWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" + TransparencyLevelHint
+       ResizeMode="CanResizeWithGrip"           -> CanResize="True"   (Avalonia has no grip)
+       Visibility="Collapsed"                   -> IsVisible="False"
+       ToolTip="..."                            -> ToolTip.Tip="..."
+       MouseLeftButtonDown / KeyDown / Click    -> wired in the constructor
+       RenderOptions.BitmapScalingMode          -> RenderOptions.BitmapInterpolationMode
+       Style="{StaticResource {x:Type Slider}}" -> dropped; that was "use the default theme"
+       vlc:VideoView / gif: namespaces          -> dropped, both are WPF-only packages
+       <Button.Style> with a ControlTemplate    -> the default Button template plus the two
+                                                   pointerover setters below. A property-only
+                                                   ControlTheme would blank the button (trap 4),
+                                                   and re-templating just to paint a hover is
+                                                   more markup than the selector.
+       TxtFileName / Title lose {loc:Str}: LoadFile overwrites both with the file name, and in
+       Avalonia a local set does NOT clear a binding, so the next language change would put
+       "Preview" back over the file name. The constructor sets them from Loc instead. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.MiniPlayerWindow"
+        Height="350" Width="450"
+        MinHeight="200" MinWidth="300"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        CanResize="True">
+
+    <Window.Styles>
+        <!-- The WPF ControlTemplate.Triggers block for the close button, setters verbatim.
+             #PART_ContentPresenter is the default Button template's own presenter, so the
+             content still draws (trap 6). -->
+        <Style Selector="Button#BtnClose /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="0"/>
+        </Style>
+        <Style Selector="Button#BtnClose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#E81123"/>
+            <Setter Property="TextElement.Foreground" Value="White"/>
+        </Style>
+        <!-- Not in the original: Avalonia's Fluent Button lightens on hover, which on this dark
+             chrome reads as the button flashing white. Hold the WPF colours instead. -->
+        <Style Selector="Button#BtnPlayPause /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#353555"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource PinkBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <Border CornerRadius="8" Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Grid Grid.Row="0" Background="{DynamicResource PanelBgBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtFileName"
+                           Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="12,0,0,0"
+                           TextTrimming="CharacterEllipsis"/>
+                <Button x:Name="BtnClose" Grid.Column="1" Content="✕" Width="32" Height="32"
+                        Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                        BorderThickness="0" FontSize="14" Cursor="Hand"
+                        ToolTip.Tip="{loc:Str tooltip_close_escape}"/>
+            </Grid>
+
+            <!-- Content Area -->
+            <Grid Grid.Row="1" Background="#000000">
+                <!-- Video Player (LibVLC) -->
+                <Border x:Name="VideoContainer" IsVisible="False">
+                    <!-- VideoView added programmatically -->
+                </Border>
+
+                <!-- Image/GIF Display -->
+                <Image x:Name="ImagePreview" Stretch="Uniform" IsVisible="False"
+                       RenderOptions.BitmapInterpolationMode="HighQuality"/>
+
+                <!-- Loading Indicator -->
+                <Grid x:Name="LoadingOverlay" IsVisible="False">
+                    <TextBlock Text="{loc:Str label_loading_2}" Foreground="{DynamicResource TextMutedBrush}" FontSize="14"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Grid>
+
+            <!-- Video Controls (only shown for videos) -->
+            <Grid x:Name="VideoControls" Grid.Row="2" Background="{DynamicResource PanelBgBrush}" Height="40" IsVisible="False">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Play/Pause Button -->
+                <Button x:Name="BtnPlayPause" Grid.Column="0"
+                        Content="▶" Width="36" Height="28"
+                        Padding="0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Background="#353555" Foreground="{DynamicResource PinkBrush}"
+                        BorderThickness="0" FontSize="12" Cursor="Hand"
+                        Margin="8,0,0,0"
+                        ToolTip.Tip="{loc:Str tooltip_play_pause_space}"/>
+
+                <!-- Seek Slider -->
+                <Slider x:Name="SeekSlider" Grid.Column="1"
+                        Minimum="0" Maximum="100" Value="0"
+                        VerticalAlignment="Center" Margin="10,0"/>
+
+                <!-- Time Display -->
+                <TextBlock x:Name="TxtTime" Grid.Column="2"
+                           Text="00:00 / 00:00" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                           VerticalAlignment="Center" Margin="0,0,12,0"
+                           FontFamily="Consolas, Courier New"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
