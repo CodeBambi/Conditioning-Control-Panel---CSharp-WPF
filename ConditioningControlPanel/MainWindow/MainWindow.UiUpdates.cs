@@ -2049,7 +2049,9 @@ namespace ConditioningControlPanel
             var oldKeys = new HashSet<string>(App.Settings.Current.SubliminalPool.Keys);
             // OrdinalIgnoreCase to match the removed-set and ModService's top-up comparison.
             var defaults = new HashSet<string>(
-                (App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>()).Keys,
+                // CoreMods.GetDefaultSubliminalPool() IS this call site's old chain: seeded it is
+                // App.Mods', and unseeded it answers BambiSleep's pool, never null.
+                CoreMods.GetDefaultSubliminalPool().Keys,
                 StringComparer.OrdinalIgnoreCase);
 
             var dialog = new TextEditorDialog("Subliminal Messages", App.Settings.Current.SubliminalPool);

@@ -109,8 +109,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Save();
 
             // ponytail: WPF live-applies here - App.LockCard.Start()/Stop(), gated on
-            // App.IsEngineRunning. LockCardService (ConditioningControlPanel/Services/) and
-            // App.IsEngineRunning (ConditioningControlPanel/App.xaml.cs) are both still head-side.
+            // App.IsEngineRunning. Both are head-side: LockCardService
+            // (ConditioningControlPanel/Services/LockCard/LockCardService.cs) and
+            // App.IsEngineRunning (ConditioningControlPanel/App.xaml.cs:784).
         }
 
         private void SliderFreq_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -195,11 +196,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                     _isLoading = false;
                     return;
                 }
-                // ponytail: on WPF the consent dialog itself flips AppSettings.MicConsentGiven and
-                // saves; the ported one does not yet (CCP.Avalonia/Views/Dialogs/MicConsentDialog
-                // .axaml.cs, Enable()). Until it does, LoadFromSettings' "LockCardVoiceMode &&
-                // MicConsentGiven" clears this box again on the next repaint. Fixing it belongs in
-                // that dialog, not here - this control never wrote the consent flag on WPF either.
+                // The dialog's own Enable() writes and saves MicConsentGiven, as WPF's did, so
+                // nothing to persist here - this control never wrote the consent flag on WPF.
             }
 
             s.LockCardVoiceMode = on;
@@ -246,21 +244,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// The "no enabled phrases" guard is settings-backed, so it is real here; what it guards
         /// is not, yet.
         /// </summary>
-        private void BtnTest_Click(object? sender, RoutedEventArgs e)
+        private async void BtnTest_Click(object? sender, RoutedEventArgs e)
         {
             var s = CoreSettings.Current;
 
             var enabledPhrases = s.LockCardPhrases.Where(p => p.Value).Select(p => p.Key).ToList();
             if (enabledPhrases.Count == 0)
             {
-                // ponytail: WPF says so in a MessageBox (Loc key
-                // "msg_no_phrases_enabled_add_some_phrases_first"); this head has no styled
-                // message dialog yet, so the refusal is logged rather than shown.
-                Log.Warning("Lock card test refused: {Msg}", Loc.Get("msg_no_phrases_enabled_add_some_phrases_first"));
+                // WPF's MessageBox.Show(…, "No Phrases", OK, Warning), through this head's twin.
+                if (TopLevel.GetTopLevel(this) is Window owner)
+                    await Dialogs.MessageDialog.ShowAsync(
+                        owner, "No Phrases", Loc.Get("msg_no_phrases_enabled_add_some_phrases_first"));
                 return;
             }
             // ponytail: needs App.LockCard.TestLockCard() - LockCardService
-            // (ConditioningControlPanel/Services/), still in the WPF head.
+            // (ConditioningControlPanel/Services/LockCard/LockCardService.cs), still head-side.
         }
 
         private async void BtnColorSettings_Click(object? sender, RoutedEventArgs e)
