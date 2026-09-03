@@ -1,0 +1,323 @@
+<!-- PORTED from ConditioningControlPanel/Windows/WebcamCalibrationWindow.xaml.
+     Structure, ordering, spacing, colours and every element name preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       WindowStyle="None"                 -> SystemDecorations="None"
+       ResizeMode="NoResize"              -> CanResize="False"
+       Visibility="Collapsed"             -> IsVisible="False"
+       Panel.ZIndex                       -> ZIndex
+       KeyDown / Loaded / Closed=         -> wired in the constructor, per the porting convention
+       ToolTip="…"                        -> ToolTip.Tip="…"
+       StrokeDashCap="Round"              -> StrokeLineCap="Round"  (Avalonia's Shape has no
+                                             StrokeDashCap; StrokeLineCap caps the dashes)
+       StrokeDashArray="0 10000"          -> "0,10000"              (comma form, unambiguous)
+       DropShadowEffect ShadowDepth="0"   -> OffsetX="0" OffsetY="0" (Avalonia's ShadowDepth lives
+                                             on DropShadowDirectionEffect, not this effect)
+       RenderTransformOrigin="0.5,0.5"    -> dropped; Avalonia's default IS RelativePoint.Center,
+                                             and "0.5,0.5" would parse as an ABSOLUTE point
+       x:Name on the two ScaleTransforms  -> dropped; Avalonia's XAML compiler rejects a name on a
+                                             non-Control (AVLN2000). The code-behind reaches them
+                                             through the owning shape's RenderTransform instead.
+       ControlTemplate.Triggers           -> a :pointerover selector in Window.Styles
+       <ContentPresenter/>                -> Content="{TemplateBinding Content}" (CLAUDE.md trap 6)
+       TextBlock inner text               -> Text="…" so the XAML indentation is not rendered
+
+     Buttons carry a TextBlock child rather than Content wherever the label is a word, per the
+     access-key note in CLAUDE.md. The "?" help button keeps Content because its inline template
+     needs a ContentPresenter anyway and "?" has no underscore.
+
+     There is NO Win32 P/Invoke and NO WebView2 in this view - see the code-behind header. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WebcamCalibrationWindow"
+        Title="Webcam Calibration"
+        Background="#000000"
+        SystemDecorations="None"
+        WindowState="Maximized"
+        CanResize="False"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Styles>
+        <!-- The WPF Button.Template's IsMouseOver trigger, setter verbatim. -->
+        <Style Selector="Button#BtnCalibrationHelp:pointerover /template/ Border#bd">
+            <Setter Property="Background" Value="#FF69B4"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid>
+        <Canvas x:Name="DotCanvas">
+            <!-- Background ring: faint full circle so the user always sees the
+                 progress track. -->
+            <Ellipse x:Name="DotRingBg" Width="84" Height="84"
+                     Stroke="#33FFFFFF" StrokeThickness="3"/>
+            <!-- Foreground ring: fills clockwise from 12 o'clock as samples
+                 accumulate. Drawn via StrokeDashArray (visible/gap) so we can
+                 update the fill amount per-frame from code-behind. -->
+            <Ellipse x:Name="DotRingFg" Width="84" Height="84"
+                     Stroke="#FFFF69B4" StrokeThickness="4"
+                     StrokeDashArray="0,10000" StrokeLineCap="Round">
+                <Ellipse.RenderTransform>
+                    <TransformGroup>
+                        <RotateTransform Angle="-90"/>
+                        <ScaleTransform ScaleX="1" ScaleY="1"/>
+                    </TransformGroup>
+                </Ellipse.RenderTransform>
+                <Ellipse.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="14" OffsetX="0" OffsetY="0" Opacity="0.7"/>
+                </Ellipse.Effect>
+            </Ellipse>
+            <Ellipse x:Name="Dot" Width="44" Height="44">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#FFFFB6E1" Offset="0"/>
+                        <GradientStop Color="#FFFF69B4" Offset="0.6"/>
+                        <GradientStop Color="#FFC71585" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+                <Ellipse.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="30" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+                </Ellipse.Effect>
+            </Ellipse>
+        </Canvas>
+
+        <!-- Discoverability hint for the global 6-blink recalibrate gesture.
+             Shown on the intro + verify panels (toggled from code-behind), hidden
+             during the dot grid so it never overlaps the top-row dots. -->
+        <Border x:Name="ShortcutHintBanner" IsVisible="False"
+                VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,12,0,0"
+                Background="#22FF69B4" BorderBrush="#55FF69B4" BorderThickness="1"
+                CornerRadius="10" Padding="16,7" ZIndex="100">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="👁" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock Foreground="#FFE3F0" FontSize="12" VerticalAlignment="Center"
+                           Text="Tip: blink fast 6 times in a row, anytime, to stop everything and jump straight back here to recalibrate."/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel x:Name="StatusPanel" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtTitle" Text="Webcam Calibration" Foreground="White"
+                           FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                <!-- Inline "?" (HelpButtonStyle lives only in MainWindow, not reachable
+                     from this top-level Window). Always visible, even when gated/locked. -->
+                <Button x:Name="BtnCalibrationHelp" Content="?"
+                        Width="24" Height="24" Margin="12,0,0,0" VerticalAlignment="Center"
+                        Cursor="Help" Foreground="White" Background="Transparent"
+                        BorderBrush="#FF69B4" BorderThickness="1" FontWeight="Bold" FontSize="12"
+                        ToolTip.Tip="Calibration help">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12">
+                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </StackPanel>
+            <TextBlock x:Name="TxtStatus" Text="Look at the pink dot. Press ESC to cancel."
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TxtProgress" Text="" Foreground="#FF69B4" FontSize="13"
+                       Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas, Courier New"/>
+        </StackPanel>
+
+        <Border x:Name="IntroPanel" IsVisible="False"
+                Background="#181820" BorderBrush="#FF69B4" BorderThickness="2"
+                CornerRadius="14" Padding="36,28,36,28"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="640">
+            <StackPanel>
+                <TextBlock Text="Webcam Calibration"
+                           Foreground="#FFFFFF" FontSize="26" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBlock Text="Two short phases — under a minute total."
+                           Foreground="#FFB6E1" FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,0,0,22"/>
+
+                <Grid Margin="0,0,0,8" ColumnDefinitions="40,*">
+                    <TextBlock Grid.Column="0" Text="1." Foreground="#FF69B4"
+                               FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Dot grid (16 dots)" Foreground="#FFFFFF"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="A pink dot moves around the screen. Look at it and hold your gaze until the ring around it fills up."
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,0,0,18" ColumnDefinitions="40,*">
+                    <TextBlock Grid.Column="0" Text="2." Foreground="#FF69B4"
+                               FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Quick checks" Foreground="#FFFFFF"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="Two quick prompts to warm up tracking: blink, then open your mouth wide."
+                                   Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Foreground="#FFC96E" FontSize="12.5"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,0,8"
+                           Text="⚠ Dim-lit rooms make eye tracking super inconsistent — put some light on your face if you can."/>
+                <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,0,18"
+                           Text="Sit comfortably. ESC cancels at any time."/>
+
+                <Button x:Name="BtnIntroContinue"
+                        Padding="32,10" Background="#FF69B4" Foreground="Black"
+                        BorderThickness="0" FontWeight="Bold" FontSize="15"
+                        Cursor="Hand" HorizontalAlignment="Center">
+                    <TextBlock Text="Continue"/>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <Grid x:Name="ValidationPanel" IsVisible="False">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtValidationCue" Text="" Foreground="#FF69B4"
+                           FontSize="160" FontWeight="Bold" HorizontalAlignment="Center"
+                           Margin="0,0,0,20">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="40" OffsetX="0" OffsetY="0" Opacity="0.7"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock x:Name="TxtValidationPrompt" Text="" Foreground="White"
+                           FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtValidationDetail" Text="" Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="16" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                <TextBlock x:Name="TxtValidationAttempt" Text="" Foreground="#FF69B4"
+                           FontSize="13" FontFamily="Consolas, Courier New" HorizontalAlignment="Center"
+                           Margin="0,16,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Bubble accuracy test: optional post-calibration minigame launched
+             from the verify panel. One bubble at a time; the user pops it by
+             holding their gaze cursor on it (~0.7s dwell). Residuals feed a
+             drift fine-tune — see RunBubbleTestAsync.
+
+             The bubble and its ring are deliberately TALLER THAN WIDE. CHI
+             2025 gaze-target guidance says the target's shape should absorb
+             the axis carrying more error, and vertical gaze error runs
+             1.5-2x horizontal (half the eyeball rotation per screen unit,
+             plus eyelid occlusion of the iris top/bottom). Sizes are
+             ~3 degrees wide by ~4 tall: at 60cm on a 27" 1440p panel 1
+             degree is ~45 px, so 3 x 45 = 135 -> 136 wide and 4 x 45 = 180
+             tall. Rings sit 48 DIPs outside on each axis. UpdateRing() uses
+             a Ramanujan perimeter so the dwell arc stays correct on an
+             ellipse. -->
+        <Grid x:Name="BubbleTestPanel" IsVisible="False">
+            <Canvas x:Name="BubbleTestCanvas">
+                <Ellipse x:Name="TestBubbleRingBg" Width="184" Height="228"
+                         Stroke="#33FFFFFF" StrokeThickness="4" IsVisible="False"/>
+                <!-- Width/Height are deliberately SWAPPED relative to TestBubbleRingBg.
+                     The RotateTransform below (-90, to start the dash at 12 o'clock) also
+                     rotates the ellipse's own axes, so an ellipse authored 228x184 RENDERS
+                     as 184x228 and matches the upright background ring. Authoring it
+                     184x228 like the bg makes the pink arc render as a WIDE oval crossing
+                     the grey tall oval at four points. Ramanujan's perimeter is symmetric
+                     in a/b, so UpdateRing is unaffected by the swap. -->
+                <Ellipse x:Name="TestBubbleRingFg" Width="228" Height="184"
+                         Stroke="#FFFF69B4" StrokeThickness="5"
+                         StrokeDashArray="0,10000" StrokeLineCap="Round"
+                         IsVisible="False">
+                    <Ellipse.RenderTransform>
+                        <RotateTransform Angle="-90"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse x:Name="TestBubble" Width="136" Height="180" IsVisible="False">
+                    <Ellipse.RenderTransform>
+                        <ScaleTransform ScaleX="1" ScaleY="1"/>
+                    </Ellipse.RenderTransform>
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#66FFFFFF" Offset="0"/>
+                            <GradientStop Color="#99FF9BD0" Offset="0.7"/>
+                            <GradientStop Color="#CCFF69B4" Offset="1"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                    <Ellipse.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="24" OffsetX="0" OffsetY="0" Opacity="0.8"/>
+                    </Ellipse.Effect>
+                </Ellipse>
+            </Canvas>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
+                <TextBlock Text="Accuracy test" Foreground="White" FontSize="22" FontWeight="Bold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtBubbleTestStatus"
+                           Text="Look at each bubble — hold your gaze on it to pop it. ESC cancels."
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <Border x:Name="ErrorPanel" IsVisible="False"
+                Background="#221A1A" BorderBrush="#FF4040" BorderThickness="2"
+                CornerRadius="10" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="520">
+            <StackPanel>
+                <TextBlock Text="Calibration failed" Foreground="#FF8080" FontSize="18"
+                           FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtErrorDetail" Text="" Foreground="White" FontSize="13"
+                           Margin="0,12,0,16" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                <Button x:Name="BtnErrorClose" Padding="20,8"
+                        Background="#FF69B4" Foreground="Black" BorderThickness="0"
+                        FontWeight="Bold" Cursor="Hand"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="Close"/>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- Verify panel: shown after successful calibration. Replaces the
+             old 2.5s auto-close so the user can sanity-check accuracy via
+             the debug cursor before committing. Placeholder copy — voice-pass
+             at ship time. -->
+        <Border x:Name="VerifyPanel" IsVisible="False"
+                Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2"
+                CornerRadius="10" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="560">
+            <StackPanel>
+                <TextBlock Text="Calibration verified" Foreground="#FF69B4" FontSize="22"
+                           FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Calibration complete. Blink and mouth tracking warmed up — you're all set."
+                           Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,8,0,0"
+                           TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtVerifyStatus" Text="Preview accuracy with a live gaze cursor, or pop a few bubbles with your eyes to test (and auto fine-tune) precision."
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,16,0,20"
+                           TextWrapping="Wrap" HorizontalAlignment="Center" MaxWidth="440"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnVerifyAccuracy" Padding="20,10"
+                            Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
+                            BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
+                            Margin="0,0,8,0">
+                        <TextBlock Text="Verify accuracy"/>
+                    </Button>
+                    <Button x:Name="BtnVerifyBubbleTest" Padding="20,10"
+                            Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
+                            BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
+                            Margin="0,0,8,0">
+                        <TextBlock Text="Bubble test"/>
+                    </Button>
+                    <Button x:Name="BtnVerifyRecalibrate" Padding="20,10"
+                            Background="#33333A" Foreground="White" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,8,0">
+                        <TextBlock Text="Recalibrate"/>
+                    </Button>
+                    <Button x:Name="BtnVerifyDone" Padding="20,10"
+                            Background="#FF69B4" Foreground="Black" BorderThickness="0"
+                            FontWeight="Bold" Cursor="Hand">
+                        <TextBlock Text="Done"/>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
