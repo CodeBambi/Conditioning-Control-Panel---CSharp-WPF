@@ -63,7 +63,8 @@ namespace ConditioningControlPanel.Services.Commands
             App.Logger?.Information("AiCommandService: dispatching {Cmd} with data {@Data}",
                 commandData.Command, commandData.Data);
 
-            // Surface a human-readable line in the AI Brain "Live actions" feed.
+            // Surface a human-readable line in the AI Brain "Live actions" feed. This is the
+            // request; a second line follows after execution if the effect did not fire.
             AppendLiveAction(FormatLiveAction(commandData));
 
             var token = commandData.Data.Token;
@@ -82,7 +83,16 @@ namespace ConditioningControlPanel.Services.Commands
                 if (command != null)
                 {
                     App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
-                    await command.ExecuteAsync();
+                    var fired = await command.ExecuteAsync();
+                    if (!fired)
+                    {
+                        // The line appended above is the request. Executors return false when
+                        // the effect never happened (empty assets/audio folder, video already
+                        // playing, feature off), so follow up instead of leaving a feed line
+                        // that reads like it played (#1120).
+                        App.Logger?.Warning("AiCommandService: {Cmd} did not fire", commandData.Command);
+                        AppendLiveAction(FormatFailedAction(commandData));
+                    }
                 }
             }
             catch (Exception ex)
@@ -177,6 +187,21 @@ namespace ConditioningControlPanel.Services.Commands
                 default:
                     return $"⚙️ {c.Command}";
             }
+        }
+
+        /// <summary>
+        /// Follow-up feed line for a command whose executor reported failure, so the panel
+        /// never leaves a request line standing as if the effect happened. Audio names the
+        /// usual cause: there are no files in the assets audio folder (#1120).
+        /// </summary>
+        private static string FormatFailedAction(AiCommandData c)
+        {
+            return c.Command switch
+            {
+                AICommandType.audio => "🔇 Audio didn't play - check your assets audio folder",
+                AICommandType.video => "🎬 Video didn't play",
+                _ => $"⚠️ {c.Command} didn't fire"
+            };
         }
 
         private static bool IsEffectAllowed(AICommandType cmd, Models.CompanionPromptSettings s)

@@ -1710,6 +1710,9 @@ namespace ConditioningControlPanel
             // Create user assets directories in LocalAppData (persists across updates)
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "images"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "videos"));
+            // AI "audio" effects play from assets/audio. Without the folder the scan finds
+            // nothing and the command silently no-ops, so scaffold it like the rest (#1120).
+            Directory.CreateDirectory(Path.Combine(UserAssetsPath, "audio"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "mindwipe"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
@@ -4664,7 +4667,7 @@ Application State:
 
         /// <summary>
         /// Ensures a configured custom assets folder and its standard subfolders
-        /// (images/videos/wallpapers) exist. The default UserAssetsPath subdirs are
+        /// (images/videos/audio/wallpapers) exist. The default UserAssetsPath subdirs are
         /// created unconditionally at startup, but a custom path is only known after
         /// settings load — and if its folder is missing, EffectiveAssetsPath silently
         /// falls back to the default location, sending imports/extractions to the wrong
@@ -4680,6 +4683,8 @@ Application State:
                 // CreateDirectory creates the parent customPath too if absent.
                 Directory.CreateDirectory(Path.Combine(customPath, "images"));
                 Directory.CreateDirectory(Path.Combine(customPath, "videos"));
+                // Same reason as the default scaffold: AI audio effects read assets/audio (#1120).
+                Directory.CreateDirectory(Path.Combine(customPath, "audio"));
                 Directory.CreateDirectory(Path.Combine(customPath, "wallpapers"));
                 Logger?.Information("Ensured custom assets directories at {Path}", customPath);
             }
