@@ -1,0 +1,59 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/Runtime/WorkshopLibraryCell.xaml.
+     Structure, order, spacing, comments and every resource key are preserved so the two can be
+     diffed. Documented deviations, all forced:
+
+       Style="{StaticResource X}"    ->  Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       {loc:Str key}                 ->  {Binding LocX}               (LocExtension is a WPF
+                                         MarkupExtension and stays in the head)
+       Content="{loc:Str ...}"       ->  a TextBlock child            (Avalonia parses "_" in
+                                         Content as an access key - see CLAUDE.md)
+       Click="Handler"               ->  wired in the constructor
+       x:FieldModifier="internal"    ->  dropped                      (the internal consumers -
+                                         CompanionTabView's passthroughs and MainWindow - are the
+                                         WPF head's; controls are reached with FindControl here)
+       UserControl.Resources merge   ->  dropped                      (WorkshopCellTheme.xaml's two
+                                         keys used here now live app-level in Theme/Styles.xaml) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime.WorkshopLibraryCell"
+             x:DataType="vm:WorkshopLibraryCellViewModel"
+             xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" d:DesignWidth="312">
+
+    <!-- ================================================================
+         Z8 · HER LIBRARY — the per-mod Hypnotube link pool, moved whole.
+         The scope signpost comes with it: these links are mod-scoped
+         while everything around them is global, and losing that line in
+         the move would have been the one genuinely confusing drop.
+         ================================================================ -->
+
+    <StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <TextBlock Text="{Binding LocLabelCurrentMode}" Theme="{StaticResource CmpCellHintStyle}" VerticalAlignment="Center"/>
+            <TextBlock x:Name="TxtHypnotubeModeLabel" Text="{Binding LocLabelBambiSleep}"
+                       FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                       VerticalAlignment="Center" Margin="3,0,0,0"/>
+            <Button x:Name="HelpBtnVideoLinks" Theme="{StaticResource HelpButtonStyle}"
+                    VerticalAlignment="Center" Margin="6,0,0,0" Tag="HypnotubeLinks"/>
+        </StackPanel>
+
+        <TextBlock Text="{Binding LocLabelVideoLinksPoolDesc}" Theme="{StaticResource CmpCellHintStyle}" Margin="0,0,0,5"/>
+
+        <Border CornerRadius="7" Padding="6" MinHeight="52" MaxHeight="200" Margin="0,0,0,6"
+                BorderBrush="#22808080" BorderThickness="1" Background="#FF14121F">
+            <ScrollViewer x:Name="LinkPoolScroll" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="VideoLinkPoolPanel">
+                    <TextBlock x:Name="TxtNoVideoLinks" Text="{Binding LocLabelNoVideoLinksYet}"
+                               Foreground="#505050" FontSize="10.5" FontStyle="Italic"
+                               HorizontalAlignment="Center" Margin="0,12,0,12"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Button x:Name="BtnAddVideoLink" Theme="{StaticResource CmpCellButtonStyle}">
+            <TextBlock Text="{Binding LocBtnAddLinkToPool}"/>
+        </Button>
+    </StackPanel>
+</UserControl>

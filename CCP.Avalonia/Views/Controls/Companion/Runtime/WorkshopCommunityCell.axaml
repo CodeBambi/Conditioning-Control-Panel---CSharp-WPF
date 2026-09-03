@@ -1,0 +1,82 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/Runtime/WorkshopCommunityCell.xaml.
+     Structure, order, spacing and every resource key are preserved so the two can be diffed.
+     Deviations, all forced:
+
+       Style="{StaticResource X}"   ->  Theme="{StaticResource X}"   (keyed styles are ControlThemes)
+       {loc:Str key}                ->  {Binding LocX}               (LocExtension is a WPF
+                                        MarkupExtension and stays in the head; the strings still
+                                        come from CCP.Core's Loc, via the VM)
+       Content="{loc:Str …}"        ->  a <TextBlock> child          (Avalonia's Button reads "_" in
+                                        Content as an access key and every key here is snake_case)
+       Click="Handler"              ->  wired in the constructor
+       the merged WorkshopCellTheme -> CmpCellHintStyle / CmpCellButtonStyle moved to
+                                       Theme/Styles.xaml, where this head keeps its keyed styles.
+                                       pack:// URIs do not exist on Avalonia. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime.WorkshopCommunityCell"
+             x:DataType="vm:WorkshopCommunityCellViewModel"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime"
+             mc:Ignorable="d" d:DesignWidth="312">
+
+    <!-- ================================================================
+         Z8 · COMMUNITY — browse / import / export / refresh plus the
+         installed list, moved whole. Z4's expert door links to the same
+         browse dialog; this cell owns the controls.
+         ================================================================ -->
+
+    <StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
+                <TextBlock Text="{Binding LocBeta}" Foreground="White" FontSize="9" FontWeight="Bold"/>
+            </Border>
+            <Button x:Name="HelpBtnPrompts" Theme="{DynamicResource HelpButtonStyle}"
+                    VerticalAlignment="Center" Margin="7,0,0,0" Tag="CommunityPrompts"/>
+        </StackPanel>
+
+        <Grid Margin="0,0,0,5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BtnBrowsePrompts" Grid.Column="0"
+                    Theme="{StaticResource CmpCellButtonStyle}" Margin="0,0,3,0">
+                <TextBlock Text="{Binding LocBrowse}"/>
+            </Button>
+            <Button x:Name="BtnImportPrompt" Grid.Column="1"
+                    Theme="{StaticResource CmpCellButtonStyle}" Margin="3,0,3,0">
+                <TextBlock Text="{Binding LocImport}"/>
+            </Button>
+            <Button x:Name="BtnExportPrompt" Grid.Column="2"
+                    Theme="{StaticResource CmpCellButtonStyle}" Margin="3,0,0,0">
+                <TextBlock Text="{Binding LocExport}"/>
+            </Button>
+        </Grid>
+
+        <Grid Margin="0,0,0,5">
+            <TextBlock Text="{Binding LocInstalledPrompts}" Theme="{StaticResource CmpCellHintStyle}"
+                       VerticalAlignment="Center"/>
+            <Button x:Name="BtnRefreshPrompts"
+                    HorizontalAlignment="Right" Background="Transparent"
+                    Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
+                    FontSize="10.5" Padding="6,1" Cursor="Hand">
+                <TextBlock Text="{Binding LocRefresh}"/>
+            </Button>
+        </Grid>
+
+        <Border CornerRadius="7" Padding="7" MinHeight="60" MaxHeight="140"
+                BorderBrush="#22808080" BorderThickness="1" Background="#FF14121F">
+            <ScrollViewer x:Name="InstalledPromptsScroll" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="InstalledPromptsPanel">
+                    <TextBlock x:Name="TxtNoInstalledPrompts"
+                               Text="{Binding LocNoPromptsInstalled}"
+                               Foreground="#505050" FontSize="10.5" FontStyle="Italic"
+                               HorizontalAlignment="Center" Margin="0,14,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </StackPanel>
+</UserControl>
