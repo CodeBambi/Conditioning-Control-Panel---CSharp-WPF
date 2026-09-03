@@ -62,12 +62,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///         <see cref="InitializeVideo"/>, <see cref="InitializeAudioAsync"/> and the transport's
     ///         play/pause/seek drive <see cref="_totalSeconds"/> / <see cref="_currentSeconds"/>
     ///         directly instead of a player. Everything downstream of those two numbers is real.</item>
-    ///   <item><b>WebView2.</b> The WPF preview drove <c>CoreWebView2</c> for navigation, injected
-    ///         JS, WebMessage time reporting, fullscreen and ZoomFactor.
-    ///         <see cref="Controls.WebHost"/> exposes only <c>Source</c>, so navigation is a Source
-    ///         assignment and the rest (BrowserVideoTimeSource, the fullscreen reparent,
-    ///         ExecuteScriptAsync, AddScriptToExecuteOnDocumentCreatedAsync, WebMessageReceived,
-    ///         ContainsFullScreenElementChanged, ZoomFactor) is a stub.</item>
+    ///   <item><b>The browser preview.</b> Real: the https pre-flight, a per-navigation host
+    ///         fence, and the page's own &lt;video&gt; driven and read back through
+    ///         <c>WebHost.InvokeScriptAsync</c>, so duration, playhead, play/pause and seek
+    ///         describe the video rather than a free-running timer. Two things WPF had are NOT
+    ///         reproduced and both WIDEN what it allowed: the first hop is pinned to the project
+    ///         URL's own host instead of <c>DeeperConfig.PreviewHostAllowlist</c> (internal to
+    ///         Core), and there is no per-instance user-data folder, so the preview shares a cookie
+    ///         jar with every other WebHost. Stubbed because NativeWebView has no counterpart at
+    ///         all: ZoomFactor, ContainsFullScreenElementChanged (and the fullscreen reparent it
+    ///         drove), and AddScriptToExecuteOnDocumentCreatedAsync.</item>
     ///   <item><b>Win32.</b> <c>WindowChromeHelper.ApplyDarkTitleBar</c> (DwmSetWindowAttribute),
     ///         <c>RestoreOwnerOnClose</c>, <c>System.Windows.Forms.Screen.FromHandle</c> +
     ///         <c>WindowInteropHelper</c> (the borderless-fullscreen preview window) and
@@ -96,9 +100,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool _isDirty;
         private bool _suppressDirty;
 
-        // ponytail: needs LibVLCSharp (video), NAudio (audio + AudioWaveformResult) and
-        // BrowserVideoTimeSource (WebView2 time source). The three player handles the WPF window
-        // held are replaced by the two numbers every drawing path actually reads.
+        // ponytail: needs LibVLCSharp (video) and NAudio (audio + AudioWaveformResult). LOCAL
+        // media still has no player, so the two numbers every drawing path reads are driven
+        // directly; the remote branch no longer is - it polls the page (PollBrowserTimeAsync).
         private double[]? _waveformPeaks;
         private bool _isPlaying;
 
@@ -601,6 +605,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         {
             try
             {
+                // A swap from a URL to a local file must blank the old page first, or its audio
+                // keeps playing behind the waveform this method is about to show.
+                StopBrowserPreview();
+
                 var source = _enhancement.MediaSource;
 
                 // Remote http(s):// URL -> embedded browser preview.
@@ -637,22 +645,202 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>
-        /// ponytail: needs the CoreWebView2 surface. The WPF version created the WebView2
-        /// environment, gated navigation on IsAllowedPreviewHost, injected a script that posted the
-        /// &lt;video&gt; element's currentTime back over WebMessage (driving BrowserVideoTimeSource
-        /// and thus _totalSeconds / the playhead), and handled fullscreen. WebHost exposes only
-        /// Source, so this navigates and stops; the timeline runs off whatever duration the project
-        /// itself carries.
+        /// Remote https preview. WPF built a WebView2 environment in its own user-data folder,
+        /// gated navigation on <c>DeeperConfig.PreviewHostAllowlist</c>, injected a
+        /// document-created script that posted the &lt;video&gt;'s currentTime back over
+        /// WebMessage, and handled fullscreen. Two of those four cross.
+        ///
+        /// <para><b>The fence crosses.</b> <c>WebHost.AllowNavigation</c> runs for every navigation
+        /// the engine starts - the first hop and every redirect, link and script-driven hop after
+        /// it - which is what NavigationStarting was for. What it is pinned TO is weaker on that
+        /// first hop: <c>UrlSafety.HostMatches</c> and <c>DeeperConfig.PreviewHostAllowlist</c> are
+        /// both <c>internal</c> to CCP.Core and this head is not in Core's InternalsVisibleTo, so
+        /// the fence pins the engine to whatever host the project's own URL named. A shared
+        /// .ccpenh.json can therefore aim the preview at an https host WPF would have refused;
+        /// every hop after it is fenced, which is the leg WPF's pre-flight never saw. Copying the
+        /// allowlist into this head would be a second copy of a security rule, which is why the
+        /// sibling player refused it too.</para>
+        ///
+        /// <para><b>The profile does not.</b> WPF gave this preview its own
+        /// <c>browser_data_deeper_editor</c> folder so a hostile page could not read the main
+        /// browser tab's signed-in cookies. NativeWebView takes no per-instance data directory, so
+        /// the preview shares the process cookie jar with every other WebHost on this head. There
+        /// is no line of code here to point at; it is a capability the wrapper does not have.</para>
+        ///
+        /// <para><b>The time source crosses.</b> No document-created injection exists, but
+        /// <c>WebHost.InvokeScriptAsync</c> does, so <see cref="PollBrowserTimeAsync"/> reads
+        /// currentTime/duration/paused off the page on the playhead timer instead of receiving them
+        /// over WebMessage. Fullscreen and zoom do not - see the stub region at the foot of the
+        /// file.</para>
         /// </summary>
         private Task InitializeBrowserAsync(string url)
         {
-            VideoPreview.IsVisible = false;
-            WaveformCanvas.IsVisible = false;
-            PreviewPlaceholder.IsVisible = false;
-            BrowserPreview.IsVisible = true;
-            try { BrowserPreview.Source = new Uri(url); }
-            catch (Exception ex) { Log.Debug("DeeperEditor: preview URL rejected: {Error}", ex.Message); }
+            if (_browserInitInFlight) return Task.CompletedTask;
+            _browserInitInFlight = true;
+            try
+            {
+                // Pre-flight, as WPF did: a source that could not pass the fence never reaches the
+                // engine. Host only in the log - a signed media URL's query string must not land in
+                // crash.log, which is the same rule WebHost's own blocked-navigation line follows.
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                    || uri.Scheme != Uri.UriSchemeHttps)
+                {
+                    Log.Warning("DeeperEditor: preview source refused ({Host})", uri?.Host ?? "unparseable");
+                    ShowPlaceholder();
+                    return Task.CompletedTask;
+                }
+
+                VideoPreview.IsVisible = false;
+                WaveformCanvas.IsVisible = false;
+                PreviewPlaceholder.IsVisible = false;
+                BrowserPreview.IsVisible = true;
+
+                // No engine on this machine (the default on a fresh Linux box, and every headless
+                // render): WebHost draws its own panel naming the missing package. Do NOT start the
+                // poll - it would question a control that has no page.
+                if (!BrowserPreview.HasEngine) return Task.CompletedTask;
+
+                // Assigned BEFORE Source: the gate is read at navigation time and a Source set
+                // first can start navigating before the predicate is in place.
+                var pinned = uri.Host;
+                BrowserPreview.AllowNavigation = u =>
+                    u.Scheme == Uri.UriSchemeHttps && HostsMatchIgnoringWww(u.Host, pinned);
+                BrowserPreview.Source = uri;
+                _browserNavigated = true;
+                _browserPollDisabled = false;
+
+                // Runs regardless of _isPlaying, unlike the local-media path: the page starts and
+                // stops itself (autoplay, an ad, the site's own controls) and the poll is the only
+                // thing that would notice.
+                _playheadTimer?.Start();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "DeeperEditor: browser preview init failed");
+                BrowserPreview.IsVisible = false;
+                ShowPlaceholder();
+            }
+            finally { _browserInitInFlight = false; }
             return Task.CompletedTask;
+        }
+
+        /// <summary>Host equality that ignores a leading "www.", the same fence the player uses.
+        /// Deliberately NOT a domain-suffix match: a subdomain is a different host here, because
+        /// this pins to one page's host rather than admitting a whole domain the way the
+        /// allowlist did.</summary>
+        private static bool HostsMatchIgnoringWww(string? a, string? b)
+        {
+            static string Strip(string? h) =>
+                (h ?? "").StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? h![4..] : (h ?? "");
+            var (x, y) = (Strip(a), Strip(b));
+            return x.Length > 0 && x.Equals(y, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Addresses the page's LARGEST &lt;video&gt;, which was BrowserVideoTimeSource's rule too:
+        /// a HypnoTube page carries preview thumbnails that are also video elements, and the first
+        /// in document order is routinely not the one being watched. Returns "" when the page has
+        /// no video yet, so a caller can tell "did nothing" from "did it".
+        ///
+        /// The one-shot <c>_ccpScrolled</c> flag replaces WPF's injected scrollIntoView poller: HT
+        /// stacks promo banners above the player, so without it the preview lands at scrollTop=0
+        /// with the video offscreen. It lives on the element, so a navigation resets it for free.
+        /// </summary>
+        private static string BrowserVideoScript(string tail) =>
+            "(function(){var l=null,a=0;document.querySelectorAll('video').forEach(function(v){"
+            + "var s=(v.clientWidth||0)*(v.clientHeight||0); if(s>=a){a=s;l=v;}});"
+            + "if(!l)return '';"
+            + "if(!l._ccpScrolled){l._ccpScrolled=1;try{l.scrollIntoView({block:'center'});}catch(e){}}"
+            + "return " + tail + ";})()";
+
+        /// <summary>
+        /// BrowserVideoTimeSource's poll, minus the WebView2 binding: read currentTime, duration and
+        /// paused off the page each tick so the read-out, the playhead and every duration-derived
+        /// visual describe the video rather than a field nothing writes.
+        ///
+        /// Re-entrancy matters - the tick is 80 ms and a script round-trip through the adapter is
+        /// not promised to be faster - so a poll in flight skips the next tick rather than queueing.
+        /// A poll that throws stops polling for good: twelve failures a second in the log help
+        /// nobody, and the read-out simply stops moving.
+        /// </summary>
+        private async Task PollBrowserTimeAsync()
+        {
+            if (_browserPollInFlight || _browserPollDisabled) return;
+            _browserPollInFlight = true;
+            try
+            {
+                var raw = await BrowserPreview.InvokeScriptAsync(
+                    BrowserVideoScript("l.currentTime+'|'+(l.duration||0)+'|'+(l.paused?0:1)"));
+
+                // Re-checked AFTER the await, not only before it: a late answer from a page that
+                // has since been blanked would rebuild the timeline against a dead duration, and a
+                // scrub that began during the round-trip would have it yanked out from under the
+                // pointer. WPF's handler took the same three guards before touching anything.
+                if (!_browserNavigated || _isScrubbing || _fsTransitionInFlight) return;
+
+                var parts = Unquote(raw).Split('|');
+                if (parts.Length != 3) return;
+
+                if (double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var dur)
+                    && dur > 0 && !double.IsInfinity(dur) && Math.Abs(dur - _totalSeconds) > 0.5)
+                {
+                    _totalSeconds = dur;
+                    TxtTotalTime.Text = FormatTime(_totalSeconds);
+                    RebuildTimelineRuler();
+                    RebuildRegionVisuals();
+                    RebuildHapticVisuals();
+                    RebuildEffectVisuals();
+                    // NOT in WPF's set, which left TimeReached pins at the old duration's x until
+                    // the next resize happened to rebuild them. One call, and they move with
+                    // everything else.
+                    RebuildRuleVisuals();
+                }
+
+                // The page plays and pauses without us - autoplay, an ad, the site's own controls.
+                // Follow it, or the glyph says "paused" over a running video.
+                var playing = parts[2] == "1";
+                if (playing != _isPlaying)
+                {
+                    _isPlaying = playing;
+                    BtnPlayPause.Content = playing ? "⏸" : "▶";
+                }
+
+                if (double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var cur))
+                    OnBrowserTimeChanged(cur);
+            }
+            catch (Exception ex)
+            {
+                _browserPollDisabled = true;
+                Log.Debug("DeeperEditor: preview time poll disabled after {Error}", ex.Message);
+            }
+            finally { _browserPollInFlight = false; }
+        }
+
+        /// <summary>WebView2 hands back a JSON literal (a string arrives quoted); WebKitGTK hands
+        /// back the raw value. Strip one layer of quotes so the caller sees the same on both.</summary>
+        private static string Unquote(string? s)
+            => string.IsNullOrEmpty(s) ? "" : (s.Length >= 2 && s[0] == '"' && s[^1] == '"' ? s[1..^1] : s);
+
+        /// <summary>
+        /// Blanks the preview page and closes the fence behind it. The gate is narrowed to
+        /// <c>about:</c> BEFORE the assignment, so the navigation that clears the page is the only
+        /// one it will still admit - a gate left permissive while the engine tears a document down
+        /// is a gate that is open for the last navigation.
+        /// </summary>
+        private void StopBrowserPreview()
+        {
+            if (!_browserNavigated) return;
+            _browserNavigated = false;
+            // The page owned _isPlaying while it was up. Leaving it true would make the next press
+            // of a local-media transport toggle straight to "paused" and do nothing visible.
+            _isPlaying = false;
+            BtnPlayPause.Content = "▶";
+            try
+            {
+                BrowserPreview.AllowNavigation = u => u.Scheme == "about";
+                BrowserPreview.Source = new Uri("about:blank");
+            }
+            catch (Exception ex) { Log.Debug("DeeperEditor: preview blank failed: {Error}", ex.Message); }
         }
 
         /// <summary>ponytail: needs LibVLCSharp. The WPF path created a MediaPlayer on VideoView and
@@ -756,10 +944,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         // Transport
         // ---------------------------------------------------------------------------------
 
-        /// <summary>ponytail: needs a media player. With none, play/pause toggles the glyph and the
-        /// playhead timer so the timeline still animates against the project's own duration.</summary>
+        /// <summary>
+        /// In browser mode this drives the page's own &lt;video&gt; and sets NOTHING locally: the
+        /// poll flips the glyph off the page's real state a tick later, so a press on a page that
+        /// has no video element yet (still loading, an error page, a navigation the fence refused)
+        /// reads as having done nothing - which is what happened.
+        ///
+        /// <para>ponytail: LOCAL media still has no player, so there play/pause toggles the glyph
+        /// and the playhead timer and the timeline animates against the project's own
+        /// duration.</para>
+        /// </summary>
         private void BtnPlayPause_Click(object? sender, RoutedEventArgs e)
         {
+            if (_browserNavigated)
+            {
+                _ = BrowserPreview.InvokeScriptAsync(
+                    BrowserVideoScript(_isPlaying ? "(l.pause(),'ok')" : "(l.play(),'ok')"));
+                return;
+            }
             _isPlaying = !_isPlaying;
             BtnPlayPause.Content = _isPlaying ? "⏸" : "▶";
             if (_isPlaying) _playheadTimer?.Start(); else _playheadTimer?.Stop();
@@ -767,11 +969,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void PlayheadTimer_Tick(object? sender, EventArgs e)
         {
+            // Browser mode: the page owns the clock AND the play state, so the tick is a poll and
+            // runs whether or not we think anything is playing.
+            if (_browserNavigated) { _ = PollBrowserTimeAsync(); return; }
             if (_isScrubbing) return;
             if (!_isPlaying || _totalSeconds <= 0) return;
-            // ponytail: the WPF tick read AudioFileReader.CurrentTime (video time arrived on
-            // MediaPlayer.TimeChanged). With no player, advance by the timer interval so the
-            // playhead, the readout and any time-driven redraw stay honest about elapsed time.
+            // ponytail: LOCAL media only. The WPF tick read AudioFileReader.CurrentTime (video time
+            // arrived on MediaPlayer.TimeChanged). With no player, advance by the timer interval so
+            // the playhead, the readout and any time-driven redraw stay honest about elapsed time.
             _currentSeconds = Math.Min(_totalSeconds, _currentSeconds + 0.08);
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
             UpdatePlayheadPosition();
@@ -782,8 +987,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             frac = Math.Clamp(frac, 0, 1);
             _currentSeconds = frac * _totalSeconds;
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
-            // ponytail: needs the media player's Seek; the WPF version pushed the new position to
-            // BrowserVideoTimeSource / MediaPlayer / AudioFileReader here.
+            if (_browserNavigated && _totalSeconds > 0)
+            {
+                _ = BrowserPreview.InvokeScriptAsync(BrowserVideoScript(string.Format(
+                    CultureInfo.InvariantCulture, "(l.currentTime={0:0.###},'ok')", _currentSeconds)));
+            }
+            // ponytail: LOCAL media needs the player's Seek - the WPF version pushed the new
+            // position to MediaPlayer.SeekTo / AudioFileReader.CurrentTime on these two branches.
             UpdatePlayheadPosition();
         }
 
@@ -873,14 +1083,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         // +/-10% page zoom on the embedded browser preview. Distinct from BtnZoomIn/Out above,
         // which scale the timeline canvas.
-        // ponytail: needs CoreWebView2.ZoomFactor; WebHost exposes only Source, so these two
-        // buttons are inert until the wrapper grows a zoom property.
         private void BtnPreviewZoomIn_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(+0.10);
         private void BtnPreviewZoomOut_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(-0.10);
 
+        /// <summary>
+        /// ponytail: NativeWebView genuinely has no zoom factor - one of the three CoreWebView2
+        /// members with no counterpart at all, and NOT a missing script channel, since
+        /// InvokeScriptAsync works and everything else in this region uses it. CSS <c>zoom</c>
+        /// through that channel is the obvious substitute and is not one: it is per-document, so it
+        /// is lost on the next navigation, and it does not scale a fullscreened video. So WPF's
+        /// +/-10% clamped to [0.25, 5.0] stays lost, and these two buttons only log.
+        /// </summary>
         private void AdjustPreviewZoom(double delta)
         {
-            Log.Debug("DeeperEditor: preview zoom {Delta:+0.00;-0.00} ignored; WebHost has no ZoomFactor", delta);
+            Log.Debug("DeeperEditor: preview zoom {Delta:+0.00;-0.00} ignored; NativeWebView has no zoom", delta);
         }
 
         private void TimelineScroll_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
@@ -2765,11 +2981,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             DisposePlayback();
         }
 
-        /// <summary>ponytail: the WPF body detached the WebView2 handlers, exited preview
-        /// fullscreen and disposed the CoreWebView2 environment. WebHost owns its own control's
-        /// lifetime, so only the timers need stopping here.</summary>
+        /// <summary>WPF also detached the WebView2 handlers and disposed the CoreWebView2
+        /// environment; WebHost owns its control's lifetime, so the page is blanked instead. The
+        /// blank matters on a media swap, not on close - without it a swap away from a URL leaves
+        /// the old page's audio running behind whatever replaces it.
+        /// ponytail: exiting preview fullscreen first has nothing to exit - see the stub region at
+        /// the foot of the file.</summary>
         private void TeardownPreview()
         {
+            StopBrowserPreview();
             try { _playheadTimer?.Stop(); } catch { }
             try { _validationTimer?.Stop(); } catch { }
             try { _htFetchCts?.Cancel(); _htFetchCts?.Dispose(); } catch { }
@@ -2785,42 +3005,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         // ---------------------------------------------------------------------------------
-        // WebView2 / VLC / NAudio surface
+        // Preview fullscreen / VLC / NAudio surface
         //
-        // Every one of these is a member of the WPF window that has no counterpart on this head:
-        // the CoreWebView2 event surface, the borderless-fullscreen preview window (Forms.Screen +
-        // WindowInteropHelper + WS_EX_TOOLWINDOW), and the four player callbacks. They are kept
-        // named and typed against portable signatures rather than deleted, so nothing silently
-        // disappears and the layer that brings a player or a richer WebHost has an exact list of
-        // what to fill in. The framework-typed parameters (CoreWebView2NavigationStartingEventArgs,
-        // MediaPlayerLengthChangedEventArgs, MediaPlayerTimeChangedEventArgs, StoppedEventArgs)
+        // What is left here after the browser preview was wired: the fullscreen reparent and the
+        // four player callbacks. They are kept named and typed against portable signatures rather
+        // than deleted, so nothing silently disappears and the layer that brings a player has an
+        // exact list of what to fill in. The framework-typed parameters
+        // (MediaPlayerLengthChangedEventArgs, MediaPlayerTimeChangedEventArgs, StoppedEventArgs)
         // become object?/EventArgs, since naming them would require the very packages this head
         // must not reference.
+        //
+        // The FULLSCREEN half is stubbed for one reason and it is not a missing wrapper method:
+        // ContainsFullScreenElementChanged has no counterpart in NativeWebView, so nothing on this
+        // head can tell that the page went fullscreen. Without that signal every member below is
+        // unreachable, whatever else were built. HT's video.requestFullscreen() therefore just
+        // expands the video to fill the small preview cell, with the timeline still visible behind
+        // it - degraded, but not a lie: no control here claims fullscreen is on.
+        //
+        // Two members that were stubbed for a WebView2 reason are GONE rather than stubbed, because
+        // the gate in InitializeBrowserAsync now does their job: IsAllowedPreviewHost (a static
+        // that returned false and had no caller) and OnBrowserNavigationStarting. The half of
+        // IsAllowedPreviewHost that is still missing is the first-hop allowlist, and that is a Core
+        // visibility change, not a member of this file.
         // ---------------------------------------------------------------------------------
 
-        // The WebView2 preview's own state. Held so the members below read as the port they are.
-        private object? _browserSource;          // ponytail: BrowserVideoTimeSource
+        // The preview's own state. _fsTransitionInFlight and _isPreviewFullscreen are read by
+        // PollBrowserTimeAsync / OnBrowserTimeChanged and written only by the fullscreen members
+        // below, so they are permanently false until those are real - which is the honest state.
         private bool _browserInitInFlight;
-        private bool _previewBrowserConfigured;
+        private bool _browserNavigated;
+        private bool _browserPollInFlight;
+        private bool _browserPollDisabled;
         private bool _isPreviewFullscreen;
         private bool _fsTransitionInFlight;
         private Window? _previewFullscreenWindow;
 
-        /// <summary>ponytail: needs Core's UrlSafety.HostMatches + DeeperConfig.PreviewHostAllowlist,
-        /// both <c>internal</c> to CCP.Core, which does not list CCP.Avalonia in its
-        /// InternalsVisibleTo. Returning false is the safe direction: it denies rather than
-        /// allows. One line to make real once the head is added to that attribute.</summary>
-        private static bool IsAllowedPreviewHost(Uri uri) { _ = uri; return false; }
-
-        /// <summary>ponytail: needs CoreWebView2.NavigationStarting. Gated navigation on
-        /// <see cref="IsAllowedPreviewHost"/> and cancelled anything off the allow-list.</summary>
-        private void OnBrowserNavigationStarting(object? sender, EventArgs e) { }
-
-        /// <summary>ponytail: needs CoreWebView2.WebMessageReceived. Carried the page's
-        /// &lt;video&gt; currentTime and the Ctrl+wheel zoom requests back from injected JS.</summary>
+        /// <summary>ponytail: WPF's page-side bridge posted 'ccp_exit_fullscreen' / 'ccp_zoom_in' /
+        /// 'ccp_zoom_out' from a document-created script. NativeWebView HAS WebMessageReceived, but
+        /// it has no AddScriptToExecuteOnDocumentCreatedAsync to install the sender, and both of the
+        /// three messages' destinations (the fullscreen exit, the page zoom) are themselves stubs -
+        /// so a bridge would carry messages nobody could act on.</summary>
         private void OnPreviewWebMessageReceived(object? sender, EventArgs e) { }
 
-        /// <summary>ponytail: needs CoreWebView2.ContainsFullScreenElementChanged.</summary>
+        /// <summary>ponytail: needs ContainsFullScreenElementChanged, which NativeWebView does not
+        /// have. This is the signal the whole reparent hangs off.</summary>
         private void OnPreviewFullscreenChanged(object? sender, EventArgs e) { }
 
         /// <summary>ponytail: part of the fullscreen reparent - detached the WebView2 from whichever
@@ -2829,8 +3057,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         /// <summary>ponytail: needs Forms.Screen.FromHandle + WindowInteropHelper + a borderless
         /// topmost window. On Linux the Avalonia parts exist (Screens.ScreenFromVisual,
-        /// SystemDecorations="None", Topmost, ShowInTaskbar=false) but the WebView2 reparent this
-        /// wrapped does not, so the whole path is a stub.</summary>
+        /// SystemDecorations="None", Topmost, ShowInTaskbar=false) and WebHost is an ordinary
+        /// control that could be moved between them, but nothing calls this: see
+        /// <see cref="OnPreviewFullscreenChanged"/>.</summary>
         private void EnterPreviewFullscreen() { }
 
         /// <summary>ponytail: the recovery half of the reparent - put BrowserPreview back into
@@ -2840,15 +3069,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// <summary>ponytail: the orderly half of the reparent.</summary>
         private void ExitPreviewFullscreen() { }
 
-        /// <summary>ponytail: needs CoreWebView2.ExecuteScriptAsync - asked the page itself to leave
-        /// fullscreen, so the site's own player chrome stayed consistent.</summary>
+        /// <summary>ponytail: asked the page itself to leave fullscreen so the site's own player
+        /// chrome stayed consistent. The script channel for this DOES exist now
+        /// (WebHost.InvokeScriptAsync); what does not is anything that would call it.</summary>
         private void ExitPreviewFullscreenViaScript() { }
 
         /// <summary>
-        /// Time report from the browser preview. REAL apart from its source: the duration probe and
-        /// the play/pause glyph came off BrowserVideoTimeSource, which is a WPF-head type, but the
-        /// playhead, the read-out and the mid-scrub guard are the WPF logic unchanged. Wire a time
-        /// source to this method and the browser-driven timeline works.
+        /// Time report from the browser preview, fed by <see cref="PollBrowserTimeAsync"/>. The
+        /// playhead, the read-out and the mid-scrub guard are the WPF logic unchanged; only the
+        /// source changed, from BrowserVideoTimeSource's WebMessage push to a script-channel poll.
         /// </summary>
         private void OnBrowserTimeChanged(double seconds)
         {
