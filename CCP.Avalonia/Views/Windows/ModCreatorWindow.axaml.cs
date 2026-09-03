@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -12,9 +13,14 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using Newtonsoft.Json;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -38,7 +44,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///   CheckBox.Checked/Unchecked             -> IsCheckedChanged
     ///   BitmapImage + DecodePixelWidth         -> Bitmap.DecodeToWidth(stream, 200)
     ///   AllowDrop/DragOver/Drop                -> DragDrop.SetAllowDrop + AddHandler(DropEvent)
-    ///   OpenFileDialog (Microsoft.Win32)       -> StorageProvider.OpenFilePickerAsync
+    ///   OpenFileDialog / SaveFileDialog        -> StorageProvider.Open/SaveFilePickerAsync
+    ///   MessageBox.Show(msg, caption)          -> MessageDialog.ShowAsync(this, title, msg)
+    ///                                             NOTE the argument order flips
+    ///   WinForms ColorDialog                   -> Views/Dialogs/ColorPickerDialog.PickAsync
     ///   Tag + GotFocus/LostFocus placeholder   -> TextBox.PlaceholderText
     ///
     /// Two deliberate simplifications, both taking a native rung rather than porting code:
@@ -51,8 +60,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///   - SetImageSlot/ClearImageSlot walked the visual tree to find each slot's Border. The
     ///     parts are created here, so <see cref="_imageSlotParts"/> holds them by key instead.
     ///
+    /// The manifest round-trip is live: BuildManifestFromForm, PopulateFromManifest, export to a
+    /// .ccpmod zip, load from one, and the active mod auto-loaded as a starting preset. The models
+    /// are Core's (ModManifest / ModPackage) and the active mod comes from the CoreMods seam, which
+    /// answers "the built-in default" on a head with no mod layer, so the ctor touches no disk.
+    ///
     /// Stubbed, all with a ponytail marker at the call site: everything reaching App.*, a service,
-    /// NAudio, a WinForms dialog, or one of the nine per-panel partial classes
+    /// NAudio, or one of the nine per-panel partial classes
     /// (ModCreatorWindow.Pools.cs, .Personalities.cs, .Advanced.cs, .Barks.cs, .Mantras.cs,
     /// .EventAudio.cs, .Portraits.cs, .Emotes.cs, .UiArt.cs / .ArtFraming.cs), which are their own
     /// port layers. Their sidebar entries stay - they are part of this view's chrome - and each
@@ -434,6 +448,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void LoadSideFilesFrom(string resourcesDir) { }
         private void ClearSideFileState() { }
 
+        // ponytail: needs the manifest-backed panel partials (Pools/Personalities/Advanced/UiArt),
+        // wired when each is ported. In the WPF head BuildManifestFromForm ends with
+        // ApplyPoolsToManifest / ApplyPersonalitiesToManifest / ApplyAdvancedToManifest /
+        // ApplyArtFramingToManifest and PopulateFromManifest with the four Populate* twins.
+        // Aggregated into one pair on purpose: a later layer that ports Pools.cs as a partial will
+        // define the real ApplyPoolsToManifest, and a stub of that exact name here would collide.
+        private void ApplyPanelSectionsToManifest(ModManifest manifest) { }
+        private void PopulatePanelSectionsFromManifest(ModManifest manifest) { }
+
         private Border CreateSectionPanel(string key)
         {
             var panel = new Border
@@ -667,9 +690,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Theme = (ControlTheme)this.FindResource("SecondaryButton")!,
                 Padding = new Thickness(10, 4, 10, 4),
             };
-            pickBtn.Click += (_, _) =>
+            pickBtn.Click += async (_, _) =>
             {
-                var result = ShowColorPicker((hexBox.Text ?? "").Trim());
+                var result = await ShowColorPickerAsync((hexBox.Text ?? "").Trim(), label);
                 if (result != null)
                 {
                     hexBox.Text = result;
@@ -766,8 +789,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var wrap = new WrapPanel();
             foreach (var (slotKey, name) in slots)
             {
-                // ponytail: needs App.Mods.MakeModAware, wired when ModService moves to Core.
-                var displayName = name;
+                // Stale note said this needed App.Mods; CoreMods.MakeModAware is the seam, and
+                // returns the input unchanged when no mod layer is up.
+                var displayName = CoreMods.MakeModAware(name);
                 wrap.Children.Add(CreateImageSlot(slotKey, displayName));
             }
             stack.Children.Add(wrap);
@@ -835,9 +859,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Content = "+ Add Custom Avatar Set",
                 Background = new SolidColorBrush(Color.Parse("#2A2A4A")),
-                Foreground = new SolidColorBrush(Color.Parse(AccentColorHex)),
+                Foreground = BrushFromHex(AccentColorHex),
                 BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.Parse(AccentColorHex)),
+                BorderBrush = BrushFromHex(AccentColorHex),
                 Padding = new Thickness(16, 8, 16, 8),
                 Cursor = new Cursor(StandardCursorType.Hand),
                 FontSize = 12,
@@ -848,10 +872,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             stack.Children.Add(addBtn);
         }
 
-        /// <summary>ponytail: needs App.Mods.GetAccentColorHex(), wired when ModService moves to
-        /// Core. The WPF original already falls back to this exact literal when no mod is
-        /// active.</summary>
-        private const string AccentColorHex = "#FF69B4";
+        /// <summary>The active mod's accent, through the CoreMods seam rather than App.Mods. With
+        /// no mod layer up this is the built-in CCP default's accent, which is what the WPF call
+        /// answered with no mod active.</summary>
+        private static string AccentColorHex => CoreMods.AccentColorHex;
 
         private void ToggleAvatarSet(int setNum, bool enabled)
         {
@@ -994,9 +1018,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Content = "+ Add Voice Lines",
                 Background = new SolidColorBrush(Color.Parse("#2A2A4A")),
-                Foreground = new SolidColorBrush(Color.Parse(AccentColorHex)),
+                Foreground = BrushFromHex(AccentColorHex),
                 BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.Parse(AccentColorHex)),
+                BorderBrush = BrushFromHex(AccentColorHex),
                 Padding = new Thickness(16, 8, 16, 8),
                 Cursor = new Cursor(StandardCursorType.Hand),
                 FontSize = 12,
@@ -1335,9 +1359,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Content = "+ Add Video Link",
                 Background = new SolidColorBrush(Color.Parse("#2A2A4A")),
-                Foreground = new SolidColorBrush(Color.Parse(AccentColorHex)),
+                Foreground = BrushFromHex(AccentColorHex),
                 BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Color.Parse(AccentColorHex)),
+                BorderBrush = BrushFromHex(AccentColorHex),
                 Padding = new Thickness(16, 8, 16, 8),
                 Cursor = new Cursor(StandardCursorType.Hand),
                 FontSize = 12,
@@ -1709,15 +1733,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var borderHolder = new Grid { Width = width, Height = height };
 
-            // Hint image (dimmed default)
-            // ponytail: needs ModResourceResolver.ResolveImage, wired when the resolver moves to
-            // Core. Without it the slot shows only the "+" affordance, which is what an unhinted
-            // slot looks like in the WPF head too.
+            // Hint image (dimmed default). WPF called ModResourceResolver.ResolveImage, which
+            // cannot move to Core - it decodes to a WPF ImageSource. The portable half is
+            // CoreModArt.OverridePath plus this head's own avares:// copy.
             var hintImage = new Image
             {
                 Opacity = 0.2,
                 Stretch = Stretch.Uniform,
                 IsHitTestVisible = false,
+                Source = TryLoadSlotHint(resourceKey),
             };
             borderHolder.Children.Add(hintImage);
 
@@ -1834,6 +1858,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// border.Tag and pattern-matched it back out; a dictionary says the same thing without
         /// the cast, and Tag stays free.
         /// </summary>
+        /// <summary>
+        /// The mod's override first (<see cref="CoreModArt"/>), then this head's own shipped copy
+        /// under <c>avares://</c>. Null when neither exists, which is what an unhinted slot looked
+        /// like in the WPF head too - the head deliberately ships only a slice of achievements/
+        /// and skills/, so most badge slots legitimately have no hint here.
+        ///
+        /// ponytail: a byte-for-byte twin of TubeFitDialog.TryLoadImage, whose own note asks for a
+        /// head-wide helper once a second view wants the two-step. This is that second view, but
+        /// hoisting it means editing a file this layer does not own; do it in the layer that owns
+        /// both.
+        /// </summary>
+        private static Bitmap? TryLoadSlotHint(string resourceName)
+        {
+            var overridePath = CoreModArt.OverridePath(resourceName);
+            if (overridePath != null)
+            {
+                try { if (File.Exists(overridePath)) return new Bitmap(overridePath); }
+                catch (Exception ex) { Log.Warning(ex, "[ModCreator] mod override {Path} would not load", overridePath); }
+            }
+
+            try
+            {
+                var uri = new Uri($"avares://CCP.Avalonia/Resources/{resourceName}");
+                if (!AssetLoader.Exists(uri)) return null;
+                using var stream = AssetLoader.Open(uri);
+                return new Bitmap(stream);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[ModCreator] built-in {Name} would not load", resourceName);
+                return null;
+            }
+        }
+
         private readonly Dictionary<string, (Button Clear, TextBlock Plus, Image Hint)> _imageSlotParts = new();
 
         private void SetImageSlot(string key, string filePath, bool validate = true)
@@ -1953,12 +2011,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ─── Color Picker ────────────────────────────────────────
         /// <summary>
-        /// ponytail: needs a colour picker. WPF opened System.Windows.Forms.ColorDialog, which
-        /// does not exist here; Views/Dialogs/ColorEditorDialog is the ported candidate but does
-        /// not yet return a value. Returning null leaves the hex box exactly as it was, which is
-        /// what Cancel did.
+        /// WPF opened System.Windows.Forms.ColorDialog. Views/Dialogs/ColorPickerDialog is the
+        /// cross-platform twin and returns a Color? with the same "null means Cancel" contract,
+        /// so the hex box is left exactly as it was on Cancel. Alpha is dropped, as WPF did.
         /// </summary>
-        private static string? ShowColorPicker(string currentHex) => null;
+        private async Task<string?> ShowColorPickerAsync(string currentHex, string title)
+        {
+            TryParseHex(currentHex, out var initial);
+            var picked = await ColorPickerDialog.PickAsync(this, initial, title);
+            return picked is { } c ? $"#{c.R:X2}{c.G:X2}{c.B:X2}" : null;
+        }
 
         // ─── Populate Defaults ───────────────────────────────────
         private void PopulateDefaults()
@@ -1968,44 +2030,531 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// ponytail: needs App.Mods (ActiveMod / InstalledPath) and ModManifest, wired when
-        /// ModService moves to Core. The WPF version auto-loads the active mod's manifest and
-        /// resources tree as a starting preset and writes Loc.GetF("mod_loaded_active", name) to
-        /// the status bar; LoadAudioFromResources and SetImageSlot below are already able to do
-        /// the filling once a resources directory can be found.
+        /// Auto-loads the currently active mod's manifest and resources as a starting preset.
+        /// Skips built-in mods, which have no installed path.
+        ///
+        /// <para>WPF read App.Mods.ActiveMod; CoreMods answers the same question on every head.
+        /// With no mod layer seeded (this head today) the lookup lands on the built-in CCP
+        /// default and returns immediately, so constructing the window touches no disk.</para>
         /// </summary>
-        private void LoadActiveModAsPreset() { }
+        private void LoadActiveModAsPreset()
+        {
+            try
+            {
+                var mods = CoreMods.InstalledMods;
+                if (!mods.TryGetValue(CoreMods.ActiveModId, out var activeMod)) return;
+                if (activeMod.IsBuiltIn || string.IsNullOrEmpty(activeMod.InstalledPath)) return;
+
+                var manifestPath = Path.Combine(activeMod.InstalledPath!, "mod.json");
+                if (!File.Exists(manifestPath)) return;
+
+                var manifest = JsonConvert.DeserializeObject<ModManifest>(File.ReadAllText(manifestPath));
+                if (manifest == null) return;
+
+                PopulateFromManifest(manifest);
+                LoadResourcesFrom(Path.Combine(activeMod.InstalledPath!, "resources"));
+
+                _txtStatus.Text = Loc.GetF("mod_loaded_active", manifest.Name);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to auto-load active mod as preset");
+            }
+        }
 
         /// <summary>
-        /// ponytail: needs ModManifest, wired when the model moves to Core. In the WPF head this
-        /// pushes a parsed manifest back into every field built above, and BuildManifestFromForm
-        /// is its inverse.
+        /// Refills the image slots, the audio slots and the panel partials' side files from an
+        /// extracted resources tree. Shared by the active-mod preset and by Load; the WPF head
+        /// carried the same eight lines in both.
         /// </summary>
-        private void PopulateFromManifest(object manifest) { }
+        private void LoadResourcesFrom(string resourcesDir)
+        {
+            if (!Directory.Exists(resourcesDir)) return;
+
+            foreach (var key in _imageSlots.Keys.ToList())
+            {
+                var imgPath = Path.Combine(resourcesDir, key.Replace('/', Path.DirectorySeparatorChar));
+                if (File.Exists(imgPath))
+                    SetImageSlot(key, imgPath, validate: false);
+            }
+            LoadAudioFromResources(resourcesDir);
+            LoadSideFilesFrom(resourcesDir);
+        }
+
+        // ─── Populate From Manifest ──────────────────────────────
+        private void PopulateFromManifest(ModManifest manifest)
+        {
+            // Info
+            SetTextBoxValue(_txtModName, manifest.Name);
+            SetTextBoxValue(_txtAuthor, manifest.Author);
+            SetTextBoxValue(_txtVersion, manifest.Version);
+            SetTextBoxValue(_txtDescription, manifest.Description);
+            SetTextBoxValue(_txtTags, manifest.Tags != null ? string.Join(", ", manifest.Tags) : "");
+            SetTextBoxValue(_txtMinAppVersion, manifest.MinAppVersion);
+
+            // Theme
+            if (manifest.Theme != null)
+            {
+                if (_txtAccentHex != null) _txtAccentHex.Text = manifest.Theme.AccentColor ?? "#FF69B4";
+                if (_txtLightHex != null) _txtLightHex.Text = manifest.Theme.AccentLightColor ?? "#FFB6C1";
+                if (_txtDarkHex != null) _txtDarkHex.Text = manifest.Theme.AccentDarkColor ?? "#FF1493";
+                if (_txtBgHex != null) _txtBgHex.Text = manifest.Theme.BackgroundColor ?? "#1A1A2E";
+                if (_txtPanelHex != null) _txtPanelHex.Text = manifest.Theme.PanelColor ?? "#252542";
+                if (_txtSurfaceHex != null) _txtSurfaceHex.Text = manifest.Theme.SurfaceColor ?? "#1E1E3A";
+                if (_txtFilterHex != null) _txtFilterHex.Text = manifest.Theme.FilterColor ?? "#FF69B4";
+            }
+
+            // FX palette
+            if (_txtMistHex != null) _txtMistHex.Text = manifest.FxPalette?.MistColor ?? FxRowDefault;
+            if (_txtParticleHex != null) _txtParticleHex.Text = manifest.FxPalette?.ParticleColor ?? FxRowDefault;
+            if (_txtGlowHex != null) _txtGlowHex.Text = manifest.FxPalette?.GlowColor ?? FxRowDefault;
+            if (_txtFlashTintHex != null) _txtFlashTintHex.Text = manifest.FxPalette?.FlashTint ?? FxRowDefault;
+
+            // Identity
+            if (manifest.Identity != null)
+            {
+                SetTextBoxValue(_txtCompanionName, manifest.Identity.CompanionName);
+                SetTextBoxValue(_txtUserTerm, manifest.Identity.UserTerm);
+                SetTextBoxValue(_txtModeDisplayName, manifest.Identity.ModeDisplayName);
+                SetTextBoxValue(_txtTalkToLabel, manifest.Identity.TalkToLabel);
+                SetTextBoxValue(_txtTakeoverLabel, manifest.Identity.TakeoverLabel);
+                SetTextBoxValue(_txtAffirmation, manifest.Identity.Affirmation);
+                SetTextBoxValue(_txtRankSubject, manifest.Identity.RankSubject);
+            }
+
+            // Triggers
+            if (manifest.Triggers != null)
+            {
+                SetTextBoxValue(_txtFreeze, manifest.Triggers.Freeze);
+                SetTextBoxValue(_txtReset, manifest.Triggers.Reset);
+                SetTextBoxValue(_txtCumCollapse, manifest.Triggers.CumAndCollapse);
+                SetTextBoxValue(_txtAutonomyOn, manifest.Triggers.AutonomyOn);
+            }
+
+            // Messages
+            if (manifest.Messages != null)
+            {
+                SetTextBoxValue(_txtAttentionFail, manifest.Messages.AttentionCheckFail);
+                SetTextBoxValue(_txtAttentionMercy, manifest.Messages.AttentionCheckMercy);
+                SetTextBoxValue(_txtBubbleRetry, manifest.Messages.BubbleCountRetry);
+            }
+
+            // Phrases
+            if (manifest.Phrases != null)
+            {
+                foreach (var (cat, phrases) in manifest.Phrases)
+                {
+                    if (!_phraseData.ContainsKey(cat)) continue;
+                    _phraseData[cat].Clear();
+                    _phrasePanels[cat].Children.Clear();
+
+                    foreach (var phrase in phrases)
+                        AddPhraseRow(cat, phrase);
+
+                    UpdatePhraseHeaderByCategory(cat);
+                }
+            }
+
+            // Browser
+            if (manifest.Browser != null)
+            {
+                SetTextBoxValue(_txtBrowserUrl, manifest.Browser.DefaultUrl);
+                SetTextBoxValue(_txtBrowserSiteName, manifest.Browser.SiteName);
+                if (_chkShowBambiCloud != null)
+                    _chkShowBambiCloud.IsChecked = manifest.Browser.ShowBambiCloudOption ?? true;
+                if (manifest.Browser.DefaultVideoLinks != null)
+                {
+                    _videoLinks.Clear();
+                    _videoLinksPanel?.Children.Clear();
+                    foreach (var (vName, vUrl) in manifest.Browser.DefaultVideoLinks)
+                        AddVideoLinkRow(vName, vUrl);
+                }
+            }
+
+            // Text Replacements
+            if (manifest.TextReplacements != null)
+            {
+                _textReplacements.Clear();
+                _replacementsPanel?.Children.Clear();
+
+                foreach (var (from, to) in manifest.TextReplacements)
+                    AddReplacementRow(from, to);
+            }
+
+            // Supported avatar sets — uncheck sets not in the list
+            if (manifest.SupportedAvatarSets != null)
+            {
+                foreach (var (setNum, cb) in _avatarSetCheckboxes)
+                {
+                    var supported = manifest.SupportedAvatarSets.Contains(setNum);
+                    cb.IsChecked = supported;
+                    ToggleAvatarSet(setNum, supported);
+                }
+            }
+
+            // Custom avatar sets
+            if (manifest.CustomAvatarSets != null)
+            {
+                foreach (var cs in manifest.CustomAvatarSets)
+                    AddCustomAvatarSet(cs.SetNumber, cs.Label, cs.UnlockLevel);
+            }
+
+            // Manifest sections owned by the panel partials. Art framing is read here, BEFORE the
+            // callers go on to fill the image slots from resources/, which is the order that keeps
+            // it: SetImageSlot only discards framing for an author-picked swap, not a bulk load.
+            PopulatePanelSectionsFromManifest(manifest);
+
+            UpdateStatusBar();
+        }
+
+        // ─── Build Manifest From Form ────────────────────────────
+        private ModManifest BuildManifestFromForm()
+        {
+            var name = GetTextBoxValue(_txtModName);
+            var manifest = new ModManifest
+            {
+                Id = SanitizeModId(name),
+                Name = name,
+                Version = GetTextBoxValue(_txtVersion),
+                Author = GetTextBoxValue(_txtAuthor),
+                Description = string.IsNullOrWhiteSpace(GetTextBoxValue(_txtDescription)) ? null : GetTextBoxValue(_txtDescription),
+            };
+
+            // Tags + minimum app version
+            var tags = GetTextBoxValue(_txtTags)
+                .Split(new[] { ',', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(t => t.Trim())
+                .Where(t => t.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(12)
+                .ToList();
+            if (tags.Count > 0) manifest.Tags = tags;
+            var minVer = GetTextBoxValue(_txtMinAppVersion).Trim();
+            if (Version.TryParse(minVer, out _)) manifest.MinAppVersion = minVer;
+
+            // Preview image
+            if (_imageSlots.TryGetValue("preview", out var previewPath) && previewPath != null)
+                manifest.PreviewImage = "resources/preview" + Path.GetExtension(previewPath);
+
+            // Theme
+            var accent = (_txtAccentHex?.Text ?? "#FF69B4").Trim();
+            var light = (_txtLightHex?.Text ?? "#FFB6C1").Trim();
+            var dark = (_txtDarkHex?.Text ?? "#FF1493").Trim();
+            var bg = (_txtBgHex?.Text ?? "#1A1A2E").Trim();
+            var panel = (_txtPanelHex?.Text ?? "#252542").Trim();
+            var surface = (_txtSurfaceHex?.Text ?? "#1E1E3A").Trim();
+            var filter = (_txtFilterHex?.Text ?? "#FF69B4").Trim();
+            if (accent != "#FF69B4" || light != "#FFB6C1" || dark != "#FF1493"
+                || bg != "#1A1A2E" || panel != "#252542" || surface != "#1E1E3A"
+                || filter != accent)
+            {
+                manifest.Theme = new ModTheme
+                {
+                    AccentColor = accent,
+                    AccentLightColor = light,
+                    AccentDarkColor = dark,
+                    BackgroundColor = bg != "#1A1A2E" ? bg : null,
+                    PanelColor = panel != "#252542" ? panel : null,
+                    SurfaceColor = surface != "#1E1E3A" ? surface : null,
+                    FilterColor = filter != accent ? filter : null,
+                };
+            }
+
+            // FX palette — only the rows the creator actually moved off the inherit default.
+            var mist = (_txtMistHex?.Text ?? FxRowDefault).Trim();
+            var particle = (_txtParticleHex?.Text ?? FxRowDefault).Trim();
+            var glow = (_txtGlowHex?.Text ?? FxRowDefault).Trim();
+            var flashTint = (_txtFlashTintHex?.Text ?? FxRowDefault).Trim();
+            if (mist != FxRowDefault || particle != FxRowDefault
+                || glow != FxRowDefault || flashTint != FxRowDefault)
+            {
+                manifest.FxPalette = new ModFxPalette
+                {
+                    MistColor = mist != FxRowDefault ? mist : null,
+                    ParticleColor = particle != FxRowDefault ? particle : null,
+                    GlowColor = glow != FxRowDefault ? glow : null,
+                    FlashTint = flashTint != FxRowDefault ? flashTint : null,
+                };
+            }
+
+            // Identity
+            var cn = GetTextBoxValue(_txtCompanionName);
+            var ut = GetTextBoxValue(_txtUserTerm);
+            var mdn = GetTextBoxValue(_txtModeDisplayName);
+            var ttl = GetTextBoxValue(_txtTalkToLabel);
+            var tol = GetTextBoxValue(_txtTakeoverLabel);
+            var aff = GetTextBoxValue(_txtAffirmation);
+            var rank = GetTextBoxValue(_txtRankSubject);
+            if (!string.IsNullOrEmpty(cn) || !string.IsNullOrEmpty(ut) || !string.IsNullOrEmpty(mdn)
+                || !string.IsNullOrEmpty(ttl) || !string.IsNullOrEmpty(tol)
+                || !string.IsNullOrEmpty(aff) || !string.IsNullOrEmpty(rank))
+            {
+                manifest.Identity = new ModIdentity
+                {
+                    CompanionName = string.IsNullOrEmpty(cn) ? null : cn,
+                    UserTerm = string.IsNullOrEmpty(ut) ? null : ut,
+                    ModeDisplayName = string.IsNullOrEmpty(mdn) ? null : mdn,
+                    TalkToLabel = string.IsNullOrEmpty(ttl) ? null : ttl,
+                    TakeoverLabel = string.IsNullOrEmpty(tol) ? null : tol,
+                    Affirmation = string.IsNullOrEmpty(aff) ? null : aff,
+                    RankSubject = string.IsNullOrEmpty(rank) ? null : rank,
+                };
+            }
+
+            // Triggers
+            var freeze = GetTextBoxValue(_txtFreeze);
+            var reset = GetTextBoxValue(_txtReset);
+            var cum = GetTextBoxValue(_txtCumCollapse);
+            var auto = GetTextBoxValue(_txtAutonomyOn);
+            if (!string.IsNullOrEmpty(freeze) || !string.IsNullOrEmpty(reset)
+                || !string.IsNullOrEmpty(cum) || !string.IsNullOrEmpty(auto))
+            {
+                manifest.Triggers = new ModTriggers
+                {
+                    Freeze = string.IsNullOrEmpty(freeze) ? null : freeze,
+                    Reset = string.IsNullOrEmpty(reset) ? null : reset,
+                    CumAndCollapse = string.IsNullOrEmpty(cum) ? null : cum,
+                    AutonomyOn = string.IsNullOrEmpty(auto) ? null : auto,
+                };
+            }
+
+            // Messages
+            var af = GetTextBoxValue(_txtAttentionFail);
+            var am = GetTextBoxValue(_txtAttentionMercy);
+            var br = GetTextBoxValue(_txtBubbleRetry);
+            if (!string.IsNullOrEmpty(af) || !string.IsNullOrEmpty(am) || !string.IsNullOrEmpty(br))
+            {
+                manifest.Messages = new ModMessages
+                {
+                    AttentionCheckFail = string.IsNullOrEmpty(af) ? null : af,
+                    AttentionCheckMercy = string.IsNullOrEmpty(am) ? null : am,
+                    BubbleCountRetry = string.IsNullOrEmpty(br) ? null : br,
+                };
+            }
+
+            // Phrases — include all categories that have content
+            var phrases = new Dictionary<string, string[]>();
+            foreach (var (cat, list) in _phraseData)
+            {
+                var filtered = list.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+                if (filtered.Length > 0)
+                    phrases[cat] = filtered;
+            }
+            if (phrases.Count > 0)
+                manifest.Phrases = phrases;
+
+            // Text Replacements
+            var replacements = new Dictionary<string, string>();
+            foreach (var (fromBox, toBox) in _textReplacements)
+            {
+                var from = (fromBox.Text ?? "").Trim();
+                var to = (toBox.Text ?? "").Trim();
+                if (!string.IsNullOrEmpty(from) && !replacements.ContainsKey(from))
+                    replacements[from] = to;
+            }
+            if (replacements.Count > 0)
+                manifest.TextReplacements = replacements;
+
+            // Browser
+            var browserUrl = GetTextBoxValue(_txtBrowserUrl);
+            var siteName = GetTextBoxValue(_txtBrowserSiteName);
+            var showBambi = _chkShowBambiCloud?.IsChecked;
+            var vidLinks = new Dictionary<string, string>();
+            foreach (var (nameBox, urlBox) in _videoLinks)
+            {
+                var vName = (nameBox.Text ?? "").Trim();
+                var vUrl = (urlBox.Text ?? "").Trim();
+                if (!string.IsNullOrEmpty(vName) && !string.IsNullOrEmpty(vUrl) && !vidLinks.ContainsKey(vName))
+                    vidLinks[vName] = vUrl;
+            }
+            if (!string.IsNullOrEmpty(browserUrl) || !string.IsNullOrEmpty(siteName)
+                || showBambi == false || vidLinks.Count > 0)
+            {
+                manifest.Browser = new ModBrowser
+                {
+                    DefaultUrl = string.IsNullOrEmpty(browserUrl) ? null : browserUrl,
+                    SiteName = string.IsNullOrEmpty(siteName) ? null : siteName,
+                    ShowBambiCloudOption = showBambi == false ? false : null,
+                    DefaultVideoLinks = vidLinks.Count > 0 ? vidLinks : null,
+                };
+            }
+
+            // Supported avatar sets — only write if some are unchecked
+            var enabledSets = _avatarSetCheckboxes
+                .Where(kv => kv.Value.IsChecked == true)
+                .Select(kv => kv.Key)
+                .OrderBy(x => x)
+                .ToList();
+            // Also include custom set numbers
+            foreach (var cs in _customAvatarSets)
+                enabledSets.Add(cs.SetNum);
+            if (enabledSets.Count < _avatarSetCheckboxes.Count + _customAvatarSets.Count || _customAvatarSets.Count > 0)
+                manifest.SupportedAvatarSets = enabledSets.Distinct().OrderBy(x => x).ToList();
+
+            // Custom avatar sets
+            if (_customAvatarSets.Count > 0)
+            {
+                manifest.CustomAvatarSets = _customAvatarSets.Select(cs => new CustomAvatarSet
+                {
+                    SetNumber = cs.SetNum,
+                    Label = (cs.LabelBox.Text ?? "").Trim(),
+                    UnlockLevel = int.TryParse((cs.LevelBox.Text ?? "").Trim(), out var lv) ? lv : 200
+                }).ToList();
+            }
+
+            // Manifest sections owned by the panel partials.
+            ApplyPanelSectionsToManifest(manifest);
+
+            return manifest;
+        }
 
         // ─── Export ──────────────────────────────────────────────
-        private void BtnExport_Click()
+        private async void BtnExport_Click()
         {
-            // ponytail: needs ModManifest + ModPackage/ModService (zip the resources tree into a
-            // .ccpmod, validate name/author, write mod.json), wired when they move to Core.
-            _txtStatus.Text = "Export needs the mod services, which are still in the WPF head.";
+            // Validate required fields
+            var name = GetTextBoxValue(_txtModName);
+            var author = GetTextBoxValue(_txtAuthor);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("title_validation_error"), Loc.Get("msg_mod_name_is_required"));
+                NavigateToSection("info");
+                _txtModName?.Focus();
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(author))
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("title_validation_error"), Loc.Get("msg_author_is_required"));
+                NavigateToSection("info");
+                _txtAuthor?.Focus();
+                return;
+            }
+
+            var manifest = BuildManifestFromForm();
+
+            var target = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export Mod Package",
+                SuggestedFileName = $"{manifest.Id}.ccpmod",
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("CCP Mod Files") { Patterns = new[] { "*.ccpmod" } },
+                },
+            });
+            var savePath = target?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(savePath)) return;
+
+            try
+            {
+                var tempDir = Path.Combine(Path.GetTempPath(), $"ccpmod_export_{Guid.NewGuid():N}");
+                Directory.CreateDirectory(tempDir);
+                var resourcesDir = Path.Combine(tempDir, "resources");
+                Directory.CreateDirectory(resourcesDir);
+
+                // Write manifest
+                var json = JsonConvert.SerializeObject(manifest, Formatting.Indented, new JsonSerializerSettings
+                {
+                    NullValueHandling = NullValueHandling.Ignore
+                });
+                File.WriteAllText(Path.Combine(tempDir, "mod.json"), json);
+
+                // Copy filled image slots, then filled audio slots
+                foreach (var (key, filePath) in _imageSlots)
+                    if (filePath != null) CopyIntoResources(resourcesDir, key, filePath);
+                foreach (var (key, audioPath) in _audioSlots)
+                    if (audioPath != null) CopyIntoResources(resourcesDir, key, audioPath);
+
+                // Copy voice line files
+                if (_voiceLines.Count > 0)
+                {
+                    var voiceDir = Path.Combine(resourcesDir, "sounds", "flashes_audio");
+                    Directory.CreateDirectory(voiceDir);
+                    foreach (var (srcPath, _) in _voiceLines)
+                    {
+                        if (!File.Exists(srcPath)) continue;
+                        File.Copy(srcPath, Path.Combine(voiceDir, Path.GetFileName(srcPath)), overwrite: true);
+                    }
+                }
+
+                // Barks / mantras / event audio / portraits / emotes.
+                WriteSideFilesTo(resourcesDir);
+
+                // Create ZIP
+                if (File.Exists(savePath)) File.Delete(savePath!);
+                ZipFile.CreateFromDirectory(tempDir, savePath!);
+
+                // Cleanup temp
+                try { Directory.Delete(tempDir, recursive: true); } catch { }
+
+                _txtStatus.Text = Loc.GetF("mod_exported_filename", Path.GetFileName(savePath!));
+                await MessageDialog.ShowAsync(this, Loc.Get("title_export_complete"),
+                    Loc.GetF("msg_mod_exported_successfully", savePath!));
+            }
+            catch (Exception ex)
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("title_export_error"), Loc.GetF("msg_export_failed", ex.Message));
+            }
+        }
+
+        private static void CopyIntoResources(string resourcesDir, string resourceKey, string sourcePath)
+        {
+            var destPath = Path.Combine(resourcesDir, resourceKey.Replace('/', Path.DirectorySeparatorChar));
+            var destDir = Path.GetDirectoryName(destPath);
+            if (destDir != null) Directory.CreateDirectory(destDir);
+            File.Copy(sourcePath, destPath, overwrite: true);
         }
 
         // ─── Load ────────────────────────────────────────────────
-        private void BtnLoad_Click()
+        private async void BtnLoad_Click()
         {
-            // ponytail: needs ModManifest + the .ccpmod extractor, wired when they move to Core.
-            // The WPF version unzips into a temp dir, reads mod.json, calls PopulateFromManifest
-            // and then refills the image/audio slots and the panel partials from resources/.
-            _txtStatus.Text = "Load needs the mod services, which are still in the WPF head.";
+            var picked = await PickFilesAsync("Load Mod Package", new[] { "*.ccpmod" }, multiple: false);
+            if (picked.Count == 0) return;
+
+            try
+            {
+                CleanupTempDir();
+                _loadedTempDir = Path.Combine(Path.GetTempPath(), $"ccpmod_load_{Guid.NewGuid():N}");
+                ZipFile.ExtractToDirectory(picked[0], _loadedTempDir);
+
+                var manifestPath = Path.Combine(_loadedTempDir, "mod.json");
+                if (!File.Exists(manifestPath))
+                {
+                    await MessageDialog.ShowAsync(this, Loc.Get("title_load_error"),
+                        Loc.Get("msg_invalid_mod_package_mod_json_not_found"));
+                    CleanupTempDir();
+                    return;
+                }
+
+                var manifest = JsonConvert.DeserializeObject<ModManifest>(File.ReadAllText(manifestPath));
+                if (manifest == null)
+                {
+                    await MessageDialog.ShowAsync(this, Loc.Get("title_load_error"), Loc.Get("msg_failed_to_parse_mod_json"));
+                    CleanupTempDir();
+                    return;
+                }
+
+                // Clear all image slots first
+                foreach (var key in _imageSlots.Keys.ToList())
+                    ClearImageSlot(key);
+                ClearSideFileState();
+
+                PopulateFromManifest(manifest);
+                LoadResourcesFrom(Path.Combine(_loadedTempDir, "resources"));
+
+                NavigateToSection("info");
+                _txtStatus.Text = Loc.GetF("mod_loaded", manifest.Name);
+            }
+            catch (Exception ex)
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("title_load_error"), Loc.GetF("msg_load_failed", ex.Message));
+            }
         }
 
         // ─── Reset ───────────────────────────────────────────────
-        private void BtnReset_Click()
+        private async void BtnReset_Click()
         {
-            // ponytail: needs a confirmation MessageBox. WPF asked
-            // Loc.Get("msg_reset_all_fields_to_defaults_this_cannot_be_u") first; Avalonia has no
-            // MessageBox and no package may be added here, so the reset runs unprompted.
+            var confirmed = await MessageDialog.ConfirmAsync(this, Loc.Get("title_confirm_reset"),
+                Loc.Get("msg_reset_all_fields_to_defaults_this_cannot_be_u"));
+            if (!confirmed) return;
 
             // Clear all fields
             SetTextBoxValue(_txtModName, "");
@@ -2107,9 +2656,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return new SolidColorBrush(Colors.HotPink);
         }
 
+        /// <summary>Where the last loaded .ccpmod was unzipped, so the window can delete it on
+        /// the next load and on close.</summary>
+        private string? _loadedTempDir;
+
         private void CleanupTempDir()
         {
-            // ponytail: needs the .ccpmod extractor (BtnLoad_Click) to have made a temp dir first.
+            if (string.IsNullOrEmpty(_loadedTempDir)) return;
+            try { if (Directory.Exists(_loadedTempDir)) Directory.Delete(_loadedTempDir, recursive: true); } catch { }
+            _loadedTempDir = null;
         }
     }
 }
