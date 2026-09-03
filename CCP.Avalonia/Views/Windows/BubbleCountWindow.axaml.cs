@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -63,12 +64,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// through CoreWebView2 (the shared environment, InitAsync, Post, the WebMessage pump,
     /// ProcessFailed) is a ponytail stub; the wrapper exposes none of it yet.</para>
     ///
+    /// <para><b>Wired:</b> the pop sound (<c>CoreAudio.PlayOneShot</c> at the WPF
+    /// <c>(master * bubbles) ^ 1.5</c> volume), the monitor set (<c>DualMonitorEnabled</c> from
+    /// <c>CoreSettings</c>, screens from <c>ScreenList.Enumerate</c>) and the result window, so a
+    /// finished game asks for the count and resolves on the answer instead of being written off.</para>
+    ///
     /// <para><b>Stubbed, all service-shaped:</b> the whole LibVLC path (VideoService lease,
     /// CreateManagedPlayer/ReleaseManagedPlayer, the wedge watchdog, the native poison cooldown,
     /// the bounded pumped Stop() batch, VideoView attach/detach and every message-pump wait that
     /// only existed to keep HwndHost teardown safe), BrowserVideoEngine/BrowserVideoGate,
-    /// ModResourceResolver, App.Audio, App.Achievements, App.Settings, VideoDiag and
-    /// BubbleCountResultWindow. Each is marked at its site.</para>
+    /// ModResourceResolver, App.Achievements and VideoDiag. Each is marked at its site.</para>
     ///
     /// <para><c>Loaded</c> became <c>Opened</c>: WPF's Loaded fires synchronously inside Show(),
     /// which ShowOnAllMonitors' completion de-duplication leans on, and Avalonia's Opened is the
@@ -283,13 +288,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // move, every game takes the browser path - which is the only one this head can host.
             _nextGameUsesBrowser = true;
 
-            // ponytail: needs App.Settings.DualMonitorEnabled to decide one screen or all of them.
-            // Primary only until the settings service moves to Core.
+            // One screen or all of them, per the user's setting - the same question
+            // BubbleCountResultWindow.ShowOnAllMonitors asks, answered from the same place.
+            //
+            // Avalonia has no screen list without a TopLevel, so the primary is built first and its
+            // Screens is what the set is drawn from; WPF read App.GetAllScreensCached() up front.
+            // An empty enumeration (headless, or no platform impl yet) is the single-screen path,
+            // NOT WPF's onComplete(false): here empty means "no topology reported", not "no display".
             try
             {
                 var primaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, complete, null, true);
                 primaryWindow.Show();
                 primaryWindow.WindowState = WindowState.Maximized;
+
+                if (CoreSettings.Current.DualMonitorEnabled)
+                {
+                    var all = Features.ScreenList.Enumerate(primaryWindow);
+                    // Drawn from the SAME list the loop filters, never from primaryWindow._screen:
+                    // that came from Screens?.Primary in the ctor and Screen does not promise
+                    // reference equality across reads, so a mismatch would open a second fullscreen
+                    // game on the primary display.
+                    var primary = all.FirstOrDefault(s => s.IsPrimary) ?? all.FirstOrDefault();
+                    foreach (var screen in all.Where(s => s != primary))
+                    {
+                        var secondary = new BubbleCountWindow(videoPath, difficulty, strictMode, complete, screen, false);
+                        secondary.Show();
+                        secondary.WindowState = WindowState.Maximized;
+                    }
+                }
+
+                // Activate the primary LAST so it owns the keyboard, exactly as WPF does.
                 // ForceTopmost's SetWindowPos(HWND_TOPMOST) is gone: Topmost="True" in the XAML is
                 // the same thing, applied by the platform rather than after the fact.
                 primaryWindow.Activate();
@@ -654,11 +682,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        /// <summary>
+        /// One of the three pop samples, at (master * bubbles) ^ 1.5 - the WPF formula verbatim.
+        /// Unseeded CoreAudio is a no-op that still returns, so a head with no audio backend just
+        /// pops silently rather than stalling the animation tick that calls this.
+        /// </summary>
         private void PlayPopSound()
         {
-            // ponytail: needs App.Audio.PlayOneShot plus App.Settings' MasterVolume/BubblesVolume.
-            // The original picked one of Resources/sounds/bubbles/Pop{,2,3}.mp3 at random and
-            // played it at (master * bubbles) ^ 1.5. Silent until the audio service moves to Core.
+            var soundIndex = _random.Next(3);
+            var masterVolume = CoreSettings.Current.MasterVolume / 100f;
+            var bubblesVolume = CoreSettings.Current.BubblesVolume / 100f;
+
+            try
+            {
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+                var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
+                var popPath = Path.Combine(soundsPath, popFiles[soundIndex]);
+
+                var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+                CoreAudio.PlayOneShot(popPath, volume, "bubblecount-pop");
+            }
+            catch { }
         }
 
         private void OnVideoEnded()
@@ -703,18 +747,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        /// <summary>
+        /// Hide the game and ask for the count. Verbatim WPF: the game windows are HIDDEN, not
+        /// closed, so the result window's own multi-monitor set can be torn down independently and
+        /// its answer still resolves this game through the shared completion callback.
+        /// </summary>
         private void ShowResultWindow()
         {
-            // ponytail: needs BubbleCountResultWindow, which is NOT ported yet (no
-            // CCP.Avalonia/Views/Windows/BubbleCountResultWindow.axaml on this base). The original
-            // hid every game window and handed _sharedBubbleCount to that window, which asked for
-            // the user's count and resolved the game.
-            //
-            // Deliberately NOT "hide the windows and wait": with no result window to show, that
-            // leaves an invisible, un-closeable, strict-locked game hanging forever. Resolve it as
-            // an unsuccessful game instead, which is the same outcome an ESC skip produces.
-            _gameCompleted = true;
-            CloseAllWindows(false);
+            foreach (var window in _allWindows.ToList())
+            {
+                try { window.Hide(); } catch { }
+            }
+
+            BubbleCountResultWindow.ShowOnAllMonitors(
+                _sharedBubbleCount,
+                _strictMode,
+                success =>
+                {
+                    _gameCompleted = true;
+                    CloseAllWindows(success);
+                });
         }
 
         private void OnKeyDown(object? sender, KeyEventArgs e)
