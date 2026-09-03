@@ -1,9 +1,26 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.AssetsFx.cs (226 lines).
+// PORTED-AS-A-NOTE from ConditioningControlPanel/MainWindow/MainWindow.AssetsFx.cs (226 lines).
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// Nothing is wired here, and unlike the two tabs this batch DID turn on, the reason is not a
+// missing service - the Assets tab has no AmbientFxCanvas at all, in WPF or here. All three of
+// its effects are interaction motion on controls, and each is blocked on something concrete:
+//
+//   * the pack-card sheen (CardSheenAdorner over the hovered card). WPF hangs it off an
+//     AdornerLayer with a FrameworkElement host. There is no CardSheenAdorner on this head - it
+//     was never ported, and it is a control, so it belongs to a controls layer, not to a
+//     MainShellWindow partial. Avalonia does have an AdornerLayer, so this is a port and not a
+//     reimplementation, but it is somebody else's file.
+//   * the asset-tree row nudge (AssetTreeRowNudgePx over AssetTreeRowNudgeMs on hover). The
+//     target exists - AssetsTabView.axaml:518, TreeView x:Name="AssetTreeView" - but the hover
+//     handler belongs to the row template inside AssetsTabView, which this layer does not own.
+//   * the media-log pulse (MediaLogPulseBeats beats down to MediaLogPulseFloor when the log has
+//     unseen entries). The button exists (AssetsTabView.axaml:138, x:Name="BtnMediaLog") and the
+//     motion is a plain opacity Animation - but "unseen" is _mediaLogSeenCount against the media
+//     log service, which is still in the WPF head, and pulsing on a count this head cannot read
+//     would be decoration lying about state.
+//
+// None of the three is a storyboard-only effect: all three have real Avalonia equivalents
+// (Animation over OpacityProperty / a TranslateTransform, and AdornerLayer for the sheen). They
+// are blocked on ownership and on the media-log service, not on the framework.
 //
 // Members dropped (18):
 //   private const double AssetTreeRowNudgePx
