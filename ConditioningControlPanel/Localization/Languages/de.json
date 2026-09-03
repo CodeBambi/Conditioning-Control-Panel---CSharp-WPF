@@ -4946,5 +4946,13 @@
   "label_gaze_interaction": "Blick-Interaktion",
   "label_stare_to_pop": "Ansehen zum Platzen",
   "tooltip_bubble_gaze_pop": "Sieh eine Blase etwa 1 Sekunde lang an, um sie ohne Klicken platzen zu lassen. Gilt nur für Blasen; Flashes haben ihren eigenen Schalter auf der Flash-Seite.",
-  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus."
+  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus.",
+  "tooltip_report_bug_titlebar": "Fehler melden (packt deine Logs für den Entwickler ein)",
+  "btn_bug_short": "Fehler",
+  "yl7_nav_mediasource": "Medienquellen",
+  "yl7_nav_mediasource_tip": "Woher deine Medien kommen: eigene Ordner, Reddit oder beides.",
+  "tooltip_media_source_own": "Nur die Bilder und Videos in deinem Assets-Ordner. Das ist auch der Schalter, der Web- und Reddit-Bilder in Flashes, Hintergrundbildern und im Feed abschaltet.",
+  "btn_open_whisper_folder": "🔊 Flüster-Audio-Ordner öffnen",
+  "tooltip_open_whisper_folder": "Öffnet den Ordner für deine Flüster-Clips. Dateien hier überstehen Updates.",
+  "label_whisper_folder_hint": "Eine Audiodatei pro Satz, exakt wie der Satz benannt. Bei good girl heißt der Clip good girl.mp3."
 }

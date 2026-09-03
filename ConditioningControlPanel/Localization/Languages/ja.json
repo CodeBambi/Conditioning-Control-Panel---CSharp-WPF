@@ -4937,5 +4937,13 @@
   "label_gaze_interaction": "視線操作",
   "label_stare_to_pop": "見つめて割る",
   "tooltip_bubble_gaze_pop": "バブルを約1秒見つめると、クリックせずに割れます。対象はバブルのみです。フラッシュにはフラッシュページに専用のスイッチがあります。",
-  "label_gaze_needs_calibration": "ウェブカメラの起動と視線追跡のキャリブレーションが必要です。Play のフォーカスゲイズで設定してください。"
+  "label_gaze_needs_calibration": "ウェブカメラの起動と視線追跡のキャリブレーションが必要です。Play のフォーカスゲイズで設定してください。",
+  "tooltip_report_bug_titlebar": "バグを報告（開発者向けにログをまとめます）",
+  "btn_bug_short": "バグ",
+  "yl7_nav_mediasource": "メディアの取得元",
+  "yl7_nav_mediasource_tip": "メディアがどこから来るか：自分のフォルダ、Reddit、またはその両方。",
+  "tooltip_media_source_own": "アセットフォルダの画像と動画だけを使います。これはフラッシュ、壁紙、フィードでのウェブと Reddit の画像をオフにするスイッチでもあります。",
+  "btn_open_whisper_folder": "🔊 ささやき音声フォルダを開く",
+  "tooltip_open_whisper_folder": "ささやきクリップを入れるフォルダを開きます。ここのファイルは更新後も残ります。",
+  "label_whisper_folder_hint": "フレーズ1つにつき音声ファイル1つ、フレーズとまったく同じ名前にします。good girl なら good girl.mp3 です。"
 }

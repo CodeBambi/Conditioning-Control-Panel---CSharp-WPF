@@ -2259,7 +2259,9 @@ namespace ConditioningControlPanel
             }
 
             Add(MediaSrcLocal, "label_media_source_own", "My own assets",
-                "tooltip_media_source_own", "Only the images and videos in your assets folder.");
+                "tooltip_media_source_own",
+                "Only the images and videos in your assets folder. This is also the switch that turns "
+                + "web and Reddit images off in flashes, wallpapers and the feed.");
             Add(MediaSrcOnline, "label_media_source_online", "Reddit",
                 "tooltip_media_source_online", "Stream everything from the subreddits you pick. Nothing is saved to your disk.");
             Add(MediaSrcMixed, "label_media_source_both", "Both",

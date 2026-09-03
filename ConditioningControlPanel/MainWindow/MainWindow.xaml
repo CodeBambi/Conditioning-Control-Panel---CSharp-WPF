@@ -471,9 +471,21 @@
 
                 <!-- Window Control Buttons -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Button x:Name="BtnTitleBarBugReport" Content="🐛" Width="46" Height="36"
+                    <!-- The content used to be a bare 🐛, which draws as a caterpillar and got
+                         described in #ask-support (2026-08-25) as "an s shaped icon, looks a bit
+                         like a worm" - one user could not find how to file a bug at all and a
+                         moderator had to talk him to it. Ladybug glyph plus the word, so the
+                         button says what it is without a hover. Same style, same handler, same
+                         place in the row: only the label and the tooltip changed. -->
+                    <Button x:Name="BtnTitleBarBugReport" Width="74" Height="36"
                             Click="BtnReportBug_Click" Style="{StaticResource WindowControlButton}"
-                            ToolTip="{loc:Str btn_report_bug}" FontSize="14"/>
+                            ToolTip="{loc:Str tooltip_report_bug_titlebar}" FontSize="12">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='🐞', Converter={StaticResource EmojiToImageSource}}"/>
+                            <TextBlock Text="{loc:Str btn_bug_short}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
                             Click="BtnMinimize_Click" Style="{StaticResource WindowControlButton}"/>
                     <Button x:Name="BtnMaximize" Content="☐" Width="46" Height="36" 
@@ -1266,6 +1278,24 @@
                                      Deliberately NOT duplicated here: the Mod Catalogue browser
                                      (a button inside ModManagerDialog) and Session History (a
                                      Studio/Presets surface). -->
+                                <!-- "Where your media comes from" lived ONLY on the Assets page, and
+                                     the page is reached by clicking the Library door header - not by
+                                     any row under it. Three people in #ask-support (2026-08-25:
+                                     RaleighMac8, beebee, Mmmmbawk) could not find where to turn
+                                     Reddit images off, and RaleighMac8 ended up writing the
+                                     directions himself: "You have to click on Library, not one of
+                                     the dropdowns on the sub menu". So the sub menu gets a row that
+                                     lands on the panel. Not a launcher and not a tab of its own: it
+                                     opens the Assets page and scrolls the panel into view, so the
+                                     old route still works exactly as before. -->
+                                <Button x:Name="BtnNavMediaSource" Tag="MediaSource" Style="{StaticResource NavEntryButton}"
+                                        Click="BtnNavMediaSource_Click" ToolTip="{loc:Str yl7_nav_mediasource_tip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='📡', Converter={StaticResource EmojiToImageSource}}"/>
+                                        <TextBlock Text="{loc:Str yl7_nav_mediasource}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                                 <Button x:Name="BtnNavMods" Tag="Mods" Style="{StaticResource NavEntryButton}"
                                         Click="BtnManageMods_Click" ToolTip="{loc:Str yl7_nav_mods_tip}">
                                     <StackPanel Orientation="Horizontal">

@@ -4944,5 +4944,13 @@
   "label_gaze_interaction": "시선 조작",
   "label_stare_to_pop": "응시해서 터뜨리기",
   "tooltip_bubble_gaze_pop": "버블을 약 1초간 바라보면 클릭하지 않아도 터집니다. 버블에만 적용되며, 플래시는 플래시 페이지에 별도 스위치가 있습니다.",
-  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요."
+  "label_gaze_needs_calibration": "웹캠 실행과 시선 추적 보정이 필요합니다. Play의 포커스 게이즈에서 설정하세요.",
+  "tooltip_report_bug_titlebar": "버그 신고 (개발자에게 보낼 로그를 함께 담습니다)",
+  "btn_bug_short": "버그",
+  "yl7_nav_mediasource": "미디어 출처",
+  "yl7_nav_mediasource_tip": "미디어가 어디서 오는지: 내 폴더, Reddit, 또는 둘 다.",
+  "tooltip_media_source_own": "assets 폴더에 있는 이미지와 영상만 씁니다. 플래시, 배경화면, 피드에서 웹과 Reddit 이미지를 끄는 스위치이기도 합니다.",
+  "btn_open_whisper_folder": "🔊 속삭임 오디오 폴더 열기",
+  "tooltip_open_whisper_folder": "속삭임 클립을 넣는 폴더를 엽니다. 여기 있는 파일은 업데이트 후에도 남습니다.",
+  "label_whisper_folder_hint": "문구 하나당 오디오 파일 하나, 문구와 똑같은 이름으로. good girl이면 파일은 good girl.mp3입니다."
 }

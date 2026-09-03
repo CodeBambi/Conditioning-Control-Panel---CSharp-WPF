@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -203,6 +204,27 @@ namespace ConditioningControlPanel.Features
                 s.SubliminalPool = dialog.ResultData;
                 App.Settings?.Save();
                 App.Logger?.Information("Subliminal pool updated: {Count} items", dialog.ResultData.Count);
+            }
+        }
+
+        /// <summary>
+        /// Opens the folder a user's own whisper clips go in, creating it first: the button is
+        /// worth nothing if it opens nothing, and on a fresh install nobody has put a file there
+        /// yet. Points at the assets-folder copy rather than <c>Resources/sub_audio</c> beside the
+        /// exe - both are searched at playback time, but only this one survives an update and only
+        /// this one is writable when the app is installed under Program Files.
+        /// </summary>
+        private void BtnWhisperFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var folder = App.UserWhisperAudioPath;
+                Directory.CreateDirectory(folder);
+                Helpers.ExplorerLauncher.OpenFolder(folder);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Could not open the whisper audio folder");
             }
         }
 

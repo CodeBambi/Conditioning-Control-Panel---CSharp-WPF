@@ -4946,5 +4946,13 @@
   "label_gaze_interaction": "Interaction par le regard",
   "label_stare_to_pop": "Fixer pour éclater",
   "tooltip_bubble_gaze_pop": "Regardez une bulle pendant environ 1 seconde pour la faire éclater, sans cliquer. Ne concerne que les bulles ; les flashs ont leur propre interrupteur sur la page Flashes.",
-  "label_gaze_needs_calibration": "Nécessite la webcam active et le suivi oculaire calibré. Configurez-le dans Play, Regard Focalisé."
+  "label_gaze_needs_calibration": "Nécessite la webcam active et le suivi oculaire calibré. Configurez-le dans Play, Regard Focalisé.",
+  "tooltip_report_bug_titlebar": "Signaler un bug (prépare tes journaux pour le développeur)",
+  "btn_bug_short": "Bug",
+  "yl7_nav_mediasource": "Sources de médias",
+  "yl7_nav_mediasource_tip": "D'où viennent tes médias : tes propres dossiers, Reddit, ou les deux.",
+  "tooltip_media_source_own": "Uniquement les images et vidéos de ton dossier assets. C'est aussi l'interrupteur qui coupe les images du web et de Reddit dans les flashes, les fonds d'écran et le fil.",
+  "btn_open_whisper_folder": "🔊 Ouvrir le dossier audio des chuchotements",
+  "tooltip_open_whisper_folder": "Ouvre le dossier où vont tes clips de chuchotement. Les fichiers déposés ici survivent aux mises à jour.",
+  "label_whisper_folder_hint": "Un fichier audio par phrase, nommé exactement comme la phrase. Pour good girl, le clip est good girl.mp3."
 }
