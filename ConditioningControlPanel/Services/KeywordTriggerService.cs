@@ -1845,45 +1845,11 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Rebuild the <see cref="KeywordTrigger.Actions"/> list from the legacy flat
-        /// fields. Used by migration on load and by the Exclusives editor on save so
-        /// users editing the flat-field UI stay compatible with the dispatcher loop.
+        /// Rebuild the <see cref="KeywordTrigger.Actions"/> list from the legacy flat fields.
+        /// The rule lives on the model in Core now (SettingsService needs it there for the
+        /// on-load migration); this stays for the editor and every other caller in the head.
         /// </summary>
-        public static void RebuildActionsFromFlatFields(KeywordTrigger trigger)
-        {
-            if (trigger == null) return;
-
-            var list = new List<KeywordAction>();
-
-            if (!string.IsNullOrEmpty(trigger.AudioFilePath))
-            {
-                list.Add(new PlayAudioAction
-                {
-                    FilePath = trigger.AudioFilePath,
-                    Volume = trigger.AudioVolume,
-                    PlayCount = trigger.AudioPlayCount,
-                    DelayBetweenMs = trigger.AudioDelayBetweenMs,
-                    DuckSystemAudio = trigger.DuckAudio,
-                });
-            }
-
-            if (trigger.VisualEffect != KeywordVisualEffect.None &&
-                trigger.VisualEffect != KeywordVisualEffect.HighlightOnly)
-            {
-                list.Add(new VisualEffectAction { Effect = trigger.VisualEffect });
-            }
-
-            // Always include Highlight — it self-guards on matchedWords != null & global setting.
-            list.Add(new HighlightAction());
-
-            if (trigger.HapticEnabled)
-                list.Add(new HapticAction { Intensity = trigger.HapticIntensity });
-
-            if (trigger.XPAward > 0)
-                list.Add(new AddXpAction { Amount = trigger.XPAward });
-
-            trigger.Actions = list;
-        }
+        public static void RebuildActionsFromFlatFields(KeywordTrigger trigger) => trigger?.RebuildActionsFromFlatFields();
 
         private void FireVisualEffect(KeywordVisualEffect effect, KeywordTrigger trigger)
         {

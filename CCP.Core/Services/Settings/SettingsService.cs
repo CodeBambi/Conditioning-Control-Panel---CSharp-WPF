@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
+using Serilog;
 using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
@@ -102,7 +103,7 @@ namespace ConditioningControlPanel.Services
         public SettingsService()
         {
             // Store settings in user data folder (persists across updates)
-            _settingsPath = Path.Combine(App.UserDataPath, "settings.json");
+            _settingsPath = Path.Combine(CorePaths.UserData, "settings.json");
 
             // Migrate settings from old location if needed
             MigrateSettingsFromOldLocation();
@@ -132,12 +133,12 @@ namespace ConditioningControlPanel.Services
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
                     File.Copy(oldSettingsPath, _settingsPath);
-                    App.Logger?.Information("Migrated settings from {Old} to {New}", oldSettingsPath, _settingsPath);
+                    Log.Information("Migrated settings from {Old} to {New}", oldSettingsPath, _settingsPath);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("Failed to migrate settings: {Error}", ex.Message);
+                Log.Warning("Failed to migrate settings: {Error}", ex.Message);
             }
         }
 
@@ -172,7 +173,7 @@ namespace ConditioningControlPanel.Services
                         {
                             var path = args.ErrorContext.Path;
                             badMembers.Add(path);
-                            App.Logger?.Warning(
+                            Log.Warning(
                                 "Skipping unparseable settings member '{Path}' (kept the rest): {Error}",
                                 path, args.ErrorContext.Error.Message);
                             args.ErrorContext.Handled = true;
@@ -183,10 +184,10 @@ namespace ConditioningControlPanel.Services
                     if (settings != null)
                     {
                         if (badMembers.Count > 0)
-                            App.Logger?.Warning(
+                            Log.Warning(
                                 "Settings loaded with {Count} skipped member(s); the rest were preserved: {Members}",
                                 badMembers.Count, string.Join(", ", badMembers.Distinct()));
-                        App.Logger?.Information("Settings loaded from {Path} (Triggers: {TriggerCount})",
+                        Log.Information("Settings loaded from {Path} (Triggers: {TriggerCount})",
                             _settingsPath, settings.CustomTriggers?.Count ?? 0);
                         // NOTE: Don't validate level-locked features here - cloud sync hasn't happened yet.
                         // The cloud level may be higher than the local level, and we don't want to
@@ -245,7 +246,7 @@ namespace ConditioningControlPanel.Services
                 // (e.g. truncated/malformed JSON, or a top-level structural error). Do NOT let the
                 // fresh defaults below get silently written over it — preserve the original so the
                 // user's phrases/pools stay recoverable instead of being lost forever.
-                App.Logger?.Error(ex, "Could not load settings — preserving the unparseable file");
+                Log.Error(ex, "Could not load settings — preserving the unparseable file");
                 PreserveCorruptSettingsFile();
             }
 
@@ -253,7 +254,7 @@ namespace ConditioningControlPanel.Services
             // (not because it was missing) — preserve it before defaults overwrite it on next save.
             if (File.Exists(_settingsPath) && !WasSettingsFileCorrupt)
             {
-                App.Logger?.Error("Settings file present but did not load — preserving it before applying defaults");
+                Log.Error("Settings file present but did not load — preserving it before applying defaults");
                 PreserveCorruptSettingsFile();
             }
 
@@ -267,7 +268,7 @@ namespace ConditioningControlPanel.Services
 
             if (!WasSettingsFileCorrupt)
                 WasSettingsFileMissing = true;
-            App.Logger?.Information("Using default settings ({Reason})",
+            Log.Information("Using default settings ({Reason})",
                 WasSettingsFileCorrupt ? "previous file unparseable, preserved a backup" : "fresh install detected");
             var fresh = new AppSettings();
             MergeBuiltInAwarenessPresets(fresh);
@@ -299,11 +300,11 @@ namespace ConditioningControlPanel.Services
                         }
                         catch
                         {
-                            App.Logger?.Warning("Discarding partial settings temp file {Temp}", candidate);
+                            Log.Warning("Discarding partial settings temp file {Temp}", candidate);
                             continue;
                         }
 
-                        App.Logger?.Information("Recovering settings from interrupted save ({Temp})", candidate);
+                        Log.Information("Recovering settings from interrupted save ({Temp})", candidate);
                         File.Move(candidate, _settingsPath);
                         break;
                     }
@@ -317,7 +318,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("Settings temp-file recovery failed: {Error}", ex.Message);
+                Log.Warning("Settings temp-file recovery failed: {Error}", ex.Message);
             }
         }
 
@@ -359,12 +360,12 @@ namespace ConditioningControlPanel.Services
                     RestoredSeason = settings.CurrentSeason;
                     WriteRestoreMarker();
 
-                    App.Logger?.Warning("Settings RESTORED from daily backup {Backup} (main file was unparseable)", bakPath);
+                    Log.Warning("Settings RESTORED from daily backup {Backup} (main file was unparseable)", bakPath);
                     return settings;
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("Daily backup {Backup} also failed to load: {Error}", bakPath, ex.Message);
+                    Log.Warning("Daily backup {Backup} also failed to load: {Error}", bakPath, ex.Message);
                 }
             }
             return null;
@@ -382,7 +383,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Could not write settings restore marker: {Error}", ex.Message);
+                Log.Debug("Could not write settings restore marker: {Error}", ex.Message);
             }
         }
 
@@ -402,12 +403,12 @@ namespace ConditioningControlPanel.Services
                 RestoredBackupPath = parts.Length > 1 ? parts[1] : null;
                 RestoredSeason = parts.Length > 2 && !string.IsNullOrWhiteSpace(parts[2]) ? parts[2] : null;
 
-                App.Logger?.Warning("Settings were restored from daily backup {Backup} (season {Season}) on a previous run and have not been reconciled with the cloud profile yet",
+                Log.Warning("Settings were restored from daily backup {Backup} (season {Season}) on a previous run and have not been reconciled with the cloud profile yet",
                     RestoredBackupPath, RestoredSeason);
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Could not read settings restore marker: {Error}", ex.Message);
+                Log.Debug("Could not read settings restore marker: {Error}", ex.Message);
             }
         }
 
@@ -424,7 +425,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Could not clear settings restore marker: {Error}", ex.Message);
+                Log.Debug("Could not clear settings restore marker: {Error}", ex.Message);
             }
         }
 
@@ -445,12 +446,12 @@ namespace ConditioningControlPanel.Services
                 File.Move(_settingsPath, backupPath, overwrite: true);
                 LastCorruptBackupPath = backupPath;
                 WasSettingsFileCorrupt = true;
-                App.Logger?.Warning("Preserved unparseable settings to {Backup}", backupPath);
+                Log.Warning("Preserved unparseable settings to {Backup}", backupPath);
             }
             catch (Exception ex)
             {
                 // If we can't even rename it, leave it in place rather than deleting anything.
-                App.Logger?.Error(ex, "Failed to preserve unparseable settings file");
+                Log.Error(ex, "Failed to preserve unparseable settings file");
             }
         }
 
@@ -466,11 +467,16 @@ namespace ConditioningControlPanel.Services
                 var token = obj["auth_token"]?.ToString();
                 if (!string.IsNullOrEmpty(token))
                 {
+                    // Only on a head that HAS a secret store. Without one there is nothing to
+                    // migrate into, and the re-save below would strip the plaintext and lose the
+                    // token. The Linux head is in that state today (see CoreSecrets).
+                    if (!CoreSecrets.HasStore) return;
+
                     // Only migrate if encrypted store is empty (don't overwrite a newer token)
-                    if (string.IsNullOrEmpty(SecureAuthTokenStore.Retrieve()))
+                    if (string.IsNullOrEmpty(CoreSecrets.Retrieve(CoreSecrets.AuthToken)))
                     {
-                        SecureAuthTokenStore.Store(token);
-                        App.Logger?.Information("Migrated auth token from plaintext settings to DPAPI-encrypted storage");
+                        CoreSecrets.Store(CoreSecrets.AuthToken, token);
+                        Log.Information("Migrated auth token from plaintext settings to encrypted storage");
                     }
 
                     // Re-save settings to strip the plaintext auth_token from the JSON file
@@ -480,7 +486,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("Auth token migration failed: {Error}", ex.Message);
+                Log.Warning("Auth token migration failed: {Error}", ex.Message);
             }
         }
 
@@ -539,13 +545,13 @@ namespace ConditioningControlPanel.Services
                         p.Id?.StartsWith(phrasePrefix, StringComparison.Ordinal) == true);
 
                     settings.KeywordTriggerPresets.Remove(stored);
-                    App.Logger?.Information("MergeBuiltInAwarenessPresets: removed retired {Id}", RetiredTestLabId);
+                    Log.Information("MergeBuiltInAwarenessPresets: removed retired {Id}", RetiredTestLabId);
                 }
 
                 var dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "AwarenessPresets");
                 if (!Directory.Exists(dir))
                 {
-                    App.Logger?.Debug("MergeBuiltInAwarenessPresets: no directory at {Dir}", dir);
+                    Log.Debug("MergeBuiltInAwarenessPresets: no directory at {Dir}", dir);
                     return;
                 }
 
@@ -579,7 +585,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 if (t == null) continue;
                                 if (t.Actions == null || t.Actions.Count == 0)
-                                    KeywordTriggerService.RebuildActionsFromFlatFields(t);
+                                    t.RebuildActionsFromFlatFields();
                             }
                         }
 
@@ -592,18 +598,18 @@ namespace ConditioningControlPanel.Services
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning("Failed to load preset file {File}: {Error}", file, ex.Message);
+                        Log.Warning("Failed to load preset file {File}: {Error}", file, ex.Message);
                     }
                 }
 
                 if (added > 0 || upgraded > 0 || healed > 0)
-                    App.Logger?.Information(
+                    Log.Information(
                         "Awareness presets merged: {Added} added, {Upgraded} version-upgraded, {Healed} definition-healed",
                         added, upgraded, healed);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("MergeBuiltInAwarenessPresets failed: {Error}", ex.Message);
+                Log.Warning("MergeBuiltInAwarenessPresets failed: {Error}", ex.Message);
             }
         }
 
@@ -724,16 +730,16 @@ namespace ConditioningControlPanel.Services
                     if (trigger == null) continue;
                     if (trigger.Actions != null && trigger.Actions.Count > 0) continue;
 
-                    KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
+                    trigger.RebuildActionsFromFlatFields();
                     migrated++;
                 }
 
                 if (migrated > 0)
-                    App.Logger?.Information("Migrated {Count} keyword triggers to action-list model", migrated);
+                    Log.Information("Migrated {Count} keyword triggers to action-list model", migrated);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("Keyword trigger action migration failed: {Error}", ex.Message);
+                Log.Warning("Keyword trigger action migration failed: {Error}", ex.Message);
             }
         }
 
@@ -790,7 +796,7 @@ namespace ConditioningControlPanel.Services
                 _saveDebounceTimer?.Dispose();
                 _saveDebounceTimer = null;
             }
-            App.Logger?.Warning("Settings sealed for factory reset — every further save is a no-op");
+            Log.Warning("Settings sealed for factory reset — every further save is a no-op");
         }
 
         /// <summary>
@@ -801,7 +807,7 @@ namespace ConditioningControlPanel.Services
         public void UnsealAfterFailedReset()
         {
             _sealed = false;
-            App.Logger?.Warning("Settings unsealed — the factory reset did not complete");
+            Log.Warning("Settings unsealed — the factory reset did not complete");
         }
 
         /// <summary>
@@ -826,7 +832,7 @@ namespace ConditioningControlPanel.Services
                 // Debug-level: this fires every time settings change during normal play (XP
                 // ticks, achievement progress, etc.) and at Information level it floods
                 // bug-report activity logs with hundreds of identical lines per minute.
-                App.Logger?.Debug("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
+                Log.Debug("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
                     string.Join(", ", Current.ActivePackIds ?? new List<string>()));
 
                 // Serialized OUTSIDE _saveLock: the snapshot can hop to the UI thread, and holding
@@ -835,11 +841,17 @@ namespace ConditioningControlPanel.Services
                 var sequence = Interlocked.Increment(ref _saveSequence);
                 var json = SerializeCurrentSnapshot();
 
+                // The service owns its folder. The WPF head happens to create UserData at startup;
+                // a head that does not (the Linux one, the smoke runner) must still be able to
+                // save on a fresh profile, and the failure mode without this line was a caught
+                // DirectoryNotFoundException logged to a sink nobody was reading.
+                Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+
                 lock (_saveLock)
                 {
                     if (sequence < Interlocked.Read(ref _lastWrittenSaveSequence))
                     {
-                        App.Logger?.Debug("Settings save #{Sequence} dropped — a newer snapshot already reached disk", sequence);
+                        Log.Debug("Settings save #{Sequence} dropped — a newer snapshot already reached disk", sequence);
                         return;
                     }
 
@@ -876,14 +888,14 @@ namespace ConditioningControlPanel.Services
                     Interlocked.Exchange(ref _lastWrittenSaveSequence, sequence);
                 }
 
-                App.Logger?.Debug("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
+                Log.Debug("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
                     _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
 
                 // Auto-backup settings to cloud (fire-and-forget, debounced)
                 // suppressCloudBackup is used when auth token was just cleared (401 handler) to prevent
                 // a 401 → Save() → backup → 401 storm loop
                 // Uses Interlocked.CompareExchange for thread-safe gate (multiple async paths call Save concurrently)
-                if (!suppressCloudBackup && App.HasCloudIdentity && App.ProfileSync != null)
+                if (!suppressCloudBackup && CoreSettingsHooks.CloudBackup is { } cloudBackup)
                 {
                     var nowTicks = DateTime.UtcNow.Ticks;
                     var lastTicks = Interlocked.Read(ref _lastBackupAttemptTicks);
@@ -893,10 +905,10 @@ namespace ConditioningControlPanel.Services
                     {
                         _ = Task.Run(async () =>
                         {
-                            try { await App.ProfileSync.BackupSettingsAsync(); }
+                            try { await cloudBackup(); }
                             catch (Exception backupEx)
                             {
-                                App.Logger?.Debug("Auto settings backup failed: {Error}", backupEx.Message);
+                                Log.Debug("Auto settings backup failed: {Error}", backupEx.Message);
                             }
                         });
                     }
@@ -904,7 +916,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Could not save settings");
+                Log.Error(ex, "Could not save settings");
             }
         }
 
@@ -936,7 +948,7 @@ namespace ConditioningControlPanel.Services
 
                 // Bounded: a busy (or wedged) UI thread must never stall the save path. Drop this
                 // save rather than write a snapshot we could not take cleanly — the next one wins.
-                App.Logger?.Warning("Settings serialize could not reach the UI thread in time — skipping this save");
+                Log.Warning("Settings serialize could not reach the UI thread in time — skipping this save");
                 throw;
             }
         }
@@ -973,11 +985,11 @@ namespace ConditioningControlPanel.Services
                 // date check above re-rotates on the next save and burns a second slot.
                 try { File.SetLastWriteTime(bak1, DateTime.Now); } catch { }
                 _lastBackupRotationDate = DateTime.Now.Date;
-                App.Logger?.Information("Settings daily backup rotated: {Backup}", bak1);
+                Log.Information("Settings daily backup rotated: {Backup}", bak1);
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Settings backup rotation failed: {Error}", ex.Message);
+                Log.Debug("Settings backup rotation failed: {Error}", ex.Message);
             }
         }
 
@@ -990,15 +1002,15 @@ namespace ConditioningControlPanel.Services
             Current = settings ?? throw new ArgumentNullException(nameof(settings));
             // Notify listeners (ModService re-binds its per-mod pool sync + re-derives the
             // active pools) BEFORE we persist, so any backups they seed get written too.
-            try { CurrentReplaced?.Invoke(); } catch (Exception ex) { App.Logger?.Warning("CurrentReplaced handler failed: {Error}", ex.Message); }
+            try { CurrentReplaced?.Invoke(); } catch (Exception ex) { Log.Warning("CurrentReplaced handler failed: {Error}", ex.Message); }
             SaveImmediate();
-            App.Logger?.Information("Settings restored from external source");
+            Log.Information("Settings restored from external source");
         }
 
         public void Reset()
         {
             Current = new AppSettings();
-            try { CurrentReplaced?.Invoke(); } catch (Exception ex) { App.Logger?.Warning("CurrentReplaced handler failed: {Error}", ex.Message); }
+            try { CurrentReplaced?.Invoke(); } catch (Exception ex) { Log.Warning("CurrentReplaced handler failed: {Error}", ex.Message); }
             SaveImmediate();
         }
     }

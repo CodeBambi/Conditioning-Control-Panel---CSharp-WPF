@@ -278,6 +278,8 @@ namespace ConditioningControlPanel
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.CurrentProvider = () => Settings?.Current;
+            CoreSettingsHooks.CloudBackup = () =>
+                HasCloudIdentity && ProfileSync != null ? ProfileSync.BackupSettingsAsync() : Task.CompletedTask;
 
             // The settings model's outward hooks. Bark and the mod service attach later in
             // startup; the delegates read them lazily, so seeding here is order-safe.

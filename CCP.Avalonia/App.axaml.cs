@@ -2,11 +2,15 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia
 {
     public partial class App : Application
     {
+        /// <summary>The settings service, or null on the headless render path.</summary>
+        public static SettingsService? Settings { get; private set; }
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -33,7 +37,17 @@ namespace ConditioningControlPanel.Avalonia
             // does. The diagnostics window is still reachable, from Settings, and RenderProof
             // still hosts single views inside it - neither depends on it being the startup window.
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                // Real settings on this head: SettingsService now lives in Core and reads and
+                // writes settings.json under CorePaths.UserData (~/.local/share on Linux), with
+                // the same migrations, backups and recovery the Windows app has. Seeded here and
+                // not in Initialize() on purpose: the headless render path never reaches this
+                // callback, so a CI render cannot touch a user's profile. Unseeded, Core hands
+                // out one default instance, which is what the renders bind against.
+                Settings = new SettingsService();
+                CoreSettings.CurrentProvider = () => Settings?.Current;
                 desktop.MainWindow = new Views.Windows.MainShellWindow();
+            }
             base.OnFrameworkInitializationCompleted();
         }
     }

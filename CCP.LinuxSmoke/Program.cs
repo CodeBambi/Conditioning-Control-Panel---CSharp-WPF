@@ -37,7 +37,13 @@ namespace ConditioningControlPanel.LinuxSmoke
             Console.WriteLine($"CCP.Core smoke on {Environment.OSVersion.Platform} / {System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}");
             Console.WriteLine($".NET {Environment.Version}\n");
 
+            // Sandbox the user-data tree BEFORE anything touches CorePaths (it resolves once, at
+            // type init). Ends with the app folder so the Paths() checks below still describe it.
+            var sandbox = Path.Combine(Path.GetTempPath(), $"ccp-smoke-{Environment.ProcessId}", "ConditioningControlPanel");
+            Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", sandbox);
+
             Paths();
+            Settings();
             Moderation();
             Determinism();
             Scrubbing();
@@ -77,6 +83,27 @@ namespace ConditioningControlPanel.LinuxSmoke
         }
 
         /// <summary>Path resolution is the single most platform-divergent thing Core does.</summary>
+        /// <summary>
+        /// SettingsService lives in Core now (wire/08). This is the proof it works off Windows:
+        /// a value written through the real service comes back from a fresh instance, from a
+        /// settings.json under CorePaths.UserData, with no head, no UI thread and no secret store.
+        /// </summary>
+        private static void Settings()
+        {
+            Console.WriteLine("== Settings ==");
+            var first = new ConditioningControlPanel.Services.SettingsService();
+            Check("a fresh sandbox reads as missing settings", first.WasSettingsFileMissing);
+            first.Current.ActiveModId = "smoke-mod";
+            first.SaveImmediate();
+            var file = Path.Combine(CorePaths.UserData, "settings.json");
+            Check("SaveImmediate writes settings.json under CorePaths.UserData", File.Exists(file), file);
+            var second = new ConditioningControlPanel.Services.SettingsService();
+            Check("a second instance reads the value back", second.Current.ActiveModId == "smoke-mod", second.Current.ActiveModId);
+            Check("CoreSettings still serves the default until a head seeds it", !CoreSettings.HasProvider);
+            try { Directory.Delete(Path.GetDirectoryName(CorePaths.UserData)!, recursive: true); } catch { }
+            Console.WriteLine();
+        }
+
         private static void Paths()
         {
             Console.WriteLine("CorePaths");
