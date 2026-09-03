@@ -12,6 +12,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -21,13 +22,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// size/opacity sliders - and live-applies every change.
     ///
     /// PORTED from ConditioningControlPanel/Windows/CornerGifWindow.xaml.cs. Deviations:
-    ///  - App.Settings and App.CornerGif are still in the WPF head, so the slot list is
-    ///    in-memory placeholder data and <see cref="ApplyLive"/> is a stub. Everything the user
-    ///    can touch - toggle, picker, corner buttons, both sliders, the debounce - is real and
-    ///    edits the setting objects; only the persist-and-reapply tail is missing.
-    ///  - CornerGifOverlaySetting / CornerPosition live in the WPF project, which this head may
-    ///    not reference, so they are copied as private nested types (see TextItem in
-    ///    TextEditorDialog for the same call). They delete when the models reach Core.
+    ///  - App.CornerGif is still in the WPF head, so <see cref="ApplyLive"/> persists but cannot
+    ///    re-realize the overlay windows; the slot list itself is the real persisted one.
     ///  - Microsoft.Win32.OpenFileDialog -> TopLevel.StorageProvider.OpenFilePickerAsync, which
     ///    is async, so the pick handler awaits instead of blocking.
     ///  - MouseLeftButtonUp -> PointerReleased with an InitialPressMouseButton check.
@@ -40,27 +36,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private static readonly Color SelectedAccent = Color.FromRgb(0xFF, 0x69, 0xB4);
         private static readonly Color IdleAccent = Color.FromRgb(0x33, 0x33, 0x3A);
-
-        /// <summary>Copy of ConditioningControlPanel.Models.CornerGifOverlaySetting. The type lives
-        /// in the WPF head, not in CCP.Core, and neither may be touched by this port.</summary>
-        private sealed class CornerGifOverlaySetting
-        {
-            public bool Enabled { get; set; }
-            /// <summary>Absolute path to the GIF/image. Empty => fall back to the built-in spiral.</summary>
-            public string GifPath { get; set; } = "";
-            public CornerPosition Position { get; set; } = CornerPosition.BottomLeft;
-            /// <summary>Longest-edge target size in logical pixels.</summary>
-            public int Size { get; set; } = 300;
-            /// <summary>Opacity in percent (1-100).</summary>
-            public int Opacity { get; set; } = 18;
-        }
-
-        /// <summary>Copy of ConditioningControlPanel.Models.CornerPosition, same reason.</summary>
-        private enum CornerPosition { TopLeft, TopRight, BottomLeft, BottomRight }
-
-        // ponytail: needs App.Settings.Current.CornerGifOverlays. Placeholder so the window has
-        // something to draw; slot 1 is on so at least one card renders at full opacity.
-        private readonly List<CornerGifOverlaySetting> _slots = new();
 
         private readonly StackPanel _slotsPanel;
 
@@ -87,32 +62,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 ApplyLive(slot);
             };
 
-            EnsureSlots();
             BuildSlots();
         }
 
-        /// <summary>Pads the list to <see cref="SlotCount"/> entries with sensible defaults, and
-        /// trims anything beyond them - the UI only ever edits the first <see cref="SlotCount"/>,
+        /// <summary>Pads the persisted list to <see cref="SlotCount"/> entries with sensible defaults,
+        /// and trims anything beyond them - the UI only ever edits the first <see cref="SlotCount"/>,
         /// so extra entries in a hand-edited settings file would be invisible overlays.</summary>
-        private void EnsureSlots()
+        private static List<CornerGifOverlaySetting> EnsureSlots()
         {
-            while (_slots.Count < SlotCount)
+            var s = CoreSettings.Current;
+            var list = s.CornerGifOverlays ?? new List<CornerGifOverlaySetting>();
+            while (list.Count < SlotCount)
             {
                 // Second slot defaults to the opposite bottom corner so two-at-once looks sensible.
-                _slots.Add(new CornerGifOverlaySetting
+                list.Add(new CornerGifOverlaySetting
                 {
-                    Enabled = _slots.Count == 0,   // placeholder: one card on, one off
-                    Position = _slots.Count == 0 ? CornerPosition.BottomLeft : CornerPosition.BottomRight,
+                    Position = list.Count == 0 ? CornerPosition.BottomLeft : CornerPosition.BottomRight
                 });
             }
-            if (_slots.Count > SlotCount) _slots.RemoveRange(SlotCount, _slots.Count - SlotCount);
+            if (list.Count > SlotCount) list.RemoveRange(SlotCount, list.Count - SlotCount);
+            s.CornerGifOverlays = list;
+            return list;
         }
 
         private void BuildSlots()
         {
             _slotsPanel.Children.Clear();
+            var list = EnsureSlots();
             for (int i = 0; i < SlotCount; i++)
-                _slotsPanel.Children.Add(BuildSlotCard(i, _slots[i]));
+                _slotsPanel.Children.Add(BuildSlotCard(i, list[i]));
         }
 
         private Border BuildSlotCard(int index, CornerGifOverlaySetting setting)
@@ -385,8 +363,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// alone, which is what keeps a slider drag from re-realizing every overlay per tick.</summary>
         private void ApplyLive(int index = -1)
         {
-            // ponytail: needs App.Settings (Save) + CornerGifService (RefreshSlot/RefreshOverlays),
-            // wired when they move to Core. The edits above already live in _slots.
+            CoreSettings.Save();
+            // ponytail: needs CornerGifService.RefreshSlot(int) / RefreshOverlays()
+            // (ConditioningControlPanel/Services/CornerGifService.cs, reached as App.CornerGif),
+            // which is Win32-layered-window code still in the WPF head. The settings write above is
+            // live; only the re-realize of an already-showing overlay is missing.
             _ = index;
         }
     }

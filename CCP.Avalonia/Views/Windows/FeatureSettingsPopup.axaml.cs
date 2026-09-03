@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using ConditioningControlPanel.Models;
 
@@ -22,8 +24,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>_maxMinute</c> and <c>_settingControls</c> are dropped: the WPF original writes both
     ///    and reads neither.
     ///  - <c>Checked</c>/<c>Unchecked</c> collapse into <c>IsCheckedChanged</c>.
-    ///  - The file picker's <c>OpenFileDialog</c> and <c>ImportFromGlobal</c>'s
-    ///    <c>App.Settings.Current.*Pool</c> are stubbed; see the ponytail notes at each.
+    ///  - <c>OpenFileDialog</c> -&gt; <c>TopLevel.StorageProvider.OpenFilePickerAsync</c>, which is
+    ///    async, so the browse handler awaits instead of blocking.
+    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so the
+    ///    empty-pool notice on import is a small owned window (the ModManagerDialog pattern).
     /// </summary>
     public partial class FeatureSettingsPopup : UserControl
     {
@@ -387,9 +391,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 BorderThickness = new Thickness(0),
                 Cursor = new Cursor(StandardCursorType.Hand)
             };
-            // ponytail: needs a file picker (WPF used Microsoft.Win32.OpenFileDialog, filtered to
-            // *.gif;*.png;*.jpg), wired when the storage-provider host exists on this head
-            browseButton.Click += (_, _) => { };
+            browseButton.Click += async (_, _) =>
+            {
+                if (TopLevel.GetTopLevel(this) is not { } top) return;
+
+                var picked = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = $"Select {name}",
+                    AllowMultiple = false,
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("Image/GIF Files")
+                        {
+                            Patterns = new[] { "*.gif", "*.png", "*.jpg" }
+                        },
+                        new FilePickerFileType("All Files") { Patterns = new[] { "*" } },
+                    },
+                });
+
+                var path = picked.FirstOrDefault()?.TryGetLocalPath();
+                if (string.IsNullOrEmpty(path)) return;
+
+                textBox.Text = path;
+                SaveSetting(key, path);
+            };
             Grid.SetColumn(browseButton, 1);
             grid.Children.Add(browseButton);
 
@@ -519,11 +544,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var importButton = PhraseButton("📥 Import from Global Settings", InputBorder, new Thickness(0, 8, 0, 0));
             importButton.Padding = new Thickness(8, 6);
             importButton.HorizontalAlignment = HorizontalAlignment.Stretch;
-            // ponytail: needs App.Settings.Current.SubliminalPool / BouncingTextPool (the enabled
-            // entries of a Dictionary<string,bool>), wired when SettingsService moves to Core.
-            // isSubliminal picks which pool; it is the only thing that argument is for.
-            _ = isSubliminal;
-            importButton.Click += (_, _) => { };
+            importButton.Click += (_, _) => ImportFromGlobal(phrases, listBox, countText, isSubliminal);
             SettingsPanel.Children.Add(importButton);
         }
 
@@ -601,6 +622,84 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (_event != null)
                 SettingsChanged?.Invoke(this, _event);
+        }
+
+        private void ImportFromGlobal(List<string> phrases, ListBox listBox, TextBlock countText, bool isSubliminal)
+        {
+            // Get enabled phrases from global pool (Dictionary<string, bool>)
+            var globalPool = isSubliminal
+                ? CoreSettings.Current.SubliminalPool
+                : CoreSettings.Current.BouncingTextPool;
+
+            var enabledPhrases = globalPool?.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+
+            if (enabledPhrases == null || enabledPhrases.Count == 0)
+            {
+                Notify("Import", "No enabled phrases found in global settings.");
+                return;
+            }
+
+            // Clear existing and import
+            phrases.Clear();
+            phrases.AddRange(enabledPhrases);
+
+            listBox.Items.Clear();
+            listBox.IsEnabled = true;
+            foreach (var phrase in phrases)
+            {
+                listBox.Items.Add(phrase);
+            }
+
+            countText.Text = $"({phrases.Count} custom)";
+
+            if (_event != null)
+                SettingsChanged?.Invoke(this, _event);
+        }
+
+        /// <summary>Minimal stand-in for WPF's information MessageBox, which Avalonia has no
+        /// equivalent of and no package may be added for. Shown owned when this control has a
+        /// host window; silently dropped when it does not, because a notice is not worth
+        /// stranding an ownerless window over.</summary>
+        private void Notify(string title, string message)
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+
+            var ok = new Button
+            {
+                Content = new TextBlock { Text = "OK" },
+                Padding = new Thickness(14, 6),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 16, 0, 0),
+                Cursor = new Cursor(StandardCursorType.Hand)
+            };
+
+            var dialog = new Window
+            {
+                Title = title,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                CanResize = false,
+                ShowInTaskbar = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = ListBg,
+                Content = new StackPanel
+                {
+                    Margin = new Thickness(20),
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = message,
+                            Foreground = ValueGrey,
+                            FontSize = 13,
+                            TextWrapping = TextWrapping.Wrap,
+                            MaxWidth = 320
+                        },
+                        ok
+                    }
+                }
+            };
+            ok.Click += (_, _) => dialog.Close();
+            _ = dialog.ShowDialog(owner);
         }
     }
 }

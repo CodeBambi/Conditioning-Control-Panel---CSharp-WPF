@@ -13,6 +13,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -31,10 +32,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    <c>Button.Theme</c>. Same three colours, none of the factory plumbing. <c>Freeze()</c>
     ///    has no Avalonia twin and is dropped (Avalonia brushes are not thread-affine here).
     ///  - <c>Dispatcher.BeginInvoke</c> -&gt; <c>Dispatcher.UIThread.Post</c>.
-    ///  - <c>App.Logger</c> has no twin on this head yet, so the guarded catches simply swallow,
-    ///    as AchievementPopup's port does.
-    ///  - The default dismissal bookkeeping (<c>App.Settings.Current.DismissedAnnouncementId</c>)
-    ///    is stubbed; see DismissAndClose.
+    ///  - <c>App.Logger</c> is Serilog's static <c>Log</c> here; the warning templates are unchanged.
     /// </summary>
     public partial class AnnouncementPopup : Window
     {
@@ -252,10 +250,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 };
                 _cardArtImage.RenderTransform = _cardArtScale;
             }
-            catch
+            catch (Exception ex)
             {
                 // A layout failure must not cost the user the message itself.
-                // ponytail: needs App.Logger, wired when it moves to Core.
+                Log.Warning("AnnouncementPopup card layout failed: {Error}", ex.Message);
             }
         }
 
@@ -334,10 +332,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     _imageContainer.IsVisible = true;
                 });
             }
-            catch
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger ("Failed to load announcement image"), wired when it
-                // moves to Core. A missing image leaves the text-only layout, as before.
+                // A missing image leaves the text-only layout, as before.
+                Log.Warning("Failed to load announcement image: {Error}", ex.Message);
             }
         }
 
@@ -355,7 +353,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Dispatcher.UIThread.Post(() =>
                 {
                     try { act(); }
-                    catch { /* ponytail: needs App.Logger ("Announcement action failed") */ }
+                    catch (Exception ex) { Log.Warning("Announcement action failed: {Error}", ex.Message); }
                 }, DispatcherPriority.Background);
                 return;
             }
@@ -368,9 +366,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // ponytail: needs App.Logger ("Failed to open announcement link").
+                    Log.Warning("Failed to open announcement link: {Error}", ex.Message);
                 }
             }
         }
@@ -381,14 +379,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 // Caller owns its own dismissal record - do NOT touch the shared server-announcement slot.
                 try { _onDismiss(); }
-                catch { /* ponytail: needs App.Logger ("Announcement dismiss handler failed") */ }
+                catch (Exception ex) { Log.Warning("Announcement dismiss handler failed: {Error}", ex.Message); }
             }
             else
             {
-                // ponytail: needs App.Settings (the single DismissedAnnouncementId slot), wired when
-                // it moves to Core. Until then a server announcement re-shows on the next launch
-                // rather than being recorded as seen.
-                _ = _announcementId;
+                // The single server-announcement slot. No Save() here, matching WPF: the settings
+                // service's own debounce writes it out.
+                CoreSettings.Current.DismissedAnnouncementId = _announcementId;
             }
 
             try
