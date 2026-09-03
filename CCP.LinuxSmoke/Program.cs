@@ -78,6 +78,12 @@ namespace ConditioningControlPanel.LinuxSmoke
                 CoreAudio.Duck(95); CoreAudio.Unduck();
                 Check("CoreAudio ducking is a no-op with no audio", CoreAudio.DuckGeneration == 0);
                 Check("CoreAi.IsAvailable is false with no head", !CoreAi.IsAvailable);
+                // The speech seam (wire/21). Unseeded must be honest, never optimistic: a view
+                // that believed "available" here would offer voice input nothing can deliver.
+                Check("CoreSpeech.IsAvailable is false with no speech service", !CoreSpeech.IsAvailable);
+                Check("CoreSpeech.HasCaptureDevice is false with no speech service", !CoreSpeech.HasCaptureDevice);
+                Check("CoreSpeech.ModelStatus is NotProbed with no speech service", CoreSpeech.ModelStatus == CoreSpeechModelStatus.NotProbed);
+                Check("CoreSpeech.EnumerateInputDevices is empty with no speech service", CoreSpeech.EnumerateInputDevices().Count == 0);
                 Check("CoreReleaseContent answers null with no pack service", CoreReleaseContent.GetPackInfo("mod-bambi") == null && CoreReleaseContent.GetStampFor("mod-bambi") == null);
                 Check("AwarenessIntensity.Current reads the ship default unseeded", Services.Awareness.AwarenessIntensityProfile.Current == Services.Awareness.AwarenessIntensity.Chatty);
                 // The subreddit rule moved from the online coordinator into Core with no test of its own.

@@ -29,6 +29,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     public partial class DevicesSettingsSection : UserControl
     {
         private bool _loading = true;
+        private bool _micPopulating;   // Items.Clear()/SelectedItem raise SelectionChanged
 
         public DevicesSettingsSection()
         {
@@ -45,8 +46,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             ChkPanicOverridesAll.IsCheckedChanged += ChkPanicOverridesAll_Changed;
             ChkNoPanic.IsCheckedChanged += ChkNoPanic_Changed;
             TxtSpeechWakeWords.LostFocus += TxtSpeechWakeWords_LostFocus;
+            CmbMicDevice.SelectionChanged += CmbMicDevice_SelectionChanged;
+            BtnMicRefresh.Click += BtnMicRefresh_Click;
 
             SyncFromSettings();
+            PopulateMicDevices();
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -55,8 +59,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             // The WPF section implements IAppSettingsSection.OnSectionShown because device lists go
             // stale the moment someone plugs a headset in. Attach is this head's equivalent reveal
-            // hook; there is nothing to re-enumerate yet (see the mic note below).
+            // hook, so the mic list is re-enumerated here too.
             SyncFromSettings();
+            PopulateMicDevices();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -152,10 +157,53 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // (MainWindow.RefreshSheListeningDeviceChips); no such host on this head.
         }
 
-        // ponytail: CmbMicDevice / BtnMicRefresh need SpeechService.EnumerateInputDevices
-        // (ConditioningControlPanel/Services/Speech/SpeechService.cs, NAudio/WASAPI), still in the
-        // WPF head. Without an enumeration there is no device to select and nothing honest to
-        // write to SpeechInputDeviceIndex / SpeechInputDeviceName, so both stay unwired.
+        /// <summary>
+        /// The WPF PopulateMicDevices, against <see cref="CoreSpeech"/> instead of SpeechService.
+        /// An empty enumeration means no head has seeded the seam, and clearing on that would
+        /// leave a blank ComboBox where the XAML's "System default" placeholder sits - so the
+        /// list is only replaced when there is a real one to replace it with.
+        /// </summary>
+        private void PopulateMicDevices()
+        {
+            var devices = CoreSpeech.EnumerateInputDevices();
+            if (devices.Count == 0) return;   // no speech head attached; keep the placeholder
+
+            int saved = CoreSettings.Current.SpeechInputDeviceIndex;
+            _micPopulating = true;   // Clear() raises SelectionChanged here as it does on WPF
+            try
+            {
+                CmbMicDevice.Items.Clear();
+                ComboBoxItem? toSelect = null;
+                foreach (var dev in devices)
+                {
+                    var item = new ComboBoxItem { Content = dev.Name, Tag = dev.Index };
+                    CmbMicDevice.Items.Add(item);
+                    if (dev.Index == saved) toSelect = item;
+                }
+                // Fall back to the first entry (the OS default) if the saved device is gone.
+                CmbMicDevice.SelectedItem = toSelect ?? (CmbMicDevice.Items.Count > 0 ? CmbMicDevice.Items[0] : null);
+            }
+            finally { _micPopulating = false; }
+        }
+
+        private void CmbMicDevice_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_micPopulating || _loading) return;
+            if (CmbMicDevice.SelectedItem is not ComboBoxItem item || item.Tag is not int idx) return;
+
+            var s = CoreSettings.Current;
+            var name = idx < 0 ? "" : (item.Content?.ToString() ?? "");
+            if (s.SpeechInputDeviceIndex == idx && s.SpeechInputDeviceName == name) return;
+            s.SpeechInputDeviceIndex = idx;
+            s.SpeechInputDeviceName = name; // matched by name on reopen - robust to ordinal reshuffle (#441b)
+            CoreSettings.Save();
+            // ponytail: WPF also cuts the open capture so the wake loop reopens on the new device
+            // (App.Speech.StopListening + App.Autonomy.RefreshVoiceInputModes) and re-quotes the
+            // device on the She's Listening chip. The seam carries capability only, and neither
+            // the autonomy service nor that chip exists on this head.
+        }
+
+        private void BtnMicRefresh_Click(object? sender, RoutedEventArgs e) => PopulateMicDevices();
 
         // =====================================================================================
         //  webcam

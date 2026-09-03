@@ -58,6 +58,10 @@ namespace ConditioningControlPanel.Avalonia
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 CoreReleaseContent.AppVersionProvider = () =>
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+                // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
+                // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
+                // exactly what that is. Seeding it with anything else would be a lie.
+
                 desktop.MainWindow = new Views.Windows.MainShellWindow();
             }
             base.OnFrameworkInitializationCompleted();
