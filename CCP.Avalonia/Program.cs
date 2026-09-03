@@ -13,6 +13,12 @@ namespace ConditioningControlPanel.Avalonia
             if (Array.IndexOf(args, "--smoke") >= 0)
                 return HeadlessSmoke.Run();
 
+            // --nav-check drives the shell's tab navigation headlessly and fails if a click
+            // would land on a blank page. The render proofs are still frames; this is the one
+            // check that exercises a click.
+            if (Array.IndexOf(args, "--nav-check") >= 0)
+                return NavCheck.Run();
+
             // --render <path> draws the real window offscreen and saves a PNG. Visual proof that
             // survives on a CI runner with no display server.
             var r = Array.IndexOf(args, "--render");
