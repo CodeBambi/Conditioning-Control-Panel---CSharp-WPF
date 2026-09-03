@@ -5,6 +5,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -17,15 +18,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// PORTED from ConditioningControlPanel/Dialogs/UpdateFailedDialog.xaml.cs. Deviations:
     ///  - <c>DialogResult</c> becomes <c>Close(bool)</c>; Avalonia carries the result through
     ///    <c>ShowDialog&lt;bool?&gt;</c>.
-    ///  - <c>UpdateService.ReleasesPageUrl</c>, <c>BrowserLauncher</c> and <c>App.Logger</c> all
-    ///    live in the WPF head, so they are stubbed here (see the ponytail notes below).
+    ///  - <c>App.Logger</c> becomes Serilog's static <c>Log</c>.
+    ///  - <c>BrowserLauncher.OpenUrlOrPrompt</c> is a Win32 explorer/cmd/rundll32 chain and will
+    ///    never be in Core; <c>TopLevel.Launcher.LaunchUriAsync</c> is this head's equivalent and
+    ///    the chain's last resort - copying the link to the clipboard - is kept.
+    ///  - <c>UpdateService.ReleasesPageUrl</c> still lives in the WPF head (ponytail note below).
     ///  - The copy-link label is swapped by rebinding, not by assigning Text: the TextBlock carries
     ///    a <c>{loc:Str}</c> binding and a local value would be undone on the next language change
     ///    (CLAUDE.md, "setting text from code").
     /// </summary>
     public partial class UpdateFailedDialog : Window
     {
-        // ponytail: needs UpdateService.ReleasesPageUrl, wired when UpdateService moves to Core
+        // ponytail: needs UpdateService.ReleasesPageUrl (ConditioningControlPanel/Services/UpdateService.cs),
+        // still in the WPF head.
         private const string ReleasesPageUrl =
             "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest";
 
@@ -77,7 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 var dialog = new UpdateFailedDialog(title, message, detail) { Topmost = true };
 
-                if (owner is { IsVisible: true })
+                if (owner is { IsLoaded: true, IsVisible: true })
                 {
                     dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
                     _ = dialog.ShowDialog(owner);
@@ -89,19 +94,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     dialog.Show();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger and a MessageBox equivalent for the fallback path,
-                // wired when the logger moves to Core. Swallowed for now, as WPF did.
+                Log.Warning(ex, "Failed to show update failure dialog; falling back to a message box");
+                // ponytail: needs a cross-platform MessageBox for the last-resort fallback WPF had
+                // (MessageBox.Show with the releases URL); this head has no modal box that works
+                // without an owner Window, which is exactly the case this catch handles.
             }
         }
 
-        private void BtnDownload_Click()
+        private async void BtnDownload_Click()
         {
             ManualDownloadRequested = true;
 
-            // ponytail: needs BrowserLauncher.OpenUrlOrPrompt(ReleasesPageUrl, "open the download page"),
-            // wired when BrowserLauncher moves to Core
+            // The WPF path went through BrowserLauncher, whose last resort was the clipboard, so
+            // a machine with no usable browser still got the link. Same two steps here.
+            try
+            {
+                await Launcher.LaunchUriAsync(new Uri(ReleasesPageUrl));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to open the download page; copying the link instead");
+                try
+                {
+                    if (Clipboard is not null) await Clipboard.SetTextAsync(ReleasesPageUrl);
+                }
+                catch { /* clipboard may be locked by another app */ }
+            }
 
             Close(true);
         }
@@ -115,10 +135,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 if (Clipboard is null) return;
                 await Clipboard.SetTextAsync(ReleasesPageUrl);
             }
-            catch
+            catch (Exception ex)
             {
                 // Clipboard can be locked by another app - say nothing, the button just won't confirm.
-                // ponytail: needs App.Logger for the warning, wired when the logger moves to Core
+                Log.Warning(ex, "Failed to copy the releases link to the clipboard");
                 return;
             }
 

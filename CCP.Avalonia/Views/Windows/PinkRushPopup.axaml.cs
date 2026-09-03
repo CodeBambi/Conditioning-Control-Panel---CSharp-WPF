@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -12,14 +13,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// Popup window shown when Pink Rush activates, with a live countdown timer.
     ///
     /// PORTED from ConditioningControlPanel/Windows/PinkRushPopup.xaml.cs. Deviations:
-    ///  - The constructor takes the boost's end time instead of reading
-    ///    <c>App.Settings.Current.PinkRushEndTime</c>: AppSettings lives in the WPF head and this
-    ///    project may not reference it. Call shape is <c>new PinkRushPopup(endTime)</c>.
+    ///  - The constructor takes the boost's end time instead of re-reading
+    ///    <c>CoreSettings.Current.PinkRushEndTime</c> on every tick. The render harness needs a
+    ///    parameterless constructor that DRAWS, and headless that setting is null, which on the
+    ///    WPF path closes the popup immediately - a blank PNG. Call shape is
+    ///    <c>new PinkRushPopup(CoreSettings.Current.PinkRushEndTime.Value)</c>.
     ///  - <c>DoubleAnimation</c> on Opacity becomes a <see cref="DoubleTransition"/> plus a plain
     ///    Opacity assignment - Avalonia animates through the property system, not a Storyboard.
     ///  - <c>SystemParameters.WorkArea</c> becomes <c>Screens.Primary.WorkingArea</c>, populated
     ///    only once the window has a handle, so placement moves to OnOpened.
-    ///  - <c>App.Logger</c> calls are dropped; there is no logger on this head yet.
+    ///  - <c>App.Logger</c> becomes Serilog's static <c>Log</c>.
     /// </summary>
     public partial class PinkRushPopup : Window
     {
@@ -46,9 +49,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _endTime = endTime;
             _txtCountdown = this.FindControl<TextBlock>("TxtCountdown")!;
 
-            // ponytail: needs App.Mods.GetPinkRushName()/GetPinkRushDescription() to override the
-            // title and subtitle per mod, wired when the mod registry moves to Core. The markup
-            // literals are the un-modded defaults, exactly as in the WPF original.
+            // Mod override for the title. The TextBlock carries a plain literal in the markup (no
+            // {loc:Str} binding), so assigning Text is safe. CoreMods answers with the vanilla
+            // default when no mod layer is up, which is what App.Mods == null gave WPF.
+            this.FindControl<TextBlock>("TxtPinkRushTitle")!.Text = "\u26A1 " + CoreMods.PinkRushName;
+
+            // ponytail: needs CoreMods.PinkRushDescription for the subtitle - the provider does not
+            // exist in CCP.Core/CoreMods.cs; the value is ModService.GetPinkRushDescription()
+            // (ConditioningControlPanel/Services/ModService.cs:1340). The markup literal is the
+            // un-modded default, exactly as in the WPF original.
 
             // ponytail: needs Helpers.PassiveToastWindow (Win32 WS_EX_NOACTIVATE), which kept this
             // toast from stealing mouse capture from fullscreen games (ccp-bugs #1000), wired when
@@ -86,8 +95,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     workArea.Right - (int)Width - 20,
                     workArea.Bottom - (int)Height - 20);
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error(ex, "Failed to position Pink Rush popup");
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
         }

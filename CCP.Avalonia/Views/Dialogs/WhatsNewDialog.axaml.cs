@@ -2,6 +2,7 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -23,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    TextBlock so Avalonia does not eat an underscore as an access key.
     ///  - <c>Dispatcher.BeginInvoke(..., DispatcherPriority.Normal)</c> becomes
     ///    <c>Dispatcher.UIThread.Post(..., DispatcherPriority.Normal)</c>, the same queued post.
-    ///  - <c>App.Logger</c> lives in the WPF head, so the catch is a stub.</para>
+    ///  - <c>App.Logger</c> becomes Serilog's static <c>Log</c>.</para>
     /// </summary>
     public partial class WhatsNewDialog : Window
     {
@@ -79,9 +80,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (action == null) return;
             Dispatcher.UIThread.Post(() =>
             {
-                // ponytail: needs App.Logger, wired when logging moves to Core
                 try { action(); }
-                catch (Exception) { /* the tour action threw */ }
+                catch (Exception ex) { Log.Warning(ex, "What's New: the tour action threw"); }
             }, DispatcherPriority.Normal);
         }
     }
