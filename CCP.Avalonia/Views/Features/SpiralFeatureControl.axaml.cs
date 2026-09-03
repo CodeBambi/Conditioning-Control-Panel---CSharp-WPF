@@ -266,11 +266,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             SpiralLibraryPanel.Children.Clear();
 
-            // Built-in spiral (active when SpiralPath is empty / missing).
-            // ponytail: WPF thumbnails it with Services.ModResourceResolver.ResolveSpiralUri()
-            // (ConditioningControlPanel/Services/ModResourceResolver.cs), still in the WPF head, so
-            // the Default card falls through to the glyph here.
-            SpiralLibraryPanel.Children.Add(BuildSpiralCard("", "Default", null));
+            // Built-in spiral (active when SpiralPath is empty / missing). The MOD half of WPF's
+            // ResolveSpiralUri() is portable and lives in CoreModArt; a null falls through to the
+            // glyph, which is exactly the "no mod override" answer.
+            // ponytail: the OTHER half - the head's own shipped spiral - has no thumbnail here:
+            // Assets/spiral.gif is not <AvaloniaResource Include= Link=>-linked in
+            // CCP.Avalonia/CCP.Avalonia.csproj, so there is no avares:// URI to decode yet.
+            SpiralLibraryPanel.Children.Add(BuildSpiralCard("", "Default", CoreModArt.SpiralOverridePath()));
 
             int fileCount = 0;
             try

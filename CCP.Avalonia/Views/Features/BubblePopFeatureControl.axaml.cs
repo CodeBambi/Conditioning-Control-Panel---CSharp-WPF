@@ -48,10 +48,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             LoadFromSettings();
 
             // ponytail: WPF also repaints the hero and side art plates here (ApplyFeatureArt).
-            // Needs Services.ModResourceResolver.ResolveImageDecoded
-            // (ConditioningControlPanel/Services/, still in the WPF head) AND a named ImageBrush
-            // in the .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port
-            // draws a static wash instead, so there is nothing here to repaint.
+            // The mod-override half of ResolveImageDecoded is portable now
+            // (CoreModArt.OverridePath), but the plate still needs a named ImageBrush in the
+            // .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port draws a
+            // static wash instead, so there is nothing here to repaint.
         }
 
         /// <summary>The seven effect boxes, each carrying its variant id in <c>Tag</c>.</summary>
@@ -185,9 +185,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (_isLoading) return;
             CoreSettings.Current.BubblesEnabled = ChkEnable.IsChecked ?? false;
             CoreSettings.Save();
-            // ponytail: WPF also live-applies here - App.Bubbles.Start()/Stop() when
-            // App.IsEngineRunning. Needs BubbleService (ConditioningControlPanel/Services/) and the
-            // engine-running flag off App, both still in the WPF head.
+
+            // Live-apply: start/stop the bubble service if the engine is running.
+            if (CoreSession.IsEngineRunning)
+            {
+                // ponytail: App.Bubbles.Start()/Stop() - BubbleService
+                // (ConditioningControlPanel/Services/BubbleService.cs), still in the WPF head.
+            }
         }
 
         private void SliderFreq_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -236,9 +240,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (_isLoading) return;
             CoreSettings.Current.BubbleSharedHost = ChkSolidMode.IsChecked ?? false;
             CoreSettings.Save();
-            // ponytail: the render path is latched per Start->Stop session, so WPF bounces a live
-            // bubble service here to pick up the new mode. Needs BubbleService
-            // (ConditioningControlPanel/Services/) and App.IsEngineRunning, still in the WPF head.
+
+            // The render path is latched per Start->Stop session, so a live bubble service has to
+            // be bounced to pick up the new mode. Two of WPF's three conjuncts are real here; the
+            // third ("is it actually running") is the service's own.
+            if (CoreSession.IsEngineRunning && CoreSettings.Current.BubblesEnabled)
+            {
+                // ponytail: App.Bubbles.IsRunning, then Stop() + Start() - BubbleService
+                // (ConditioningControlPanel/Services/BubbleService.cs), still in the WPF head.
+            }
         }
 
         private void ChkTriggers_Changed(object? sender, RoutedEventArgs e)

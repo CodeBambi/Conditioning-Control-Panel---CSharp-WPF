@@ -56,10 +56,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             LoadFromSettings();
 
             // ponytail: WPF also repaints the hero and side art plates here (ApplyFeatureArt +
-            // App.Mods.ModChanged). Needs Services.ModResourceResolver.ResolveImageDecoded
-            // (ConditioningControlPanel/Services/, still in the WPF head) AND a named ImageBrush
-            // in the .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port
-            // draws a static wash instead, so there is nothing here to repaint.
+            // App.Mods.ModChanged). The mod-override half of ResolveImageDecoded is portable now
+            // (CoreModArt.OverridePath), but the plate still needs a named ImageBrush in the
+            // .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port draws a
+            // static wash instead, so there is nothing here to repaint.
         }
 
         // ---- settings instance tracking (WPF: SettingsHook + ISettingsRebindable) --------------
@@ -196,9 +196,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (_isLoading) return;
             CoreSettings.Current.MandatoryVideosEnabled = ChkEnable.IsChecked ?? false;
             CoreSettings.Save();
-            // ponytail: WPF also live-applies here - App.Video.Start()/Stop() when
-            // App.IsEngineRunning. Needs VideoService (ConditioningControlPanel/Services/) and the
-            // engine-running flag off App, both still in the WPF head.
+
+            // Live-apply: start/stop the video service if the engine is running.
+            if (CoreSession.IsEngineRunning)
+            {
+                // ponytail: App.Video.Start()/Stop() - VideoService
+                // (ConditioningControlPanel/Services/Video/VideoService.cs), still in the WPF head.
+            }
         }
 
         private void SliderPerHour_Changed(object? sender, RangeBaseValueChangedEventArgs e)
