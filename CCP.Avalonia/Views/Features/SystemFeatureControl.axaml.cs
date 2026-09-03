@@ -189,9 +189,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private static string DescribeStartupGroup(AppSettings s)
         {
             var parts = new List<string>();
-            // ponytail: WPF asks Services.StartupManager.IsRegistered() (a Windows Startup-folder
-            // shortcut) rather than the stored flag. No equivalent on this head; the stored value
-            // stands in, exactly as GeneralSettingsSection does for the same switch.
+            // ponytail: WPF asks StartupManager.IsRegistered()
+            // (ConditioningControlPanel/Services/StartupManager.cs - a Windows Startup-folder
+            // shortcut, so it is head-side by nature and not in Core) rather than the stored flag.
+            // The stored value stands in, exactly as GeneralSettingsSection does for this switch.
             if (s.RunOnStartup) parts.Add(Loc.Get("setting_win_start"));
             if (s.StartMinimized) parts.Add(Loc.Get("setting_start_hidden"));
             if (s.AutoStartEngine) parts.Add(Loc.Get("setting_auto_run"));
@@ -201,10 +202,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 : string.Join(" · ", parts);
         }
 
-        // ponytail: the four navigation buttons need the shell's OpenAppSettingsSection /
-        // OpenDeviceSettings / RequestPickAssetsFolder. Both heads still owe them: they are
-        // commented-out stubs in CCP.Avalonia/Views/Windows/MainShellWindow.Settings.cs,
-        // .LabTab.cs and .axaml.cs, and live methods on MainWindow in the WPF head.
+        // ponytail: the four navigation buttons need three shell methods this head does not have
+        // yet, each still a commented-out stub naming itself:
+        //   MainShellWindow.OpenAppSettingsSection  - Views/Windows/MainShellWindow.Settings.cs:12
+        //   MainShellWindow.OpenDeviceSettings      - Views/Windows/MainShellWindow.LabTab.cs:47
+        //   MainShellWindow.RequestPickAssetsFolder - Views/Windows/MainShellWindow.axaml.cs:245
+        // PlayTabView's Owner?.ShowTab("appsettings") approximation is deliberately NOT used here:
+        // this control is popup-hosted, so TopLevel.GetTopLevel(this) is not the shell and the call
+        // would be a null no-op dressed up as a restore.
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
 
         private void BtnOpenGeneralSettings_Click(object? sender, RoutedEventArgs e) { }

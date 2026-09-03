@@ -21,8 +21,10 @@
                                          Avalonia head has no such host yet. x:Names are kept.
 
      Sliders carry Value="0.6"/"0.5" so the render matches the TxtWakeVal/TxtCmdVal defaults; WPF
-     leaves them unset and fills from settings. CmbMicDevice carries one placeholder item ("System
-     default", the WPF list's first entry). Every handler is stubbed - see the code-behind. -->
+     leaves them unset and fills from settings. CmbMicDevice carries one fallback item ("System
+     default", the WPF list's first entry) that PopulateMicDevices replaces from
+     CoreSpeech.EnumerateInputDevices() whenever a head has seeded that seam. The settings handlers
+     are live against CoreSettings; what still needs a head service is named where it sits. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -314,7 +316,9 @@
                                   Margin="6,0" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Stretch"
                                   SelectedIndex="0"
                                   ToolTip.Tip="Pick the microphone used for voice (Hey Bambi, mantras, lock cards).">
-                            <!-- ponytail: placeholder - PopulateMicDevices fills this from SpeechService on WPF -->
+                            <!-- The fallback entry. PopulateMicDevices (code-behind) replaces the
+                                 list from CoreSpeech.EnumerateInputDevices(); an empty enumeration
+                                 means no speech head is attached, and this item stays. -->
                             <ComboBoxItem Content="System default"/>
                         </ComboBox>
                         <Button Grid.Column="2" x:Name="BtnMicRefresh" Content="↻"

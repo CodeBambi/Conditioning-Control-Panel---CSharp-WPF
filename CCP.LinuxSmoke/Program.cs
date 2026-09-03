@@ -75,6 +75,28 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("CoreMods.AccentColorHex is the built-in default manifest's", CoreMods.AccentColorHex == Models.BuiltInMods.CCPDefault.Theme?.AccentColor, CoreMods.AccentColorHex);
                 Check("CoreMods.Affirmation is the built-in default manifest's", CoreMods.Affirmation == Models.BuiltInMods.CCPDefault.Identity?.Affirmation, CoreMods.Affirmation);
                 Check("CoreMods.GetPhrases is null with no mod layer", CoreMods.GetPhrases("BubbleCountMercy") == null);
+                Check("CoreMods.PinkRushDescription is the vanilla blurb with no mod layer",
+                      CoreMods.PinkRushDescription == (Models.BuiltInMods.CCPDefault.EnhancementOverrides?.PinkRushDescription ?? "3x XP for 60 seconds!"),
+                      CoreMods.PinkRushDescription);
+                // The filter colour must come off the default manifest, not the parser's miss
+                // default - reaching hot pink here would mean the manifest chain silently failed.
+                CoreMods.TryParseHexColor(
+                    Models.BuiltInMods.CCPDefault.Theme?.FilterColor ?? Models.BuiltInMods.CCPDefault.Theme?.AccentColor,
+                    out var vanillaFilter);
+                var filter = CoreMods.GetFilterColorRgb();
+                Check("CoreMods.GetFilterColorRgb is the default manifest's colour, not the parser's miss pink",
+                      filter == vanillaFilter && filter != ((byte)255, (byte)105, (byte)180),
+                      $"#{filter.R:X2}{filter.G:X2}{filter.B:X2}");
+                // The documented exception to the vanilla rule: unseeded this answers BambiSleep's
+                // pool, not CCPDefault's, because that is the fallback the WPF call sites carried.
+                var bambiPool = Models.BuiltInMods.BambiSleep.SubliminalPool!;
+                var pool = CoreMods.GetDefaultSubliminalPool();
+                var poolMatches = pool.Count == bambiPool.Count && pool.Count > 0;
+                foreach (var key in bambiPool.Keys) if (!pool.ContainsKey(key)) poolMatches = false;
+                Check("CoreMods.GetDefaultSubliminalPool is the BambiSleep pool with no mod layer",
+                      poolMatches, $"{pool.Count} phrases vs BambiSleep's {bambiPool.Count}");
+                Check("the unseeded subliminal pool is deliberately NOT the CCP default's",
+                      pool.Count != Models.BuiltInMods.CCPDefault.SubliminalPool!.Count);
                 var finished = false;
                 CoreAudio.PlayOneShot("/nowhere.mp3", 1f, "smoke", onFinished: () => finished = true);
                 Check("CoreAudio.PlayOneShot fires onFinished at once with no audio", finished);
