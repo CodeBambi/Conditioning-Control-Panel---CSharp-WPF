@@ -34,9 +34,12 @@ import { createSpine } from './spine.js';
 const layout = createSpine({ seed, roomOrder });   // roomOrder: array of room ids from rooms.js
 ```
 Returns a `layout` object that is ALSO a valid argument to `engine/tunnel.js createTunnel(layout)`:
-- `RADIUS`, `totalDepth`, `loopDepth` (= totalDepth), `spine` (a closed `THREE.Curve`), `pointAt(d)`,
-  `frameAt(d)` (tunnel.js compat shape: `{pos, tangent, right, up}`) - tunnel.js only needs `spine`.
-- `frameAtDepth(d)` -> `{pos, tangent, up, right}` (parallel transport, cached per 0.5 m).
+- `RADIUS`, `totalDepth`, `loopDepth` (= totalDepth), `spine` (a closed `THREE.Curve`), `pointAt(t)`,
+  `frameAt(t)` - `t` is the NORMALIZED 0..1 parameter exactly as `buildLoopLayout` (fx.js calls
+  `layout.frameAt(Math.random())` and reads `pos/normal/binormal`); tunnel.js only needs `spine`.
+- `frameAtDepth(d)` -> `{pos, tangent, up, right, normal, binormal}` (`normal`/`binormal` alias
+  `up`/`right`; parallel transport through the wheel, re-levelled to world up elsewhere so the
+  road never stays banked; cached per 0.5 m).
 - `toWorld(d, x, h, out = new THREE.Vector3())` -> `out`.
 - `wrap(d)` -> d folded into `[0, totalDepth)`.
 - `chunks` -> ordered array of `{ id, kind, d0, d1, room, features }`.
@@ -55,6 +58,9 @@ Track shape rules: one Tea Garden start straight, then the rooms in `roomOrder`,
 chunks, exactly one loop somewhere after the first two rooms, at least one ramp per room, the whole
 thing closes back onto the start (closed curve, `spine.closed = true`). The loop must sidestep
 laterally by more than `2*RADIUS` so the tube never self-intersects (see the demo in the pitch).
+Each room's FIRST chunk is its `gate` chunk (the gate feature sits mid-chunk); the Tea Garden gate
+is `chunks[0]` at `d = 0`, so THE BANK fires on every lap crossing, and the start straight follows.
+Every room also carries at least one `itembox`, and a `boost` pad sits on the run-up to the loop.
 
 ### `race/rooms.js` (PR 1)
 ```js
