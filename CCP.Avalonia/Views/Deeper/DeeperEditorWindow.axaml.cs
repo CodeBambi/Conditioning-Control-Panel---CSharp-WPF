@@ -17,6 +17,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
@@ -70,11 +71,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///         <c>RestoreOwnerOnClose</c>, <c>System.Windows.Forms.Screen.FromHandle</c> +
     ///         <c>WindowInteropHelper</c> (the borderless-fullscreen preview window) and
     ///         <c>VisualTreeHelper.GetDpi</c> (the gaze picker's screen placement).</item>
-    ///   <item><b>App services.</b> App.Settings (sidebar width, first-run flag), App.Tutorial +
-    ///         TutorialOverlay, App.EnhancementLibrary, App.DeeperPlayer / App.DeeperHost,
-    ///         the haptics bus, ExplorerLauncher, GazePickerWindow, and every file dialog and
-    ///         MessageBox. Save / Save As / Export / Swap / Change media / drag-drop all land on
-    ///         those, so they log their intent and return.</item>
+    ///   <item><b>App services.</b> App.Tutorial + TutorialOverlay, App.DeeperPlayer /
+    ///         App.DeeperHost, the haptics bus and GazePickerWindow. App.EnhancementLibrary is
+    ///         head-only too, but the five members the editor needs from it are inlined in the
+    ///         file-ops region, so Save / Save As / Export / Swap / Change media / drag-drop are
+    ///         real. What is still missing there is a three-way Save/Discard/Cancel modal: this
+    ///         head ships MessageDialog (OK, OK/Cancel) only, so the unsaved-changes guard on
+    ///         swap, drop-load and close is still open. See ConfirmDiscardChangesAsync.</item>
     /// </list>
     /// </summary>
     public partial class DeeperEditorWindow : Window
@@ -1981,31 +1984,255 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         // ---------------------------------------------------------------------------------
         // File ops
         //
-        // ponytail: every member below needs App.EnhancementLibrary, a file dialog
-        // (IStorageProvider is available but the library's folder + suffix conventions are not),
-        // EnhancementMediaBundler for export, and a MessageBox for the result. The WPF bodies are
-        // ~450 lines of that plumbing; ported as named stubs that log what they would have done, so
-        // no member silently disappears and the wiring above stays honest.
+        // The library's file conventions are inlined below rather than taken from
+        // ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs, which is head-only
+        // (App.UserDataPath, App.Settings, App.Logger, FileSystemWatcher, DispatcherTimer). Only
+        // five of its members matter to this window - FileSuffix, LibraryFolder, LastDirectory,
+        // SuggestedFileName and Save - and every one of them reduces to CorePaths, CoreSettings and
+        // Core's EnhancementSerializer.
+        //
+        // ponytail: five inlined members beats blocking the whole file-ops group on a service move
+        // this layer does not own. When EnhancementLibrary reaches Core, delete this region and
+        // call it. Deliberately NOT inlined: LibraryChanged (nothing on this head listens - the
+        // catalogue browser is not ported), the demo seeding, and ScanLibrary/FindMatch, whose
+        // absence is visible in exactly one place and noted there.
         // ---------------------------------------------------------------------------------
 
-        private void MenuSave_Click(object? sender, RoutedEventArgs e)
+        private const string EnhancementFileSuffix = ".ccpenh.json";
+        private const int MaxRecentFiles = 10;
+
+        private static readonly string[] AudioPatterns = { "*.mp3", "*.wav", "*.m4a", "*.aac", "*.flac", "*.ogg" };
+        private static readonly string[] VideoPatterns = { "*.mp4", "*.webm", "*.mkv", "*.mov", "*.avi", "*.m4v" };
+
+        /// <summary>EnhancementLibrary.LibraryFolder.</summary>
+        private static string LibraryFolder => IOPath.Combine(CorePaths.UserData, "enhancements");
+
+        /// <summary>EnhancementLibrary.LastDirectory: where the last save or open happened,
+        /// falling back to the library folder.</summary>
+        private static string LastDirectory
         {
-            if (string.IsNullOrEmpty(_filePath))
+            get
             {
-                MenuSaveAs_Click(sender, e);
-                return;
+                var d = CoreSettings.Current.DeeperLastDirectory;
+                return !string.IsNullOrEmpty(d) && Directory.Exists(d) ? d : LibraryFolder;
             }
-            SaveTo(_filePath!);
         }
 
-        private void MenuSaveAs_Click(object? sender, RoutedEventArgs e)
-            => Log.Debug("DeeperEditor: Save As needs App.EnhancementLibrary + a save dialog");
+        /// <summary>EnhancementLibrary.SuggestedFileName.</summary>
+        private static string SuggestedProjectFileName(Enhancement e)
+        {
+            var name = e.Metadata?.Name;
+            if (string.IsNullOrWhiteSpace(name)) name = "Untitled";
+            foreach (var c in IOPath.GetInvalidFileNameChars()) name = name!.Replace(c, '_');
+            return name + EnhancementFileSuffix;
+        }
 
-        private void SaveTo(string path)
-            => Log.Debug("DeeperEditor: Save needs EnhancementSerializer.Write + App.EnhancementLibrary: {Path}", path);
+        /// <summary>EnhancementLibrary.Save, with its TouchRecent and RememberDirectory folded in -
+        /// those two writes are what puts a saved project in the recent list and seeds the next
+        /// picker, so dropping them would quietly lose behaviour the strip depends on.</summary>
+        private static void WriteProjectFile(Enhancement e, string path)
+        {
+            var dir = IOPath.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir!);
+            File.WriteAllText(path, EnhancementSerializer.Save(e));
 
-        private void MenuExportEnhanced_Click(object? sender, RoutedEventArgs e)
-            => Log.Debug("DeeperEditor: Export needs EnhancementMediaBundler + a save dialog");
+            try
+            {
+                var settings = CoreSettings.Current;
+                var canonical = IOPath.GetFullPath(path);
+                var recent = settings.DeeperRecentFiles
+                    .Where(x => !string.Equals(x, canonical, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                recent.Insert(0, canonical);
+                if (recent.Count > MaxRecentFiles) recent = recent.Take(MaxRecentFiles).ToList();
+                settings.DeeperRecentFiles = recent;
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir!)) settings.DeeperLastDirectory = dir!;
+                CoreSettings.Save();
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: recording the saved project failed"); }
+        }
+
+        /// <summary>A picker start folder from a path, or null when it does not resolve. The
+        /// library folder does not exist until the first save, so a null here is normal and just
+        /// means the picker opens wherever the OS last left it.</summary>
+        private async Task<IStorageFolder?> TryFolderAsync(string? dir)
+        {
+            if (string.IsNullOrEmpty(dir)) return null;
+            try { return await StorageProvider.TryGetFolderFromPathAsync(dir!); }
+            catch { return null; }
+        }
+
+        private async void MenuSave_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_filePath)) await SaveAsAsync();
+                else await SaveToAsync(_filePath!);
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: save failed"); }
+        }
+
+        private async void MenuSaveAs_Click(object? sender, RoutedEventArgs e)
+        {
+            try { await SaveAsAsync(); }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: save-as failed"); }
+        }
+
+        private async Task SaveAsAsync()
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Loc.Get("deeper_editor_save_dialog_title"),
+                SuggestedFileName = SuggestedProjectFileName(_enhancement),
+                SuggestedStartLocation = await TryFolderAsync(LastDirectory),
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("Deeper Enhancement") { Patterns = new[] { "*" + EnhancementFileSuffix } },
+                },
+            });
+            var path = file?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+            // WPF set AddExtension=false and appended the double suffix itself, because
+            // ".ccpenh.json" is not an extension any picker will complete. Same here.
+            if (!path!.EndsWith(EnhancementFileSuffix, StringComparison.OrdinalIgnoreCase))
+                path += EnhancementFileSuffix;
+            await SaveToAsync(path);
+        }
+
+        private async Task SaveToAsync(string path)
+        {
+            try
+            {
+                // A synchronous validation pass so the user is not handed a file we already know
+                // is broken. Errors get a "save anyway?" prompt; warnings pass silently, they are
+                // already on the validation strip.
+                var errorCount = EnhancementValidator.Validate(_enhancement)
+                    .Count(i => i.Severity == ValidationSeverity.Error);
+                if (errorCount > 0 && !await MessageDialog.ConfirmAsync(this,
+                        Loc.Get("deeper_editor_save_invalid_title"),
+                        Loc.GetF("deeper_editor_save_invalid_prompt_fmt", errorCount)))
+                    return;
+
+                // Refresh the hardware-gating auto-tags so the catalogue browser can show them on
+                // the card without re-reading the file.
+                if (_enhancement.Metadata != null)
+                    _enhancement.Metadata.AutoTags = EnhancementAutoTagger.Detect(_enhancement);
+
+                WriteProjectFile(_enhancement, path);
+                _filePath = path;
+                _isDirty = false;
+                TxtDirty.IsVisible = false;
+                // UpdateTitle only writes TextBlocks and the linked-files strip, so none of
+                // Avalonia's deferred TextChanged handlers fire and the flag stays clear.
+                UpdateTitle();
+
+                // ponytail: WPF also set TutorialEventBus.LastSavedEnhancementPath and emitted
+                // "FileSaved" so the HT walkthrough could advance to its follow-up card.
+                // TutorialEventBus is head-only (ConditioningControlPanel/Services/TutorialEventBus.cs)
+                // and no tutorial runs on this head, so there is nothing listening to notify.
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "DeeperEditor: save failed");
+                await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_save_dialog_title"),
+                    Loc.GetF("deeper_editor_save_failed_fmt", ex.Message));
+            }
+        }
+
+        private async void MenuExportEnhanced_Click(object? sender, RoutedEventArgs e)
+        {
+            try { await ExportEnhancedAsync(); }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "DeeperEditor: export failed");
+                await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_export_dialog_title"),
+                    Loc.GetF("deeper_editor_export_failed_fmt", ex.Message));
+            }
+        }
+
+        private async Task ExportEnhancedAsync()
+        {
+            // Hard errors block the export outright rather than prompting: the bundled file is
+            // meant to be shared, so handing someone a known-broken enhancement is worse than
+            // refusing.
+            var errorCount = EnhancementValidator.Validate(_enhancement)
+                .Count(i => i.Severity == ValidationSeverity.Error);
+            if (errorCount > 0)
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_export_dialog_title"),
+                    Loc.GetF("deeper_editor_export_validation_blocked_fmt", errorCount));
+                return;
+            }
+
+            // A project already backed by a local file the bundler can write into needs no picker.
+            // URLs, missing files and containers the bundler cannot write (webm, mkv) fall through.
+            string? sourcePath = null;
+            var currentSrc = _enhancement.MediaSource ?? "";
+            var srcIsUrl = currentSrc.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        || currentSrc.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+            if (!srcIsUrl && EnhancementMediaBundler.IsSupportedExtension(currentSrc))
+            {
+                try { if (File.Exists(currentSrc)) sourcePath = currentSrc; } catch { }
+            }
+
+            if (sourcePath == null)
+            {
+                var picked = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = Loc.Get("deeper_editor_export_pick_source_title"),
+                    AllowMultiple = false,
+                    SuggestedStartLocation = await TryFolderAsync(LastDirectory),
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("Media files")
+                            { Patterns = new[] { "*.mp4", "*.m4v", "*.mov", "*.m4a", "*.mp3", "*.wav" } },
+                        FilePickerFileTypes.All,
+                    },
+                });
+                sourcePath = picked.FirstOrDefault()?.TryGetLocalPath();
+                if (string.IsNullOrEmpty(sourcePath)) return;
+            }
+
+            if (!EnhancementMediaBundler.IsSupportedExtension(sourcePath!))
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_export_dialog_title"),
+                    Loc.Get("deeper_editor_export_unsupported_format"));
+                return;
+            }
+
+            var srcExt = IOPath.GetExtension(sourcePath!);
+            var defaultName = IOPath.GetFileNameWithoutExtension(sourcePath!) + " (CCP)" + srcExt;
+
+            var dest = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Loc.Get("deeper_editor_export_save_dialog_title"),
+                SuggestedFileName = defaultName,
+                DefaultExtension = srcExt.TrimStart('.'),
+                SuggestedStartLocation = await TryFolderAsync(IOPath.GetDirectoryName(sourcePath!)),
+                // Pinned to the source extension. A destination in another container would hold the
+                // source bytes under a name no player can open.
+                FileTypeChoices = new[]
+                {
+                    new FilePickerFileType("Media (" + srcExt + ")") { Patterns = new[] { "*" + srcExt } },
+                },
+            });
+            var destPath = dest?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(destPath)) return;
+
+            if (string.Equals(IOPath.GetFullPath(destPath!), IOPath.GetFullPath(sourcePath!),
+                              StringComparison.OrdinalIgnoreCase))
+            {
+                await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_export_dialog_title"),
+                    Loc.Get("deeper_editor_export_same_file_error"));
+                return;
+            }
+
+            var result = EnhancementMediaBundler.Export(_enhancement, sourcePath!, destPath!);
+            await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_export_dialog_title"),
+                result.Success
+                    ? Loc.GetF("deeper_editor_export_success_fmt", result.OutputPath ?? destPath!)
+                    : Loc.GetF("deeper_editor_export_failed_fmt", result.Error ?? "(unknown)"));
+        }
 
         private void MenuClose_Click(object? sender, RoutedEventArgs e) => Close();
 
@@ -2101,11 +2328,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             catch (Exception ex) { Log.Warning(ex, "DeeperEditor: could not open the project folder"); }
         }
 
-        /// <summary>ponytail: needs App.EnhancementLibrary + an open dialog.</summary>
-        private void BtnLinkedJsonSwap_Click(object? sender, RoutedEventArgs e)
+        private async void BtnLinkedJsonSwap_Click(object? sender, RoutedEventArgs e)
         {
-            if (!ConfirmDiscardChanges()) return;
-            Log.Debug("DeeperEditor: swap project needs App.EnhancementLibrary + an open dialog");
+            try
+            {
+                if (!await ConfirmDiscardChangesAsync()) return;
+                var picked = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = Loc.Get("deeper_editor_linked_swap_json_btn"),
+                    AllowMultiple = false,
+                    SuggestedStartLocation = await TryFolderAsync(LibraryFolder),
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("Deeper Enhancement") { Patterns = new[] { "*" + EnhancementFileSuffix } },
+                        FilePickerFileTypes.All,
+                    },
+                });
+                var path = picked.FirstOrDefault()?.TryGetLocalPath();
+                if (!string.IsNullOrEmpty(path)) await OpenProjectAsync(path!);
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: swap project failed"); }
+        }
+
+        /// <summary>EnhancementLibrary.Open plus the editor's reload: read the file, tear the
+        /// preview down, swap the model in, start the new preview. The one shared body behind the
+        /// swap button and the drag-and-drop path, so a bad file reports the same way from both.
+        /// </summary>
+        private async Task OpenProjectAsync(string path)
+        {
+            try
+            {
+                var enhancement = EnhancementSerializer.LoadFromFile(path);
+                TeardownPreview();
+                LoadEnhancement(enhancement, path);
+                _ = InitializePreviewAsync();
+            }
+            catch (EnhancementLoadException ex)
+            {
+                await MessageDialog.ShowAsync(this, "Deeper", ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "DeeperEditor: open project failed: {Path}", path);
+                await MessageDialog.ShowAsync(this, "Deeper", ex.Message);
+            }
         }
 
         private void BtnLinkedMediaChange_Click(object? sender, RoutedEventArgs e)
@@ -2113,30 +2379,135 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             if (MediaChangePopup != null) MediaChangePopup.IsOpen = true;
         }
 
-        /// <summary>ponytail: needs an open-file dialog.</summary>
-        private void BtnChangeMediaLocal_Click(object? sender, RoutedEventArgs e)
+        private async void BtnChangeMediaLocal_Click(object? sender, RoutedEventArgs e)
         {
             if (MediaChangePopup != null) MediaChangePopup.IsOpen = false;
-            Log.Debug("DeeperEditor: change media (local) needs a file dialog");
+            try
+            {
+                var picked = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+                {
+                    Title = Loc.Get("deeper_editor_linked_change_media_btn"),
+                    AllowMultiple = false,
+                    SuggestedStartLocation = await TryFolderAsync(LastDirectory),
+                    FileTypeFilter = new[]
+                    {
+                        new FilePickerFileType("Media (audio + video)")
+                            { Patterns = AudioPatterns.Concat(VideoPatterns).ToArray() },
+                        new FilePickerFileType("Audio") { Patterns = AudioPatterns },
+                        new FilePickerFileType("Video") { Patterns = VideoPatterns },
+                        FilePickerFileTypes.All,
+                    },
+                });
+                var path = picked.FirstOrDefault()?.TryGetLocalPath();
+                if (!string.IsNullOrEmpty(path)) await ApplyChangedMediaAsync(path!, isLocal: true);
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: change media (local) failed"); }
         }
 
-        /// <summary>ponytail: needs UrlPromptDialog.</summary>
-        private void BtnChangeMediaUrl_Click(object? sender, RoutedEventArgs e)
+        /// <summary>UrlPromptDialog closes with a bare <c>Close()</c> and reports through its
+        /// <c>Result</c> property, so this awaits the dialog and then reads it rather than reading
+        /// a dialog result.</summary>
+        private async void BtnChangeMediaUrl_Click(object? sender, RoutedEventArgs e)
         {
             if (MediaChangePopup != null) MediaChangePopup.IsOpen = false;
-            Log.Debug("DeeperEditor: change media (URL) needs UrlPromptDialog");
+            try
+            {
+                var prompt = new UrlPromptDialog();
+                await prompt.ShowDialog(this);
+                if (string.IsNullOrEmpty(prompt.Result)) return;
+                await ApplyChangedMediaAsync(prompt.Result!, isLocal: false);
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: change media (URL) failed"); }
         }
 
-        /// <summary>ponytail: needs the media pipeline (re-probe duration, reload the preview) plus
-        /// the same dialogs as the two callers above.</summary>
-        private void ApplyChangedMedia(string newSource, bool isLocal)
-            => Log.Debug("DeeperEditor: ApplyChangedMedia({Source}, local={Local}) needs the media pipeline", newSource, isLocal);
-
-        private void BtnLinkedMediaClear_Click(object? sender, RoutedEventArgs e)
+        /// <summary>
+        /// Relinks the project to a new media source, first offering to switch to whichever
+        /// project that media already carries.
+        ///
+        /// PORTED whole apart from one probe and one button. The embedded probe
+        /// (EnhancementMediaBundler.TryExtract) and the sidecar probe are both Core-backed and run
+        /// for real. ponytail: the third probe - App.EnhancementLibrary.FindMatch over a scan of
+        /// the enhancements folder - does not. FindMatch is the one member of that head-only
+        /// service this window cannot reduce to a few lines, so a project that lives in the library
+        /// but is neither embedded in nor sitting beside the media is not offered here.
+        ///
+        /// WPF's "use the matching project?" prompt was Yes/No/Cancel; MessageDialog is OK/Cancel,
+        /// so OK still switches projects and Cancel now means WPF's No - relink the open project.
+        /// The lost branch is Cancel-out-entirely; a user who wanted that re-picks the old media.
+        /// Nothing is written to disk on either path, so no work is lost either way.
+        /// </summary>
+        private async Task ApplyChangedMediaAsync(string newSource, bool isLocal)
         {
-            if (_enhancement == null) return;
+            Enhancement? matched = null;
+            string? matchedSource = null;
+
+            try
+            {
+                if (isLocal && EnhancementMediaBundler.IsSupportedExtension(newSource)
+                    && EnhancementMediaBundler.TryExtract(newSource, out var embedded, out _)
+                    && embedded != null)
+                {
+                    matched = embedded;
+                    matchedSource = newSource; // embedded source = the media itself
+                }
+            }
+            catch (Exception ex) { Log.Debug("DeeperEditor: embedded probe failed: {Error}", ex.Message); }
+
+            if (matched == null && isLocal)
+            {
+                try
+                {
+                    var dir = IOPath.GetDirectoryName(newSource);
+                    var stem = IOPath.GetFileNameWithoutExtension(newSource);
+                    if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(stem))
+                    {
+                        var sidecar = IOPath.Combine(dir!, stem + EnhancementFileSuffix);
+                        if (File.Exists(sidecar))
+                        {
+                            matched = EnhancementSerializer.LoadFromFile(sidecar);
+                            matchedSource = sidecar;
+                        }
+                    }
+                }
+                catch (Exception ex) { Log.Debug("DeeperEditor: sidecar probe failed: {Error}", ex.Message); }
+            }
+
+            if (matched != null && !string.IsNullOrEmpty(matchedSource)
+                && await MessageDialog.ConfirmAsync(this, "Deeper",
+                       Loc.Get("deeper_editor_linked_replace_project_q")))
+            {
+                if (!await ConfirmDiscardChangesAsync()) return;
+                // An embedded project is not a file: load it with no path, so a later save writes
+                // a new .ccpenh.json instead of overwriting the media in place.
+                var loadPath = matchedSource!.EndsWith(EnhancementFileSuffix, StringComparison.OrdinalIgnoreCase)
+                    ? matchedSource
+                    : null;
+                TeardownPreview();
+                LoadEnhancement(matched, loadPath);
+                _ = InitializePreviewAsync();
+                return;
+            }
+
+            // Just relink: point the open project at the new media.
+            _enhancement.MediaSource = newSource;
+            _enhancement.MediaType = isLocal && !IsLocalVideoFile(newSource) ? MediaTypes.Audio : MediaTypes.Video;
+            MarkDirty();
+            RefreshLinkedFilesUi();
+            TeardownPreview();
+            _ = InitializePreviewAsync();
+            _ = TryAutoFillFromHtAsync(_enhancement.MediaSource);
+        }
+
+        /// <summary>The clear confirm is back: WPF asked before dropping the media link and the
+        /// straight port had lost the question, so the button used to wipe the link on one click.
+        /// </summary>
+        private async void BtnLinkedMediaClear_Click(object? sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_enhancement?.MediaSource)) return;
+            if (!await MessageDialog.ConfirmAsync(this, "Deeper",
+                    Loc.Get("deeper_editor_linked_clear_confirm"))) return;
             PushUndoSnapshot();
-            _enhancement.MediaSource = "";
+            _enhancement!.MediaSource = "";
             MarkDirty();
             RefreshLinkedFilesUi();
             ShowPlaceholder();
@@ -2159,24 +2530,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             }
         }
 
-        /// <summary>ponytail: the accept/reject half is real; loading the dropped file needs
-        /// EnhancementSerializer.Read plus the media pipeline, so the drop logs and returns.</summary>
-        private void Window_Drop(object? sender, DragEventArgs e)
+        private async void Window_Drop(object? sender, DragEventArgs e)
         {
             var files = e.DataTransfer.TryGetFiles();
             if (files == null) return;
-            foreach (var f in files)
+            try
             {
-                var p = f.TryGetLocalPath();
-                if (p == null) continue;
-                if (IsEnhancementJsonPath(p)) { LoadEnhancementFromDrop(p); return; }
-                if (IsLocalMediaFile(p)) { ApplyChangedMedia(p, isLocal: true); return; }
+                foreach (var f in files)
+                {
+                    var p = f.TryGetLocalPath();
+                    if (p == null) continue;
+                    if (IsEnhancementJsonPath(p)) { await LoadEnhancementFromDropAsync(p); return; }
+                    if (IsLocalMediaFile(p)) { await ApplyChangedMediaAsync(p, isLocal: true); return; }
+                }
             }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: drop failed"); }
         }
 
-        /// <summary>ponytail: needs EnhancementSerializer.Read + ConfirmDiscardChanges' dialog.</summary>
-        private void LoadEnhancementFromDrop(string ccpenhJsonPath)
-            => Log.Debug("DeeperEditor: drop-load needs EnhancementSerializer.Read: {Path}", ccpenhJsonPath);
+        private async Task LoadEnhancementFromDropAsync(string ccpenhJsonPath)
+        {
+            if (!await ConfirmDiscardChangesAsync()) return;
+            await OpenProjectAsync(ccpenhJsonPath);
+        }
 
         private static bool IsDroppableEditorPath(string path)
             => IsEnhancementJsonPath(path) || IsLocalMediaFile(path);
@@ -2193,13 +2568,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             => !string.IsNullOrWhiteSpace(path)
                && path.EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase);
 
-        /// <summary>ponytail: needs a modal confirm dialog. Returning true keeps the caller's flow
-        /// intact; the unsaved-changes guard is lost until a dialog exists on this head.</summary>
-        private bool ConfirmDiscardChanges()
+        /// <summary>
+        /// The one gate this layer deliberately leaves open, now that the editor can actually save.
+        ///
+        /// WPF asked Save / Discard / Cancel and this head has no three-way modal - MessageDialog
+        /// offers OK and OK/Cancel only. Both two-way collapses are worse than the gap, so neither
+        /// was taken: mapping OK to Discard contradicts the localized prompt itself ("You have
+        /// unsaved changes. Save before continuing?"), and mapping OK to Save leaves a user who
+        /// wants to abandon an experiment with no way out except writing it over their original
+        /// file - which is a data loss of its own, not a smaller one.
+        ///
+        /// ponytail: this is async and every caller awaits it, so the layer that adds a three-way
+        /// dialog in CCP.Avalonia/Views/Dialogs/ replaces this body and touches nothing else.
+        /// </summary>
+        private Task<bool> ConfirmDiscardChangesAsync()
         {
-            if (!_isDirty) return true;
-            Log.Debug("DeeperEditor: discard-changes confirm needs a modal dialog; proceeding");
-            return true;
+            if (!_isDirty) return Task.FromResult(true);
+            Log.Debug("DeeperEditor: discard-changes confirm needs a three-way modal; proceeding");
+            return Task.FromResult(true);
         }
 
         private static bool IsLocalVideoFile(string path)
@@ -2334,9 +2720,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             try { Close(); } catch { }
         }
 
-        /// <summary>ponytail: the unsaved-changes prompt needs a modal dialog (WPF used
-        /// MessageBox.Show with Yes/No/Cancel and could cancel the close). Without one the editor
-        /// closes and the teardown below still runs, so nothing leaks - only the prompt is lost.</summary>
+        /// <summary>
+        /// ponytail: the unsaved-changes prompt needs the same three-way modal
+        /// <see cref="ConfirmDiscardChangesAsync"/> is waiting on. Teardown still runs, so nothing
+        /// leaks - but now that Save works, closing a dirty editor discards real work silently.
+        ///
+        /// The layer that adds the dialog cannot simply await here: Avalonia evaluates
+        /// <c>WindowClosingEventArgs.Cancel</c> synchronously, so it must set <c>e.Cancel = true</c>
+        /// BEFORE the first await, then call <c>Close()</c> again behind a <c>_closeConfirmed</c>
+        /// flag once the user has answered.
+        /// </summary>
         private void Window_Closing(object? sender, WindowClosingEventArgs e)
         {
             if (_isDirty && !_suppressDirtyPromptOnClose)
