@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
@@ -9,8 +10,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/WelcomeDialog.xaml.cs. Deviations:
     ///  - WPF's <c>DialogResult</c> becomes <c>Close(true)</c>.
-    ///  - <c>App.Mods.GetAffirmation()</c> and <c>App.Settings</c> are head services; both are
-    ///    ponytail stubs below.
+    ///  - <c>App.Mods.GetAffirmation() ?? "Subject"</c> becomes <see cref="CoreMods.Affirmation"/>,
+    ///    which carries the same fallback.
+    ///  - <see cref="ShowIfNeeded"/> takes an owner and is async: Avalonia's <c>ShowDialog</c> needs
+    ///    a non-null owner Window and returns a Task, so the parameterless synchronous WPF static
+    ///    cannot be ported one for one.
     /// </summary>
     public partial class WelcomeDialog : Window
     {
@@ -18,8 +22,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             AvaloniaXamlLoader.Load(this);
 
-            // ponytail: needs App.Mods.GetAffirmation(), wired when it moves to Core
-            this.FindControl<TextBlock>("TxtWelcomeHeading")!.Text = Loc.GetF("label_welcome", "Subject");
+            this.FindControl<TextBlock>("TxtWelcomeHeading")!.Text =
+                Loc.GetF("label_welcome", CoreMods.Affirmation);
 
             this.FindControl<Button>("BtnBegin")!.Click += (_, _) => Close(true);
         }
@@ -28,12 +32,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// Show welcome dialog if user hasn't been welcomed yet.
         /// </summary>
         /// <returns>True if welcome was shown (first launch), false otherwise</returns>
-        public static bool ShowIfNeeded()
+        public static async Task<bool> ShowIfNeeded(Window owner)
         {
-            // ponytail: needs App.Settings (Welcomed flag + Save), wired when it moves to Core.
-            // Until then this never fires, so first launch shows nothing rather than showing it
-            // on every launch.
-            return false;
+            if (CoreSettings.Current.Welcomed) return false;
+
+            await new WelcomeDialog().ShowDialog(owner);
+
+            // WPF latched Welcomed whatever the dialog returned — dismissing it still counts as
+            // having seen it, otherwise the dialog reappears on every launch.
+            CoreSettings.Current.Welcomed = true;
+            CoreSettings.Save();
+            return true;
         }
     }
 }
