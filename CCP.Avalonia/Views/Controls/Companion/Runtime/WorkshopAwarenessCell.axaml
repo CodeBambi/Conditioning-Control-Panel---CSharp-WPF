@@ -108,16 +108,19 @@
         <!-- ========== legacy cooldowns (only while UseAwarenessV2 is off) ========== -->
         <Border x:Name="AwarenessSettingsPanel" IsVisible="False" Margin="0,0,0,7">
             <StackPanel>
+                <!-- The two value labels below and TxtPrivacySpoiler are plain text, not
+                     {loc:Str}: the code-behind writes them, and a live loc binding under a
+                     local set is re-applied on the next language change, undoing it. -->
                 <Grid>
                     <TextBlock Text="{loc:Str label_reaction_cooldown}" Theme="{StaticResource CmpCellLabelStyle}"/>
-                    <TextBlock x:Name="TxtAwarenessCooldown" Text="{loc:Str label_90s}"
+                    <TextBlock x:Name="TxtAwarenessCooldown" Text="90s"
                                Theme="{StaticResource CmpCellValueStyle}"/>
                 </Grid>
                 <Slider x:Name="SliderAwarenessCooldown" Theme="{DynamicResource PinkSlider}"
                         Minimum="10" Maximum="300" Value="90" Margin="0,4,0,8"/>
                 <Grid>
                     <TextBlock Text="{loc:Str label_reaction_cooldown_max}" Theme="{StaticResource CmpCellLabelStyle}"/>
-                    <TextBlock x:Name="TxtAwarenessCooldownMax" Text="{loc:Str label_cooldown_off}"
+                    <TextBlock x:Name="TxtAwarenessCooldownMax" Text="Off"
                                Theme="{StaticResource CmpCellValueStyle}"/>
                 </Grid>
                 <Slider x:Name="SliderAwarenessCooldownMax" Theme="{DynamicResource PinkSlider}"
@@ -137,7 +140,7 @@
                     <Button x:Name="BtnPrivacySpoiler"
                             Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
                             HorizontalAlignment="Right" FontSize="10.5" Cursor="Hand">
-                        <TextBlock x:Name="TxtPrivacySpoiler" Text="{loc:Str btn_click_to_reveal}"/>
+                        <TextBlock x:Name="TxtPrivacySpoiler"/>
                     </Button>
                 </Grid>
                 <TextBlock x:Name="TxtPrivacyDetails" IsVisible="False"
