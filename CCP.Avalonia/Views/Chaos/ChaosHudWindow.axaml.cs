@@ -50,6 +50,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///    tier colour, the tier font size, the glow, the final opacity, the parked slide offset.
     ///    The state-driven visuals are therefore all present; only the motion between them is not.
     ///    The one animation that was already a timer - the hot-streak jitter - is ported as-is.
+    ///  - <b>Settings.</b> The persisted edge (<c>ChaosHudOnRight</c>) and the panic-key hint
+    ///    read and write <c>CoreSettings.Current</c>, one for one with the <c>App.Settings</c>
+    ///    pair WPF used, so the side switch survives a restart again.
     ///  - <c>Mouse.GetPosition</c> has no Avalonia twin (there is no global cursor query), so the
     ///    collapse grace tests the LAST SEEN pointer position instead; see CursorInHudGrace.
     ///  - <c>SystemParameters.WorkArea</c> -> <c>Screens</c>; <c>Left</c>/<c>Top</c> ->
@@ -229,8 +232,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             // screen (shrinks from the bottom up). Left/right edge is chosen by ApplySide.
             Height = WorkAreaDip().Height * 0.6;
             if (double.IsNaN(Height) || Height < 200) Height = 780;   // headless, or no screen yet
-            // ponytail: needs App.Settings (ChaosHudOnRight), wired when settings move to Core.
-            ApplySide(false);
+            ApplySide(CoreSettings.Current.ChaosHudOnRight);
             LoadPortrait();
             AttachHudTips();
         }
@@ -346,8 +348,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// <summary>
         /// Sidebar portrait slot. WPF resolved art by convention through <c>ChaosArt.Resolve</c>
         /// and collapsed the host when no file was present.
-        /// ponytail: needs ChaosArt, wired when it moves to Core. Until then this is the no-art
-        /// path - which is what a fresh install renders anyway.
+        /// <para>ponytail: needs <c>Services/Chaos/ChaosArt.cs</c>, still in the WPF head because
+        /// it returns <c>System.Windows.Media.ImageSource</c>. Only the RESOLUTION half is
+        /// portable (<c>ChaosArt.PathFor</c> / <c>FilePath</c>, returning an absolute path each
+        /// head decodes itself) - that is the half to move, as <c>CoreModArt</c> did for mod art.
+        /// Whoever moves it: <c>Roots()</c> yields <c>App.UserAssetsPath</c> (= UserData/assets)
+        /// and the callers then append <c>assets/Chaos/...</c>, so the user root probes a doubled
+        /// <c>assets</c> segment; decide whether that is the intended layout before copying it.
+        /// Until then this is the no-art path - what a fresh install renders anyway.</para>
         /// </summary>
         private void LoadPortrait()
         {
@@ -620,10 +628,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             PersistSide(true);
         }
 
-        /// <summary>ponytail: needs App.Settings (ChaosHudOnRight), wired when settings move to
-        /// Core. The side switch works for the session; it just does not survive a restart.</summary>
+        /// <summary>Remember the chosen edge across restarts. Compare-before-write, as WPF did:
+        /// the switch handlers already early-out on a no-op, but a debounced save is not free.</summary>
         private void PersistSide(bool onRight)
         {
+            try
+            {
+                if (CoreSettings.Current.ChaosHudOnRight == onRight) return;
+                CoreSettings.Current.ChaosHudOnRight = onRight;
+                CoreSettings.Save();
+            }
+            catch (Exception ex) { Log.Debug("ChaosHud side persist: {E}", ex.Message); }
         }
 
         /// <summary>Pin the panel open for the pre-run loadout glance (FALL IN → countdown), then
@@ -745,9 +760,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             {
                 _btnHero.IsVisible = !paused;
                 _pauseChoiceRow.IsVisible = paused;
-                // ponytail: needs App.Settings (PanicKeyEnabled / PanicKey), wired when settings
-                // move to Core. Until then the hint reads as it does with the panic key off.
-                _txtPauseHint.Text = "⏸ HELD · the hole waits";
+                var settings = CoreSettings.Current;
+                _txtPauseHint.Text = settings.PanicKeyEnabled
+                    ? $"⏸ HELD · {settings.PanicKey} again wakes you up"
+                    : "⏸ HELD · the hole waits";
                 _txtPauseHint.IsVisible = paused;
                 _pinnedOpen = paused;
                 if (paused)
