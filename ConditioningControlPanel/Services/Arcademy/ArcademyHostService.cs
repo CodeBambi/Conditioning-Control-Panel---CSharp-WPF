@@ -1812,6 +1812,14 @@ internal static class ArcademyHostService
         ["replay_board"] = "Flip the board again",
         ["share"] = "Copy share card",
         ["shared"] = "Copied to clipboard",
+        // The picture half of the share (shell/cardshot.js). Button + toast only:
+        // every word drawn ON the image is a neutral literal, so a paste never outs a mod.
+        ["share_image"] = "Save as image",
+        ["share_image_saved"] = "Card saved as a picture",
+        ["share_image_copied"] = "Card copied. Paste it anywhere.",
+        ["share_image_hold"] = "Press and hold the card to save it",
+        ["share_image_failed"] = "The card would not save",
+        ["share_image_close"] = "Close",
         ["done"] = "Done",
         ["retake"] = "Retake",
         ["xp"] = "XP",

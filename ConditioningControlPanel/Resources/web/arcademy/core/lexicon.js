@@ -79,6 +79,15 @@ export const DEFAULT_LEXICON = Object.freeze({
   replay_board: 'Flip the board again',
   share: 'Copy share card',
   shared: 'Copied to clipboard',
+  /* the picture half of the share (shell/cardshot.js). These are the ONLY
+     strings the image beat can be re-voiced through - the copy drawn ON the
+     picture is neutral by ruling, so a paste never outs a mod. */
+  share_image: 'Save as image',
+  share_image_saved: 'Card saved as a picture',
+  share_image_copied: 'Card copied. Paste it anywhere.',
+  share_image_hold: 'Press and hold the card to save it',
+  share_image_failed: 'The card would not save',
+  share_image_close: 'Close',
   done: 'Done',
   xp: 'XP',
   streak: 'Streak',
