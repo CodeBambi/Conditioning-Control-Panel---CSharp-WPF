@@ -1,76 +1,61 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.ProgramsFx.cs (1210 lines).
+// PORTED-AS-A-NOTE from ConditioningControlPanel/MainWindow/MainWindow.ProgramsFx.cs (1,210 lines)
+// - the Programs tab's "ignition" rig: the Today band gets warmer, brighter and busier as a run
+// gets deeper, and fires one-shot moments on a day completing, a chapter sealing and a graduation.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// NOTHING IS RESTORED HERE, and for once the reason is not Avalonia. EVERY effect in this file is
+// a FUNCTION OF RUN STATE that does not exist on this head:
 //
-// Members dropped (60):
-//   private const double ProgramSigilRestOpacity
-//   private const byte ProgramWashAlphaCold
-//   private const byte ProgramWashAlphaHot
-//   private const double ProgramAccentFadeSeconds
-//   private const double ProgramSealSeconds
-//   private static readonly Color ProgramGraduationGold
-//   private SolidColorBrush? _programAccent
-//   private string? _programAccentRunKey
-//   private Color? _programAccentTarget
-//   private double _programHeat
-//   private ProgramHeatTier _programTier
-//   private bool _programBossToday
-//   private string? _programFxSignature
-//   private LinearGradientBrush? _programBorderBrush
-//   private RotateTransform? _programBorderRotate
-//   private LinearGradientBrush? _programCounterBrush
-//   private TranslateTransform? _programCounterSlide
-//   private LinearGradientBrush? _programCometBrush
-//   private Brush? _programWashBrush
-//   private Brush? _programEdgeBrush
-//   private Brush? _programSigilGlowBrush
-//   private ScaleTransform? _programSigilScale
-//   private RadialGradientBrush? _programWaveBrush
-//   private DropShadowEffect? _programRailGlow
-//   private DropShadowEffect? _programBossGlow
-//   private AmbientFxCanvas? _programParticles
-//   private int _programCometAttempts
-//   private double _programSheenSeconds
-//   private string? _programChapterSealed
-//   private string? _programGraduationCelebrated
-//   private string? _programChapterBaselineRun
-//   private int? _programIgniteDay
-//   private bool _programDayJustCompleted
-//   private bool _programWindowFxHooked
-//   private static Color ProgramAccentColor(…)
-//   private SolidColorBrush ProgramRunAccent(…)
-//   private Color ProgramAccentColorNow(…)
-//   private void ComputeProgramHeat(…)
-//   private void ApplyProgramIgnition(…)
-//   private void BuildProgramIgnitionScenery(…)
-//   private void ApplyProgramSigilBreath(…)
-//   private void ApplyProgramBorderRotation(…)
-//   private void ApplyProgramWashBloom(…)
-//   private void ApplyProgramRailGlow(…)
-//   private void ApplyProgramCounterShimmer(…)
-//   private void ApplyProgramEdgeGlow(…)
-//   private void ApplyProgramBossFlare(…)
-//   private void ApplyProgramRailComet(…)
-//   private void ApplyProgramParticles(…)
-//   private AmbientFxCanvas? EnsureProgramParticleLayer(…)
-//   private void EnsureProgramWindowFxHooked(…)
-//   private void StopProgramIgnitionLoops(…)
-//   private void NoteProgramDayCompletion(…)
-//   private void PlayProgramDayCompleteMoment(…)
-//   private void CelebrateProgramTaskCompletions(…)
-//   private void NoteProgramChapterSeal(…)
-//   private void PlayProgramChapterSeal(…)
-//   private void CelebrateProgramGraduation(…)
-//   private static Color WithAccentAlpha(…)
-//   private static Color LightenToward(…)
+//     ComputeProgramHeat(ProgramDefinition, ProgramEnrollment, ProgramDay?)
+//         -> ProgramHeat.Compute(currentDay, lengthDays, day.Intensity, isBoss)
+//         -> _programHeat / _programTier / _programBossToday
+//         -> the wash alpha, the sigil breath depth, the border rotation, the rail glow, the comet
+//            budget and ProgramHeat.ParticleCount().
+//
+// Models.ProgramDefinition / ProgramEnrollment / ProgramDay and Services ProgramHeat are all still
+// in the WPF head, and MainWindow.ProgramsTab.cs - the only caller of ApplyProgramIgnition,
+// NoteProgramDayCompletion, NoteProgramChapterSeal and CelebrateProgramGraduation - is not ported
+// either. With no heat there is no tier, and every knob collapses to "cold".
+//
+// THAT IS WHY THERE IS NO EnsureProgramsFx() HERE, though it looks like the one obvious win.
+// ProgramsTabView.axaml carries an empty <Grid x:Name="TodayFxLayer"/> waiting for exactly the
+// AmbientFxCanvas that MainShellWindow.EnhancementsFx.cs composes for the skill tree - but WPF
+// adds that canvas only from ApplyProgramParticles, and only when
+// ProgramHeat.ParticleCount(_programHeat) > 0, i.e. at Charged and above. Composing it
+// unconditionally would put dust over a cold band the Windows app leaves clean: a deviation
+// dressed as a port, and one a render proof would happily pass. When the program service lands the
+// canvas goes in TodayFxLayer, RegisterTabFx("programs", canvas) (idempotent) hooks it into the
+// tab-switch park/resume governor, and one `case "programs": EnsureProgramsFx(); break;` goes in
+// EnsureTabFx (MainShellWindow.AmbientFx.cs), which this layer does not own.
+//
+// What each group needs, so the next pass does not have to re-derive it (60 members):
+//
+//   * the run state, listed above - the eleven _program* run fields, ComputeProgramHeat,
+//     ApplyProgramIgnition, BuildProgramIgnitionScenery, NoteProgramDayCompletion,
+//     PlayProgramDayCompleteMoment, CelebrateProgramTaskCompletions, NoteProgramChapterSeal,
+//     PlayProgramChapterSeal, CelebrateProgramGraduation.
+//   * Services/MotionFx.cs + Services/PerformanceProfile.cs (not in Core): the ambient gate and
+//     the particle budget - ApplyProgramParticles, EnsureProgramParticleLayer,
+//     ApplyProgramRailComet, _programCometAttempts, _programSheenSeconds.
+//   * Services/FxTheme.cs's accent (ProgramAccentColor, ProgramRunAccent, ProgramAccentColorNow,
+//     _programAccent). CoreMods answers the mod accent (HapticsSetupWindow.AccentFor is the
+//     precedent), so this group is cheapest to unblock and least useful alone: an accent with no
+//     heat repaints nothing that moves.
+//   * WPF drawing blocked only by the two groups above, NOT by Avalonia: the nine cached
+//     brush/transform/effect fields (a LinearGradientBrush turned by its own RelativeTransform
+//     ports as-is - Avalonia brushes take a Transform; DropShadowEffect exists here), plus
+//     ApplyProgramSigilBreath, ApplyProgramBorderRotation, ApplyProgramWashBloom,
+//     ApplyProgramRailGlow, ApplyProgramCounterShimmer, ApplyProgramEdgeGlow,
+//     ApplyProgramBossFlare, EnsureProgramWindowFxHooked, StopProgramIgnitionLoops and the six
+//     constants/colour helpers.
+//
+// Two rules for whoever restores it: park the loops through the shared gate
+// (MainShellWindow.TabFxTakeoverLabStatus.cs:Pr4aAmbientAllowed), not a second Activated
+// subscription; and cancel every keyframe Animation through a CTS, as every other loop here does.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // No member of this partial is referenced from MainShellWindow.axaml.
+        // Nothing references this partial, and nothing is restored - see the header.
     }
 }
