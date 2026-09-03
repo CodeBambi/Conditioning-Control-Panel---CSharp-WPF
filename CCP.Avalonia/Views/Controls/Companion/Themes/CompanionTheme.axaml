@@ -335,6 +335,32 @@
         </Style>
     </ControlTheme>
 
+    <!-- ============================ 4b. the room shell ============================
+         .room in the mockup is one element with four stacked backgrounds. The shell is the linear
+         base and the two radial washes ride above it as sibling Borders. ClipToBounds is not
+         optional: the washes overhang the corner radius. -->
+    <SolidColorBrush x:Key="CmpRoomBorderBrush" Color="#33B478FF"/>
+
+    <RadialGradientBrush x:Key="CmpRoomFloorGlowBrush" Center="55%,108%" GradientOrigin="55%,108%"
+                         RadiusX="58%" RadiusY="70%">
+        <GradientStop Color="#CC1E1E3F" Offset="0"/>
+        <GradientStop Color="#001E1E3F" Offset="1"/>
+    </RadialGradientBrush>
+
+    <ControlTheme x:Key="CmpRoomShellStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpRoomBackdropBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpRoomBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusRoom}"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+    </ControlTheme>
+
+    <!-- A wash layer: pure decoration, never in the hit-test path. -->
+    <ControlTheme x:Key="CmpRoomWashStyle" TargetType="Border">
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusRoom}"/>
+    </ControlTheme>
+
     <!-- ============================ 5. cards ============================ -->
     <ControlTheme x:Key="CmpCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource CmpCardBrush}"/>
@@ -774,6 +800,275 @@
         <Setter Property="Foreground" Value="#FFF2C9E0"/>
     </ControlTheme>
 
+    <!-- ============================ 10. chat bubbles ============================ -->
+    <!-- .bub.her is TWO borders in CSS: a faint outline plus a SOLID 3px pink rail on the left.
+         The outline lives here and the rail is CmpBubbleHerRailStyle, a Rectangle. -->
+    <ControlTheme x:Key="CmpBubbleHerStyle" TargetType="Border">
+        <Setter Property="Background" Value="#FF2A1A3A"/>
+        <Setter Property="BorderBrush" Value="#40FF69B4"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="4,14,14,14"/>
+        <Setter Property="Padding" Value="14,9,14,9"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="MaxWidth" Value="420"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpBubbleYouStyle" TargetType="Border">
+        <Setter Property="Background" Value="#FF1F2A3A"/>
+        <Setter Property="BorderBrush" Value="#409370DB"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="14,4,14,14"/>
+        <Setter Property="Padding" Value="14,9,14,9"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="MaxWidth" Value="420"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </ControlTheme>
+    <!-- her bubble's solid pink rail. Bottom margin matches the bubble's. -->
+    <ControlTheme x:Key="CmpBubbleHerRailStyle" TargetType="Rectangle">
+        <Setter Property="Width" Value="3"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Fill" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="RadiusX" Value="1.5"/>
+        <Setter Property="RadiusY" Value="1.5"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </ControlTheme>
+
+    <!-- .bub.echo - what her voice said out loud. Transparent: the DASHED outline is
+         CmpBubbleEchoOutlineStyle, because Border cannot dash. -->
+    <ControlTheme x:Key="CmpBubbleEchoStyle" TargetType="Border">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Padding" Value="14,8,14,8"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="MaxWidth" Value="440"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </ControlTheme>
+    <!-- the echo's dashed white-1F outline (.bub.echo { border: 1px dashed #ffffff1f }) -->
+    <ControlTheme x:Key="CmpBubbleEchoOutlineStyle" TargetType="Rectangle">
+        <Setter Property="Stroke" Value="#1FFFFFFF"/>
+        <Setter Property="StrokeThickness" Value="1"/>
+        <Setter Property="StrokeDashArray" Value="4,3"/>
+        <Setter Property="RadiusX" Value="14"/>
+        <Setter Property="RadiusY" Value="14"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </ControlTheme>
+
+    <ControlTheme x:Key="CmpBubbleTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="19"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpBubbleEchoTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpBubbleTextStyle}">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+    </ControlTheme>
+
+    <!-- .watchchip - sits under her line when she NAMED something the app has a real link for.
+         Quiet by design: an offer, not a call to action. -->
+    <ControlTheme x:Key="CmpWatchChipStyle" TargetType="Button">
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Margin" Value="0,7,0,0"/>
+        <Setter Property="Padding" Value="9,4"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="Chip" CornerRadius="9" Padding="{TemplateBinding Padding}"
+                        Background="#26FF69B4" BorderBrush="#59FF69B4" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x25B6;" FontSize="9" VerticalAlignment="Center"
+                                   Margin="0,0,5,0" Foreground="{TemplateBinding Foreground}"/>
+                        <TextBlock Text="{TemplateBinding Content}" TextTrimming="CharacterEllipsis"
+                                   MaxWidth="240" VerticalAlignment="Center"
+                                   Foreground="{TemplateBinding Foreground}"/>
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Chip">
+            <Setter Property="Background" Value="#3DFF69B4"/>
+        </Style>
+    </ControlTheme>
+
+    <!-- .aibadge - the pink AI badge. INVARIANT: this rides IsAiGenerated only. -->
+    <ControlTheme x:Key="CmpAiBadgeStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
+        <Setter Property="(cmp:CompanionCapsule.IsCapsule)" Value="True"/>
+        <Setter Property="Padding" Value="7,2,7,2"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="Margin" Value="0,-8,-6,0"/>
+        <!-- NO Effect: this badge rides one bubble each, inside the scrolling thread. -->
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="#59FFC2E0"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpAiBadgeTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="8.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+    </ControlTheme>
+
+    <!-- rounded chat entry + the heart send button. Same text-part contract as CmpFieldBoxStyle;
+         WPF's IsKeyboardFocusWithin trigger is :focus-within. -->
+    <ControlTheme x:Key="CmpChatInputStyle" TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource CmpSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="CaretBrush" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpChipBorderBrush}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Padding" Value="18,10,18,10"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="TextBox">
+                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        cmp:CompanionCapsule.IsCapsule="True">
+                    <ScrollViewer Name="PART_ScrollViewer" Margin="{TemplateBinding Padding}"
+                                  VerticalAlignment="Center" Focusable="False"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden">
+                        <TextPresenter Name="PART_TextPresenter"
+                                       Text="{TemplateBinding Text, Mode=TwoWay}"
+                                       CaretIndex="{TemplateBinding CaretIndex}"
+                                       SelectionStart="{TemplateBinding SelectionStart}"
+                                       SelectionEnd="{TemplateBinding SelectionEnd}"
+                                       CaretBrush="{TemplateBinding CaretBrush}"
+                                       SelectionBrush="{TemplateBinding SelectionBrush}"
+                                       SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                       VerticalAlignment="Center"/>
+                    </ScrollViewer>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:focus-within /template/ Border#Bd">
+            <Setter Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFF69B4" BlurRadius="12" OffsetX="0" OffsetY="0" Opacity="0.25"/>
+            </Setter>
+        </Style>
+        <Style Selector="^:disabled /template/ Border#Bd">
+            <Setter Property="Opacity" Value="0.45"/>
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="CmpSendButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="41"/>
+        <Setter Property="Height" Value="41"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Button">
+                <Grid>
+                    <!-- resting: no Effect (glow budget). The hover glows: transient, only ever one. -->
+                    <Ellipse x:Name="Disc" Fill="{StaticResource CmpPinkPurpleDiagonalBrush}"/>
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Ellipse#Disc">
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFF69B4" BlurRadius="22" OffsetX="0" OffsetY="0" Opacity="0.55"/>
+            </Setter>
+        </Style>
+        <Style Selector="^:disabled /template/ Ellipse#Disc">
+            <Setter Property="Opacity" Value="0.40"/>
+        </Style>
+    </ControlTheme>
+
+    <!-- ============================ 11. fact wall ============================ -->
+    <ControlTheme x:Key="CmpFactCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="#A6252542"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpHairlineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+        <Setter Property="Padding" Value="12,11,12,9"/>
+        <Setter Property="Margin" Value="0,0,0,9"/>
+    </ControlTheme>
+    <!-- boundary cards: steel-blue rail, always sorted first. Consent hygiene made visible. -->
+    <ControlTheme x:Key="CmpFactBoundaryCardStyle" TargetType="Border" BasedOn="{StaticResource CmpFactCardStyle}">
+        <Setter Property="Background" Value="#A61D2735"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpSteelBrush}"/>
+        <Setter Property="BorderThickness" Value="3,1,1,1"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpFactKindTagStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="8.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpVioletBrush}"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpFactBoundaryKindTagStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpFactKindTagStyle}">
+        <Setter Property="Foreground" Value="{StaticResource CmpSteelBrush}"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpFactTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpBodyBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="17"/>
+        <Setter Property="Margin" Value="0,4,0,0"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpFactMetaStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="9.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="Margin" Value="0,6,0,0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </ControlTheme>
+    <!-- the hover-reveal 📌 / ✏ / 🗑 row: pure selector, no code-behind -->
+    <ControlTheme x:Key="CmpFactActionStyle" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Margin" Value="4,0,0,0"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="Bd" Background="{StaticResource CmpRoom2Brush}"
+                        BorderBrush="{StaticResource CmpChipBorderBrush}" BorderThickness="1"
+                        CornerRadius="6" Padding="6,2,6,2">
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Bd">
+            <Setter Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+        </Style>
+    </ControlTheme>
+
+    <!-- danger: "Forget everything...". Subtle by design - destructive, not decorative. -->
+    <ControlTheme x:Key="CmpDangerButtonStyle" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="#FFFF9CB0"/>
+        <Setter Property="Padding" Value="14,6,14,6"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Button">
+                <Border x:Name="Bd" Background="Transparent" BorderBrush="#59FF5C7A" BorderThickness="1"
+                        CornerRadius="8" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Bd">
+            <Setter Property="Background" Value="#1AFF5C7A"/>
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFF5C7A" BlurRadius="12" OffsetX="0" OffsetY="0" Opacity="0.25"/>
+            </Setter>
+        </Style>
+    </ControlTheme>
+
     <!-- ============================ 12. segmented dial ============================
          Three (or four) RadioButtons sharing one templated pill strip. No custom control, no
          code-behind - IsChecked binds through CmpEnumEquals with a per-button ConverterParameter. -->
@@ -885,6 +1180,30 @@
         <Style Selector="^:disabled /template/ Border#Track">
             <Setter Property="Opacity" Value="0.40"/>
         </Style>
+    </ControlTheme>
+
+    <!-- ============================ 13. wire view (Z5) ============================
+         The trust element: a terminal chip showing EXACTLY the projected ContextFrame. -->
+    <ControlTheme x:Key="CmpWireStyle" TargetType="Border">
+        <Setter Property="Background" Value="#FF0B0A16"/>
+        <Setter Property="BorderBrush" Value="#336EE7A7"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="9"/>
+        <Setter Property="Padding" Value="13,10,13,10"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpWireTextStyle" TargetType="TextBlock">
+        <!-- ponytail: literal stack; the head has no Font.Mono key yet. Hoist to App.axaml when a
+             second monospace consumer appears. -->
+        <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, DejaVu Sans Mono, monospace"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="#FF8FE3B0"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpWireCaptionStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpFaintTextStyle}">
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Margin" Value="2,6,2,12"/>
     </ControlTheme>
 
     <!-- ============================ 14. drawers (Z7 / Z8) ============================
@@ -1091,6 +1410,54 @@
         <Setter Property="TextWrapping" Value="Wrap"/>
     </ControlTheme>
 
+    <!-- ============================ 15. constellation nodes ============================ -->
+    <ControlTheme x:Key="CmpConstellationNodeStyle" TargetType="Border">
+        <Setter Property="Width" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Background" Value="{StaticResource CmpRoom2Brush}"/>
+        <Setter Property="BorderBrush" Value="#26FFFFFF"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpConstellationNodeFilledStyle" TargetType="Border" BasedOn="{StaticResource CmpConstellationNodeStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource CmpPinkBrush}"/>
+        <Setter Property="Background">
+            <RadialGradientBrush Center="35%,30%" GradientOrigin="35%,30%">
+                <GradientStop Color="#FFFF9CCE" Offset="0"/>
+                <GradientStop Color="{StaticResource CmpPinkColor}" Offset="0.7"/>
+            </RadialGradientBrush>
+        </Setter>
+        <!-- No glow on a FILLED node: the budget names only the ACTIVE one (§7.4). -->
+    </ControlTheme>
+    <ControlTheme x:Key="CmpConstellationNodeCurrentStyle" TargetType="Border" BasedOn="{StaticResource CmpConstellationNodeStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource CmpGoldBrush}"/>
+        <Setter Property="Background">
+            <RadialGradientBrush Center="35%,30%" GradientOrigin="35%,30%">
+                <GradientStop Color="#FFFFE9A8" Offset="0"/>
+                <GradientStop Color="#FFFFB84D" Offset="0.7"/>
+            </RadialGradientBrush>
+        </Setter>
+        <Setter Property="Effect">
+            <DropShadowEffect Color="{StaticResource CmpGoldColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.65"/>
+        </Setter>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpConstellationLabelStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,7,0,0"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpConstellationLabelReachedStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpConstellationLabelStyle}">
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpConstellationLabelCurrentStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpConstellationLabelStyle}">
+        <Setter Property="Foreground" Value="#FFFFE9A8"/>
+    </ControlTheme>
+
     <!-- ============================ 16. virtualised lists ============================
          Avalonia's VirtualizingStackPanel virtualises on its own; the WPF attached
          VirtualizingPanel.* setters have no equivalent and are not needed. -->
@@ -1111,5 +1478,19 @@
             </ControlTemplate>
         </Setter>
     </ControlTheme>
+
+    <!-- ============================ 17. motion ============================
+         NOT PORTED as resources. WPF's five keyed Storyboards have no dictionary-level twin: an
+         Avalonia Animation's Setters need a target type, which only a Style selector supplies, so
+         the compiler rejects a keyed Animation in a ResourceDictionary (AVLN2200). Each consumer
+         declares its animation in its own code-behind or Style.Animations. The numbers, so
+         nothing is re-derived:
+           CmpPortraitBreatheStoryboard  scale 1.000 to 1.015, 2.5s each way, SineEaseInOut, forever
+                                         (THE one ambient loop per tab - the budget is spent here)
+           CmpShimmerSweepStoryboard     TranslateTransform.X -90 to host width (900 default),
+                                         1.4s, 0.25s delay, CubicEaseInOut, once
+           CmpNodePulseStoryboard        scale 1.0 to 1.18 and back, 0.32s out + 0.32s back, once
+           CmpThinkingDotsStoryboard     Opacity 0.25 to 1.0, 0.45s each way, forever while sending
+           CmpCursorBlinkStoryboard      IsVisible on 0.6s / off 0.6s, forever while the card is live -->
 
 </ResourceDictionary>
