@@ -1,0 +1,232 @@
+<!-- PORTED from ConditioningControlPanel/Features/BubblePopFeatureControl.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+       Style="{StaticResource X}"        ->  Theme="{StaticResource X}"
+       ToolTip="..."                     ->  ToolTip.Tip="..."
+       helpers:EmojiTextBlock            ->  TextBlock
+       Visibility="Collapsed"            ->  IsVisible="False"
+       LinearGradientBrush "0,0"/"1,0"   ->  "0%,0%"/"100%,0%"
+       ImageBrush HeroArtBrush/SideArtBrush -> dropped (feature art not an AvaloniaResource here
+                                            yet; x:Name on a brush is AVLN2000); wash stands in
+       feat:AdaptiveSideArt.CollapseBelow, feat:SessionLock.Owned -> dropped
+       all event handlers                ->  wired in code-behind (porting convention) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.BubblePopFeatureControl">
+
+    <!-- Velvet Kit 2 density pass. The root IS the StackPanel (the old Grid wrapper is gone):
+         MainWindow.SessionFeatureLock.cs inserts the session-lock banner at index 0 of
+         content.Content, and into a Grid that banner would have overlapped the settings. -->
+    <StackPanel>
+
+        <!-- HERO -->
+        <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
+            <Grid>
+                <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                        Background="{StaticResource SectionHueStudioWashBrush}">
+                    <Border.OpacityMask>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                            <GradientStop Color="#00000000" Offset="0"/>
+                            <GradientStop Color="#E6000000" Offset="0.55"/>
+                        </LinearGradientBrush>
+                    </Border.OpacityMask>
+                </Border>
+                <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
+                    <TextBlock Text="{loc:Str label_bubble_pop}" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource TextLightBrush}"/>
+                    <TextBlock Text="{loc:Str tooltip_pop_bubbles_to_earn_xp}" FontSize="11.5"
+                               Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                    <!-- #1019/#1026: ambient-pop XP has a 300/day ceiling. Text is set in code
+                         (LoadFromSettings + the service's budget event). -->
+                    <TextBlock x:Name="TxtAmbientXpBudget" FontSize="11"
+                               Foreground="{StaticResource TextMutedBrush}" Opacity="0.85" Margin="0,2,0,0"/>
+                </StackPanel>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" CornerRadius="99"
+                        Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="12,5,8,5">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <CheckBox x:Name="ChkEnable"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY: settings column capped, art card takes the rest. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card -->
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_bubble_spawn_rate}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_per_min}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderFreq" Minimum="1" Maximum="60" Value="5"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="5" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="How fast bubbles travel across the screen">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Speed" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderSpeed" Minimum="0" Maximum="500" Value="0"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtSpeed" Text="+0%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <!-- Size. Sits with Per Min / Speed: "these are too big" is a first-minute reaction. -->
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_bubble_size}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_size}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderSize" Minimum="50" Maximum="150" Value="100"
+                                        SmallChange="5" LargeChange="10" TickFrequency="5" IsSnapToTickEnabled="True"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_bubble_pop_sound_volume}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_volume}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderVolume" Minimum="0" Maximum="100" Value="50"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtVolume" Text="50%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <!-- Solid mode: render all bubbles on one shared host (the DTRH/Chaos path). -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="Uses the Rabbit Hole's optimized renderer so the field stays smooth with lots of bubbles. Lifts the on-screen cap. Turn off to use the classic one-window-per-bubble mode. Takes effect when bubbles restart.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Solid mode (many bubbles)" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Trigger Bubbles: a share of bubbles fire a Chaos effect when popped. The egg
+                                 hint stays VISIBLE (code-behind rewrites it with the active persona's name). -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="Some bubbles fire an effect when popped (flash, video, overlays…)">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Trigger Bubbles" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtTriggerEggHint"
+                                               Text="careful — Bambi loves these…"
+                                               Foreground="{DynamicResource PinkBrush}" FontSize="10.5" FontStyle="Italic"
+                                               VerticalAlignment="Center" Margin="8,1,0,0"/>
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" x:Name="ChkTriggers"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Trigger options: own card, revealed by the switch above. -->
+                <StackPanel x:Name="TriggerOptionsPanel" IsVisible="False">
+                    <Border Theme="{StaticResource SettingCardStyle}">
+                        <Grid>
+                            <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                            <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                    Background="{StaticResource SectionHueStudioBrush}"/>
+                            <StackPanel Margin="16,8,16,10">
+
+                                <Grid Height="36" Background="Transparent" ToolTip.Tip="How often a spawned bubble carries an effect">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Trigger chance" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderTriggerChance" Minimum="0" Maximum="50" Value="10"
+                                            VerticalAlignment="Center" Margin="14,0"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtTriggerChance" Text="10%" HorizontalAlignment="Right"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                               FontSize="13" FontWeight="Bold"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                <TextBlock Text="Effect types" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,8"/>
+                                <WrapPanel Background="Transparent" ToolTip.Tip="Each ticked effect has an equal chance">
+                                    <CheckBox x:Name="ChkTypeFlash"      Tag="flash"      Content="Flash"       Foreground="White" Margin="0,0,16,8"/>
+                                    <CheckBox x:Name="ChkTypeSubliminal" Tag="subliminal" Content="Subliminal"  Foreground="White" Margin="0,0,16,8"/>
+                                    <CheckBox x:Name="ChkTypePink"       Tag="pink"       Content="Pink Filter" Foreground="White" Margin="0,0,16,8"/>
+                                    <CheckBox x:Name="ChkTypeSpiral"     Tag="spiral"     Content="Spiral"      Foreground="White" Margin="0,0,16,8"/>
+                                    <CheckBox x:Name="ChkTypeGlitch"     Tag="glitch"     Content="Glitch"      Foreground="White" Margin="0,0,16,8"/>
+                                    <CheckBox x:Name="ChkTypeCascade"    Tag="htlink"     Content="Cascade"     Foreground="White" Margin="0,0,16,8"/>
+                                    <CheckBox x:Name="ChkTypeVideo"      Tag="video"      Content="Video"       Foreground="White" Margin="0,0,16,8"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- SIDE ART. On WPF an ImageBrush background; the wash stands in. Scrim kept verbatim. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
+
+    </StackPanel>
+</UserControl>

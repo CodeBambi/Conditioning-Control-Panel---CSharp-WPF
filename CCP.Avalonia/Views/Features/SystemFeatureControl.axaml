@@ -1,0 +1,231 @@
+<!-- PORTED from ConditioningControlPanel/Features/SystemFeatureControl.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+       Style="{StaticResource X}"        ->  Theme="{StaticResource X}"
+       ToolTip="..."                     ->  ToolTip.Tip="..."
+       helpers:EmojiTextBlock            ->  TextBlock (Avalonia renders colour emoji natively)
+       Image of an emoji (EmojiToImageSource) -> TextBlock with the emoji
+       Content="{loc:Str ...}" on Button ->  a <TextBlock> child (trap 1: "_" is an access key)
+       feat:AdaptiveSideArt.CollapseBelow -> dropped (attached behaviour lives in the WPF head)
+       Click/Checked handlers            ->  wired in code-behind (porting convention) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.SystemFeatureControl">
+
+    <!-- This control hangs off the Settings door, not the Studio rack, so it gets NO hero
+         strip - just the dense row grammar. Every description that used to sit under a
+         control is now that row's ToolTip; the read-out rows (startup group, no-panic,
+         offline mode, startup video, panic key) keep their state TextBlocks VISIBLE because
+         code-behind writes the current value into them - that text IS the row's value. -->
+    <StackPanel>
+
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <!-- Multi-monitor -->
+                            <Grid Height="34" ToolTip.Tip="{loc:Str tooltip_show_content_on_all_connected_monitors_2_3_or}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_multi_mon}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkMultiMon"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Depends on the row above, so it stays indented. -->
+                            <Grid Height="34" Margin="16,0,0,0" ToolTip.Tip="{loc:Str tooltip_fill_all_monitors_video}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fill_all_monitors_video}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkFillAllMon"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- GPU decode -->
+                            <Grid Height="34" ToolTip.Tip="Play mandatory videos on the GPU. Off by default (software decode) to dodge a white-screen bug on some PCs. Turn ON if a video only plays on one of your screens, keeps swapping screens, or freezes when it starts.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Force video GPU decode" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkVideoGpuDecode"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Blurred video background -->
+                            <Grid Height="34" ToolTip.Tip="Fill the empty bars around a video that doesn't fit the screen (e.g. a vertical clip on a widescreen monitor) with a blurred, zoomed copy of the video, like TikTok. Turn OFF for plain black bars.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Blurred video background" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkVideoBlurBg"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Browser video engine -->
+                            <Grid Height="34" ToolTip.Tip="{loc:Str tooltip_browser_video_engine}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_browser_video_engine}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkBrowserVideoEngine"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- Read-only since Phase 2 of the UX restructure: Settings → General owns the
+                                 startup group; this is a read-out that LoadFromSettings keeps painted. -->
+                            <Grid Height="38">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str set2_general_startup_title}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtStartupGroupState" Text=""
+                                           Foreground="{StaticResource TextMutedBrush}" FontSize="11"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                           HorizontalAlignment="Right" Margin="10,0,10,0"/>
+                                <Button Grid.Column="2" x:Name="BtnOpenGeneralSettings"
+                                        Theme="{DynamicResource OutlineButton}" Padding="10,4" FontSize="11"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str set2_configure_in_settings}"/>
+                                </Button>
+                            </Grid>
+
+                            <!-- Read-only since Phase 2. Settings → Devices owns the panic key. -->
+                            <Grid Height="38">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_no_panic}" Foreground="#FF6B6B"
+                                           FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtNoPanicState" Text="{loc:Str set2_chip_off}"
+                                           Foreground="{StaticResource TextMutedBrush}" FontSize="11"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                           HorizontalAlignment="Right" Margin="10,0,10,0"/>
+                                <Button Grid.Column="2" x:Name="BtnOpenDeviceSettingsNoPanic"
+                                        Theme="{DynamicResource OutlineButton}" Padding="10,4" FontSize="11"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str set2_configure_in_settings}"/>
+                                </Button>
+                            </Grid>
+
+                            <!-- Read-only since Phase 2. Settings → Data owns OfflineMode. -->
+                            <Grid Height="38">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_offline_mode}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtOfflineModeState" Text="{loc:Str set2_chip_off}"
+                                           Foreground="{StaticResource TextMutedBrush}" FontSize="11"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                           HorizontalAlignment="Right" Margin="10,0,10,0"/>
+                                <Button Grid.Column="2" x:Name="BtnOpenDataSettings"
+                                        Theme="{DynamicResource OutlineButton}" Padding="10,4" FontSize="11"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str set2_configure_in_settings}"/>
+                                </Button>
+                            </Grid>
+
+                            <!-- Startup video: read-only since Phase 2, picker lives in Settings → General. -->
+                            <Grid Height="38">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_startup_video}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtStartupVideo" Text="{loc:Str label_random}"
+                                           Foreground="{DynamicResource PinkBrush}" FontSize="12"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                           HorizontalAlignment="Right" Margin="10,0,10,0"/>
+                                <Button Grid.Column="2" x:Name="BtnOpenGeneralSettingsVideo"
+                                        Theme="{DynamicResource OutlineButton}" Padding="10,4" FontSize="11"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str set2_configure_in_settings}"/>
+                                </Button>
+                            </Grid>
+
+                            <!-- Panic key. Read-only: the rebind lives in Settings → Devices (Phase 2). -->
+                            <Grid Height="34" ToolTip.Tip="{loc:Str set2_panic_change_in_settings}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str btn_escape}"
+                                           Foreground="{StaticResource TextLightBrush}"
+                                           FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtPanicKeyState" Text="🔑 —"
+                                           Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                            </Grid>
+
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Assets folder: buttons live below the card, as everywhere else in this kit. -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" x:Name="BtnPickAssets" Content="📁 Pick Folder"
+                            Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="{loc:Str tooltip_set_custom_assets_folder}"/>
+                    <Button Grid.Column="2" x:Name="BtnOpenAssets"
+                            Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="{loc:Str tooltip_open_assets_folder_images_videos_sounds}">
+                        <TextBlock Text="{loc:Str btn_assets}"/>
+                    </Button>
+                </Grid>
+            </StackPanel>
+
+            <!-- SIDE CARD, no art: this feature has no plate in Resources/features and round 3 invents
+                 no assets. The page's own glyph, huge and nearly transparent, on the section wash. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <TextBlock Text="⚙" FontSize="100" Opacity="0.18"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+    </StackPanel>
+</UserControl>

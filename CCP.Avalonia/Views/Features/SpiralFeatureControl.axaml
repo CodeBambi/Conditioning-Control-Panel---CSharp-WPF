@@ -1,0 +1,237 @@
+<!-- PORTED from ConditioningControlPanel/Features/SpiralFeatureControl.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+       Style="{StaticResource X}"        ->  Theme="{StaticResource X}"
+       ToolTip="..."                     ->  ToolTip.Tip="..."
+       helpers:EmojiTextBlock            ->  TextBlock
+       Visibility="Collapsed"            ->  IsVisible="False"
+       Content="{loc:Str ...}" on Button ->  a <TextBlock> child (trap 1)
+       LinearGradientBrush "0,0"/"1,0"   ->  "0%,0%"/"100%,0%" (Avalonia points are absolute
+                                            unless given as %)
+       ImageBrush HeroArtBrush/SideArtBrush -> dropped: Resources/features/*.png is not an
+                                            AvaloniaResource in this head yet, and x:Name on a
+                                            brush is AVLN2000. The wash stands in on both plates.
+       feat:AdaptiveSideArt.CollapseBelow, feat:SessionLock.Owned -> dropped (WPF-head attached
+                                            behaviours)
+       all event handlers                ->  wired in code-behind (porting convention) -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.SpiralFeatureControl">
+
+    <!-- Velvet Kit 2 density pass. The root IS the StackPanel (the old Grid wrapper is gone):
+         MainWindow.SessionFeatureLock.cs inserts the session-lock banner at index 0 of
+         content.Content, and into a Grid that banner would have overlapped the settings
+         instead of sitting above them. -->
+    <StackPanel>
+
+        <!-- HERO -->
+        <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
+            <Grid>
+                <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                        Background="{StaticResource SectionHueStudioWashBrush}">
+                    <Border.OpacityMask>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                            <GradientStop Color="#00000000" Offset="0"/>
+                            <GradientStop Color="#E6000000" Offset="0.55"/>
+                        </LinearGradientBrush>
+                    </Border.OpacityMask>
+                </Border>
+                <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
+                    <TextBlock Text="{loc:Str label_spiral_overlay}" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource TextLightBrush}"/>
+                    <TextBlock Text="{loc:Str tooltip_show_hypnotic_spiral_overlay}" FontSize="11.5"
+                               Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                </StackPanel>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" CornerRadius="99"
+                        Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="12,5,8,5">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <CheckBox x:Name="ChkEnable"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so a
+             slider stops being a ~1200px runway in the wide Studio detail pane, and the width that
+             buys back becomes ONE big art card instead of dead margin. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card: opacity, the randomize switch (#641), the monitor picker (#639). -->
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_spiral_opacity_5_100}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderOpacity"
+                                        Minimum="5" Maximum="100" Value="15"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="15%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_spiral_randomize}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_spiral_randomize}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkRandomize"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- User master for the SESSION corner GIF. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_session_corner_gif_allowed}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_session_corner_gif_allowed}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkSessionCornerGif"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_effect_monitor}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_effect_monitor}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbMonitor"
+                                          Width="180" VerticalAlignment="Center"
+                                          Theme="{DynamicResource DarkComboBoxStyle}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Actions (kept above the library so they're reachable without scrolling) -->
+                <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
+                <Button x:Name="BtnOpenLoom"
+                        Content="🌀 THE LOOM — weave your own spiral"
+                        Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
+                        Padding="12,10"
+                        Margin="0,0,0,10"/>
+
+                <!-- Standalone corner-GIF overlays (independent of sessions) -->
+                <Button x:Name="BtnCornerGifs"
+                        Content="🖼 CORNER GIFs — pin a GIF to a screen corner"
+                        Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
+                        Padding="12,10"
+                        Margin="0,0,0,10"/>
+
+                <!-- Select GIF (browse anywhere) -->
+                <Button x:Name="BtnSelectGif"
+                        Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
+                        Padding="12,10"
+                        Margin="0,0,0,10">
+                    <TextBlock Text="{loc:Str btn_select_gif}"/>
+                </Button>
+
+                <!-- Spiral library: its own card - it is a picker, not a dial. -->
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,10,16,12">
+                            <Grid Margin="0,0,0,10" Background="Transparent"
+                                  ToolTip.Tip="Pick the spiral used everywhere. Drop your own .gif / image files in the folder, then Refresh.">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="SPIRAL LIBRARY"
+                                           Foreground="{StaticResource TextLightBrush}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <Button Grid.Column="1"
+                                        x:Name="BtnOpenSpiralFolder"
+                                        Content="Open folder"
+                                        Theme="{DynamicResource OutlineButton}"
+                                        Padding="10,5"
+                                        Margin="0,0,6,0"
+                                        FontSize="11"/>
+                                <Button Grid.Column="2"
+                                        x:Name="BtnRefreshSpirals"
+                                        Content="⟳ Refresh"
+                                        Theme="{DynamicResource OutlineButton}"
+                                        Padding="10,5"
+                                        FontSize="11"/>
+                            </Grid>
+
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          MaxHeight="280">
+                                <WrapPanel x:Name="SpiralLibraryPanel" Orientation="Horizontal"/>
+                            </ScrollViewer>
+
+                            <TextBlock x:Name="SpiralEmptyState"
+                                       IsVisible="False"
+                                       Text="No spirals in your folder yet — only the built-in spiral is available. Click &quot;Open folder&quot; to add your own."
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <TextBlock Text="{loc:Str label_if_you_have_display_problems_try_setting_your}"
+                           Foreground="#FFA500"
+                           FontSize="11"
+                           FontStyle="Italic"
+                           TextWrapping="Wrap"
+                           Opacity="0.8"
+                           Margin="0,2,0,0"/>
+            </StackPanel>
+
+            <!-- SIDE ART. On WPF the art is the Border's BACKGROUND (an ImageBrush); the wash stands
+                 in until feature art ships in this head. The scrim is kept verbatim. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
+
+    </StackPanel>
+</UserControl>
