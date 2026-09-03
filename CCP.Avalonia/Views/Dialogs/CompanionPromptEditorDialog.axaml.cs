@@ -342,12 +342,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     box.BorderThickness = new Thickness(2);
                     ToolTip.SetTip(box, Loc.GetF("prompt_validator_warning", result.MatchedPatterns.Count));
                     flaggedNames.Add(fieldName);
-                    // ponytail: App.ModerationLog?.RecordEdit(fieldName, count, "companion_prompt").
-                    // The CLASS is already in Core (CCP.Core/Services/Moderation/ModerationLog.cs);
-                    // what is missing is a seam for the app's ONE instance, which today lives on
-                    // ConditioningControlPanel/App.xaml.cs:610. Constructing a second one here
-                    // would give it a different per-launch ModerationSession hash and split the
-                    // CCBill record file in two, so it waits for a CoreModeration provider.
+                    // Through the seam, so the app's ONE log (and its one per-launch session hash)
+                    // takes the entry. Unseeded on this head, so nothing is written here yet.
+                    CoreModerationLog.RecordEdit(fieldName, result.MatchedPatterns.Count, "companion_prompt");
                 }
             }
 

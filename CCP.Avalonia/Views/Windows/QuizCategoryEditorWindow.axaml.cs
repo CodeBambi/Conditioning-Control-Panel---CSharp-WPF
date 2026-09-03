@@ -25,7 +25,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    TextEditorDialog/QuizReportWindow precedent).
     ///  - <c>QuizService</c> is not in Core either, so the template dropdown, the AI preview, the
     ///    built-in name-collision check and Delete are stubs. Each carries a ponytail comment.
-    ///  - <c>PromptValidator</c> IS in Core, so <see cref="RunPromptValidation"/> runs for real.
+    ///  - <c>PromptValidator</c> IS in Core, so <see cref="RunPromptValidation"/> runs for real, and
+    ///    its flags go to the app's moderation log through <see cref="CoreModerationLog"/>.
     ///  - The <c>MessageBox.Show</c> calls are this head's <see cref="MessageDialog"/>, which is
     ///    async, so Save and Delete are <c>async void</c> handlers. Only the name-collision warning
     ///    is missing, because the check behind it needs QuizService.
@@ -423,11 +424,9 @@ Do NOT include any other text before or after the question format. Just the ques
                 "PromptValidator flagged QuizCategoryEditorWindow system prompt ({Count} matches)",
                 result.MatchedPatterns.Count);
 
-            // ponytail: needs the app-wide ModerationLog INSTANCE (App.ModerationLog) for
-            // RecordEdit("SystemPromptTemplate", count, "quiz_category"). The class itself is in
-            // Core (CCP.Core/Services/Moderation/ModerationLog.cs) but it is instance-scoped over a
-            // ModerationSession and an append-only file; constructing a second one here would give
-            // the process two writers of moderation.log. Needs a CoreModeration seam.
+            // Through the seam, so the app's ONE moderation.log writer takes the entry rather than
+            // a second instance with its own session hash. Unseeded here, so nothing is written yet.
+            CoreModerationLog.RecordEdit("SystemPromptTemplate", result.MatchedPatterns.Count, "quiz_category");
         }
 
         private async void BtnDelete_Click(Border _)

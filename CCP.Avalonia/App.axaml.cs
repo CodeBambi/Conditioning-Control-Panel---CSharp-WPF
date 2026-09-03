@@ -58,6 +58,16 @@ namespace ConditioningControlPanel.Avalonia
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 CoreReleaseContent.AppVersionProvider = () =>
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+                // CoreSession stays unseeded: this head has no session engine yet, so "not
+                // running" is the truth, and the feature cards fall to their save-only branch.
+                //
+                // CoreModerationLog stays unseeded too, and NOT because a log is unavailable here
+                // - ModerationLog is in Core and would construct fine. It hardcodes
+                // SpecialFolder.ApplicationData (~/.config on Linux) while this head's user data
+                // lives under CorePaths.UserData (~/.local/share), so seeding it would scatter the
+                // CCBill record file into a second tree. That is a fix to the class, in a later
+                // layer, not a seeding decision here.
+
                 // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
                 // exactly what that is. Seeding it with anything else would be a lie.

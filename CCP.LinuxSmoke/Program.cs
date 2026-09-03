@@ -127,6 +127,12 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("CoreSpeech.HasCaptureDevice is false with no speech service", !CoreSpeech.HasCaptureDevice);
                 Check("CoreSpeech.ModelStatus is NotProbed with no speech service", CoreSpeech.ModelStatus == CoreSpeechModelStatus.NotProbed);
                 Check("CoreSpeech.EnumerateInputDevices is empty with no speech service", CoreSpeech.EnumerateInputDevices().Count == 0);
+                // The session and moderation-log seams (wire/36). Unseeded, "no engine is running"
+                // is the truth on a head that has none, and the log sink swallows the write.
+                Check("CoreSession.IsEngineRunning is false with no engine", !CoreSession.IsEngineRunning);
+                CoreModerationLog.RecordEdit("smoke", 1, "linux_smoke");
+                CoreModerationLog.Record(ProhibitedCategory.Minor, "input", "smoke");
+                Check("CoreModerationLog records are silent no-ops with no log attached", true);
                 Check("CoreReleaseContent answers null with no pack service", CoreReleaseContent.GetPackInfo("mod-bambi") == null && CoreReleaseContent.GetStampFor("mod-bambi") == null);
                 Check("AwarenessIntensity.Current reads the ship default unseeded", Services.Awareness.AwarenessIntensityProfile.Current == Services.Awareness.AwarenessIntensity.Chatty);
                 // The subreddit rule moved from the online coordinator into Core with no test of its own.
