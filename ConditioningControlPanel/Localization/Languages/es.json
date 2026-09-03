@@ -4937,5 +4937,13 @@
   "label_gaze_interaction": "Interacción con la mirada",
   "label_stare_to_pop": "Mirar para reventar",
   "tooltip_bubble_gaze_pop": "Mira una burbuja durante 1 segundo para reventarla sin hacer clic. Solo afecta a las burbujas; los flashes tienen su propio interruptor en la página de Flashes.",
-  "label_gaze_needs_calibration": "Necesita la cámara encendida y el seguimiento ocular calibrado. Configúralo en Play, Mirada Fija."
+  "label_gaze_needs_calibration": "Necesita la cámara encendida y el seguimiento ocular calibrado. Configúralo en Play, Mirada Fija.",
+  "tooltip_report_bug_titlebar": "Reportar un error (empaqueta tus registros para el desarrollador)",
+  "btn_bug_short": "Error",
+  "yl7_nav_mediasource": "Fuentes de medios",
+  "yl7_nav_mediasource_tip": "De dónde vienen tus medios: tus propias carpetas, Reddit o ambas.",
+  "tooltip_media_source_own": "Solo las imágenes y videos de tu carpeta de assets. También es el interruptor que desactiva las imágenes de la web y de Reddit en los flashes, los fondos de pantalla y el feed.",
+  "btn_open_whisper_folder": "🔊 Abrir carpeta de audio de susurros",
+  "tooltip_open_whisper_folder": "Abre la carpeta donde van tus clips de susurro. Los archivos que pongas aquí sobreviven a las actualizaciones.",
+  "label_whisper_folder_hint": "Un archivo de audio por frase, con el nombre exacto de la frase. Si la frase es good girl, el clip es good girl.mp3."
 }

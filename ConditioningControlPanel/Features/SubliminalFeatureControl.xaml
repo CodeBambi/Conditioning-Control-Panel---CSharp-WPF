@@ -191,6 +191,20 @@
                             Style="{DynamicResource OutlineButton}" Click="BtnAdvanced_Click"
                             ToolTip="{loc:Str tooltip_advanced_subliminal_visual_settings}"/>
                 </Grid>
+
+                <!-- Whispers only ever played for people who had already guessed where the clips
+                     go. One user in #nsfw-chat (2026-09-02) found it by trial: "sub whisper files
+                     go in the install folder, in resources then sub_audio, not assets. and each
+                     mp3 has to be named exactly like the phrase". Both halves of that are now on
+                     screen, and the button opens the assets-folder copy, which is the one that
+                     survives an update (App.UserWhisperAudioPath). -->
+                <Button Margin="0,8,0,0" HorizontalAlignment="Stretch"
+                        Content="{loc:Str btn_open_whisper_folder}"
+                        Style="{DynamicResource OutlineButton}" Click="BtnWhisperFolder_Click"
+                        ToolTip="{loc:Str tooltip_open_whisper_folder}"/>
+                <TextBlock Text="{loc:Str label_whisper_folder_hint}" FontSize="11"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           TextWrapping="Wrap" Margin="2,5,2,0"/>
             </StackPanel>
 
             <!-- SIDE ART. The art is the Border's BACKGROUND, not a child Image: a Border clips its

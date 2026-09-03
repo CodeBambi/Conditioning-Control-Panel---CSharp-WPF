@@ -1001,6 +1001,33 @@ namespace ConditioningControlPanel
 
 
         /// <summary>
+        /// The Library door's "Where your media comes from" row. That panel is the switch that
+        /// turns Reddit and web images off, and until now the only way in was clicking the Library
+        /// door HEADER - three people in #ask-support (2026-08-25) hunted for it and gave up.
+        ///
+        /// <para>Not a launcher and not a tab of its own: it opens the same Assets page the Assets
+        /// row opens and then scrolls the panel to the top of the view, so nothing about the
+        /// existing route changes. <see cref="UIElement.BringIntoView()"/> is deferred to Loaded
+        /// priority because <c>ShowTab</c> has only just made the page visible - asking a panel
+        /// that has not been arranged yet where it is scrolls nowhere.</para>
+        /// </summary>
+        private void BtnNavMediaSource_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ShowTab("assets");
+                var panel = AssetsTab?.MediaSourcePanel;
+                if (panel == null) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { panel.BringIntoView(); }
+                    catch (Exception ex) { App.Logger?.Debug("MediaSourcePanel.BringIntoView failed: {Error}", ex.Message); }
+                }), DispatcherPriority.Loaded);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BtnNavMediaSource_Click failed"); }
+        }
+
+        /// <summary>
         /// Phase 7 · the Library door's Media Log row. The only one of that door's four new rows
         /// that needed a handler at all: Mods, Catalogue and Phrase Manager each bind the exact
         /// existing launcher (<c>BtnManageMods_Click</c>, <c>BtnCatalogue_Click</c>,

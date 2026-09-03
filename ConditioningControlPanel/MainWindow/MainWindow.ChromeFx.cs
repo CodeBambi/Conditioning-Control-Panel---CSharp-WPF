@@ -95,7 +95,8 @@ namespace ConditioningControlPanel
                     BtnLab, BtnDeeper, BtnPatreonExclusives, BtnNavGradedIntake, BtnNavLockdown,
                     BtnNavBlinkTrainer, BtnNavRemoteControl, BtnAvailableSubjects,
                     BtnDiscordTab, BtnNavSpiral, BtnQuests, BtnAchievements, BtnEnhancements, BtnPrograms, BtnLeaderboard,
-                    BtnOpenAssetsTop, BtnNavMods, BtnNavCatalogue, BtnNavPhrases, BtnNavMediaLog,
+                    BtnOpenAssetsTop, BtnNavMediaSource, BtnNavMods, BtnNavCatalogue, BtnNavPhrases,
+                    BtnNavMediaLog,
                 };
                 return all.Where(b => b != null)!;
             }

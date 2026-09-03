@@ -5402,5 +5402,13 @@
   "label_gaze_interaction": "视线交互",
   "label_stare_to_pop": "注视即可戳破",
   "tooltip_bubble_gaze_pop": "注视泡泡约 1 秒即可戳破，无需点击。仅对泡泡有效；闪图在闪图页面有独立开关。",
-  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。"
+  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。",
+  "tooltip_report_bug_titlebar": "报告问题（会打包你的日志给开发者）",
+  "btn_bug_short": "问题",
+  "yl7_nav_mediasource": "素材来源",
+  "yl7_nav_mediasource_tip": "你的素材从哪来：自己的文件夹、Reddit，或两者都要。",
+  "tooltip_media_source_own": "只用 assets 文件夹里的图片和视频。这也是关闭闪图、壁纸和信息流中网络与 Reddit 图片的开关。",
+  "btn_open_whisper_folder": "🔊 打开耳语音频文件夹",
+  "tooltip_open_whisper_folder": "打开存放耳语音频的文件夹。放在这里的文件在更新后仍会保留。",
+  "label_whisper_folder_hint": "每句一个音频文件，文件名与句子完全一致。good girl 对应 good girl.mp3。"
 }

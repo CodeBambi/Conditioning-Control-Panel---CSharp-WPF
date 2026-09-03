@@ -37,6 +37,9 @@ namespace ConditioningControlPanel.Services
         // Audio file search cache
         private string[]? _audioFilesCache;
         private DateTime _audioFilesCacheTime = DateTime.MinValue;
+        // Two non-mod folders share this cache (the user's assets/sub_audio and the bundled
+        // Resources/sub_audio), so it has to remember which one it is holding.
+        private string? _audioFilesCacheDir;
         private string[]? _modAudioFilesCache;
         private DateTime _modAudioFilesCacheTime = DateTime.MinValue;
         private string? _modAudioCacheModId;
@@ -370,7 +373,12 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Fall back to default sub_audio directory
+            // The user's own clips first (assets/sub_audio - the folder that survives an upgrade),
+            // then the bundled ones next to the exe. Same order SubliminalService uses.
+            var userResult = SearchAudioDirectory(App.UserWhisperAudioPath, cleanText, textVariants, extensions, isModCache: false);
+            if (userResult != null) return userResult;
+
+            // Fall back to the install folder's sub_audio directory
             return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
         }
 
@@ -405,10 +413,12 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                        if (_audioFilesCache == null || _audioFilesCacheDir != directory ||
+                            (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
                         {
                             _audioFilesCache = Directory.GetFiles(directory);
                             _audioFilesCacheTime = DateTime.UtcNow;
+                            _audioFilesCacheDir = directory;
                         }
                         files = _audioFilesCache;
                     }

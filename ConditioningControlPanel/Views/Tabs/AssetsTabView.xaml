@@ -107,7 +107,11 @@
              (InitializeRemoteMediaPicker) rather than declaring Click/ValueChanged handlers:
              the chip rows are built from FypOnlineCoordinator.Catalog and from live settings
              lists, so the same code that fills them owns their events. -->
-        <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12">
+        <!-- x:Name so the Library door's "Where your media comes from" row can scroll straight
+             here (MainWindow.TabNavigation.BtnNavMediaSource_Click). The panel was previously
+             reachable only by landing on this page and spotting it. -->
+        <Border x:Name="MediaSourcePanel" x:FieldModifier="internal"
+                Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12">
             <StackPanel>
                 <TextBlock Text="{loc:Str section_media_source}" Style="{StaticResource SectionHeader}"
                            Margin="0,0,0,2"/>

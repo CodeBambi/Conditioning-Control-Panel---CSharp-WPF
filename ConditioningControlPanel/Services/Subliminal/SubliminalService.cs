@@ -59,6 +59,10 @@ namespace ConditioningControlPanel.Services
         private readonly string _audioPath;
         private string[]? _audioFilesCache;
         private DateTime _audioFilesCacheTime;
+        // The cache below is shared by TWO non-mod folders now (the user's assets/sub_audio and
+        // the bundled Resources/sub_audio), so it has to remember which one it holds or a miss in
+        // the first would be answered with the second's file list.
+        private string? _audioFilesCacheDir;
         private string[]? _modAudioFilesCache;
         private DateTime _modAudioFilesCacheTime;
         private string? _modAudioCacheModId;
@@ -523,7 +527,13 @@ namespace ConditioningControlPanel.Services
                 if (result != null) return result;
             }
 
-            // Fall back to default sub_audio directory
+            // The user's own clips, then the bundled ones. The user folder wins on a name clash:
+            // it is the only one of the two that survives an upgrade, so it is the only one anyone
+            // can have deliberately put a file in.
+            var userResult = SearchAudioDirectory(App.UserWhisperAudioPath, cleanText, textVariants, extensions, isModCache: false);
+            if (userResult != null) return userResult;
+
+            // Fall back to the install folder's sub_audio directory
             return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
         }
 
@@ -568,10 +578,12 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                        if (_audioFilesCache == null || _audioFilesCacheDir != directory ||
+                            (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
                         {
                             _audioFilesCache = Directory.GetFiles(directory);
                             _audioFilesCacheTime = DateTime.UtcNow;
+                            _audioFilesCacheDir = directory;
                         }
                         files = _audioFilesCache;
                     }

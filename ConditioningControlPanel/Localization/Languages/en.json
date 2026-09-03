@@ -5521,5 +5521,13 @@
   "label_gaze_interaction": "Gaze interaction",
   "label_stare_to_pop": "Stare to pop",
   "tooltip_bubble_gaze_pop": "Look at a bubble for about 1 second to pop it, no clicking. Covers bubbles only; flashes have their own switch on the Flashes page.",
-  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze."
+  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze.",
+  "tooltip_report_bug_titlebar": "Report a bug (packs your logs for the dev)",
+  "btn_bug_short": "Bug",
+  "yl7_nav_mediasource": "Media sources",
+  "yl7_nav_mediasource_tip": "Where your media comes from: your own folders, Reddit, or both.",
+  "tooltip_media_source_own": "Only the images and videos in your assets folder. This is also the switch that turns web and Reddit images off in flashes, wallpapers and the feed.",
+  "btn_open_whisper_folder": "🔊 Open whisper audio folder",
+  "tooltip_open_whisper_folder": "Opens the folder your whisper clips go in. Files you put here survive updates.",
+  "label_whisper_folder_hint": "One audio file per phrase, named exactly like the phrase. Say good girl, and the clip is good girl.mp3."
 }

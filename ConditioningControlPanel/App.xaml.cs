@@ -188,6 +188,19 @@ namespace ConditioningControlPanel
         public static string UserAssetsPath => Path.Combine(UserDataPath, "assets");
 
         /// <summary>
+        /// Where a user drops their own subliminal whisper clips: one audio file per phrase,
+        /// named exactly like the phrase ("good girl" wants "good girl.mp3").
+        ///
+        /// <para>Under the assets folder, NOT the install folder. The bundled clips still live in
+        /// <c>Resources/sub_audio</c> beside the exe and both folders are searched at playback
+        /// time, but the install folder is wiped by an upgrade and is read-only under Program
+        /// Files - so anything a user put there is gone at the next update. A user in #nsfw-chat
+        /// (2026-09-02) worked the install-folder route out by trial and error; this is the one
+        /// the "Open whisper audio folder" button on the Subliminals page points at.</para>
+        /// </summary>
+        public static string UserWhisperAudioPath => Path.Combine(EffectiveAssetsPath, "sub_audio");
+
+        /// <summary>
         /// Base URL for hosted tutorial pages. "Watch full tutorial" links in the
         /// video help system resolve against this. Placeholder - confirm before release.
         /// </summary>
@@ -1712,6 +1725,7 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "videos"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "mindwipe"));
+            Directory.CreateDirectory(Path.Combine(UserAssetsPath, "sub_audio"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
 
             // Create Resources directories (these are bundled with app, not user content)
@@ -4664,7 +4678,7 @@ Application State:
 
         /// <summary>
         /// Ensures a configured custom assets folder and its standard subfolders
-        /// (images/videos/wallpapers) exist. The default UserAssetsPath subdirs are
+        /// (images/videos/wallpapers/sub_audio) exist. The default UserAssetsPath subdirs are
         /// created unconditionally at startup, but a custom path is only known after
         /// settings load — and if its folder is missing, EffectiveAssetsPath silently
         /// falls back to the default location, sending imports/extractions to the wrong
@@ -4681,6 +4695,7 @@ Application State:
                 Directory.CreateDirectory(Path.Combine(customPath, "images"));
                 Directory.CreateDirectory(Path.Combine(customPath, "videos"));
                 Directory.CreateDirectory(Path.Combine(customPath, "wallpapers"));
+                Directory.CreateDirectory(Path.Combine(customPath, "sub_audio"));
                 Logger?.Information("Ensured custom assets directories at {Path}", customPath);
             }
             catch (Exception ex)

@@ -92,9 +92,12 @@ public class YouLibraryDoorTests
     private static readonly string[] AllLanguages =
         { "en.json", "de.json", "es.json", "fr.json", "ja.json", "ko.json", "pt-BR.json", "ru.json", "zh-CN.json" };
 
-    /// <summary>The four Library rows added in Phase 7, and the handler each one binds.</summary>
+    /// <summary>The Library rows below the Assets row, and the handler each one binds. The
+    /// Media sources row is the odd one out: it navigates rather than launching (see
+    /// TheLibraryLaunchersClaimNoTabKey), but it is held to the same row shape.</summary>
     public static IEnumerable<object[]> LibraryLaunchers => new[]
     {
+        new object[] { "BtnNavMediaSource", "BtnNavMediaSource_Click", "yl7_nav_mediasource", "yl7_nav_mediasource_tip" },
         new object[] { "BtnNavMods",     "BtnManageMods_Click",   "yl7_nav_mods",      "yl7_nav_mods_tip" },
         new object[] { "BtnNavCatalogue", "BtnCatalogue_Click",   "yl7_nav_catalogue", "yl7_nav_catalogue_tip" },
         new object[] { "BtnNavPhrases",  "BtnManagePhrases_Click", "yl7_nav_phrases",  "yl7_nav_phrases_tip" },
@@ -157,7 +160,10 @@ public class YouLibraryDoorTests
         var names = Regex.Matches(LibraryDoorPanel(), "<Button x:Name=\"(\\w+)\"")
                          .Select(m => m.Groups[1].Value).ToArray();
         Assert.Equal("BtnOpenAssetsTop", names.First());
-        Assert.Equal(5, names.Length);
+        // 6 since the "Media sources" row: Assets, Media sources, Mods, Catalogue, Phrases,
+        // Media Log. The media-source panel used to be reachable only by clicking the door
+        // header, which is what #ask-support kept tripping over (2026-08-25).
+        Assert.Equal(6, names.Length);
     }
 
     [Fact]
