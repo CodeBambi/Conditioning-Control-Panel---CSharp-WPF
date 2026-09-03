@@ -1,0 +1,283 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/StudioTabView.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences or by what this head
+     does not carry yet:
+
+       <Style x:Key TargetType>          ->  <ControlTheme x:Key TargetType>
+       Style="{StaticResource X}"        ->  Theme, set as a DynamicResource from code (see
+                                            RenderRackRows: the rows are built in the constructor,
+                                            before this control is attached and can resolve a
+                                            StaticResource at all)
+       ControlTemplate.Triggers          ->  ^:pointerover / ^:checked nested selectors
+       Visibility="Collapsed"            ->  IsVisible="False"
+       helpers:EmojiTextBlock            ->  TextBlock (Avalonia renders colour emoji natively)
+       <ContentPresenter/>               ->  Content/ContentTemplate TemplateBindings, or the
+                                            templated row draws nothing (CLAUDE.md trap 6)
+       Image Source="pack://.../nav/door_studio.png"
+                                         ->  a wash chip. Resources/nav/*.png is not an
+                                            AvaloniaResource in this head, and ModResourceResolver
+                                            (which overrides that Source on every repaint) is a
+                                            WPF-head service. Same stand-in the BrainDrain port
+                                            uses for its hero plate.
+       tabs:HapticsTabView               ->  a placard, see PanelHaptics below.
+
+     The whole rack list is built in code from one table, exactly as on WPF - the key, the icon,
+     the label, the dot, the panel and the bark key can never drift apart. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Avalonia.Views.Features"
+             xmlns:studio="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Studio"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.StudioTabView">
+
+    <UserControl.Resources>
+
+        <!-- Rack row. Same grammar as the nav rail's active indicator and the Settings door's
+             section pills: a 3px accent bar plus a tinted fill. Deliberately no animation - a
+             pseudo-class setter is not one, so there is nothing here for a motion kill-switch to
+             gate or stop.
+
+             HEIGHT IS A MINIMUM, NOT A FIXED SIZE. The resting row is 38 - tall enough for the
+             28px chip RenderRackRows builds - but the CHECKED row of a module that has a tile
+             swaps its content for a 56px full-bleed tile, and the row has to grow into it. The
+             Height setter below is what the code-behind overrides on Checked and ClearValue()s on
+             Unchecked; the template's MinHeight is the floor that keeps every other row honest. -->
+        <ControlTheme x:Key="RackEntryStyle" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="StudioRack"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <!-- Null, not the RadioButton default: TierRim below paints whatever sits in
+                 BorderBrush, and only BuildRack's tiered rows put a brush there (gold = Tier 1,
+                 diamond = Tier 2 - the tier livery, Theme/Brushes.xaml). Free rows stay rimless. -->
+            <Setter Property="BorderBrush" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid Background="Transparent" MinHeight="38">
+                        <Border Name="RowFill" CornerRadius="8" Opacity="0"
+                                Background="{DynamicResource TransparentPink20Brush}"/>
+                        <!-- The tier rim. A stroke, never a fill, and hit-test invisible so it is
+                             pure livery: selection (RowFill/RowBar) and hover keep their existing
+                             grammar underneath it. -->
+                        <Border Name="TierRim" CornerRadius="8" BorderThickness="1"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                IsHitTestVisible="False"/>
+                        <Border Name="RowBar" Width="3" CornerRadius="2" Margin="0,5"
+                                HorizontalAlignment="Left" IsVisible="False"
+                                Background="{DynamicResource PinkBrush}"/>
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Margin="12,0,10,0" VerticalAlignment="Center"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#RowFill">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Style>
+
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#RowFill">
+                <Setter Property="Opacity" Value="1"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#RowBar">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+        </ControlTheme>
+
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ============================ page header ============================ -->
+        <Grid Grid.Row="0" Margin="4,2,4,12" ColumnDefinitions="Auto,*">
+            <!-- Stands in for the WPF Image whose pack:// Source is the DEFAULT and whose real
+                 art comes from ModResourceResolver on every repaint. Neither exists on this head;
+                 the name is kept so ApplyDoorIcon has something to point at when they land. -->
+            <Border x:Name="ImgStudioDoorIcon"
+                    Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0"
+                    VerticalAlignment="Center" CornerRadius="8"
+                    Background="{DynamicResource SectionHueStudioWashBrush}"
+                    BorderThickness="1" BorderBrush="{DynamicResource SectionHueStudioBorderBrush}">
+                <TextBlock Text="🎛" FontSize="15"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtStudioTitle" Text="{loc:Str st4_studio_title}"
+                           Foreground="White" FontSize="21" FontWeight="Bold"/>
+                <TextBlock Text="{loc:Str st4_studio_subtitle}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ========================== rack + detail pane ======================== -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+
+            <!-- The rack list. Fixed 230 wide per the Phase-4 contract; rows are built in code
+                 from the single rack table. -->
+            <Border Grid.Column="0" Width="230" Margin="0,0,14,0"
+                    Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
+                    BorderThickness="1" CornerRadius="12" Padding="8,10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="RackList"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- The detail column. -->
+            <Grid Grid.Column="1" RowDefinitions="Auto,*">
+
+                <!-- RETIRED, NOT DELETED.
+                     This was the stand-in for the FeaturePopupWindow title bar. Every feature page
+                     now draws its OWN in-page hero, which named the module twice - so every rack
+                     entry sets OwnHeader and RefreshDetailHeader collapses this on every selection.
+                     It stays in the tree, still x:Named, still repainted: a page that ever loses
+                     its in-page hero passes ownHeader:false and gets this bar back with no new
+                     XAML. Do not delete it and do not rename TxtDetailIcon / TxtDetailTitle. -->
+                <Border x:Name="DetailHeader" Grid.Row="0" Margin="0,0,0,10" Padding="14,9"
+                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
+                        BorderThickness="1" CornerRadius="10">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtDetailIcon" FontSize="15"
+                                   VerticalAlignment="Center" Margin="0,0,9,0"/>
+                        <TextBlock x:Name="TxtDetailTitle" Foreground="White" FontSize="14"
+                                   FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Every module's panel, all instantiated, exactly one visible.
+
+                     Each Features/* panel gets its OWN ScrollViewer and ~14px of padding because
+                     that is what FeaturePopupWindow gave it; without it the long panels - Flash,
+                     BouncingText, Spiral - clip silently with no scrollbar at all. -->
+                <Grid x:Name="DetailHost" Grid.Row="1">
+
+                    <ScrollViewer x:Name="HostFlash" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:FlashFeatureControl x:Name="PanelFlash"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostVisuals" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:VisualsFeatureControl x:Name="PanelVisuals"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostVideo" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:VideoFeatureControl x:Name="PanelVideo"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostSubliminal" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:SubliminalFeatureControl x:Name="PanelSubliminal"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostSpiral" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:SpiralFeatureControl x:Name="PanelSpiral"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostPinkFilter" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:PinkFilterFeatureControl x:Name="PanelPinkFilter"/>
+                    </ScrollViewer>
+
+                    <!-- TxtTriggerEggHint travels with this panel. -->
+                    <ScrollViewer x:Name="HostBubblePop" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:BubblePopFeatureControl x:Name="PanelBubblePop"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostLockCard" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:LockCardFeatureControl x:Name="PanelLockCard"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostBubbleCount" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:BubbleCountFeatureControl x:Name="PanelBubbleCount"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostBouncingText" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:BouncingTextFeatureControl x:Name="PanelBouncingText"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostMindWipe" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <feat:MindWipeFeatureControl x:Name="PanelMindWipe"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostBrainDrain" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <studio:BrainDrainFeatureControl x:Name="PanelBrainDrain"/>
+                    </ScrollViewer>
+
+                    <!-- SystemFeatureControl and AppInfoFeatureControl are deliberately NOT rack
+                         modules (Phase-4 contract): System is configuration + the No-Panic safety
+                         control, and both belong to the Settings/Home doors. -->
+
+                    <!-- ponytail: hosted RAW on WPF, because HapticsTabView's root is already a
+                         ScrollViewer and it carries its own page header (which is why DetailHeader
+                         hides for this module). HapticsTabView is not ported to this head yet, so
+                         the module hosts a placard instead of the page - the rack's `haptics` row,
+                         its tier-1 livery and its null bark key already expect the real thing.
+                         Replace this Border with <tabs:HapticsTabView x:Name="PanelHaptics"/> when
+                         it lands; nothing in the code-behind changes but the field's type. -->
+                    <Border x:Name="PanelHaptics" IsVisible="False"
+                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
+                            BorderThickness="1" CornerRadius="12" Padding="24"
+                            VerticalAlignment="Top" HorizontalAlignment="Left"
+                            Margin="2,0,14,10">
+                        <StackPanel>
+                            <TextBlock Text="📳" FontSize="34" Margin="0,0,0,10"/>
+                            <TextBlock Text="{loc:Str tab_haptics}" Foreground="White"
+                                       FontSize="17" FontWeight="SemiBold"/>
+                            <TextBlock Text="Not ported to this head yet — the Haptics page moves in whole, as one instance."
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" MaxWidth="460"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- These wrap the LIVE Features/SchedulerFeatureControl and
+                         Features/IntensityRampFeatureControl. Both fire the popup's single
+                         "SchedulerRamp" bark key. -->
+                    <ScrollViewer x:Name="HostScheduler" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <studio:SchedulerRackPanel x:Name="PanelScheduler"/>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="HostRamp" IsVisible="False"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Padding="2,0,14,10">
+                        <studio:RampRackPanel x:Name="PanelRamp"/>
+                    </ScrollViewer>
+
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>
