@@ -1,0 +1,51 @@
+<!-- The head's colour picker. There is no WPF original to port: the WPF head opened
+     System.Windows.Forms.ColorDialog, which cannot follow us across, so this is the twin
+     every colour button on this head opens instead.
+
+     ColorView, not ColorPicker: ColorPicker is the flyout *button* and would draw as a small
+     swatch inside a dialog that is already the picker. ColorView is the inline panel.
+
+     Its theme is NOT part of FluentTheme - it ships in the Avalonia.Controls.ColorPicker
+     package and has to be merged by whoever uses the control. App.axaml belongs to the shell,
+     so the merge lives here, at window scope. Nothing in the compiler checks that URI; the
+     render does.
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key and every loc key here is snake_case (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ColorPickerDialog"
+        Height="520" Width="420"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="False">
+
+    <Window.Styles>
+        <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml"/>
+    </Window.Styles>
+
+    <Grid Margin="20" RowDefinitions="Auto,*,Auto">
+
+        <!-- TxtTitle carries no {loc:Str}: the constructor always assigns it, and in Avalonia a
+             local value sits UNDER a binding and is undone on the next language change. -->
+        <TextBlock Grid.Row="0" x:Name="TxtTitle"
+                   Foreground="{StaticResource PinkBrush}"
+                   FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+
+        <ColorView Grid.Row="1" x:Name="Picker"
+                   IsAlphaEnabled="False"
+                   IsAlphaVisible="False"
+                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+
+        <Grid Grid.Row="2" Margin="0,15,0,0" ColumnDefinitions="*,Auto,Auto">
+            <Button x:Name="BtnCancel" Grid.Column="1" Theme="{StaticResource SecondaryButton}"
+                    Margin="0,0,10,0">
+                <TextBlock Text="{loc:Str btn_cancel}"/>
+            </Button>
+            <Button x:Name="BtnOk" Grid.Column="2" Theme="{StaticResource ActionButton}">
+                <TextBlock Text="{loc:Str btn_ok}"/>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>
