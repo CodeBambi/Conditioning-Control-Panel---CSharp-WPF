@@ -1354,6 +1354,73 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>Let the panel keep the chrome lit while the pointer is inside it.</summary>
         internal void HoldChromeForPanel(bool on) => ChromeHold(EmiChromeHold.Menu, on);
 
+        // ---- her book -------------------------------------------------------------
+
+        private EmiBookWindow? _book;
+
+        /// <summary>
+        /// HER MANUAL. Open the book beside her, at <paramref name="cardId"/> or at the first card.
+        ///
+        /// <para>The WPF path is <c>EmiBook.Open</c>, a static router that keeps the single instance
+        /// and resolves the owner off <c>App.EmiDesk</c>. There is no app shell on this head, so the
+        /// widget keeps the instance itself - the same shape it already uses for her options panel,
+        /// and the widget IS the owner the router was going looking for.</para>
+        ///
+        /// <para>Single instance, the router's own rule: a second open on a live book NAVIGATES it
+        /// rather than building a second panel.</para>
+        ///
+        /// <para>ponytail: three of the router's jobs are still blocked and none of them is view
+        /// work. <c>EmiBook.Bookmark</c> / <c>NoteCard</c> (the card she last had open) and
+        /// <c>EmiState.NoteCodexOpened()</c> need
+        /// ConditioningControlPanel/Services/EmiDesk/EmiState.cs; <c>NoteSideChanged</c> needs the
+        /// bubble dodge in EmiDeskWindow.Bubble.cs. So the book opens at the first card every time
+        /// until EmiState lands.</para>
+        /// </summary>
+        private void OpenBook(string? cardId = null)
+        {
+            try
+            {
+                if (_book != null)
+                {
+                    _book.GoTo(cardId);
+                    return;
+                }
+
+                var win = new EmiBookWindow(this);
+                // The window can go away without anybody calling CloseBook - the fold finishing, or
+                // the app shutting down - so the reference is dropped from the window's own Closed.
+                // Without this the next ? click would GoTo a dead panel.
+                win.Closed += OnBookClosed;
+                _book = win;
+                win.OpenBook(cardId);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] the book failed to open");
+                try { CloseBook(); } catch { /* nothing else to try */ }
+            }
+        }
+
+        /// <summary>Fold the book. Safe when it is not up, and the road her close button takes.</summary>
+        internal void CloseBook()
+        {
+            var win = _book;
+            _book = null;
+            if (win == null) return;
+            try
+            {
+                win.Closed -= OnBookClosed;
+                win.Kill();
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book close failed"); }
+        }
+
+        private void OnBookClosed(object? sender, EventArgs e)
+        {
+            if (!ReferenceEquals(sender, _book)) return;
+            _book = null;
+        }
+
         /// <summary>Clear the resize hold, whichever way the drag ended.</summary>
         private void EndResizeHold()
         {
@@ -2422,9 +2489,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs EmiSfx (Services/EmiDesk/EmiSfx.cs) - the pat sound.</summary>
         private void PlayPatSfx() { }
 
-        /// <summary>ponytail: needs EmiBook.Open (Services/EmiDesk/EmiBook.cs) - her manual.</summary>
-        private void OpenBook() { }
-
         /// <summary>ponytail: needs App.EmiDesk.Dismiss() - the hover x sends her away.</summary>
         private void Dismiss() { }
 
@@ -2445,6 +2509,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 try { OnTearDownCore(); }
                 catch (Exception ex) { Log.Debug(ex, "[EmiDesk] teardown seam threw"); }
                 KillOptionsPanel();
+                // NOT in WPF's ShutDown, and deliberately: there the book is held by a static
+                // router and the App shutdown closes every window. This head has no shell, so a
+                // book left up would be a topmost window with two handlers pointing at a closed
+                // widget and no road back to a close button.
+                CloseBook();
                 StopIdleBeats();
                 StopAlive();
                 DisarmPet();
@@ -2467,6 +2536,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             {
                 _closingForGood = true;
                 KillOptionsPanel();
+                CloseBook();
                 StopIdleBeats();
                 StopAlive();
                 DisarmPet();
