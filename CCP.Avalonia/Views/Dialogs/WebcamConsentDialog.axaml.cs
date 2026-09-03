@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Services.Webcam;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
@@ -157,18 +158,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             // Persist consent. Camera stays closed — the user must explicitly enable a feature
             // toggle in the Lab card to actually start tracking.
-            // ponytail: needs WebcamTrackingService.ConsentVersion
-            // (ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs:98), still in the
-            // WPF head — there is no Webcam directory in Core. Until it moves, WebcamConsentVersion
-            // is left unstamped and the log line omits {Version}. That fails safe: IsConsentCurrent
-            // compares the stored version against the contract version, so a Given=true record with
-            // an empty version re-prompts rather than silently granting.
             var s = CoreSettings.Current;
             s.WebcamConsentGiven = true;
             s.WebcamConsentDate = System.DateTime.UtcNow;
+            s.WebcamConsentVersion = WebcamConsent.ConsentVersion;
             CoreSettings.Save();
 
-            Log.Information("Webcam consent granted at {Time}", System.DateTime.UtcNow);
+            Log.Information("Webcam consent granted at {Time}, version {Version}",
+                System.DateTime.UtcNow, WebcamConsent.ConsentVersion);
 
             ConsentGiven = true;
             _step = Step.Calibrate;

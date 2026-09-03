@@ -1,7 +1,11 @@
+using System;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Awareness;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -39,11 +43,56 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         public static bool IsRequired(AppSettings? settings) => settings?.AwarenessConsentShownV2 != true;
 
-        // ponytail: EnsureConsent needs AwarenessPrivacyRules.EnsureSeeded
-        // (ConditioningControlPanel/Services/Awareness/AwarenessPrivacyRules.cs) and
-        // AwarenessIntensityMigration.EnsureMigrated
-        // (ConditioningControlPanel/Services/Awareness/AwarenessIntensityMigration.cs), both still
-        // in the WPF head. Accepting consent without seeding the recommended deny groups would
-        // change what awareness observes, so this stays unported rather than half-ported.
+        /// <summary>
+        /// Raises the dialog when it is required and returns whether awareness may now be enabled.
+        /// Accepting records the consent flag, seeds the recommended deny groups and performs the
+        /// one-time cooldown → intensity migration, so the defaults exist before anything is observed.
+        ///
+        /// <para>Returns true without showing anything when consent was already given, and false when
+        /// the user declines — the caller must then leave awareness off rather than "asking again
+        /// later", which is how a declined dialog turns into a nag.</para>
+        ///
+        /// <para>Async because Avalonia's <c>ShowDialog</c> is; the WPF original was blocking. The
+        /// owner is required for the same reason — a parentless modal has nothing to be modal to.</para>
+        /// </summary>
+        public static async Task<bool> EnsureConsentAsync(Window? owner, AppSettings? settings)
+        {
+            if (settings == null) return false;
+            if (!IsRequired(settings)) return true;
+
+            bool accepted;
+            try
+            {
+                var dialog = new AwarenessConsentDialog();
+                // Avalonia's ShowDialog has no ownerless form. No owner means the question cannot
+                // be asked, and an unasked question is a decline — never an implicit yes.
+                if (owner == null || ReferenceEquals(owner, dialog))
+                {
+                    Log.Warning("Awareness consent needs an owner window — treating as declined");
+                    return false;
+                }
+                accepted = await dialog.ShowDialog<bool>(owner);
+            }
+            catch (Exception ex)
+            {
+                // A dialog that cannot be shown may never become an implicit yes.
+                Log.Warning(ex, "Awareness consent dialog failed to open — treating as declined");
+                return false;
+            }
+
+            if (!accepted)
+            {
+                Log.Information("Awareness consent declined");
+                return false;
+            }
+
+            settings.AwarenessConsentShownV2 = true;
+            AwarenessPrivacyRules.EnsureSeeded(settings);
+            AwarenessIntensityMigration.EnsureMigrated(settings);
+            CoreSettings.Save();
+
+            Log.Information("Awareness consent accepted (deny groups seeded, intensity migrated)");
+            return true;
+        }
     }
 }

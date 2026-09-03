@@ -38,7 +38,7 @@ namespace ConditioningControlPanel
                 var rows = new List<Row>();
                 foreach (var r in parsed)
                 {
-                    var kindText = Loc.Get(r.Kind == BugReportService.ReportKind.Suggestion
+                    var kindText = Loc.Get(r.Kind == ReportKind.Suggestion
                         ? "my_reports_kind_suggestion"
                         : "my_reports_kind_bug");
 

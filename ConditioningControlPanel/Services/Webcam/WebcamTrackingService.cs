@@ -91,11 +91,10 @@ namespace ConditioningControlPanel.Services
     public class WebcamTrackingService : IDisposable
     {
         /// <summary>
-        /// Bumped any time we add a new sensor type, broaden what the camera
-        /// observes, or change what numbers are stored. On bump, the consent
-        /// dialog re-runs from screen 1 for every existing user.
+        /// The consent contract version. Aliases <see cref="Webcam.WebcamConsent.ConsentVersion"/>
+        /// in Core so both heads stamp and compare the same string — bump it THERE, not here.
         /// </summary>
-        public const string ConsentVersion = "1.0";
+        public const string ConsentVersion = Webcam.WebcamConsent.ConsentVersion;
 
         /// <summary>
         /// True when the user has granted consent AND the recorded consent
@@ -105,13 +104,7 @@ namespace ConditioningControlPanel.Services
         /// makes bumping <see cref="ConsentVersion"/> actually re-consent
         /// existing users when the privacy contract changes.
         /// </summary>
-        public static bool IsConsentCurrent()
-        {
-            var s = App.Settings?.Current;
-            if (s == null) return false;
-            if (!s.WebcamConsentGiven) return false;
-            return s.WebcamConsentVersion == ConsentVersion;
-        }
+        public static bool IsConsentCurrent() => Webcam.WebcamConsent.IsCurrent(App.Settings?.Current);
 
         // Capture parameters
         private const int CaptureWidth = 640;

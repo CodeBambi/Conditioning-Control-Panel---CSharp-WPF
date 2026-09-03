@@ -19,18 +19,18 @@ namespace ConditioningControlPanel
     {
         private readonly BugReportService _service;
         private readonly DispatcherTimer _enableTimer;
-        private readonly BugReportService.ReportKind _kind;
+        private readonly ReportKind _kind;
         private bool _submitted;
         private bool _submitting;
 
-        public BugReportWindow(BugReportService.ReportKind kind = BugReportService.ReportKind.Bug)
+        public BugReportWindow(ReportKind kind = ReportKind.Bug)
         {
             InitializeComponent();
 
             _kind = kind;
             _service = App.BugReport ?? new BugReportService();
 
-            if (_kind == BugReportService.ReportKind.Suggestion)
+            if (_kind == ReportKind.Suggestion)
                 ApplySuggestionMode();
 
             _enableTimer = new DispatcherTimer
@@ -132,7 +132,7 @@ namespace ConditioningControlPanel
                 var result = await _service.SubmitAsync(draft).ConfigureAwait(true);
                 _submitted = true;
 
-                bool isSuggestion = _kind == BugReportService.ReportKind.Suggestion;
+                bool isSuggestion = _kind == ReportKind.Suggestion;
                 string caption = Loc.Get(isSuggestion ? "suggestion_title" : "bug_report_title");
 
                 switch (result.Outcome)
@@ -182,7 +182,7 @@ namespace ConditioningControlPanel
                 MessageBox.Show(
                     this,
                     Loc.Get("bug_report_error_toast") + "\n\n" + ex.Message,
-                    Loc.Get(_kind == BugReportService.ReportKind.Suggestion ? "suggestion_title" : "bug_report_title"),
+                    Loc.Get(_kind == ReportKind.Suggestion ? "suggestion_title" : "bug_report_title"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
                 _submitted = false;

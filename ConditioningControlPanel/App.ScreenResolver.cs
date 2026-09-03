@@ -6,11 +6,13 @@ namespace ConditioningControlPanel
 {
     public partial class App
     {
-        // Sentinel values for the per-effect monitor target settings (suggestion #639).
+        // Sentinel values for the per-effect monitor target settings (suggestion #639). They are
+        // PERSISTED, so the numbers live in Core (Services/UI/MonitorTarget.cs) where every head
+        // reads the same ones; these are aliases, not a second copy.
         /// <summary>Follow the global <see cref="Models.AppSettings.DualMonitorEnabled"/> behavior (default).</summary>
-        public const int MonitorTargetFollowGlobal = -1;
+        public const int MonitorTargetFollowGlobal = Services.UI.MonitorTarget.FollowGlobal;
         /// <summary>Render on every connected monitor regardless of DualMonitorEnabled.</summary>
-        public const int MonitorTargetAll = -2;
+        public const int MonitorTargetAll = Services.UI.MonitorTarget.All;
 
         /// <summary>
         /// Resolve a per-effect monitor target (see <see cref="Models.AppSettings.SpiralTargetMonitor"/>) to the

@@ -6,6 +6,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -15,8 +16,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// for bug reports and suggestions, newest first, each with a Copy button.
     ///
     /// PORTED from ConditioningControlPanel/Windows/MyReportsWindow.xaml.cs. Deviations:
-    ///  - AppSettings.RecentBugReports is in Core, but the parser that turns those raw entries
-    ///    into rows is not, so LoadRows still has no rows and the empty state shows (note below).
+    ///  - The parser is <c>RecentReports.Parse</c> in Core; the WPF original reached it through
+    ///    <c>BugReportService.ParseRecentReports</c>, which now forwards to the same code.
     ///  - The per-row Copy click is one handler on the ItemsControl; the row Button carries the
     ///    token in Tag exactly as before.
     ///  - The Copy label is swapped by rebinding, not by assigning Text: the TextBlock carries a
@@ -48,13 +49,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void LoadRows()
         {
-            // ponytail: needs BugReportService.ParseRecentReports plus RecentReport/ReportKind
-            // (ConditioningControlPanel/Services/BugReportService.cs, internal static), still in the
-            // WPF head. AppSettings.RecentBugReports is already in Core, but the raw
-            // "token|stamp|kind" entries it holds are only meaningful through that parser, so no
-            // rows means the empty state shows; the row subtitle is "{local date}  •  {kind}"
-            // as in the WPF code-behind.
             var rows = new List<Row>();
+            try
+            {
+                foreach (var r in RecentReports.Parse(CoreSettings.Current.RecentBugReports))
+                {
+                    var kindText = Loc.Get(r.Kind == ReportKind.Suggestion
+                        ? "my_reports_kind_suggestion"
+                        : "my_reports_kind_bug");
+
+                    // Stamps are stored in UTC; show them in the user's local time.
+                    var dateText = r.TimestampUtc.HasValue
+                        ? r.TimestampUtc.Value.ToLocalTime().ToString("g")
+                        : string.Empty;
+
+                    rows.Add(new Row
+                    {
+                        Token = r.Token,
+                        SubtitleText = string.IsNullOrEmpty(dateText) ? kindText : $"{dateText}  •  {kindText}",
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[BugReport] My Reports list failed to load");
+                rows.Clear();
+            }
 
             _reportsList.ItemsSource = rows;
             _txtEmpty.IsVisible = rows.Count == 0;

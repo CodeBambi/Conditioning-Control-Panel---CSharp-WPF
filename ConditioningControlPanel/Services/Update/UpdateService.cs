@@ -73,8 +73,10 @@ AND SOME FIXES
 
         /// <summary>
         /// Manual-download fallback shown whenever an automatic install could not complete.
+        /// Aliases <see cref="ReleaseLinks.ReleasesPageUrl"/> in Core so both heads send the user
+        /// to the same page — change it THERE.
         /// </summary>
-        public const string ReleasesPageUrl = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest";
+        public const string ReleasesPageUrl = ReleaseLinks.ReleasesPageUrl;
 
         /// <summary>
         /// How long a skip marker suppresses re-offering the same version. The marker is written

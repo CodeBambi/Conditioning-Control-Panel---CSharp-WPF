@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Awareness
 {
@@ -227,11 +228,11 @@ namespace ConditioningControlPanel.Services.Awareness
         {
             try
             {
-                return Evaluate(request, App.Settings?.Current, DateTime.Now);
+                return Evaluate(request, CoreSettings.Current, DateTime.Now);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[AWARE] privacy layer threw — dropping the frame");
+                Log.Warning(ex, "[AWARE] privacy layer threw — dropping the frame");
                 return AwarenessPrivacyDecision.Drop(AwarenessDropReason.Error);
             }
         }
@@ -296,7 +297,7 @@ namespace ConditioningControlPanel.Services.Awareness
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[AWARE] privacy layer threw — dropping the frame");
+                Log.Warning(ex, "[AWARE] privacy layer threw — dropping the frame");
                 return AwarenessPrivacyDecision.Drop(AwarenessDropReason.Error);
             }
         }
@@ -397,7 +398,7 @@ namespace ConditioningControlPanel.Services.Awareness
 
             settings.AwarenessDenyList = merged;   // setter sanitises
             settings.AwarenessDenySeeded = true;
-            App.Logger?.Information("Awareness: seeded the recommended deny groups ({Count} entries)",
+            Log.Information("Awareness: seeded the recommended deny groups ({Count} entries)",
                 settings.AwarenessDenyList.Count);
             return true;
         }
