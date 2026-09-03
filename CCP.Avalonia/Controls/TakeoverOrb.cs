@@ -7,6 +7,7 @@ using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
 using SkiaSharp;
+using ModPackage = ConditioningControlPanel.Models.ModPackage;
 
 namespace ConditioningControlPanel.Avalonia.Controls
 {
@@ -22,7 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
     /// second one:
     ///   • a self-stopping <see cref="DispatcherTimer"/> that only runs while the control is loaded,
     ///     visible, and its window is active and not minimized;
-    ///   • colours and the performance budget read ONCE at (re)start, never per tick;
+    ///   • colours and the performance budget read ONCE at (re)start and on a mod switch, never
+    ///     per tick;
     ///   • nothing allocated per frame - three persistent <see cref="SKImage"/> sprites baked once
     ///     for the whole app, two <see cref="SKPaint"/>s, and colour filters rebuilt only when the
     ///     palette moves;
@@ -84,6 +86,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         private bool _active;
         private bool _paused;
+        private bool _modHooked;
         private int _faults;
         private Window? _window;
         private readonly Random _rng = new();
@@ -196,15 +199,16 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             try
             {
-                // ponytail: needs PerformanceProfile + MotionFx, wired when they move to Core. The
-                // WPF original reads CurrentTier -> FxTargetFps / MaxAmbientParticles; these are the
-                // Quality-tier values it returns, so the orb behaves as it does on a default install.
-                _targetFps = 30;
+                // CurrentTier -> FxTargetFps / MaxAmbientParticles, exactly as the WPF original.
+                // At the Performance tier FxTargetFps is 0, which ShouldRun reads as "never start
+                // the clock" - the orb still PAINTS, it just stops moving.
+                var tier = AmbientFxCanvas.Env.CurrentTier;
+                _targetFps = AmbientFxCanvas.Env.FxTargetFps(tier);
                 if (_targetFps > 0)
                     _timer.Interval = TimeSpan.FromMilliseconds(1000.0 / _targetFps);
 
                 // A third of the shared ambient budget: this is one small element, not a field.
-                _wispBudget = Math.Clamp(60 / 4, 0, MaxWisps);
+                _wispBudget = Math.Clamp(AmbientFxCanvas.Env.MaxAmbientParticles(tier) / 4, 0, MaxWisps);
 
                 // The palette half of FxTheme is not a service - it reads the app resource
                 // dictionary, and Theme/Colors.xaml is already ported - so this is the real thing.
@@ -262,8 +266,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             try
             {
                 HookWindow(TopLevel.GetTopLevel(this) as Window);
-                // ponytail: needs App.Mods.ModChanged, wired when the mod service moves to Core.
-                // Until then the palette is read once here and on Restart(), not on every mod swap.
+                if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
                 Evaluate();
             }
             catch (Exception ex) { Log("TakeoverOrb.OnLoaded: " + ex.Message); }
@@ -275,8 +278,26 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 StopClock();
                 UnhookWindow();
+                if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
             }
             catch (Exception ex) { Log("TakeoverOrb.OnUnloaded: " + ex.Message); }
+        }
+
+        /// <summary>
+        /// A mod switch re-reads the palette and the budget and repaints - it never reseeds, so the
+        /// ring keeps its orbits and only its colour moves, which is what the WPF twin does. The
+        /// head may raise this off the UI thread, so it is marshalled before the colour filters are
+        /// rebuilt.
+        /// </summary>
+        private void OnModChanged(object? sender, ModPackage mod)
+        {
+            void Apply()
+            {
+                try { ReadEnvironment(); Repaint(); }
+                catch (Exception ex) { Log("TakeoverOrb.OnModChanged: " + ex.Message); }
+            }
+            if (Dispatcher.UIThread.CheckAccess()) Apply();
+            else Dispatcher.UIThread.Post(Apply);
         }
 
         /// <summary>
@@ -339,8 +360,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
             if (_paused || _faults >= FaultLimit) return false;
             if (!IsLoaded || !IsEffectivelyVisible) return false;
             if (_targetFps <= 0) return false;
-            // ponytail: needs MotionFx.AllowAmbientLoops, wired when it moves to Core. That flag is
-            // the reduced-motion / Performance-tier kill switch; assumed true here.
+            // The reduced-motion / Performance-tier kill switch. It stops the CLOCK only: Render
+            // still paints, so "off" is a still orb rather than a hole in the hero row.
+            if (!AmbientFxCanvas.Env.AllowAmbientLoops) return false;
             var w = _window;
             if (w != null)
             {
@@ -619,8 +641,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
             return fallback;
         }
 
-        /// <summary>ponytail: needs App.Logger, wired when logging moves to Core.</summary>
-        private static void Log(string message) => System.Diagnostics.Debug.WriteLine(message);
+        /// <summary>App.Logger's twin: Serilog's static Log, fully qualified past this method.</summary>
+        private static void Log(string message) => Serilog.Log.Debug("{Message}", message);
 
         /// <summary>Soft white radial dot - the glow and wisp sprite.</summary>
         private static SKImage? Dot

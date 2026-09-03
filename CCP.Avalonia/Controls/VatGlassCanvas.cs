@@ -6,8 +6,12 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Platform;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Serilog;
+using ModPackage = ConditioningControlPanel.Models.ModPackage;
+using MotionLevel = ConditioningControlPanel.Models.MotionLevel;
 
 namespace ConditioningControlPanel.Avalonia.Controls
 {
@@ -80,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private double _lastTickMs;
         private int _faults;
         private Window? _window;
+        private bool _modHooked;
 
         // ----------------------------------------------------------- engine state
 
@@ -179,19 +184,16 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>True while the faucet is in and pouring.</summary>
         public bool IsPouring => _pourT > 0;
 
-        // ponytail: needs MotionFx (perf tier + prefers-reduced-motion), wired when it moves to
-        // Core. Until then the vat draws its Full-motion self — waves, bubbles, foam and the 2.1s
-        // pour all run — which is the WPF behaviour on an unloaded machine.
         /// <summary>
         /// Reduced motion is the desktop's prefers-reduced-motion: waves, bubbles,
         /// the faucet, splash and spill all drop out and the level snaps instead of
         /// easing. The vat itself never disappears — a user who turned animation off
         /// did not ask to stop seeing today's XP.
         /// </summary>
-        private static bool Animated => true;
+        private static bool Animated => AmbientFxCanvas.Env.AllowAmbientLoops;
 
         /// <summary>MotionFx.Level == MotionLevel.Full. See <see cref="Animated"/>.</summary>
-        private static bool FullMotion => true;
+        private static bool FullMotion => AmbientFxCanvas.Env.Level == MotionLevel.Full;
 
         // ============================== public API ==============================
 
@@ -398,8 +400,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             try
             {
                 HookWindow(TopLevel.GetTopLevel(this) as Window);
-                // ponytail: needs ModService.ModChanged to re-read the accent on a mod switch,
-                // wired when it moves to Core. RefreshPalette() is public so a host can push it.
+                if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
                 ReadPalette();
                 Evaluate();
             }
@@ -412,8 +413,26 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 StopClock();
                 UnhookWindow();
+                if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
             }
             catch (Exception ex) { Log.Debug("VatGlassCanvas.OnUnloaded: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// A mod switch re-reads the accent and repaints; the level, the pour and the wave phase
+        /// are untouched, so only the liquid's colour moves. Marshalled because the head may raise
+        /// the switch off the UI thread.
+        /// </summary>
+        private void OnModChanged(object? sender, ModPackage mod)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) Apply();
+            else Dispatcher.UIThread.Post(Apply);
+
+            void Apply()
+            {
+                try { RefreshPalette(); }
+                catch (Exception ex) { Log.Debug("VatGlassCanvas.OnModChanged: {E}", ex.Message); }
+            }
         }
 
         /// <summary>WPF's IsVisibleChanged. Avalonia routes it through the property system.</summary>
@@ -952,19 +971,54 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _liquidEdge = light;
         }
 
-        // ponytail: needs ModService (App.Mods.GetAccentColorHex / GetAccentLightColorHex), wired
-        // when it moves to Core. Null keeps the mockup's own hot-pink literals, which is exactly
-        // what the WPF file falls back to for a mod that ships no theme.
-        private static string? AccentHex => null;
-        private static string? AccentLightHex => null;
+        /// <summary>ModService.GetAccentColorHex's non-event branch, through the mod seam.</summary>
+        private static string? AccentHex => CoreMods.AccentColorHex;
+
+        /// <summary>
+        /// GetAccentLightColorHex's non-event branch, read off the active manifest the way
+        /// TubeFitDialog reads its tube layout - CoreMods exposes no accent-light provider.
+        /// ponytail: needs CoreMods.AccentLightColorHexProvider for the live-event tint, which
+        /// ModService shades from the event accent rather than taking from the manifest.
+        /// </summary>
+        private static string? AccentLightHex =>
+            CoreMods.InstalledMods.TryGetValue(CoreMods.ActiveModId, out var pkg)
+                ? pkg?.Manifest?.Theme?.AccentLightColor
+                : null;
 
         private static Color ParseHex(string? hex, Color fallback)
             => !string.IsNullOrWhiteSpace(hex) && Color.TryParse(hex, out var c) ? c : fallback;
 
-        // ponytail: needs the faucet art (Resources/descent/faucet.png, a WPF pack:// resource not
-        // yet in the Avalonia head's assets), wired when the descent art moves across. Null is the
-        // WPF file's own degradation path — the stream falls from 55% of the box with no plumbing
-        // drawn, because the level is the information and the faucet is only the theater.
-        private static IImage? LoadFaucet() => null;
+        /// <summary>
+        /// The faucet art, decoded once for the whole app. /Assets/descent is linked into this head
+        /// as Resources/descent, so the WPF pack:// URI becomes the avares:// one and nothing else
+        /// about the draw changes. Null stays the WPF file's own degradation path — the stream
+        /// falls from 55% of the box with no plumbing drawn — and _faucetTried keeps a miss from
+        /// re-decoding every frame.
+        /// </summary>
+        private static IImage? LoadFaucet()
+        {
+            if (_faucet != null || _faucetTried) return _faucet;
+            lock (FaucetLock)
+            {
+                if (_faucet != null || _faucetTried) return _faucet;
+                _faucetTried = true;
+                try
+                {
+                    var uri = new Uri("avares://CCP.Avalonia/Resources/descent/faucet.png");
+                    if (!AssetLoader.Exists(uri)) return null;
+                    using var stream = AssetLoader.Open(uri);
+                    _faucet = new Bitmap(stream);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("VatGlassCanvas: faucet art unavailable: {E}", ex.Message);
+                }
+                return _faucet;
+            }
+        }
+
+        private static IImage? _faucet;
+        private static bool _faucetTried;
+        private static readonly object FaucetLock = new();
     }
 }
