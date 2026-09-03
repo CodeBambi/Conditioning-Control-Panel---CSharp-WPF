@@ -2,7 +2,6 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
-using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 using ConditioningControlPanel.Avalonia.Views.Controls;
@@ -32,67 +31,51 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// </summary>
     public partial class QuestsTabView : UserControl
     {
-        private readonly StackPanel _dailyWeeklyPanel, _roadmapPanel;
-        private readonly Button _btnSubDaily, _btnSubRoadmap;
-        private readonly Button _btnTrack1, _btnTrack2, _btnTrack3;
-        private readonly Button _btnRerollWeekly, _btnFixStreak;
-        private readonly Canvas _streakCanvas;
+        /// <summary>The three daily seats, in column order. The seats themselves are named in
+        /// the XAML; this is just the group the reroll forward iterates.</summary>
         private readonly DailyQuestCard[] _dailyCards;
 
         public QuestsTabView()
         {
-            AvaloniaXamlLoader.Load(this);
+            // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
+            // x:Name fields, and Load leaves every one of them permanently null - a silent no-op
+            // that compiles, renders and reviews clean.
+            InitializeComponent();
 
-            _dailyWeeklyPanel = this.FindControl<StackPanel>("DailyWeeklyPanel")!;
-            _roadmapPanel = this.FindControl<StackPanel>("RoadmapPanel")!;
-            _btnSubDaily = this.FindControl<Button>("BtnQuestSubDaily")!;
-            _btnSubRoadmap = this.FindControl<Button>("BtnQuestSubRoadmap")!;
-            _btnTrack1 = this.FindControl<Button>("BtnTrack1")!;
-            _btnTrack2 = this.FindControl<Button>("BtnTrack2")!;
-            _btnTrack3 = this.FindControl<Button>("BtnTrack3")!;
-            _btnRerollWeekly = this.FindControl<Button>("BtnRerollWeekly")!;
-            _btnFixStreak = this.FindControl<Button>("BtnFixStreak")!;
-            _streakCanvas = this.FindControl<Canvas>("StreakCalendarCanvas")!;
+            _dailyCards = new[] { DailyCard0, DailyCard1, DailyCard2 };
 
-            _dailyCards = new[]
-            {
-                this.FindControl<DailyQuestCard>("DailyCard0")!,
-                this.FindControl<DailyQuestCard>("DailyCard1")!,
-                this.FindControl<DailyQuestCard>("DailyCard2")!,
-            };
-
-            _btnSubDaily.Click += (_, _) => ShowDailyWeekly();
-            _btnSubRoadmap.Click += (_, _) => ShowRoadmap();
-            _btnTrack1.Click += OnTrackClick;
-            _btnTrack2.Click += OnTrackClick;
-            _btnTrack3.Click += OnTrackClick;
-            _btnRerollWeekly.Click += (_, _) => RerollWeekly();
-            _btnFixStreak.Click += (_, _) => FixStreak();
+            BtnQuestSubDaily.Click += (_, _) => ShowDailyWeekly();
+            BtnQuestSubRoadmap.Click += (_, _) => ShowRoadmap();
+            BtnTrack1.Click += OnTrackClick;
+            BtnTrack2.Click += OnTrackClick;
+            BtnTrack3.Click += OnTrackClick;
+            BtnRerollWeekly.Click += (_, _) => RerollWeekly();
+            BtnFixStreak.Click += (_, _) => FixStreak();
 
             // The three daily seats each own a reroll button; the tab just forwards which seat was
             // pressed. The shell spends the reroll - no quest state is touched down here.
             foreach (var card in _dailyCards)
                 card.RerollRequested += OnDailyCardRerollRequested;
 
-            _streakCanvas.SizeChanged += (_, _) => PaintStreakCalendar();
+            StreakCalendarCanvas.SizeChanged += (_, _) => PaintStreakCalendar();
         }
 
         // ---- SUB-TABS (view-only, ported for real) --------------------------------
 
         private void ShowDailyWeekly()
         {
-            _dailyWeeklyPanel.IsVisible = true;
-            _roadmapPanel.IsVisible = false;
-            _btnSubDaily.Theme = TabTheme("TabButtonActive");
-            _btnSubRoadmap.Theme = TabTheme("TabButton");
+            DailyWeeklyPanel.IsVisible = true;
+            RoadmapPanel.IsVisible = false;
+            BtnQuestSubDaily.Theme = TabTheme("TabButtonActive");
+            BtnQuestSubRoadmap.Theme = TabTheme("TabButton");
         }
 
         private void ShowRoadmap()
         {
-            _dailyWeeklyPanel.IsVisible = false;
-            _roadmapPanel.IsVisible = true;
-            _btnSubDaily.Theme = TabTheme("TabButton");
-            _btnSubRoadmap.Theme = TabTheme("TabButtonActive");
+            DailyWeeklyPanel.IsVisible = false;
+            RoadmapPanel.IsVisible = true;
+            BtnQuestSubDaily.Theme = TabTheme("TabButton");
+            BtnQuestSubRoadmap.Theme = TabTheme("TabButtonActive");
             // ponytail: needs RoadmapService (App.Roadmap), wired when it moves to Core. The panel
             // shows its authored placeholders until then.
         }
@@ -100,9 +83,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnTrackClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             var tag = (sender as Button)?.Tag as string;
-            _btnTrack1.Theme = TabTheme(tag == "EmptyDoll" ? "TabButtonActive" : "TabButton");
-            _btnTrack2.Theme = TabTheme(tag == "ObedientPuppet" ? "TabButtonActive" : "TabButton");
-            _btnTrack3.Theme = TabTheme(tag == "SluttyBlowdoll" ? "TabButtonActive" : "TabButton");
+            BtnTrack1.Theme = TabTheme(tag == "EmptyDoll" ? "TabButtonActive" : "TabButton");
+            BtnTrack2.Theme = TabTheme(tag == "ObedientPuppet" ? "TabButtonActive" : "TabButton");
+            BtnTrack3.Theme = TabTheme(tag == "SluttyBlowdoll" ? "TabButtonActive" : "TabButton");
             // ponytail: needs RoadmapService (App.Roadmap) to repaint the nodes for the new track,
             // wired when it moves to Core.
         }
@@ -131,10 +114,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         private void PaintStreakCalendar()
         {
-            _streakCanvas.Children.Clear();
+            StreakCalendarCanvas.Children.Clear();
 
             const int days = 7, stamped = 4, size = 26;
-            double width = _streakCanvas.Bounds.Width;
+            double width = StreakCalendarCanvas.Bounds.Width;
             if (width <= 0) return;
 
             double step = Math.Min(size + 14, width / days);
@@ -152,7 +135,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 };
                 Canvas.SetLeft(pip, left + i * step);
                 Canvas.SetTop(pip, 12);
-                _streakCanvas.Children.Add(pip);
+                StreakCalendarCanvas.Children.Add(pip);
             }
         }
     }

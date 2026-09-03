@@ -1,7 +1,6 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Windows;
@@ -45,11 +44,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private bool _fxComposed;
 
-        // The compiled-XAML x:Name fields are only populated by a generated InitializeComponent();
-        // this view loads with AvaloniaXamlLoader.Load, so the one control the code touches is
-        // resolved by name here, as in LockdownTabView and AdornedAvatar.
-        private readonly AmbientFxCanvas? _rabbitHoleFx;
-
         /// <summary>The one cast every shim makes - the port of WPF's
         /// <c>Window.GetWindow(this) as MainWindow</c>. Null while the view is being built and under
         /// <c>--render-view</c>, where a card that fires simply does nothing, exactly as WPF's
@@ -58,8 +52,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         public PlayTabView()
         {
-            AvaloniaXamlLoader.Load(this);
-            _rabbitHoleFx = this.FindControl<AmbientFxCanvas>("RabbitHoleFx");
+            // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
+            // x:Name fields, and Load leaves every one of them permanently null - a silent no-op
+            // that compiles, renders and reviews clean.
+            InitializeComponent();
 
             // Composed on first ATTACH rather than in the constructor: the canvas needs a live
             // visual tree to size its layers against. WPF hooked IsVisibleChanged; Avalonia's twin
@@ -72,20 +68,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
-                if (_fxComposed || _rabbitHoleFx == null) return;
+                if (_fxComposed || RabbitHoleFx == null) return;
                 _fxComposed = true;
 
                 // Embers, not weather: a DustField alone. The card already carries a three-stop
                 // gradient of its own and a fog layer on top would just wash it out. Colour is
                 // FxTheme's particle slot, so this is an ember on a Bambi build and a green mote
                 // on Dronification - no orange is hard-coded into the Play door.
-                _rabbitHoleFx.StartLayers(new AmbientFxConfig
+                RabbitHoleFx.StartLayers(new AmbientFxConfig
                 {
                     Layers = AmbientFxLayers.DustField,
                     Intensity = RabbitHoleFxIntensity,
                 });
 
-                // ponytail: needs RegisterTabFx(TabKey, _rabbitHoleFx) - the park/resume hook and
+                // ponytail: needs RegisterTabFx(TabKey, RabbitHoleFx) - the park/resume hook and
                 // the motion kill-switch's reach. It is one of the four members stubbed out of
                 // CCP.Avalonia/Views/Windows/MainShellWindow.AmbientFx.cs. Until it exists the
                 // canvas parks itself on detach (AmbientFxCanvas.Evaluate), which is why running
