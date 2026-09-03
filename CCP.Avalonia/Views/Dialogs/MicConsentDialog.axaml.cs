@@ -130,8 +130,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void Enable()
         {
-            // ponytail: needs AppSettings (MicConsentGiven) + SettingsService.Save, wired when they move to Core.
-            // The mic stays closed - it only opens during an explicit listen window while Takeover runs.
+            // Persist consent. The mic stays closed — it only opens during an explicit listen
+            // window while Takeover is running.
+            CoreSettings.Current.MicConsentGiven = true;
+            CoreSettings.Save();
+
             Log.Information("Mic consent granted at {Time}", System.DateTime.UtcNow);
 
             ConsentGiven = true;

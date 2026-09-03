@@ -155,8 +155,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void Enable()
         {
-            // ponytail: needs AppSettings (WebcamConsentGiven/Version/Date), SettingsService.Save and
-            // WebcamTrackingService.ConsentVersion, wired when they move to Core. Camera stays closed.
+            // Persist consent. Camera stays closed — the user must explicitly enable a feature
+            // toggle in the Lab card to actually start tracking.
+            // ponytail: needs WebcamTrackingService.ConsentVersion
+            // (ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs:98), still in the
+            // WPF head — there is no Webcam directory in Core. Until it moves, WebcamConsentVersion
+            // is left unstamped and the log line omits {Version}. That fails safe: IsConsentCurrent
+            // compares the stored version against the contract version, so a Given=true record with
+            // an empty version re-prompts rather than silently granting.
+            var s = CoreSettings.Current;
+            s.WebcamConsentGiven = true;
+            s.WebcamConsentDate = System.DateTime.UtcNow;
+            CoreSettings.Save();
+
             Log.Information("Webcam consent granted at {Time}", System.DateTime.UtcNow);
 
             ConsentGiven = true;

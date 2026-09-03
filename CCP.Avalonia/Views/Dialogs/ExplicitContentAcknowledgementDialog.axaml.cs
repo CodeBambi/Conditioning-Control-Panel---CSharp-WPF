@@ -1,5 +1,8 @@
+using System;
+using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -23,8 +26,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 // Defense-in-depth: IsEnabled already prevents this, but a harness may invoke it.
                 if (chk.IsChecked != true) return;
 
-                // ponytail: needs AppSettings.CompanionPrompt (ExplicitAcknowledgedAt/Locale audit stamp),
-                // wired when AppSettings moves to Core.
+                // P2 C3: stamp the audit-trail fields BEFORE the caller's MarkAcknowledged call
+                // flips ExplicitContentAcknowledged + ExplicitAcknowledgedVersion. These two
+                // properties capture WHEN and in WHICH locale the affirmation happened. The
+                // dialog never saves — the caller's MarkAcknowledged + Save persists both.
+                try
+                {
+                    var promptSettings = CoreSettings.Current.CompanionPrompt;
+                    if (promptSettings != null)
+                    {
+                        promptSettings.ExplicitAcknowledgedAt =
+                            DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+                        promptSettings.ExplicitAcknowledgedLocale = CultureInfo.CurrentCulture.Name;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Best-effort capture; the gate itself still functions if this fails.
+                    Log.Warning(ex, "ExplicitContentAcknowledgementDialog: failed to capture ack timestamp/locale");
+                }
+
                 Close(true);
             };
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close(false);
