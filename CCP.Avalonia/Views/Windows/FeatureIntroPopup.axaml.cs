@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -45,13 +46,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// per-feature bitmaps.
     ///
     /// PORTED from ConditioningControlPanel/Windows/FeatureIntroPopup.xaml.cs. Deviations:
-    ///  - The whole show gate is stubbed rather than ported. Every line of ShowIfFirstTime /
-    ///    ShowCelebrationIfFirstTime / ShowWhenStartupSettles / ShowCore is App.Settings,
-    ///    App.Tutorial, App.IsUpdateDialogActive, MainWindow.IsStartupDialogShowing and
-    ///    Dispatcher-priority gating. The three entry points stay as empty stubs so the call sites
-    ///    port unchanged; ShowCore and the pacing statics behind them are dropped, because fields
-    ///    nothing reads are worse than nothing. (ProgramsIntroPopup next door dropped its gate
-    ///    outright - this layer keeps the signatures instead.)
+    ///  - The show gate is ported, minus three head-only conditions it cannot see yet
+    ///    (App.Tutorial.IsActive, App.IsUpdateDialogActive, MainWindow.IsStartupDialogShowing);
+    ///    each is marked where it belongs. Without them the settle clock fires on its first tick
+    ///    instead of waiting the startup ladder out, and a card can land on top of a modal.
+    ///  - <c>popup.ShowDialog()</c> needs an owner on Avalonia, so an ownerless call shows the
+    ///    card modelessly - which also means <c>_opening</c> clears when Show() returns rather
+    ///    than when the card closes.
     ///  - <c>CardShadow</c> loses its x:Name: an Effect is not in the XAML name scope, so the
     ///    accent recolour reaches it through <c>CardBorder.Effect</c>.
     ///  - <c>Dispatcher.BeginInvoke</c> -&gt; <c>Dispatcher.UIThread.Post</c>;
@@ -93,21 +94,168 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Seen-list key for the one-time premium celebration card.</summary>
         internal const string CelebrationKey = "premium-celebration";
 
-        // ponytail: needs App.Settings.SeenFeatureIntros, App.Tutorial, App.IsUpdateDialogActive,
-        // MainWindow.IsStartupDialogShowing and the Dispatcher gating - wired when they move to
-        // Core. Until then these are the WPF signatures with no body: the seen-flag spend, the
-        // 10-minute pacing cooldown, the per-door launch budget and the 5-minute startup-settle
-        // clock all live on services this head does not have yet.
+        /// <summary>Set between queueing a card and opening it, so a double-click queues one card.</summary>
+        private static bool _opening;
 
-        /// <summary>Shows the intro for <paramref name="key"/> once per install, then never again.</summary>
-        internal static void ShowIfFirstTime(string key, Window? owner, string? doorKey = null) { }
+        /// <summary>
+        /// Pacing gate: a curious first-day user clicking through every tab must not eat a modal
+        /// per click. A card suppressed by pacing is NOT spent - it shows on a later visit.
+        /// </summary>
+        private static DateTime _lastShownUtc = DateTime.MinValue;
+        private static readonly TimeSpan ShowCooldown = TimeSpan.FromMinutes(10);
 
-        /// <summary>The premium celebration rides the same card and seen-list but skips pacing.</summary>
-        internal static void ShowCelebrationIfFirstTime(Window? owner) { }
+        /// <summary>
+        /// The doors each own more than one card, so "one card per first door visit" cannot be a
+        /// pure rename of the per-tab trigger. This is the budget instead - the FIRST card a door
+        /// produces in a launch is the only one that door produces, and the sibling shows on a
+        /// later launch's first visit. Session-local on purpose: it is a pacing rule, not a
+        /// seen-flag. Claimed at OPEN time (next to the seen-flag spend), never at queue time - a
+        /// card suppressed by pacing must leave the door's slot for the card that actually shows.
+        /// </summary>
+        private static readonly HashSet<string> _doorSlotsSpentThisLaunch =
+            new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>For the ONE card whose surface the app lands on by itself (the Dashboard): waits
-        /// out the startup ladder, then shows.</summary>
-        internal static void ShowWhenStartupSettles(string key, Window? owner, string? doorKey) { }
+        /// <summary>Keys with a settle timer already running, so a tab that is shown twice during
+        /// startup arms one clock and not two.</summary>
+        private static readonly HashSet<string> _settling = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Shows the intro for <paramref name="key"/> once per install, then never again.
+        /// Silently does nothing within the pacing cooldown of another card, or when
+        /// <paramref name="doorKey"/>'s door has already shown a card this launch.
+        /// </summary>
+        /// <param name="doorKey">
+        /// The sidebar door that owns this card's tab, or null to opt out of the per-door budget.
+        /// </param>
+        internal static void ShowIfFirstTime(string key, Window? owner, string? doorKey = null) =>
+            ShowCore(key, owner, paced: true, doorKey: doorKey);
+
+        /// <summary>
+        /// The premium celebration rides the same card and seen-list but skips the pacing
+        /// cooldown: it fires at most once per install and has retry points on every launch,
+        /// so suppressing it (unspent) is always safe and delaying it never is. It belongs to no
+        /// door, so it neither claims nor is blocked by the per-door budget.
+        /// </summary>
+        internal static void ShowCelebrationIfFirstTime(Window? owner) =>
+            ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
+
+        /// <summary>
+        /// For the ONE card whose surface the app lands on by itself: the Dashboard is visible
+        /// from XAML before anything navigates, so its card has no ShowTab case to ride and would
+        /// otherwise open in the middle of the startup ladder.
+        ///
+        /// <para>So it waits. A 1s clock re-tests the startup conditions, calls
+        /// <see cref="ShowCore"/> once they are clear, and keeps ticking until the card is
+        /// actually spent - which also lets it outlast the 10-minute pacing cooldown if another
+        /// card got in first. Gives up after five minutes leaving the seen-flag UNSPENT, so the
+        /// next launch simply tries again.</para>
+        /// </summary>
+        internal static void ShowWhenStartupSettles(string key, Window? owner, string? doorKey)
+        {
+            try
+            {
+                if (!FeatureIntros.All.ContainsKey(key)) return;
+                if (CoreSettings.Current.SeenFeatureIntros.Contains(key)) return;
+                if (!_settling.Add(key)) return;
+
+                int ticks = 0;
+                var timer = new DispatcherTimer(DispatcherPriority.Background)
+                {
+                    Interval = TimeSpan.FromSeconds(1),
+                };
+                timer.Tick += (_, _) =>
+                {
+                    try
+                    {
+                        var live = CoreSettings.Current;
+                        if (live.SeenFeatureIntros.Contains(key) || ++ticks > 300)
+                        {
+                            timer.Stop();
+                            _settling.Remove(key);
+                            return;
+                        }
+
+                        // ponytail: WPF also holds the clock here on App.IsUpdateDialogActive,
+                        // MainWindow.IsStartupDialogShowing (ConditioningControlPanel/MainWindow/
+                        // MainWindow.xaml.cs) and App.Tutorial.IsActive (Services/TutorialService.cs).
+                        // With none of the three on this head, the very first tick shows the card.
+                        ShowCore(key, owner, paced: true, doorKey: doorKey);
+                    }
+                    catch (Exception ex)
+                    {
+                        timer.Stop();
+                        _settling.Remove(key);
+                        Log.Warning(ex, "Feature intro settle tick failed for {Key}", key);
+                    }
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                _settling.Remove(key);
+                Log.Warning(ex, "Feature intro settle gate failed for {Key}", key);
+            }
+        }
+
+        private static void ShowCore(string key, Window? owner, bool paced, string? doorKey)
+        {
+            try
+            {
+                if (!FeatureIntros.All.TryGetValue(key, out var content)) return;
+
+                var settings = CoreSettings.Current;
+                if (settings.SeenFeatureIntros.Contains(key) || _opening) return;
+
+                // ponytail: WPF also bails here on App.Tutorial?.IsActive == true
+                // (ConditioningControlPanel/Services/TutorialService.cs, reached as App.Tutorial) -
+                // the tour navigates tabs itself and a modal would ambush it.
+                if (paced && DateTime.UtcNow - _lastShownUtc < ShowCooldown) return;
+                if (doorKey != null && _doorSlotsSpentThisLaunch.Contains(doorKey)) return;
+
+                _opening = true;
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    try
+                    {
+                        var live = CoreSettings.Current;
+                        if (live.SeenFeatureIntros.Contains(key)) return;
+
+                        // ponytail: WPF yields here on App.IsUpdateDialogActive ||
+                        // MainWindow.IsStartupDialogShowing, so a card never stacks on a modal.
+                        // Both live in the WPF head; the flag is spent below this line, so a
+                        // suppressed card is retried on a later visit.
+
+                        var popup = new FeatureIntroPopup(content);
+
+                        // Constructed without throwing, so the card is going to be shown - spend
+                        // the flag now, so being killed while it is on screen still counts as seen.
+                        live.SeenFeatureIntros.Add(key);
+                        CoreSettings.Save();
+                        _lastShownUtc = DateTime.UtcNow;
+                        // ...and claim this door's one slot for the launch, here rather than at
+                        // queue time so a card that never opened cannot spend its sibling's turn.
+                        if (doorKey != null) _doorSlotsSpentThisLaunch.Add(doorKey);
+
+                        // Avalonia's ShowDialog needs a real owner; without one the card is shown
+                        // modelessly rather than not at all.
+                        if (owner is { IsLoaded: true }) await popup.ShowDialog(owner);
+                        else popup.Show();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Feature intro popup failed to show for {Key}", key);
+                    }
+                    finally
+                    {
+                        _opening = false;
+                    }
+                }, DispatcherPriority.Normal);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Feature intro gate failed for {Key}", key);
+            }
+        }
 
         private void ApplyContent(FeatureIntroContent content)
         {
@@ -585,8 +733,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // WPF opens MainWindow.WebAppUrl through Helpers.BrowserLauncher - not Process.Start,
                 // because the no-default-browser machines are exactly who must not see this fail -
                 // and acting on the card also retires the One Account banner beat.
-                // ponytail: needs Helpers.BrowserLauncher and MainWindow.RetireWebBannerBeat, wired
-                // when they move to Core. Kept non-null so the card still shows its CTA.
+                // ponytail: needs Helpers.BrowserLauncher.OpenUrlOrPrompt
+                // (ConditioningControlPanel/Helpers/BrowserLauncher.cs), the MainWindow.WebAppUrl
+                // constant (ConditioningControlPanel/MainWindow/MainWindow.TabNavigation.cs:640 -
+                // NOT to be copied here) and MainWindow.RetireWebBannerBeat. Kept non-null so the
+                // card still shows its CTA.
                 OnAction = () => { }
             },
 
