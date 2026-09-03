@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -32,10 +34,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    <c>DisableProcessWindowsGhosting</c>, <c>WindowInteropHelper</c>/<c>HwndSource</c> and the
     ///    <c>WM_DPICHANGED</c> swallow-hook are dropped outright — see the losses listed on
     ///    <see cref="ShowOnAllMonitors"/>.
-    ///  - <b>The whole multi-monitor / pool / dead-man's-switch machinery is stubbed.</b> It is
-    ///    built out of hwnds, <c>System.Windows.Forms.Screen</c> and a background thread that
-    ///    force-drops a layered window at the Win32 level; none of that maps, and the parts that
-    ///    could (screen enumeration via <c>Screens</c>) exist only to serve the parts that cannot.
+    ///  - <b>The multi-monitor cover set is real</b> — <c>DualMonitorEnabled</c> from
+    ///    <c>CoreSettings</c>, screens from <c>ScreenList.Enumerate</c>, the primary owning the
+    ///    keyboard and the rest mirroring it. The <b>pool and the dead-man's switch are not</b>:
+    ///    both are hwnds and a background thread force-dropping a layered window at the Win32
+    ///    level, so a wedged UI thread here leaves the cover up. See <see cref="ShowOnAllMonitors"/>.
     ///  - <b>Settings are wired</b>: the five per-user card colours and the panic-key name come
     ///    from <c>CoreSettings.Current</c>, with the mod pack's accent from <c>CoreMods</c>, so a
     ///    recoloured card draws correctly here.
@@ -52,6 +55,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // ponytail: needs LockCardService, wired when it moves to Core. Placeholder card so the
         // render (and any manual run) shows the real layout with real strings.
         private const int SampleRepeats = 3;
+
+        /// <summary>
+        /// The visible set. Drives <see cref="IsAnyOpen"/> (which BubbleCountResultWindow's mercy
+        /// flow polls every 500 ms), the mirror sync and every "all windows" fan-out below.
+        /// Populated by <see cref="ShowOnAllMonitors"/> only - NOT by the constructor, or a
+        /// --render-all pass would leave phantom cards in it and IsAnyOpen would lie.
+        /// </summary>
+        private static readonly List<LockCardWindow> _allWindows = new();
+
+        /// <summary>Exactly one card owns the keyboard; every other monitor is a read-only mirror
+        /// that echoes what the primary types.</summary>
+        private bool _isPrimary = true;
 
         // Per-session config (mutable: the WPF original pooled windows and reconfigured on reuse).
         private string _phrase = "";
@@ -210,19 +225,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             else _txtStrict.Text = "";
             RefreshEscHint();
 
-            // The WPF original owned the keyboard on exactly one monitor and mirrored the rest; with
-            // the multi-monitor set stubbed out, this window is always the input owner.
+            // Exactly one card owns the keyboard and every other monitor mirrors it, as in WPF.
             ApplyInputAffordance();
             ApplyColors();
         }
 
         /// <summary>
-        /// Input affordance for this card. In the WPF original exactly one card (the primary) owned
-        /// the keyboard/mic and every other monitor was a read-only mirror; the mirror half is gone
-        /// with <see cref="ShowOnAllMonitors"/>, so this always configures the owner.
+        /// Input affordance for this card. Exactly one card (the primary) owns the keyboard; every
+        /// other monitor is a read-only mirror that echoes what the primary types.
         /// </summary>
         private void ApplyInputAffordance()
         {
+            if (!_isPrimary)
+            {
+                _txtInput.IsReadOnly = true;
+                _txtInput.Focusable = false;
+                SetLocalized(_txtHint, "label_input_synced_from_primary_monitor");
+                if (_voiceMode) _txtVoiceState.Text = "🎤 Speak on the main monitor";
+                return;
+            }
+
             _txtInput.IsReadOnly = false;
             _txtInput.Focusable = true;
             if (_voiceMode)
@@ -253,8 +275,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _totalErrors = 0;
             _totalCharsTyped = 0;
 
-            Activate();
-            FocusInput();
+            // A mirror must never take the foreground: it would pull focus off the one card the
+            // user can actually type into.
+            if (_isPrimary)
+            {
+                Activate();
+                FocusInput();
+            }
 
             Log.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}",
                 _phrase, _requiredRepeats, _strictMode, _voiceMode);
@@ -267,10 +294,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// that is <c>WM_DELETE_WINDOW</c>, which Avalonia surfaces here as a cancellable
         /// <c>Closing</c> — the same hook, so strict mode keeps its teeth off Windows.
         ///
-        /// ponytail: the WPF override also removed this card from the visible set, refreshed the
-        /// watchdog snapshot, un-poisoned its hwnd, pulled it out of the keep-alive pool and
-        /// released App.InteractionQueue's LockCard slot (#462). All five need the stubbed
-        /// machinery or a service — see <see cref="ShowOnAllMonitors"/>.
+        /// Deregistration from the visible set happens in <see cref="OnClosed"/> rather than here,
+        /// since a cancelled close must not leave the set. ponytail: the WPF override also
+        /// refreshed the watchdog snapshot, un-poisoned its hwnd, pulled the card out of the
+        /// keep-alive pool and released App.InteractionQueue's LockCard slot (#462) — all four are
+        /// Win32 or service, see <see cref="ShowOnAllMonitors"/>.
         /// </summary>
         protected override void OnClosing(WindowClosingEventArgs e)
         {
@@ -293,6 +321,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // that shared process.
             _closeTimer?.Stop();
             _closeTimer = null;
+            _allWindows.Remove(this);
             base.OnClosed(e);
         }
 
@@ -392,7 +421,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void TxtInput_TextChanged()
         {
-            if (_isCompleted) return;
+            // A mirror's Text is set programmatically by SyncInputToAllWindows, so it is never
+            // credited as typing and never judged as a match.
+            if (_isCompleted || !_isPrimary) return;
 
             var input = _txtInput.Text ?? "";
 
@@ -414,7 +445,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
             }
 
-            // ponytail: needs the multi-monitor set (SyncInputToAllWindows) — see ShowOnAllMonitors.
+            SyncInputToAllWindows(input);
 
             if (string.Equals(input.Trim(), _phrase, StringComparison.OrdinalIgnoreCase))
             {
@@ -432,6 +463,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         "Lock Card: rejected an untyped match ({Keys} keystroke(s) for a {Len}-char phrase) (#734)",
                         _keystrokes, _phrase.Length);
                     _txtInput.Clear();
+                    SyncInputToAllWindows("");
                     ResetKeystrokeGate();
                     RejectCheat("untyped match");
                 }
@@ -444,25 +476,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_isCompleted) return;
 
             _completedRepeats++;
-            UpdateProgress();
 
             // Clear input for next repeat (no-op/harmless in voice mode).
             _txtInput.Clear();
+            SyncInputToAllWindows("");
             // The next repeat has to be earned from scratch — the clear Ctrl+Z used to undo.
             ResetKeystrokeGate();
 
-            PulseCard();
+            var encouragement = _completedRepeats < _requiredRepeats ? GetEncouragement() : null;
+            foreach (var window in Fanout())
+            {
+                window._completedRepeats = _completedRepeats;
+                window.UpdateProgress();
+                window.PulseCard();
+                if (encouragement == null) continue;
+                window._txtHint.Text = encouragement;
+                window._txtHint.Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100));
+            }
 
-            if (_completedRepeats >= _requiredRepeats)
-            {
-                CompleteCard();
-            }
-            else
-            {
-                var hint = GetEncouragement();
-                _txtHint.Text = hint;
-                _txtHint.Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100));
-            }
+            if (_completedRepeats >= _requiredRepeats) CompleteCard();
         }
 
         private void CompleteCard()
@@ -475,10 +507,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Log.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors",
                 _requiredRepeats, completionTime, _totalErrors);
 
-            _isCompleted = true;
-            _txtInput.IsEnabled = false;
-            _txtHint.IsVisible = false;
-            _completionPanel.IsVisible = true;
+            foreach (var window in Fanout())
+            {
+                window._isCompleted = true;
+                window._txtInput.IsEnabled = false;
+                window._txtHint.IsVisible = false;
+                window._completionPanel.IsVisible = true;
+            }
 
             // Auto-close after delay
             _closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
@@ -488,6 +523,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CloseAllWindows();
             };
             _closeTimer.Start();
+        }
+
+        /// <summary>
+        /// The windows this one speaks for: the whole visible set (a snapshot - a fan-out can close
+        /// windows), or just itself when this card was never registered, which is the design
+        /// constructor's standalone window. Every "all windows" operation goes through this, so a
+        /// standalone card still progresses instead of silently doing nothing.
+        /// </summary>
+        private List<LockCardWindow> Fanout() =>
+            _allWindows.Contains(this) ? _allWindows.ToList() : new List<LockCardWindow> { this };
+
+        /// <summary>Echo the primary's box onto every mirror. A programmatic Text set raises
+        /// TextChanged but not TextInput, and the mirror's own handler returns immediately on
+        /// <c>!_isPrimary</c>, so nothing here is credited as typing.</summary>
+        private void SyncInputToAllWindows(string input)
+        {
+            foreach (var window in Fanout())
+                if (window != this && !window._isCompleted)
+                    window._txtInput.Text = input;
         }
 
         private void UpdateProgress()
@@ -767,40 +821,118 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private void CloseAllWindows()
         {
-            _isCompleted = true;
-            Close();
+            var windows = Fanout();
+            _allWindows.Clear();
+            foreach (var window in windows)
+            {
+                // Set FIRST on every window: OnClosing cancels an unsolved strict close, so a
+                // strict mirror would otherwise refuse and leave an orphaned fullscreen cover.
+                window._isCompleted = true;
+                try { window.Close(); } catch { }
+            }
         }
 
         /// <summary>
-        /// ponytail: needs LockCardService and a multi-monitor cover story. The WPF original built
-        /// one card per <c>System.Windows.Forms.Screen</c>, kept a keep-alive pool of realized
-        /// layered windows (a fresh <c>Show()</c> of one could deadlock the render thread, #494),
-        /// mirrored the primary's input to the rest, deferred the show across display changes, and
-        /// ran a background dead-man's switch that force-dropped every cover at the Win32 level if
-        /// the UI thread wedged. None of that survives the port:
+        /// Put a lock card up: one cover on the primary, plus one per further monitor when
+        /// <c>DualMonitorEnabled</c> is on, with the primary owning the keyboard and the rest
+        /// mirroring it. This does NOT need a service — the WPF version's blocker was Win32, not
+        /// LockCardService, and the caller that matters is already on this head:
+        /// BubbleCountResultWindow's mercy card shows one here and polls <see cref="IsAnyOpen"/>.
         ///
-        ///  - the pool and the #494 workaround are WPF render-thread specific;
-        ///  - the dead-man's switch is <c>SetLayeredWindowAttributes</c> + <c>SetWindowPos</c> on
-        ///    raw hwnds — there is no equivalent, so a wedged UI thread on this head leaves the
-        ///    cover up. That is the single largest behavioural loss in this file;
-        ///  - <c>DisableProcessWindowsGhosting</c> and the <c>WM_DPICHANGED</c> swallow-hook are
-        ///    Windows-only and simply dropped;
-        ///  - multi-monitor enumeration itself maps (<c>Screens.All</c> / <c>screen.WorkingArea</c>
-        ///    / <c>screen.Scaling</c>), but only serves the parts above.
+        /// <para>What the WPF original did that is deliberately NOT reproduced:</para>
+        ///  - the keep-alive pool of realized layered windows and its #494 render-thread deadlock
+        ///    workaround, both WPF-specific;
+        ///  - the background dead-man's switch that force-dropped every cover through
+        ///    <c>SetLayeredWindowAttributes</c> + <c>SetWindowPos</c> on raw hwnds. There is no
+        ///    equivalent, so a wedged UI thread on this head leaves the cover up. That is the
+        ///    single largest behavioural loss in this file;
+        ///  - the deferred show across display changes, and
+        ///    <c>DisableProcessWindowsGhosting</c> / the <c>WM_DPICHANGED</c> swallow-hook, both
+        ///    Windows-only and simply dropped.
+        ///
+        /// <para>ponytail: the mirror's monitor placement is best effort. A maximized X11 window
+        /// ignores <c>Position</c>, so a mirror is un-maximized, moved and re-maximized and the WM
+        /// decides — where WPF could insist with <c>SetWindowPos</c> in device pixels.</para>
         /// </summary>
         public static void ShowOnAllMonitors(string phrase, int repeats, bool strictMode, bool isTest = false, bool voiceMode = false)
-            => Log.Warning("LockCardWindow.ShowOnAllMonitors is not wired on this head (needs LockCardService)");
+        {
+            // A card is already up. Reconfiguring live covers would drop the lock mid-solve, which
+            // is also why the WPF original deferred a second show rather than reusing the set.
+            if (_allWindows.Count > 0) return;
 
-        /// <summary>ponytail: needs the multi-monitor set — see <see cref="ShowOnAllMonitors"/>.</summary>
-        public static bool IsAnyOpen() => false;
+            try
+            {
+                var primary = Build(phrase, repeats, strictMode, voiceMode, isPrimary: true);
+                primary.Show();
 
-        /// <summary>ponytail: needs the multi-monitor set — see <see cref="ShowOnAllMonitors"/>.</summary>
-        public static void ForceCloseAll() { }
+                // One cover per monitor when the user asked for it. Avalonia has no screen list
+                // without a TopLevel, so the set is drawn off the primary once it exists.
+                if (CoreSettings.Current.DualMonitorEnabled)
+                {
+                    var all = Features.ScreenList.Enumerate(primary);
+                    var primaryScreen = all.FirstOrDefault(s => s.IsPrimary) ?? all.FirstOrDefault();
+                    foreach (var screen in all.Where(s => s != primaryScreen))
+                    {
+                        var mirror = Build(phrase, repeats, strictMode, voiceMode, isPrimary: false);
+                        mirror.Show();
+                        // The .axaml opens Maximized, and a maximized X11 window ignores Position.
+                        // Un-maximize, place it on the target screen, re-maximize: the WM then
+                        // maximizes onto the monitor the window sits on. Best effort by definition -
+                        // placement is the WM's call here, not a SetWindowPos we can insist on.
+                        mirror.WindowState = WindowState.Normal;
+                        mirror.Position = new PixelPoint(screen.Bounds.X + 50, screen.Bounds.Y + 50);
+                        mirror.WindowState = WindowState.Maximized;
+                    }
+                }
+
+                // Last, so the card that can be typed into owns the foreground.
+                primary.Activate();
+                Log.Information("Lock Card shown on {Count} window(s) - {Repeats} repeat(s), strict={Strict}, test={Test}",
+                    _allWindows.Count, repeats, strictMode, isTest);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("LockCardWindow.ShowOnAllMonitors failed: {Error}", ex.Message);
+                ForceCloseAll();
+            }
+        }
+
+        /// <summary>
+        /// One configured, registered, not-yet-shown card. Registration happens HERE rather than in
+        /// the constructor so the design constructor (and --render-all) never join the visible set,
+        /// and before <c>Show()</c> so <see cref="IsAnyOpen"/> is already true for a caller that
+        /// polls it the moment <see cref="ShowOnAllMonitors"/> returns.
+        /// </summary>
+        private static LockCardWindow Build(string phrase, int repeats, bool strictMode, bool voiceMode, bool isPrimary)
+        {
+            var window = new LockCardWindow { _isPrimary = isPrimary };
+            window.Configure(phrase, repeats, strictMode, voiceMode);
+            _allWindows.Add(window);
+            return window;
+        }
+
+        /// <summary>Whether a lock card is on screen. BubbleCountResultWindow's mercy flow polls
+        /// this every 500 ms to learn when the card has been solved.</summary>
+        public static bool IsAnyOpen() => _allWindows.Count > 0;
+
+        /// <summary>Drop every card, solved or not - the panic exit. Strict mode does not survive
+        /// this: <c>_isCompleted</c> is set first on each window so OnClosing cannot refuse.</summary>
+        public static void ForceCloseAll()
+        {
+            var windows = _allWindows.ToList();
+            _allWindows.Clear();
+            foreach (var window in windows)
+            {
+                window._isCompleted = true;
+                try { window.Close(); } catch { }
+            }
+        }
 
         /// <summary>
         /// The mic privacy pill: drop every voice-mode card to typed solve so the microphone closes
-        /// but the lock still has to be solved. ponytail: needs the multi-monitor set and
-        /// App.Speech — see <see cref="ShowOnAllMonitors"/>.
+        /// but the lock still has to be solved. A no-op on purpose — no card on this head is ever
+        /// in voice mode (see <see cref="Configure"/>), so there is nothing to drop. Wire it with
+        /// the CoreSpeech listen call, not before.
         /// </summary>
         public static void DisableVoiceForAll() { }
     }
