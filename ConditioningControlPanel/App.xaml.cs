@@ -1982,7 +1982,7 @@ namespace ConditioningControlPanel
             // SlutModePersonality, CompanionPrompt, custom Awareness templates, etc.) cannot
             // bypass these — the wordlist is hardcoded in ModerationGuard and applies to
             // every input that goes to an LLM and every output that comes back. See
-            // AI_AUDIT.md §15 and §13 P1 for the CCBill rationale. Must be initialized
+            // docs/audits/AI_AUDIT.md §15 and §13 P1 for the CCBill rationale. Must be initialized
             // BEFORE the AI services so AiService / LocalAiService can read App.ModerationGuard.
             ModerationSession = new Services.Moderation.ModerationSession();
             ModerationLog = new Services.Moderation.ModerationLog(ModerationSession);
