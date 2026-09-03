@@ -49,10 +49,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///         click on this panel can still focus it on X11.</item>
     ///   <item><b>The two global hooks have no equivalent on this head</b> and are stubbed. See
     ///         <see cref="InstallHooks"/> for exactly which two behaviours that costs.</item>
-    ///   <item><b>The owner is not ported yet.</b> <c>EmiDeskWindow</c> is the widget this panel
-    ///         hangs off, and it does not exist on this head, so the constructor takes no owner and
-    ///         every <c>_owner.*</c> call is a stub. That also makes this its own render
-    ///         constructor - there is no argument left to supply sample data for.</item>
+    ///   <item><b>The owner is optional.</b> <c>EmiDeskWindow</c> is the widget this panel hangs
+    ///         off and it is ported, so the constructor takes it and every <c>_owner.*</c> call is
+    ///         real. It stays NULLABLE for one reason: <c>--render-view</c> needs a parameterless
+    ///         constructor, and a headless render has no widget to hang off. Every owner call is
+    ///         therefore <c>?.</c> with the same fallback the unowned panel used.</item>
     ///   <item><b>Localize() is gone.</b> Its sixteen <c>Loc.Get</c> assignments are
     ///         <c>{loc:Str}</c> in the markup, so a language change re-renders them (CLAUDE.md).
     ///         The one string it set that is NOT static - the summon chord, which is either the
@@ -77,11 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>How long a width drag rests before the number is written to settings.</summary>
         private const int WidthPersistMs = 400;
 
-        // ponytail: needs EmiDeskWindow.MinBodyWidth / MaxBodyWidth, wired when the widget is
-        // ported. The two literals below are the ones the WPF markup already declared on the
-        // slider; WireControls() then overwrote them with the same pair from the owner.
-        private const double MinBodyWidth = 152.0;
-        private const double MaxBodyWidth = 420.0;
+        private readonly EmiDeskWindow? _owner;
 
         private readonly Button _btnPanelClose;
         private readonly Button _btnOpenCards;
@@ -106,15 +103,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         // ---------------------------------------------------------------- ctor
 
+        /// <summary>The render constructor: a panel with no widget behind it. See the header.</summary>
+        public EmiOptionsWindow() : this(null) { }
+
         /// <summary>
-        /// Builds the panel. Created folded; <see cref="OpenPanel"/> shows it.
-        ///
-        /// <para>Parameterless where WPF took an <c>EmiDeskWindow</c>: that widget is not on this
-        /// head yet, so there is nothing to hold and nothing to null-check. It doubles as the
-        /// render constructor for that reason.</para>
+        /// Builds the panel for one widget. Created folded; <see cref="OpenPanel"/> shows it.
         /// </summary>
-        public EmiOptionsWindow()
+        public EmiOptionsWindow(EmiDeskWindow? owner)
         {
+            _owner = owner;
             AvaloniaXamlLoader.Load(this);
 
             _btnPanelClose = this.FindControl<Button>("BtnPanelClose")!;
@@ -141,8 +138,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             PointerEntered += (_, _) => Hold(true);
             PointerExited += (_, _) => Hold(false);
 
-            // WPF also subscribed _owner.Moved / _owner.Resized here. See NotifyOwnerMoved and
-            // NotifyOwnerResized: with no owner type on this head the widget calls in instead.
+            // She moves, she resizes: the panel is anchored to her edge and has to come along.
+            if (_owner is not null)
+            {
+                _owner.Moved += OnOwnerMoved;
+                _owner.Resized += OnOwnerResized;
+            }
         }
 
         /// <summary>The panel folded. The desk window drops its chrome hold on this.</summary>
@@ -194,8 +195,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 }
             };
 
-            _sldWidth.Minimum = MinBodyWidth;
-            _sldWidth.Maximum = MaxBodyWidth;
+            _sldWidth.Minimum = EmiDeskWindow.MinBodyWidth;
+            _sldWidth.Maximum = EmiDeskWindow.MaxBodyWidth;
             _sldWidth.ValueChanged += OnWidthChanged;
             // A track click is not a drag, so the debounce is what actually persists both. Kept
             // anyway: it is what makes the write land the instant the thumb is let go.
@@ -212,8 +213,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             _spiceAnything.IsCheckedChanged += (_, _) => { if (_spiceAnything.IsChecked == true) OnSpicePicked(2); };
         }
 
-        // ponytail: needs EmiDeskWindow.HoldChromeForPanel, wired when the widget is ported.
-        private void Hold(bool on) { _ = on; }
+        private void Hold(bool on)
+        {
+            try { _owner?.HoldChromeForPanel(on); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options chrome hold failed"); }
+        }
 
         // ---------------------------------------------------------------- open / close
 
@@ -279,6 +283,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             {
                 _closingForGood = true;
                 ClosePanel();
+                if (_owner is not null)
+                {
+                    _owner.Moved -= OnOwnerMoved;
+                    _owner.Resized -= OnOwnerResized;
+                }
                 Close();
             }
             catch (Exception ex)
@@ -289,41 +298,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         // ---------------------------------------------------------------- values
 
-        /// <summary>
-        /// Fill the controls in.
-        ///
-        /// <para>ponytail: needs App.Settings and EmiDeskWindow.BodyWidth, wired when they move to
-        /// Core. The placeholders below are chosen to prove the templates rather than to look
-        /// tidy: one switch off and two on, and a checked middle segment, so a render shows both
-        /// states of the pill and both states of the segment.</para>
-        /// </summary>
+        /// <summary>Fill the controls in from the live settings and from her current width.</summary>
         private void LoadValues()
         {
             try
             {
                 _loading = true;
 
-                _chkMute.IsChecked = false;
-                _chkOffers.IsChecked = true;
-                _chkGlass.IsChecked = true;
+                var s = CoreSettings.Current;
+                _chkMute.IsChecked = s.EmiDeskMuteAvatar;
+                _chkOffers.IsChecked = s.EmiDeskOffers;
+                _chkGlass.IsChecked = s.EmiDeskGlass;
 
                 // The three segments ARE the 0..2 scale the lines file carries. No translation.
-                int spice = Math.Max(0, Math.Min(2, 1));
+                int spice = Math.Max(0, Math.Min(2, s.EmiDeskSpice));
                 _spiceInnocent.IsChecked = spice == 0;
                 _spiceSuggestive.IsChecked = spice == 1;
                 _spiceAnything.IsChecked = spice == 2;
 
-                var chord = "Ctrl+Alt+E";
+                var chord = s.EmiDeskHotkey;
                 // Chosen in code, not markup: which of the two strings applies depends on whether
-                // a chord is bound. Bind the key rather than assign .Text once App.Settings is
-                // here - an assignment is undone by the next language change (CLAUDE.md).
+                // a chord is bound. Safe as an assignment - TxtHotkey carries no {loc:Str}, so
+                // there is no binding for a language change to put back (CLAUDE.md).
                 _txtHotkey.Text = string.IsNullOrWhiteSpace(chord)
                     ? Loc.Get("emi_desk_hotkey_unbound")
                     : chord;
 
                 // Her CURRENT width, not the stored one: the grip writes settings on mouse-up, so
                 // mid-drag the window is the truth and the file is one drag behind.
-                double w = 220.0;
+                double w = _owner?.BodyWidth ?? EmiDeskWindow.DefaultBodyWidth;
                 _sldWidth.Value = Math.Max(_sldWidth.Minimum, Math.Min(_sldWidth.Maximum, w));
                 _txtWidth.Text = ((int)Math.Round(_sldWidth.Value)).ToString();
             }
@@ -337,20 +340,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
         }
 
-        // ponytail: needs App.Settings, wired when it moves to Core. WPF read Current, ran the
-        // write and called Save(); with no settings service on this head there is nothing to write.
-        private static void Persist(Action write) { _ = write; }
+        /// <summary>Run one settings write and persist it. CoreSettings.Current is never null.</summary>
+        private static void Persist(Action write)
+        {
+            try
+            {
+                write();
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] options settings write failed");
+            }
+        }
 
         private void OnMuteChanged(object? sender, RoutedEventArgs e)
         {
             if (_loading) return;
             bool on = _chkMute.IsChecked == true;
+            // Compare before writing. Avalonia raises IsCheckedChanged on a PROGRAMMATIC set too,
+            // and this handler has a SIDE EFFECT - a spurious raise would silently wipe the user's
+            // "don't ask again" without the switch ever having moved.
+            if (CoreSettings.Current.EmiDeskMuteAvatar == on) return;
             Persist(() =>
             {
-                // ponytail: needs App.Settings.EmiDeskMuteAvatar = on, and the same rule as the
-                // settings tab - flipping the switch clears EmiDeskMuteDontAsk, because the user
-                // has just changed their mind about the whole arrangement.
-                _ = on;
+                CoreSettings.Current.EmiDeskMuteAvatar = on;
+                // Same rule as the settings tab: flipping the switch clears "don't ask again",
+                // because the user has just changed their mind about the whole arrangement.
+                CoreSettings.Current.EmiDeskMuteDontAsk = false;
             });
         }
 
@@ -358,24 +375,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             if (_loading) return;
             bool on = _chkOffers.IsChecked == true;
-            // ponytail: needs App.Settings.EmiDeskOffers = on
-            Persist(() => { _ = on; });
+            if (CoreSettings.Current.EmiDeskOffers == on) return;
+            Persist(() => CoreSettings.Current.EmiDeskOffers = on);
         }
 
         private void OnGlassChanged(object? sender, RoutedEventArgs e)
         {
             if (_loading) return;
             bool on = _chkGlass.IsChecked == true;
-            // ponytail: needs App.Settings.EmiDeskGlass = on
-            Persist(() => { _ = on; });
+            if (CoreSettings.Current.EmiDeskGlass == on) return;
+            Persist(() => CoreSettings.Current.EmiDeskGlass = on);
         }
 
         private void OnSpicePicked(int spice)
         {
             if (_loading) return;
             int v = Math.Max(0, Math.Min(2, spice));
-            // ponytail: needs App.Settings.EmiDeskSpice = v
-            Persist(() => { _ = v; });
+            if (CoreSettings.Current.EmiDeskSpice == v) return;
+            Persist(() => CoreSettings.Current.EmiDeskSpice = v);
         }
 
         /// <summary>
@@ -389,8 +406,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 _txtWidth.Text = ((int)Math.Round(e.NewValue)).ToString();
-                // ponytail: needs EmiDeskWindow.ApplyBodyWidth + ClampIntoWorkArea, wired when the
-                // widget is ported. Without them the number moves and she does not.
+                _owner?.ApplyBodyWidth(e.NewValue);
+                _owner?.ClampIntoWorkArea();
                 ArmWidthPersist();
             }
             catch (Exception ex)
@@ -429,9 +446,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private void PersistWidth()
         {
             StopWidthPersist();
-            // ponytail: needs App.Settings.EmiDeskWidth and EmiDeskWindow.BodyWidth /
-            // SavePlacement, wired when both move to Core. WPF wrote the width only when it had
-            // moved by more than half a pixel, then saved her placement alongside it.
+            if (_owner is null) return;
+            try
+            {
+                double w = _owner.BodyWidth;
+                // Half a pixel, as WPF did: the slider reports every intermediate value of a drag
+                // and a save rewrites the whole settings file.
+                if (Math.Abs(CoreSettings.Current.EmiDeskWidth - w) > 0.5)
+                {
+                    CoreSettings.Current.EmiDeskWidth = w;
+                    CoreSettings.Save();
+                }
+                _owner.SavePlacement();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] options width persist failed");
+            }
         }
 
         // ---------------------------------------------------------------- placement
@@ -450,10 +481,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 if (screens == null || screens.ScreenCount == 0)
                     return new PixelRect(0, 0, 1920, 1080);
 
-                // ponytail: needs EmiDeskWindow.BodyScreenRect for the centre of her body, wired
-                // when the widget is ported. Until then the panel's own screen is the best guess,
-                // and it is the right one whenever she and the panel share a monitor.
-                var screen = screens.ScreenFromWindow(this) ?? screens.Primary;
+                // The monitor SHE is standing on, not the one this panel happens to be over: the
+                // panel is placed relative to her, so a straddle has to clamp into her screen's
+                // work area. With no owner, this window's own screen is the best guess left.
+                var body = _owner?.BodyScreenRect;
+                var screen = body is null
+                    ? screens.ScreenFromWindow(this) ?? screens.Primary
+                    : screens.ScreenFromPoint(new PixelPoint(
+                          (int)Math.Round(body.Value.X + body.Value.Width / 2),
+                          (int)Math.Round(body.Value.Y + body.Value.Height / 2))) ?? screens.Primary;
                 return screen?.WorkingArea ?? new PixelRect(0, 0, 1920, 1080);
             }
             catch (Exception ex)
@@ -492,10 +528,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 // Measure with the cap applied: the height is content-driven and not known until now.
                 UpdateLayout();
 
-                // ponytail: needs EmiDeskWindow.BodyScreenRect, wired when the widget is ported.
-                // With no body to hang off, the panel sits at the work area's top-left corner - the
-                // same fallback the clamp below would produce for a body pinned there.
-                var bodyPx = new PixelRect(work.X, work.Y, 1, 1);
+                // With no owner (the headless render) the panel sits at the work area's top-left
+                // corner - the same fallback the clamp below would produce for a body pinned there.
+                var b = _owner?.BodyScreenRect;
+                var bodyPx = b is null
+                    ? new PixelRect(work.X, work.Y, 1, 1)
+                    : new PixelRect((int)Math.Round(b.Value.X), (int)Math.Round(b.Value.Y),
+                                    (int)Math.Round(b.Value.Width), (int)Math.Round(b.Value.Height));
 
                 double w = (Bounds.Width > 1 ? Bounds.Width : Width) * s;
                 double h = (Bounds.Height > 1 ? Bounds.Height : MinHeight) * s;
@@ -522,9 +561,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
         /// <summary>She moved. The panel is anchored to her edge and has to come along.</summary>
-        /// <remarks>WPF subscribed <c>EmiDeskWindow.Moved</c> in the constructor. With no owner type
-        /// on this head the widget calls in here instead; the body is unchanged.</remarks>
-        public void NotifyOwnerMoved()
+        private void OnOwnerMoved(object? sender, EventArgs e)
         {
             if (!_open) return;
             try
@@ -539,10 +576,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
         /// <summary>She was resized, by the grip or by this panel's own slider.</summary>
-        /// <remarks>The WPF twin of <c>EmiDeskWindow.Resized</c>. The grip can drive this too, so
-        /// the slider follows her rather than the other way round; <c>_loading</c> keeps that from
-        /// bouncing straight back into <c>ApplyBodyWidth</c>.</remarks>
-        public void NotifyOwnerResized(double width)
+        /// <remarks>The grip can drive this too, so the slider follows her rather than the other
+        /// way round; <c>_loading</c> keeps that from bouncing straight back into
+        /// <c>ApplyBodyWidth</c>.</remarks>
+        private void OnOwnerResized(object? sender, double width)
         {
             if (!_open) return;
             try
