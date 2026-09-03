@@ -1,12 +1,15 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Moderation;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -17,11 +20,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// PORTED from ConditioningControlPanel/Dialogs/CompanionPromptEditorDialog.xaml.cs. Deviations:
     ///  - <c>NullOrEmptyToCollapsedConverter</c> is gone: the XAML uses Avalonia's built-in
     ///    <c>StringConverters.IsNotNullOrEmpty</c> on <c>IsVisible</c>.
-    ///  - Settings come from <c>CompanionPromptSettings.GetDefaults()</c> in Core; persisting them,
-    ///    the community-prompt lookup and the moderation log are stubs (ponytail comments below).
+    ///  - Settings load and save for real against <see cref="CoreSettings"/>, knowledge links
+    ///    included; the community-prompt lookup and the moderation log are still stubs.
     ///  - <c>PromptValidator</c> lives in Core and runs for real on Save.
-    ///  - The three MessageBox confirms have no Avalonia equivalent and no package may be added;
-    ///    they are stubbed and noted, so Cancel/Reset All/close act without asking.
+    ///  - <c>MessageBox.Show</c> becomes this head's <see cref="MessageDialog"/>, which is awaited,
+    ///    so Remove / Reset All / Cancel are async void. Its two-button shape covers the Yes/No
+    ///    confirms; the X button's three-way Save/Discard/Cancel prompt is not portable and is
+    ///    noted at the bottom of this file instead.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>.
     /// </summary>
     public partial class CompanionPromptEditorDialog : Window
@@ -83,25 +88,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private void ApplyPolicyBannerState()
         {
-            // ponytail: needs App.Settings.Current.CompanionPrompt.PromptEditorDisclaimerAcknowledged,
-            // wired when settings move to Core. The default is "not yet acknowledged".
-            var acked = _policyAcked;
+            var acked = CoreSettings.Current.CompanionPrompt.PromptEditorDisclaimerAcknowledged;
             this.FindControl<Border>("PolicyBannerFull")!.IsVisible = !acked;
             this.FindControl<Border>("PolicyBannerSlim")!.IsVisible = acked;
         }
 
-        private bool _policyAcked;
-
         private void BtnPolicyGotIt_Click()
         {
-            _policyAcked = true; // ponytail: persisted via App.Settings.Save() once settings move to Core
+            CoreSettings.Current.CompanionPrompt.PromptEditorDisclaimerAcknowledged = true;
+            CoreSettings.Save();
             ApplyPolicyBannerState();
         }
 
-        private void BtnPolicyRead_Click()
+        /// <summary>WPF used Process.Start with UseShellExecute; Avalonia's Launcher is the
+        /// cross-platform equivalent and needs no shell assumptions.</summary>
+        private async void BtnPolicyRead_Click()
         {
-            // ponytail: needs a launcher for https://app.cclabs.app/policies/prohibited-content;
-            // Process.Start(UseShellExecute) is per-platform and belongs behind a Core interface.
+            try
+            {
+                await Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app/policies/prohibited-content"));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "CompanionPromptEditorDialog: failed to open policy URL");
+            }
         }
 
         /// <summary>
@@ -110,10 +120,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void LoadKnowledgeLinks()
         {
             _knowledgeLinks.Clear();
-            // ponytail: needs App.Settings.Current.GlobalKnowledgeBaseLinks; wired when settings
-            // move to Core. One sample row so the template renders.
-            _knowledgeLinks.Add(new KnowledgeBaseLink { Title = "Sample link", Url = "https://example.com", Description = "Placeholder entry" });
+            foreach (var link in CoreSettings.Current.GlobalKnowledgeBaseLinks)
+            {
+                _knowledgeLinks.Add(link);
+            }
             _lstKnowledgeLinks.ItemsSource = _knowledgeLinks;
+        }
+
+        /// <summary>
+        /// Saves global knowledge base links from the list.
+        /// </summary>
+        private void SaveKnowledgeLinks()
+        {
+            var links = CoreSettings.Current.GlobalKnowledgeBaseLinks;
+            links.Clear();
+            foreach (var link in _knowledgeLinks)
+            {
+                links.Add(link);
+            }
         }
 
         /// <summary>
@@ -122,26 +146,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void UpdateActivePromptDisplay()
         {
             var txt = this.FindControl<TextBlock>("TxtActivePromptName")!;
-            // ponytail: needs App.Settings.Current.ActiveCommunityPromptId + App.CommunityPrompts;
-            // wired when they move to Core. Until then only the "custom" and "default" branches exist.
-            if (_chkUseCustom.IsChecked == true)
+            var settings = CoreSettings.Current;
+
+            if (!string.IsNullOrEmpty(settings.ActiveCommunityPromptId))
+            {
+                // ponytail: a community prompt IS active, but its display name needs
+                // ConditioningControlPanel/Services/Companion/CommunityPromptService.GetInstalledPrompt,
+                // which is head-only. Painting "unknown prompt" here would be an invented answer -
+                // WPF says that only when the lookup MISSES - so the badge keeps its XAML default
+                // until the service crosses.
+                return;
+            }
+
+            if (settings.CompanionPrompt.UseCustomPrompt)
             {
                 // Custom prompt is active
-                txt.Text = Loc.Get("label_custom");
-                txt.Foreground = new SolidColorBrush(Color.Parse("#FF69B4")); // App.Mods accent fallback
+                BindLoc(txt, "label_custom");
+                txt.Foreground = new SolidColorBrush(Color.Parse(CoreMods.AccentColorHex));
             }
             else
             {
                 // Default prompt
-                txt.Text = Loc.Get("label_default");
+                BindLoc(txt, "label_default");
                 txt.Foreground = new SolidColorBrush(Color.FromRgb(112, 112, 112)); // Gray
             }
         }
 
+        /// <summary>
+        /// TxtActivePromptName carries <c>{loc:Str label_default}</c> from the XAML. An assignment
+        /// to .Text sits UNDER that binding and is undone on the next language change, so the
+        /// branch picks a key and rebinds - the same binding {loc:Str} would have produced.
+        /// </summary>
+        private static void BindLoc(TextBlock target, string key)
+            => target.Bind(TextBlock.TextProperty, new Binding($"[{key}]")
+            {
+                Source = LocalizationManager.Instance,
+                Mode = BindingMode.OneWay,
+            });
+
         private void LoadCurrentSettings()
         {
-            // ponytail: needs App.Settings.Current.CompanionPrompt; wired when settings move to Core.
-            var settings = new CompanionPromptSettings();
+            var settings = CoreSettings.Current.CompanionPrompt;
 
             _chkUseCustom.IsChecked = settings.UseCustomPrompt;
 
@@ -165,9 +210,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void SaveSettings()
         {
-            // ponytail: needs App.Settings (persist, CommunityPromptService.ClearCustomPromptOverride,
-            // Save) and App.Logger; wired when settings move to Core.
+            var settings = CoreSettings.Current.CompanionPrompt;
+            settings.UseCustomPrompt = _chkUseCustom.IsChecked == true;
+            // Provider/model/host/effect-permission settings are owned by the AI Brain
+            // panel; we only persist personality-related fields here.
+            // Coalesced: WPF's TextBox.Text is never null, Avalonia's is null when empty, and
+            // the settings model's fields are non-nullable strings.
+            settings.Personality = _txtPersonality.Text ?? string.Empty;
+            settings.ExplicitReaction = _txtExplicitReaction.Text ?? string.Empty;
+            settings.SlutModePersonality = _txtSlutMode.Text ?? string.Empty;
+            settings.KnowledgeBase = _txtKnowledgeBase.Text ?? string.Empty;
+            settings.ContextReactions = _txtContextReactions.Text ?? string.Empty;
+            settings.OutputRules = _txtOutputRules.Text ?? string.Empty;
+
+            // ponytail: un-ticking "use custom prompt" must also drop the community id, through
+            // ConditioningControlPanel/Services/Companion/CommunityPromptService.ClearCustomPromptOverride,
+            // or the Companion tab keeps reporting "Custom: <name>" off an override that is no
+            // longer on the wire. That service is head-only. Its body is NOT inlined here on
+            // purpose: one shared call is what keeps the two call sites from drifting apart.
+
+            // Save global knowledge base links
+            SaveKnowledgeLinks();
+
+            CoreSettings.Save();
             _hasUnsavedChanges = false;
+
+            Log.Information("Companion prompt settings saved. UseCustomPrompt={UseCustom}, GlobalLinks={LinkCount}",
+                settings.UseCustomPrompt, _knowledgeLinks.Count);
         }
 
         private void UpdateEnabledState()
@@ -195,20 +264,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
         }
 
-        private void RemoveKnowledgeLink_Click()
+        private async void RemoveKnowledgeLink_Click()
         {
             if (_lstKnowledgeLinks.SelectedItem is KnowledgeBaseLink link)
             {
                 _knowledgeLinks.Remove(link);
                 _hasUnsavedChanges = true;
             }
-            // ponytail: WPF showed MessageBox(msg_please_select_a_link_to_remove) otherwise; no
-            // MessageBox stand-in exists in this head yet.
+            else
+            {
+                await MessageDialog.ShowAsync(this, "No Selection", Loc.Get("msg_please_select_a_link_to_remove"));
+            }
         }
 
-        private void ResetAll_Click()
+        private async void ResetAll_Click()
         {
-            // ponytail: WPF confirmed with a Yes/No MessageBox first; stubbed, see class summary.
+            // These two strings are hardcoded English in the WPF original, not loc keys; ported as
+            // literals rather than inventing key names no catalogue carries.
+            var confirmed = await MessageDialog.ConfirmAsync(this, "Reset All Prompts",
+                "Reset all prompts to their default values?\n\nThis cannot be undone.");
+            if (!confirmed) return;
+
             _txtPersonality.Text = _defaults.Personality;
             _txtExplicitReaction.Text = _defaults.ExplicitReaction;
             _txtSlutMode.Text = _defaults.SlutModePersonality;
@@ -266,8 +342,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     box.BorderThickness = new Thickness(2);
                     ToolTip.SetTip(box, Loc.GetF("prompt_validator_warning", result.MatchedPatterns.Count));
                     flaggedNames.Add(fieldName);
-                    // ponytail: App.ModerationLog?.RecordEdit(fieldName, count, "companion_prompt"),
-                    // wired when the moderation log moves to Core.
+                    // ponytail: App.ModerationLog?.RecordEdit(fieldName, count, "companion_prompt").
+                    // The CLASS is already in Core (CCP.Core/Services/Moderation/ModerationLog.cs);
+                    // what is missing is a seam for the app's ONE instance, which today lives on
+                    // ConditioningControlPanel/App.xaml.cs:610. Constructing a second one here
+                    // would give it a different per-launch ModerationSession hash and split the
+                    // CCBill record file in two, so it waits for a CoreModeration provider.
                 }
             }
 
@@ -280,20 +360,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 this.FindControl<TextBlock>("TxtValidatorBanner")!.Text = Loc.GetF("prompt_validator_banner", flaggedNames.Count);
                 banner.IsVisible = true;
+                Log.Information("PromptValidator flagged {Count} field(s) in CompanionPromptEditorDialog",
+                    flaggedNames.Count);
             }
         }
 
-        private void BtnCancel_Click()
+        private async void BtnCancel_Click()
         {
             if (_hasUnsavedChanges)
             {
-                // ponytail: WPF asked "discard unsaved changes?" here; stubbed, see class summary.
+                var discard = await MessageDialog.ConfirmAsync(this, "Unsaved Changes",
+                    "You have unsaved changes. Discard them?");
+                if (!discard) return;
             }
+
             Close(false);
         }
 
-        // ponytail: WPF's OnClosing prompted Save/Discard/Cancel on the X button with unsaved
-        // changes; without a MessageBox stand-in the X simply closes. _hasUnsavedChanges is kept so
-        // the prompt drops in unchanged.
+        // ponytail: WPF's OnClosing prompts Save / Discard / CANCEL-THE-CLOSE on the X button when
+        // there are unsaved changes. MessageDialog (CCP.Avalonia/Views/Dialogs/MessageDialog.axaml.cs)
+        // is two-button, so the three-way answer cannot be expressed and the X still just closes.
+        // Whoever adds a three-button dialog also needs two things Avalonia forces: Closing is
+        // SYNCHRONOUS, so the shape is `e.Cancel = true; await ...; Close()` behind a re-entry
+        // flag; and WPF's `!DialogResult.HasValue` guard has no twin, because Close(x) raises
+        // Closing too - it needs a "closed by a button" flag set in BtnSave_Click/BtnCancel_Click.
     }
 }

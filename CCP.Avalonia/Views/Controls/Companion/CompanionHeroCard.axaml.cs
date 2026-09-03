@@ -9,6 +9,8 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
@@ -25,13 +27,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// is false (the mockup's <c>animation:none</c> asleep state), and whenever the viewmodel is
     /// swapped out.</para>
     ///
-    /// <para>The WPF original also owns the portrait's optical centring (a pixel probe of the
-    /// bust's opaque bounds) and its mod repaint (<c>App.Mods.ModChanged</c>). Both are stubbed
-    /// here — see <see cref="ApplyAvatarArt"/> and <see cref="CentrePortrait"/>.</para>
+    /// <para>The mod repaint is wired: <see cref="CoreMods.ModChanged"/> is the authoritative
+    /// "the art answers differently now" signal, and the only one this tab gets, so the hook is
+    /// taken on Loaded and released on Unloaded exactly as the WPF original does with
+    /// <c>App.Mods.ModChanged</c>. What it can re-read is still thin — see
+    /// <see cref="ApplyAvatarArt"/> — and the portrait's optical centring is stubbed, see
+    /// <see cref="CentrePortrait"/>.</para>
     /// </summary>
     public partial class CompanionHeroCard : UserControl
     {
         private CompanionHeroCardViewModel? _observed;
+
+        /// <summary>Guards the ModChanged hook: Loaded fires again on every re-parent.</summary>
+        private bool _modHooked;
 
         public CompanionHeroCard()
         {
@@ -51,9 +59,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
+            // WPF's "Known Issues #2: never animate before the element is loaded and templated"
+            // guard is deliberately NOT ported: RefreshAmbientState and StartAmbientLoop already
+            // re-check IsLoaded, and an early return here would also skip the mod hook.
             Observe(ViewModel);
 
-            // ponytail: needs App.Mods (ModChanged -> ApplyAvatarArt), wired when it moves to Core.
+            // Hook on Loaded, unhook on Unloaded, and never let a re-parent double-subscribe.
+            if (!_modHooked)
+            {
+                CoreMods.ModChanged += OnModChanged;
+                _modHooked = true;
+            }
 
             // DispatcherPriority.Normal, never Loaded — Loaded is starved in this app and the
             // breathe would silently never start.
@@ -65,7 +81,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             Observe(null);
             StopAmbientLoop();
+
+            if (_modHooked) CoreMods.ModChanged -= OnModChanged;
+            _modHooked = false;
         }
+
+        /// <summary>ModChanged can be raised off the UI thread; marshal before touching the art.</summary>
+        private void OnModChanged(object? sender, ModPackage mod)
+            => Dispatcher.UIThread.Post(ApplyAvatarArt);
 
         private void OnDataContextChanged(object? sender, EventArgs e)
         {
@@ -127,14 +150,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         // =====================================================================================
 
         /// <summary>
-        /// Re-reads her bust and re-centres it in the ring. The WPF version calls
-        /// <c>CompanionHeroRuntimeVm.Sync()</c> first (which resolves the active mod's pose-1
-        /// through <c>ModResourceResolver</c>).
+        /// Re-reads her bust and re-centres it in the ring. Called on Loaded and on every
+        /// <see cref="CoreMods.ModChanged"/>. The WPF version calls
+        /// <c>CompanionHeroRuntimeVm.Sync()</c> first, which is what re-reads her name, mod chip
+        /// and flavour as well as the pose.
         /// </summary>
         internal void ApplyAvatarArt()
         {
-            // ponytail: needs CompanionHeroRuntimeVm / ModResourceResolver, wired when they move to Core.
-            CentrePortrait();
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(ApplyAvatarArt); return; }
+
+            try
+            {
+                // ponytail: the Sync() half needs ConditioningControlPanel/Views/Controls/Companion/
+                // Runtime/CompanionHeroRuntimeVm.Sync, which reads App.Companion, App.AvatarWindow
+                // and CompanionRuntimeContext.Navigator - head navigation, not a mod lookup, so it
+                // cannot cross to Core as it stands. The hook below it is live, so the moment a
+                // portable hero viewmodel exists this method re-reads on every mod switch.
+                CentrePortrait();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Companion hero: avatar art refresh failed: {E}", ex.Message);
+            }
         }
 
         /// <summary>
@@ -142,10 +179,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// </summary>
         private void CentrePortrait()
         {
-            // ponytail: the WPF ink probe (OpaqueBounds/InkViewbox, PortraitInkFill=0.86,
-            // alpha floor 8, 96px probe) reads BitmapSource pixels. On Avalonia it is
-            // Bitmap.CopyPixels into ImageBrush.SourceRect; port it with the first real bust —
-            // the placeholder viewmodel ships Portrait=null and the vector disc needs no centring.
+            // ponytail: blocked on CompanionHeroCard.axaml, which this layer does not own. WPF
+            // points a NAMED ImageBrush's Viewbox at the ink; the Avalonia XAML dropped every
+            // x:Name on non-controls (illegal there), so there is no brush to give a SourceRect to
+            // before the pixel probe (OpaqueBounds/InkViewbox, PortraitInkFill=0.86, alpha floor 8,
+            // 96px probe -> Bitmap.CopyPixels) is even relevant. The placeholder viewmodel ships
+            // Portrait=null and the vector disc needs no centring, so nothing is visibly wrong yet.
         }
     }
 
