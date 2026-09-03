@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -31,7 +32,7 @@ namespace ConditioningControlPanel.Services
         {
             get
             {
-                var list = App.Settings?.Current?.KeywordTriggerPresets;
+                var list = CoreSettings.Current?.KeywordTriggerPresets;
                 if (list == null || list.Count == 0) return Array.Empty<KeywordTriggerPreset>();
                 return list.ToList();
             }
@@ -40,7 +41,7 @@ namespace ConditioningControlPanel.Services
         public KeywordTriggerPreset? GetPreset(string presetId)
         {
             if (string.IsNullOrEmpty(presetId)) return null;
-            return App.Settings?.Current?.KeywordTriggerPresets
+            return CoreSettings.Current?.KeywordTriggerPresets
                 .FirstOrDefault(p => p.Id == presetId);
         }
 
@@ -57,13 +58,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool InstallPreset(string presetId)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             var preset = GetPreset(presetId);
             if (settings == null || preset == null) return false;
 
             if (preset.MasterEnabled)
             {
-                App.Logger?.Debug("InstallPreset: {Id} already installed", presetId);
+                Log.Debug("InstallPreset: {Id} already installed", presetId);
                 return true;
             }
 
@@ -72,7 +73,7 @@ namespace ConditioningControlPanel.Services
             // Remove any stale clones from previous installs (defensive).
             settings.KeywordTriggers.RemoveAll(t => t.Id?.StartsWith(prefix, StringComparison.Ordinal) == true);
 
-            var aiAvailable = App.Ai?.IsAvailable == true;
+            var aiAvailable = CoreAi.IsAvailable;
 
             foreach (var source in preset.Triggers)
             {
@@ -93,7 +94,7 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
-                    KeywordTriggerService.RebuildActionsFromFlatFields(clone);
+                    clone.RebuildActionsFromFlatFields();
                 }
 
                 settings.KeywordTriggers.Add(clone);
@@ -102,8 +103,8 @@ namespace ConditioningControlPanel.Services
             InstallCannedPhrases(preset);
 
             preset.MasterEnabled = true;
-            App.Settings?.Save();
-            App.Logger?.Information("InstallPreset: {Id} installed ({Count} triggers)",
+            CoreSettings.Save();
+            Log.Information("InstallPreset: {Id} installed ({Count} triggers)",
                 presetId, preset.Triggers?.Count ?? 0);
 
             PresetsChanged?.Invoke(this, EventArgs.Empty);
@@ -116,7 +117,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool UninstallPreset(string presetId)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             var preset = GetPreset(presetId);
             if (settings == null || preset == null) return false;
 
@@ -127,8 +128,8 @@ namespace ConditioningControlPanel.Services
             RemoveCannedPhrases(preset);
 
             preset.MasterEnabled = false;
-            App.Settings?.Save();
-            App.Logger?.Information("UninstallPreset: {Id} uninstalled ({Count} triggers removed)",
+            CoreSettings.Save();
+            Log.Information("UninstallPreset: {Id} uninstalled ({Count} triggers removed)",
                 presetId, removed);
 
             PresetsChanged?.Invoke(this, EventArgs.Empty);
@@ -146,7 +147,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public KeywordTriggerPreset? CloneToCustom(string presetId)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             var source = GetPreset(presetId);
             if (settings == null || source == null) return null;
 
@@ -177,13 +178,13 @@ namespace ConditioningControlPanel.Services
                 clone.Id = Guid.NewGuid().ToString("N")[..8];
                 clone.LastTriggeredAt = DateTime.MinValue;
                 if (clone.Actions == null || clone.Actions.Count == 0)
-                    KeywordTriggerService.RebuildActionsFromFlatFields(clone);
+                    clone.RebuildActionsFromFlatFields();
                 copy.Triggers.Add(clone);
             }
 
             settings.KeywordTriggerPresets.Add(copy);
-            App.Settings?.Save();
-            App.Logger?.Information("CloneToCustom: created {NewId} from {SourceId} ({Count} triggers)",
+            CoreSettings.Save();
+            Log.Information("CloneToCustom: created {NewId} from {SourceId} ({Count} triggers)",
                 copy.Id, presetId, copy.Triggers.Count);
 
             PresetsChanged?.Invoke(this, EventArgs.Empty);
@@ -213,10 +214,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void RefreshAiGating()
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null) return;
 
-            var aiAvailable = App.Ai?.IsAvailable == true;
+            var aiAvailable = CoreAi.IsAvailable;
             int touched = 0;
 
             foreach (var trigger in settings.KeywordTriggers)
@@ -240,8 +241,8 @@ namespace ConditioningControlPanel.Services
 
             if (touched > 0)
             {
-                App.Settings?.Save();
-                App.Logger?.Information("RefreshAiGating: adjusted {Count} avatar-comment actions (aiAvailable={Ai})",
+                CoreSettings.Save();
+                Log.Information("RefreshAiGating: adjusted {Count} avatar-comment actions (aiAvailable={Ai})",
                     touched, aiAvailable);
             }
         }
@@ -253,7 +254,7 @@ namespace ConditioningControlPanel.Services
 
         private static void InstallCannedPhrases(KeywordTriggerPreset preset)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null || preset.CannedPhrases == null || preset.CannedPhrases.Count == 0) return;
 
             // Defensive: strip any previously-injected phrases for this preset.
@@ -282,7 +283,7 @@ namespace ConditioningControlPanel.Services
 
         private static void RemoveCannedPhrases(KeywordTriggerPreset preset)
         {
-            var settings = App.Settings?.Current;
+            var settings = CoreSettings.Current;
             if (settings == null) return;
 
             var marker = $"preset:{preset.Id}:phrase:";
