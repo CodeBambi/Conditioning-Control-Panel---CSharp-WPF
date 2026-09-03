@@ -1,0 +1,75 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Studio/RampRackPanel.xaml.
+     Structure, ordering, spacing, every x:Name and every loc key preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       Style="{StaticResource X}"       ->  Theme="{StaticResource X}"
+       helpers:EmojiTextBlock           ->  TextBlock (Avalonia draws COLR/CPAL colour fonts
+                                            natively; CLAUDE.md trap 3)
+       Image + EmojiToImageSource       ->  TextBlock with the same glyph, size and opacity -
+                                            same trap 3. It was the only {Binding} on this view,
+                                            so no x:DataType is needed.
+       feat:AdaptiveSideArt.CollapseBelow -> dropped (WPF-head attached behaviour), same call as
+                                            Views/Features/SpiralFeatureControl.axaml.
+       x:FieldModifier="internal"       ->  dropped; x:Names kept. No host on this head pokes
+                                            those fields.
+
+     The hosted editor is the already-ported Views/Features/IntensityRampFeatureControl - this
+     panel is a frame, exactly as on WPF. Root stays a StackPanel and the direct UserControl
+     content: MainWindow.SessionFeatureLock.cs inserts the session-lock banner at index 0 of
+     ((Panel)content.Content).Children. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Avalonia.Views.Features"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Studio.RampRackPanel">
+
+    <StackPanel x:Name="StudioRampPanel">
+
+        <!-- HERO. Carries the help "?" that only the dead ProgressionTab copy ever had
+             (HelpContentService ships an "IntensityRamp" entry). -->
+        <Border Height="72" CornerRadius="16" Margin="0,0,0,10"
+                Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2">
+            <Grid ClipToBounds="True" ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="16,0,10,0">
+                    <TextBlock Text="{loc:Str section_intensity_ramp}" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource TextLightBrush}"/>
+                    <TextBlock Text="{loc:Str st4_ramp_hint}" FontSize="11.5"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="HelpBtnStudioRamp"
+                        Theme="{StaticResource HelpButtonStyle}" Tag="IntensityRamp"
+                        VerticalAlignment="Center" Margin="0,0,14,0"/>
+            </Grid>
+        </Border>
+
+        <!-- VELVET KIT 2 · ROUND 3 · DENSITY. The settings column is capped (3*, MaxWidth 780) so
+             a slider stops being a ~1200px runway in the wide Studio detail pane, and the width
+             that buys back becomes ONE big art card instead of dead margin. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- The live control, verbatim: enable, duration, multiplier, curve,
+                     end-at-complete, and the five ramp links. -->
+                <feat:IntensityRampFeatureControl x:Name="RampHost"/>
+            </StackPanel>
+
+            <!-- SIDE CARD, no art: this feature has no plate in Resources/features and round 3
+                 invents no assets. The page's own glyph, huge and nearly transparent, on the
+                 section wash. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <TextBlock Text="&#x1F4C8;" FontSize="100" Opacity="0.18"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+    </StackPanel>
+</UserControl>
