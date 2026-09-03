@@ -200,13 +200,13 @@
                                           Checked="ChkFlashAvoidCenter_Changed" Unchecked="ChkFlashAvoidCenter_Changed"/>
                             </Grid>
 
-                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_keep_flash_images_out_of_a_square_in_the_midd}">
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_center_zone}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="120"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto" MinWidth="56"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_center_zone}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderCenterExclusion" Minimum="5" Maximum="60" Value="25"
                                         IsEnabled="{Binding IsChecked, ElementName=ChkFlashAvoidCenter}"
