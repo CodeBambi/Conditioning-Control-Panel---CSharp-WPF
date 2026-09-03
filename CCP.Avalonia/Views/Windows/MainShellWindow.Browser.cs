@@ -29,25 +29,26 @@
 //
 // CALLERS STILL MISSING, each one line in a file this layer does not own:
 //   * CCP.Avalonia/Views/Tabs/SettingsTabView.axaml's RbBambiCloud / RbHypnoTube /
-//     BtnReloadBrowser carry no Click=. Point them at the shell handlers below.
+//     BtnReloadBrowser carry no Click=. A Click= there can only name a method on
+//     SettingsTabView's OWN code-behind, so the forward goes in SettingsTabView.axaml.cs:
+//     `(TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BrowserSiteToggle_Click(sender, e)`.
 //   * CCP.Avalonia/Views/Tabs/DiscordTabView.axaml.cs:BtnClearProfile_Click is an empty stub;
 //     `Host?.BtnClearProfile_Click(sender, e)` is the WPF forward, and what finally wires
 //     ClearProfileViewer -> SetProfileViewingSelf. NavigateToUrlInBrowser stays public for
 //     AvatarTubeWindow's speech-bubble links and the remote controller, neither on this head.
-//
 // STILL BLOCKED, grouped by what is actually missing (60 members):
-//   * WebView2 itself (36): the init/teardown chain (InitializeBrowserAsync,
-//     TearDownBrowserForReinit, InitAndNavigateAsync, NavigateWhenBrowserReadyAsync,
-//     OpenUrlExternallyAfterBrowserFailure, BrowserLoadingText_Click, _browserInitializing,
-//     _browserCorePending); the script channel (AutoPlayAndFullscreenVideoAsync,
+//   * WebView2 itself (36): the init/teardown chain (InitializeBrowserAsync, InitAndNavigateAsync,
+//     TearDownBrowserForReinit, NavigateWhenBrowserReadyAsync, BrowserLoadingText_Click,
+//     OpenUrlExternallyAfterBrowserFailure, _browserInitializing, _browserCorePending); the
+//     script channel (AutoPlayAndFullscreenVideoAsync,
 //     AutoPlayBambiCloudPlaylistAsync, EndWebVideoTakeover, OnBrowserWebMessageReceived,
 //     HandleBrowserMediaMessage, the four HandleAudioSync* members, HookHapticAudioSyncRearm,
 //     OnHapticConnectionChangedForAudioSync, _hapticAudioSyncConnHooked); the pop-out and
 //     fullscreen rig (BtnPopOutBrowser_Click, FocusBrowserSurface's pop-out half,
-//     HandleBrowserFullscreenChanged, Arm/DisarmFullscreenEscapes,
-//     ExitBrowserFullscreenForTeardown, Enter/ExitBrowserFullscreen, the four _browserFs* fields);
-//     the remote video pair (PlayHypnotubeFromRemote, StopBrowserVideoFromRemote,
-//     _remoteBrowserVideoActive); and the refused mute pair above.
+//     HandleBrowserFullscreenChanged, Arm/DisarmFullscreenEscapes, Enter/ExitBrowserFullscreen,
+//     ExitBrowserFullscreenForTeardown, the four _browserFs* fields); the remote video pair
+//     (PlayHypnotubeFromRemote, StopBrowserVideoFromRemote, _remoteBrowserVideoActive); the
+//     refused mute pair above.
 //   * the account / leaderboard / achievements services (23): BtnDiscordTabLogin_Click,
 //     UpdateDiscordTabUI, TxtProfileSearch_KeyDown, BtnProfileSearch_Click, BtnViewMyProfile_Click,
 //     SearchAndDisplayProfile, RefreshAndSearchAsync, DisplayOwnProfile, DisplayProfileEntry,
