@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -7,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -59,8 +61,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             IsOpen = true;
 
-            // ponytail: needs App.AvatarWindow (SetMuteAvatar). WPF muted the avatar for the whole
-            // quiz so her z-order work could not cover this window, and restored it in OnClosed.
+            // ponytail: needs AvatarWindow.IsMuted / SetMuteAvatar from
+            // ConditioningControlPanel/Windows/AvatarWindow.xaml.cs (head-side). WPF muted the
+            // avatar for the whole quiz so her z-order work could not cover this window, and
+            // restored it in OnClosed.
 
             AvaloniaXamlLoader.Load(this);
             _question = question;
@@ -143,8 +147,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Award XP
             if (!_isTest)
             {
-                // ponytail: needs App.Progression.AddXP(25, XPSource.Other), wired when the
-                // progression service moves to Core.
+                // ponytail: needs ProgressionService.AddXP(25, XPSource.Other) from
+                // ConditioningControlPanel/Services/ProgressionService.cs — still head-side, and
+                // there is no CoreProgression seam yet.
             }
 
             // Show affirmation
@@ -165,14 +170,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // the second call hits the mismatch branch and clears whatever interaction the
             // first Complete just dequeued (same #462 class as the lock-card fix).
             _answered = true;
-            // ponytail: needs App.InteractionQueue.Complete(InteractionType.PopQuiz).
+            // ponytail: needs InteractionQueueService.Complete(InteractionType.PopQuiz) from
+            // ConditioningControlPanel/Services/InteractionQueueService.cs — still head-side.
             Close();
         }
 
-        /// <summary>ponytail: needs App.Audio (PlayOneShot), App.Settings.MasterVolume and the
-        /// Resources/sounds chimes. The whole body of the WPF original was those three.</summary>
+        /// <summary>
+        /// The WPF body verbatim against the seams: <c>App.Settings.Current</c> is
+        /// <see cref="CoreSettings.Current"/>, <c>App.Audio</c> is <see cref="CoreAudio"/> and
+        /// <c>App.Logger</c> is Serilog's static <c>Log</c>. Silent on this head for the two
+        /// reasons that are both the WPF no-op branch: the chimes are Content in the WPF head and
+        /// are not laid down beside CCP.Avalonia, so the probe misses; and nothing seeds
+        /// <c>CoreAudio.PlayOneShotProvider</c> yet, so the seam fires its finished callback and
+        /// returns.
+        /// </summary>
         private static void PlayChime()
         {
+            try
+            {
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
+                var files = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
+                var file = files[_random.Next(files.Length)];
+                var path = Path.Combine(soundsPath, file);
+                if (!File.Exists(path)) return;
+
+                var master = CoreSettings.Current.MasterVolume / 100f;
+                var volume = (float)Math.Pow(master * 0.5f, 1.5);
+
+                CoreAudio.PlayOneShot(path, volume, "popquiz-chime");
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("PopQuiz chime failed: {Error}", ex.Message);
+            }
         }
 
         // Hover effects
@@ -236,9 +266,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             IsOpen = false;
 
-            // ponytail: restoring App.AvatarWindow's mute state, and the safety-net
-            // `if (!_answered) App.InteractionQueue.Complete(...)`, both go here, wired with the
-            // services above. _answered is deliberately NOT set here — that flag is what tells the
+            // ponytail: restoring the avatar mute state needs AvatarWindow.IsMuted /
+            // SetMuteAvatar from ConditioningControlPanel/Windows/AvatarWindow.xaml.cs, and the
+            // safety net `if (!_answered) InteractionQueue.Complete(...)` needs
+            // ConditioningControlPanel/Services/InteractionQueueService.cs. Both head-side. _answered is deliberately NOT set here — that flag is what tells the
             // safety net an unanswered quiz still owes a Complete.
 
             base.OnClosed(e);

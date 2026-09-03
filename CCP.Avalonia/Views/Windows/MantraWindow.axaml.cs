@@ -14,13 +14,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// and the whole scene warms from cold purple to hot pink as the streak climbs.
     ///
     /// PORTED from ConditioningControlPanel/Windows/MantraWindow.xaml.cs. Deviations:
-    ///  - <c>App.Mantra</c> (MantraService), <c>App.Audio</c> and <c>App.Settings</c> live in the
-    ///    WPF head, so the session itself is stubbed: no completion counting, no streak events, no
-    ///    NAudio drone or tones, no session-complete overlay trigger. What is ported verbatim is
-    ///    everything that only touches the view — the per-character highlight system, the streak
-    ///    intensity ramp, the colour lerp and the float drift — driven here by
-    ///    <see cref="SampleMantra"/> and <see cref="SampleStreak"/> so the render shows the live
-    ///    state rather than a cold empty one.
+    ///  - <c>App.Mantra</c> (MantraService) is pinned to the WPF head by App.Progression /
+    ///    App.Quests, so the SESSION half is still stubbed: no completion counting, no streak
+    ///    events, no NAudio drone or tones, no session-complete trigger. The VIEW half is ported
+    ///    verbatim — the per-character highlight system, the streak intensity ramp, the colour
+    ///    lerp, the float drift and the #734 anti-cheat guard — and its text and rep target now
+    ///    come from <c>CoreSettings.Current</c> (MantraPool, MantraDefaultCount) rather than an
+    ///    invented English line; <see cref="SampleStreak"/> still drives the warm palette so the
+    ///    render shows a live scene rather than a cold empty one.
     ///  - Five WPF Storyboards (pulse, shake, letter-pulse, wrong-shake, glow) are dropped:
     ///    Avalonia has no Storyboard and every one of them is begun from a service event that is
     ///    stubbed above. ponytail: re-add as Avalonia Animations when MantraService reaches Core.
@@ -33,11 +34,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// </summary>
     public partial class MantraWindow : Window
     {
-        /// <summary>ponytail: needs MantraService.CurrentMantra / TargetCount, wired when the
-        /// service moves to Core. Placeholder so the letter highlighting has something to draw.</summary>
+        /// <summary>Last-resort line for the letter highlighting when the user's pool is empty.
+        /// ponytail: the live line needs MantraService.CurrentMantra from
+        /// ConditioningControlPanel/Services/MantraService.cs — it is pinned to the head by
+        /// App.Progression / App.Quests, so no Core seam exists for it yet.</summary>
         private const string SampleMantra = "good girls sink deeper every time";
         private const int SampleStreak = 7;
-        private const int SampleTarget = 10;
 
         private DispatcherTimer? _floatTimer;
         private DateTime _startTime;
@@ -100,13 +102,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             _startTime = DateTime.UtcNow;
 
-            // ponytail: needs MantraService (StreakChanged / StreakBroken / MantraCompleted /
-            // SessionComplete), the NAudio drone and the tone player; all wired when the service
-            // moves to Core.
+            // ponytail: subscribing StreakChanged / StreakBroken / MantraCompleted /
+            // SessionComplete needs ConditioningControlPanel/Services/MantraService.cs; the drone
+            // and the streak tones need NAudio's SignalGenerator + WaveOutEvent, which CoreAudio
+            // deliberately does not cover (PlayOneShot takes a file path, not a generator).
 
             // Build initial letter display
-            BuildMantraRuns(SampleMantra);
-            _txtTarget.Text = $"/{SampleTarget}";
+            var mantra = CurrentMantra ?? "";
+            BuildMantraRuns(mantra);
+            // ponytail: the live figure is MantraService.TargetCount, which the caller sets via
+            // StartSession(reps). MantraDefaultCount is the settings-backed default that caller
+            // reads, so it is the honest stand-in rather than an invented number.
+            _txtTarget.Text = $"/{CoreSettings.Current.MantraDefaultCount}";
             _txtCompletions.Text = "0";
             _txtStreak.Text = "0";
             _txtBestStreak.Text = "0";
@@ -118,7 +125,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // Placeholder session state, so the highlight ramp and the warm palette both draw.
             OnStreakChanged(SampleStreak);
-            UpdateHighlights(SampleMantra.Substring(0, 11));
+            UpdateHighlights(mantra[..Math.Min(11, mantra.Length)]);
 
             _txtInput.Focus();
         }
@@ -213,8 +220,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         #endregion
 
-        /// <summary>ponytail: needs MantraService.CurrentMantra, wired when it moves to Core.</summary>
-        private static string? CurrentMantra => SampleMantra;
+        /// <summary>
+        /// The line on screen. The user's own <c>MantraPool</c> is in Core, so the window shows a
+        /// real mantra rather than an invented English one; the pool's FIRST entry is deliberate —
+        /// picking at random here would be a second copy of <c>MantraService.NextMantra</c>'s
+        /// no-immediate-repeat rotation, which is the drift the service exists to prevent.
+        /// ponytail: needs MantraService.CurrentMantra for the rotating line.
+        /// </summary>
+        private static string? CurrentMantra
+        {
+            get
+            {
+                var pool = CoreSettings.Current.MantraPool;
+                return pool is { Count: > 0 } && !string.IsNullOrWhiteSpace(pool[0])
+                    ? pool[0]
+                    : SampleMantra;
+            }
+        }
 
         private void FloatTimer_Tick(object? sender, EventArgs e)
         {
@@ -222,7 +244,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_mantraTranslate != null)
                 _mantraTranslate.Y = Math.Sin(elapsed * 0.5) * 6;
 
-            // ponytail: the drone gain ramp lived here; needs NAudio plus App.Settings.
+            // ponytail: the drone gain ramp lived here. Needs NAudio's SignalGenerator (the tone is
+            // synthesised, not a file), which CoreAudio.PlayOneShot cannot express; its volume knob
+            // CoreSettings.Current.MantraDroneVolume is already in Core and waits on the generator.
         }
 
         private void TxtInput_TextChanged()
@@ -236,18 +260,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             int matchCount = UpdateHighlights(input);
 
             // Check completion: all characters match and input length equals mantra length.
-            // ponytail: needs MantraService.TryCompleteMantra to count the rep and roll the next
-            // mantra; until then a finished line just stays lit.
+            // ponytail: needs MantraService.TryCompleteMantra from
+            // ConditioningControlPanel/Services/MantraService.cs to count the rep, clear the box
+            // and roll the next mantra; until then a finished line just stays lit. The
+            // _updatingInput re-entry guard belongs with it — it only exists to cover that clear.
             _ = matchCount;
         }
 
         private void TxtInput_PreviewKeyDown(object? sender, KeyEventArgs e)
         {
-            // WPF called LockCardWindow.IsBlockedInputGesture(e.Key, Keyboard.Modifiers) — shared
-            // deliberately so the two anti-cheat surfaces can't drift apart again (#734).
-            // ponytail: needs LockCardWindow, wired when that view is ported; inlining the gesture
-            // list here would recreate exactly the drift #734 removed.
-            _ = e;
+            // Same gesture set as the lock card (paste/copy/cut/select-all/undo/redo plus the
+            // legacy Shift+Insert / Ctrl+Insert / Shift+Delete clipboard gestures) — shared with
+            // LockCardWindow deliberately so the two anti-cheat surfaces can't drift apart
+            // again (#734). WPF read Keyboard.Modifiers; Avalonia carries them on the args.
+            if (LockCardWindow.IsBlockedInputGesture(e.Key, e.KeyModifiers))
+            {
+                e.Handled = true;
+            }
         }
 
         private void OnStreakChanged(int streak)
@@ -360,8 +389,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             _floatTimer?.Stop();
 
-            // ponytail: unsubscribing the four MantraService events and ending the session go here,
-            // wired when the service moves to Core.
+            // ponytail: unsubscribing the four MantraService events and MantraService.EndSession()
+            // go here, plus StopDrone(); all need ConditioningControlPanel/Services/MantraService.cs
+            // and NAudio respectively.
 
             Close();
         }

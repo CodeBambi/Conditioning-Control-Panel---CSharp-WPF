@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Moderation;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -23,9 +26,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>QuizService</c> is not in Core either, so the template dropdown, the AI preview, the
     ///    built-in name-collision check and Delete are stubs. Each carries a ponytail comment.
     ///  - <c>PromptValidator</c> IS in Core, so <see cref="RunPromptValidation"/> runs for real.
-    ///  - The four <c>MessageBox.Show</c> calls have no Avalonia equivalent and no package may be
-    ///    added; they become ponytail comments, so the empty-field guards still block the save but
-    ///    do so silently (CompanionPromptEditorDialog precedent).
+    ///  - The <c>MessageBox.Show</c> calls are this head's <see cref="MessageDialog"/>, which is
+    ///    async, so Save and Delete are <c>async void</c> handlers. Only the name-collision warning
+    ///    is missing, because the check behind it needs QuizService.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>.
     ///  - The public ctor loses its <c>= null</c> default: with a parameterless render ctor beside
     ///    it, <c>new QuizCategoryEditorWindow()</c> would be ambiguous (CS0121).
@@ -38,7 +41,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     {
         private readonly QuizCategoryDefinition? _existing;
         private string _selectedColor = "#FF69B4";
-        private bool _policyAcked;
 
         /// <summary>Row i holds { name, min, max, description } for archetype i.</summary>
         private readonly List<TextBox[]> _arch = new();
@@ -270,8 +272,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var templateId = item.Tag?.ToString();
             if (string.IsNullOrEmpty(templateId)) return;
 
-            // ponytail: needs QuizService.GetBuiltInCategories()/FindCategory() for the real
-            // category name and its archetype table; wired when the quiz service moves to Core.
+            // ponytail: needs QuizService.GetBuiltInCategories() / FindCategory() from
+            // ConditioningControlPanel/Services/Quiz/QuizService.cs for the real category name and
+            // its archetype table - still head-side.
             // The skeleton below is the WPF original's, minus the RESULT ARCHETYPES block it filled
             // from the built-in definition.
             _txtPrompt.Text = GetBuiltInPromptText(templateId);
@@ -316,8 +319,9 @@ Do NOT include any other text before or after the question format. Just the ques
                 return;
             }
 
-            // ponytail: needs QuizService.StartQuizAsync to round-trip the prompt through the AI
-            // provider; wired when the quiz service moves to Core. Until then the panel opens with
+            // ponytail: needs QuizService.StartQuizAsync from
+            // ConditioningControlPanel/Services/Quiz/QuizService.cs to round-trip the prompt
+            // through the AI provider - still head-side. Until then the panel opens with
             // the same "couldn't generate" copy the WPF original shows on a null question, so the
             // busy/idle hint swap and ShowPreviewResult stay exercised.
             _txtPreviewHint.Text = Loc.Get("label_generating");
@@ -334,26 +338,43 @@ Do NOT include any other text before or after the question format. Just the ques
             this.FindControl<Border>("PreviewResultPanel")!.IsVisible = true;
         }
 
-        private void BtnSave_Click(Border _)
+        /// <summary>
+        /// WPF's four <c>MessageBox.Show</c> warnings are this head's <see cref="MessageDialog"/>,
+        /// which makes the handler async — hence <c>async void</c>, which is what an event handler
+        /// is allowed to be and what <see cref="WireActionBorder"/> binds to.
+        /// </summary>
+        private async void BtnSave_Click(Border _)
         {
             var name = (_txtName.Text ?? "").Trim();
-            // ponytail: WPF showed MessageBox(msg_please_enter_a_category_name) here; no Avalonia
-            // equivalent and no package may be added, so the guard blocks silently.
-            if (string.IsNullOrWhiteSpace(name)) return;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                await MessageDialog.ShowAsync(this, "Missing Name",
+                    Loc.Get("msg_please_enter_a_category_name"));
+                return;
+            }
 
             if (name.Length > 30) name = name[..30];
 
             var prompt = (_txtPrompt.Text ?? "").Trim();
-            // ponytail: WPF showed MessageBox(msg_please_enter_a_system_prompt_for_the_ai) here.
-            if (string.IsNullOrWhiteSpace(prompt)) return;
+            if (string.IsNullOrWhiteSpace(prompt))
+            {
+                await MessageDialog.ShowAsync(this, "Missing Prompt",
+                    Loc.Get("msg_please_enter_a_system_prompt_for_the_ai"));
+                return;
+            }
 
             var archetypes = CollectArchetypes();
-            // ponytail: WPF showed MessageBox(msg_please_define_at_least_2_archetypes) here.
-            if (archetypes.Count < 2) return;
+            if (archetypes.Count < 2)
+            {
+                await MessageDialog.ShowAsync(this, "Need Archetypes",
+                    Loc.Get("msg_please_define_at_least_2_archetypes"));
+                return;
+            }
 
-            // ponytail: needs QuizService.GetBuiltInCategories() to reject a name that collides with
-            // a built-in one (msg_this_name_conflicts_with_a_built_in_category); wired when the
-            // quiz service moves to Core.
+            // ponytail: the built-in name-collision guard (and its
+            // msg_this_name_conflicts_with_a_built_in_category warning) needs
+            // QuizService.GetBuiltInCategories() from
+            // ConditioningControlPanel/Services/Quiz/QuizService.cs — still head-side.
 
             // P1.3 PromptValidator: soft validation, warns but does not block save.
             RunPromptValidation(prompt);
@@ -398,17 +419,30 @@ Do NOT include any other text before or after the question format. Just the ques
             this.FindControl<TextBlock>("TxtValidatorBanner")!.Text = Loc.GetF("prompt_validator_banner", 1);
             banner.IsVisible = true;
 
-            // ponytail: App.ModerationLog?.RecordEdit("SystemPromptTemplate", count, "quiz_category")
-            // and the matching App.Logger line, wired when the moderation log moves to Core.
+            Log.Information(
+                "PromptValidator flagged QuizCategoryEditorWindow system prompt ({Count} matches)",
+                result.MatchedPatterns.Count);
+
+            // ponytail: needs the app-wide ModerationLog INSTANCE (App.ModerationLog) for
+            // RecordEdit("SystemPromptTemplate", count, "quiz_category"). The class itself is in
+            // Core (CCP.Core/Services/Moderation/ModerationLog.cs) but it is instance-scoped over a
+            // ModerationSession and an append-only file; constructing a second one here would give
+            // the process two writers of moderation.log. Needs a CoreModeration seam.
         }
 
-        private void BtnDelete_Click(Border _)
+        private async void BtnDelete_Click(Border _)
         {
             if (_existing == null) return;
 
-            // ponytail: WPF confirmed with a Yes/No MessageBox and then called
-            // QuizService.DeleteCustomCategory(_existing.Id); both are stubbed, so the dialog just
-            // closes with a null Result - which is already the "deleted" signal the caller reads.
+            // WPF's Yes/No MessageBox, verbatim - the copy is hardcoded English there too.
+            var confirmed = await MessageDialog.ConfirmAsync(this, "Delete Category",
+                $"Delete the \"{_existing.Name}\" category? This cannot be undone.");
+            if (!confirmed) return;
+
+            // ponytail: needs QuizService.DeleteCustomCategory(_existing.Id) from
+            // ConditioningControlPanel/Services/Quiz/QuizService.cs to remove it from the stored
+            // custom-category file - still head-side. The null Result below is already the
+            // "deleted" signal the caller reads, so the dialog contract itself is complete.
             Result = null;
             Close(true);
         }
@@ -418,22 +452,38 @@ Do NOT include any other text before or after the question format. Just the ques
         /// </summary>
         private void ApplyPolicyBannerState()
         {
-            // ponytail: needs App.Settings.Current.CompanionPrompt.PromptEditorDisclaimerAcknowledged,
-            // wired when settings move to Core. The default is "not yet acknowledged".
-            this.FindControl<Border>("PolicyBannerFull")!.IsVisible = !_policyAcked;
-            this.FindControl<Border>("PolicyBannerSlim")!.IsVisible = _policyAcked;
+            var acked = CoreSettings.Current.CompanionPrompt?.PromptEditorDisclaimerAcknowledged == true;
+            this.FindControl<Border>("PolicyBannerFull")!.IsVisible = !acked;
+            this.FindControl<Border>("PolicyBannerSlim")!.IsVisible = acked;
         }
 
         private void BtnPolicyGotIt_Click()
         {
-            _policyAcked = true; // ponytail: persisted via App.Settings.Save() once settings move to Core
+            var settings = CoreSettings.Current.CompanionPrompt;
+            if (settings != null)
+            {
+                settings.PromptEditorDisclaimerAcknowledged = true;
+                CoreSettings.Save();
+            }
             ApplyPolicyBannerState();
         }
 
+        /// <summary>
+        /// WPF's <c>Process.Start(UseShellExecute)</c> verbatim: on Linux that hands the URL to
+        /// xdg-open, which is the same "ask the platform" contract, so there is nothing to put
+        /// behind an interface (the SeasonRecapWindow precedent).
+        /// </summary>
         private void BtnPolicyRead_Click()
         {
-            // ponytail: needs a launcher for https://app.cclabs.app/policies/prohibited-content;
-            // Process.Start(UseShellExecute) is per-platform and belongs behind a Core interface.
+            try
+            {
+                Process.Start(new ProcessStartInfo(
+                    "https://app.cclabs.app/policies/prohibited-content") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "QuizCategoryEditorWindow: failed to open policy URL");
+            }
         }
 
         private static QuizCategoryDefinition SampleCategory() => new()
