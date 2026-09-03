@@ -1,0 +1,69 @@
+<!-- PORTED from ConditioningControlPanel/Windows/DescentFuseWindow.xaml.
+     Structure, ordering, x:Names, colours and gradient stops preserved. Deviations, all forced:
+
+       WindowStyle="None"                -> SystemDecorations="None"
+       WindowState="Maximized"           -> kept, plus a restore Width/Height, which is what the
+                                            headless render sizes its frame from
+       ResizeMode="NoResize"             -> CanResize="False"
+       TextOptions.TextFormattingMode    -> dropped; Avalonia has no WPF text-formatting modes
+       RadiusX/RadiusY="0.85"            -> "85%" (Avalonia's RelativeScalar syntax)
+       GradientOrigin/Center="0.5,0.5"   -> "50%,50%"
+
+     Deliberately NOT transparent, exactly as the original: this window is opaque by design,
+     because the whole point of the beat is that the room goes away.
+
+     The show itself (DescentFuseStageVisual) is a WPF DrawingVisual living in the other head,
+     so StageHost stays empty here - see the code-behind. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.DescentFuseWindow"
+        Title="The Descent"
+        SystemDecorations="None"
+        WindowState="Maximized"
+        Width="1280" Height="720"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="#FF0A0514"
+        UseLayoutRounding="True">
+
+    <Grid>
+        <Border x:Name="BackdropLayer" Opacity="0.28">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="85%" RadiusY="90%">
+                    <GradientStop Color="#FF241041" Offset="0"/>
+                    <GradientStop Color="#FF1A1A2E" Offset="0.55"/>
+                    <GradientStop Color="#FF0A0514" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- The drawn show. Populated in code so no xmlns import is needed for one element. -->
+        <Grid x:Name="StageHost"/>
+
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="75%" RadiusY="75%">
+                    <GradientStop Color="#00000000" Offset="0.45"/>
+                    <GradientStop Color="#99000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!--
+          The show's only words. Two sentences exist for it (DescentFuseCopy.ShowAwaits and
+          .IgnitionLine) and it is invisible unless one of them is due.
+        -->
+        <TextBlock x:Name="ShowLine"
+                   Opacity="0"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Bottom"
+                   Margin="40,0,40,120"
+                   MaxWidth="900"
+                   FontSize="26"
+                   FontWeight="Light"
+                   Foreground="#FFF2ECF7"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"/>
+    </Grid>
+</Window>
