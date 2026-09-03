@@ -39,13 +39,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
     ///    because the chips, sliders and warning ARE view logic. Load/Save/Discover are stubs.
     ///  - The library is seeded with <see cref="SampleLibrary"/> so the render exercises the
     ///    card builder, both drop zones, the library strip and an enabled Start button.
+    ///  - The reward CLIP plays through <c>CoreAudio.PlayOneShot</c> (WPF's master^1.5 curve
+    ///    carried over); its folder is not linked into this head's csproj, so it currently logs
+    ///    a miss. The other four reward effects have no seam yet.
     ///  - <c>App.Webcam</c> / <c>App.Flash</c> / <c>App.Haptics</c> / <c>App.Bubbles</c> /
     ///    <c>App.MindWipe</c> / <c>App.Overlay</c> / <c>WebcamCalibrationWindow</c>, LibVLC
     ///    (<c>VideoView</c> + the whole stop/detach/dispose dance and its message pump), NAudio
     ///    and XamlAnimatedGif are all head-side; each is a stub. Gaze never changes side, so a
     ///    round resolves on its display cap.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so the
-    ///    "quit the session?" confirmation is not raised (ChaosSlotPickerWindow precedent).
+    ///  - <c>MessageBox.Show</c> -> this head's <c>Views/Dialogs/MessageDialog.ConfirmAsync</c>,
+    ///    so the mid-run "quit the session?" confirmation is raised again (awaited, hence the
+    ///    re-test of <c>_gameRunning</c> after it).
     ///  - <c>FolderBrowserDialog</c> -> <c>StorageProvider.OpenFolderPickerAsync</c>.
     ///  - Mouse* -> Pointer*; Avalonia 12's <c>DoDragDropAsync</c> only takes a
     ///    <see cref="PointerPressedEventArgs"/>, so the drag starts on press and the WPF
@@ -92,7 +96,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         /// Field-for-field twin of the head's <c>GazeMinigameSettings</c>, minus the JSON
         /// attributes. The presets, the clamps and the bundled-audio list are copied verbatim:
         /// they drive the difficulty chips and the sliders, which are view logic.
-        /// ponytail: needs Lab/GazeMinigame/GazeMinigameSettings.cs, wired when it moves to Core.
+        /// <para>ponytail: this whole class and the three enums above are a SECOND COPY of
+        /// <c>ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs</c>, which CLAUDE.md
+        /// forbids - they exist only because that file is still in the WPF head. It is portable
+        /// today: Newtonsoft plus <c>CorePaths</c>, and the only head-ism is two
+        /// <c>App.Logger</c> calls that become Serilog's static <c>Log</c>. <b>Move it to
+        /// CCP.Core/Lab/GazeMinigame/ and DELETE this twin</b>, which also restores Load/Save (and
+        /// with them the persisted difficulty, chips, sliders and pack roles).</para>
         /// </summary>
         private sealed class GazeMinigameSettings
         {
@@ -351,9 +361,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         private void DiscoverLibrary()
         {
             _library.Clear();
-            // ponytail: needs Lab/GazeMinigame/GazePackLibrary.Discover, wired when it moves to
-            // Core. Until then the strip shows the sample library so the gallery, both zones and
-            // the Start gating all draw.
+            // ponytail: needs ConditioningControlPanel/Lab/GazeMinigame/GazePackLibrary.cs, still
+            // in the WPF head. It is portable today - it already calls CorePaths.EffectiveAssets
+            // and Core's AssetPack, and its only head-ism is one App.Logger call. Move it to
+            // CCP.Core/Lab/GazeMinigame/ and this becomes GazePackLibrary.Discover(_customPaths).
+            // Until then the strip shows the sample library so the gallery, both zones and the
+            // Start gating all draw.
             _library.AddRange(SampleLibrary());
 
             foreach (var pack in _library)
@@ -1230,11 +1243,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
         /// <summary>
         /// WPF fanned this out to App.Flash.TriggerFlashOnce / App.Bubbles.SpawnOnce ×5 /
-        /// PlayRewardAudio / App.MindWipe.TriggerOnce / App.Overlay.PulseOverlays.
-        /// ponytail: needs those services, wired when they move to Core.
+        /// PlayRewardAudio / App.MindWipe.TriggerOnce / App.Overlay.PulseOverlays. Only the audio
+        /// arm has a seam - <c>CoreAudio</c> - so only the audio arm fires here.
+        /// ponytail: the other four need <c>App.Flash</c> (FlashService.TriggerFlashOnce),
+        /// <c>App.Bubbles</c> (BubbleService.SpawnOnce), <c>App.MindWipe</c>
+        /// (MindWipeService.TriggerOnce) and <c>App.Overlay</c> (OverlayService.PulseOverlays),
+        /// all still in the WPF head; each wants a seam of its own.
         /// </summary>
-        private static void FireRewardEffect(GazeRewardEffect effect)
-            => Log.Debug("GazeMinigame: reward effect {Effect} suppressed (services not on this head)", effect);
+        private void FireRewardEffect(GazeRewardEffect effect)
+        {
+            if (effect == GazeRewardEffect.Audio) { PlayRewardAudio(_settings.RewardAudioFile); return; }
+            if (effect == GazeRewardEffect.None) return;
+            Log.Debug("GazeMinigame: reward effect {Effect} suppressed (service not on this head)", effect);
+        }
 
         /// <summary>
         /// WPF posted HapticEventKind.GazeReward so the Haptics tab's "Gaze reward" routing row
@@ -1243,10 +1264,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         private static void FireVibration(string tag)
             => Log.Debug("GazeMinigame: vibration {Tag} suppressed (haptics not on this head)", tag);
 
-        /// <summary>ponytail: needs NAudio + App.Settings.MasterVolume, wired when audio
-        /// playback moves to Core.</summary>
+        /// <summary>The short reward clip, through the audio seam. WPF spun up its own
+        /// self-disposing NAudio pair here; <c>CoreAudio.PlayOneShot</c> is that pattern already,
+        /// so only the volume curve is carried across - master/100 raised to 1.5, exactly as
+        /// <c>PlayTriggerAudio</c> and the other ported one-shots do.
+        /// <para>ponytail: <c>Resources/AwarenessPresets/audio/</c> is not linked into
+        /// <c>CCP.Avalonia.csproj</c> (which ships a ~33 MB subset of the Resources tree), so on
+        /// this head the file is missing and playback logs and returns. Link the folder to hear
+        /// it; the call itself is wired.</para></summary>
         private static void PlayRewardAudio(string fileName)
-            => Log.Debug("GazeMinigame: reward audio {File} suppressed (no audio on this head)", fileName);
+        {
+            try
+            {
+                var path = System.IO.Path.Combine(
+                    AppContext.BaseDirectory, "Resources", "AwarenessPresets", "audio", fileName);
+                if (!System.IO.File.Exists(path))
+                {
+                    Log.Warning("GazeMinigame: reward audio missing '{Path}'", path);
+                    return;
+                }
+                var master = CoreSettings.Current.MasterVolume / 100f;
+                CoreAudio.PlayOneShot(path, (float)Math.Pow(master, 1.5), "gaze-reward");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "GazeMinigame: PlayRewardAudio failed");
+            }
+        }
 
         // chime.wav is bundled at Resources/AwarenessPresets/audio/chime.wav and plays on every
         // correct round, independent of the configured RewardEffect.
@@ -1526,12 +1570,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
 
             if (e.Key != Key.Escape) return;
+            e.Handled = true;
 
-            // WPF raised a MessageBox here ("Quit the current session?") when a game was
-            // running. Avalonia has no MessageBox and no package may be added, so the
-            // confirmation is not raised — same call ChaosSlotPickerWindow made.
+            if (_gameRunning)
+            {
+                // Mid-run ESC asks before throwing the run away. MessageDialog is this head's
+                // MessageBox; it is awaited, so re-test _gameRunning after it - the round ticker
+                // can have ended the game while the dialog was up.
+                _ = ConfirmQuitAsync();
+                return;
+            }
+
+            // Outside of gameplay, ESC closes (after exiting fullscreen if needed).
             ExitFullscreen();
             Close();
+        }
+
+        private async Task ConfirmQuitAsync()
+        {
+            try
+            {
+                bool quit = await Views.Dialogs.MessageDialog.ConfirmAsync(
+                    this, "Gaze minigame",
+                    "Quit the current session? Your progress for this run will be lost.");
+                if (quit && _gameRunning) Close();
+            }
+            catch (Exception ex) { Log.Warning(ex, "GazeMinigame: quit confirmation failed"); }
         }
 
         private void Window_Closing(object? sender, WindowClosingEventArgs e)
@@ -1541,8 +1605,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             DisposeCurrentRoundPlayers(synchronous: true);
             UnsubscribeWebcam();
             // WPF also resumed the main-session FlashService here, but only when the engine was
-            // still running (bug #221). ponytail: needs App.Flash + App.IsEngineRunning, wired
-            // when they move to Core.
+            // still running (bug #221). ponytail: needs App.Flash (FlashService.Start/Stop), still
+            // in the WPF head - BtnStartGame_Click has the matching suspend stub. The #221 gate
+            // itself no longer blocks: CoreSession.IsEngineRunning answers it.
         }
     }
 }
