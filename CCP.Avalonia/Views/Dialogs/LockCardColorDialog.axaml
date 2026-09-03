@@ -1,0 +1,142 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/LockCardColorDialog.xaml. Deviations, all forced:
+       ResizeMode="NoResize"            -> CanResize="False"
+       Style="{StaticResource X}"       -> Theme="{StaticResource X}"
+       ToolTip="..."                    -> ToolTip.Tip="..."
+       Click="..."                      -> wired in the constructor
+       <Window.Resources/>              -> dropped, it was empty
+     Buttons carry a TextBlock child rather than Content (CLAUDE.md trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.LockCardColorDialog"
+        Title="{loc:Str dialog_lock_card_colors}"
+        Height="700" Width="600"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        CanResize="False">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="{loc:Str label_lock_card_colors}"
+                   Foreground="{StaticResource PinkBrush}"
+                   FontSize="18" FontWeight="Bold" Margin="0,0,0,20"/>
+
+        <!-- Color Settings -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,20">
+
+            <!-- Background Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{loc:Str label_background}" Foreground="{StaticResource TextLightBrush}"
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnBgColor" Grid.Column="1" Theme="{StaticResource ColorButtonLarge}"
+                        ToolTip.Tip="{loc:Str tooltip_click_to_change_background_color}"/>
+            </Grid>
+
+            <!-- Text Color (Phrase) -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{loc:Str label_phrase_text}" Foreground="{StaticResource TextLightBrush}"
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnTextColor" Grid.Column="1" Theme="{StaticResource ColorButtonLarge}"
+                        ToolTip.Tip="{loc:Str tooltip_click_to_change_phrase_text_color}"/>
+            </Grid>
+
+            <!-- Input Background Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{loc:Str label_input_background}" Foreground="{StaticResource TextLightBrush}"
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnInputBgColor" Grid.Column="1" Theme="{StaticResource ColorButtonLarge}"
+                        ToolTip.Tip="{loc:Str tooltip_click_to_change_input_field_background}"/>
+            </Grid>
+
+            <!-- Input Text Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{loc:Str label_input_text}" Foreground="{StaticResource TextLightBrush}"
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnInputTextColor" Grid.Column="1" Theme="{StaticResource ColorButtonLarge}"
+                        ToolTip.Tip="{loc:Str tooltip_click_to_change_input_text_color}"/>
+            </Grid>
+
+            <!-- Accent Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{loc:Str label_accent_progress}" Foreground="{StaticResource TextLightBrush}"
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnAccentColor" Grid.Column="1" Theme="{StaticResource ColorButtonLarge}"
+                        ToolTip.Tip="{loc:Str tooltip_click_to_change_accent_color_progress_bar_bor}"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Preview -->
+        <Border Grid.Row="2" x:Name="PreviewBorder" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8"
+                Padding="20" Margin="0,0,0,20">
+            <StackPanel VerticalAlignment="Center">
+                <!-- Title -->
+                <TextBlock Text="{loc:Str label_type_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+                <!-- Phrase to type -->
+                <TextBlock x:Name="PreviewPhrase" Text="{loc:Str label_good_girls_obey}"
+                           FontSize="22" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+                <!-- Input field preview -->
+                <Border x:Name="PreviewInputBorder" Background="{DynamicResource PanelBgBrush}" CornerRadius="6"
+                        Padding="15,10" Margin="0,0,0,15" BorderThickness="2">
+                    <TextBlock x:Name="PreviewInputText" Text="{loc:Str label_good_girls_ob}"
+                               FontSize="16" HorizontalAlignment="Center"/>
+                </Border>
+
+                <!-- Progress indicator -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock x:Name="PreviewProgress" Text="1 / 3" FontSize="12" Margin="0,0,10,0"/>
+                    <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="3" Width="100" Height="6">
+                        <Border x:Name="PreviewProgressBar" Background="{DynamicResource PinkBrush}" CornerRadius="3"
+                                Width="33" HorizontalAlignment="Left"/>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Buttons -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BtnCancel" Grid.Column="1" Theme="{StaticResource SecondaryButton}"
+                    Margin="0,0,10,0">
+                <TextBlock Text="{loc:Str btn_cancel}"/>
+            </Button>
+            <Button x:Name="BtnSave" Grid.Column="2" Theme="{StaticResource ActionButton}">
+                <TextBlock Text="{loc:Str btn_save}"/>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>
