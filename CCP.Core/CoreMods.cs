@@ -56,6 +56,16 @@ namespace ConditioningControlPanel
             get { try { return PetNameOverrideProvider?.Invoke(); } catch { return null; } }
         }
 
+        /// <summary>The active mod's display name for its content mode, or null when no mod layer
+        /// is up. The settings model shows it and falls back to the vanilla label.</summary>
+        public static volatile Func<string?>? ModeDisplayNameProvider;
+
+        /// <summary>Mode display name, or null. Faults are swallowed - see <see cref="ActiveModToken"/>.</summary>
+        public static string? ModeDisplayName
+        {
+            get { try { return ModeDisplayNameProvider?.Invoke(); } catch { return null; } }
+        }
+
         /// <summary>Collective override, or null. Faults are swallowed - see <see cref="ActiveModToken"/>.</summary>
         public static string? CollectiveOverride
         {

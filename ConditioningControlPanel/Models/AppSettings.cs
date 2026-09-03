@@ -93,9 +93,9 @@ namespace ConditioningControlPanel.Models
 
     /// <summary>
     /// Legacy content mode enum. Kept for settings deserialization backward compatibility.
-    /// Use App.Mods (ModService) instead.
+    /// Use the mod service (ModService) instead.
     /// </summary>
-    [Obsolete("Use App.Mods (ModService) and ActiveModId instead")]
+    [Obsolete("Use the mod service (ModService) and ActiveModId instead")]
     public enum ContentMode
     {
         BambiSleep,
@@ -142,9 +142,9 @@ namespace ConditioningControlPanel.Models
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
             // Bark hook: surface every numeric/bool setting change as a SettingChanged trigger so
             // the avatar can react to toggles, thresholds and easter-egg values. BarkService reads
-            // the new value off this instance by name and ignores non-numeric props. App.Bark is
+            // the new value off this instance by name and ignores non-numeric props. the bark service is
             // null during startup load, so no spurious barks while settings deserialize.
-            try { ConditioningControlPanel.App.Bark?.NotifySettingChanged(name); } catch { /* never break settings for a bark */ }
+            CoreSettingsHooks.NotifySettingChanged(name);
         }
 
         #region Language
@@ -2099,8 +2099,8 @@ namespace ConditioningControlPanel.Models
         // compatible), -2 = all monitors, 0..N = that specific monitor index
         // (into Screen.AllScreens). An index beyond the current monitor count is
         // NOT clamped here — it falls back to -1 behavior at resolve time (via
-        // App.ResolveScreens) so a temporarily-unplugged monitor's target survives
-        // a reconnect. See App.ResolveScreens for the resolution semantics.
+        // the head's screen resolver) so a temporarily-unplugged monitor's target survives
+        // a reconnect. See the head's screen resolver for the resolution semantics.
         private int _spiralTargetMonitor = -1;
         /// <summary>Monitor target for the Spiral overlay. -1 = follow DualMonitorEnabled,
         /// -2 = all monitors, 0..N = specific monitor index. See <see cref="DualMonitorEnabled"/>.</summary>
@@ -2251,7 +2251,7 @@ namespace ConditioningControlPanel.Models
         // decoupled them — gaze-pop and stare-linger have their own toggles,
         // both default ON. To preserve the intent of existing users who
         // had FlashClickable=false (hands-free / accessibility / deep-trance
-        // configs), App.OnStartup runs RunFlashClickableDecouplingMigration
+        // configs), head startup runs RunFlashClickableDecouplingMigration
         // once: if FlashClickable was off, the new gaze toggles are also
         // turned off. Flag prevents re-migration after the user later
         // configures the new toggles independently.
@@ -2271,7 +2271,7 @@ namespace ConditioningControlPanel.Models
         // Scrapped pre-ship per design call — feature stays in the codebase
         // but is disabled by default and has no UI surface in this release.
         // To revive: flip default to true, re-add the Lab toggle, re-add the
-        // App.OnStartup wiring (see git history for the integration points).
+        // head-startup wiring (see git history for the integration points).
         private bool _attentionCheckEnabled = false;
         public bool AttentionCheckEnabled
         {
@@ -3734,7 +3734,7 @@ namespace ConditioningControlPanel.Models
         /// <summary>True when this name is already kept (case-insensitive, sanitized).</summary>
         public bool LibraryHasSub(string? rawName)
         {
-            var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(rawName);
+            var clean = Services.Fyp.SubredditName.Sanitize(rawName);
             if (clean == null) return false;
             foreach (var e in _remoteSubLibrary)
                 if (string.Equals(e?.Name, clean, StringComparison.OrdinalIgnoreCase)) return true;
@@ -3748,7 +3748,7 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public bool TryAddLibrarySub(string? rawName)
         {
-            var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(rawName);
+            var clean = Services.Fyp.SubredditName.Sanitize(rawName);
             if (clean == null) return false;
             if (LibraryHasSub(clean)) return false;
             if (_remoteSubLibrary.Count >= RemoteSubLibraryCap) return false;
@@ -3765,7 +3765,7 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public bool RemoveLibrarySub(string? rawName)
         {
-            var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(rawName) ?? rawName?.Trim();
+            var clean = Services.Fyp.SubredditName.Sanitize(rawName) ?? rawName?.Trim();
             if (string.IsNullOrEmpty(clean)) return false;
 
             bool changed = false;
@@ -3813,7 +3813,7 @@ namespace ConditioningControlPanel.Models
                 {
                     if (_remoteSubLibrary.Count >= RemoteSubLibraryCap) break;
                     if (string.IsNullOrWhiteSpace(name) || LibraryHasSub(name)) continue;
-                    var clean = Services.Fyp.Online.FypOnlineCoordinator.SanitizeSub(name);
+                    var clean = Services.Fyp.SubredditName.Sanitize(name);
                     if (clean == null) continue;
                     // AddedAtUtc backdated by a tick so migrated names sort ahead of anything the
                     // user adds after this load, which is the order they were really added in.
@@ -4694,7 +4694,7 @@ namespace ConditioningControlPanel.Models
         private bool _useCompanionBrain = true;
         /// <summary>
         /// Train 1 kill switch. True routes companion conversation through <c>CompanionBrain</c>
-        /// (<c>App.Brain</c>) — one turn log shared by every provider, so cloud chat finally has
+        /// (the head's brain service) — one turn log shared by every provider, so cloud chat finally has
         /// memory of the current conversation and of previous launches.
         ///
         /// <para>False restores the pre-Train-1 behaviour exactly: each call site goes straight to
@@ -5116,8 +5116,8 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public string OpenRouterApiKey
         {
-            get => Services.SecureApiKeyStore.Retrieve() ?? "";
-            set { Services.SecureApiKeyStore.Store(string.IsNullOrEmpty(value) ? null : value); OnPropertyChanged(); }
+            get => CoreSecrets.Retrieve(CoreSecrets.ApiKey) ?? "";
+            set { CoreSecrets.Store(CoreSecrets.ApiKey, string.IsNullOrEmpty(value) ? null : value); OnPropertyChanged(); }
         }
 
         /// <summary>
@@ -5131,9 +5131,9 @@ namespace ConditioningControlPanel.Models
             set
             {
                 // Migrate: if there's a plaintext key in settings.json, move it to DPAPI
-                if (!string.IsNullOrEmpty(value) && string.IsNullOrEmpty(Services.SecureApiKeyStore.Retrieve()))
+                if (!string.IsNullOrEmpty(value) && string.IsNullOrEmpty(CoreSecrets.Retrieve(CoreSecrets.ApiKey)))
                 {
-                    Services.SecureApiKeyStore.Store(value);
+                    CoreSecrets.Store(CoreSecrets.ApiKey, value);
                 }
             }
         }
@@ -5243,7 +5243,7 @@ namespace ConditioningControlPanel.Models
         /// Display name for current content mode.
         /// </summary>
         [JsonIgnore]
-        public string ContentModeDisplay => App.Mods?.GetModeDisplayName() ?? "CCP Default";
+        public string ContentModeDisplay => CoreMods.ModeDisplayName ?? "CCP Default";
 
         /// <summary>
         /// Gets/sets the hypnotube links for the currently active content mode.
@@ -6071,8 +6071,8 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public string? AuthToken
         {
-            get => Services.SecureAuthTokenStore.Retrieve();
-            set { Services.SecureAuthTokenStore.Store(value); OnPropertyChanged(); }
+            get => CoreSecrets.Retrieve(CoreSecrets.AuthToken);
+            set { CoreSecrets.Store(CoreSecrets.AuthToken, value); OnPropertyChanged(); }
         }
 
         private string? _userDisplayName = null;
@@ -7992,7 +7992,7 @@ namespace ConditioningControlPanel.Models
         private string? _installDate = null;
         /// <summary>
         /// Best available evidence of when this install first appeared on this machine, as a UTC
-        /// <c>yyyy-MM-dd</c> string. Written ONCE by <c>App.EnsureInstallDateRecorded</c> on the
+        /// <c>yyyy-MM-dd</c> string. Written ONCE by the head's install-date recorder on the
         /// first launch that finds it absent (see that method for the evidence ordering) and never
         /// touched again — a re-derived value would drift downward as old files are cleaned up.
         ///

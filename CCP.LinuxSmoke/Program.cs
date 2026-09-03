@@ -46,6 +46,22 @@ namespace ConditioningControlPanel.LinuxSmoke
             Console.WriteLine();
             if (_failures == 0)
             {
+                // The settings seams (wire/06). Unseeded is the documented state here: no head has
+                // attached a secret store or a listener, and the model must behave, not throw.
+                Check("CoreSecrets.Retrieve is null when no store is attached", CoreSecrets.Retrieve(CoreSecrets.ApiKey) == null);
+                CoreSecrets.Store(CoreSecrets.ApiKey, "never-written");
+                Check("CoreSecrets.Store is a no-op when no store is attached", CoreSecrets.Retrieve(CoreSecrets.ApiKey) == null);
+                CoreSettingsHooks.NotifySettingChanged("Anything");
+                Check("CoreSettingsHooks tolerates no listener", true);
+                Check("CoreMods.ModeDisplayName is null when no mod layer is up", CoreMods.ModeDisplayName == null);
+                // The subreddit rule moved from the online coordinator into Core with no test of its own.
+                Check("SubredditName strips r/", Services.Fyp.SubredditName.Sanitize("r/gonewild") == "gonewild");
+                Check("SubredditName keeps the last /r/ segment", Services.Fyp.SubredditName.Sanitize("https://reddit.com/r/Bar_1/") == "Bar_1");
+                Check("SubredditName stops at the first bad char", Services.Fyp.SubredditName.Sanitize("abc def") == "abc");
+                Check("SubredditName rejects one char", Services.Fyp.SubredditName.Sanitize("a") == null);
+                Check("SubredditName rejects 41 chars", Services.Fyp.SubredditName.Sanitize(new string('x', 41)) == null);
+                Check("SubredditName rejects blank", Services.Fyp.SubredditName.Sanitize("   ") == null);
+
                 Console.WriteLine("CCP.Core executed on this platform with all assertions holding.");
                 return 0;
             }

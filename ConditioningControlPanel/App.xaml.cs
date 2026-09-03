@@ -273,6 +273,25 @@ namespace ConditioningControlPanel
             CoreMods.ActiveModTokenProvider = () => Mods?.ActiveMod?.Manifest;
             CoreMods.PetNameOverrideProvider = () => Mods?.GetPetNameOverride();
             CoreMods.CollectiveOverrideProvider = () => Mods?.GetCollectiveOverride();
+            CoreMods.ModeDisplayNameProvider = () => Mods?.GetModeDisplayName();
+
+            // The settings model's outward hooks. Bark and the mod service attach later in
+            // startup; the delegates read them lazily, so seeding here is order-safe.
+            CoreSettingsHooks.SettingChangedSink = name => Bark?.NotifySettingChanged(name);
+            CoreSecrets.RetrieveProvider = name => name switch
+            {
+                CoreSecrets.ApiKey    => Services.SecureApiKeyStore.Retrieve(),
+                CoreSecrets.AuthToken => Services.SecureAuthTokenStore.Retrieve(),
+                _ => null,
+            };
+            CoreSecrets.StoreProvider = (name, value) =>
+            {
+                switch (name)
+                {
+                    case CoreSecrets.ApiKey:    Services.SecureApiKeyStore.Store(value); break;
+                    case CoreSecrets.AuthToken: Services.SecureAuthTokenStore.Store(value); break;
+                }
+            };
         }
 
         #region Remote media handoff (Phase 1.5)
