@@ -55,15 +55,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             // ponytail: needs the avatar tube window (detach before maximizing, re-attach after);
             // wired when AvatarTubeWindow's host service moves to Core.
+            // The glyph is set through Named<T>, not through the generated BtnMaximize field.
+            // MainShellWindow loads with AvaloniaXamlLoader.Load, which never assigns those fields,
+            // so `BtnMaximize.Content = …` threw a NullReferenceException on the first click of the
+            // maximize button - a crash, and one neither --render-view nor --nav-check can see,
+            // because neither clicks the chrome. See the header of MainShellWindow.TabNavigation.cs.
+            var maximize = Named<Button>("BtnMaximize");
             if (WindowState == WindowState.Maximized)
             {
                 WindowState = WindowState.Normal;
-                BtnMaximize.Content = "☐";
+                if (maximize is not null) maximize.Content = "☐";
             }
             else
             {
                 WindowState = WindowState.Maximized;
-                BtnMaximize.Content = "❐";
+                if (maximize is not null) maximize.Content = "❐";
             }
         }
 

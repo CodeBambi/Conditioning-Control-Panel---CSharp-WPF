@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
-using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 using ConditioningControlPanel.Localization;
@@ -39,7 +38,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     {
         public PresetsTabView()
         {
-            AvaloniaXamlLoader.Load(this);
+            // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
+            // x:Name fields, and Load leaves every one of them permanently null - a silent no-op
+            // that compiles, renders and reviews clean.
+            InitializeComponent();
             SeedPlaceholders();
         }
 
@@ -66,13 +68,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Three chips ahead of the fixed "+ New" one, as CreatePresetCard inserts them.</summary>
         private void SeedPresetRail()
         {
-            var panel = this.FindControl<WrapPanel>("PresetCardsPanel");
-            if (panel == null) return;
-
             int at = 0;
-            panel.Children.Insert(at++, PresetChip("Morning Drift", "⚡🌀", isDefault: true, selected: false));
-            panel.Children.Insert(at++, PresetChip("Deep Soak", "⚡🎬💭🌀", isDefault: false, selected: true));
-            panel.Children.Insert(at, PresetChip("Quiet Hours", "💭🔒", isDefault: false, selected: false));
+            PresetCardsPanel.Children.Insert(at++, PresetChip("Morning Drift", "⚡🌀", isDefault: true, selected: false));
+            PresetCardsPanel.Children.Insert(at++, PresetChip("Deep Soak", "⚡🎬💭🌀", isDefault: false, selected: true));
+            PresetCardsPanel.Children.Insert(at, PresetChip("Quiet Hours", "💭🔒", isDefault: false, selected: false));
         }
 
         private Border PresetChip(string name, string glyphs, bool isDefault, bool selected)
@@ -108,30 +107,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Four source chips (single-select) and four difficulty dots (independent).</summary>
         private void SeedRackToolbar()
         {
-            var sources = this.FindControl<StackPanel>("RackSourceChips");
-            var dots = this.FindControl<StackPanel>("RackDifficultyChips");
+            // RackSourceChipLabel: "<label>  <count>".
+            RackSourceChips.Children.Add(SourceChip("rack_source_all", 4, "all", isOn: true));
+            RackSourceChips.Children.Add(SourceChip("rack_source_builtin", 2, "builtin", isOn: false));
+            RackSourceChips.Children.Add(SourceChip("rack_source_yours", 1, "yours", isOn: false));
+            RackSourceChips.Children.Add(SourceChip("rack_source_catalogue", 1, "catalogue", isOn: false));
 
-            if (sources != null)
-            {
-                // RackSourceChipLabel: "<label>  <count>".
-                sources.Children.Add(SourceChip("rack_source_all", 4, "all", isOn: true));
-                sources.Children.Add(SourceChip("rack_source_builtin", 2, "builtin", isOn: false));
-                sources.Children.Add(SourceChip("rack_source_yours", 1, "yours", isOn: false));
-                sources.Children.Add(SourceChip("rack_source_catalogue", 1, "catalogue", isOn: false));
-            }
-
-            if (dots != null)
-            {
-                dots.Children.Add(Dot("SessionDiffEasyBrush", Loc.Get("rack_diff_easy"), on: true));
-                dots.Children.Add(Dot("SessionDiffMediumBrush", Loc.Get("rack_diff_medium"), on: true));
-                dots.Children.Add(Dot("SessionDiffHardBrush", Loc.Get("rack_diff_hard"), on: true));
-                dots.Children.Add(Dot("SessionDiffExtremeBrush", Loc.Get("rack_diff_extreme"), on: false));
-            }
+            RackDifficultyChips.Children.Add(Dot("SessionDiffEasyBrush", Loc.Get("rack_diff_easy"), on: true));
+            RackDifficultyChips.Children.Add(Dot("SessionDiffMediumBrush", Loc.Get("rack_diff_medium"), on: true));
+            RackDifficultyChips.Children.Add(Dot("SessionDiffHardBrush", Loc.Get("rack_diff_hard"), on: true));
+            RackDifficultyChips.Children.Add(Dot("SessionDiffExtremeBrush", Loc.Get("rack_diff_extreme"), on: false));
 
             // The zone hint. UpdateRackToolbarCounts picks rack_count_all when nothing is
             // filtered out and rack_count_filtered otherwise.
-            var count = this.FindControl<TextBlock>("TxtRackCount");
-            if (count != null) count.Text = Loc.GetF("rack_count_all", 4);
+            TxtRackCount.Text = Loc.GetF("rack_count_all", 4);
         }
 
         private ToggleButton SourceChip(string labelKey, int count, string tag, bool isOn) => new()
@@ -162,13 +151,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// present so the three provenance colours and two row themes are all exercised.</summary>
         private void SeedSessionRack()
         {
-            var panel = this.FindControl<StackPanel>("SessionRackPanel");
-            if (panel == null) return;
-
-            panel.Children.Add(RackRow("🌅", "Morning Drift", "Ease into the day.", "Easy", 15, 45, "rack_src_builtin", false, false));
-            panel.Children.Add(RackRow("🎮", "Gamer Girl", "Play while she watches.", "Medium", 30, 90, "rack_src_builtin", true, false));
-            panel.Children.Add(RackRow("🪆", "Distant Doll", "Long, quiet, and very far away.", "Hard", 60, 180, "rack_src_yours", false, true));
-            panel.Children.Add(RackRow("💀", "Good Girls", "Nothing left to decide.", "Extreme", 90, 320, "rack_src_catalogue", false, true));
+            SessionRackPanel.Children.Add(RackRow("🌅", "Morning Drift", "Ease into the day.", "Easy", 15, 45, "rack_src_builtin", false, false));
+            SessionRackPanel.Children.Add(RackRow("🎮", "Gamer Girl", "Play while she watches.", "Medium", 30, 90, "rack_src_builtin", true, false));
+            SessionRackPanel.Children.Add(RackRow("🪆", "Distant Doll", "Long, quiet, and very far away.", "Hard", 60, 180, "rack_src_yours", false, true));
+            SessionRackPanel.Children.Add(RackRow("💀", "Good Girls", "Nothing left to decide.", "Extreme", 90, 320, "rack_src_catalogue", false, true));
         }
 
         private Border RackRow(string icon, string name, string blurb, string difficulty,
@@ -273,30 +259,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// rows behind it. The tray host stays collapsed, as PaintTakeawayShelf leaves it.</summary>
         private void SeedTakeaway()
         {
-            var shelf = this.FindControl<StackPanel>("TakeawayShelf");
-            if (shelf != null)
-            {
-                // PaintTakeawayShelf pins up to three receipts, then the "+n more" toggle, then
-                // the door. ONE receipt here: the strip never wraps and never scrolls sideways,
-                // and at the render proof's 1100px the fill is ~330px, so a second receipt would
-                // push the door off the clip and leave its ControlTheme unproven. With three or
-                // fewer orders there is no overflow, so the toggle (SdTakeawayChipAccent, a
-                // two-setter Border variant of the chip below it) is correctly absent too.
-                shelf.Children.Add(TakeawayChip("Slow Sink", 30, "AUG 09"));
-                shelf.Children.Add(DoorChip());
-            }
+            // PaintTakeawayShelf pins up to three receipts, then the "+n more" toggle, then
+            // the door. ONE receipt here: the strip never wraps and never scrolls sideways,
+            // and at the render proof's 1100px the fill is ~330px, so a second receipt would
+            // push the door off the clip and leave its ControlTheme unproven. With three or
+            // fewer orders there is no overflow, so the toggle (SdTakeawayChipAccent, a
+            // two-setter Border variant of the chip below it) is correctly absent too.
+            TakeawayShelf.Children.Add(TakeawayChip("Slow Sink", 30, "AUG 09"));
+            TakeawayShelf.Children.Add(DoorChip());
 
-            var tray = this.FindControl<StackPanel>("TakeawayTray");
-            if (tray != null)
-            {
-                // The tray renders EVERY order the drawer returned, not just the pinned ones.
-                tray.Children.Add(TrayRow("Velvet Hour", 45, "AUG 12", Loc.Get("takeaway_today")));
-                tray.Children.Add(TrayRow("Slow Sink", 30, "AUG 09", Loc.GetF("takeaway_days_ago", 3)));
-                tray.Children.Add(TrayRow("Static Bloom", 20, "JUL 28", Loc.GetF("takeaway_days_ago", 15)));
-            }
+            // The tray renders EVERY order the drawer returned, not just the pinned ones.
+            TakeawayTray.Children.Add(TrayRow("Velvet Hour", 45, "AUG 12", Loc.Get("takeaway_today")));
+            TakeawayTray.Children.Add(TrayRow("Slow Sink", 30, "AUG 09", Loc.GetF("takeaway_days_ago", 3)));
+            TakeawayTray.Children.Add(TrayRow("Static Bloom", 20, "JUL 28", Loc.GetF("takeaway_days_ago", 15)));
 
-            var count = this.FindControl<TextBlock>("TxtTakeawayCount");
-            if (count != null) count.Text = Loc.GetF("sd_takeaway_kept", 3);
+            TxtTakeawayCount.Text = Loc.GetF("sd_takeaway_kept", 3);
         }
 
         private Border TakeawayChip(string name, int minutes, string date)
