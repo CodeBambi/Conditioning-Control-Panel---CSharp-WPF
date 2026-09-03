@@ -167,39 +167,9 @@ namespace ConditioningControlPanel.Services.UI
         /// One list entry, cleaned: trimmed, lower-cased, a trailing ".exe" removed, surrounding
         /// quotes dropped. "VLC.exe" and " vlc " are the same app and must compare equal.
         /// </summary>
-        public static string Normalize(string? raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) return "";
-            var name = raw.Trim().Trim('"').Trim();
-            if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                name = name.Substring(0, name.Length - 4);
-            return name.Trim().ToLowerInvariant();
-        }
-
-        /// <summary>
-        /// Parses the settings textbox into the stored list. Accepts one process per line, commas,
-        /// semicolons or any mix of the three, because users will type all of them. Entries are
-        /// <see cref="Normalize"/>d, blanks dropped and duplicates collapsed, order preserved so the
-        /// box reads back the way it was typed.
-        /// </summary>
-        public static List<string> ParseProcessList(string? raw)
-        {
-            var result = new List<string>();
-            if (string.IsNullOrWhiteSpace(raw)) return result;
-
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var piece in raw.Split(new[] { '\r', '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var name = Normalize(piece);
-                if (name.Length == 0) continue;
-                if (seen.Add(name)) result.Add(name);
-            }
-            return result;
-        }
-
-        /// <summary>Renders the stored list back into the textbox, one process per line.</summary>
-        public static string FormatProcessList(IEnumerable<string>? list)
-            => list == null ? "" : string.Join(Environment.NewLine, list);
+        public static string Normalize(string? raw) => DndProcessList.Normalize(raw);          // the rule lives in Core
+        public static List<string> ParseProcessList(string? raw) => DndProcessList.Parse(raw);
+        public static string FormatProcessList(IEnumerable<string>? list) => DndProcessList.Format(list);
 
         /// <summary>
         /// Process names of everything that currently owns a visible top-level window, de-duplicated
