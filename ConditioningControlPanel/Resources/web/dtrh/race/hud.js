@@ -4,19 +4,24 @@
  * DOM only, built inside the `.race-hud` div race.html provides. Score rolls
  * up on a short tween (tabular numerals), the multiplier pill pulses on every
  * rung (CHIME LADDER), the combo bar drains over COMBO_HOLD_SEC, the MARQUEE
- * banner slides in once per gate in the room's colour, the item slot bounces,
- * speed is a thin gauge. Toasts each carry their own motion (ALMOST shivers,
+ * banner rides in as a left ribbon under the score block once per gate in the
+ * room's colour, the item slot bounces,
+ * speed is a gauge with a boost state. Toasts each carry their own motion (ALMOST shivers,
  * JACKPOT is a gold flash and a REVEAL, BANK flies tokens into the score and
  * ticks the counter as they land). flicker() is the Stat Flicker: the face
  * lies for 450 ms, the ledger never does (Law I). The Brake and the End card
  * are the only pointer targets. Copy is DtRH voice: lowercase, short.
  * ==========================================================================*/
 
-import { COMBO_HOLD_SEC, MULT_LADDER, KART_MAX_SPEED } from './consts.js';
+import { COMBO_HOLD_SEC, MULT_LADDER, KART_MAX_SPEED, KART_BASE_SPEED } from './consts.js';
 
 const FLICK_MS = 450;
 const TOAST_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400 };
-const TOP_RUNG = MULT_LADDER[MULT_LADDER.length - 1][1];
+/** The second-pass rung ladder. consts.js MULT_LADDER is the source of truth;
+ * this is the documented fallback for when the import is missing or malformed. */
+const NEW_LADDER = [[0, 1], [3, 2], [8, 3], [15, 4], [25, 6], [40, 8]];
+const okLadder = (l) => Array.isArray(l) && l.length > 1
+  && l.every((r) => Array.isArray(r) && r.length > 1 && isFinite(r[0]) && isFinite(r[1]));
 
 export function createRaceHud(root) {
   const reduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -45,20 +50,42 @@ export function createRaceHud(root) {
   const vignette = el('rh-vignette', chrome);
   const gold = el('rh-gold', chrome);
 
-  const scoreWrap = el('rh-score-wrap', chrome);
+  const scoreWrap = el('rh-score-wrap rh-plate', chrome);
   el('rh-label', scoreWrap, 'score');
   const scoreRow = el('rh-score-row', scoreWrap);
   const scoreEl = el('rh-score rh-num', scoreRow, '0');
   const multEl = el('rh-mult rh-num', scoreRow, 'x1');
   const rungs = el('rh-rungs', scoreRow);
-  const rungEls = MULT_LADDER.slice(1).map(() => el('rh-rung', rungs));
   const comboRow = el('rh-combo-row is-off', scoreWrap);
   const comboBar = el('rh-combo-bar', comboRow);
   const comboFill = el('rh-combo-fill', comboBar);
   comboFill.style.setProperty('--rh-hold', `${COMBO_HOLD_SEC}s`);
   const comboN = el('rh-num', comboRow, 'combo 0');
+  const nextEl = el('rh-next rh-num', scoreWrap, '');
   const bankEl = el('rh-bank rh-num', scoreWrap, 'banked 0');
 
+  // ---- the rung ladder: consts by default, swappable via setLadder ----
+  let ladder = okLadder(MULT_LADDER) ? MULT_LADDER : NEW_LADDER;
+  let rungEls = [];
+  function buildRungs() {
+    rungs.textContent = '';
+    rungEls = ladder.slice(1).map(() => el('rh-rung', rungs));
+  }
+  buildRungs();
+  /** "next x2 in 3" for the combo we are on, or the top-rung note. */
+  function nextRungText(combo) {
+    for (let i = 1; i < ladder.length; i++) {
+      if (combo < ladder[i][0]) return `next x${ladder[i][1]} in ${ladder[i][0] - combo}`;
+    }
+    return 'top rung';
+  }
+  const topRung = () => ladder[ladder.length - 1][1];
+  nextEl.textContent = nextRungText(0);
+
+  // MARQUEE: a left ribbon under the score block (never top-centre, where the
+  // media lane and the payload cards land). It stays inside .rh-chrome at z3 so
+  // a freeze or the mandatory tape still covers it, exactly as before; the lane
+  // is what keeps cards off it (mediaLane.js skips the left rail while it is up).
   const banner = el('rh-banner', chrome);
   const bannerName = el('rh-banner-name', banner);
   const bannerTag = el('rh-banner-tag', banner);
@@ -71,8 +98,8 @@ export function createRaceHud(root) {
   itemKey.textContent = 'E';
   itemName.appendChild(itemKey);
 
-  const speed = el('rh-speed', chrome);
-  const speedRow = el('', speed);
+  const speed = el('rh-speed rh-plate', chrome);
+  const speedRow = el('rh-speed-row', speed);
   const speedN = document.createElement('span');
   speedN.className = 'rh-speed-n rh-num';
   speedN.textContent = '0';
@@ -80,7 +107,11 @@ export function createRaceHud(root) {
   speedU.className = 'rh-speed-u';
   speedU.textContent = 'km/h';
   speedRow.append(speedN, speedU);
-  const speedFill = el('rh-speed-fill', el('rh-speed-bar', speed));
+  const speedBar = el('rh-speed-bar', speed);
+  const speedFill = el('rh-speed-fill', speedBar);
+  el('rh-speed-mark', speedBar).style.left = `${(KART_BASE_SPEED / KART_MAX_SPEED * 100).toFixed(1)}%`;
+  el('rh-speed-tag', speed, 'boost');   // shown only while .is-boost is on
+  let speedHot = false;
 
   const toasts = el('rh-toasts', chrome);
 
@@ -172,15 +203,32 @@ export function createRaceHud(root) {
       if (mult !== lastMult) {
         multEl.textContent = `x${mult}`;
         multEl.classList.toggle('is-gold', mult >= 6);
-        if (mult > lastMult) { hit(multEl, 'is-pulse'); if (mult >= TOP_RUNG) hit(scoreEl, 'is-pop'); }
+        if (mult > lastMult) { hit(multEl, 'is-pulse'); if (mult >= topRung()) hit(scoreEl, 'is-pop'); }
       }
-      rungEls.forEach((r, i) => r.classList.toggle('is-lit', mult >= MULT_LADDER[i + 1][1]));
+      rungEls.forEach((r, i) => r.classList.toggle('is-lit', mult >= ladder[i + 1][1]));
+      // how far the next rung is, so the first one never reads as unreachable
+      const txt = nextRungText(combo);
+      if (txt !== nextEl.textContent) nextEl.textContent = txt;
+      const gap = /in (\d+)$/.exec(txt);
+      nextEl.classList.toggle('is-close', !!gap && +gap[1] <= 2);
+      nextEl.classList.toggle('is-top', !gap);
       lastMult = mult; lastCombo = combo;
     },
-    setSpeed(ms) {
+    /** Swap the rung ladder ([[comboAtLeast, mult], ...]). Rebuilds the pips. */
+    setLadder(l) {
+      if (!okLadder(l)) return;
+      ladder = l.map((r) => [Number(r[0]) || 0, Number(r[1]) || 1]);
+      buildRungs();
+      hud.setCombo(lastCombo, lastMult);
+    },
+    setSpeed(ms, boosting) {
       const v = Math.max(0, ms || 0);
       speedN.textContent = String(Math.round(v * 3.6));
       speedFill.style.transform = `scaleX(${Math.min(1, v / KART_MAX_SPEED).toFixed(3)})`;
+      // run.js passes speed alone, so infer the boost: cruise is capped at
+      // KART_BASE_SPEED and only a boost pin lets the kart past it
+      const hot = boosting != null ? !!boosting : v > KART_BASE_SPEED + 0.4;
+      if (hot !== speedHot) { speedHot = hot; speed.classList.toggle('is-boost', hot); }
     },
     setBank(n) { bankTarget = Math.max(0, n || 0); wake(); },
     banner(name, tagline, colorHex) {
@@ -188,6 +236,12 @@ export function createRaceHud(root) {
       bannerName.textContent = (name || '').toLowerCase();
       bannerTag.textContent = (tagline || '').toLowerCase();
       banner.classList.remove('is-on');
+      // sit the ribbon under the MEASURED score block, so it never rides up
+      // into the bank line on a short window or down into the media lane
+      try {
+        const b = scoreWrap.getBoundingClientRect();
+        if (b && b.bottom > 0) banner.style.top = `${Math.round(b.bottom + 12)}px`;
+      } catch (e) { /* no layout yet: the CSS fallback top stands */ }
       later(() => banner.classList.add('is-on'), 40);
       later(() => banner.classList.remove('is-on'), 2600);
     },
