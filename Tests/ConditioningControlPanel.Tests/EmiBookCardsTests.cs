@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -48,7 +48,7 @@ public class EmiBookCardsTests
 
     private static Dictionary<string, string> English()
     {
-        var path = Path.Combine(AppDir(), "Localization", "Languages", "en.json");
+        var path = Path.Combine(SourceRoots.LanguagesDirectory, "en.json");
         Assert.True(File.Exists(path), path);
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         var d = new Dictionary<string, string>(StringComparer.Ordinal);

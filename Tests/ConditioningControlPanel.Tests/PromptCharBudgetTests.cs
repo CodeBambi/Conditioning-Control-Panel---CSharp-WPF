@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -572,23 +572,8 @@ public class OversizeNoticeTests : IDisposable
 
     private static Dictionary<string, string> EnglishStrings()
     {
-        var dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 8 && !string.IsNullOrEmpty(dir); i++)
-        {
-            foreach (var relative in new[]
-                     {
-                         Path.Combine("Localization", "Languages", "en.json"),
-                         Path.Combine("ConditioningControlPanel", "Localization", "Languages", "en.json")
-                     })
-            {
-                var candidate = Path.Combine(dir, relative);
-                if (File.Exists(candidate))
-                    return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(candidate))
-                           ?? new Dictionary<string, string>();
-            }
-            dir = Path.GetDirectoryName(dir);
-        }
-
-        throw new FileNotFoundException("en.json not found from " + AppContext.BaseDirectory);
+        var path = Path.Combine(SourceRoots.LanguagesDirectory, "en.json");
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
+               ?? new Dictionary<string, string>();
     }
 }

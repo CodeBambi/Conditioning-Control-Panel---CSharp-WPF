@@ -156,6 +156,17 @@ internal static class SourceRoots
         return hits[0];
     }
 
+    /// <summary>The directory holding the nine language JSON files, wherever it currently lives.
+    ///
+    /// <para><b>Why this exists.</b> Fourteen sites across twelve test classes each built this path
+    /// as <c>&lt;repo&gt;/ConditioningControlPanel/Localization/Languages</c> by hand. The catalogue
+    /// moved to <c>CCP.Core</c> and all fourteen went red in one commit — each one green on its own
+    /// branch, red only once the move and the tests met on main. Probing the roots means the next
+    /// move costs nothing here.</para></summary>
+    internal static string LanguagesDirectory =>
+        Path.GetDirectoryName(FindProductFile("Localization", "Languages", "en.json"))!;
+
+
     /// <summary>The text of ONE product file, located by <see cref="FindProductFile"/>.</summary>
     internal static string ReadProductFile(params string[] relativeParts) =>
         File.ReadAllText(FindProductFile(relativeParts));

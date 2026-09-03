@@ -10,6 +10,8 @@
              same merge order App.xaml uses. -->
         <ResourceInclude Source="avares://CCP.Avalonia/Theme/Colors.xaml"/>
         <ResourceInclude Source="avares://CCP.Avalonia/Theme/Brushes.xaml"/>
+        <!-- Keyed styles the views are written against, as ControlThemes. -->
+        <ResourceInclude Source="avares://CCP.Avalonia/Theme/Styles.xaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

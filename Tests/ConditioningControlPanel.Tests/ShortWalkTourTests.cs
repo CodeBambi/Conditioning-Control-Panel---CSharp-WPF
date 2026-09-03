@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -142,7 +142,7 @@ public class ShortWalkTourTests : IDisposable
         svc.Start(TutorialType.ShortWalk);
 
         var en = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(AppDir(), "Localization", "Languages", "en.json"))).RootElement;
+            Path.Combine(SourceRoots.LanguagesDirectory, "en.json"))).RootElement;
 
         foreach (var step in svc.CurrentSteps)
         {

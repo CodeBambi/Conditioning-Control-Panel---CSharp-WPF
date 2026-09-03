@@ -17,7 +17,18 @@ namespace ConditioningControlPanel.Avalonia
     /// </summary>
     internal static class RenderProof
     {
-        public static int Run(string outPath)
+        public static int Run(string outPath) => Run(outPath, null);
+
+        /// <param name="viewFactory">Optional factory for a view to host instead of the default
+        /// window content, so a ported view can be rendered on its own for a side-by-side fidelity
+        /// comparison against its WPF original.
+        ///
+        /// A FACTORY, not an instance, and that distinction is load-bearing: an instance passed as
+        /// an argument is constructed before this method runs, so its XAML loads before
+        /// SetupWithoutStarting() has called App.Initialize(). The view then binds against an
+        /// uninitialised app - which showed up as every localized string rendering as its raw key
+        /// while the same lookup succeeded in --smoke. Construct after setup, not before.</param>
+        public static int Run(string outPath, global::System.Func<global::Avalonia.Controls.Control>? viewFactory)
         {
             try
             {
@@ -27,6 +38,12 @@ namespace ConditioningControlPanel.Avalonia
                     .SetupWithoutStarting();
 
                 var window = new MainWindow { Width = 880, Height = 620 };
+                if (viewFactory is not null)
+                {
+                    window.Content = viewFactory();
+                    window.Width = 720;
+                    window.Height = 760;
+                }
                 window.Show();
 
                 // Two passes: layout settles on the first, content is painted on the second.

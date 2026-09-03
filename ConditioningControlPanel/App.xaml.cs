@@ -236,6 +236,18 @@ namespace ConditioningControlPanel
         static App()
         {
             CorePaths.EffectiveAssetsProvider = () => EffectiveAssetsPath;
+
+            // Mod seam. Localization moved to CCP.Core and VocabTokens needs the active mod's
+            // overrides, but App derives from System.Windows.Application and cannot exist there.
+            // These run lazily on every read, so the mod system coming up after localization is
+            // fine - which it does, and which the old inline code handled with a try/catch.
+            //
+            // ActiveModToken is an identity token only: VocabTokens ReferenceEquals it against
+            // the previous value to decide whether to rebuild its cache, and never reads a
+            // property off it. That is what lets Core stay free of ModManifest.
+            CoreMods.ActiveModTokenProvider = () => Mods?.ActiveMod?.Manifest;
+            CoreMods.PetNameOverrideProvider = () => Mods?.GetPetNameOverride();
+            CoreMods.CollectiveOverrideProvider = () => Mods?.GetCollectiveOverride();
         }
 
         #region Remote media handoff (Phase 1.5)

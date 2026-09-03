@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -792,7 +792,7 @@ public class AwarenessReviewFixTests : IDisposable
     }
 
     private static string LanguagesDir =>
-        Path.Combine(RepoRoot, "ConditioningControlPanel", "Localization", "Languages");
+        SourceRoots.LanguagesDirectory;
 
     private static string ReadEnglishKey(string key)
     {

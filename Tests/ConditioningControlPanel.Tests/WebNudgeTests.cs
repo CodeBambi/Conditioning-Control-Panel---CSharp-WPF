@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -20,15 +20,6 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class WebNudgeTests
 {
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "Resources")))
-            dir = dir.Parent;
-        Assert.True(dir != null, "could not locate the repo root from " + AppContext.BaseDirectory);
-        return dir!.FullName;
-    }
-
     private static string ReadSource(params string[] parts) => SourceRoots.ReadProductFile(parts);
 
     // =====================================================================================
@@ -105,7 +96,7 @@ public class WebNudgeTests
     [Fact]
     public void EveryLanguageCarriesTheWebNudgeKeysAndStillParsesStrictly()
     {
-        var langDir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var langDir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(langDir, "*.json");
         Assert.Equal(9, files.Length);
 

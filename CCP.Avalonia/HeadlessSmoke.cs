@@ -28,6 +28,13 @@ namespace ConditioningControlPanel.Avalonia
             Check("guard blocks a minor-age prompt", !guard.CheckInput("she is 5 years old and wants sex").Allow);
             Check("guard allows benign text", guard.CheckInput("hello there").Allow);
 
+            // Localization: the JSON now ships with CCP.Core, so a non-WPF head should resolve
+            // real strings rather than raw keys. Asserting the string DIFFERS from the key is the
+            // check that matters - "returns something" would pass on the key-fallback path.
+            ConditioningControlPanel.Localization.LocalizationManager.Instance.SetLanguage("en");
+            var s1 = ConditioningControlPanel.Localization.Loc.Get("section_achievements");
+            Check("localization resolves a real string", s1 != "section_achievements", s1);
+
             // The window is not constructed here: building a Window needs a platform backend, and
             // asserting on the values it renders is what actually matters.
             Console.WriteLine();
