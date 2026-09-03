@@ -1,0 +1,1011 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/LeaderboardTabView.xaml.
+     Structure, ordering, spacing, every x:Name and every resource key are preserved so the two
+     diff directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       <Style x:Key TargetType>       ->  <ControlTheme x:Key TargetType>, applied with Theme=
+       ControlTemplate.Triggers       ->  ^:pointerover / ^:checked / ^:disabled nested selectors
+       DataTrigger (in a template)    ->  Classes.foo="{Binding Bool}" + selectors in
+                                          UserControl.Styles (Avalonia has no data triggers)
+       DataTemplateSelector           ->  two typed DataTemplates in ListBox.DataTemplates;
+                                          Avalonia matches on DataType, so
+                                          LeaderboardItemTemplateSelector has no port at all
+       <ContentPresenter/>            ->  Content="{TemplateBinding Content}" (trap 6: a bare
+                                          presenter draws nothing in Avalonia)
+       Visibility="Collapsed"         ->  IsVisible="False"
+       BoolToVisibility               ->  IsVisible="{Binding X}" / "{Binding !X}"
+       ToolTip="..." / Border.ToolTip ->  ToolTip.Tip="..." / <ToolTip.Tip>
+       RelativeSource AncestorType    ->  $parent[tabs:LeaderboardTabView]
+       DropShadowEffect ShadowDepth=0 ->  OffsetX="0" OffsetY="0" (Avalonia defaults to 3.5)
+       LinearGradientBrush "0,0"/"1,0"->  "0%,0%"/"100%,0%": Avalonia gradient points are absolute
+                                          pixels unless a percentage is written, so the WPF form
+                                          would draw a one-pixel gradient
+       ListView / ListViewItem        ->  ListBox / ListBoxItem; ItemContainerStyle is
+                                          ItemContainerTheme
+       search placeholder TextBlock   ->  TextBox Watermark (native; the DataTrigger on Text=""
+                                          has no Avalonia equivalent and needs none)
+       Checked="..." /
+       MouseDoubleClick="..."         ->  handler forwarded to MainWindow; stubbed, nothing is
+                                          wired here (see the code-behind)
+       reserved 17px scrollbar        ->  folded into the row Border's right margin (4,0,21,0).
+                                          WPF held the roster's scrollbar permanently visible so
+                                          the "31 = 14 + 17" block contract held; Avalonia's
+                                          scrollbar is an overlay and takes no layout width, so
+                                          without this every column from Level rightwards sits
+                                          17px off the legend and the you-bar.
+       x:FieldModifier="internal"     ->  dropped; x:Names kept and reached with FindControl
+       Typography.NumeralAlignment /
+       TextOptions.TextFormattingMode ->  dropped; Avalonia has no attached equivalents
+       FontFamily="Segoe UI"          ->  dropped; the head ships Inter
+       VirtualizingStackPanel.* /
+       VirtualizingPanel.ScrollUnit /
+       IsDeferredScrollingEnabled     ->  dropped; Avalonia's ListBox virtualizes in pixel units
+                                          by default, which is what ScrollUnit=Pixel bought WPF
+       PreviewMouseWheel handler      ->  dropped with its code-behind. It existed ONLY to undo
+                                          WPF's "3 text lines per notch" once ScrollUnit=Pixel was
+                                          forced on; Avalonia never had that regression.
+       band Focusable/IsHitTestVisible->  dropped: the hover tint lives on the row template's own
+                                          Border here, so a tier band never highlights anyway.
+     Buttons carry a TextBlock child rather than Content (trap 1: "_" is an access key and every
+     loc key is snake_case). -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.LeaderboardTabView"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="1240">
+
+    <UserControl.Resources>
+
+        <!-- ======================= shared board geometry =======================
+             The board is a single block rather than a full-bleed table. Everything
+             that has to stay column-aligned - header, podium, legend, roster,
+             sticky you-bar - hangs off this ONE width, and the leftover becomes
+             page margin. Change it here or the five blocks stop pixel-aligning.
+
+             Horizontal alignment contract for the four column-bearing blocks
+             (legend / roster rows / you-bar all measure from the SAME block edges):
+                 content left  = block left  + 14
+                 content right = block right - 31   (14 + 17px reserved scrollbar)
+
+             Column contract (legend header / roster row / sticky you-bar - all
+             three carry the SAME six definitions):
+                 0 rank         68        fixed
+                 1 subject      2*        min 130
+                 2 level        82        fixed
+                 3 xp          112        fixed
+                 4 achievements  *        min 268, max 420
+                 5 streak       90        fixed
+             Subject and Achievements share the slack 2:1 instead of Subject taking
+             all of it, so widening the board grows the achievement bar too rather
+             than opening a canyon between the name and the Level column. -->
+        <x:Double x:Key="LbBlockWidth">1920</x:Double>
+
+        <!-- ============================= chrome styles ============================= -->
+
+        <ControlTheme x:Key="LbIconButton" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                            BorderBrush="{DynamicResource TransparentPink20Brush}" BorderThickness="1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="{DynamicResource AccentTintedBgHoverBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="LbTextButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="11,6"
+                            BorderBrush="{DynamicResource TransparentPink20Brush}" BorderThickness="1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="{DynamicResource AccentTintedBgHoverBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- Filter chips are RadioButtons so the active state is pure XAML (no code-behind
+             restyling to keep in sync with ApplyLeaderboardTheme). -->
+        <ControlTheme x:Key="LbFilterChip" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" CornerRadius="10" Padding="10,4"
+                            Background="{DynamicResource AccentTintedBgBrush}"
+                            BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#Bd">
+                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- Clickable column legend header (replaces GridViewColumnHeader.Click sorting) -->
+        <ControlTheme x:Key="LbLegendHeader" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- Thin achievement progress bar. A property-only ControlTheme on a TEMPLATED control has
+             to say BasedOn or Template stays null and the bar draws nothing (trap 4). -->
+        <ControlTheme x:Key="LbThinBar" TargetType="ProgressBar"
+                      BasedOn="{StaticResource {x:Type ProgressBar}}">
+            <Setter Property="Height" Value="4"/>
+            <Setter Property="MinHeight" Value="4"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="2"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+        </ControlTheme>
+
+        <!-- ============================= chip styles ============================= -->
+
+        <ControlTheme x:Key="LbChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="5,0.5"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </ControlTheme>
+
+        <ControlTheme x:Key="LbChipText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="9.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </ControlTheme>
+
+        <!-- Level pill used by the podium cards -->
+        <ControlTheme x:Key="LbLevelPill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="5"/>
+            <Setter Property="Padding" Value="7,1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </ControlTheme>
+
+        <!-- ======================= roster container (ItemContainerStyle) =======================
+             Everything the WPF ItemContainerStyle carried as a DataTrigger (OG wash, "this is
+             you", hover) now lives on the row template's OWN Border: that is inside the
+             DataTemplate, so it can read the row and a tier band never picks any of it up. What
+             is left here is the neutralising work - Fluent's ListBoxItem otherwise brings its own
+             padding, min-height and blue hover/selection tint into the roster. -->
+        <ControlTheme x:Key="LbRowContainer" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="ContainerBorder" Background="Transparent">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Stretch"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:selected /template/ Border#ContainerBorder">
+                <Setter Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- == the WPF ItemContainerStyle DataTriggers, moved onto the row == -->
+        <Style Selector="Border.lbrow">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="Border.lbrow.og">
+            <Setter Property="Background" Value="#18FFD700"/>
+        </Style>
+        <Style Selector="Border.lbrow.me">
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="3,0,0,0"/>
+        </Style>
+        <!-- last, so hover wins over the OG wash exactly as the WPF trigger order did -->
+        <Style Selector="Border.lbrow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+        </Style>
+
+        <!-- == rank delta arrow colour (DataTrigger on DeltaState) == -->
+        <Style Selector="TextBlock.lbdelta">
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.lbdelta.up">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessGreenBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.lbdelta.down">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.lbdelta.isnew">
+            <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
+        </Style>
+
+        <!-- == presence: dimmed avatar + grey ring when offline == -->
+        <Style Selector="Grid.lbavatar">
+            <Setter Property="Opacity" Value="0.72"/>
+        </Style>
+        <Style Selector="Grid.lbavatar.online">
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+        <Style Selector="Ellipse.lbring">
+            <Setter Property="Stroke" Value="{DynamicResource PanelAccentHoverBrush}"/>
+        </Style>
+        <!-- PinkColor from Theme/Colors.xaml; a DynamicResource inside an Effect is not in the
+             logical tree, so the literal is used and a failed lookup cannot go silent. -->
+        <Style Selector="Ellipse.lbring.online">
+            <Setter Property="Stroke" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFF69B4" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+            </Setter>
+        </Style>
+        <Style Selector="Ellipse.lbring.big.online">
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFF69B4" BlurRadius="16" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+            </Setter>
+        </Style>
+
+        <!-- == patron chip tiers (DataTrigger on EffectivePatreonTier) == -->
+        <Style Selector="Border.lbpatron">
+            <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TransparentPink40Brush}"/>
+        </Style>
+        <Style Selector="Border.lbpatron.t2">
+            <Setter Property="Background" Value="{DynamicResource NeonPurpleTransparent20Brush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
+        </Style>
+        <Style Selector="Border.lbpatron.t3">
+            <Setter Property="Background" Value="#1AFFD700"/>
+            <Setter Property="BorderBrush" Value="#80FFD700"/>
+        </Style>
+        <Style Selector="TextBlock.lbpatrontext">
+            <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.lbpatrontext.t2">
+            <Setter Property="Foreground" Value="{DynamicResource NeonPurpleSoftBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.lbpatrontext.t3">
+            <Setter Property="Foreground" Value="#FFFFD700"/>
+        </Style>
+
+        <!-- == podium DataTemplate.Triggers on Rank == -->
+        <Style Selector="Border.lbpodium">
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+        </Style>
+        <Style Selector="Border.lbpodium TextBlock#Crown">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
+        <Style Selector="Border.lbpodium.r1">
+            <Setter Property="BorderBrush" Value="#8CFFD700"/>
+            <Setter Property="Padding" Value="12,9,12,10"/>
+            <Setter Property="Effect">
+                <DropShadowEffect Color="#FFFFD700" BlurRadius="26" OffsetX="0" OffsetY="0" Opacity="0.28"/>
+            </Setter>
+        </Style>
+        <Style Selector="Border.lbpodium.r1 TextBlock#Crown">
+            <Setter Property="IsVisible" Value="True"/>
+        </Style>
+        <Style Selector="Border.lbpodium.r1 Grid#AvWrap">
+            <Setter Property="Width" Value="50"/>
+            <Setter Property="Height" Value="50"/>
+        </Style>
+        <Style Selector="Border.lbpodium.r1 TextBlock#AvInitials">
+            <Setter Property="FontSize" Value="20"/>
+        </Style>
+        <Style Selector="Border.lbpodium.r1 TextBlock#PName">
+            <Setter Property="FontSize" Value="16"/>
+        </Style>
+        <Style Selector="Border.lbpodium.r2">
+            <Setter Property="BorderBrush" Value="#59DCE1FF"/>
+        </Style>
+        <Style Selector="Border.lbpodium.r3">
+            <Setter Property="BorderBrush" Value="#66E2965A"/>
+        </Style>
+
+        <!-- the Discord chip: a plain Button with an inline template, in two templates -->
+        <Style Selector="Button.lbdiscord:pointerover /template/ Border#Bd">
+            <Setter Property="Background" Value="#337788FF"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- =========================== ROW 0 - header =========================== -->
+        <!-- The tinted band stays full-bleed; its CONTENT is constrained to the shared
+             block so the toolbar's left edge lines up with the roster's rank column. -->
+        <Border Grid.Row="0" Background="{DynamicResource TransparentPink20Brush}" CornerRadius="12,12,0,0" Padding="0,5">
+          <Border MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch" Padding="14,0" Background="Transparent">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- season name + live countdown -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="180" Margin="0,0,14,0">
+                    <TextBlock x:Name="TxtLeaderboardSeason"
+                               FontSize="13" FontWeight="Bold"
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PinkBrush}"/>
+                    <TextBlock x:Name="TxtLeaderboardSubtitle"
+                               Text="" FontSize="11.5" Margin="0,2,0,0"
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextMutedBrush}"/>
+                </StackPanel>
+
+                <!-- segmented Monthly / All-Time pill -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnLeaderboardMonthly"
+                            Padding="15,5" FontSize="12" FontWeight="SemiBold"
+                            Background="{DynamicResource PinkBrush}" Foreground="White" Cursor="Hand"
+                            Tag="monthly">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="MonthlyBorder" Background="{TemplateBinding Background}" CornerRadius="10,0,0,10"
+                                        Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Styles>
+                            <Style Selector="Button:pointerover">
+                                <Setter Property="Opacity" Value="0.85"/>
+                            </Style>
+                        </Button.Styles>
+                        <TextBlock Text="{loc:Str btn_monthly}"/>
+                    </Button>
+                    <Button x:Name="BtnLeaderboardAllTime"
+                            Padding="15,5" FontSize="12" FontWeight="SemiBold"
+                            Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}" Cursor="Hand"
+                            Tag="all-time">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="AllTimeBorder" Background="{TemplateBinding Background}" CornerRadius="0,10,10,0"
+                                        Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                    <ContentPresenter Content="{TemplateBinding Content}"
+                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Button.Styles>
+                            <Style Selector="Button:pointerover">
+                                <Setter Property="Opacity" Value="0.85"/>
+                            </Style>
+                        </Button.Styles>
+                        <TextBlock Text="{loc:Str btn_all_time}"/>
+                    </Button>
+                </StackPanel>
+
+                <!-- spacer is column 2 -->
+
+                <!-- search -->
+                <Border Grid.Column="3" CornerRadius="8" Padding="9,5" MinWidth="170" VerticalAlignment="Center" Margin="0,0,10,0"
+                        Background="{DynamicResource AccentTintedBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                    <TextBox x:Name="TxtLeaderboardSearch" FontSize="12"
+                             Watermark="{loc:Str lb_search_placeholder}"
+                             Background="Transparent" BorderThickness="0" Padding="0" MinHeight="0"
+                             CaretBrush="{DynamicResource PinkBrush}"
+                             Foreground="{DynamicResource TextLightBrush}" VerticalContentAlignment="Center"/>
+                </Border>
+
+                <!-- filter chips -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <RadioButton x:Name="ChipFilterAll" Theme="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="all" IsChecked="True">
+                        <TextBlock Text="{loc:Str lb_filter_all}"/>
+                    </RadioButton>
+                    <RadioButton x:Name="ChipFilterOnline" Theme="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="online">
+                        <TextBlock Text="{loc:Str lb_filter_online}"/>
+                    </RadioButton>
+                    <RadioButton x:Name="ChipFilterPatrons" Theme="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="patrons">
+                        <TextBlock Text="{loc:Str lb_filter_patrons}"/>
+                    </RadioButton>
+                    <RadioButton x:Name="ChipFilterOg" Theme="{StaticResource LbFilterChip}"
+                                 GroupName="LbFilter" Tag="og">
+                        <TextBlock Text="{loc:Str lb_filter_og}"/>
+                    </RadioButton>
+                </StackPanel>
+
+                <!-- online / total + your rank -->
+                <StackPanel Grid.Column="5" VerticalAlignment="Center" Margin="0,0,6,0">
+                    <TextBlock x:Name="TxtLeaderboardStatus" FontSize="12"
+                               HorizontalAlignment="Right"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+                    <TextBlock x:Name="TxtYourRank" FontSize="11.5" FontWeight="SemiBold"
+                               HorizontalAlignment="Right" Margin="0,2,0,0" IsVisible="False"
+                               Foreground="{DynamicResource PinkBrush}"/>
+                </StackPanel>
+
+                <!-- actions -->
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnRefreshLeaderboard" Theme="{StaticResource LbIconButton}"
+                            ToolTip.Tip="{loc:Str btn_refresh}">
+                        <TextBlock Text="&#x21BB;"/>
+                    </Button>
+                    <Button x:Name="BtnJumpToMe" Theme="{StaticResource LbIconButton}"
+                            ToolTip.Tip="{loc:Str btn_jump_to_me}">
+                        <TextBlock Text="&#x25CE;"/>
+                    </Button>
+                    <Button x:Name="BtnViewSeasonRecap" Theme="{StaticResource LbTextButton}"
+                            IsVisible="False">
+                        <TextBlock Text="{loc:Str recap_btn_view}"/>
+                    </Button>
+                    <Button x:Name="HelpBtnLeaderboard" Theme="{StaticResource HelpButtonStyle}"
+                            VerticalAlignment="Center" Margin="6,0,0,0" Tag="Leaderboard"/>
+                </StackPanel>
+            </Grid>
+          </Border>
+        </Border>
+
+        <!-- =========================== ROW 1 - podium ===========================
+             The podium is a BADGE, not a hero banner. The stacked-portrait version cost
+             ~220px to show three names and pushed the roster down to four visible rows.
+             It is laid out on its side now: rank / avatar / (name, level+xp, chips),
+             ~80px per card. #1 still reads as the winner through the gold border, the
+             star, the drop shadow and a bigger avatar + name + card. -->
+        <ItemsControl x:Name="PodiumHost" Grid.Row="1" Margin="0,6,0,2"
+                      MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                      IsVisible="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" VerticalAlignment="Bottom"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="tabs:LeaderboardRow">
+                    <Border x:Name="Card" Classes="lbpodium"
+                            Classes.r1="{Binding IsRank1}" Classes.r2="{Binding IsRank2}" Classes.r3="{Binding IsRank3}"
+                            Margin="6,0" Padding="12,6,12,6" CornerRadius="12" VerticalAlignment="Bottom"
+                            Background="{DynamicResource ElevatedSurfaceBrush}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding Rank}" FontSize="17" FontWeight="Bold" Margin="0,0,9,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+
+                            <Grid x:Name="AvWrap" Classes="lbavatar" Classes.online="{Binding IsOnline}"
+                                  Width="40" Height="40" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <!-- Setter.Value can't take a Binding, and {loc:Str} IS a binding, so
+                                     the presence tooltip is two visibility-gated lines rather than a
+                                     trigger that swaps the tip. -->
+                                <ToolTip.Tip>
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str lb_tooltip_online}" IsVisible="{Binding IsOnline}"/>
+                                        <TextBlock Text="{loc:Str lb_tooltip_offline}" IsVisible="{Binding !IsOnline}"/>
+                                    </StackPanel>
+                                </ToolTip.Tip>
+                                <Ellipse Fill="{Binding AvatarBrush}" Margin="2.5"/>
+                                <TextBlock x:Name="AvInitials" Text="{Binding Initials}" FontSize="15" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource DarkerBgBrush}"/>
+                                <Ellipse Classes="lbring big" Classes.online="{Binding IsOnline}" StrokeThickness="2.5"/>
+                            </Grid>
+
+                            <StackPanel VerticalAlignment="Center">
+
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="Crown" Text="&#x2605;" FontSize="13" VerticalAlignment="Center"
+                                           Margin="0,0,5,0" Foreground="#FFFFD700">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="#FFFFD700" BlurRadius="12" OffsetX="0" OffsetY="0" Opacity="0.85"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                                <TextBlock x:Name="PName" Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextLightBrush}"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                <Border Theme="{StaticResource LbLevelPill}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding LevelLabel}" FontSize="10.5" FontWeight="Bold"
+                                                   Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text=" " FontSize="11"/>
+                                        <TextBlock Text="{Binding LevelColumnValue}" FontSize="12" FontWeight="Bold"
+                                                   Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="{Binding XpColumnDisplay}" FontSize="12" FontWeight="Bold" Margin="8,0,3,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextLightBrush}"/>
+                                <TextBlock Text="{loc:Str label_xp}" FontSize="11" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,3,-4,0">
+                                <Border Theme="{StaticResource LbChip}" Background="#1AFFD700" BorderBrush="#80FFD700"
+                                        ToolTip.Tip="{loc:Str lb_tooltip_og}"
+                                        IsVisible="{Binding IsSeason0Og}">
+                                    <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str label_og}" Foreground="#FFFFD700">
+                                        <TextBlock.Effect>
+                                            <DropShadowEffect Color="#FFFFD700" BlurRadius="9" OffsetX="0" OffsetY="0" Opacity="0.75"/>
+                                        </TextBlock.Effect>
+                                    </TextBlock>
+                                </Border>
+                                <Border Theme="{StaticResource LbChip}" Background="{DynamicResource TransparentPink20Brush}"
+                                        BorderBrush="{DynamicResource TransparentPink40Brush}"
+                                        IsVisible="{Binding ShowPatreonChip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str section_patreon}"
+                                                   Foreground="{DynamicResource PinkSoftBrush}"/>
+                                        <TextBlock Theme="{StaticResource LbChipText}" Text=" "/>
+                                        <TextBlock Theme="{StaticResource LbChipText}" Text="{Binding PatreonTierRoman}"
+                                                   Foreground="{DynamicResource PinkSoftBrush}"/>
+                                    </StackPanel>
+                                </Border>
+                                <Button Classes="lbdiscord" Cursor="Hand" Tag="{Binding DiscordId}"
+                                        ToolTip.Tip="{loc:Str tooltip_send_discord_dm}"
+                                        IsVisible="{Binding HasDiscord}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bd" CornerRadius="4" Padding="5,1" Margin="0,0,4,0" BorderThickness="1"
+                                                    Background="#1A7788FF" BorderBrush="#667788FF">
+                                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str section_disc}" Foreground="#FF9FAFFF"/>
+                                </Button>
+                                <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str lb_no_badges}"
+                                           Foreground="{DynamicResource TextDimBrush}"
+                                           IsVisible="{Binding HasNoBadges}"/>
+                            </StackPanel>
+
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- =========================== ROW 2 - roster =========================== -->
+        <Grid Grid.Row="2" Margin="0,2,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Non-scrolling column legend; headers sort. Padding 14 / 31 is the block
+                 alignment contract (the 31 covers the roster's reserved scrollbar). -->
+            <Border Grid.Row="0" MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                    Padding="14,5,31,5" BorderThickness="0,0,0,1"
+                    BorderBrush="{DynamicResource PanelAccentBrush}">
+                <Grid>
+                    <!-- KEEP IN SYNC with the row template and the sticky you-bar. -->
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="68"/>
+                        <ColumnDefinition Width="2*" MinWidth="130"/>
+                        <ColumnDefinition Width="82"/>
+                        <ColumnDefinition Width="112"/>
+                        <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
+                        <ColumnDefinition Width="90"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Theme="{StaticResource LbLegendHeader}" Tag="rank"
+                            HorizontalContentAlignment="Right" HorizontalAlignment="Stretch">
+                        <TextBlock Text="{loc:Str section_rank}"/>
+                    </Button>
+                    <Button Grid.Column="1" Theme="{StaticResource LbLegendHeader}" Tag="name"
+                            HorizontalContentAlignment="Left" HorizontalAlignment="Stretch" Margin="44,0,0,0">
+                        <TextBlock Text="{loc:Str lb_col_subject}"/>
+                    </Button>
+                    <!-- The label swaps to lb_col_peak on the All-Time board: the number under it
+                         is HighestLevelEver, so rank 7 legitimately out-levels rank 4 and labelling
+                         it "Level" reads as a sorting bug. See ApplyModeLabels().
+                         Two TextBlocks rather than assigning Content from code: Avalonia keeps the
+                         {loc:Str} binding alive under a local value, so the next language change
+                         would put the wrong label straight back (CLAUDE.md, setting text from code). -->
+                    <Button x:Name="HdrLevel" Grid.Column="2"
+                            Theme="{StaticResource LbLegendHeader}" Tag="level"
+                            HorizontalContentAlignment="Center" HorizontalAlignment="Stretch">
+                        <Panel>
+                            <TextBlock x:Name="HdrLevelSeasonal" Text="{loc:Str label_level}"/>
+                            <TextBlock x:Name="HdrLevelPeak" Text="{loc:Str lb_col_peak}" IsVisible="False"/>
+                        </Panel>
+                    </Button>
+                    <Button Grid.Column="3" Theme="{StaticResource LbLegendHeader}" Tag="xp"
+                            HorizontalContentAlignment="Right" HorizontalAlignment="Stretch" Margin="0,0,4,0">
+                        <TextBlock Text="{loc:Str label_xp}"/>
+                    </Button>
+                    <Button Grid.Column="4" Theme="{StaticResource LbLegendHeader}" Tag="achievements"
+                            HorizontalContentAlignment="Left" HorizontalAlignment="Stretch" Margin="14,0,0,0">
+                        <TextBlock Text="{loc:Str tab_achievements}"/>
+                    </Button>
+                    <Button x:Name="HdrStreak" Grid.Column="5"
+                            Theme="{StaticResource LbLegendHeader}" Tag="streak"
+                            HorizontalContentAlignment="Right" HorizontalAlignment="Stretch"
+                            IsVisible="{Binding $parent[tabs:LeaderboardTabView].ShowTrophyStats}">
+                        <TextBlock Text="{loc:Str lb_col_streak}"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <ListBox x:Name="LstLeaderboard" Background="Transparent"
+                         BorderThickness="0" Margin="0,1,0,2" Padding="0"
+                         MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                         FontSize="13"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Visible"
+                         ItemContainerTheme="{StaticResource LbRowContainer}">
+                    <ListBox.DataTemplates>
+
+                        <!-- ============================= roster row =============================
+                             Padding/Margin here are density-critical: they set the row pitch, and
+                             the pitch is what decides how many rows survive above the you-bar. -->
+                        <DataTemplate DataType="tabs:LeaderboardRow" x:DataType="tabs:LeaderboardRow">
+                            <Border Classes="lbrow" Classes.og="{Binding IsSeason0Og}" Classes.me="{Binding IsCurrentUser}"
+                                    CornerRadius="9" Padding="10,3" Margin="4,0,21,0">
+                                <ToolTip.Tip>
+                                    <StackPanel MaxWidth="300">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="13"
+                                                   Foreground="{DynamicResource PinkBrush}" TextWrapping="Wrap"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <!-- LevelLabel, not label_level: on the All-Time board this
+                                                 number is HighestLevelEver, so it is labelled "Peak". -->
+                                            <TextBlock Text="{Binding LevelLabel}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                            <TextBlock Text=" " FontSize="11"/>
+                                            <TextBlock Text="{Binding LevelColumnValue}" FontSize="11" FontWeight="SemiBold"/>
+                                            <TextBlock Text="   " FontSize="11"/>
+                                            <TextBlock Text="{loc:Str label_xp}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                            <TextBlock Text=" " FontSize="11"/>
+                                            <TextBlock Text="{Binding XpColumnDisplay}" FontSize="11" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                        <!-- Trophy-case stat that used to own a permanently-blank column.
+                                             Two gates, exactly as before: the viewer's trophy_case skill
+                                             (ShowTrophyStats) and this subject's own HasTrophyCase flag. -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0"
+                                                    IsVisible="{Binding $parent[tabs:LeaderboardTabView].ShowTrophyStats}">
+                                            <StackPanel Orientation="Horizontal" IsVisible="{Binding HasTrophyCase}">
+                                                <TextBlock Text="{loc:Str section_best_session}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock Text=" " FontSize="11"/>
+                                                <TextBlock Text="{Binding LongestSessionDisplay}" FontSize="11" FontWeight="SemiBold"/>
+                                                <TextBlock Text=" " FontSize="11"/>
+                                                <TextBlock Text="{loc:Str label_min}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <TextBlock Text="{loc:Str lb_tooltip_row}" FontSize="10.5" Margin="0,5,0,0" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextDimBrush}"/>
+                                    </StackPanel>
+                                </ToolTip.Tip>
+
+                                <Grid>
+                                    <!-- KEEP IN SYNC with the legend header and the sticky you-bar. -->
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="68"/>
+                                        <ColumnDefinition Width="2*" MinWidth="130"/>
+                                        <ColumnDefinition Width="82"/>
+                                        <ColumnDefinition Width="112"/>
+                                        <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
+                                        <ColumnDefinition Width="90"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- rank + delta -->
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                        <TextBlock Classes="lbdelta"
+                                                   Classes.up="{Binding IsDeltaUp}" Classes.down="{Binding IsDeltaDown}"
+                                                   Classes.isnew="{Binding IsDeltaNew}"
+                                                   Text="{Binding DeltaText}" FontSize="9.5" FontWeight="Bold" Margin="0,0,5,0"
+                                                   VerticalAlignment="Center" ToolTip.Tip="{loc:Str lb_tooltip_delta}"/>
+                                        <TextBlock Text="{Binding Rank}" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextLightBrush}"/>
+                                    </StackPanel>
+
+                                    <!-- avatar + name + inline chips -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Grid Classes="lbavatar" Classes.online="{Binding IsOnline}"
+                                              Width="34" Height="34" Margin="0,0,10,0" VerticalAlignment="Center">
+                                            <ToolTip.Tip>
+                                                <StackPanel>
+                                                    <TextBlock Text="{loc:Str lb_tooltip_online}" IsVisible="{Binding IsOnline}"/>
+                                                    <TextBlock Text="{loc:Str lb_tooltip_offline}" IsVisible="{Binding !IsOnline}"/>
+                                                </StackPanel>
+                                            </ToolTip.Tip>
+                                            <Ellipse Fill="{Binding AvatarBrush}" Margin="2"/>
+                                            <TextBlock Text="{Binding Initials}" FontSize="12.5" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource DarkerBgBrush}"/>
+                                            <!-- presence ring: replaces the old Online column -->
+                                            <Ellipse Classes="lbring" Classes.online="{Binding IsOnline}" StrokeThickness="2"/>
+                                        </Grid>
+
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="13.5" FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextLightBrush}"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                                <!-- OG -->
+                                                <Border Theme="{StaticResource LbChip}" Background="#1AFFD700" BorderBrush="#80FFD700"
+                                                        ToolTip.Tip="{loc:Str lb_tooltip_og}"
+                                                        IsVisible="{Binding IsSeason0Og}">
+                                                    <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str label_og}" Foreground="#FFFFD700">
+                                                        <TextBlock.Effect>
+                                                            <DropShadowEffect Color="#FFFFD700" BlurRadius="9" OffsetX="0" OffsetY="0" Opacity="0.75"/>
+                                                        </TextBlock.Effect>
+                                                    </TextBlock>
+                                                </Border>
+                                                <!-- Patreon tier -->
+                                                <Border Theme="{StaticResource LbChip}" Classes="lbpatron"
+                                                        Classes.t2="{Binding IsPatreonTier2}" Classes.t3="{Binding IsPatreonTier3}"
+                                                        IsVisible="{Binding ShowPatreonChip}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Theme="{StaticResource LbChipText}" Classes="lbpatrontext"
+                                                                   Classes.t2="{Binding IsPatreonTier2}" Classes.t3="{Binding IsPatreonTier3}"
+                                                                   Text="{loc:Str section_patreon}"/>
+                                                        <TextBlock Theme="{StaticResource LbChipText}" Text=" "/>
+                                                        <TextBlock Theme="{StaticResource LbChipText}" Classes="lbpatrontext"
+                                                                   Classes.t2="{Binding IsPatreonTier2}" Classes.t3="{Binding IsPatreonTier3}"
+                                                                   Text="{Binding PatreonTierRoman}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <!-- Seasons (All-Time board only; replaces the old Seasons column) -->
+                                                <Border Theme="{StaticResource LbChip}"
+                                                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                                        IsVisible="{Binding ShowSeasonsChip}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Theme="{StaticResource LbChipText}" Text="{Binding SeasonsChipText}"
+                                                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"/>
+                                                        <TextBlock Theme="{StaticResource LbChipText}" Text=" "/>
+                                                        <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str section_seasons}"
+                                                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <!-- Discord (keeps the old column's click + tooltip) -->
+                                                <Button Classes="lbdiscord" Cursor="Hand" Tag="{Binding DiscordId}"
+                                                        ToolTip.Tip="{loc:Str tooltip_send_discord_dm}"
+                                                        IsVisible="{Binding HasDiscord}">
+                                                    <Button.Template>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border x:Name="Bd" CornerRadius="4" Padding="5,1" Margin="0,0,4,0" BorderThickness="1"
+                                                                    Background="#1A7788FF" BorderBrush="#667788FF">
+                                                                <ContentPresenter Content="{TemplateBinding Content}"
+                                                                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Button.Template>
+                                                    <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str section_disc}" Foreground="#FF9FAFFF"/>
+                                                </Button>
+                                                <!-- nothing to show -->
+                                                <TextBlock Theme="{StaticResource LbChipText}" Text="{loc:Str lb_no_badges}"
+                                                           Foreground="{DynamicResource TextDimBrush}"
+                                                           IsVisible="{Binding HasNoBadges}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <!-- level (labelled "Peak" on the All-Time board - see HdrLevel) -->
+                                    <TextBlock Grid.Column="2" Text="{Binding LevelColumnValue}" FontSize="14" FontWeight="Bold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+
+                                    <!-- xp -->
+                                    <TextBlock Grid.Column="3" Text="{Binding XpColumnDisplay}" FontSize="13.5" FontWeight="SemiBold"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                                               Foreground="{DynamicResource TextLightBrush}"/>
+
+                                    <!-- achievements -->
+                                    <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="14,0,10,0">
+                                        <TextBlock Text="{Binding AchievementsDisplay}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                                        <ProgressBar Theme="{StaticResource LbThinBar}" Margin="0,4,0,0"
+                                                     Maximum="{Binding AchievementsTotal}" Value="{Binding AchievementsCount, Mode=OneWay}"/>
+                                    </StackPanel>
+
+                                    <!-- streak (trophy-case gated, same two gates as the old column) -->
+                                    <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right"
+                                                IsVisible="{Binding $parent[tabs:LeaderboardTabView].ShowTrophyStats}">
+                                        <StackPanel Orientation="Horizontal" IsVisible="{Binding HasTrophyCase}">
+                                            <TextBlock Text="{Binding HighestStreakDisplay}" FontSize="12.5" FontWeight="Bold"
+                                                       Foreground="{DynamicResource PinkSoftBrush}"/>
+                                            <TextBlock Text=" " FontSize="12.5"/>
+                                            <TextBlock Text="{loc:Str label_days}" FontSize="10.5" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+
+                        <!-- ============================= tier band ============================= -->
+                        <DataTemplate DataType="tabs:LeaderboardTierBand" x:DataType="tabs:LeaderboardTierBand">
+                            <Grid Margin="18,4,18,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Rectangle Grid.Column="0" Height="1" VerticalAlignment="Center">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                            <GradientStop Color="#00000000" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                                <StackPanel Grid.Column="1" Margin="14,0">
+                                    <TextBlock Text="{Binding HeaderText}" FontSize="10.5" FontWeight="Bold"
+                                               HorizontalAlignment="Center" Foreground="{DynamicResource PinkSoftBrush}"/>
+                                    <TextBlock Text="{Binding Subtitle}" FontSize="9.5" HorizontalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextDimBrush}"/>
+                                </StackPanel>
+                                <Rectangle Grid.Column="2" Height="1" VerticalAlignment="Center">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                            <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
+                                            <GradientStop Color="#00000000" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.DataTemplates>
+                </ListBox>
+
+                <!-- Sits just under the legend, NOT vertically centred: centred, it floated in
+                     ~500px of void and read as a rendering accident rather than as the answer
+                     to what the user just typed into the search box. -->
+                <TextBlock x:Name="TxtLeaderboardEmpty" Text="{loc:Str lb_empty_filter}"
+                           FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="20,66,20,0"
+                           TextWrapping="Wrap" TextAlignment="Center" IsVisible="False"
+                           Foreground="{DynamicResource TextMutedBrush}"/>
+            </Grid>
+        </Grid>
+
+        <!-- =========================== ROW 3 - sticky "you" =========================== -->
+        <Border x:Name="YouBar" Grid.Row="3" Padding="0,7"
+                Background="{DynamicResource TransparentPink20Brush}"
+                BorderThickness="0,1,0,0" BorderBrush="{DynamicResource TransparentPink40Brush}">
+          <Border MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                  Padding="14,0,31,0" Background="Transparent">
+            <Grid>
+                <!-- KEEP IN SYNC with the row template and the legend header. -->
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="68"/>
+                    <ColumnDefinition Width="2*" MinWidth="130"/>
+                    <ColumnDefinition Width="82"/>
+                    <ColumnDefinition Width="112"/>
+                    <ColumnDefinition Width="*" MinWidth="268" MaxWidth="420"/>
+                    <ColumnDefinition Width="90"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtYouDelta" FontSize="9.5" FontWeight="Bold"
+                               Margin="0,0,5,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextDimBrush}"/>
+                    <TextBlock x:Name="TxtYouRankNumber" FontSize="16" FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource PinkBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Grid Width="34" Height="34" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <Ellipse x:Name="EllYouAvatar" Margin="2"/>
+                        <TextBlock x:Name="TxtYouInitials" FontSize="12.5" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource DarkerBgBrush}"/>
+                        <Ellipse StrokeThickness="2" Stroke="{DynamicResource PinkBrush}"/>
+                    </Grid>
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="TxtYouName" FontSize="14" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextLightBrush}"/>
+                            <Border CornerRadius="4" Padding="5,1" Margin="7,0,0,0" VerticalAlignment="Center"
+                                    Background="{DynamicResource PinkBrush}">
+                                <TextBlock Text="{loc:Str lb_you}" FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource DarkerBgBrush}"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtYouGap" FontSize="11.5" Margin="0,1,0,0"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource PinkSoftBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" x:Name="TxtYouLevel" FontSize="14" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource PinkBrush}"/>
+
+                <TextBlock Grid.Column="3" x:Name="TxtYouXp" FontSize="13.5" FontWeight="SemiBold"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                           Foreground="{DynamicResource TextLightBrush}"/>
+
+                <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="14,0,10,0">
+                    <TextBlock x:Name="TxtYouAchievements" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+                    <ProgressBar x:Name="BarYouAchievements" Theme="{StaticResource LbThinBar}"
+                                 Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="5" x:Name="TxtYouPercent" FontSize="12" FontWeight="Bold"
+                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Foreground="#FFFFD700"/>
+            </Grid>
+          </Border>
+        </Border>
+    </Grid>
+</UserControl>
