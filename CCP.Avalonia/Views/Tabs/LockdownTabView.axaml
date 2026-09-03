@@ -1,0 +1,613 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/LockdownTabView.xaml.
+     Structure, order, spacing, colour literals and every shared resource key are preserved so the
+     two files can be diffed side by side. Documented deviations, all forced:
+
+       Style="{StaticResource X}"     ->  Theme="{StaticResource X}"      (keyed styles are ControlThemes)
+       <Style x:Key TargetType>       ->  <ControlTheme x:Key TargetType> with the template kept
+                                          (a property-only ControlTheme on a templated control
+                                          draws nothing - CLAUDE.md trap 4) and Triggers rewritten
+                                          as ^:checked / ^:pointerover selectors
+       <ContentPresenter/>            ->  Content="{TemplateBinding Content}" (trap 6: a bare
+                                          presenter renders an EMPTY button on Avalonia; the
+                                          Emergency Exit slab is exactly that shape)
+       Button Content="{loc:Str k}"   ->  a TextBlock child (trap 1: Avalonia parses '_' in Content
+                                          as an access key and every loc key here is snake_case)
+       EmojiToImageSource converter   ->  plain <TextBlock Text="🔒"/> (trap 3: Avalonia renders
+                                          colour emoji natively)
+       helpers:EmojiTextBlock         ->  TextBlock (same reason)
+       Visibility="Collapsed"         ->  IsVisible="False"
+       ToolTip="..."                  ->  ToolTip.Tip="..."
+       Checked=/Unchecked=            ->  IsCheckedChanged= (Avalonia 11 dropped the split events)
+       PreviewMouseLeftButtonDown/Up  ->  a ^:pressed style. Button's class handler marks both
+       + MouseLeave (the press sink)       pointer events handled before an instance handler runs,
+                                           so the ported handler pair would never have fired.
+       MouseLeftButtonDown (the timer) ->  PointerPressed (a TextBlock handles nothing)
+       ScaleTransform x:Name="EEScale" ->  RenderTransform + TransformOperationsTransition
+                                          (AVLN2000: Avalonia can only name a StyledElement, so a
+                                          transform cannot be an animation target - same call
+                                          Theme/Styles.xaml's ToggleStyle already made)
+       DropShadowEffect ShadowDepth/Direction -> OffsetX/OffsetY; the two named effects
+                                          (EEGlow, LockdownImageGlow) lose their x:Name for the
+                                          same AVLN2000 reason, and nothing drives them here yet
+       RadiusX="1.05"                 ->  RadiusX="105%" (a bare RelativeScalar is absolute px)
+       x:FieldModifier="internal"     ->  dropped; no host re-publishes these fields on this head.
+                                          x:Names are kept so the wiring is a one-line change.
+       feat:AdaptiveSideArt           ->  dropped; the attached behaviour lives in the WPF head.
+                                          The 3*/2* split with MaxWidth="780" is kept verbatim.
+       hover:HoverPop.IsEnabled       ->  dropped, same reason.
+       poss:Possession.Role/Name/Exclude -> dropped throughout; the Possession tagger is a WPF
+                                          service. Re-add as attached properties when it moves.
+       pack:// ImageSource            ->  dropped. This head ships no Resources/ PNGs yet, so the
+                                          hero art strip, the side-art plate and the Emergency
+                                          Exit face plate keep their geometry and scrim and draw
+                                          no bitmap. Re-add as avares:// when the art moves. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.LockdownTabView">
+
+    <!-- Velvet Kit 2 · round 4. Lockdown's hue is burnt orange: the page is a timed cage, not a
+         toy, so it reads warm-but-warning rather than house pink. LOCAL literals only - the WPF
+         original carries a BAML EndOfStream warning about cross-dictionary StaticResources; that
+         trap is WPF-specific, but the literals stay local so the two files still diff clean. -->
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TabHueBrush" Color="#FF8A5C"/>
+        <SolidColorBrush x:Key="TabHueBorderBrush" Color="#40FF8A5C"/>
+        <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0%,0%" EndPoint="90%,70%">
+            <GradientStop Color="#14FF8A5C" Offset="0"/>
+            <GradientStop Color="#00000000" Offset="0.55"/>
+        </LinearGradientBrush>
+
+        <!-- Intensity pills. ControlTheme, not Style: an Avalonia keyed style REPLACES the theme,
+             so the template has to come with it or the three pills draw nothing at all. -->
+        <ControlTheme x:Key="LockdownPillStyle" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFC7A8"/>
+            <Setter Property="BorderBrush" Value="#40FF8A5C"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,5"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="12" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="#FF8A5C"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Style Selector="^ /template/ Border#bd">
+                    <Setter Property="Background" Value="#26FF8A5C"/>
+                    <Setter Property="BorderBrush" Value="#FF8A5C"/>
+                </Style>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="BorderBrush" Value="#FF8A5C"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ===== EMERGENCY EXIT ================================================================
+             The one honest affordance on a haunted page, so it is DRAWN rather than themed: a
+             tiled hazard border around a crimson mushroom-button slab.
+
+             The tile is 20x20 and the two figures are each other's wrap, so the diagonal band runs
+             unbroken across a border of any thickness or length. WPF's Viewport/ViewportUnits
+             becomes Avalonia's DestinationRect; the RectangleGeometry/PathGeometry children become
+             path strings, which GeometryDrawing.Geometry parses directly. -->
+        <DrawingBrush x:Key="EEHazardBrush" TileMode="Tile" Stretch="None"
+                      DestinationRect="0,0,20,20">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#1C0810" Geometry="M 0,0 L 20,0 L 20,20 L 0,20 Z"/>
+                    <GeometryDrawing Brush="#FF8A5C" Geometry="M 0,20 L 20,0 L 20,10 L 10,20 Z"/>
+                    <GeometryDrawing Brush="#FF8A5C" Geometry="M 0,0 L 10,0 L 0,10 Z"/>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+    </UserControl.Resources>
+
+    <!-- The Emergency Exit slab's press sink. WPF ran it from
+         PreviewMouseLeftButtonDown/Up on the Button; on Avalonia the Button's own class handler
+         marks PointerPressed/Released handled before an instance handler sees them, so a ported
+         handler pair would be silently dead. A :pressed descendant selector is the idiom, needs
+         no code, and drives the TransformOperationsTransition already on EERoot. EERoot must NOT
+         carry a local RenderTransform or it outranks these setters. -->
+    <UserControl.Styles>
+        <Style Selector="Grid#EERoot">
+            <Setter Property="RenderTransform" Value="scale(1)"/>
+        </Style>
+        <Style Selector="Button#BtnEmergencyExit:pressed Grid#EERoot">
+            <Setter Property="RenderTransform" Value="scale(0.965)"/>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="36,28,36,28">
+            <!-- Root grid. LockdownGate is its LAST sibling on purpose: the gate has to cover the
+                 hero AND both columns, and the premium-gate refresh only ever flips its IsVisible. -->
+            <Grid MaxWidth="1100" HorizontalAlignment="Center" VerticalAlignment="Top">
+
+                <StackPanel>
+
+                    <!-- HERO. Replaces the 44px-emoji header row. On WPF the art strip is an
+                         ImageBrush bound to ImgLockdownFeature.Source so the per-mod art swap
+                         repaints the hero too; this head ships no PNGs, so the strip keeps its
+                         geometry, its right-to-left opacity mask and a hue wash, and takes the
+                         bound ImageBrush back when the art moves. -->
+                    <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
+                        <Grid>
+                            <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                                    Background="{StaticResource TabHueWashBrush}">
+                                <Border.OpacityMask>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                        <GradientStop Color="#00000000" Offset="0"/>
+                                        <GradientStop Color="#E6000000" Offset="0.55"/>
+                                    </LinearGradientBrush>
+                                </Border.OpacityMask>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,252,0">
+                                <TextBlock Text="🔒" FontSize="26" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str tab_lockdown_mode}" FontSize="17" FontWeight="Bold"
+                                               Foreground="{DynamicResource TextLightBrush}"/>
+                                    <TextBlock Text="{loc:Str label_lock_yourself_into_a_timed_conditioning_sessi}"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"
+                                               Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Round-3 capped column + side art. On WPF, feat:AdaptiveSideArt collapses
+                         the art column below 1000px so the controls retake the full width; that
+                         attached behaviour is not ported, and the column split is unchanged. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3*" MaxWidth="780"/>
+                            <ColumnDefinition Width="2*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+
+                            <!-- The lockdown card. On WPF its Background AND BorderBrush are
+                                 code-owned: ApplyLockdownTheme paints both crimson while a
+                                 lockdown runs and RestoreLockdownTheme rebuilds this gradient
+                                 when it ends. So the card deliberately does NOT take
+                                 SettingCardStyle - that style's velvet border would survive
+                                 exactly one lockdown cycle. The values here match what Restore
+                                 writes. -->
+                            <Border x:Name="LockdownCardBorder" CornerRadius="12"
+                                    Padding="0" Margin="0,0,0,10" BorderThickness="2">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#1A1A32" Offset="0"/>
+                                        <GradientStop Color="#201A38" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Grid>
+                                    <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                            Background="{StaticResource TabHueBrush}"/>
+                                    <StackPanel Margin="16,10,16,12">
+
+                                        <!-- Setup Panel (visible when lockdown is NOT active) -->
+                                        <StackPanel x:Name="LockdownSetupPanel">
+                                            <Grid Height="36" Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str label_duration_2}" FontSize="13"
+                                                           FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}"
+                                                           VerticalAlignment="Center"/>
+                                                <ComboBox Grid.Column="1" x:Name="CmbLockdownDuration"
+                                                          Width="160" SelectedIndex="1" VerticalAlignment="Center" FontSize="13"
+                                                          Theme="{StaticResource DarkComboBoxStyle}">
+                                                    <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5"/>
+                                                    <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10"/>
+                                                    <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15"/>
+                                                    <ComboBoxItem Content="{loc:Str label_30_minutes}" Tag="30"/>
+                                                    <ComboBoxItem Content="{loc:Str btn_60_minutes}" Tag="60"/>
+                                                    <ComboBoxItem Content="{loc:Str btn_2_hours}" Tag="120"/>
+                                                    <ComboBoxItem Content="{loc:Str btn_4_hours}" Tag="240"/>
+                                                </ComboBox>
+                                            </Grid>
+
+                                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                            <!-- ===== POSSESSION =====================================================
+                                                 The haunt itself (Services/Possession/POSSESSION.md). It sits ABOVE the
+                                                 Safeties block on purpose: Possession is what Lockdown IS now, and the old
+                                                 cage is the quiet fine print underneath it.
+
+                                                 The master switch greys the block rather than collapsing it: someone who
+                                                 turned the haunt off still has to be able to see WHAT they turned off, or
+                                                 the card reads as if the feature vanished. -->
+                                            <Grid Height="32" Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_poss_title}" FontSize="13"
+                                                           FontWeight="SemiBold" Foreground="{DynamicResource TextLightBrush}"
+                                                           VerticalAlignment="Center"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkPossessionEnabled"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          ToolTip.Tip="{loc:Str lockdown_poss_on}"
+                                                          IsCheckedChanged="ChkPossessionEnabled_Changed"/>
+                                            </Grid>
+
+                                            <StackPanel x:Name="PossessionBlock">
+                                                <TextBlock Text="{loc:Str lockdown_poss_blurb}" FontSize="11.5"
+                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                    <TextBlock Text="{loc:Str lockdown_poss_intensity_label}" FontSize="11.5"
+                                                               Foreground="{DynamicResource TextMutedBrush}"
+                                                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                                    <ToggleButton x:Name="BtnPossGentle"
+                                                                  Theme="{StaticResource LockdownPillStyle}"
+                                                                  Tag="0" Click="PossIntensity_Click">
+                                                        <TextBlock Text="{loc:Str lockdown_poss_intensity_gentle}"/>
+                                                    </ToggleButton>
+                                                    <ToggleButton x:Name="BtnPossEerie"
+                                                                  Theme="{StaticResource LockdownPillStyle}"
+                                                                  Tag="1" Click="PossIntensity_Click">
+                                                        <TextBlock Text="{loc:Str lockdown_poss_intensity_eerie}"/>
+                                                    </ToggleButton>
+                                                    <ToggleButton x:Name="BtnPossFullDoki"
+                                                                  Theme="{StaticResource LockdownPillStyle}"
+                                                                  Tag="2" Click="PossIntensity_Click">
+                                                        <TextBlock Text="{loc:Str lockdown_poss_intensity_fulldoki}"/>
+                                                    </ToggleButton>
+                                                </StackPanel>
+                                                <TextBlock Text="{loc:Str lockdown_poss_fulldoki_hint}" FontSize="10.5"
+                                                           Foreground="#B38A6E" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+                                                <Grid Height="40" Background="Transparent">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{loc:Str lockdown_poss_tripwires}" FontSize="12.5"
+                                                                   Foreground="{DynamicResource TextLightBrush}"/>
+                                                        <TextBlock Text="{loc:Str lockdown_poss_tripwires_hint}" FontSize="10.5"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                                                    </StackPanel>
+                                                    <CheckBox Grid.Column="1" x:Name="ChkPossTripwires"
+                                                              Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                              IsCheckedChanged="ChkPossTripwires_Changed"/>
+                                                </Grid>
+
+                                                <Grid Height="40" Background="Transparent">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{loc:Str lockdown_poss_warden}" FontSize="12.5"
+                                                                   Foreground="{DynamicResource TextLightBrush}"/>
+                                                        <TextBlock Text="{loc:Str lockdown_poss_warden_hint}" FontSize="10.5"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                                                    </StackPanel>
+                                                    <CheckBox Grid.Column="1" x:Name="ChkPossWarden"
+                                                              Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                              IsCheckedChanged="ChkPossWarden_Changed"/>
+                                                </Grid>
+
+                                                <Grid Height="40" Background="Transparent">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{loc:Str lockdown_poss_photosafe}" FontSize="12.5"
+                                                                   Foreground="{DynamicResource TextLightBrush}"/>
+                                                        <TextBlock Text="{loc:Str lockdown_poss_photosafe_hint}" FontSize="10.5"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                                                    </StackPanel>
+                                                    <CheckBox Grid.Column="1" x:Name="ChkPossPhotosafe"
+                                                              Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                              IsCheckedChanged="ChkPossPhotosafe_Changed"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                            <!-- ===== SAFETIES ======================================================
+                                                 The original Lockdown, demoted to fine print. Smaller and muted because
+                                                 they are defaults nobody should have to think about, but they stay
+                                                 REACHABLE and honest: OnLockdownActivated reads each one instead of
+                                                 forcing all three, so an unticked box here really does mean the cage
+                                                 leaves that one door open. -->
+                                            <TextBlock Text="{loc:Str lockdown_poss_safeties_title}" FontSize="11.5"
+                                                       FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}"
+                                                       Margin="0,0,0,2"/>
+
+                                            <Grid Height="28" Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_poss_safety_strict}" FontSize="11.5"
+                                                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkLockdownStrict"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          IsCheckedChanged="ChkLockdownSafety_Changed"/>
+                                            </Grid>
+
+                                            <Grid Height="28" Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_poss_safety_panic}" FontSize="11.5"
+                                                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkLockdownNoPanic"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          IsCheckedChanged="ChkLockdownSafety_Changed"/>
+                                            </Grid>
+
+                                            <Grid Height="28" Background="Transparent">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_poss_safety_syskeys}" FontSize="11.5"
+                                                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkLockdownSysKeys"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          IsCheckedChanged="ChkLockdownSafety_Changed"/>
+                                            </Grid>
+
+                                            <Grid Height="28" Background="Transparent"
+                                                  ToolTip.Tip="{loc:Str lockdown_poss_safety_dose_tip}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{loc:Str lockdown_poss_safety_dose}" FontSize="11.5"
+                                                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <CheckBox Grid.Column="1" x:Name="ChkLockdownDose"
+                                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                                          IsCheckedChanged="ChkLockdownSafety_Changed"/>
+                                            </Grid>
+
+                                            <TextBlock Text="{loc:Str lockdown_poss_safeties_note}" FontSize="10.5"
+                                                       Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
+                                                       Opacity="0.85" Margin="0,2,0,0"/>
+
+                                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                                            <!-- WPF wrapped this in a Button.Resources Style that rounded the
+                                                 template's Border; Avalonia's Button carries CornerRadius itself. -->
+                                            <Button x:Name="BtnActivateLockdown" Cursor="Hand" CornerRadius="8"
+                                                    Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="13"
+                                                    BorderThickness="0" Padding="16,10" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                                    Click="BtnActivateLockdown_Click">
+                                                <TextBlock Text="{loc:Str btn_activate}"/>
+                                            </Button>
+                                        </StackPanel>
+
+                                        <!-- Active Panel (visible when lockdown IS active).
+                                             Authored collapsed, exactly as on WPF; the constructor
+                                             shows it on this head because the host that flips it
+                                             (MainWindow.Lab.cs) has not moved yet. -->
+                                        <StackPanel x:Name="LockdownActivePanel" IsVisible="False">
+                                            <TextBlock Text="{loc:Str label_lockdown_active}" Foreground="#DC143C" FontWeight="Bold" FontSize="16" Margin="0,0,0,8"/>
+                                            <TextBlock x:Name="TxtLockdownTimer" Text="00:00" Foreground="#DC143C" FontWeight="Bold" FontSize="36"
+                                                       Margin="0,0,0,8" Cursor="Hand" PointerPressed="TxtLockdownTimer_Click"/>
+
+                                            <!-- Rung readout. The digits above are never allowed to lie
+                                                 (POSSESSION.md), so THIS is where "how haunted is it right
+                                                 now" gets to be legible: a word plus five pips, driven from
+                                                 OnLockdownActivated / RungChanged in MainWindow.Lab.cs. -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                <TextBlock x:Name="TxtPossessionRung"
+                                                           Text="" FontSize="11.5" FontWeight="SemiBold"
+                                                           Foreground="#FF8A5C" VerticalAlignment="Center"
+                                                           Margin="0,0,10,0"/>
+                                                <StackPanel x:Name="PossessionPips"
+                                                            Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
+                                                    <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
+                                                    <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
+                                                    <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
+                                                    <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- ===== THE HUGE BUTTON ==========================
+                                                 Comically large on purpose: while the room is
+                                                 misbehaving, the way out must be the single
+                                                 loudest object on the page, readable from across
+                                                 the room, and impossible to mistake for one of
+                                                 the ghosts.
+
+                                                 Template is a bare presenter so the named visuals
+                                                 below live in the UserControl's own namescope and
+                                                 the code-behind can drive them - which on Avalonia
+                                                 means the presenter MUST carry
+                                                 Content="{TemplateBinding Content}" or the whole
+                                                 slab renders as empty space (CLAUDE.md trap 6).
+
+                                                 The press animation is the :pressed style at the
+                                                 top of this file plus the transition below; the
+                                                 idle ember pulse needs LockdownPhotosafe and is
+                                                 stubbed in the code-behind.
+
+                                                 The art is the mushroom dome ONLY on WPF,
+                                                 deliberately cropped clear of any baked-in
+                                                 lettering, so the words stay a loc key. This head
+                                                 ships no PNG, so the face plate draws its inset
+                                                 frame alone and the crimson slab still reads as
+                                                 the button. -->
+                                            <Button x:Name="BtnEmergencyExit"
+                                                    Cursor="Hand" Background="Transparent" BorderThickness="0"
+                                                    Padding="0" Margin="0,16,0,2" MinHeight="150"
+                                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                                    ToolTip.Tip="{loc:Str lockdown_ee_tooltip}"
+                                                    Click="BtnEmergencyExit_Click">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <ContentPresenter Name="PART_ContentPresenter"
+                                                                          Content="{TemplateBinding Content}"
+                                                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                          HorizontalContentAlignment="Stretch"
+                                                                          VerticalContentAlignment="Stretch"/>
+                                                    </ControlTemplate>
+                                                </Button.Template>
+
+                                                <Grid x:Name="EERoot" RenderTransformOrigin="50%,50%">
+                                                    <Grid.Transitions>
+                                                        <Transitions>
+                                                            <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.14">
+                                                                <TransformOperationsTransition.Easing>
+                                                                    <QuadraticEaseInOut/>
+                                                                </TransformOperationsTransition.Easing>
+                                                            </TransformOperationsTransition>
+                                                        </Transitions>
+                                                    </Grid.Transitions>
+
+                                                    <!-- Hazard plate -->
+                                                    <Border CornerRadius="20" BorderThickness="7" Background="#160810"
+                                                            BorderBrush="{StaticResource EEHazardBrush}">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect Color="#FF8A5C" BlurRadius="28"
+                                                                              OffsetX="0" OffsetY="0" Opacity="0.32"/>
+                                                        </Border.Effect>
+
+                                                        <Border x:Name="EESlab"
+                                                                CornerRadius="13" Margin="7" ClipToBounds="True">
+                                                            <Border.Background>
+                                                                <RadialGradientBrush GradientOrigin="42%,20%" Center="42%,30%"
+                                                                                     RadiusX="105%" RadiusY="125%">
+                                                                    <GradientStop Color="#FF3E5C" Offset="0"/>
+                                                                    <GradientStop Color="#DC143C" Offset="0.5"/>
+                                                                    <GradientStop Color="#780A1E" Offset="1"/>
+                                                                </RadialGradientBrush>
+                                                            </Border.Background>
+
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <!-- An ImageBrush on a rounded Border rather than an
+                                                                     Image: Border does not clip its children, so the only
+                                                                     way to get the art's own corners rounded is to make it
+                                                                     the background. Reads as an inset plate instead of a
+                                                                     square pasted onto the slab. The brush itself waits
+                                                                     for the art to move to avares://. -->
+                                                                <Border Grid.Column="0" x:Name="EEFacePlate"
+                                                                        Width="128" Margin="14,10,8,10" CornerRadius="10"
+                                                                        Background="#33000000"
+                                                                        BorderBrush="#4D000000" BorderThickness="1"/>
+
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                                                            HorizontalAlignment="Center" Margin="4,0,18,0">
+                                                                    <TextBlock Text="{loc:Str lockdown_ee_button}"
+                                                                               FontSize="40" FontWeight="Bold" Foreground="White"
+                                                                               TextAlignment="Center" TextWrapping="Wrap"
+                                                                               LineHeight="42">
+                                                                        <TextBlock.Effect>
+                                                                            <DropShadowEffect Color="#99000000" BlurRadius="10"
+                                                                                              OffsetX="0" OffsetY="2" Opacity="0.9"/>
+                                                                        </TextBlock.Effect>
+                                                                    </TextBlock>
+                                                                    <TextBlock Text="{loc:Str lockdown_ee_sub}"
+                                                                               FontSize="12.5" Foreground="#FFDCE2"
+                                                                               TextAlignment="Center" TextWrapping="Wrap"
+                                                                               Opacity="0.9" Margin="0,4,0,0"/>
+                                                                </StackPanel>
+
+                                                                <!-- Gloss last so it lies over art AND text. -->
+                                                                <Border Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="13"
+                                                                        IsHitTestVisible="False">
+                                                                    <Border.Background>
+                                                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                                            <GradientStop Color="#3DFFFFFF" Offset="0"/>
+                                                                            <GradientStop Color="#00FFFFFF" Offset="0.42"/>
+                                                                            <GradientStop Color="#00000000" Offset="0.6"/>
+                                                                            <GradientStop Color="#3D000000" Offset="1"/>
+                                                                        </LinearGradientBrush>
+                                                                    </Border.Background>
+                                                                </Border>
+                                                            </Grid>
+                                                        </Border>
+                                                    </Border>
+                                                </Grid>
+                                            </Button>
+
+                                            <TextBox x:Name="TxtLockdownExit" IsVisible="False"
+                                                     Background="#1A0A0A" Foreground="#DC143C" BorderBrush="#DC143C" BorderThickness="1"
+                                                     FontSize="13" Padding="8,6" Margin="0,8,0,0"
+                                                     KeyDown="TxtLockdownExit_KeyDown"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- SIDE ART = the lockdown plate, moved out of the card body. It keeps its
+                             own pink border instead of the velvet outline because on WPF
+                             StartLockdownPulse animates LockdownImageBorderBrush and
+                             LockdownImageGlow directly. Those two x:Names are gone here (Avalonia
+                             cannot name a brush or an effect), and the plate ships without its
+                             Image child until the art moves to avares://. -->
+                        <Border Grid.Column="1" x:Name="LockdownImageBorder" Margin="10,0,0,10" CornerRadius="12"
+                                BorderThickness="2" ClipToBounds="True" Background="#12FFFFFF"
+                                BorderBrush="#FF1493"
+                                VerticalAlignment="Stretch" MinHeight="200" MaxHeight="520">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF1493" BlurRadius="14" OffsetX="0" OffsetY="0" Opacity="0.7"/>
+                            </Border.Effect>
+                            <TextBlock Text="🔒" FontSize="64" Opacity="0.55"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Translucent gating overlay (only for free users) -->
+                <Border x:Name="LockdownGate" IsVisible="False"
+                        Background="#99000010" BorderBrush="{DynamicResource FxGlowBrush}" BorderThickness="2"
+                        CornerRadius="16" IsHitTestVisible="True">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="🔒" FontSize="44" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
+                                   FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                        <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
+                                Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                            <TextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
