@@ -1,4 +1,5 @@
 using System;
+using Serilog;
 using System.Collections.Generic;
 using System.IO;
 
@@ -67,7 +68,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ContentLocator.Resolve failed for {Path}: {Error}", relPath, ex.Message);
+                Log.Debug("ContentLocator.Resolve failed for {Path}: {Error}", relPath, ex.Message);
                 return relPath;
             }
         }
@@ -94,7 +95,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ContentLocator.ResolveDirectory failed for {Path}: {Error}", relDir, ex.Message);
+                Log.Debug("ContentLocator.ResolveDirectory failed for {Path}: {Error}", relDir, ex.Message);
                 return relDir;
             }
         }
@@ -116,7 +117,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ContentLocator.DirectoryExists failed for {Path}: {Error}", relDir, ex.Message);
+                Log.Debug("ContentLocator.DirectoryExists failed for {Path}: {Error}", relDir, ex.Message);
                 return false;
             }
         }
@@ -160,7 +161,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ContentLocator.EnumerateFiles failed for {Path}: {Error}", relDir, ex.Message);
+                Log.Debug("ContentLocator.EnumerateFiles failed for {Path}: {Error}", relDir, ex.Message);
             }
             return result;
         }
@@ -191,7 +192,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ContentLocator.Mirror failed for {Path}: {Error}", absolutePath, ex.Message);
+                Log.Debug("ContentLocator.Mirror failed for {Path}: {Error}", absolutePath, ex.Message);
                 return null;
             }
         }
@@ -213,7 +214,7 @@ namespace ConditioningControlPanel.Services
             try { return Directory.GetFiles(dir, pattern, opt); }
             catch (Exception ex)
             {
-                App.Logger?.Debug("ContentLocator: could not enumerate {Dir}: {Error}", dir, ex.Message);
+                Log.Debug("ContentLocator: could not enumerate {Dir}: {Error}", dir, ex.Message);
                 return Array.Empty<string>();
             }
         }

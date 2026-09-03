@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel
 {
@@ -75,6 +77,75 @@ namespace ConditioningControlPanel
         public static string MakeModAware(string text)
         {
             try { return MakeModAwareProvider?.Invoke(text) ?? text; } catch { return text; }
+        }
+
+        // ---- What the ported views ask of the mod service ------------------------------------
+        // The service itself stays in the WPF head: on a switch it clears caches on a dozen head
+        // services, and moving that is a project. So the head seeds these, and a head with no mod
+        // layer (Linux today) gets exactly what the service answers with no mod active: the
+        // built-in CCP default manifest, which is in Core.
+
+        public static volatile Func<string?>? ActiveModIdProvider;
+        public static volatile Func<IReadOnlyDictionary<string, ModPackage>?>? InstalledModsProvider;
+        public static volatile Func<string?>? AccentColorHexProvider;
+        public static volatile Func<string?>? SecondaryColorHexProvider;
+        public static volatile Func<string?>? AffirmationProvider;
+        public static volatile Func<string, string[]?>? PhrasesProvider;
+        public static volatile Func<string?>? PinkRushNameProvider;
+
+        private static readonly Lazy<IReadOnlyDictionary<string, ModPackage>> VanillaMods = new(() =>
+            new Dictionary<string, ModPackage>(StringComparer.OrdinalIgnoreCase)
+            {
+                [BuiltInMods.CCPDefaultId] = new ModPackage(BuiltInMods.CCPDefault, null, isBuiltIn: true),
+            });
+
+        public static string ActiveModId
+        {
+            get { try { return ActiveModIdProvider?.Invoke() ?? BuiltInMods.CCPDefaultId; } catch { return BuiltInMods.CCPDefaultId; } }
+        }
+
+        public static bool IsCCPDefault => string.Equals(ActiveModId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+
+        public static IReadOnlyDictionary<string, ModPackage> InstalledMods
+        {
+            get { try { return InstalledModsProvider?.Invoke() ?? VanillaMods.Value; } catch { return VanillaMods.Value; } }
+        }
+
+        public static string AccentColorHex
+        {
+            get { try { return AccentColorHexProvider?.Invoke() ?? BuiltInMods.CCPDefault.Theme?.AccentColor ?? "#E84393"; } catch { return "#E84393"; } }
+        }
+
+        /// <summary>Vanilla is the service's own CCP-default branch.</summary>
+        public static string SecondaryColorHex
+        {
+            get { try { return SecondaryColorHexProvider?.Invoke() ?? "#8B5CF6"; } catch { return "#8B5CF6"; } }
+        }
+
+        public static string Affirmation
+        {
+            get { try { return AffirmationProvider?.Invoke() ?? BuiltInMods.CCPDefault.Identity?.Affirmation ?? "Subject"; } catch { return "Subject"; } }
+        }
+
+        /// <summary>The mod's phrase list for a category, or null with no mod layer, which is what
+        /// <c>App.Mods?.GetPhrases(...)</c> returned; callers already carry their own fallback.</summary>
+        public static string[]? GetPhrases(string category)
+        {
+            try { return PhrasesProvider?.Invoke(category); } catch { return null; }
+        }
+
+        public static string PinkRushName
+        {
+            get { try { return PinkRushNameProvider?.Invoke() ?? "PINK RUSH!"; } catch { return "PINK RUSH!"; } }
+        }
+
+        /// <summary>The active mod changed. The head forwards its service's event here so a view
+        /// subscribes once, to Core, on every head.</summary>
+        public static event EventHandler<ModPackage>? ModChanged;
+
+        public static void RaiseModChanged(object? sender, ModPackage package)
+        {
+            try { ModChanged?.Invoke(sender, package); } catch { /* a subscriber's fault is not the switch's */ }
         }
 
         /// <summary>Collective override, or null. Faults are swallowed - see <see cref="ActiveModToken"/>.</summary>

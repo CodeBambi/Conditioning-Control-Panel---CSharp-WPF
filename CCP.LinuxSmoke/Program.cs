@@ -66,6 +66,13 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("CoreSettings.Current is a default instance, not null", CoreSettings.Current is not null);
                 Check("CoreSettings.Current is stable across reads", ReferenceEquals(CoreSettings.Current, CoreSettings.Current));
                 Check("CoreMods.MakeModAware passes text through with no mod layer", CoreMods.MakeModAware("Bambi") == "Bambi");
+                Check("CoreMods.ActiveModId is the CCP default with no mod layer", CoreMods.ActiveModId == Models.BuiltInMods.CCPDefaultId);
+                Check("CoreMods.IsCCPDefault with no mod layer", CoreMods.IsCCPDefault);
+                Check("CoreMods.InstalledMods holds the one built-in default", CoreMods.InstalledMods.Count == 1 && CoreMods.InstalledMods.ContainsKey(Models.BuiltInMods.CCPDefaultId));
+                Check("CoreMods.AccentColorHex is the built-in default manifest's", CoreMods.AccentColorHex == Models.BuiltInMods.CCPDefault.Theme?.AccentColor, CoreMods.AccentColorHex);
+                Check("CoreMods.Affirmation is the built-in default manifest's", CoreMods.Affirmation == Models.BuiltInMods.CCPDefault.Identity?.Affirmation, CoreMods.Affirmation);
+                Check("CoreMods.GetPhrases is null with no mod layer", CoreMods.GetPhrases("BubbleCountMercy") == null);
+                Check("CoreReleaseContent answers null with no pack service", CoreReleaseContent.GetPackInfo("mod-bambi") == null && CoreReleaseContent.GetStampFor("mod-bambi") == null);
                 Check("AwarenessIntensity.Current reads the ship default unseeded", Services.Awareness.AwarenessIntensityProfile.Current == Services.Awareness.AwarenessIntensity.Chatty);
                 // The subreddit rule moved from the online coordinator into Core with no test of its own.
                 Check("SubredditName strips r/", Services.Fyp.SubredditName.Sanitize("r/gonewild") == "gonewild");

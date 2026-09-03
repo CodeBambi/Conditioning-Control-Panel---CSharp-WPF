@@ -275,9 +275,25 @@ namespace ConditioningControlPanel
             CoreMods.CollectiveOverrideProvider = () => Mods?.GetCollectiveOverride();
             CoreMods.ModeDisplayNameProvider = () => Mods?.GetModeDisplayName();
             CoreMods.MakeModAwareProvider = text => Mods?.MakeModAware(text);
+            CoreMods.ActiveModIdProvider = () => Mods?.ActiveModId;
+            CoreMods.InstalledModsProvider = () => Mods?.InstalledMods;
+            CoreMods.AccentColorHexProvider = () => Mods?.GetAccentColorHex();
+            CoreMods.SecondaryColorHexProvider = () => Mods?.GetSecondaryColorHex();
+            CoreMods.AffirmationProvider = () => Mods?.GetAffirmation();
+            CoreMods.PhrasesProvider = category => Mods?.GetPhrases(category);
+            CoreMods.PinkRushNameProvider = () => Mods?.GetPinkRushName();
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.ServiceProvider = () => Settings;
+            // The mod service's side effects on a switch, and what it asks the head.
+            CoreModsHooks.ModSwitched = () => Brain?.OnModSwitched();
+            CoreModsHooks.ReloadBarkRules = () => Bark?.ReloadRules();
+            CoreModsHooks.EventAccentHexProvider = () => LiveEvent?.AccentHex;
+            CoreModsHooks.ActiveCompanionProvider = () => Companion?.ActiveCompanion;
+            CoreModsHooks.SwitchCompanion = cid => Companion?.SwitchCompanion(cid);
+            // The downloadable packs: the pack service seeds what the mod service reads.
+            CoreReleaseContent.StampProvider = ReleaseContentService.GetStampFor;
+            CoreReleaseContent.PackInfoProvider = id => ReleaseContent?.GetPackInfo(id);
             CoreSettingsHooks.CloudBackup = () =>
                 HasCloudIdentity && ProfileSync != null ? ProfileSync.BackupSettingsAsync() : Task.CompletedTask;
 
@@ -1860,6 +1876,8 @@ namespace ConditioningControlPanel
 
             // Initialize mod system (must be after settings, before services that use content config)
             Mods = new ModService();
+            // Views subscribe to the mod switch through Core, on every head.
+            Mods.ModChanged += (sender, package) => CoreMods.RaiseModChanged(sender, package);
             Mods.Initialize(Settings?.Current?.ActiveModId);
 
             // Mod-coded title bars: tint every window's OS caption with the active mod accent.
@@ -2359,7 +2377,7 @@ namespace ConditioningControlPanel
                 // downloaded .ccpmod into its built-in slot, drop the resource caches, refresh mod
                 // lists. Wired here rather than in ModService's ctor - that runs far earlier, while
                 // ReleaseContent is still null.
-                Mods?.AttachReleaseContent(releaseContent);
+                Mods?.AttachReleaseContent();
 
                 _ = Task.Run(async () =>
                 {
