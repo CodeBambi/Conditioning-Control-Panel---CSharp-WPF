@@ -670,8 +670,10 @@ public class BubbleService : IDisposable
             await avatar.GlideToBubbleAsync(bubble.CenterPx, bubble.RadiusPx, ct);
             if (ct.IsCancellationRequested || !bubble.IsAlive) return;
 
-            // 2) speak the mod-themed, effect-specific line (the avatar narrates what it's about to fire)
-            var line = PickEggVoiceLine(bubble.EffectKindId);
+            // 2) speak the mod-themed, effect-specific line (the avatar narrates what it's about to fire).
+            // Disguise on: the narration is the loudest tell of the lot, so the companion falls back
+            // to the generic "let me pop this one for you" line and gives nothing away either.
+            var line = PickEggVoiceLine(bubble.IsDisguised ? "" : bubble.EffectKindId);
             avatar.GigglePriority(line.Text, playSound: line.Audio != null, aiGenerated: false,
                                   phraseAudioPath: line.Audio, barkVoice: line.Audio != null, mood: "playful");
             await Task.Delay(EstimateSpeechMs(line.Text, line.Audio), ct);
@@ -1103,6 +1105,13 @@ public class BubbleService : IDisposable
             ChaosMotion? motion = Enum.TryParse<ChaosMotion>(App.Settings?.Current?.ChaosMotionMode, out var mm)
                 ? mm : (ChaosMotion?)null;
 
+            // Disguise (thread 1526803967177134170): a trigger bubble must be indistinguishable
+            // from a plain one, and travel is as much of a tell as the sprite: a rain-down bubble
+            // in a float-up field names itself. Force the ambient motion here; Bubble's ctor takes
+            // care of size, speed and rot, and BuildChaosLayers of sprite, tint, label and hint.
+            bool disguise = App.Settings?.Current?.BubbleDisguiseEnabled == true;
+            if (disguise) motion = ChaosMotion.FloatUp;
+
             // Trigger effects linger longer than the brisk chaos cadence (user feedback:
             // pink filter / glitch wash were too quick on the calm dashboard).
             const double LINGER = 2.5;
@@ -1123,12 +1132,14 @@ public class BubbleService : IDisposable
                     FuseMs = 0,
                     Motion = motion ?? ChaosMotion.FloatUp,
                     TreatLifeMs = 7000,
+                    Disguised = disguise,
                 };
             }
             var v = ChaosBubbleVariants.All.FirstOrDefault(x => x.Id == id);
             if (v == null) return null;
             var spec = ChaosBubbleVariants.Build(v, intensity: 0.3, motionOverride: motion, ambient: true);
             if (spec.Payload != null) spec.Payload.DurationMult = LINGER;   // longer-lasting overlays/flashes
+            spec.Disguised = disguise;
             return spec;
         }
         catch (Exception ex) { App.Logger?.Debug("BuildTriggerSpec({Id}): {E}", id, ex.Message); return null; }
@@ -2462,6 +2473,17 @@ internal class Bubble
 
     private bool _hasVariantSprite;   // a per-variant sprite replaced the tinted bubble.png
 
+    /// <summary>Disguise mode (thread 1526803967177134170): this bubble carries a payload but must
+    /// look, size, move and rot exactly like a plain ambient one. Set from the spec at spawn, so a
+    /// bubble already on screen keeps the look it was born with when the setting is toggled.</summary>
+    private readonly bool _disguised;
+    /// <summary>True when this bubble should wear the chaos skin (variant sprite / tint / label /
+    /// hint pill). A disguised trigger bubble reads as a plain bubble on BOTH render paths.</summary>
+    private bool WearsChaosSkin => _spec != null && !_disguised;
+
+    /// <summary>Disguise mode is on for this bubble (see <see cref="_disguised"/>).</summary>
+    internal bool IsDisguised => _disguised;
+
     // ---- lifetime-boon extensions (neutral defaults; chaos effect bubbles only) ----
     private readonly int _hitSize;         // Magic Wand / Mesmer Reach: enlarged click target (>= _size)
     private readonly double _baseOpacity;  // Blindfold: spawn-time opacity multiplier (1.0 = off)
@@ -2671,16 +2693,18 @@ internal class Bubble
     /// same flags so the two render paths match.</summary>
     private Compositor.BubbleLayer.BubbleItem BuildLayerItem()
     {
-        bool hasTint = _spec != null && !_hasVariantSprite;
-        var tint = _spec != null
-            ? new SkiaSharp.SKColor(_spec.Tint.R, _spec.Tint.G, _spec.Tint.B)
+        // WearsChaosSkin, not "_spec != null": a disguised trigger bubble must draw here exactly as
+        // a plain one does, or the compositor route would leak the tint/label the WPF route hides.
+        bool hasTint = WearsChaosSkin && !_hasVariantSprite;
+        var tint = WearsChaosSkin
+            ? new SkiaSharp.SKColor(_spec!.Tint.R, _spec.Tint.G, _spec.Tint.B)
             : new SkiaSharp.SKColor(0xE8, 0xE8, 0xF0);
 
         // Glow: the DropShadow that wins on the sprite (or the spotlight halo), resolved from flags.
         bool hasGlow = false; var glowColor = default(SkiaSharp.SKColor); float glowBlur = 0, glowOp = 0;
-        if (_spec != null)
+        if (WearsChaosSkin)
         {
-            if (_spec.IsSweeper) { glowColor = new SkiaSharp.SKColor(0xFF, 0x8A, 0x14); glowBlur = 36; glowOp = 1.0f; hasGlow = true; }
+            if (_spec!.IsSweeper) { glowColor = new SkiaSharp.SKColor(0xFF, 0x8A, 0x14); glowBlur = 36; glowOp = 1.0f; hasGlow = true; }
             else if (_isDarter) { glowColor = tint; glowBlur = 26; glowOp = 0.9f; hasGlow = true; }
             else if (_spec.IsGolden) { glowColor = new SkiaSharp.SKColor(0xFF, 0xD7, 0x00); glowBlur = 20; glowOp = 0.55f; hasGlow = true; }
             else if (_spec.IsBrittle) { glowColor = new SkiaSharp.SKColor(0xBF, 0xE6, 0xFF); glowBlur = 22; glowOp = 0.6f; hasGlow = true; }
@@ -2709,11 +2733,11 @@ internal class Bubble
             Sprite = Compositor.BubbleLayer.ResolveSprite(_bubbleImage.Source as System.Windows.Media.Imaging.BitmapSource),
             HasTint = hasTint,
             Tint = tint,
-            Label = (_spec != null && !_hasVariantSprite && !string.IsNullOrEmpty(_spec.Label)) ? _spec.Label : null,
+            Label = (WearsChaosSkin && !_hasVariantSprite && !string.IsNullOrEmpty(_spec!.Label)) ? _spec.Label : null,
             LabelFontDip = (float)Math.Max(14, _size * 0.30),
-            HasShine = ChaosSkiaFxOverlay.Enabled && !_hasVariantSprite && _spec != null,
-            IsEcho = _spec?.IsEcho == true,
-            EchoColor = _spec != null ? new SkiaSharp.SKColor(_spec.Tint.R, _spec.Tint.G, _spec.Tint.B, 110) : default,
+            HasShine = ChaosSkiaFxOverlay.Enabled && !_hasVariantSprite && WearsChaosSkin,
+            IsEcho = WearsChaosSkin && _spec!.IsEcho,
+            EchoColor = WearsChaosSkin ? new SkiaSharp.SKColor(_spec!.Tint.R, _spec.Tint.G, _spec.Tint.B, 110) : default,
             IsTease = _isTease,
             TeaseInnerDip = (float)(_size * 0.86),
             HasGlow = hasGlow,
@@ -2856,12 +2880,15 @@ internal class Bubble
         // Chaperone escorts don't either: the shield mechanic would dismantle itself in 5s.
         // The Tease isn't a treat either — it runs its own expiry (the DENIED bonus, no streak dock).
         // Nor is the Brittle: a dodged glass mine just drifts off-screen, no rot, no sting.
-        _isTreat = spec != null && !spec.IsLive && !_isDarter && !_isFreeze
+        // Disguised trigger bubbles never rot: a plain bubble rides all the way off the top, so one
+        // that dissolves in place after 5s has named itself as the odd one out.
+        _disguised = spec?.Disguised == true;
+        _isTreat = spec != null && !spec.IsLive && !_isDarter && !_isFreeze && !_disguised
                    && spec.IsHeart != true && spec.IsDroplet != true && spec.IsEscort != true
                    && spec.IsTease != true && spec.IsBrittle != true;
         if (_isTreat) _treatLifeRemainingMs = spec!.TreatLifeMs > 0 ? spec.TreatLifeMs : TREAT_LIFETIME_MS;
         // The two giants read frantic when they breathe at full danger amplitude — calm them 60%.
-        if (spec?.VariantId is "video" or "htlink") _dangerWobbleMult = 0.4;
+        if (!_disguised && spec?.VariantId is "video" or "htlink") _dangerWobbleMult = 0.4;
 
         // Random properties (size/motion overridden for chaos effect bubbles)
         //
@@ -2869,7 +2896,10 @@ internal class Bubble
         // against their own scale system (ChaosBubbleVariants.GLOBAL_SIZE_SCALE and the per-variant
         // sizeScale), so the user's ambient-size setting deliberately does NOT touch them.
         // The ambient field is the branch that had no knob at all - see BubbleSizing.
-        _size = spec != null
+        // A disguised trigger bubble takes the AMBIENT size band, not its variant's SizePx: the
+        // giants (video/htlink) are twice the size of a plain bubble, which gives the payload away
+        // across the room. Same call as the plain branch, so it lands inside the same spread.
+        _size = spec != null && !_disguised
             ? Math.Max(60, (int)Math.Round(spec.SizePx))
             : BubbleSizing.Scale(
                   random.Next(BubbleSizing.BaseMinDip, BubbleSizing.BaseMaxDip),
@@ -2903,10 +2933,13 @@ internal class Bubble
             ? Math.Max(WindowPad, (int)Math.Round(_size * 1.3))
             : Math.Max(WindowPad + (_hitSize - _size + 1) / 2, popPad);
         _speed = 1.0 + random.NextDouble() * 1.0; // 1.0 to 2.0 px/frame
-        if (spec != null) // bigger chaos bubbles drift a little slower (more reachable)
+        // The three spec speed terms are skipped while disguised. The chaos pace bump alone makes
+        // an effect bubble visibly quicker than the field it is hiding in.
+        bool specPace = spec != null && !_disguised;
+        if (specPace) // bigger chaos bubbles drift a little slower (more reachable)
             _speed *= Math.Clamp(1.4 - (_size - 150) / 220.0, 0.6, 1.4);
-        if (spec != null) _speed *= Math.Max(0.1, spec.SpeedMult);   // golden bubbles fly
-        if (spec != null) _speed *= ChaosTuning.CHAOS_SPEED_MULT;    // chaos pace bump: travel farther before rotting
+        if (specPace) _speed *= Math.Max(0.1, spec!.SpeedMult);   // golden bubbles fly
+        if (specPace) _speed *= ChaosTuning.CHAOS_SPEED_MULT;     // chaos pace bump: travel farther before rotting
         // Dashboard speed slider: up to +500% travel (6x) for the ambient game — BOTH plain and
         // trigger bubbles — leaving chaos pacing alone (chaos bubbles carry a spec but are
         // never ambientTrigger).
@@ -2999,8 +3032,10 @@ internal class Bubble
         // the shared bubble image otherwise.
         // GG sweeper rabbits share the "darter" VariantId but wear their own amber sprite so
         // they read as a different rabbit from the catchable pink one (falls back to darter.png).
-        var variantSprite = spec == null ? null
-            : (spec.IsSweeper ? ChaosArt.Resolve("bubbles", "sweeper") : null)
+        // Disguised trigger bubbles skip the lookup entirely and fall through to the shared
+        // bubble.png below: the sprite IS the tell the thread asked us to remove.
+        var variantSprite = !WearsChaosSkin ? null
+            : (spec!.IsSweeper ? ChaosArt.Resolve("bubbles", "sweeper") : null)
               ?? ChaosArt.Resolve("bubbles", spec.VariantId);
         if (variantSprite != null)
         {
@@ -3082,7 +3117,7 @@ internal class Bubble
         // Glassy specular shine over plain round bubbles (variant sprites bring their own art).
         // Chaos bubbles only — the classic (ambient) bubble feature reads as a harsh white glare with it
         // (the bubble.png already has its own highlights), so keep the rim-shine to the Rabbit Hole.
-        if (ChaosSkiaFxOverlay.Enabled && !_hasVariantSprite && spec != null)
+        if (ChaosSkiaFxOverlay.Enabled && !_hasVariantSprite && WearsChaosSkin)
         {
             var shine = new System.Windows.Shapes.Ellipse
             {
@@ -4361,6 +4396,12 @@ internal class Bubble
     private void BuildChaosLayers()
     {
         if (_spec == null) return;
+        // Disguise (thread 1526803967177134170): every layer below is a payload tell: the tint,
+        // the label glyph, the first-contact hint pill ("click to pop", which a plain bubble never
+        // wears). Returning here leaves the visual tree byte-for-byte identical to a plain ambient
+        // bubble's, including child order, which is what the compositor mirror relies on.
+        // Ambient trigger specs are never live/tease/echo/darter, so nothing below is lost.
+        if (_disguised) return;
 
         // Freeze aura — a soft blue halo behind the bubble, hidden (opacity 0) until the field is
         // frozen, then pulsed in AnimateFrame. Every chaos bubble carries one so the whole field

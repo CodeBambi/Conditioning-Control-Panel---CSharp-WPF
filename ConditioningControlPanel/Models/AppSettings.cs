@@ -2960,6 +2960,18 @@ namespace ConditioningControlPanel.Models
             set { _spiralRandomize = value; OnPropertyChanged(); }
         }
 
+        // Suggestion thread 1529406379625021541: popping a spiral bubble while the spiral overlay
+        // was already up did nothing visible. With this on, that pop swaps the live spiral for a
+        // different one from the same pool the randomizer uses. Off by default - it overrides a
+        // spiral the user deliberately picked in the library, so it stays opt-in like the
+        // randomizer above. A pool with fewer than two entries makes it a no-op.
+        private bool _spiralRerollOnPop = false;
+        public bool SpiralRerollOnPop
+        {
+            get => _spiralRerollOnPop;
+            set { _spiralRerollOnPop = value; OnPropertyChanged(); }
+        }
+
         private int _spiralOpacity = 10; // 0-100%
         public int SpiralOpacity
         {
@@ -3102,6 +3114,18 @@ namespace ConditioningControlPanel.Models
         {
             get => _bubbleTriggerChance;
             set { _bubbleTriggerChance = Math.Clamp(value, 0, 50); OnPropertyChanged(); }
+        }
+        // Disguise (suggestion thread 1526803967177134170, the most-upvoted idea in the forum):
+        // trigger bubbles normally advertise their payload with a per-variant sprite, a tint and a
+        // label, so you always know what you are about to set off. With this on they wear the plain
+        // bubble instead - same sprite, same size band, same drift, no hint pill, no early rot - and
+        // the only way to find out what is inside one is to pop it. Mechanics, sound, XP, triggers
+        // and the avatar egg are all untouched; this only changes what the bubble looks like.
+        private bool _bubbleDisguiseEnabled = false;
+        public bool BubbleDisguiseEnabled
+        {
+            get => _bubbleDisguiseEnabled;
+            set { _bubbleDisguiseEnabled = value; OnPropertyChanged(); }
         }
         private int _bubbleSpeedBoost = 0;   // 0..500 % extra travel speed for on-screen bubbles
         public int BubbleSpeedBoost

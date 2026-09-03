@@ -306,6 +306,13 @@ public class OverlayService : IDisposable
     private readonly Random _spiralRandom = new();
     private string? _lastRandomSpiralPath;
 
+    // Pop-to-reroll (thread 1529406379625021541). The cooldown is the whole safety story: a spiral
+    // bubble pop is user-paced, but a trigger-happy field can land several a second and each swap
+    // may cost a GIF decode. _spiralSwapInFlight tells StopSpiral it is mid-swap, not shutting down.
+    private const double SpiralRerollCooldownMs = 1500;
+    private DateTime _lastSpiralRerollUtc = DateTime.MinValue;
+    private bool _spiralSwapInFlight;
+
     public bool IsRunning => _isRunning;
 
     /// <summary>
@@ -476,6 +483,75 @@ public class OverlayService : IDisposable
                     return null;
                 }
             }
+
+    /// <summary>
+    /// Swap the spiral that is on screen RIGHT NOW for a different one from the same pool the
+    /// randomizer draws from. Suggestion thread 1529406379625021541: "at the moment if you have the
+    /// spiral overlay, popping a spiral bubble doesn't change anything... it could change the gif
+    /// used". Called from <see cref="ShowOverlayTimed"/>'s spiral branch, i.e. exactly when a spiral
+    /// bubble pops over a live spiral, and gated on SpiralRerollOnPop.
+    ///
+    /// No-ops (returning false) when nothing is showing, when the pool can't offer a different
+    /// asset, or inside the cooldown - a fast pop streak must not turn into a decode storm. Cheap on
+    /// the default compositor route: StartSpiral decodes off the UI thread and re-uses the cache.
+    /// </summary>
+    public bool RerollLiveSpiral()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null || dispatcher.HasShutdownStarted) return false;
+        if (!dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(new Action(() => RerollLiveSpiral()));
+            return true;
+        }
+
+        try
+        {
+            if (!SpiralShowing) return false;
+            if ((DateTime.UtcNow - _lastSpiralRerollUtc).TotalMilliseconds < SpiralRerollCooldownMs) return false;
+
+            var settings = App.Settings.Current;
+            var configured = (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+                ? settings.SpiralPath
+                : null;
+            // Point the picker's no-repeat guard at what is ACTUALLY on screen, not at the last
+            // path it happened to draw: a two-spiral pool would otherwise keep handing back the one
+            // already showing, and the pop would look as dead as it does today.
+            _lastRandomSpiralPath = _spiralPath;
+            var pick = PickRandomSpiral(configured);
+            if (string.IsNullOrEmpty(pick)) return false;
+            if (string.Equals(pick, _spiralPath, StringComparison.OrdinalIgnoreCase)) return false;
+
+            _lastSpiralRerollUtc = DateTime.UtcNow;
+
+            // StopSpiral is a full teardown: it drops the ramp hold and the sustained flag (so a
+            // panic can't strand them) and hands the session's corner GIF back. None of that is
+            // wanted for a swap - the overlay is not going away, it is changing clothes - so park
+            // the opacity ownership across the restart and mute the corner-GIF handback.
+            var ramp = _rampSpiralOpacity;
+            var sustained = _sustainedSpiralHeld;
+            _spiralSwapInFlight = true;
+            try { StopSpiral(); }
+            finally { _spiralSwapInFlight = false; }
+            _rampSpiralOpacity = ramp;
+            _sustainedSpiralHeld = sustained;
+
+            _spiralPath = pick!;
+            StartSpiral();
+            // The cache-hit route paints the saved SpiralOpacity; re-assert the parked owner. The
+            // off-thread decode route reads _rampSpiralOpacity itself when it lands.
+            if (ramp.HasValue && SpiralShowing) ApplySpiralOpacityDirect(ramp.Value);
+
+            App.Logger?.Debug("[Overlay] Spiral rerolled on bubble pop -> {Path}", pick);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("[Overlay] RerollLiveSpiral: {E}", ex.Message);
+            return false;
+        }
+    }
+
     public void Start()
     {
         if (_isRunning) return;
@@ -923,6 +999,12 @@ public class OverlayService : IDisposable
                     if (!_bumpSpiralActive) { _bumpSpiralActive = true; _bumpPrevRampSpiral = _rampSpiralOpacity; }
                     if (SpiralShowing)
                     {
+                        // Pop-to-reroll (thread 1529406379625021541): this is the "spiral bubble
+                        // popped while the spiral is already up" case, which until now only bumped
+                        // the opacity. Opt-in, and the swap runs before the bump so the bump below
+                        // still ends up owning the opacity on the freshly-started spiral.
+                        if (App.Settings?.Current?.SpiralRerollOnPop == true) RerollLiveSpiral();
+
                         double target = ResolveAdHocOverlayOpacity(true, _rampSpiralOpacity,
                             (App.Settings?.Current?.SpiralOpacity ?? 0) / 100.0, opacityPercent / 100.0);
                         _rampSpiralOpacity = target;
@@ -2073,6 +2155,10 @@ public class OverlayService : IDisposable
         // day is a minute-0 one. Same shape as CornerGifService's own admission nudge; the policy
         // guards its re-entrancy and refuses to raise anything on a paused session. Session end
         // clears Active before it tears any overlay down, so this cannot resurrect a corner GIF.
+        // ...unless this stop is only the first half of a pop-to-reroll swap: the overlay is about
+        // to come straight back with a different asset, so handing the corner GIF back here would
+        // put two spirals on screen for the rest of the session.
+        if (_spiralSwapInFlight) return;
         try { SessionEngine.Active?.RefreshCornerGifPolicy(); }
         catch (Exception ex)
         {

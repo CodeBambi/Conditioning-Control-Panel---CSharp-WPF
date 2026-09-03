@@ -103,6 +103,12 @@ public sealed class EffectBubbleSpec
     /// <summary>Velocity magnitude in DIPs/frame once active (fast).</summary>
     public double DarterSpeed { get; init; }
 
+    /// <summary>Dashboard trigger bubbles only (AppSettings.BubbleDisguiseEnabled): draw this
+    /// bubble as a plain ambient one - no variant sprite, no tint, no label, no hint pill - so the
+    /// payload can't be read off it before the pop. Settable rather than init: BubbleService stamps
+    /// it after the variant table has built the spec. Chaos runs never set it.</summary>
+    public bool Disguised { get; set; }
+
     public int Strength => Payload.Strength;
 }
 

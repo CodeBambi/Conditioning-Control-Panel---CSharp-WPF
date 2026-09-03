@@ -83,6 +83,7 @@ namespace ConditioningControlPanel.Features
             {
                 ChkEnable.IsChecked = s.SpiralEnabled;
                 ChkRandomize.IsChecked = s.SpiralRandomize;
+                ChkRerollOnPop.IsChecked = s.SpiralRerollOnPop;
                 ChkSessionCornerGif.IsChecked = s.SessionCornerGifAllowed;
                 SliderOpacity.Value = s.SpiralOpacity;
                 TxtOpacity.Text = $"{s.SpiralOpacity}%";
@@ -100,6 +101,7 @@ namespace ConditioningControlPanel.Features
             if (e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.SpiralOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.SpiralRandomize) ||
+                e.PropertyName == nameof(Models.AppSettings.SpiralRerollOnPop) ||
                 e.PropertyName == nameof(Models.AppSettings.SessionCornerGifAllowed) ||
                 e.PropertyName == nameof(Models.AppSettings.SpiralTargetMonitor))
             {
@@ -142,6 +144,21 @@ namespace ConditioningControlPanel.Features
             // Takes effect on the next spiral overlay/session start (never mid-run — the decoded
             // frame cache is keyed by path, so re-picking live would cause a hitch).
             s.SpiralRandomize = ChkRandomize.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// Pop a spiral bubble to reroll the spiral (suggestion thread 1529406379625021541). Read
+        /// live by OverlayService at the moment of the pop, so this needs no restart. A pool with
+        /// fewer than two spirals in it makes the pop behave exactly as it does today.
+        /// </summary>
+        private void ChkRerollOnPop_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.SpiralRerollOnPop = ChkRerollOnPop.IsChecked ?? false;
             App.Settings?.Save();
         }
 

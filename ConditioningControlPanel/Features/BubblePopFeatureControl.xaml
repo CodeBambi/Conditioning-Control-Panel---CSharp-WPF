@@ -251,6 +251,23 @@
 
                                 <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
+                                <!-- Disguise (suggestion thread 1526803967177134170). Lives with the
+                                     trigger dials because it only means anything once bubbles carry
+                                     effects: it hides WHICH effect, not that bubbles are on. -->
+                                <Grid Height="34" Background="Transparent" ToolTip="{loc:Str tooltip_bubble_disguise}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_disguise}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="ChkDisguise"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Checked="ChkDisguise_Changed" Unchecked="ChkDisguise_Changed"/>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
                                 <TextBlock Text="Effect types" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,8"/>
                                 <WrapPanel Background="Transparent" ToolTip="Each ticked effect has an equal chance">
