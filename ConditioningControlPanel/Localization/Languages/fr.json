@@ -4946,5 +4946,13 @@
   "label_gaze_interaction": "Interaction par le regard",
   "label_stare_to_pop": "Fixer pour éclater",
   "tooltip_bubble_gaze_pop": "Regardez une bulle pendant environ 1 seconde pour la faire éclater, sans cliquer. Ne concerne que les bulles ; les flashs ont leur propre interrupteur sur la page Flashes.",
-  "label_gaze_needs_calibration": "Nécessite la webcam active et le suivi oculaire calibré. Configurez-le dans Play, Regard Focalisé."
+  "label_gaze_needs_calibration": "Nécessite la webcam active et le suivi oculaire calibré. Configurez-le dans Play, Regard Focalisé.",
+  "video_strict_lock_notice": "Le verrou strict est actif. Cette vidéo va jusqu'au bout.",
+  "tooltip_lockdown_force_strict_lock": "Active le verrou strict pendant tout le confinement et remet ton réglage ensuite. Tant qu'il est actif, les vidéos obligatoires ne peuvent pas être passées : Escape, Alt+F4 et la touche panique ne font rien jusqu'à la fin du clip.",
+  "xp_chip_cycle_bonus": "+{0}% d'XP · Cérémonie du 1er septembre",
+  "xp_chip_cycle_bonus_tip": "Tu es redescendu à la Cérémonie du 1er septembre : chaque point d'XP que tu gagnes vaut {0}% de plus, définitivement.",
+  "setting_panic_single_press": "Panique en une pression",
+  "tooltip_panic_single_press": "Une pression et c'est fini : tout s'arrête et toutes les fenêtres se cachent. Pas d'étape de pause, et le panneau ne passe jamais au premier plan.",
+  "tooltip_stop_panic_key": "Tout arrêter. Touche panique : {0}",
+  "tooltip_stop_no_panic_key": "Tout arrêter. Ta touche panique est désactivée."
 }

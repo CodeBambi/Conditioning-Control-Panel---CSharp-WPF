@@ -4946,5 +4946,13 @@
   "label_gaze_interaction": "Blick-Interaktion",
   "label_stare_to_pop": "Ansehen zum Platzen",
   "tooltip_bubble_gaze_pop": "Sieh eine Blase etwa 1 Sekunde lang an, um sie ohne Klicken platzen zu lassen. Gilt nur für Blasen; Flashes haben ihren eigenen Schalter auf der Flash-Seite.",
-  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus."
+  "label_gaze_needs_calibration": "Benötigt eine laufende Webcam und eine kalibrierte Blickverfolgung. Einrichtung unter Play, Blick-Fokus.",
+  "video_strict_lock_notice": "Strikte Sperre ist an. Dieses Video läuft bis zum Ende.",
+  "tooltip_lockdown_force_strict_lock": "Schaltet die strikte Sperre für den gesamten Lockdown ein und stellt deine Einstellung danach wieder her. Solange sie an ist, lassen sich Pflichtvideos nicht überspringen: Escape, Alt+F4 und die Panik-Taste bewirken nichts, bis der Clip zu Ende ist.",
+  "xp_chip_cycle_bonus": "+{0}% XP · Zeremonie vom 1. September",
+  "xp_chip_cycle_bonus_tip": "Bei der Zeremonie vom 1. September bist du erneut abgestiegen, also ist jeder XP-Punkt, den du verdienst, dauerhaft {0}% mehr wert.",
+  "setting_panic_single_press": "Panik mit einem Druck",
+  "tooltip_panic_single_press": "Ein Druck und es ist vorbei: alles stoppt, alle Fenster verschwinden. Kein Pausenschritt, und das Bedienfeld springt nie nach vorn.",
+  "tooltip_stop_panic_key": "Alles stoppen. Panik-Taste: {0}",
+  "tooltip_stop_no_panic_key": "Alles stoppen. Deine Panik-Taste ist ausgeschaltet."
 }

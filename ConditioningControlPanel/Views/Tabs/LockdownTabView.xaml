@@ -309,7 +309,8 @@
                                                        FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}"
                                                        Margin="0,0,0,2"/>
 
-                                            <Grid Height="28" Background="Transparent">
+                                            <Grid Height="28" Background="Transparent"
+                                                  ToolTip="{loc:Str tooltip_lockdown_force_strict_lock}">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
@@ -317,6 +318,7 @@
                                                 <TextBlock Grid.Column="0" Text="{loc:Str lockdown_poss_safety_strict}" FontSize="11.5"
                                                            Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
                                                 <CheckBox Grid.Column="1" x:Name="ChkLockdownStrict" x:FieldModifier="internal"
+                                                          ToolTip="{loc:Str tooltip_lockdown_force_strict_lock}"
                                                           Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
                                                           poss:Possession.Role="Toggle" poss:Possession.Name="the Strict Lock safety"
                                                           Checked="ChkLockdownSafety_Changed" Unchecked="ChkLockdownSafety_Changed"/>

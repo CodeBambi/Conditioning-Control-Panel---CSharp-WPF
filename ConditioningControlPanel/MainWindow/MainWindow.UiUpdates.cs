@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -624,12 +624,59 @@ namespace ConditioningControlPanel
             RefreshXPBarBonuses();
         }
 
+        /// <summary>
+        /// The Ceremony chip: "+10% XP · Ceremony of Sept 1", first in the bonus row.
+        ///
+        /// <para>Why it exists: the bonus row is built from the SKILL TREE's breakdown, and the
+        /// Cycle multiplier is not a skill - ProgressionService.AddXP multiplies it
+        /// in separately. So the one screen that lists "here is every bonus on your XP" listed
+        /// everything except the permanent reward people had just been handed. luzy, AhrySiss,
+        /// Wobberjockey and yeoZ all reported the same thing after Sept 1: the invisible +10.</para>
+        ///
+        /// <para>The percent comes off DescentMigration.ActiveCycleXpBonus, the
+        /// multiplier that is really applied, so retuning the constant retunes the chip. Nothing
+        /// is drawn for an account that never cycled, or whose bonus is 1.0.</para>
+        /// </summary>
+        private void AddCycleBonusChip()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null) return;
+
+                var kind = Services.Descent.DescentReceipt.Resolve(s.DescentMigrationCompleted, s.DescentMigrationChoice);
+                var bonus = Services.Descent.DescentMigration.ActiveCycleXpBonus;
+                if (!Services.Descent.DescentReceipt.ShowsXpMultiplier(kind, bonus)) return;
+
+                var percent = Services.Descent.DescentReceipt.BonusPercentText(bonus);
+                var chip = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)), // #2A2A4A - as the skill chips
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(6, 3, 6, 3),
+                    Margin = new Thickness(0, 0, 8, 0),
+                    ToolTip = Loc.GetF("xp_chip_cycle_bonus_tip", percent),
+                    Child = new TextBlock
+                    {
+                        Text = Loc.GetF("xp_chip_cycle_bonus", percent),
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xB6, 0xC1)),
+                        FontSize = 10,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                XPBarBonusList.Children.Add(chip);
+            }
+            catch (Exception ex) { App.Logger?.Debug("AddCycleBonusChip: {E}", ex.Message); }
+        }
+
         private void RefreshXPBarBonuses()
         {
             if (XPBarBonusList == null) return;
 
             var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
             XPBarBonusList.Children.Clear();
+
+            AddCycleBonusChip();
 
             foreach (var (source, value) in breakdown)
             {
@@ -2411,6 +2458,21 @@ namespace ConditioningControlPanel
             s.PanicOverridesAll = AppSettingsTab.ChkPanicOverridesAll.IsChecked ?? true;
             SaveSettings();
             App.Logger?.Information("Panic override mode: {State}", s.PanicOverridesAll ? "stop everything" : "legacy ladder");
+        }
+
+        /// <summary>
+        /// Single-press panic (thread 1541736938703167550). OFF by default. ON, one press stops
+        /// every surface AND hides the control panel and the tube instead of restoring them.
+        /// </summary>
+        internal void ChkPanicSinglePress_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.PanicSinglePress = AppSettingsTab.ChkPanicSinglePress.IsChecked ?? false;
+            SaveSettings();
+            App.Logger?.Information("Single-press panic: {State}", s.PanicSinglePress ? "on (hide everything)" : "off");
         }
 
         /// <summary>

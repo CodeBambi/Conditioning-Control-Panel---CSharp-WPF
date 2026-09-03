@@ -5402,5 +5402,13 @@
   "label_gaze_interaction": "视线交互",
   "label_stare_to_pop": "注视即可戳破",
   "tooltip_bubble_gaze_pop": "注视泡泡约 1 秒即可戳破，无需点击。仅对泡泡有效；闪图在闪图页面有独立开关。",
-  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。"
+  "label_gaze_needs_calibration": "需要打开摄像头并完成视线追踪校准。请在 Play 的聚焦注视中设置。",
+  "video_strict_lock_notice": "严格锁定已开启。这段视频会播到最后。",
+  "tooltip_lockdown_force_strict_lock": "在整个锁定期间开启严格锁定，结束后恢复你原来的设置。开启期间，强制视频无法跳过：在片段结束前，Escape、Alt+F4 和恐慌键都不起作用。",
+  "xp_chip_cycle_bonus": "+{0}% 经验 · 9 月 1 日仪式",
+  "xp_chip_cycle_bonus_tip": "你在 9 月 1 日的仪式上选择了再次下沉，所以你获得的每一点经验都永久多 {0}%。",
+  "setting_panic_single_press": "一键恐慌",
+  "tooltip_panic_single_press": "按一下就结束：一切停止，所有窗口隐藏。没有暂停步骤，控制面板也不会跳到最前面。",
+  "tooltip_stop_panic_key": "全部停止。恐慌键：{0}",
+  "tooltip_stop_no_panic_key": "全部停止。你的恐慌键已关闭。"
 }
