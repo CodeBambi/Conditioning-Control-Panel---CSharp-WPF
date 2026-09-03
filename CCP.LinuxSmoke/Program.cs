@@ -103,6 +103,24 @@ namespace ConditioningControlPanel.LinuxSmoke
                 CoreAudio.Duck(95); CoreAudio.Unduck();
                 Check("CoreAudio ducking is a no-op with no audio", CoreAudio.DuckGeneration == 0);
                 Check("CoreAi.IsAvailable is false with no head", !CoreAi.IsAvailable);
+                // The progression seam (wire/35). A head with no XP service is a real state, so
+                // the only thing to assert unseeded is that awarding is silent and does not throw
+                // - a minigame must still finish its flow on a head that keeps no score.
+                CoreProgression.AddXP(25, "Other");
+                CoreProgression.TrackBubbleCountResult(true);
+                Check("CoreProgression awards and tracks silently with no progression service", true);
+                double seenAmount = 0; string? seenSource = null; bool? seenCorrect = null;
+                CoreProgression.AddXPProvider = (a, s) => { seenAmount = a; seenSource = s; };
+                CoreProgression.TrackBubbleCountResultProvider = c => seenCorrect = c;
+                CoreProgression.AddXP(250, "BubbleCount");
+                CoreProgression.TrackBubbleCountResult(false);
+                Check("CoreProgression forwards amount and source once seeded", seenAmount == 250 && seenSource == "BubbleCount");
+                Check("CoreProgression forwards the bubble-count result once seeded", seenCorrect == false);
+                CoreProgression.AddXPProvider = (_, _) => throw new InvalidOperationException("boom");
+                CoreProgression.AddXP(1);
+                Check("CoreProgression swallows a throwing provider", true);
+                CoreProgression.AddXPProvider = null;
+                CoreProgression.TrackBubbleCountResultProvider = null;
                 // The speech seam (wire/21). Unseeded must be honest, never optimistic: a view
                 // that believed "available" here would offer voice input nothing can deliver.
                 Check("CoreSpeech.IsAvailable is false with no speech service", !CoreSpeech.IsAvailable);

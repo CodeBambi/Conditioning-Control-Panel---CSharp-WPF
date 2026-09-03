@@ -147,9 +147,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Award XP
             if (!_isTest)
             {
-                // ponytail: needs ProgressionService.AddXP(25, XPSource.Other) from
-                // ConditioningControlPanel/Services/ProgressionService.cs — still head-side, and
-                // there is no CoreProgression seam yet.
+                CoreProgression.AddXP(25, "Other");
             }
 
             // Show affirmation

@@ -308,6 +308,12 @@ namespace ConditioningControlPanel
             CoreAudio.UnduckProvider = generation => Audio?.Unduck(generation);
             CoreAudio.DuckGenerationProvider = () => Audio?.DuckGeneration ?? 0;
             CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;
+            // Progression, for the ported minigame windows that award XP or record a streak. The
+            // source arrives as an XPSource member name - see CoreProgression for why - and an
+            // unknown name is charged to Other rather than dropped.
+            CoreProgression.AddXPProvider = (amount, source) =>
+                Progression?.AddXP(amount, Enum.TryParse<Services.XPSource>(source, out var s) ? s : Services.XPSource.Other);
+            CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
             // Speech capability, for the views that ask whether voice input is worth offering.
             // SpeechService itself stays here - it owns a capture device. Reading ModelStatus
             // lazily probes the model exactly as the WPF views already did.

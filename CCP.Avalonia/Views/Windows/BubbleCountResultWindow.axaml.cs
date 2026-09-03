@@ -35,8 +35,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    and drives <c>LockCardWindow.ShowOnAllMonitors</c> plus the 500 ms
     ///    <c>IsAnyOpen()</c> poll, exactly as WPF. Those two LockCardWindow statics are no-ops on
     ///    this head - that note lives in LockCardWindow, not here.
-    ///  - <b>Still stubbed</b>: the XP and achievement writes (see the ponytail comment in
-    ///    CheckAnswer). Everything that only touches the view - the 3-attempt loop, the
+    ///  - <b>The XP and achievement writes are real</b>, through <see cref="CoreProgression"/>;
+    ///    they are silent no-ops on a head with no progression service, which is this one today.
+    ///    Only the duration scaling is still stubbed (see the ponytail comment in CheckAnswer):
+    ///    the award is the flat WPF base of 250. Everything that only touches the view - the 3-attempt loop, the
     ///    too-high/too-low hints, the cross-window input mirroring, the inactivity watchdog - is
     ///    ported verbatim.
     ///  - <c>PreviewTextInput</c> -> a tunnelling <c>TextInputEvent</c> handler; <c>Visibility</c>
@@ -236,16 +238,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (answer == _correctAnswer)
             {
                 // Correct! XP scaled by video duration.
-                // ponytail: needs BubbleCountService.ScaleXpByDuration(250)
-                // (ConditioningControlPanel/Services/BubbleCountService.cs), then
-                // ProgressionService.AddXP(xp, XPSource.BubbleCount) - the enum lives in
-                // ConditioningControlPanel/Services/Companion/CompanionService.cs - and
-                // AchievementService.TrackBubbleCountResult(true). None of the three has a Core
-                // seam; CCP.Core/Services has no Progression or Achievements at all.
+                // ponytail: the scaling still needs BubbleCountService.ScaleXpByDuration(250)
+                // (ConditioningControlPanel/Services/BubbleCountService.cs), which is head-side and
+                // has no Core seam, so the flat WPF base of 250 is awarded until it moves.
                 var xp = 250;
+                CoreProgression.AddXP(xp, "BubbleCount");
                 ShowFeedbackOnAll($"🎉 CORRECT! +{xp} XP 🎉", Color.FromRgb(50, 205, 50));
                 DisableInputOnAll();
                 StopWatchdog(); // terminal success: no more input expected
+
+                // Track achievement - correct answer
+                CoreProgression.TrackBubbleCountResult(true);
 
                 // Delay then complete
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -262,8 +265,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _attemptsRemaining--;
                 UpdateAttemptsOnAll();
 
-                // ponytail: needs AchievementService.TrackBubbleCountResult(false) - a wrong answer
-                // breaks the streak. Same missing service as above.
+                // Track achievement - wrong answer (breaks streak)
+                CoreProgression.TrackBubbleCountResult(false);
 
                 if (_attemptsRemaining <= 0)
                 {
