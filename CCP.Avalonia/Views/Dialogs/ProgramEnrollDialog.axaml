@@ -1,0 +1,264 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/ProgramEnrollDialog.xaml. Structure, ordering,
+     spacing and every resource key preserved so the two diff cleanly. Deviations, all forced:
+
+       Style="{StaticResource X}"          -> Theme="{StaticResource X}"  (keyed styles are ControlThemes)
+       <Style x:Key TargetType>            -> <ControlTheme x:Key TargetType>
+       Style.Triggers / ControlTemplate.Triggers
+                                           -> ^:disabled / ^:pointerover / ^:checked selectors
+       AllowsTransparency="True"           -> TransparencyLevelHint="Transparent"
+       Background="Transparent"              + SystemDecorations="None"
+       WindowStyle="None" / ResizeMode      -> SystemDecorations="None" / CanResize="False"
+       Visibility="Collapsed"              -> IsVisible="False"
+       {Binding RewardVisibility}          -> IsVisible="{Binding RewardVisible}"  (Avalonia binds
+                                              IsVisible to a bool directly)
+       helpers:EmojiTextBlock              -> TextBlock (Avalonia renders colour emoji natively)
+       FocusVisualStyle="{x:Null}"         -> dropped; Avalonia has no such property
+       PreviewKeyDown / MouseLeftButtonDown / TextChanged / Click
+                                           -> KeyDown / PointerPressed / TextChanged / Click,
+                                              wired in the constructor
+
+     The CardRadio template gained Content/ContentTemplate on its ContentPresenter: a bare
+     presenter draws nothing in Avalonia (CLAUDE.md trap 6). Footer buttons carry a TextBlock
+     child rather than Content, because Avalonia parses "_" in Content as an access key and the
+     loc keys here are snake_case (trap 1). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ProgramEnrollDialog"
+        Title="{loc:Str program_enroll_title}"
+        Width="660"
+        SizeToContent="Height"
+        MinHeight="380"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+    <!--
+        Height is CONTENT-driven and clamped to the work area in the code-behind, not a fixed 760.
+        Chromeless + no resize + a taller-than-the-screen window is unrecoverable: the footer's
+        Cancel and Enroll buttons sit below the bottom edge with no title bar to drag by. The
+        middle section is already a ScrollViewer in a star row, so the clamp costs the arc some
+        height and never the footer. Escape and click-drag are wired for the same reason.
+    -->
+
+    <Window.Resources>
+        <!-- The shared PinkButton has no disabled visual state, so a gated Enroll button renders
+             identically whether it is armed or not - which is exactly wrong on the one screen
+             whose whole point is that Enroll stays shut until the contract is typed. Local
+             override, as in WPF; the shared theme is left alone. -->
+        <ControlTheme x:Key="GatedPinkButton" TargetType="Button" BasedOn="{StaticResource PinkButton}">
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.35"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- Selectable card. Radio semantics give us mutual exclusion for free; the template
+             turns the card itself into the hit target. -->
+        <ControlTheme x:Key="CardRadio" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="cb" CornerRadius="10" Padding="14,12"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#cb">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#cb">
+                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                <Setter Property="BorderThickness" Value="2"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Border#cb">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
+            BorderThickness="2" CornerRadius="12">
+        <Grid Margin="24,20,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ============ Header ============ -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="TxtProgramIcon" FontSize="26" VerticalAlignment="Center"/>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtProgramTitle" Foreground="{DynamicResource TextLightBrush}"
+                                   FontSize="19" FontWeight="Bold" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TxtProgramSubtitle" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="TxtProgramPitch" Foreground="{DynamicResource TextLightBrush}"
+                           FontSize="12" TextWrapping="Wrap" LineHeight="19" Margin="0,12,0,0"/>
+            </StackPanel>
+
+            <!-- ============ Body ============ -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
+                <StackPanel>
+
+                    <!-- (a) The whole arc, up front -->
+                    <TextBlock Text="{loc:Str program_enroll_arc_header}"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="13" FontWeight="Bold" Margin="0,0,0,4"/>
+                    <TextBlock Text="{loc:Str program_enroll_arc_note}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                    <ItemsControl x:Name="ChapterList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ProgramChapterItem">
+                                <Border Padding="14,12" CornerRadius="10" Margin="0,0,0,8"
+                                        Background="{DynamicResource SurfaceBgBrush}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="3" CornerRadius="2" Margin="0,1,12,1"
+                                                Background="{Binding AccentBrush}"/>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap" LineHeight="17"/>
+                                            <TextBlock Text="{Binding RewardText}" IsVisible="{Binding RewardVisible}"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding DaysLabel}"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="12,0,0,0" VerticalAlignment="Top"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="TxtCommitment" Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="12" TextWrapping="Wrap" LineHeight="19" Margin="0,6,0,18"/>
+
+                    <!-- (b) Standard vs Strict -->
+                    <TextBlock Text="{loc:Str program_enroll_mode_header}"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <UniformGrid Columns="2" Margin="0,0,0,6">
+                        <RadioButton x:Name="RadioModeStandard" GroupName="ProgramMode"
+                                     Theme="{StaticResource CardRadio}" IsChecked="True">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str program_enroll_mode_standard}"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtModeStandardBody" Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" TextWrapping="Wrap" LineHeight="17" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton x:Name="RadioModeStrict" GroupName="ProgramMode"
+                                     Theme="{StaticResource CardRadio}" Margin="8,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str program_enroll_mode_strict}"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                                <TextBlock Text="{loc:Str program_enroll_mode_strict_body}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" TextWrapping="Wrap" LineHeight="17" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </RadioButton>
+                    </UniformGrid>
+                    <TextBlock x:Name="TxtStrictUnavailable" IsVisible="False"
+                               Text="{loc:Str program_enroll_mode_strict_unavailable}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11" FontStyle="Italic" Margin="0,0,0,18"/>
+
+                    <!-- (c) The clock -->
+                    <TextBlock Text="{loc:Str program_enroll_clock_header}"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="13" FontWeight="Bold" Margin="0,12,0,8"/>
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="{loc:Str program_enroll_boundary_label}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                            <ComboBox x:Name="CmbBoundaryHour" Theme="{StaticResource DarkComboBoxStyle}"
+                                      HorizontalAlignment="Stretch" Margin="0,5,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{loc:Str program_enroll_nudge_label}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                            <ComboBox x:Name="CmbNudgeHour" Theme="{StaticResource DarkComboBoxStyle}"
+                                      HorizontalAlignment="Stretch" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="{loc:Str program_enroll_boundary_note}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,0,0,18"/>
+
+                    <!-- Safety note: plain, out of character, visually apart from the fiction -->
+                    <Border Padding="16,14" CornerRadius="10" Margin="0,0,0,18"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str program_enroll_safety_header}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                            <TextBlock x:Name="TxtSafetyNote" Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12" TextWrapping="Wrap" LineHeight="19"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Typed contract phrase -->
+                    <TextBlock Text="{loc:Str program_enroll_contract_header}"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <Border Padding="14,10" CornerRadius="10" Margin="0,0,0,8"
+                            Background="{DynamicResource SurfaceBgBrush}">
+                        <TextBlock x:Name="TxtContractPhrase" Foreground="{DynamicResource TextLightBrush}"
+                                   FontSize="13" FontStyle="Italic" TextWrapping="Wrap"/>
+                    </Border>
+                    <TextBox x:Name="TxtContractInput" Theme="{StaticResource FocusGlowTextBox}"
+                             FontSize="13" Padding="10,8"/>
+                    <TextBlock Text="{loc:Str program_enroll_contract_hint}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11" Margin="0,6,0,0"/>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ============ Footer ============ -->
+            <StackPanel Grid.Row="2" Margin="0,14,0,0">
+                <TextBlock x:Name="TxtBlockedHint" Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="BtnCancel" Theme="{StaticResource SecondaryButton}"
+                            MinWidth="110" Padding="20,10" Margin="0,0,10,0">
+                        <TextBlock Text="{loc:Str btn_cancel}"/>
+                    </Button>
+                    <Button x:Name="BtnConfirmEnroll" Theme="{StaticResource GatedPinkButton}"
+                            MinWidth="150" IsEnabled="False">
+                        <TextBlock Text="{loc:Str btn_program_enroll_confirm}"/>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
