@@ -1,0 +1,227 @@
+<!-- PORTED from ConditioningControlPanel/Windows/ProgramsIntroPopup.xaml.
+     Structure, ordering, spacing, x:Names and every comment preserved. Copy is hardcoded English in
+     the original (see the class doc) so there are no loc keys to carry across. Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency -> SystemDecorations="None" +
+                                                  TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                   -> CanResize="False"
+       DropShadowEffect ShadowDepth="0"        -> OffsetX="0" OffsetY="0"
+       LinearGradientBrush "0,0" / "0.3,1"     -> "0%,0%" / "30%,100%". Avalonia's RelativePoint
+                                                  parses a bare pair as ABSOLUTE pixels, so the WPF
+                                                  spelling would have drawn a 0.3px gradient.
+       Panel.ZIndex                            -> ZIndex
+       <Style x:Key TargetType="Button">       -> <ControlTheme> with the same Template; the
+                                                  IsMouseOver/IsPressed triggers are ^:pointerover /
+                                                  ^:pressed selectors
+       <ContentPresenter/>                     -> ContentPresenter Content="{TemplateBinding Content}"
+                                                  (CLAUDE.md trap 6)
+       Visibility="Collapsed"                  -> IsVisible="False" (set from code)
+       PreviewKeyDown / MouseLeftButtonDown    -> KeyDown / PointerPressed, wired in the constructor
+       Click="BtnDismiss_Click"                -> wired in the constructor -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.ProgramsIntroPopup"
+        Title="Training Programs"
+        Width="620" SizeToContent="Height" MaxHeight="640"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- The WPF inline <Button.Style> on BtnDismiss, setters verbatim. -->
+        <ControlTheme x:Key="DismissButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}"
+                            CornerRadius="18" Padding="16,6">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- The WPF <Style.Triggers> IsMouseOver setter on the ✕ button. -->
+        <Style Selector="Button.closeX:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="#F0151530" CornerRadius="14"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <!--
+            Two columns: the program's sigil on the left, the explainer on the right.
+
+            The art column is Auto and its host is Collapsed when no sigil resolves, and a Collapsed
+            child in an Auto column measures to zero width - so a mod that ships no program art gets
+            the copy across the full card rather than a gap where a picture should be.
+        -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Sigil rail -->
+            <Border x:Name="ArtPanel" Grid.Column="0"
+                    Width="196" CornerRadius="12,0,0,12" ClipToBounds="True">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="30%,100%">
+                        <GradientStop Color="#3C2159" Offset="0"/>
+                        <GradientStop Color="#252542" Offset="0.55"/>
+                        <GradientStop Color="#1A1A2E" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+
+                <Grid>
+                    <!-- Ambient wash behind the sigil, so the rail is never a flat panel even when
+                         the sigil itself is a sparse glyph. Fill is set in code from the program
+                         accent. -->
+                    <Rectangle x:Name="ArtGlow" Margin="8"/>
+
+                    <!--
+                        The sigil is accent-filled and MASKED by the art, never drawn as an Image.
+                        Program art ships as white RGB with its luminance in the ALPHA channel (see
+                        Services/Program/ProgramArt.cs), so an <Image> would render a near-invisible
+                        white-on-transparent smear. Fill + OpacityMask is what makes bright source
+                        read as full accent and dark source as transparent.
+                    -->
+                    <Rectangle x:Name="ArtSigil" Width="122" Height="122"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Margin="0,0,0,26"
+                               IsVisible="False"/>
+
+                    <!-- Which program the art belongs to. Named so it can be hidden independently:
+                         the rail can resolve a shared fallback plate with no program title to show. -->
+                    <StackPanel VerticalAlignment="Bottom" Margin="12,0,12,16">
+                        <TextBlock x:Name="TxtArtProgramTitle"
+                                   FontSize="14" FontWeight="Bold"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock x:Name="TxtArtProgramSubtitle"
+                                   Foreground="#AABBBBCC" FontSize="11"
+                                   TextWrapping="Wrap" TextAlignment="Center"
+                                   Margin="0,3,0,0"/>
+                    </StackPanel>
+
+                    <!-- Hairline seam so the rail reads as part of the card, not a pasted panel -->
+                    <Rectangle Width="1" HorizontalAlignment="Right" Fill="#55FF69B4"/>
+                </Grid>
+            </Border>
+
+            <!-- Close button -->
+            <Button x:Name="BtnCloseX" Classes="closeX"
+                    Content="✕"
+                    Grid.Column="1"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="28" Height="28" Margin="0,8,12,0"
+                    Padding="0"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand"
+                    ZIndex="1"/>
+
+            <StackPanel Grid.Column="1" Margin="24,22,24,20" VerticalAlignment="Center">
+                <TextBlock Text="📅  Training Programs"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontWeight="Bold" FontSize="21"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,4"/>
+
+                <TextBlock Text="Multi-day arcs, not one-off sessions."
+                           Foreground="#CCD5D5E5" FontSize="13"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,16"/>
+
+                <!-- The four things a program actually does. Authored as rows rather than a bulleted
+                     TextBlock so the accent glyph stays aligned when a line wraps. -->
+                <StackPanel Margin="0,0,0,6">
+                    <Grid Margin="0,0,0,9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="Bullet1" Text="●" FontSize="9" VerticalAlignment="Top"
+                                   Margin="0,5,9,0"/>
+                        <TextBlock Grid.Column="1" Foreground="White" FontSize="13.5"
+                                   TextWrapping="Wrap" LineHeight="20"
+                                   Text="You get one session a day, on a schedule the program sets for you."/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="Bullet2" Text="●" FontSize="9" VerticalAlignment="Top"
+                                   Margin="0,5,9,0"/>
+                        <TextBlock Grid.Column="1" Foreground="White" FontSize="13.5"
+                                   TextWrapping="Wrap" LineHeight="20"
+                                   Text="Each day also sets a few small tasks you do by hand on the Dashboard."/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="Bullet3" Text="●" FontSize="9" VerticalAlignment="Top"
+                                   Margin="0,5,9,0"/>
+                        <TextBlock Grid.Column="1" Foreground="White" FontSize="13.5"
+                                   TextWrapping="Wrap" LineHeight="20"
+                                   Text="Progress is tracked day by day. Days off are allowed, and missing too many ends the run."/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,9">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="Bullet4" Text="●" FontSize="9" VerticalAlignment="Top"
+                                   Margin="0,5,9,0"/>
+                        <!-- Deliberately does NOT name First Week. The rail beside this copy is
+                             dressed with whichever program matches the ACTIVE mod, so on a Sissy
+                             install the card introduced Presentation while the text talked about a
+                             program the user was not being shown. The fact is mod-independent either
+                             way: exactly one program is free, and it is the seven-day one. -->
+                        <TextBlock Grid.Column="1" Foreground="White" FontSize="13.5"
+                                   TextWrapping="Wrap" LineHeight="20"
+                                   Text="One program is free and runs seven days. The longer ones need a subscription."/>
+                    </Grid>
+                </StackPanel>
+
+                <TextBlock Foreground="#99AAAABB" FontSize="12"
+                           TextWrapping="Wrap" LineHeight="18"
+                           Margin="0,4,0,16"
+                           Text="Pick one to begin. Withdraw is on every screen, and nothing is asked of you when you use it."/>
+
+                <Button x:Name="BtnDismiss" Theme="{StaticResource DismissButtonStyle}"
+                        HorizontalAlignment="Left"
+                        Width="132" Height="37"
+                        Cursor="Hand"
+                        FontSize="14" FontWeight="SemiBold">
+                    <TextBlock Text="Got it"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
