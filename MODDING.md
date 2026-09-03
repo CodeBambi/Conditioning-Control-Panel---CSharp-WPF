@@ -16,8 +16,8 @@ sharing works.
 
 | What | Where |
 |------|-------|
-| Installed mods | `%APPDATA%\ConditioningControlPanel\mods\<mod-id>\` (one folder per mod, extracted) |
-| Built-in mods (Bambi/Sissy/Circe) | `%APPDATA%\ConditioningControlPanel\builtin_mods\` (managed by the app, not editable) |
+| Installed mods | `%LOCALAPPDATA%\ConditioningControlPanel\mods\<mod-id>\` (one folder per mod, extracted) |
+| Built-in mods (Bambi Sleep, Sissy Hypno, CCP Default, Dronification, Infection Control, Circe's Lock) | `%LOCALAPPDATA%\ConditioningControlPanel\builtin_mods\` (managed by the app, not editable) |
 | Exported `.ccpmod` files | Wherever you chose to save them in the export dialog |
 | Shared mods (the catalogue) | https://app.cclabs.app/catalogue/mods |
 
