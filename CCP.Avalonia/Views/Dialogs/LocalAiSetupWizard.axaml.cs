@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -11,10 +12,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// detect → consent → install Ollama → pull model → smoke test → done.
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/LocalAiSetupWizard.xaml.cs. The page switching,
-    /// footer wording, advanced-model toggle and progress-bar maths are the original's. Everything
-    /// that reached OllamaSetupService, App.Settings or App.Logger is a stub that lands on the page
-    /// the real call would have shown and stops there - the service is Windows-head code and has
-    /// not moved to Core yet. WPF's DialogResult becomes Close(bool).
+    /// footer wording, advanced-model toggle and progress-bar maths are the original's, and the two
+    /// settings touches are wired through <see cref="CoreSettings"/>: the wizard opens on whatever
+    /// model <c>CompanionPrompt.AiModel</c> already names, and finishing flips the provider to Local
+    /// and saves. Everything that reached OllamaSetupService is still a stub that lands on the page
+    /// the real call would have shown and stops there - that service shells out to a Windows
+    /// installer and the local daemon, so it is head code, not a Core move. WPF's DialogResult
+    /// becomes Close(bool).
     /// </summary>
     public partial class LocalAiSetupWizard : Window
     {
@@ -101,8 +105,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private static string ResolveStartingModel()
         {
-            // ponytail: needs App.Settings.Current.CompanionPrompt.AiModel, wired when settings move to Core
-            return DefaultModel;
+            var saved = CoreSettings.Current?.CompanionPrompt?.AiModel;
+            return string.IsNullOrWhiteSpace(saved) ? DefaultModel : saved!.Trim();
         }
 
         private void UpdateConsentDiskNote()
@@ -200,7 +204,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void StartDetect()
         {
             Show(Step.Detecting);
-            // ponytail: needs OllamaSetupService.DetectAsync, wired when it moves to Core.
+            // ponytail: needs OllamaSetupService.DetectAsync / StartServiceAsync
+            // (ConditioningControlPanel/Services/AIService/OllamaSetupService.cs) - it shells out to
+            // ollama.exe and talks to the local daemon, so it is head code with no Core seam.
             // The WPF original lands on Consent when detection throws; the stub takes that branch.
             Show(Step.Consent);
         }
@@ -212,8 +218,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             Show(Step.DownloadInstaller);
             SetDownloadProgressBar(0);
             _txtDownloadProgress.Text = "";
-            // ponytail: needs OllamaSetupService.DownloadInstallerAsync + StartInstall/StartPull/
-            // StartSmokeTest chain, wired when it moves to Core. The page shows; nothing drives it.
+            // ponytail: needs OllamaSetupService.DownloadInstallerAsync, RunInstallerSilentAsync,
+            // PullModelAsync and SmokeTestAsync
+            // (ConditioningControlPanel/Services/AIService/OllamaSetupService.cs), plus the
+            // CancellationTokenSource the WPF original cancels per step - dropped here rather than
+            // kept as dead state. The installer it downloads is a Windows NSIS .exe, so this chain
+            // needs a per-platform implementation, not just a move to Core. The page shows;
+            // nothing drives it.
         }
 
         private void SetDownloadProgressBar(double percent)
@@ -234,7 +245,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void Finish(TimeSpan smokeElapsed)
         {
-            // ponytail: needs App.Settings (AiProvider/AiModel + Save), wired when settings move to Core
+            try
+            {
+                var prompt = CoreSettings.Current?.CompanionPrompt;
+                if (prompt != null)
+                {
+                    prompt.AiProvider = AiProviderType.Local;
+                    prompt.AiModel = _targetModel;
+                    CoreSettings.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "LocalAiSetupWizard: failed to save settings on Finish");
+            }
+
             LocalAiReady = true;
             _wizardComplete = true;
 

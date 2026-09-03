@@ -9,7 +9,9 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -206,10 +208,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
     /// <summary>
     /// The mod-id/pack-id mapping plus card copy and sizes, copied from
-    /// ConditioningControlPanel/Dialogs/ModPackCatalog.cs. The mod ids come from
-    /// <c>Models/BuiltInMods.cs</c> and the pack ids from
-    /// <c>Services/Content/ReleaseContentService.cs</c>; both are WPF-head constants, so they are
-    /// inlined as the literals those constants hold.
+    /// ConditioningControlPanel/Dialogs/ModPackCatalog.cs. Both id sets are read from the constants
+    /// that own them — the mod ids from <see cref="BuiltInMods"/> and the pack ids from
+    /// <see cref="CoreReleaseContent"/>, which the pack service aliases — so a renamed id cannot
+    /// drift out of this screen.
     /// </summary>
     internal static class ModPickerCatalog
     {
@@ -220,7 +222,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             new ModPickerCatalogEntry
             {
-                ModId = "builtin-ccp-default",
+                ModId = BuiltInMods.CCPDefaultId,
                 PackId = null, // ships in the box — the neutral baseline is what "skip everything" gives you
                 NameLocKey = "modpicker_name_ccp_default",
                 DescriptionLocKey = "modpicker_desc_ccp_default",
@@ -229,8 +231,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             },
             new ModPickerCatalogEntry
             {
-                ModId = "builtin-bambisleep",
-                PackId = "mod-bambi",
+                ModId = BuiltInMods.BambiSleepId,
+                PackId = CoreReleaseContent.PackModBambi,
                 NameLocKey = "label_bambi_sleep",
                 DescriptionLocKey = "modpicker_desc_bambi",
                 AccentHex = "#FF69B4",
@@ -238,8 +240,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             },
             new ModPickerCatalogEntry
             {
-                ModId = "builtin-sissyhypno",
-                PackId = "mod-sissy",
+                ModId = BuiltInMods.SissyHypnoId,
+                PackId = CoreReleaseContent.PackModSissy,
                 NameLocKey = "label_sissy_hypno",
                 DescriptionLocKey = "modpicker_desc_sissy",
                 AccentHex = "#9B59B6",
@@ -247,8 +249,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             },
             new ModPickerCatalogEntry
             {
-                ModId = "builtin-locked",
-                PackId = "mod-locked",
+                ModId = BuiltInMods.LockedId,
+                PackId = CoreReleaseContent.PackModLocked,
                 NameLocKey = "modpicker_name_circe",
                 DescriptionLocKey = "modpicker_desc_circe",
                 AccentHex = "#E81CA8",
@@ -257,8 +259,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             },
             new ModPickerCatalogEntry
             {
-                ModId = "drone-mode",
-                PackId = "mod-drone",
+                ModId = BuiltInMods.DronificationId,
+                PackId = CoreReleaseContent.PackModDrone,
                 NameLocKey = "modpicker_name_drone",
                 DescriptionLocKey = "modpicker_desc_drone",
                 AccentHex = "#00FF41",
@@ -268,8 +270,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             },
             new ModPickerCatalogEntry
             {
-                ModId = "infection-control",
-                PackId = "mod-infection",
+                ModId = BuiltInMods.InfectionControlId,
+                PackId = CoreReleaseContent.PackModInfection,
                 NameLocKey = "modpicker_name_infection",
                 DescriptionLocKey = "modpicker_desc_infection",
                 AccentHex = "#2855F0",
@@ -289,11 +291,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         public static string? PackIdForMod(string? modId) => ForMod(modId)?.PackId;
 
         /// <summary>
-        /// Best known download size. ponytail: needs ReleaseContentService for the manifest's real
-        /// sizeBytes, wired when it moves to Core — until then the baked-in approximation, which is
+        /// Best known download size: the manifest's real sizeBytes through
+        /// <see cref="CoreReleaseContent.GetPackInfo"/>, falling back to the baked-in approximation
+        /// when no head has seeded a pack service or the manifest has not been fetched — which is
         /// exactly what the WPF original falls back to offline.
         /// </summary>
-        public static long SizeBytesFor(ModPickerCatalogEntry entry) => entry?.ApproxBytes ?? 0;
+        public static long SizeBytesFor(ModPickerCatalogEntry entry)
+        {
+            try
+            {
+                if (entry == null || string.IsNullOrEmpty(entry.PackId)) return entry?.ApproxBytes ?? 0;
+                var info = CoreReleaseContent.GetPackInfo(entry.PackId!);
+                if (info != null && info.SizeBytes > 0) return info.SizeBytes;
+                return entry.ApproxBytes;
+            }
+            catch { return entry?.ApproxBytes ?? 0; }
+        }
 
         /// <summary>"331 MB" / "1.2 GB". Empty for a zero size.</summary>
         public static string FormatSize(long bytes)
@@ -328,15 +341,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// </list>
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ModPickerDialog.xaml.cs. Deviations:
-    ///  - everything that reaches <c>App.ReleaseContent</c>, <c>App.Mods</c>,
-    ///    <c>PendingModActivation</c> or <c>App.Settings</c> is a stub: the pack service, the mod
-    ///    service and the settings store all still live in the WPF head. That is the whole download
-    ///    flow (<see cref="BtnDownload_Click"/>), the three service event handlers, and
-    ///    <see cref="ShowIfNeeded"/>. The card state machine they drive is fully ported and the
-    ///    render constructor exercises it.
-    ///  - the service event handlers took a WPF-head <c>PackProgressEventArgs</c> and marshalled
-    ///    through <c>Application.Current.Dispatcher</c>; both go with the subscription, so
-    ///    <c>MarshalToUi</c> and <c>FindCard</c> are dropped rather than kept dead.
+    ///  - what <c>App.ReleaseContent</c> exposes through <see cref="CoreReleaseContent"/> is wired:
+    ///    the install stamps behind <c>IsPackInstalled</c>, the manifest's real sizes behind
+    ///    <c>SizeBytesFor</c>, and the <c>PackInstalled</c> event, so a card flips to Installed the
+    ///    moment a pack lands however it was requested. What that seam does NOT carry is still a
+    ///    stub: the download itself (<see cref="BtnDownload_Click"/> needs <c>RequestPackAsync</c>
+    ///    and <c>PendingModActivation</c>), per-pack progress, and <see cref="ShowIfNeeded"/>'s two
+    ///    service reads. Each says so at its own site.
+    ///  - <c>OnPackProgressChanged</c> took a WPF-head <c>PackProgressEventArgs</c>, so it goes with
+    ///    the progress seam; <c>MarshalToUi</c> and <c>FindCard</c> came back with
+    ///    <c>PackInstalled</c> and now hop through <c>Dispatcher.UIThread</c>.
     ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>; <c>MouseLeftButtonDown</c> ->
     ///    <c>PointerPressed</c>, wired in the constructor.
     ///  - the download button's caption is re-BOUND, not assigned: assigning <c>.Text</c> over a
@@ -391,9 +405,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnSkip")!.Click += (_, _) => BtnSkip_Click();
             _btnDownload.Click += (_, _) => BtnDownload_Click();
 
-            // ponytail: needs ReleaseContentService.PackProgressChanged / PackInstalled and
-            // ModService.ModAvailabilityChanged, wired when they move to Core. Nothing pushes
-            // progress into the cards on this head yet.
+            // Fires once a pack's bytes are on disk and its .ccpmod has been extracted into its
+            // built-in slot — the moment the mod is genuinely usable. Raised on the download
+            // thread, so the handler marshals.
+            CoreReleaseContent.PackInstalled += OnPackInstalled;
+
+            // ponytail: per-pack DOWNLOAD PROGRESS has no seam yet - the WPF original also
+            // subscribes ReleaseContentService.PackProgressChanged
+            // (ConditioningControlPanel/Services/Content/ReleaseContentService.cs) and
+            // ModService.ModAvailabilityChanged (ConditioningControlPanel/Services/ModService.cs);
+            // neither is on CoreReleaseContent / CoreMods, so the cards' progress bars are driven
+            // only by the download loop below once that lands.
 
             Loaded += OnDialogLoaded;
             Closed += OnDialogClosed;
@@ -448,18 +470,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         /// <summary>
-        /// ponytail: needs ReleaseContentService (IsFullInstall / IsInstalled), wired when it moves
-        /// to Core. False matches the WPF path for a missing service.
+        /// The install stamp is the seam Core exposes, and it is the WPF original's own
+        /// "manifest not fetched — trust the stamp" answer. Unseeded there is no stamp, so this is
+        /// false, which is the WPF path for a missing service.
+        ///
+        /// ponytail: the WPF original also short-circuits on ReleaseContentService.IsFullInstall
+        /// and re-probes the extracted payload on disk (HasInstalledPayload), both in
+        /// ConditioningControlPanel/Services/Content/ReleaseContentService.cs. Neither is on
+        /// CoreReleaseContent, so a stamped-but-deleted pack still reads as installed here.
         /// </summary>
-        private static bool IsPackInstalled(string? packId) => false;
+        private static bool IsPackInstalled(string? packId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(packId)) return false;
+                return CoreReleaseContent.GetStampFor(packId!) != null;
+            }
+            catch { return false; }
+        }
 
         // ------------------------------------------------------------------ manifest
 
         private void OnDialogLoaded(object? sender, EventArgs e)
         {
-            // ponytail: needs ReleaseContentService, wired when it moves to Core. The WPF original
-            // branches here on IsFullInstall / a manifest fetch and falls back to SetOfflineState;
-            // this head can only show the baked-in sizes, which is the manifest-already-fetched path.
+            // ponytail: needs ReleaseContentService.IsFullInstall / FetchManifestAsync
+            // (ConditioningControlPanel/Services/Content/ReleaseContentService.cs); CoreReleaseContent
+            // exposes only the already-fetched pack info. So this takes the WPF original's
+            // manifest-already-fetched branch: sizes come from GetPackInfo where a head seeded one and
+            // from the baked-in approximations otherwise, and nothing here can fall to SetOfflineState.
             RefreshSizes();
             UpdateDownloadButton();
         }
@@ -497,6 +535,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
         }
 
+        // ------------------------------------------------------------------ events
+
+        private void OnPackInstalled(object? sender, string packId)
+        {
+            // Raised from the download loop's background thread.
+            MarshalToUi(() =>
+            {
+                var card = FindCard(packId);
+                card?.MarkInstalled();
+                UpdateDownloadButton();
+            });
+        }
+
+        private ModPickerCard? FindCard(string? packId) =>
+            string.IsNullOrEmpty(packId)
+                ? null
+                : _cards.FirstOrDefault(c => string.Equals(c.PackId, packId, StringComparison.OrdinalIgnoreCase));
+
+        private static void MarshalToUi(Action action)
+        {
+            try
+            {
+                if (Dispatcher.UIThread.CheckAccess())
+                {
+                    action();
+                    return;
+                }
+                Dispatcher.UIThread.Post(action, DispatcherPriority.Normal);
+            }
+            catch { }
+        }
+
         // ------------------------------------------------------------------ actions
 
         private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -523,11 +593,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
             if (_offline) return;
 
-            // ponytail: needs ReleaseContentService.RequestPackAsync and PendingModActivation,
-            // wired when they move to Core. That branch is also where the WPF original's
-            // `_preselectModId` and `_downloading` fields are read - both are dropped here rather
-            // than kept as dead state, so re-add them with the queue. Without a pack service there
-            // is nothing to download, which is exactly the WPF original's `svc == null` branch.
+            // ponytail: needs ReleaseContentService.RequestPackAsync
+            // (ConditioningControlPanel/Services/Content/ReleaseContentService.cs) and
+            // PendingModActivation.Record / ApplyIfReady
+            // (ConditioningControlPanel/Services/PendingModActivation.cs); neither has a Core seam.
+            // That branch is also where the WPF original's `_preselectModId` and `_downloading`
+            // fields are read - both are dropped here rather than kept as dead state, so re-add
+            // them with the queue. Without a pack service there is nothing to download, which is
+            // exactly the WPF original's `svc == null` branch.
             SetOfflineState();
         }
 
@@ -561,8 +634,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void OnDialogClosed(object? sender, EventArgs e)
         {
             _closed = true;
-            // ponytail: the WPF original unsubscribes from ReleaseContentService and
-            // ModService here; nothing is subscribed on this head yet.
+            try { CoreReleaseContent.PackInstalled -= OnPackInstalled; } catch { }
         }
 
         /// <summary>
@@ -591,11 +663,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// Shows the picker when this install has never seen it and its mod media has to come off the
         /// network.
         ///
-        /// ponytail: needs App.Settings (ModPickerShown / ModPickerOfflineOffers / OfflineMode /
-        /// ActiveModId) and ReleaseContentService, wired when they move to Core. The two guards this
-        /// method exists for are ported above as pure predicates; only the plumbing that reads and
-        /// writes settings is missing, so this returns false — "nothing was shown" — rather than
-        /// opening a picker whose choices could not be recorded.
+        /// ponytail: the settings half is available now (CoreSettings.Current carries ModPickerShown,
+        /// ModPickerOfflineOffers, OfflineMode and ActiveModId), but the two service reads that decide
+        /// whether to open at all are not: ReleaseContentService.IsFullInstall and .ManifestUnavailable
+        /// (ConditioningControlPanel/Services/Content/ReleaseContentService.cs) have no CoreReleaseContent
+        /// seam. Latching ModPickerShown without them would burn the one-shot offer on a full install or
+        /// an offline launch, which is the exact bug guards 1 and 2 exist to prevent — so this still
+        /// returns false, "nothing was shown". The showing itself also needs an owner: Avalonia's
+        /// ShowDialog is async and needs a non-null Window, so this signature cannot stay synchronous
+        /// when it lands.
         /// </summary>
         public static bool ShowIfNeeded(Window? owner = null, bool preselectActiveMod = false) => false;
     }
