@@ -17,6 +17,9 @@ import { COMBO_HOLD_SEC, MULT_LADDER, KART_MAX_SPEED, KART_BASE_SPEED } from './
 
 const FLICK_MS = 450;
 const TOAST_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400 };
+/** Two "+N" pops inside this window merge into one counting toast ("+30 x3"). */
+const POP_MERGE_MS = 600;
+
 /** The second-pass rung ladder. consts.js MULT_LADDER is the source of truth;
  * this is the documented fallback for when the import is missing or malformed. */
 const NEW_LADDER = [[0, 1], [3, 2], [8, 3], [15, 4], [25, 6], [40, 8]];
@@ -136,6 +139,8 @@ export function createRaceHud(root) {
   const wake = () => { if (!raf && !disposed) raf = requestAnimationFrame(tick); };
 
   let lastMult = 1, lastCombo = 0;
+  // the open "+N" run: the live toast, when it was last hit, and its running total
+  let popRun = { el: null, at: 0, sum: 0, n: 0, kill: 0 };
 
   // ---- BANK: tokens fly from low centre into the score; the counter ticks per landing ----
   function bankTokens(text) {
@@ -256,12 +261,33 @@ export function createRaceHud(root) {
     toast(text, kind) {
       kind = TOAST_HOLD[kind] ? kind : 'pop';
       let body = String(text == null ? '' : text);
+      // COALESCE: a dense run of "+10" pops used to stack four toasts on one
+      // spot and read as flicker. Inside POP_MERGE_MS they become one counting
+      // toast ("+30 x3") that re-pops on every hit. Only bare "+N" merges, so
+      // "x4" rung toasts and every other kind still stand alone.
+      const gain = kind === 'pop' ? /^\+(\d+)$/.exec(body) : null;
+      const now = typeof performance === 'object' ? performance.now() : Date.now();
+      if (gain && popRun.el && popRun.el.parentNode && now - popRun.at < POP_MERGE_MS) {
+        popRun.at = now;
+        popRun.sum += +gain[1];
+        popRun.n += 1;
+        popRun.el.textContent = `+${fmt(popRun.sum)} x${popRun.n}`;
+        popRun.el.classList.toggle('is-run', popRun.n > 1);
+        // restart the toast's own hold animation so the merged toast re-pops
+        popRun.el.style.animation = 'none';
+        void popRun.el.offsetWidth;
+        popRun.el.style.animation = '';
+        if (popRun.kill) { clearTimeout(popRun.kill); timers.delete(popRun.kill); }
+        popRun.kill = later(() => { if (popRun.el) popRun.el.remove(); popRun.el = null; }, TOAST_HOLD.pop + 60);
+        return;
+      }
       if (kind === 'bank') body = bankTokens(body);
       if (kind === 'jackpot') hit(gold, 'is-on');
       const t = el(`rh-toast rh-toast--${kind}`, toasts, body);
       t.style.setProperty('--rh-hold', `${TOAST_HOLD[kind]}ms`);
       while (toasts.children.length > 3) toasts.firstChild.remove();
-      later(() => t.remove(), TOAST_HOLD[kind] + 60);
+      const kill = later(() => { t.remove(); if (popRun.el === t) popRun.el = null; }, TOAST_HOLD[kind] + 60);
+      if (gain) popRun = { el: t, at: now, sum: +gain[1], n: 1, kill };
     },
     flicker() {
       const lie = Math.floor(scoreShown * (1 + (Math.random() < 0.5 ? -1 : 1) * (0.03 + Math.random() * 0.06)));
@@ -305,6 +331,7 @@ export function createRaceHud(root) {
     },
     dispose() {
       disposed = true;
+      popRun = { el: null, at: 0, sum: 0, n: 0, kill: 0 };
       settleBrake('resume');
       settleEnd('exit');
       for (const t of timers) clearTimeout(t);

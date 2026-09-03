@@ -11,7 +11,8 @@
  * Second pass: every corner block anchors off --rh-inset (plus the notch
  * insets) so nothing is flush to an edge; the MARQUEE moved off top-centre to
  * a left ribbon; the numbers ride thin dark plates so they stay readable over
- * the big-pixel render.
+ * the big-pixel render. The tail of this file caps the payloadFx full-screen
+ * overlays and styles the media lane (see race/mediaLane.js).
  * ==========================================================================*/
 
 .race-hud {
@@ -177,6 +178,8 @@
   animation: rhToastPop var(--rh-hold, 1.2s) ease-out forwards;
 }
 .race-hud .rh-toast--pop { font-size: 1.1rem; color: #ffd6ea; }
+/* a merged run of pops ("+30 x3"): one toast, one spot, and it grows with the run */
+.race-hud .rh-toast--pop.is-run { font-size: 1.4rem; color: #fff0b8; text-shadow: 0 0 20px rgba(255, 212, 94, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); }
 .race-hud .rh-toast--almost { font-size: 1.5rem; color: #bfe9ff; animation: rhShiver 0.34s linear, rhToastPop 1.3s ease-out forwards; text-shadow: 0 0 18px rgba(150, 210, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); }
 .race-hud .rh-toast--jackpot { font-size: 2.4rem; color: #fff0b8; text-shadow: 0 0 26px rgba(242, 193, 78, 1), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.8s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
 .race-hud .rh-toast--bank { font-size: 1.3rem; color: #ffe082; text-shadow: 0 0 18px rgba(255, 200, 60, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhToastPop 1.6s ease-out forwards; }
@@ -253,4 +256,73 @@
   .race-hud .rh-toast, .race-hud .rh-toast--almost, .race-hud .rh-toast--jackpot, .race-hud .rh-toast--item, .race-hud .rh-toast--effect { animation: rhFade var(--rh-hold, 1.2s) linear forwards; }
   .race-hud .rh-score.is-pop, .race-hud .rh-bank.is-pop, .race-hud .rh-mult.is-pulse, .race-hud .rh-item.is-bounce .rh-item-box, .race-hud .rh-score.is-flick, .race-hud .rh-pb, .race-hud .rh-card { animation: none; }
   .race-hud .rh-token { transition: opacity 0.12s; }
+}
+
+/* ============================================================================
+ * THE MEDIA LANE + THE OVERLAY CAP (race page only)
+ *
+ * These are the ONLY rules in this file that reach outside `.race-hud`. They
+ * are scoped to `#race-root`, the race page's own root, so nothing here can
+ * touch the tube in index.html. race.css also loads after styles.css, so an
+ * equal-specificity rule would already win; the id is belt and braces.
+ * ==========================================================================*/
+
+/* ---- the lane: race/mediaLane.js picks the lane, this owns the geometry ----
+   `!important` is load-bearing: payloadFx writes left/top inline on the card
+   (`img.style.left = (14 + Math.random()*72) + 'vw'`) and an inline
+   declaration outranks a normal rule. Replacing the animation also replaces
+   payloadFx's `sf-pfx-fall` full-height slide, and its `animationend` kill
+   handler still fires on ours, so the card is still cleaned up. */
+#race-root .rh-laned {
+  position: fixed !important;
+  left: var(--rh-lane-x, 11vw) !important;
+  top: var(--rh-lane-y, 44vh) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: var(--rh-lane-w, 20vw) !important;
+  max-height: var(--rh-lane-h, 30vh) !important;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%) !important;
+  animation: rhLaneIn var(--rh-lane-dur, 2600ms) ease-out forwards !important;
+}
+@keyframes rhLaneIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.82); }
+  10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+}
+/* the ceiling strip is a shallower box, so a tall card reads as a banner */
+#race-root .rh-lane-ceiling { border-radius: 8px; }
+
+/* ---- the overlay cap ----
+   The owner's second screenshot: a braindrain pop painted an opaque wash over
+   everything and the road was gone for seconds. payloadFx sets these element
+   opacities INLINE (up to 0.70), so we cannot cap them with `opacity` without
+   an `!important` that would also break the fade back to 0. `filter: opacity()`
+   multiplies instead: 0.70 * 0.78 = 0.55 at the peak, 0 * 0.78 = 0 at the end.
+   Flash washes are left alone: they are short by design. */
+#race-root .sf-pfx-spiral { filter: opacity(0.78); }
+#race-root .sf-pfx-pink { filter: opacity(0.7); }
+#race-root .sf-pfx-drain {
+  /* the drain was the worst of the three: an almost-black fill plus a 7px
+     backdrop blur. Lighter fill, half the blur, and a screen-friendly cap. */
+  background-color: rgba(12, 5, 20, 0.62);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  filter: opacity(0.86);
+}
+/* ROAD CUTOUT: a soft radial hole over the lower-centre road so the cup and the
+   cornering line stay readable under a sustained wash. Only on the two layers
+   that do not rotate; masking .sf-pfx-spiral would spin the hole with it. */
+#race-root .sf-pfx-drain, #race-root .sf-pfx-pink {
+  -webkit-mask-image: radial-gradient(ellipse 42% 40% at 50% 88%, transparent 0%, rgba(0, 0, 0, 0.55) 55%, #000 100%);
+  mask-image: radial-gradient(ellipse 42% 40% at 50% 88%, transparent 0%, rgba(0, 0, 0, 0.55) 55%, #000 100%);
+}
+/* the pinned spiral already carries its own mask and a 0.5 ceiling; leave it */
+
+@media (prefers-reduced-motion: reduce) {
+  #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
 }
