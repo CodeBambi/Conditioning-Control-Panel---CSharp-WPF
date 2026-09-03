@@ -22,8 +22,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// dialogs are awaited rather than blocking, and a decline reverts the box.</para>
     ///
     /// <para>Still head-side: LockCardService (start/stop/test) and the mod-aware feature art. The
-    /// voice hint keeps the WPF literals; with no speech service on this head the "on" branch
-    /// lands on "No microphone detected", which is the honest answer here.</para>
+    /// voice hint asks <see cref="CoreSpeech"/> for all four of its branches; with no speech
+    /// service seeded on this head it reports no capture device, so the "on" branch lands on
+    /// "No microphone detected", which is the honest answer here.</para>
     /// </summary>
     public partial class LockCardFeatureControl : UserControl
     {
@@ -215,10 +216,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 TxtVoiceHint.Text = "Say the phrase out loud instead of typing it (offline mic). Falls back to typing if no mic.";
                 return;
             }
-            // ponytail: WPF picks one of four hints from App.Speech (IsAvailable /
-            // HasCaptureDevice / ModelStatus) - ConditioningControlPanel/Services/Speech/
-            // SpeechService.cs, still in the WPF head. No service means no mic, which is this one.
-            TxtVoiceHint.Text = "No microphone detected — lock cards will use typing until one is connected.";
+            // The same four hints WPF picks, now from CoreSpeech rather than App.Speech. With no
+            // speech service seeded (this head) HasCaptureDevice is false, so it lands on the
+            // second branch - which is the honest answer, not a placeholder.
+            if (CoreSpeech.IsAvailable)
+                TxtVoiceHint.Text = "On — speak the phrase to dismiss the card. Typing stays available if the mic can't hear you.";
+            else if (!CoreSpeech.HasCaptureDevice)
+                TxtVoiceHint.Text = "No microphone detected — lock cards will use typing until one is connected.";
+            else if (CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed)
+                TxtVoiceHint.Text = "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart.";
+            else
+                TxtVoiceHint.Text = "Speech model not installed yet — lock cards will use typing until it is.";
         }
 
         private async void BtnManagePhrases_Click(object? sender, RoutedEventArgs e)

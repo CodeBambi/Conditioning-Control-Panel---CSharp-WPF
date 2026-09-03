@@ -308,6 +308,21 @@ namespace ConditioningControlPanel
             CoreAudio.UnduckProvider = generation => Audio?.Unduck(generation);
             CoreAudio.DuckGenerationProvider = () => Audio?.DuckGeneration ?? 0;
             CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;
+            // Speech capability, for the views that ask whether voice input is worth offering.
+            // SpeechService itself stays here - it owns a capture device. Reading ModelStatus
+            // lazily probes the model exactly as the WPF views already did.
+            CoreSpeech.IsAvailableProvider = () => Speech?.IsAvailable == true;
+            CoreSpeech.HasCaptureDeviceProvider = () => Services.Speech.SpeechService.HasCaptureDevice;
+            CoreSpeech.ModelStatusProvider = () => Speech?.ModelStatus switch
+            {
+                Services.Speech.SpeechModelStatus.Ok           => CoreSpeechModelStatus.Ok,
+                Services.Speech.SpeechModelStatus.NoModelFound => CoreSpeechModelStatus.NoModelFound,
+                Services.Speech.SpeechModelStatus.LoadFailed   => CoreSpeechModelStatus.LoadFailed,
+                _ => CoreSpeechModelStatus.NotProbed,
+            };
+            CoreSpeech.EnumerateInputDevicesProvider = () =>
+                Services.Speech.SpeechService.EnumerateInputDevices()
+                    .Select(d => new SpeechInputDevice(d.Index, d.Name)).ToList();
             CoreSettingsHooks.CloudBackup = () =>
                 HasCloudIdentity && ProfileSync != null ? ProfileSync.BackupSettingsAsync() : Task.CompletedTask;
 
