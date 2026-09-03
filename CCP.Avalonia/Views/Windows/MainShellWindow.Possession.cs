@@ -1,42 +1,26 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.Possession.cs (673 lines).
+// STILL A STUB from ConditioningControlPanel/MainWindow/MainWindow.Possession.cs (673 lines) - the
+// window as a haunted room: two overlay canvases, the registry of controls that opted in via
+// poss:Possession.Role, and the walk that turns the visual tree into possession targets.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// Head-side, and not for want of a seam: the CONTRACTS THEMSELVES ARE WPF TYPES.
+// ConditioningControlPanel/Services/Possession/PossessionContracts.cs declares IPossessionHost,
+// PossessionTarget and PossessionRole against FrameworkElement, and this partial implements
+// IPossessionHost - a Core-side twin would have to be re-declared against Avalonia's Control
+// before any of this walk could be ported. Also missing: App.Possession (the director),
+// Services/Possession/PossessionPointer.Attach, and the attached property the opt-in reads.
 //
-// Members dropped (31):
-//   private Canvas? _possessionGhostLayer
-//   private Canvas? _possessionRubbleFloor
-//   private bool _possessionHostHooked
-//   private readonly ConditionalWeakTable<FrameworkElement, PossessionTarget> _possessionTargets
-//   private void InitializePossessionHost(…)
-//   private void EnsurePossessionLayers(…)
-//   private void HookPossessionInvalidation(…)
-//   private List<PossessionTarget>? _possessionTargetCache
-//   private DateTime _possessionCacheAt
-//   private bool _possessionCacheDirty
-//   private DateTime _possessionLayoutSeenAt
-//   private bool _possessionLayoutHooked
-//   private static readonly TimeSpan PossessionRebuildFloor
-//   private static readonly TimeSpan PossessionCacheMaxAge
-//   private static readonly HashSet<string> PossessionNeverNames
-//   private const int MaxAutoLabels
-//   private const double MinTargetPx
-//   internal IReadOnlyList<PossessionTarget> GetPossessionTargets(…)
-//   private void TrimLabels(…)
-//   private readonly record struct PossessionSubtree(…)
-//   private PossessionSubtree WalkPossession(…)
-//   private PossessionTarget? TargetFor(…)
-//   private static PossessionRole InferLeafRole(…)
-//   private static bool IsInsideScrollBar(…)
-//   private static bool IsInteractiveRole(…)
-//   private static bool IsCardBorder(…)
-//   private bool PassesSizeAndPlacement(…)
-//   internal bool TryWindowBounds(…)
-//   private static string DisplayNameFor(…)
-//   private static string? Tidy(…)
-//   private static string FallbackDisplayName(…)
+// The walk itself is the portable half, and it is large: PassesSizeAndPlacement, InferLeafRole,
+// IsInsideScrollBar / IsInteractiveRole / IsCardBorder and DisplayNameFor are pure geometry and
+// naming rules over a visual tree, and Avalonia has both a visual tree and TranslatePoint. They
+// belong in the same layer that re-declares the contracts, not before it.
+//
+// Members still absent (31), unchanged from the WPF file: the two canvases and their hook flag,
+// the ConditionalWeakTable of targets, the cache quartet (_possessionTargetCache, _possessionCacheAt,
+// _possessionCacheDirty, _possessionLayoutSeenAt) and its floors, PossessionNeverNames,
+// MaxAutoLabels, MinTargetPx, InitializePossessionHost, EnsurePossessionLayers,
+// HookPossessionInvalidation, GetPossessionTargets, TrimLabels, PossessionSubtree, WalkPossession,
+// TargetFor, InferLeafRole, IsInsideScrollBar, IsInteractiveRole, IsCardBorder,
+// PassesSizeAndPlacement, TryWindowBounds, DisplayNameFor, Tidy, FallbackDisplayName.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
