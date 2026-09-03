@@ -1,0 +1,1923 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/SettingsTabView.xaml.
+     The Dashboard (tab key "settings"): the premium quick-toggle rail, the 4x4 Velvet Mosaic
+     wall, the browser / companion / account column, the quick-toggle pill row and the marquee.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two
+     files diff cleanly.
+
+     Documented deviations, all forced by real WPF/Avalonia differences:
+
+       <Style x:Key TargetType>        ->  <ControlTheme x:Key TargetType>
+       Style="{StaticResource X}"      ->  Theme="{StaticResource X}"
+       an inline <Button.Style>/<Button.Template>
+                                       ->  a keyed ControlTheme in UserControl.Resources (Avalonia
+                                           has no inline Style-with-Template on an instance)
+       ControlTemplate.Triggers        ->  <Style Selector="^:pointerover /template/ Border#x">
+       MultiTrigger IsChecked+IsMouseOver -> Selector="^:checked:pointerover"
+       bare <ContentPresenter/>        ->  Content="{TemplateBinding Content}" (CLAUDE.md trap 6)
+       Visibility="Collapsed"          ->  IsVisible="False"
+       Panel.ZIndex                    ->  ZIndex
+       ToolTip="…"                     ->  ToolTip.Tip="…"
+       ShadowDepth="0"                 ->  OffsetX="0" OffsetY="0"
+       gradient StartPoint/EndPoint    ->  percentages (a bare number is pixels in Avalonia)
+       RenderTransformOrigin="0.5,0.5" ->  "50%,50%"
+       RenderOptions.BitmapScalingMode ->  RenderOptions.BitmapInterpolationMode
+       helpers:EmojiTextBlock          ->  TextBlock  (Avalonia draws colour emoji natively)
+       Image + EmojiToImageSource      ->  TextBlock  (same reason - CLAUDE.md #3)
+       Button Content="…"              ->  a <TextBlock> child (Avalonia parses "_" in Content as
+                                           an access key - CLAUDE.md trap 1)
+       Checked/Unchecked               ->  IsCheckedChanged (Avalonia has one event)
+       x:Name on a Brush or a Transform->  dropped (AVLN2000: only a StyledElement can be named).
+                                           Every one of them - ProgramTodayArtSlide, LogoFlipScale,
+                                           LogoFlipSkew, LogoDriftScale, LogoSheenSlide,
+                                           IntakePassArtBrush, IntakePassCtaScale, MysteryFlipScale,
+                                           MysteryFlipSkew, MysteryRevealArtBrush, MysteryBadgeScale,
+                                           VaultCtaScale, MarqueeTransform, BrowserFrameStop* - is
+                                           driven from MainWindow.DashboardFx / .ProgramBanner,
+                                           which is a stub here, so nothing is lost yet.
+       Popup StaysOpen="False" + AllowsTransparency -> IsLightDismissEnabled="True"
+       CheckBox LayoutTransform        ->  RenderTransform (Avalonia's layout transform needs a
+                                           LayoutTransformControl wrapper; the 0.85 scale is
+                                           cosmetic on a 20px toggle)
+       <StackPanel.ToolTip><ToolTip …> ->  ToolTip.Tip with a plain Border (nesting Avalonia's own
+                                           ToolTip control inside a tip would double-chrome it)
+       Border.Resources                ->  UserControl.Resources (one dictionary, and a template
+                                           resolves its siblings there without ordering surprises)
+
+     ponytail: the eight rail ImageBrushes (features/takeover.png, awareness.png, vibe.png,
+     lab_quiz_hero.png, remote_control.png, blink_trainer.png, fyp.png, lockdown_icon.png) and
+     every FeatureCard/SplitFeatureCard Icon are DROPPED. They are pack:// resources of the WPF
+     head and this head ships no Resources/; each chip keeps a wash in the art's slot so it draws
+     a coloured plate rather than a hole, and the Viewbox crop rectangles go with the art. Restore
+     them as avares:// ImageBrushes when Resources/features moves - the same call PlayTabView,
+     AiPermissionsGrid and SeasonRecapCard already made.
+     ponytail: BrowserLoadingText starts hidden here. On WPF it is the prompt that stands in the
+     browser slot until BrowserLoadingText_Click creates the WebView2; this head puts the
+     cross-platform controls:WebHost in that slot from the start, so the prompt would sit straight
+     on top of the host's own panel. Show it again when the load-on-click flow is wired. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
+             xmlns:features="clr-namespace:ConditioningControlPanel.Avalonia.Views.Features"
+             xmlns:controls="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.SettingsTabView">
+
+  <UserControl.Resources>
+    <!-- ==================================================================
+         CHIP ART. On WPF the feature image is the chip's own Background, an
+         ImageBrush with a Viewbox cut to dodge the wordmark burned into the
+         PNG (and mirrored in ModArtFramingRegistry). No Resources/features
+         on this head, so each key keeps its NAME and its slot and carries a
+         wash instead - the chips stay legible plates and the markup below
+         does not have to change when the art lands.
+         ================================================================== -->
+    <LinearGradientBrush x:Key="ArtTakeover" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF4A1230" Offset="0"/>
+      <GradientStop Color="#FF8A2352" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ArtAwareness" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF17304F" Offset="0"/>
+      <GradientStop Color="#FF2E6C8E" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ArtHaptics" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF3D1440" Offset="0"/>
+      <GradientStop Color="#FF7A2668" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ArtIntake" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF1E2B52" Offset="0"/>
+      <GradientStop Color="#FF43508F" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ArtRemote" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF102C3A" Offset="0"/>
+      <GradientStop Color="#FF276C74" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ArtBlink" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF14283F" Offset="0"/>
+      <GradientStop Color="#FF2C5D82" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ArtFyp" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF35174A" Offset="0"/>
+      <GradientStop Color="#FF6B2A72" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ArtLockdown" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF231428" Offset="0"/>
+      <GradientStop Color="#FF4E2A3C" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- She's Listening has no feature art on WPF either (there is no mic PNG in
+         Resources/features), so this chip carried a gradient there too - copied verbatim. -->
+    <LinearGradientBrush x:Key="ArtVoice" StartPoint="0%,0%" EndPoint="100%,100%">
+      <GradientStop Color="#FF3A1B4D" Offset="0"/>
+      <GradientStop Color="#FF6E2856" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Legibility scrim. The art is bright neon on near-black, so a text shadow alone would not
+         survive it; the caption sits in the dark band at the foot of the chip instead. -->
+    <LinearGradientBrush x:Key="ChipScrimBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+      <GradientStop Color="#00000000" Offset="0.28"/>
+      <GradientStop Color="#73000000" Offset="0.62"/>
+      <GradientStop Color="#DE000000" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- The Lockdown / Blink cards carry live controls over their whole face, not just a caption
+         at the foot, so they darken throughout. -->
+    <LinearGradientBrush x:Key="CardScrimBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+      <GradientStop Color="#59000000" Offset="0"/>
+      <GradientStop Color="#B8000000" Offset="0.42"/>
+      <GradientStop Color="#E6000000" Offset="1"/>
+    </LinearGradientBrush>
+
+    <ControlTheme x:Key="ChipCaption" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="TextAlignment" Value="Center"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="VerticalAlignment" Value="Bottom"/>
+      <Setter Property="Margin" Value="2,0,2,3"/>
+    </ControlTheme>
+    <!-- Status dot in the top-right corner: the caption owns the bottom of the chip. Fill is
+         repainted by RefreshPremiumRail. Ellipse is untemplated, so property-only is safe
+         here (CLAUDE.md #4). -->
+    <ControlTheme x:Key="ChipDot" TargetType="Ellipse">
+      <Setter Property="Width" Value="8"/>
+      <Setter Property="Height" Value="8"/>
+      <Setter Property="HorizontalAlignment" Value="Right"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+      <Setter Property="Margin" Value="0,3,3,0"/>
+      <Setter Property="Fill" Value="#555555"/>
+      <Setter Property="Stroke" Value="#1A1A2E"/>
+      <Setter Property="StrokeThickness" Value="1"/>
+    </ControlTheme>
+
+    <ControlTheme x:Key="PremiumChipStyle" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+      <Setter Property="Height" Value="42"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+      <!-- Routed through the Button's own BorderBrush so a chip can override it: the Tier 1
+           chips wear the gold tier livery permanently, while ChipGradedIntake - a weekly pass,
+           not a tier - keeps this glass default. Hover still wins: the selectors below reach
+           the template's own Border. -->
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="cb" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                  CornerRadius="9" RenderOptions.BitmapInterpolationMode="HighQuality">
+            <!-- CornerRadius 8 = the chip's 9 minus the 1px border, so the overlays follow the
+                 inner curve instead of squaring it off. -->
+            <Grid>
+              <Border CornerRadius="8" IsHitTestVisible="False"
+                      Background="{DynamicResource ChipScrimBrush}"/>
+              <!-- Hover/press wash. A separate layer rather than a Background swap because the
+                   Background is now the art. -->
+              <Border x:Name="tint" CornerRadius="8" Opacity="0" IsHitTestVisible="False"
+                      Background="{DynamicResource TransparentPinkBrush}"/>
+              <ContentPresenter Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#cb">
+        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      </Style>
+      <Style Selector="^:pointerover /template/ Border#tint">
+        <Setter Property="Opacity" Value="1"/>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#cb">
+        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+        <Setter Property="Opacity" Value="0.82"/>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#tint">
+        <Setter Property="Opacity" Value="1"/>
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="RailMiniBtn" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="mb" Background="{DynamicResource AccentTintedBgBrush}"
+                  BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                  CornerRadius="5" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#mb">
+        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- ==================================================================
+         LOCKBANDS - the rail is the app's standing ad, so a card the account
+         cannot use stays exactly where it is, art and all, and wears a band
+         instead of vanishing or greying out. One band per card, shown from a
+         TierGate verdict (RefreshRailLockbands, MainWindow.PremiumRail.cs).
+
+         IsHitTestVisible=False is load-bearing: the card underneath must stay
+         live so its hover still runs and so the click reaches the normal
+         handler, which is where TierGate refuses and offers the tiers.
+
+         Tier language, deliberately CONSTANT across mods: gold padlock = tier
+         1, violet flask = tier 2. This is a price tag, not decor.
+         ================================================================== -->
+    <SolidColorBrush x:Key="RailLockT1Brush" Color="#FFF0C24B"/>
+    <SolidColorBrush x:Key="RailLockT2Brush" Color="#FFB47BFF"/>
+    <!-- A scrim, not a curtain: ~66% so the feature art still reads through it. Seeing what you
+         are missing is the entire job. -->
+    <SolidColorBrush x:Key="RailLockScrimBrush" Color="#A8120A1E"/>
+    <ControlTheme x:Key="RailLockBand" TargetType="Border">
+      <Setter Property="IsVisible" Value="False"/>
+      <!-- 8 = the chip's 9 minus its 1px border, the same inner curve the scrim follows. -->
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="{DynamicResource RailLockScrimBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource RailLockT1Brush}"/>
+      <Setter Property="IsHitTestVisible" Value="False"/>
+    </ControlTheme>
+    <ControlTheme x:Key="RailLockGlyph" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+      <Setter Property="Margin" Value="0,3,0,0"/>
+    </ControlTheme>
+    <!-- One short line, centred between the glyph and the caption band at the foot of the chip -
+         42px of chip and 69px of rail leave room for a price tag, not a pitch. -->
+    <ControlTheme x:Key="RailLockTeaser" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="7.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource RailLockT1Brush}"/>
+      <Setter Property="TextAlignment" Value="Center"/>
+      <Setter Property="TextWrapping" Value="NoWrap"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="1,5,1,0"/>
+    </ControlTheme>
+
+    <!-- The Training Programs "Today" card. Padding lives on the content Grid, NOT here: the
+         banner art and FX layers are part of the content and have to reach the card's edges. -->
+    <ControlTheme x:Key="ProgramTodayCardStyle" TargetType="Button">
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="cardBorder" CornerRadius="10"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#cardBorder">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- The browser's site pills. WPF authored the same template twice, once per RadioButton;
+         one keyed theme is the same markup with the copy removed. -->
+    <ControlTheme x:Key="BrowserSiteToggle" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="2,1"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="8,3">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:checked /template/ Border#border">
+        <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+      </Style>
+      <Style Selector="^:checked">
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+      </Style>
+      <Style Selector="^:pointerover /template/ Border#border">
+        <Setter Property="Background" Value="#353565"/>
+      </Style>
+      <Style Selector="^:checked:pointerover /template/ Border#border">
+        <Setter Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- Reload + webcam-tracking: one outlined pink pill, authored twice on WPF. -->
+    <ControlTheme x:Key="BrowserPillButton" TargetType="Button">
+      <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="pb" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="4" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#pb">
+        <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="BrowserMuteButton" TargetType="Button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="mub" Background="{TemplateBinding Background}" CornerRadius="4"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#mub">
+        <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- Solid pink, no border. The pop-out button's own hover/press pair. -->
+    <ControlTheme x:Key="SolidPinkButton" TargetType="Button">
+      <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="sb" Background="{TemplateBinding Background}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#sb">
+        <Setter Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#sb">
+        <Setter Property="Background" Value="#E05A9E"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- The account strip's login / logout buttons: same solid pink, 6px radius, and the
+         #E055A0 / #C04888 hover+press pair the two shared on WPF. -->
+    <ControlTheme x:Key="AccountPinkButton" TargetType="Button" BasedOn="{StaticResource SolidPinkButton}">
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Style Selector="^:pointerover /template/ Border#sb">
+        <Setter Property="Background" Value="#E055A0"/>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#sb">
+        <Setter Property="Background" Value="#C04888"/>
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="DiscordJoinButton" TargetType="Button">
+      <Setter Property="Background" Value="#5865F2"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Padding" Value="12,5"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="5"
+                  Padding="{TemplateBinding Padding}" HorizontalAlignment="Stretch">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#border">
+        <Setter Property="Background" Value="#6C75F2"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- The advanced-audio disclosure. Glyph only; the arrow flips and goes pink when open. -->
+    <ControlTheme x:Key="AudioDisclosureToggle" TargetType="ToggleButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="Transparent" Padding="4,0">
+            <TextBlock x:Name="arrow" Text="&#x25BE;" FontSize="13"
+                       Foreground="{DynamicResource TextMutedBrush}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:checked /template/ TextBlock#arrow">
+        <Setter Property="Text" Value="&#x25B4;"/>
+        <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+      </Style>
+      <Style Selector="^:pointerover /template/ TextBlock#arrow">
+        <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- The quick-toggles row. Three liveries over one 14px-radius pill: neutral glass, the
+         cyan-accented Webcam card and the pink-accented Catalogue card. -->
+    <ControlTheme x:Key="VelvetPill" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="b" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="14">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#b">
+        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+      </Style>
+    </ControlTheme>
+    <ControlTheme x:Key="VelvetPillWebcam" TargetType="Button" BasedOn="{StaticResource VelvetPill}">
+      <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
+      <Setter Property="BorderThickness" Value="1.5"/>
+      <Style Selector="^:pointerover /template/ Border#b">
+        <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+      </Style>
+    </ControlTheme>
+    <ControlTheme x:Key="VelvetPillCatalogue" TargetType="Button" BasedOn="{StaticResource VelvetPill}">
+      <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="BorderThickness" Value="1.5"/>
+      <Style Selector="^:pointerover /template/ Border#b">
+        <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+      </Style>
+    </ControlTheme>
+  </UserControl.Resources>
+
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <!-- #860: 84 of rail + 8 reserved for the rail's scrollbar. The chips used to be laid out
+           against the full 84 and then squeezed the moment the ScrollViewer decided it needed a
+           bar, cropping the chip art and wrapping the captions. The gutter is reserved here and
+           the chip stack is pinned to its old width, so a scrollbar costs the chips nothing.
+           Keep in sync with PremiumRailContent: 92 - 5 rail margin - 2 border - 8 scrollbar
+           - 8 stack margin = 69. -->
+      <ColumnDefinition Width="92"/>
+      <ColumnDefinition Width="640"/>
+      <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>   <!-- Training Programs "Today" card -->
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <!-- ============================================================ -->
+    <!-- TRAINING PROGRAMS - "TODAY" CARD (row 0, full width).         -->
+    <!-- Collapsed entirely unless a program is running; painted from  -->
+    <!-- MainWindow.ProgramsTab.cs (RefreshProgramTodayCard). Clicking -->
+    <!-- it opens the Programs tab.                                    -->
+    <!-- ============================================================ -->
+    <Button x:Name="ProgramTodayCard"
+            Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+            Theme="{StaticResource ProgramTodayCardStyle}"
+            Margin="5,5,5,0" IsVisible="False" Cursor="Hand"
+            HorizontalContentAlignment="Stretch"
+            BorderBrush="{DynamicResource PinkBrush}">
+      <Grid>
+        <!-- ============================================================ -->
+        <!-- BANNER DECORATION (art + FX). Painted and animated entirely   -->
+        <!-- from MainWindow.ProgramBanner.cs; Collapsed until             -->
+        <!-- ApplyProgramBannerArt() runs, so with no wiring and no PNGs   -->
+        <!-- the card renders exactly as it did before this layer existed. -->
+        <!-- Every child is empty here on purpose: the brushes are built   -->
+        <!-- from the PROGRAM's accent, known only at refresh time.        -->
+        <!-- ============================================================ -->
+        <Grid x:Name="ProgramTodayDecor" IsVisible="False" IsHitTestVisible="False">
+          <!-- The negative margin is the hover parallax's headroom: the art overhangs the card
+               by 14 on each side, so nudging it never exposes a bare edge. -->
+          <Rectangle x:Name="ProgramTodayArt" IsVisible="False" Margin="-14,0,-14,0">
+            <Rectangle.RenderTransform>
+              <TranslateTransform/>
+            </Rectangle.RenderTransform>
+          </Rectangle>
+          <!-- Drifting accent fog. Wider than the card and slid back and forth. -->
+          <Rectangle x:Name="ProgramTodayFog" HorizontalAlignment="Left" IsVisible="False">
+            <Rectangle.RenderTransform>
+              <TranslateTransform/>
+            </Rectangle.RenderTransform>
+          </Rectangle>
+          <!-- Periodic sheen sweep. Same idiom as the Programs tab session row. -->
+          <Rectangle x:Name="ProgramTodaySheen" Width="150" HorizontalAlignment="Left" IsVisible="False">
+            <Rectangle.RenderTransform>
+              <TranslateTransform/>
+            </Rectangle.RenderTransform>
+          </Rectangle>
+          <!-- Sparkles are added here in code: their positions are fractions of the card's
+               width, which XAML cannot express on a Canvas. -->
+          <Canvas x:Name="ProgramTodaySparkles"/>
+        </Grid>
+
+        <Grid Margin="14,11">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <Border x:Name="ProgramTodayAccent" Grid.Column="0"
+                  Width="4" CornerRadius="2" Margin="0,1,12,1"
+                  Background="{DynamicResource PinkBrush}"/>
+          <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock x:Name="TxtProgramTodayTitle"
+                       Foreground="{DynamicResource PinkBrush}"
+                       FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+            <TextBlock x:Name="TxtProgramTodayLine"
+                       Foreground="{DynamicResource TextLightBrush}"
+                       FontSize="13" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+          <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
+                     Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
+        </Grid>
+      </Grid>
+    </Button>
+
+    <!-- ============================================================ -->
+    <!-- PREMIUM QUICK-TOGGLE RAIL (col 0). Quick on/off for gated     -->
+    <!-- features. Each locked card wears its own band (see the        -->
+    <!-- LOCKBANDS block above) instead of vanishing.                  -->
+    <!-- VerticalAlignment=Top so the card hugs the chips instead of   -->
+    <!-- leaving a dead pocket at the foot.                            -->
+    <!-- ============================================================ -->
+    <Border x:Name="PremiumRail" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
+            VerticalAlignment="Top"
+            Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+            BorderThickness="1" CornerRadius="12">
+      <Grid>
+        <!-- The rail is a plain stack in a fixed-height row, so anything past the fold used to
+             be cut off by layout clip with no scrollbar and no other tell. The ScrollViewer is
+             the safety net: if the rail ever outgrows the row again it scrolls instead of
+             silently eating a feature. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <!-- #860: fixed width + Center, so a scrollbar appearing shifts the chips but never
+               narrows them. 69 = the width the chips had before the column reserved its
+               scrollbar gutter. If the rail column width changes, change this too.
+               The right-click router is on the STACK, not on each chip: one handler covers
+               every chip and cannot be forgotten when a chip is added. Left = open the
+               feature's page, right = turn it on with its existing settings. -->
+          <StackPanel x:Name="PremiumRailContent" Margin="4,6,4,6"
+                      Width="69" HorizontalAlignment="Center">
+            <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
+                       TextAlignment="Center" Margin="0,0,0,6"/>
+            <Button x:Name="ChipTakeover" Theme="{StaticResource PremiumChipStyle}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
+                    Background="{StaticResource ArtTakeover}"
+                    ToolTip.Tip="Takeover — the companion triggers effects on her own · left-click opens it, right-click turns it on">
+              <Grid>
+                <Ellipse x:Name="DotTakeover" Theme="{StaticResource ChipDot}"/>
+                <TextBlock Text="Takeover" Theme="{StaticResource ChipCaption}"/>
+                <!-- Last child = on top of the dot and the caption. -->
+                <Border x:Name="LockBandTakeover" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Button>
+            <Button x:Name="ChipAwareness" Theme="{StaticResource PremiumChipStyle}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
+                    Background="{StaticResource ArtAwareness}"
+                    ToolTip.Tip="Awareness — reacts to what's on your screen · left-click opens it, right-click turns it on">
+              <Grid>
+                <Ellipse x:Name="DotAwareness" Theme="{StaticResource ChipDot}"/>
+                <TextBlock Text="Awareness" Theme="{StaticResource ChipCaption}"/>
+                <Border x:Name="LockBandAwareness" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Button>
+            <Button x:Name="ChipHaptics" Theme="{StaticResource PremiumChipStyle}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
+                    Background="{StaticResource ArtHaptics}"
+                    ToolTip.Tip="Haptics — connect a toy · left-click opens it, right-click turns it on">
+              <Grid>
+                <Ellipse x:Name="DotHaptics" Theme="{StaticResource ChipDot}"/>
+                <TextBlock Text="Haptics" Theme="{StaticResource ChipCaption}"/>
+                <Border x:Name="LockBandHaptics" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Button>
+            <!-- Graded Intake — a navigation shortcut, not a toggle: the intake runs in its own
+                 window and is started from its page, so this chip just opens that page (hence
+                 no state dot). -->
+            <Button x:Name="ChipGradedIntake" Theme="{StaticResource PremiumChipStyle}"
+                    Background="{StaticResource ArtIntake}"
+                    ToolTip.Tip="Graded Intake — open the intake page · left- or right-click opens it">
+              <Grid>
+                <TextBlock Text="Intake" Theme="{StaticResource ChipCaption}"/>
+                <!-- The one band that is not a tier question: a FREE account holding this week's
+                     pass may take the intake. This band follows IntakePassService.CanStartIntake
+                     and says "pass", not "patron". -->
+                <Border x:Name="LockBandIntake" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_pass}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Button>
+            <Button x:Name="ChipVoice" Theme="{StaticResource PremiumChipStyle}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
+                    Background="{StaticResource ArtVoice}"
+                    ToolTip.Tip="She's Listening — voice control (&quot;Hey Bambi&quot;) and the mic · left-click opens it, right-click turns it on">
+              <Grid>
+                <!-- No art file for this one - the glyph stays centred, lifted clear of the
+                     caption band at the foot of the chip. -->
+                <TextBlock Text="🎙️" FontSize="14"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                <Ellipse x:Name="DotVoice" Theme="{StaticResource ChipDot}"/>
+                <TextBlock Text="Voice" Theme="{StaticResource ChipCaption}"/>
+                <Border x:Name="LockBandVoice" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Button>
+            <!-- For You — a navigation shortcut like Graded Intake, not a toggle: the feed runs
+                 in its own web-view window. ShowTab("fyp") is intercepted by
+                 MainWindow.TabNavigation and hands off to OpenFypFeed, which owns the premium
+                 gate — the chip itself never blocks. No state dot, same reason as Intake. -->
+            <Button x:Name="ChipFyp" Theme="{StaticResource PremiumChipStyle}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
+                    Background="{StaticResource ArtFyp}"
+                    ToolTip.Tip="For You — an endless feed cut from your own library · left- or right-click opens it">
+              <Grid>
+                <TextBlock Text="{loc:Str tab_fyp}" Theme="{StaticResource ChipCaption}"/>
+                <!-- Band on, click still through: OpenFypFeed owns this gate and already opens
+                     the App Info popup for a locked account. -->
+                <Border x:Name="LockBandFyp" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Button>
+            <!-- Lockdown — launcher with +/- duration and a live countdown. Same full-bleed
+                 treatment as the chips, but the caption and controls sit over it. -->
+            <Border x:Name="CardLockdown"
+                    Margin="0,0,0,4" Background="{StaticResource ArtLockdown}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}" BorderThickness="1" CornerRadius="9"
+                    RenderOptions.BitmapInterpolationMode="HighQuality"
+                    ToolTip.Tip="Lockdown — locks you in for the set time (panic key disabled)">
+              <Grid>
+                <Border CornerRadius="8" IsHitTestVisible="False" Background="{StaticResource CardScrimBrush}"/>
+                <StackPanel Margin="3,2,3,4">
+                  <TextBlock Text="Lockdown" Theme="{StaticResource ChipCaption}" VerticalAlignment="Top" Margin="0,0,0,0"/>
+                  <Grid x:Name="LockdownSetRow" Margin="0,3,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" x:Name="BtnLockdownMinus" Theme="{StaticResource RailMiniBtn}"
+                            FontSize="13" Width="18" Height="18">
+                      <TextBlock Text="−"/>
+                    </Button>
+                    <TextBlock Grid.Column="1" x:Name="TxtLockdownMins" Text="15m" FontSize="10"
+                               Foreground="White" VerticalAlignment="Center" TextAlignment="Center"/>
+                    <Button Grid.Column="2" x:Name="BtnLockdownPlus" Theme="{StaticResource RailMiniBtn}"
+                            FontSize="11" Width="18" Height="18">
+                      <TextBlock Text="＋"/>
+                    </Button>
+                  </Grid>
+                  <Button x:Name="BtnLockdownGo" Theme="{StaticResource RailMiniBtn}"
+                          FontSize="9" Height="16" Margin="0,3,0,0">
+                    <TextBlock Text="Lock in"/>
+                  </Button>
+                  <TextBlock x:Name="TxtLockdownCountdown" IsVisible="False"
+                             FontSize="12" FontWeight="Bold" Foreground="#FF6B6B" TextAlignment="Center" Margin="0,2,0,0"/>
+                </StackPanel>
+                <!-- Outside the StackPanel so the band never fights SetLockdownActiveUi, which
+                     owns LockdownSetRow / BtnLockdownGo / TxtLockdownCountdown visibility while
+                     a lockdown runs. Two owners of one visibility is how a countdown goes
+                     missing. -->
+                <Border x:Name="LockBandLockdown" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Border>
+            <!-- Blink Trainer — launcher with +/- duration and countdown. Same full-bleed
+                 treatment as Lockdown. -->
+            <Border x:Name="CardBlink"
+                    Margin="0,0,0,4" Background="{StaticResource ArtBlink}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}" BorderThickness="1" CornerRadius="9"
+                    RenderOptions.BitmapInterpolationMode="HighQuality"
+                    ToolTip.Tip="Blink Trainer — webcam blink-gated visuals">
+              <Grid>
+                <Border CornerRadius="8" IsHitTestVisible="False" Background="{StaticResource CardScrimBrush}"/>
+                <StackPanel Margin="3,2,3,4">
+                  <TextBlock Text="Blink" Theme="{StaticResource ChipCaption}" VerticalAlignment="Top" Margin="0,0,0,0"/>
+                  <Grid x:Name="BlinkSetRow" Margin="0,3,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" x:Name="BtnBlinkMinus" Theme="{StaticResource RailMiniBtn}"
+                            FontSize="13" Width="18" Height="18">
+                      <TextBlock Text="−"/>
+                    </Button>
+                    <TextBlock Grid.Column="1" x:Name="TxtBlinkMins" Text="10m" FontSize="10"
+                               Foreground="White" VerticalAlignment="Center" TextAlignment="Center"/>
+                    <Button Grid.Column="2" x:Name="BtnBlinkPlus" Theme="{StaticResource RailMiniBtn}"
+                            FontSize="11" Width="18" Height="18">
+                      <TextBlock Text="＋"/>
+                    </Button>
+                  </Grid>
+                  <Button x:Name="BtnBlinkGo" Theme="{StaticResource RailMiniBtn}"
+                          FontSize="9" Height="16" Margin="0,3,0,0">
+                    <TextBlock Text="Start"/>
+                  </Button>
+                  <TextBlock x:Name="TxtBlinkCountdown" IsVisible="False"
+                             FontSize="12" FontWeight="Bold" Foreground="#7FD8FF" TextAlignment="Center" Margin="0,2,0,0"/>
+                </StackPanel>
+                <!-- Sibling of the StackPanel for the same reason as Lockdown's:
+                     SetBlinkActiveUi owns BlinkSetRow / BtnBlinkGo / TxtBlinkCountdown. -->
+                <Border x:Name="LockBandBlink" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Border>
+            <!-- Remote — opens a flyout to compose + start a remote session -->
+            <Button x:Name="ChipRemote" Theme="{StaticResource PremiumChipStyle}"
+                    BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
+                    Background="{StaticResource ArtRemote}"
+                    ToolTip.Tip="Remote Control — let someone drive your session">
+              <Grid>
+                <Ellipse x:Name="DotRemote" Theme="{StaticResource ChipDot}"/>
+                <TextBlock Text="Remote" Theme="{StaticResource ChipCaption}"/>
+                <Border x:Name="LockBandRemote" Theme="{StaticResource RailLockBand}">
+                  <Grid>
+                    <TextBlock Text="🔒" Theme="{StaticResource RailLockGlyph}"/>
+                    <TextBlock Text="{loc:Str hm3_rail_lock_t1}" Theme="{StaticResource RailLockTeaser}"/>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Button>
+            <!-- VerticalOffset lifts the flyout up: ChipRemote is the last rail item and sits
+                 low on screen, so a top-aligned flyout otherwise clips the bottom Start button
+                 against the screen edge. Start is docked to the bottom (always visible) and the
+                 form above it scrolls if the popup runs out of vertical room. -->
+            <Popup x:Name="RemoteFlyout" PlacementTarget="{Binding #ChipRemote}"
+                   Placement="Right" IsLightDismissEnabled="True" HorizontalOffset="4" VerticalOffset="-150">
+              <Border Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource PinkBrush}"
+                      BorderThickness="1" CornerRadius="10" Padding="10" Width="226">
+                <DockPanel>
+                  <Button x:Name="BtnRemoteStart" DockPanel.Dock="Bottom"
+                          Theme="{StaticResource PinkButton}" Margin="0,8,0,0"
+                          Background="{DynamicResource AccentGradientBrush}" Height="30" FontSize="12">
+                    <TextBlock Text="Start Remote"/>
+                  </Button>
+                  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="420">
+                    <StackPanel>
+                      <TextBlock Text="Go available" FontWeight="Bold" Foreground="White" FontSize="13" Margin="0,0,0,6"/>
+                      <TextBlock Text="Difficulty" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"/>
+                      <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
+                        <RadioButton x:Name="RemoteDiffEasy" GroupName="RemoteDiff" Content="Easy" Foreground="White" Margin="0,0,10,0"/>
+                        <RadioButton x:Name="RemoteDiffMed" GroupName="RemoteDiff" Content="Medium" IsChecked="True" Foreground="White" Margin="0,0,10,0"/>
+                        <RadioButton x:Name="RemoteDiffHard" GroupName="RemoteDiff" Content="Hard" Foreground="White"/>
+                      </StackPanel>
+                      <CheckBox x:Name="RemoteShareCheck" Content="Share in Available Subjects"
+                                Foreground="White" FontSize="11" Margin="0,0,0,6"/>
+                      <TextBlock Text="Message" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"/>
+                      <TextBox x:Name="RemoteMessageBox" MaxLength="80" Height="40"
+                               TextWrapping="Wrap" AcceptsReturn="True" Margin="0,2,0,6"/>
+                      <TextBlock Text="Tags (up to 5)" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"/>
+                      <WrapPanel x:Name="RemoteTagPanel" Margin="0,2,0,0">
+                        <ToggleButton Content="Bimbo" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Drone" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Trance" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Fem" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Submission" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Degrade" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Audio OK" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Soft" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Lockdown OK" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                        <ToggleButton Content="Chastity" FontSize="10" Padding="5,1" Margin="0,0,3,3"/>
+                      </WrapPanel>
+                    </StackPanel>
+                  </ScrollViewer>
+                </DockPanel>
+              </Border>
+            </Popup>
+          </StackPanel>
+        </ScrollViewer>
+        <!-- RETIRED (Phase 3) - the old blanket. One padlock over the whole rail answered "no"
+             for eight different features at once and had nowhere to click. The per-card
+             lockbands replaced it. RefreshPremiumRail force-collapses this so no stale state
+             can revive it; the element stays only because live code still reads the name.
+             Do not re-show it. -->
+        <Border x:Name="PremiumRailLock" IsVisible="False"
+                Background="#B31A1A2E" CornerRadius="12" Cursor="Hand"
+                ToolTip.Tip="Premium features — unlock with Patreon">
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="🔒" FontSize="20" HorizontalAlignment="Center"/>
+            <TextBlock Text="Patron" FontSize="10" Foreground="White" TextAlignment="Center" Margin="0,4,0,0"/>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+
+    <!-- ============================================================ -->
+    <!-- VELVET MOSAIC DASHBOARD - 4x4 hybrid wall (col 1)             -->
+    <!--                                                              -->
+    <!--   Flash      | Video/BubbleCount | Subliminals | BouncingText -->
+    <!--   Just Drop  | [ LOGO 2x2                    ] | Spiral/Pink  -->
+    <!--   ? BOX      | [                              ] | Wipe/Drain  -->
+    <!--   VAULT (2w) |                   | Bubble Pop  | Lock Card    -->
+    <!--                                                              -->
+    <!-- * The three DIAGONAL tiles carry two features each. GESTURE:  -->
+    <!--   left-click on a half opens that half's Studio module,       -->
+    <!--   right-click toggles it - the same grammar as the rail chips.-->
+    <!-- * ? BOX = the daily free feature (DailyFreeService).          -->
+    <!-- * VAULT = the Exclusives/Velvet Vault storefront, double-wide.-->
+    <!-- ============================================================ -->
+    <Grid Grid.Column="1" Grid.Row="1" x:Name="VelvetFeatureGrid" Margin="5">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <!-- ============================================================ -->
+      <!-- AMBIENT LAYER - the one looping FX on the whole Dashboard.    -->
+      <!-- Declared FIRST so it is the bottom of the grid's z-order: the -->
+      <!-- tiles paint their own opaque surfaces on top, so the fog and  -->
+      <!-- dust read through the gutters, never over a card face.        -->
+      <!-- AmbientFxCanvas is hit-test invisible by construction and runs -->
+      <!-- a self-stopping clock; the layers are started in code-behind.  -->
+      <!-- ============================================================ -->
+      <fx:AmbientFxCanvas x:Name="MosaicFx"
+                          Grid.Row="0" Grid.RowSpan="4"
+                          Grid.Column="0" Grid.ColumnSpan="4"/>
+
+      <!-- The Title="" literals below are English design-time fallbacks only. At runtime
+           MainWindow.ApplyModFeatureNames() overwrites every FX title with the mod-aware
+           localized name. Two tiles are runtime-owned outright: the ? box
+           (RefreshMysteryTile) and the tease tile (ApplyTeaseCard). -->
+
+      <!-- Row 1: flash, the video pair, subliminals, bouncing text -->
+      <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash"
+                            Title="Flash Images"
+                            HelpSectionId="FlashImages"/>
+      <features:SplitFeatureCard Grid.Row="0" Grid.Column="1" x:Name="ComboVideoBubble"
+                                 TitleA="Mandatory Video" TitleB="Bubble Count"/>
+      <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardSubliminal"
+                            Title="Subliminals"
+                            HelpSectionId="Subliminals"/>
+      <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardBouncingText"
+                            Title="Bouncing Text"
+                            HelpSectionId="BouncingText"/>
+
+      <!-- Row 2: the TEASE tile (far left) + centre logo + spiral pair -->
+      <!-- THE TEASE TILE. Nameless on purpose: the art is blurred past recognition by
+           FeatureCard.TeaseTier, the title is "???", the rim is the teased feature's tier
+           livery and the click opens a cryptic teaser rather than a door. Nothing here may
+           name the feature. Title and TeaseTier are FIRST-FRAME values, not the authority:
+           MainWindow.TeaseCard.cs owns both and rewrites them on every mosaic repaint. -->
+      <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardJustDrop"
+                            Title="???"
+                            TeaseTier="2"/>
+
+      <!-- Centre logo, at 2x2. Doubles as the weekly Graded Intake pass card: when a free
+           account has an unspent run waiting, MainWindow.RefreshIntakePassTile() flips this
+           tile on its Y axis and leaves the PASS face showing until the run is used or the
+           week rolls. -->
+      <Border x:Name="LogoBrandFrame"
+              Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
+              Background="#01000000" Margin="6"
+              Cursor="Hand"
+              ToolTip.Tip="{loc:Str tooltip_click_me_rapidly}">
+
+        <!-- Flip host. The spin transform lives HERE and not on ImgLogo on purpose:
+             ImgLogo_MouseLeftButtonDown owns ImgLogo's own transform (a click pulse), and a
+             flip sharing it would be snapped back to 1.0 mid-animation. -->
+        <Grid x:Name="LogoFlipHost" RenderTransformOrigin="50%,50%">
+          <Grid.RenderTransform>
+            <TransformGroup>
+              <!-- ScaleX 1 -> 0 -> 1 is the standard fake for a Y-axis turn; the skew only
+                   sells depth and always ends back at 0. -->
+              <ScaleTransform ScaleX="1" ScaleY="1"/>
+              <SkewTransform AngleX="0" AngleY="0"/>
+            </TransformGroup>
+          </Grid.RenderTransform>
+
+          <!-- FACE A: the wordmark. Default face; the only face premium users and spent-week
+               users ever see. The Ken Burns drift (scale 1.00 -> 1.04 over 40s) lives on THIS
+               border and not on ImgLogo or on LogoFlipHost: both of those transforms are owned
+               by other animations and would snap the drift back to 1.0. -->
+          <Border x:Name="LogoFaceLogo" CornerRadius="12" ClipToBounds="True"
+                  RenderTransformOrigin="50%,50%">
+            <Border.RenderTransform>
+              <ScaleTransform ScaleX="1" ScaleY="1"/>
+            </Border.RenderTransform>
+            <Grid>
+              <!-- ponytail: the wordmark bitmap is a pack:// resource of the WPF head. The Image
+                   stays, sourceless, so MainWindow's painter has its slot back unchanged when
+                   Resources/ moves; the type below is the placeholder that keeps the 2x2 cell
+                   from rendering as a hole in the middle of the wall. Delete it with the art. -->
+              <StackPanel x:Name="LogoWordmarkPlaceholder"
+                          HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="CONDITIONING"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="26" FontWeight="Black" Opacity="0.85"/>
+                <TextBlock Text="CONTROL PANEL"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           Foreground="{DynamicResource TextLightBrush}"
+                           FontSize="18" FontWeight="Bold" Opacity="0.7"
+                           Margin="0,2,0,0"/>
+              </StackPanel>
+              <Image x:Name="ImgLogo" Stretch="Uniform"
+                     HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                     RenderOptions.BitmapInterpolationMode="HighQuality"/>
+              <!-- Occasional light pass over the wordmark (one shot every 25-40s, fired by a
+                   timer in MainWindow.DashboardFx - never an idle loop). Opacity 0 at rest. -->
+              <Rectangle x:Name="LogoSheen"
+                         Width="110" HorizontalAlignment="Left"
+                         IsHitTestVisible="False" Opacity="0">
+                <Rectangle.Fill>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Color="Transparent" Offset="0"/>
+                    <GradientStop Color="{DynamicResource FxFlashTintColor}" Offset="0.5"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                  </LinearGradientBrush>
+                </Rectangle.Fill>
+                <Rectangle.RenderTransform>
+                  <TransformGroup>
+                    <SkewTransform AngleX="-18"/>
+                    <TranslateTransform/>
+                  </TransformGroup>
+                </Rectangle.RenderTransform>
+              </Rectangle>
+            </Grid>
+          </Border>
+
+          <!-- FACE B: the weekly pass card. Collapsed by default so nothing about the Dashboard
+               changes until RefreshIntakePassTile() decides otherwise. Visual register
+               deliberately matches FeatureCard so it reads as a sibling of the tiles around it.
+               Every piece of copy here is state-dependent and is written by
+               ApplyIntakePassFaceState(); the {loc:Str} values are the available-state
+               defaults. -->
+          <Border x:Name="IntakePassFace"
+                  IsVisible="False"
+                  Background="{DynamicResource ElevatedSurfaceBrush}"
+                  BorderBrush="{DynamicResource GlassBorderBrush}"
+                  BorderThickness="1" CornerRadius="12" ClipToBounds="True"
+                  Cursor="Hand"
+                  ToolTip.Tip="{loc:Str tooltip_intake_pass_card}">
+            <Border.Effect>
+              <DropShadowEffect Color="{DynamicResource PinkColor}"
+                                BlurRadius="18" OffsetX="0" OffsetY="0" Opacity="0.55"/>
+            </Border.Effect>
+            <Grid>
+              <!-- LAYER 0: the per-niche card art (Resources/intake/pass_card_*.png). Painted
+                   as a background brush rather than an Image child because ClipToBounds ignores
+                   CornerRadius - a background brush is the only fill that follows the rounded
+                   corners. Collapsed until IntakeNiche.PassCardImage() returns a bitmap.
+                   ponytail: the brush is left empty here (no Resources/ on this head). -->
+              <Border x:Name="IntakePassArt" CornerRadius="11" IsVisible="False">
+                <Border.Background>
+                  <ImageBrush Stretch="UniformToFill"
+                              AlignmentX="Center" AlignmentY="Center"/>
+                </Border.Background>
+              </Border>
+
+              <!-- LAYER 1: ticket sheen. Vector only, and kept OVER the art on purpose - at 22%
+                   alpha it tints the top of the card the same pink as its neighbours whether or
+                   not the art resolved. -->
+              <Border CornerRadius="11">
+                <Border.Background>
+                  <RadialGradientBrush Center="50%,12%" GradientOrigin="50%,5%"
+                                       RadiusX="95%" RadiusY="85%">
+                    <GradientStop Color="#38FF69B4" Offset="0"/>
+                    <GradientStop Color="#00FF69B4" Offset="1"/>
+                  </RadialGradientBrush>
+                </Border.Background>
+              </Border>
+
+              <!-- LAYER 2: legibility scrim. Only shown with art under it. Dark at the top
+                   (headline) and heavier at the bottom (CTA), transparent through the middle so
+                   the ticket itself is never veiled. -->
+              <Border x:Name="IntakePassScrim"
+                      CornerRadius="11" IsVisible="False" IsHitTestVisible="False">
+                <Border.Background>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Color="#B31A1A2E" Offset="0"/>
+                    <GradientStop Color="#001A1A2E" Offset="0.28"/>
+                    <GradientStop Color="#001A1A2E" Offset="0.56"/>
+                    <GradientStop Color="#CC12121F" Offset="0.82"/>
+                    <GradientStop Color="#F20D0D18" Offset="1"/>
+                  </LinearGradientBrush>
+                </Border.Background>
+              </Border>
+
+              <!-- Headline. Always visible - it is the only thing naming the feature in art
+                   mode, and it sits on the art's dark top strip. -->
+              <TextBlock x:Name="IntakePassHeadline"
+                         Text="{loc:Str intake_pass_card_headline}"
+                         VerticalAlignment="Top" HorizontalAlignment="Center"
+                         Margin="10,8,10,0"
+                         Foreground="{DynamicResource PinkBrush}"
+                         FontSize="13" FontWeight="Bold"
+                         TextAlignment="Center" TextWrapping="Wrap"/>
+
+              <!-- Vector block: the pre-art card body. Collapsed whenever art is showing; shown
+                   when PassCardImage() returned null, which is the documented fallback. -->
+              <StackPanel x:Name="IntakePassVectorBody"
+                          VerticalAlignment="Center" HorizontalAlignment="Center"
+                          Margin="10,20,10,28">
+                <TextBlock Text="✨" FontSize="17" HorizontalAlignment="Center"/>
+
+                <Border Height="1" Margin="16,7"
+                        Background="{DynamicResource GlassBorderBrush}"/>
+
+                <TextBlock x:Name="IntakePassBody"
+                           Text="{loc:Str intake_pass_card_body}"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="11" LineHeight="15"
+                           TextAlignment="Center" TextWrapping="Wrap"/>
+
+                <TextBlock Text="{loc:Str intake_pass_card_footnote}"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="9" Opacity="0.75"
+                           TextAlignment="Center" TextWrapping="Wrap"
+                           Margin="0,6,0,0"/>
+              </StackPanel>
+
+              <!-- Bottom bar: the pulsing call to action plus the "(?)" explainer. Only the text
+                   scales; the "(?)" is deliberately left still so it stays an easy 18px target.
+                   A Grid, not a horizontal StackPanel: a StackPanel hands its child infinite
+                   width, so a long translation of the CTA would refuse to wrap and get clipped
+                   off BOTH edges. The 26px spacer column mirrors the "(?)" so the text still
+                   lands optically centred. -->
+              <Grid VerticalAlignment="Bottom" Margin="8,0,8,9">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="26"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="26"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="IntakePassCta"
+                           Grid.Column="1"
+                           Text="{loc:Str intake_pass_card_cta}"
+                           Foreground="White" FontSize="12" FontWeight="Bold"
+                           VerticalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap"
+                           RenderTransformOrigin="50%,50%">
+                  <TextBlock.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                  </TextBlock.RenderTransform>
+                </TextBlock>
+
+                <!-- Same interactive popover the feature tiles use; MainWindow attaches the
+                     content. A Button marks the press handled, so clicking the "?" cannot also
+                     launch the intake or poke the logo easter egg. -->
+                <Button x:Name="BtnIntakePassHelp"
+                        Grid.Column="2"
+                        Theme="{StaticResource HelpButtonStyle}"
+                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Margin="8,0,0,0"/>
+              </Grid>
+            </Grid>
+          </Border>
+        </Grid>
+      </Border>
+
+      <features:SplitFeatureCard Grid.Row="1" Grid.Column="3" x:Name="ComboSpiralPink"
+                                 TitleA="Spiral Overlay" TitleB="Pink Filter"/>
+
+      <!-- Row 3: the ? box + the immersion pair -->
+      <!-- The ? BOX: today's premium feature, free for the day (DailyFreeService). The title is
+           painted by RefreshMysteryTile() and is ALWAYS the offer ("FREE TODAY"), never the
+           day's feature - naming it on this face would spend the reveal before the plate ever
+           turned. The tile is a TWO-SIDED PLATE: HOVER turns it onto today's feature, and
+           unhovering turns it back. The flip transform lives on THIS host so both faces share
+           it, and the enter/leave hooks are on the host too (the faces swap visibility
+           mid-turn, so a handler on a face would see leaves the pointer never made). -->
+      <Grid Grid.Row="2" Grid.Column="0" x:Name="MysteryFlipHost"
+            RenderTransformOrigin="50%,50%">
+        <Grid.RenderTransform>
+          <TransformGroup>
+            <ScaleTransform ScaleX="1" ScaleY="1"/>
+            <SkewTransform AngleY="0"/>
+          </TransformGroup>
+        </Grid.RenderTransform>
+
+        <features:FeatureCard x:Name="CardMystery"
+                              Title="FREE TODAY"/>
+
+        <!-- The reveal face: today's feature, full-bleed. Art + name are painted by
+             RefreshMysteryTile; clicking it is clicking the box (same navigation). The 6px
+             margin mirrors FeatureCard's own RootBorder margin so the two faces are the same
+             plate, not two sizes of plate. -->
+        <Border x:Name="MysteryRevealFace"
+                IsVisible="False" Margin="6" CornerRadius="12" ClipToBounds="True"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="#FFD54A" BorderThickness="1.5"
+                Cursor="Hand">
+          <Grid>
+            <Border CornerRadius="11" RenderOptions.BitmapInterpolationMode="HighQuality">
+              <Border.Background>
+                <ImageBrush Stretch="UniformToFill"/>
+              </Border.Background>
+            </Border>
+            <Border CornerRadius="0,0,11,11" VerticalAlignment="Bottom" IsHitTestVisible="False">
+              <Border.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                  <GradientStop Color="Transparent" Offset="0"/>
+                  <GradientStop Color="#B3000000" Offset="1"/>
+                </LinearGradientBrush>
+              </Border.Background>
+              <StackPanel Margin="8,20,8,8">
+                <TextBlock Text="{loc:Str mosaic_daily_gift}"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           Foreground="#FFD54A" FontSize="9" FontWeight="Bold"/>
+                <TextBlock x:Name="MysteryRevealName"
+                           Text="Feature"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" Foreground="White"
+                           FontSize="15" FontWeight="Black"/>
+              </StackPanel>
+            </Border>
+
+            <!-- The gift's price, re-stamped. On the REVEAL face only: this is the side that
+                 names today's feature, so it is the side that can say what the feature normally
+                 costs and that today it does not. Painted by RefreshMysteryTile; collapsed for
+                 premium accounts, who own the whole pool. -->
+            <fx:TierBadge x:Name="MysteryRevealBadge"
+                          HorizontalAlignment="Right" VerticalAlignment="Top"
+                          Margin="0,-4,-4,0" ZIndex="9"/>
+          </Grid>
+        </Border>
+
+        <!-- The gold highlight ring. Inside the flip host so it turns with the plate. Opacity is
+             the animated property - MainWindow.DashboardFx breathes it for as long as today's
+             gift is unopened. Gold on purpose: everything else on this wall glows in the mod's
+             Fx colour, so the one gold ring cannot be mistaken for an active state. -->
+        <Border x:Name="MysteryGlow"
+                Margin="6" CornerRadius="12" IsHitTestVisible="False"
+                BorderBrush="#FFD54A" BorderThickness="2.5" Opacity="0.55">
+          <Border.Effect>
+            <DropShadowEffect Color="#FFD54A" BlurRadius="16" OffsetX="0" OffsetY="0" Opacity="0.8"/>
+          </Border.Effect>
+        </Border>
+      </Grid>
+
+      <!-- The badge sits OUTSIDE the flip host so it stays legible while the plate is edge-on
+           mid-turn. Top-right because the FREE TODAY price tag owns the card's top-left. -->
+      <Border x:Name="MysteryBadge"
+              Grid.Row="2" Grid.Column="0" ZIndex="12" IsHitTestVisible="False"
+              HorizontalAlignment="Right" VerticalAlignment="Top"
+              Margin="0,2,2,0" Padding="8,3,8,4" CornerRadius="8"
+              RenderTransformOrigin="50%,50%">
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Color="#FFE082" Offset="0"/>
+            <GradientStop Color="#FFB300" Offset="1"/>
+          </LinearGradientBrush>
+        </Border.Background>
+        <Border.RenderTransform>
+          <TransformGroup>
+            <ScaleTransform ScaleX="1" ScaleY="1"/>
+            <RotateTransform Angle="8"/>
+          </TransformGroup>
+        </Border.RenderTransform>
+        <Border.Effect>
+          <DropShadowEffect Color="#FFD54A" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.85"/>
+        </Border.Effect>
+        <TextBlock Text="{loc:Str mosaic_new_today}"
+                   Foreground="#3A2A00" FontSize="10" FontWeight="Black"/>
+      </Border>
+      <features:SplitFeatureCard Grid.Row="2" Grid.Column="3" x:Name="ComboMindDrain"
+                                 TitleA="Mind Wipe" TitleB="Brain Drain"/>
+
+      <!-- Row 4: the vault (double-wide) + the two games -->
+      <!-- THE VAULT: the Exclusives storefront (Velvet Vault + the premium T2 shelf).
+           Double-wide because it is a billboard as much as a door. -->
+      <features:FeatureCard Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" x:Name="CardVault"
+                            Title="The Vault"/>
+      <!-- The vault's animated CTA: big, slightly diagonal, breathing. Overlaid on the CELL
+           rather than inside FeatureCard so the card control stays generic. IsHitTestVisible
+           =False - clicks land on the card. Glow colour is the Fx colour, so a mod switch
+           re-themes the CTA with zero code. -->
+      <TextBlock x:Name="VaultCta"
+                 Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                 Text="{loc:Str mosaic_vault_cta}"
+                 IsHitTestVisible="False" ZIndex="12"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 TextAlignment="Center" TextWrapping="Wrap" MaxWidth="330"
+                 Foreground="White" FontSize="17" FontWeight="Black"
+                 RenderTransformOrigin="50%,50%">
+        <TextBlock.RenderTransform>
+          <TransformGroup>
+            <ScaleTransform ScaleX="1" ScaleY="1"/>
+            <RotateTransform Angle="-7"/>
+          </TransformGroup>
+        </TextBlock.RenderTransform>
+        <TextBlock.Effect>
+          <DropShadowEffect Color="{DynamicResource FxGlowColor}"
+                            BlurRadius="14" OffsetX="0" OffsetY="0" Opacity="0.95"/>
+        </TextBlock.Effect>
+      </TextBlock>
+      <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardBubblePop"
+                            Title="Bubble Pop"
+                            HelpSectionId="BubblePop"/>
+      <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardLockCard"
+                            Title="Lock Card"
+                            HelpSectionId="LockCard"/>
+
+      <!-- ============================================================ -->
+      <!-- PROGRAM FEATURE LOCK - the "why" pill. Shown only while a     -->
+      <!-- Training Program session is running; painted and hidden from  -->
+      <!-- MainWindow.ProgramLock.cs, which DERIVES the state from live  -->
+      <!-- engine state rather than latching.                            -->
+      <!--                                                                -->
+      <!-- It is an OVERLAY, and that is load-bearing: the spans cover    -->
+      <!-- the whole mosaic and VerticalAlignment=Top pins it to the top  -->
+      <!-- edge, so it adds ZERO height to the design canvas. Adding real -->
+      <!-- height here is how the Remote chip got eaten by layout clip.   -->
+      <!--                                                                -->
+      <!-- IsHitTestVisible=False on purpose: being locked out of         -->
+      <!-- CHANGING the day's feature mix is no reason to be locked out   -->
+      <!-- of reading it. The refusal happens in code.                    -->
+      <!-- ============================================================ -->
+      <Border x:Name="ProgramFeatureLockRibbon"
+              Grid.Row="0" Grid.RowSpan="4" Grid.Column="0" Grid.ColumnSpan="4"
+              IsVisible="False" IsHitTestVisible="False" ZIndex="30"
+              VerticalAlignment="Top" HorizontalAlignment="Center"
+              MaxWidth="620" Margin="0,14,0,0" Padding="13,6,13,6"
+              Background="#F21A1A2E" BorderBrush="{DynamicResource PinkBrush}"
+              BorderThickness="1" CornerRadius="10">
+        <Border.Effect>
+          <DropShadowEffect Color="{DynamicResource PinkColor}"
+                            BlurRadius="16" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+        </Border.Effect>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Text="🔒" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <!-- Text is written by ApplyProgramLockRibbon. The literal here is a design-time
+               placeholder only - it is never shown, because the ribbon is collapsed until that
+               method fills it in. -->
+          <TextBlock x:Name="TxtProgramFeatureLock"
+                     Text="Program is running this"
+                     Foreground="{DynamicResource PinkBrush}"
+                     FontSize="11" FontWeight="SemiBold"
+                     TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                     VerticalAlignment="Center"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- RIGHT HALF — col 2 (after premium rail + feature grid).
+         Phase 3 layout: browser card (star) · companion strip (auto) · account strip (auto).
+         Nothing here may grow: every unit taken from row 0 comes off the web view's slot. -->
+    <Grid Grid.Column="2" Grid.Row="1" Margin="5">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <!-- Browser Section -->
+      <!-- AIRSPACE (WPF). The WebView2 inside this card was a native HWND: nothing WPF drew
+           could ever appear over it. So this card's FX are on the FRAME and the HEADER only - a
+           slow light travelling around the border plus a pulse on the status text while it is
+           still loading. The rule survives the port: Avalonia's NativeWebView is a native
+           control host with the same airspace problem. -->
+      <Border x:Name="BrowserCardFrame"
+              Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5" ClipToBounds="True"
+              Background="{DynamicResource ElevatedSurfaceBrush}" BorderThickness="1">
+        <Border.BorderBrush>
+          <!-- The resting offsets park the bright core entirely BEFORE the brush's 0 mark. A
+               linear gradient pads past its last stop, so at rest the whole frame is flat
+               GlassBorder. The travelling band only exists while the loop is running. -->
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="{DynamicResource GlassBorder}" Offset="-0.30"/>
+            <GradientStop Color="{DynamicResource FxGlowColor}" Offset="-0.15"/>
+            <GradientStop Color="{DynamicResource GlassBorder}" Offset="0"/>
+          </LinearGradientBrush>
+        </Border.BorderBrush>
+        <!-- Grid, not StackPanel. A StackPanel hands each child its DESIRED height and never
+             shrinks it, so the browser box kept its old size when the Training Programs banner
+             took ~64 design units out of this column - and the native web view painted straight
+             through the card's bottom edge. With Auto/* the browser box is simply whatever is
+             left after the header. -->
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <!-- Browser Header - single row with title, tabs, status, webcam toggle, pop out -->
+          <Grid Grid.Row="0" Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str section_browser}" Margin="0"/>
+              <Button x:Name="HelpBtnBrowser" Theme="{StaticResource HelpButtonStyle}" Tag="Browser"/>
+            </StackPanel>
+            <!-- Site Toggle - inline -->
+            <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal">
+                <!-- #867: Click, not Checked. A RadioButton raises Checked only when it CHANGES,
+                     so clicking the site you are already on did nothing - which is exactly what
+                     a user does to get back to the homepage from a video page. Click fires
+                     either way, and code that sets IsChecked no longer triggers a navigation it
+                     did not ask for. -->
+                <RadioButton x:Name="RbBambiCloud" Theme="{StaticResource BrowserSiteToggle}"
+                             Content="{loc:Str btn_bambicloud}" GroupName="BrowserSite"
+                             IsChecked="True"/>
+                <RadioButton x:Name="RbHypnoTube" Theme="{StaticResource BrowserSiteToggle}"
+                             Content="{loc:Str btn_hypnotube}" GroupName="BrowserSite"/>
+              </StackPanel>
+            </Border>
+            <!-- Reload / Home button - sits just right of the site toggle. Reloads the current
+                 site's homepage; gives a way out of a stuck/blank page, since re-clicking an
+                 already-selected site radio won't reload. -->
+            <Button Grid.Column="2" x:Name="BtnReloadBrowser"
+                    Theme="{StaticResource BrowserPillButton}"
+                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                    ToolTip.Tip="{loc:Str tooltip_reload_browser}"
+                    FontSize="11" Padding="6,3" Margin="8,0,0,0">
+              <TextBlock Text="🔄"/>
+            </Button>
+            <!-- Status indicator -->
+            <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" Text="{loc:Str label_loading}"
+                       Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <!-- Deeper auto-bind badge (Phase 9). Shows when an enhancement is active for the
+                 current page. -->
+            <Border Grid.Column="3" x:Name="DeeperBrowserBadge" IsVisible="False"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                    CornerRadius="3" Padding="6,1" Margin="0,0,8,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                    ToolTip.Tip="{Binding $self.Tag}">
+              <TextBlock x:Name="TxtDeeperBrowserBadge"
+                         Text="🌊 Deeper"
+                         Foreground="{DynamicResource DeeperAccentBrush}"
+                         FontSize="9" FontWeight="SemiBold"/>
+            </Border>
+            <!-- Webcam Tracking toggle - inline, between the status badge and the pop-out.
+                 Off: "📷 Webcam"  On: "📷 Webcam On" (label updated in code-behind from
+                 OnTrackingStateChanged). Click runs the consent → calibrate → start flow if
+                 needed; second click stops tracking. -->
+            <Button Grid.Column="4" x:Name="BtnWebcamTracking"
+                    Theme="{StaticResource BrowserPillButton}"
+                    ToolTip.Tip="{loc:Str tooltip_browser_webcam_tracking_off}"
+                    FontSize="9" Padding="6,3" Margin="0,0,6,0" VerticalAlignment="Center">
+              <TextBlock x:Name="TxtWebcamTracking" Text="{loc:Str btn_browser_webcam_tracking_off}"/>
+            </Button>
+            <!-- Mute browser audio toggle (BambiCloud / HypnoTube video) -->
+            <Button Grid.Column="5" x:Name="BtnMuteBrowser"
+                    Theme="{StaticResource BrowserMuteButton}"
+                    ToolTip.Tip="Mute / unmute browser audio (BambiCloud / HypnoTube)"
+                    Padding="5,2" Margin="4,0,0,0"
+                    VerticalAlignment="Center">
+              <TextBlock x:Name="TxtBrowserMute" Text="🔊" FontSize="13"/>
+            </Button>
+            <!-- Pop Out button -->
+            <Button Grid.Column="6" x:Name="BtnPopOutBrowser"
+                    Theme="{StaticResource SolidPinkButton}"
+                    ToolTip.Tip="{loc:Str tooltip_pop_out_browser_to_resizable_window}"
+                    FontSize="9" Padding="6,3" VerticalAlignment="Center">
+              <TextBlock Text="{loc:Str btn_pop_out}"/>
+            </Button>
+          </Grid>
+
+          <!-- Browser Container. No fixed Height on purpose - see the Grid note above. It fills
+               the star row, so the web view's layout slot is always inside this card. -->
+          <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+
+              <!-- Deeper "Enhance if possible" toggle (always visible) -->
+              <Border x:Name="BrowserEnhanceToolbar" Grid.Row="0"
+                      Background="{DynamicResource PanelBgBrush}" Padding="8,4">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <CheckBox x:Name="ToggleEnhanceIfPossible" Grid.Column="0"
+                            Content="{loc:Str browser_enhance_label}"
+                            Foreground="{DynamicResource TextLightBrush}" FontSize="11"
+                            VerticalAlignment="Center" Cursor="Hand"
+                            ToolTip.Tip="{loc:Str browser_enhance_tooltip}"/>
+                  <TextBlock x:Name="TxtEnhanceMatchStatus" Grid.Column="1"
+                             Text="{loc:Str browser_enhance_match_none}"
+                             Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                             VerticalAlignment="Center"
+                             Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                  <!-- User override: reveal the BambiCloud site toggle even on mods whose
+                       manifest hides it (issue #596). -->
+                  <CheckBox x:Name="ChkForceShowBambiCloud" Grid.Column="2"
+                            Content="{loc:Str browser_show_bambicloud_label}"
+                            Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                            VerticalAlignment="Center" Cursor="Hand" Margin="12,0,0,0"
+                            ToolTip.Tip="{loc:Str browser_show_bambicloud_tooltip}"/>
+                </Grid>
+              </Border>
+
+              <!-- 2026-08-11: the owner missed having audio on the dashboard, so the two dials
+                   that actually get touched mid-session - master volume and ducking - live
+                   HERE. Deliberately NOT a second AudioSettingsSection: that control's children
+                   are re-published as AppSettingsTab.<Name> and written directly by MainWindow,
+                   so a second instance would render stale values and fight the canonical one.
+                   These mirror the canonical controls through MainWindow.HomeAudio.cs instead. -->
+              <Border Grid.Row="1" x:Name="HomeAudioCard"
+                      CornerRadius="10" Padding="10,7" Margin="0,0,0,5"
+                      Background="{DynamicResource ElevatedSurfaceBrush}"
+                      BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                <StackPanel>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="{loc:Str section_audio}"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="12" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                    <Slider Grid.Column="1" x:Name="HomeSliderMaster"
+                            Minimum="0" Maximum="100" VerticalAlignment="Center"
+                            ToolTip.Tip="{loc:Str tooltip_master_volume_for_all_audio}"/>
+
+                    <TextBlock Grid.Column="2" x:Name="HomeTxtMaster"
+                               Text="50%" Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11" VerticalAlignment="Center"
+                               Width="34" TextAlignment="Right" Margin="8,0,12,0"/>
+
+                    <CheckBox Grid.Column="3" x:Name="HomeChkAudioDuck"
+                              Content="{loc:Str label_duck}"
+                              Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                              VerticalAlignment="Center" Cursor="Hand"
+                              ToolTip.Tip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
+
+                    <!-- The old dashboard's BtnAudioAdvanced disclosure, restored: master +
+                         duck stay on the face, everything else is one click away. -->
+                    <ToggleButton Grid.Column="4" x:Name="HomeBtnAudioAdvanced"
+                                  Theme="{StaticResource AudioDisclosureToggle}"
+                                  Margin="10,0,0,0" VerticalAlignment="Center" Cursor="Hand"
+                                  ToolTip.Tip="{loc:Str tooltip_show_advanced_audio_settings}"/>
+                  </Grid>
+
+                  <!-- Advanced rows. Every control here MIRRORS its twin in Settings · Audio -
+                       none of them owns state. -->
+                  <StackPanel x:Name="HomeAudioAdvanced"
+                              IsVisible="False" Margin="0,8,0,0">
+
+                    <Grid Margin="0,0,0,5">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Text="{loc:Str setting_video}" FontSize="11"
+                                 Foreground="{DynamicResource TextMutedBrush}"
+                                 VerticalAlignment="Center"
+                                 ToolTip.Tip="{loc:Str tooltip_volume_for_mandatory_videos}"/>
+                      <Slider Grid.Column="1" x:Name="HomeSliderVideoVolume"
+                              Minimum="0" Maximum="100" VerticalAlignment="Center"
+                              ToolTip.Tip="{loc:Str tooltip_separate_volume_control_for_videos}"/>
+                      <TextBlock Grid.Column="2" x:Name="HomeTxtVideoVolume"
+                                 Text="50%" FontSize="11" Width="34" TextAlignment="Right"
+                                 Foreground="{DynamicResource TextMutedBrush}"
+                                 VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,5">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Text="{loc:Str label_duck}" FontSize="11"
+                                 Foreground="{DynamicResource TextMutedBrush}"
+                                 VerticalAlignment="Center"
+                                 ToolTip.Tip="{loc:Str tooltip_how_much_to_reduce_other_audio}"/>
+                      <Slider Grid.Column="1" x:Name="HomeSliderDuck"
+                              Minimum="0" Maximum="100" VerticalAlignment="Center"
+                              ToolTip.Tip="{loc:Str tooltip_ducking_percentage_80_reduce_other_audio_to_2}"/>
+                      <TextBlock Grid.Column="2" x:Name="HomeTxtDuck"
+                                 Text="80%" FontSize="11" Width="34" TextAlignment="Right"
+                                 Foreground="{DynamicResource TextMutedBrush}"
+                                 VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,5">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Text="{loc:Str setting_output}" FontSize="11"
+                                 Foreground="{DynamicResource TextMutedBrush}"
+                                 VerticalAlignment="Center"
+                                 ToolTip.Tip="{loc:Str tooltip_audio_output_device}"/>
+                      <ComboBox Grid.Column="1" x:Name="HomeCmbAudioOutputDevice"
+                                FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                ToolTip.Tip="{loc:Str tooltip_audio_output_device}"/>
+                      <Button Grid.Column="2" x:Name="HomeBtnAudioOutputRefresh"
+                              FontSize="11" Margin="6,0,0,0" Padding="8,2" Cursor="Hand"
+                              Theme="{StaticResource SecondaryButton}"
+                              ToolTip.Tip="{loc:Str set2_tooltip_audio_output_refresh}">
+                        <TextBlock Text="↻"/>
+                      </Button>
+                    </Grid>
+
+                    <CheckBox x:Name="HomeChkExcludeBambiCloudDucking"
+                              Content="{loc:Str setting_don_t_duck_browser}"
+                              Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                              Cursor="Hand" Margin="0,0,0,6"
+                              ToolTip.Tip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"/>
+
+                    <StackPanel Orientation="Horizontal">
+                      <Button x:Name="HomeBtnTestAudio"
+                              FontSize="11" Margin="0,0,8,0" Cursor="Hand"
+                              Theme="{StaticResource SecondaryButton}"
+                              ToolTip.Tip="{loc:Str set2_tooltip_test_audio}">
+                        <TextBlock Text="{loc:Str set2_btn_test_audio}"/>
+                      </Button>
+                      <Button x:Name="HomeBtnAudioLayers"
+                              FontSize="11" Cursor="Hand"
+                              Theme="{StaticResource SecondaryButton}"
+                              ToolTip.Tip="{loc:Str tooltip_audio_layers}">
+                        <TextBlock Text="{loc:Str btn_audio_layers}"/>
+                      </Button>
+                    </StackPanel>
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Grid x:Name="BrowserContainer" Grid.Row="2">
+                <!-- WPF added the WebView2 here programmatically (MainWindow.Browser.cs). This
+                     head declares the cross-platform seam instead: controls:WebHost wraps
+                     Avalonia's NativeWebView and shows a legible panel wherever no engine is
+                     installed - which is every headless render and a fresh Linux box.
+                     ponytail: needs MainWindow.Browser - EnsureBrowser/NavigateToSite, the
+                     CoreWebView2 message handlers, the cookie + user-data-folder setup and the
+                     mute/enhance script injection. None of that has a wrapper API yet, so the
+                     Source stays unset and the panel is what draws. -->
+                <controls:WebHost x:Name="BrowserWebHost"/>
+                <TextBlock x:Name="BrowserLoadingText"
+                           IsVisible="False"
+                           Text="{loc:Str label_click_to_load_browser}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Cursor="Hand"/>
+              </Grid>
+            </Grid>
+          </Border>
+        </Grid>
+      </Border>
+
+      <!-- ============================================================ -->
+      <!-- COMPANION STRIP (Phase 3).                                    -->
+      <!--                                                              -->
+      <!-- The Companion door owns her portrait, her status dots and     -->
+      <!-- her breathe loop (CompanionHeroCard), and CompanionTheme      -->
+      <!-- budgets exactly ONE forever loop for the companion app-wide.  -->
+      <!-- So this is deliberately a QUIET strip: a standing affordance  -->
+      <!-- into her door, no art, no clock. Give it a portrait later,    -->
+      <!-- with the loop.                                               -->
+      <!-- ============================================================ -->
+      <Border x:Name="CompanionStrip" Grid.Row="1"
+              CornerRadius="12" Padding="10,7" Margin="0,0,0,5"
+              Background="{DynamicResource ElevatedSurfaceBrush}"
+              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+              Cursor="Hand"
+              ToolTip.Tip="{loc:Str tooltip_companion_settings}">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <!-- Same glyph as the sidebar's Companion door, so the two read as one place. -->
+          <TextBlock Grid.Column="0" Text="🤖" FontSize="14" VerticalAlignment="Center" Margin="0,0,9,0"/>
+          <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Str nav_door_companion}"
+                       Foreground="{DynamicResource PinkBrush}"
+                       FontSize="12" FontWeight="Bold"
+                       TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{loc:Str hm3_companion_strip_sub}"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       FontSize="11" Margin="0,1,0,0"
+                       TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+          <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
+                     Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
+        </Grid>
+      </Border>
+
+      <!-- ============================================================ -->
+      <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
+      <!-- compressed from a four-row tile into one line.                -->
+      <!--                                                               -->
+      <!-- It is NOT redundant markup: every x:Name below is written by   -->
+      <!-- live code (BtnUnifiedLogin, LoggedInStatusPanel,               -->
+      <!-- TxtLoggedInName, ChkQuickDiscordRichPresence,                  -->
+      <!-- HelpBtnQuickLinks) and none may be dropped.                    -->
+      <!-- ============================================================ -->
+      <Border Grid.Row="2" CornerRadius="12" Padding="9,7"
+              Background="{DynamicResource ElevatedSurfaceBrush}"
+              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+
+          <!-- The logged-out and logged-in faces share ONE cell: MainWindow.Login.cs flips
+               exactly these two visibilities against each other, so they must never be able to
+               claim two slots' worth of width between them. -->
+          <Grid Grid.Column="0">
+            <!-- Unified Login Button -->
+            <Button x:Name="BtnUnifiedLogin"
+                    Theme="{StaticResource AccountPinkButton}"
+                    FontSize="12"
+                    Padding="14,7" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    ToolTip.Tip="{loc:Str tooltip_login_with_discord_or_patreon}">
+              <TextBlock Text="{loc:Str btn_login_2}"/>
+            </Button>
+
+            <!-- Logged In Status (shown when logged in) -->
+            <Border x:Name="LoggedInStatusPanel" IsVisible="False"
+                    Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="9,4"
+                    VerticalAlignment="Center"
+                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
+                             Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                  <TextBlock x:Name="TxtLoggedInName" Text="{loc:Str label_username}"
+                             Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,1,0,0"
+                             TextTrimming="CharacterEllipsis">
+                    <TextBlock.Effect>
+                      <DropShadowEffect Color="#FF69B4" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.65"/>
+                    </TextBlock.Effect>
+                  </TextBlock>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                  <Button x:Name="BtnLinkPhone"
+                          Margin="0,0,6,0" VerticalAlignment="Center"
+                          ToolTip.Tip="Sign in to the CCP mobile app by scanning a QR code"
+                          Padding="8,3" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
+                          BorderThickness="0" FontSize="10" Cursor="Hand">
+                    <TextBlock Text="📱 Link phone"/>
+                  </Button>
+                  <!-- Prominent, high-contrast Logout button -->
+                  <Button x:Name="BtnQuickLogout"
+                          Theme="{StaticResource AccountPinkButton}"
+                          VerticalAlignment="Center"
+                          Padding="12,4" FontSize="11" Cursor="Hand"
+                          ToolTip.Tip="{loc:Str btn_logout}">
+                    <TextBlock Text="{loc:Str btn_logout}"/>
+                  </Button>
+                </StackPanel>
+              </Grid>
+            </Border>
+          </Grid>
+
+          <!-- Discord Join Button -->
+          <Button Grid.Column="1" x:Name="BtnDiscord"
+                  Theme="{StaticResource DiscordJoinButton}"
+                  ToolTip.Tip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
+                  VerticalAlignment="Center" Margin="10,0,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+              <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
+              <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="10" FontWeight="Bold"
+                         VerticalAlignment="Center" Margin="5,0,0,0"/>
+            </StackPanel>
+          </Button>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+            <ToolTip.Tip>
+              <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
+                <StackPanel MaxWidth="280">
+                  <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                  <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
+                             Text="Shows &quot;Playing Conditioning Control Panel&quot; in your Discord status, along with your current level and session time."/>
+                  <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                  <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
+                             Text="Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your &quot;Currently Playing&quot; status like any other game."/>
+                </StackPanel>
+              </Border>
+            </ToolTip.Tip>
+            <CheckBox x:Name="ChkQuickDiscordRichPresence" Theme="{StaticResource ToggleStyle}"
+                      RenderTransformOrigin="50%,50%">
+              <CheckBox.RenderTransform>
+                <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
+              </CheckBox.RenderTransform>
+            </CheckBox>
+            <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9"
+                       VerticalAlignment="Center" Margin="4,0,0,0"/>
+          </StackPanel>
+
+          <Button x:Name="HelpBtnQuickLinks" Grid.Column="3"
+                  Theme="{StaticResource HelpButtonStyle}" Tag="QuickLinks"
+                  VerticalAlignment="Center" Margin="8,0,0,0"/>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ============================================================ -->
+    <!-- QUICK TOGGLES ROW - full width, under both the feature grid   -->
+    <!-- AND the right half. (Historic x:Name VelvetHelperButtonRow.)  -->
+    <!-- Keep this row at Height=30: it sits between the mosaic and    -->
+    <!-- the marquee inside the fixed design canvas, and every unit it -->
+    <!-- grows comes off the mosaic's star row (layout clips           -->
+    <!-- silently - #860).                                             -->
+    <!-- ============================================================ -->
+    <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
+          Height="30" Margin="5,4,5,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="10"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="10"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="10"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="10"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <!-- Webcam card — surfaced from the Lab for discoverability. Distinct Secondary (cyan)
+           accent + tinted fill so it stands out from the two neutral cards beside it. -->
+      <Button Grid.Column="0" x:Name="VelvetBtnWebcam"
+              Theme="{StaticResource VelvetPillWebcam}">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <TextBlock Text="📷" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <TextBlock Text="Webcam &amp; Mic" Foreground="White" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+
+      <!-- System — the display / video switches plus the read-only jumps into Settings. It used
+           to be the ⚙ mosaic tile; the tile went to Brain Drain and the entry point came here.
+           This pill is now the ONLY route to MainWindow.CardSystem_Click: never retire it
+           without moving the handler somewhere else. -->
+      <Button Grid.Column="2" x:Name="VelvetBtnSystem"
+              Theme="{StaticResource VelvetPill}">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <!-- No separate cog glyph: section_system already starts with the gear (same idiom as
+               the Scheduler pill below). -->
+          <TextBlock Text="{loc:Str section_system}" Foreground="White" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+
+      <Button Grid.Column="8" x:Name="VelvetBtnAppInfo"
+              Theme="{StaticResource VelvetPill}">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <TextBlock Text="ℹ" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"
+                     Foreground="{DynamicResource PinkBrush}"/>
+          <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+
+      <!-- Combined Scheduler + Intensity Ramp card. Label is two live-localized strings joined
+           by " + " so both halves stay translated. The pill navigates to the Studio rack, which
+           fires the same single "SchedulerRamp" NotifyFeatureOpened key the old popup did. -->
+      <Button Grid.Column="4" x:Name="VelvetBtnSchedulerRamp"
+              Theme="{StaticResource VelvetPill}">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <!-- No separate 📅 glyph: section_scheduler already starts with the calendar emoji
+               (matches the inline ⚡ on Intensity Ramp). -->
+          <TextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
+          <TextBlock Text=" + " Foreground="White" VerticalAlignment="Center"/>
+          <TextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+
+      <!-- CCP Catalogue card — opens the web catalogue to browse/share community presets and
+           sessions. Pink-tinted to flag it as the community/social action of the row. -->
+      <Button Grid.Column="6" x:Name="VelvetBtnCatalogue"
+              Theme="{StaticResource VelvetPillCatalogue}"
+              ToolTip.Tip="Opens app.cclabs.app/catalogue in your browser">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <TextBlock Text="📚" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <TextBlock Text="CCP Catalogue" Foreground="White" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+    </Grid>
+
+    <!-- Scrolling Marquee Banner - row 3, spans all columns -->
+    <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+            Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
+            CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
+      <Border.Effect>
+        <DropShadowEffect Color="{DynamicResource DarkPink}" BlurRadius="15" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+      </Border.Effect>
+      <!-- Chrome FX edge fade. The mask CANNOT live on MarqueeCanvas: a relative-mapped
+           OpacityMask is stretched over the masked visual's own bounds, and the canvas's bounds
+           are its overflowing child - a marquee string thousands of pixels wide. A 6% fade of
+           THAT is hundreds of pixels off-screen, which is exactly why the fade was invisible in
+           the shipped build. Two changes fix it for good: the mask lives on this wrapper, whose
+           only child clips itself, and the brush is rebuilt in code with absolute mapping
+           (MarqueeFadeHost_SizeChanged) so the fade is a genuine ~40px at each end. -->
+      <Grid x:Name="MarqueeFadeHost" ClipToBounds="True">
+        <Canvas x:Name="MarqueeCanvas" ClipToBounds="True">
+          <TextBlock x:Name="MarqueeText"
+                     Text="{loc:Str label_v5_2_1_is_out_thanks_to_all_the_100_patreons}"
+                     FontFamily="Impact, Arial Black, Segoe UI" FontSize="28" FontWeight="Bold"
+                     Foreground="{DynamicResource PinkBrush}" Canvas.Top="8">
+            <TextBlock.Effect>
+              <DropShadowEffect Color="{DynamicResource DarkPink}" BlurRadius="8" OffsetX="0" OffsetY="0" Opacity="0.8"/>
+            </TextBlock.Effect>
+            <TextBlock.RenderTransform>
+              <TranslateTransform/>
+            </TextBlock.RenderTransform>
+          </TextBlock>
+        </Canvas>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>
