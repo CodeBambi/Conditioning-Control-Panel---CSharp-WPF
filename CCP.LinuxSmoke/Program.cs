@@ -119,6 +119,13 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("SubredditName rejects 41 chars", Services.Fyp.SubredditName.Sanitize(new string('x', 41)) == null);
                 Check("SubredditName rejects blank", Services.Fyp.SubredditName.Sanitize("   ") == null);
 
+            }
+
+            // Re-tested AFTER the seam block, not inside it: the block used to return 0 on its
+            // last line, so a seam Check that failed printed [FAIL], incremented _failures and
+            // still exited 0 - the ubuntu job stayed green on a broken seam.
+            if (_failures == 0)
+            {
                 Console.WriteLine("CCP.Core executed on this platform with all assertions holding.");
                 return 0;
             }
