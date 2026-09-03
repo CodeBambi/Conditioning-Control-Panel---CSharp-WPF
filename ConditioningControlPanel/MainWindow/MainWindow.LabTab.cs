@@ -453,14 +453,22 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void WebcamActivePill_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private async void WebcamActivePill_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             // Click is the panic-stop affordance. Stops every consumer that
             // shares App.Webcam — Webcam Triggers, Focus Gaze, Blink Trainer,
             // Gaze Minigame all release together when the service stops.
             try { App.GazeFocus?.Stop(); } catch { }
             try { App.BlinkTrainer?.Stop(); } catch { }
-            try { App.Webcam?.Stop(); } catch { }
+            // Awaited, never called inline: the webcam teardown joins the capture
+            // thread (up to 5s) and disposes the ONNX sessions, which locked the
+            // UI thread solid on a wedged driver (BUG-BRR252E2RM).
+            try
+            {
+                var svc = App.Webcam;
+                if (svc != null) await svc.StopAsync();
+            }
+            catch (Exception ex) { App.Logger?.Debug("WebcamActivePill_Click stop failed: {Error}", ex.Message); }
         }
 
         internal async void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
@@ -474,9 +482,9 @@ namespace ConditioningControlPanel
 
             if (svc.IsRunning)
             {
-                svc.Stop();
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
                 AppendWebcamDebugLog("Stop requested.");
+                await StopWebcamOffUiThreadAsync(svc);
                 RefreshBlinkTrainerTrackerButton();
                 return;
             }
@@ -537,6 +545,23 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "MainWindow: webcam Start() threw on worker thread");
                 AppendWebcamDebugLog($"Start() threw: {ex.Message}");
                 return false;
+            }
+        }
+
+        // Mirror of the above for teardown. Stop() joins the capture thread for
+        // up to 5s and then disposes the capture graph plus three ONNX sessions;
+        // run on the UI thread that is a multi-second freeze on any camera whose
+        // driver is slow to release (BUG-BRR252E2RM).
+        private async Task StopWebcamOffUiThreadAsync(WebcamTrackingService svc)
+        {
+            try
+            {
+                await svc.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "MainWindow: webcam Stop() threw on worker thread");
+                AppendWebcamDebugLog($"Stop() threw: {ex.Message}");
             }
         }
 
@@ -756,7 +781,7 @@ namespace ConditioningControlPanel
             // Only auto-stop if calibration was the only reason it's running.
             if (startedHere && result != true)
             {
-                svc.Stop();
+                await StopWebcamOffUiThreadAsync(svc);
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
             }
 
@@ -1051,7 +1076,7 @@ namespace ConditioningControlPanel
             if (svc.Calibration == null)
             {
                 AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first.");
-                if (startedHere) { svc.Stop(); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
+                if (startedHere) { await StopWebcamOffUiThreadAsync(svc); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
                 return;
             }
 
@@ -1066,7 +1091,7 @@ namespace ConditioningControlPanel
             // leave it running.
             if (startedHere)
             {
-                svc.Stop();
+                await StopWebcamOffUiThreadAsync(svc);
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
             }
         }
@@ -1108,7 +1133,7 @@ namespace ConditioningControlPanel
             if (svc.Calibration == null)
             {
                 AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.");
-                if (startedHere) { svc.Stop(); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
+                if (startedHere) { await StopWebcamOffUiThreadAsync(svc); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
                 return;
             }
 
@@ -1122,7 +1147,7 @@ namespace ConditioningControlPanel
 
             if (startedHere)
             {
-                svc.Stop();
+                await StopWebcamOffUiThreadAsync(svc);
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
             }
 
