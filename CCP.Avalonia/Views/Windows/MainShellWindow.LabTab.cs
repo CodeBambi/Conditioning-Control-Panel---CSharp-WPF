@@ -1,14 +1,36 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.LabTab.cs (1413 lines).
+// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.LabTab.cs (1413 lines) - the
+// webcam and microphone partial. Sorted member by member, and unlike its neighbours the blanket
+// claim holds here: this file is the camera and the mic. What it does NOT hold for:
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+//   OpenDeviceSettings and RefreshDeviceSettingsLists are listed below as dropped, and one of them
+//   is stale. OpenDeviceSettings ALREADY SHIPS on this head - MainShellWindow.Settings.cs:82,
+//   ShowTab("appsettings") + AppSettingsPage.FocusSection("devices"), asserted by --nav-check and
+//   called from SystemFeatureControl. Do not re-add it here; a second definition is a compile
+//   error, and a second copy would be the wrong kind of fix if it were not.
+//   RefreshDeviceSettingsLists genuinely is missing, and needs the camera/monitor enumeration
+//   below before it means anything.
 //
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
+// THE TWO STATUS PILLS ARE DELIBERATELY LEFT AS STUBS, and this is the file's one real judgement
+// call rather than a missing dependency:
 //
-// Members dropped (79):
+//   MicActivePill_Click is WPF's DisarmVoiceMic - it clears wake-word and push-to-talk, cuts live
+//   capture, tears down the audio loop and the keyboard hook, and downgrades any open Voice Lock
+//   Card to a typed solve so the lock still holds. It is a PRIVACY STOP.
+//   WebcamActivePill_Click is the same affordance for the camera: GazeFocus.Stop, BlinkTrainer.Stop,
+//   Webcam.Stop, released together.
+//   Half-porting either one is worse than the stub. The restorable half is the part that hides the
+//   pill; the unrestorable half is the part that closes the device. A pill that vanishes on click
+//   while the capture device stays open is a control that LIES about the most safety-relevant state
+//   this app has. Neither pill can be shown at all on this head today (both are driven by
+//   App.Webcam/App.Speech state changes that never arrive), so the stub costs nothing and the
+//   half-port would cost the user's trust.
+//
+// The rest is genuinely the device: WebcamTrackingService and its debug counters, the calibration
+// and quick-recal flows, the loading splash, GazeSide/FocusGaze, the blink trainer's countdown,
+// the camera and monitor enumerations, and the two consent buttons (WebcamConsent itself IS in
+// Core, but "revoke" has to stop a running capture, which is App.Webcam again).
+//
+// Members dropped (79 - OpenDeviceSettings is already live elsewhere, see above):
 //   private bool _webcamDebugSubscribed
 //   private int _webcamDebugBlinkCount
 //   private int _webcamDebugMouthOpenCount
@@ -44,7 +66,7 @@
 //   private void UpdateLabTrackerUi(…)
 //   private void UpdateWebcamStatusChips(…)
 //   private static string WebcamStateText(…)
-//   internal void OpenDeviceSettings(…)
+//   internal void OpenDeviceSettings(…)               ALREADY LIVE (MainShellWindow.Settings.cs:82)
 //   internal void RefreshDeviceSettingsLists(…)
 //   private string? _quickRecalTooltipBase
 //   private void RefreshQuickRecalHotkeyHint(…)
@@ -93,10 +115,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.LabTab.cs; wired when they move to Core.
+        // REFUSED, not pending - see the header. This is the mic's privacy stop (DisarmVoiceMic).
+        // The half that would port is the half that hides the pill; the half that cannot is the
+        // half that closes the capture device. Do not "wire" this one until App.Speech's disarm
+        // path exists on this head.
         private void MicActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e) { }
 
-        // ponytail: needs the services in MainWindow.LabTab.cs; wired when they move to Core.
+        // REFUSED for the same reason: the camera's panic stop (GazeFocus/BlinkTrainer/Webcam all
+        // released together). A pill that clears while the camera stays open is worse than one
+        // that does nothing.
         private void WebcamActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e) { }
 
     }

@@ -1,14 +1,33 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.AchievementsTab.cs (875 lines).
+// PARTLY PORTED from ConditioningControlPanel/MainWindow/MainWindow.AchievementsTab.cs (875 lines).
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// THE THREE NAV HANDLERS WERE NEVER BLOCKED. BtnAchievements_Click, BtnCompanion_Click and
+// BtnLeaderboard_Click are one ShowTab call each in WPF (MainWindow.AchievementsTab.cs:94-107) -
+// they live in this file only because the buttons sit next to the achievement grid in
+// MainWindow.xaml, not because they touch a service. All three are restored below, so the You
+// door's three top-level entries lead somewhere.
 //
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
+// The rest of the file IS blocked, but the reason is not "services move to Core" - it is that
+// the grid it builds does not exist on this head in this shape. WPF builds ~48 achievement cards
+// in code (BuildAchievementCard, BuildRewardBand, the filter chips, the tooltip pass) straight
+// into MainWindow.xaml's panel. The port gave the tab its own view,
+// CCP.Avalonia/Views/Tabs/AchievementsTabView, which draws the same page from XAML with an
+// AchievementsTabViewModel supplying the formatted counters. A card builder restored here would
+// have nothing to build into.
 //
-// Members dropped (48):
+// So the honest blocker list for the achievements page is short and specific, and all of it is
+// AchievementsTabView's rather than this file's:
+//   - the counts are placeholders in AchievementsTabViewModel (Unlocked/Total, RewardsEarned/
+//     RewardsTotal, PatronUnlocked/PatronTotal). Real values need AchievementService, which is
+//     head-side; CoreProgression deliberately does NOT carry it - the seam is AddXP and
+//     TrackBubbleCountResult, the two calls ported views actually make, not the whole service.
+//     "Is achievement X unlocked" is not on it, so IsAchievementUnlocked / RefreshAchievementTile
+//     / OnAchievementUnlockedInMainWindow have no source of truth here yet.
+//   - the reward map needs Services.WardrobeItem (head-side), and LoadAchievementImage needs the
+//     achievement art under the same asset root.
+//   - BtnViewSeasonRecap_Click needs Services.SeasonRecapService.HasAnySnapshot(), which is not in
+//     Core (only Models/SeasonRecap.cs is) - see BtnLeaderboard_Click below.
+//
+// Members dropped (48 - the three now restored are marked RESTORED):
 //   private const double AchvBadgePx
 //   private const double AchvRewardIconPx
 //   private static readonly SolidColorBrush AchvMutedBrush
@@ -28,9 +47,9 @@
 //   private const string AchvFilterUnlocked
 //   private const string AchvFilterLocked
 //   private const string AchvFilterRewards
-//   private void BtnAchievements_Click(…)
-//   private void BtnCompanion_Click(…)
-//   private void BtnLeaderboard_Click(…)
+//   private void BtnAchievements_Click(…)              RESTORED
+//   private void BtnCompanion_Click(…)                 RESTORED
+//   private void BtnLeaderboard_Click(…)               RESTORED
 //   internal void BtnViewSeasonRecap_Click(…)
 //   private void UpdateAchievementCount(…)
 //   private void UpdateRewardCount(…)
@@ -62,14 +81,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.AchievementsTab.cs; wired when they move to Core.
-        private void BtnAchievements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        private void BtnAchievements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => ShowTab("achievements");
 
-        // ponytail: needs the services in MainWindow.AchievementsTab.cs; wired when they move to Core.
-        private void BtnCompanion_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        private void BtnCompanion_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => ShowTab("companion");
 
-        // ponytail: needs the services in MainWindow.AchievementsTab.cs; wired when they move to Core.
-        private void BtnLeaderboard_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        /// <summary>
+        /// Opens the Leaderboard.
+        ///
+        /// <para>ponytail: WPF also reveals LeaderboardTab.BtnViewSeasonRecap here, when
+        /// <c>Services.SeasonRecapService.HasAnySnapshot()</c> says a persisted snapshot exists.
+        /// That service is not in Core (only <c>CCP.Core/Models/SeasonRecap.cs</c> is), and the
+        /// button is authored hidden in LeaderboardTabView.axaml, so the correct state here is
+        /// "left hidden" - showing a re-view button with no snapshot to re-view would be the
+        /// worse half of the port. One line once the snapshot reader crosses.</para>
+        /// </summary>
+        private void BtnLeaderboard_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => ShowTab("leaderboard");
 
     }
 }
