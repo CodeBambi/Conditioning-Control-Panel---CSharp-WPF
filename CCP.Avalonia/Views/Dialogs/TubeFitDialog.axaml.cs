@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
@@ -31,12 +34,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    and <see cref="CoreMods"/>. The mod's shipped manifest layout is read through
     ///    <c>CoreMods.InstalledMods[ActiveModId].Manifest.TubeLayout</c>, which is what
     ///    <c>ModService.ActiveMod</c> hands back.
-    ///  - Still head-side, each with a note: <c>AvatarPortraitLoader.HasManifestForActiveMod()</c>,
-    ///    <c>ModResourceResolver.ResolveImage / .HasModOverride</c> and the tube window's
-    ///    <c>RefreshTubeLayout()</c>.
-    ///  - The two <c>Image</c> elements are placeholder Borders (the head ships no Resources/ PNGs);
-    ///    the avatar box is sized from <see cref="PlaceholderPixelWidth"/>/<see cref="PlaceholderPixelHeight"/>
-    ///    by the same uniform-fit formula the real readout uses.
+    ///  - <b>The avatar art is real.</b> The four poses load through <see cref="CoreModArt"/> -
+    ///    the active mod's override if it ships one, else this head's own
+    ///    <c>avares://CCP.Avalonia/Resources/avatar*_pose*.png</c> - and are painted into the
+    ///    preview Border as a Uniform <see cref="ImageBrush"/>, with the readout reading the
+    ///    bitmap's real pixel size. Portrait mode and the tube.png-only fallback come off the same
+    ///    seam. Nothing loading falls back to the pose glyph and a nominal
+    ///    <see cref="PlaceholderPixelWidth"/>x<see cref="PlaceholderPixelHeight"/>, so the preview
+    ///    is never blank.
+    ///  - Still head-side, with a note: the tube window's <c>RefreshTubeLayout()</c>. The tube
+    ///    frame itself stays the placeholder capsule - that is markup this layer does not own.
     ///  - WPF's <c>LayoutTransform</c> has no Avalonia twin on a plain control, so the avatar scale
     ///    is a <c>RenderTransform</c> about the centre. It does not grow the parent Border, so a
     ///    scaled avatar expands symmetrically rather than upward.
@@ -53,9 +60,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private const double PortraitRaisePx = 30;
         private const double PortraitShiftX = 10;
 
-        // ponytail: nominal source size of the placeholder avatar, standing in for the real pose
-        // PNG's PixelWidth/PixelHeight. Delete both when ModResourceResolver moves to Core and the
-        // readout can ask the bitmap.
+        // Nominal source size, used only when no pose bitmap loaded at all - no mod override AND
+        // no shipped PNG. With a bitmap the readout asks it for its real pixel size.
         private const double PlaceholderPixelWidth = 512;
         private const double PlaceholderPixelHeight = 768;
 
@@ -78,7 +84,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private readonly string _modId;
         private readonly int _avatarSet;
         private readonly bool _portraitMode;
-        private readonly string[] _poses = { "🧍", "🙋", "💃", "🧎" };
+        /// <summary>The four loaded poses; a slot is null when neither the mod nor this head has it.</summary>
+        private readonly Bitmap?[] _poses = new Bitmap?[4];
+        /// <summary>Drawn in place of a pose that would not load, so the stepper still reads.</summary>
+        private static readonly string[] PoseGlyphs = { "🧍", "🙋", "💃", "🧎" };
+        /// <summary>The XAML gradient, kept so a null pose can put the placeholder back.</summary>
+        private readonly IBrush? _placeholderAvatarBrush;
         private int _poseIndex;
 
         private readonly RadioButton _rbAttached;
@@ -103,10 +114,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             _modId = CoreMods.ActiveModId;
             _avatarSet = Math.Max(1, CoreSettings.Current.SelectedAvatarSet);
-            // ponytail: needs AvatarPortraitLoader.HasManifestForActiveMod()
-            // (ConditioningControlPanel/Services/AvatarPortraitLoader.cs). It reads a per-mod
-            // portrait manifest off disk; no Core equivalent, so this head is always legacy-pose.
-            _portraitMode = false;
+            // False with no mod layer up, which is the legacy four-pose avatar - exactly what this
+            // head draws. A seeded head answers from the active mod's portrait manifest.
+            _portraitMode = CoreModArt.HasAvatarPortraits;
 
             _rbAttached = this.FindControl<RadioButton>("RbAttached")!;
             _rbDetached = this.FindControl<RadioButton>("RbDetached")!;
@@ -137,6 +147,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnSave")!.Click += (_, _) => BtnSave_Click();
             this.FindControl<Button>("BtnReset")!.Click += (_, _) => BtnReset_Click();
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close();
+
+            _placeholderAvatarBrush = _previewAvatar.Background;
+            LoadPoses();
 
             LoadWorkingValues(EffectiveLayout());
 
@@ -204,10 +217,62 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         // AVATAR POSES
         // ============================================================
 
-        // ponytail: LoadPoses() needs ModResourceResolver.ResolveImage
-        // (ConditioningControlPanel/Services/ModResourceResolver.cs) plus the embedded
-        // Resources/avatar*_pose*.png. Until then the four slots are placeholder glyphs, so the
-        // stepper and the "Pose n/4" readout still work.
+        /// <summary>
+        /// Loads the 4 pose PNGs for the selected avatar set, falling back to set 1's same pose and
+        /// then to nothing - the chain WPF's LoadPoses / AvatarTubeWindow.LoadAvatarPoses walk.
+        /// </summary>
+        private void LoadPoses()
+        {
+            string prefix = _avatarSet == 1 ? "avatar_pose" : $"avatar{_avatarSet}_pose";
+
+            for (int i = 0; i < _poses.Length; i++)
+            {
+                _poses[i] = TryLoadImage($"{prefix}{i + 1}.png");
+
+                if (_poses[i] == null && _avatarSet > 1)
+                    _poses[i] = TryLoadImage($"avatar_pose{i + 1}.png");
+            }
+
+            // Land on the first pose that actually loaded, so the preview opens on art.
+            for (int i = 0; i < _poses.Length; i++)
+            {
+                if (_poses[i] != null) { _poseIndex = i; break; }
+            }
+        }
+
+        /// <summary>
+        /// The mod's override first (<see cref="CoreModArt"/>), then this head's own shipped copy
+        /// under <c>avares://</c>. Null when neither exists. Never throws: a mod's broken PNG
+        /// degrades to the built-in exactly as ModResourceResolver.LoadFrozen does, and a missing
+        /// built-in degrades to the glyph.
+        ///
+        /// ponytail: private because TubeFitDialog is the seam's first consumer on this head. Hoist
+        /// it to a head-wide helper when a second view (Flash, BubblePop, Video, Studio, Spiral,
+        /// AchievementPopup ...) wants the same two-step.
+        /// </summary>
+        private static Bitmap? TryLoadImage(string resourceName)
+        {
+            var overridePath = CoreModArt.OverridePath(resourceName);
+            if (overridePath != null)
+            {
+                try { if (File.Exists(overridePath)) return new Bitmap(overridePath); }
+                catch (Exception ex) { Log.Warning(ex, "[TubeFit] mod override {Path} would not load", overridePath); }
+            }
+
+            try
+            {
+                var uri = new Uri($"avares://CCP.Avalonia/Resources/{resourceName}");
+                if (!AssetLoader.Exists(uri)) return null;
+                using var stream = AssetLoader.Open(uri);
+                return new Bitmap(stream);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[TubeFit] built-in {Name} would not load", resourceName);
+                return null;
+            }
+        }
+
         private void StepPose(int delta)
         {
             _poseIndex = (_poseIndex + _poses.Length + delta) % _poses.Length;
@@ -221,11 +286,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <summary>
         /// True when the active mod overrides tube.png but not tube2.png — in that case the detached
         /// state uses the mod's tube.png AND the attached margins, exactly like the real tube
-        /// (AvatarTubeWindow.ModOverridesAttachedTubeOnly, bug report #172).
-        /// ponytail: needs ModResourceResolver.HasModOverride("tube.png"/"tube2.png")
-        /// (ConditioningControlPanel/Services/ModResourceResolver.cs).
+        /// (AvatarTubeWindow.ModOverridesAttachedTubeOnly, bug report #172). With no mod layer up
+        /// both answers are false, so detached keeps the detached margins - the shipped behaviour.
         /// </summary>
-        private static bool ModOverridesAttachedTubeOnly() => false;
+        private static bool ModOverridesAttachedTubeOnly()
+            => CoreModArt.HasOverride("tube.png") && !CoreModArt.HasOverride("tube2.png");
 
         private void UpdatePreview()
         {
@@ -237,18 +302,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _previewTube.Margin = useAttachedLayout ? AttachedTubeMargin : DetachedTubeMargin;
             _txtTubeName.Text = useAttachedLayout ? "tube.png" : "tube2.png";
 
-            // Avatar pose
-            _txtPoseGlyph.Text = _poses[_poseIndex];
+            // Avatar pose. A loaded bitmap paints the box; a null slot keeps the XAML gradient and
+            // the glyph, so the preview never goes blank on a head that is missing the art.
+            var pose = _poses[_poseIndex];
+            _txtPoseGlyph.Text = PoseGlyphs[_poseIndex];
+            _txtPoseGlyph.IsVisible = pose == null;
+            _previewAvatar.Background = pose != null
+                ? new ImageBrush(pose) { Stretch = Stretch.Uniform }
+                : _placeholderAvatarBrush;
 
             // Avatar box + glow (portrait mode shrinks the box and drops the pink glow)
             double maxW = _portraitMode ? LegacyAvatarMaxWidth * PortraitSizeScale : LegacyAvatarMaxWidth;
             double maxH = _portraitMode ? LegacyAvatarMaxHeight * PortraitSizeScale : LegacyAvatarMaxHeight;
 
-            // The placeholder has no intrinsic size, so Stretch="Uniform" is applied by hand: fit
-            // the nominal source into the box and take the result as the drawn size.
-            double fit = Math.Min(maxW / PlaceholderPixelWidth, maxH / PlaceholderPixelHeight);
-            _previewAvatar.Width = PlaceholderPixelWidth * fit;
-            _previewAvatar.Height = PlaceholderPixelHeight * fit;
+            // The Border has no intrinsic size, so Stretch="Uniform" is applied by hand: fit the
+            // source into the box and take the result as the drawn size. The ImageBrush is Uniform
+            // over exactly that box, so the pose lands where WPF's <Image Stretch="Uniform"> put it.
+            double fit = Math.Min(maxW / SourcePixelWidth, maxH / SourcePixelHeight);
+            _previewAvatar.Width = SourcePixelWidth * fit;
+            _previewAvatar.Height = SourcePixelHeight * fit;
 
             _previewAvatar.Effect = _portraitMode ? null : new DropShadowEffect
             {
@@ -279,6 +351,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             Log.Warning(ex, "[TubeFit] Failed to update preview");
           }
         }
+
+        /// <summary>Current pose's real pixel width, or the nominal size when nothing loaded.</summary>
+        private double SourcePixelWidth => _poses[_poseIndex]?.PixelSize.Width ?? PlaceholderPixelWidth;
+
+        /// <summary>Current pose's real pixel height, or the nominal size when nothing loaded.</summary>
+        private double SourcePixelHeight => _poses[_poseIndex]?.PixelSize.Height ?? PlaceholderPixelHeight;
 
         private ITransform? BuildBorderTransform()
         {
@@ -319,10 +397,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             double boxW = maxW * _scale;
             double boxH = maxH * _scale;
-            double f = Math.Min(boxW / PlaceholderPixelWidth, boxH / PlaceholderPixelHeight);
+            double f = Math.Min(boxW / SourcePixelWidth, boxH / SourcePixelHeight);
             _txtImageInfo.Text = Loc.GetF("tube_fit_image_info",
-                (int)PlaceholderPixelWidth, (int)PlaceholderPixelHeight,
-                (int)Math.Round(PlaceholderPixelWidth * f), (int)Math.Round(PlaceholderPixelHeight * f));
+                (int)SourcePixelWidth, (int)SourcePixelHeight,
+                (int)Math.Round(SourcePixelWidth * f), (int)Math.Round(SourcePixelHeight * f));
         }
 
         // ============================================================

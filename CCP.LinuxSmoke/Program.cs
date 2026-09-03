@@ -134,6 +134,21 @@ namespace ConditioningControlPanel.LinuxSmoke
                 CoreModerationLog.Record(ProhibitedCategory.Minor, "input", "smoke");
                 Check("CoreModerationLog records are silent no-ops with no log attached", true);
                 Check("CoreReleaseContent answers null with no pack service", CoreReleaseContent.GetPackInfo("mod-bambi") == null && CoreReleaseContent.GetStampFor("mod-bambi") == null);
+                // The mod-art seam (wire/37). Unseeded means "no mod overrides anything", which is
+                // what makes a head with no mod service draw its own shipped art rather than blank.
+                Check("CoreModArt.HasOverride is false with no mod layer", !CoreModArt.HasOverride("tube.png"));
+                Check("CoreModArt.OverridePath is null with no mod layer", CoreModArt.OverridePath("logo.png") == null);
+                Check("CoreModArt.SpiralOverridePath is null with no mod layer", CoreModArt.SpiralOverridePath() == null);
+                Check("CoreModArt.HasAvatarPortraits is false with no mod layer", !CoreModArt.HasAvatarPortraits);
+                // Traversal is rejected in Core, BEFORE the head's resolver is asked - a resource
+                // name can come out of mod-authored JSON, so a seeded head must never see "..".
+                CoreModArt.OverridePathProvider = _ => "/hit";
+                Check("CoreModArt rejects traversal before the head sees it",
+                      CoreModArt.OverridePath("../../etc/passwd") == null && CoreModArt.OverridePath("a/b.png") == "/hit");
+                // A throwing provider must degrade to "no override", not take the view with it.
+                CoreModArt.OverridePathProvider = _ => throw new InvalidOperationException("boom");
+                Check("CoreModArt swallows a throwing provider", CoreModArt.OverridePath("tube.png") == null);
+                CoreModArt.OverridePathProvider = null;
                 Check("AwarenessIntensity.Current reads the ship default unseeded", Services.Awareness.AwarenessIntensityProfile.Current == Services.Awareness.AwarenessIntensity.Chatty);
                 // The subreddit rule moved from the online coordinator into Core with no test of its own.
                 Check("SubredditName strips r/", Services.Fyp.SubredditName.Sanitize("r/gonewild") == "gonewild");
