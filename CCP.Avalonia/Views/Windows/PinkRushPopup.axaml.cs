@@ -49,15 +49,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _endTime = endTime;
             _txtCountdown = this.FindControl<TextBlock>("TxtCountdown")!;
 
-            // Mod override for the title. The TextBlock carries a plain literal in the markup (no
-            // {loc:Str} binding), so assigning Text is safe. CoreMods answers with the vanilla
-            // default when no mod layer is up, which is what App.Mods == null gave WPF.
+            // Mod overrides for the title and subtitle. Both TextBlocks carry a plain literal in
+            // the markup (no {loc:Str} binding), so assigning Text is safe. CoreMods answers with
+            // the vanilla default when no mod layer is up, which is what App.Mods == null gave WPF.
             this.FindControl<TextBlock>("TxtPinkRushTitle")!.Text = "\u26A1 " + CoreMods.PinkRushName;
-
-            // ponytail: needs CoreMods.PinkRushDescription for the subtitle - the provider does not
-            // exist in CCP.Core/CoreMods.cs; the value is ModService.GetPinkRushDescription()
-            // (ConditioningControlPanel/Services/ModService.cs:1340). The markup literal is the
-            // un-modded default, exactly as in the WPF original.
+            this.FindControl<TextBlock>("TxtPinkRushSubtitle")!.Text = CoreMods.PinkRushDescription;
 
             // ponytail: needs Helpers.PassiveToastWindow (Win32 WS_EX_NOACTIVATE), which kept this
             // toast from stealing mouse capture from fullscreen games (ccp-bugs #1000), wired when

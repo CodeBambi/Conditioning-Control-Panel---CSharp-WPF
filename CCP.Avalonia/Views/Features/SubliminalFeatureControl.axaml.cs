@@ -286,13 +286,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var oldKeys = new HashSet<string>(s.SubliminalPool.Keys);
             // OrdinalIgnoreCase: the removed-set and ModService's top-up compare
             // case-insensitively, so detection must too or modded defaults slip through.
-            // ponytail: WPF asks App.Mods.GetDefaultSubliminalPool() first
-            // (ConditioningControlPanel/Services/ModService.cs:1113, no Core seam yet) and only
-            // falls back to BuiltInMods. With no mod layer on this head the fallback IS the
-            // answer, which is the branch WPF takes for a null App.Mods too.
             var defaults = new HashSet<string>(
-                (BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>()).Keys,
-                StringComparer.OrdinalIgnoreCase);
+                CoreMods.GetDefaultSubliminalPool().Keys, StringComparer.OrdinalIgnoreCase);
 
             var dialog = new Dialogs.TextEditorDialog("Subliminal Messages", s.SubliminalPool);
             if (await dialog.ShowDialog<bool?>(owner) != true || dialog.ResultData == null) return;
