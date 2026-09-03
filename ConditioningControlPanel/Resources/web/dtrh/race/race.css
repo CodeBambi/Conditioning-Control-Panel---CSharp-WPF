@@ -185,6 +185,8 @@
 .race-hud .rh-toast--bank { font-size: 1.3rem; color: #ffe082; text-shadow: 0 0 18px rgba(255, 200, 60, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhToastPop 1.6s ease-out forwards; }
 .race-hud .rh-toast--item { font-size: 1.6rem; color: #ffd6ea; animation: rhBounce 0.36s cubic-bezier(0.2, 1.6, 0.4, 1), rhToastPop 1.4s ease-out forwards; }
 .race-hud .rh-toast--effect { font-size: 1.2rem; color: #e9c8ff; text-shadow: 0 0 18px rgba(180, 120, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhLean 1.4s ease-out forwards; }
+/* a served recipe: the name lands big and pink, a REVEAL like the jackpot but softer */
+.race-hud .rh-toast--recipe { font-size: 1.8rem; color: #ffb6d9; letter-spacing: 0.14em; text-shadow: 0 0 24px rgba(255, 61, 165, 0.95), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.7s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
 .race-hud .rh-gold { position: absolute; inset: 0; background: radial-gradient(60% 60% at 50% 50%, rgba(255, 230, 140, 0.55), rgba(242, 193, 78, 0.18)); opacity: 0; }
 .race-hud .rh-gold.is-on { animation: rhGold 0.7s ease-out forwards; }
 .race-hud .rh-token {
@@ -193,6 +195,65 @@
   transition: transform 0.62s cubic-bezier(0.3, 0, 0.2, 1), opacity 0.2s 0.5s;
 }
 .race-hud .rh-token.is-fly { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.5); opacity: 0; }
+
+/* ---- THE MIXER: the live ingredients of the mix, above the item slot (race/cocktail.js) ----
+   One pixel chip per category: the glyph, a charge count, pips up to the
+   category's cap, and a drain bar that empties with the effect. The served
+   recipe rides underneath with its own drain. Chips are colour-coded to the
+   bubble that poured them, so the rail reads as "what is on me right now". */
+.race-hud .rh-mixer {
+  position: absolute; left: var(--rh-in-l); bottom: calc(var(--rh-in-b) + 72px);
+  display: flex; flex-direction: column; gap: 5px; opacity: 0; transform: translateY(6px);
+  transition: opacity 0.25s, transform 0.25s;
+}
+.race-hud .rh-mixer.is-on { opacity: 1; transform: none; }
+.race-hud .rh-mixer-label { font-size: 0.66rem; letter-spacing: 0.16em; opacity: 0.55; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+.race-hud .rh-mixer-row { display: flex; gap: 9px; align-items: flex-end; padding: 8px 8px 0 0; }
+.race-hud .rh-chip {
+  --c: #ffd6ea; position: relative; width: 40px; height: 46px; padding: 4px 0 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  color: var(--c); background: rgba(8, 4, 14, 0.72);
+  /* the stepped shadow is the pixel border: no rounding, two hard rings */
+  box-shadow: 0 0 0 2px rgba(8, 4, 14, 0.9), 0 0 0 3px var(--c), 0 0 14px color-mix(in srgb, var(--c) 45%, transparent);
+  transition: box-shadow 0.2s, opacity 0.25s, transform 0.25s;
+}
+.race-hud .rh-chip.is-in { animation: rhChipIn 0.28s cubic-bezier(0.2, 1.5, 0.4, 1); }
+.race-hud .rh-chip.is-out { opacity: 0; transform: translateY(6px) scale(0.9); }
+.race-hud .rh-chip.is-bump { animation: rhBounce 0.36s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-chip.is-max { box-shadow: 0 0 0 2px rgba(8, 4, 14, 0.9), 0 0 0 3px #fff, 0 0 18px var(--c); }
+.race-hud .rh-chip-glyph { font-size: 1.25rem; font-weight: 900; line-height: 1; text-shadow: 0 0 8px var(--c); }
+.race-hud .rh-chip-glyph.is-kick { animation: rhThud 0.22s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-chip-n { position: absolute; top: -9px; right: -8px; min-width: 16px; padding: 0 3px; font-size: 0.6rem; font-weight: 900; line-height: 14px; text-align: center; color: #1a1a2e; background: var(--c); box-shadow: 0 0 0 2px rgba(8, 4, 14, 0.9); }
+.race-hud .rh-chip-n:empty { display: none; }
+.race-hud .rh-chip-pips { display: flex; gap: 2px; height: 4px; margin-top: 1px; }
+.race-hud .rh-pip { width: 4px; height: 4px; background: rgba(255, 255, 255, 0.16); }
+.race-hud .rh-pip.is-lit { background: var(--c); box-shadow: 0 0 4px var(--c); }
+.race-hud .rh-chip-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.race-hud .rh-chip-fill { position: absolute; inset: 0; background: var(--c); transform-origin: left; transform: scaleX(1); box-shadow: 0 0 6px var(--c); }
+.race-hud .rh-chip--strobe { --c: #fff0b8; }
+.race-hud .rh-chip--tint { --c: #ff3da5; }
+.race-hud .rh-chip--overlay { --c: #40d0c0; }
+.race-hud .rh-chip--corruption { --c: #78ffbe; }
+.race-hud .rh-chip--cards { --c: #b080ff; }
+.race-hud .rh-chip--freeze { --c: #8ae6ff; }
+.race-hud .rh-chip--video { --c: #e0404d; }
+.race-hud .rh-mixer-recipe { display: none; flex-direction: column; gap: 3px; margin-top: 2px; }
+.race-hud .rh-mixer-recipe.is-on { display: flex; }
+.race-hud .rh-mixer-recipe.is-served { animation: rhChipIn 0.4s cubic-bezier(0.2, 1.5, 0.4, 1); }
+.race-hud .rh-mixer-recipe-name { font-size: 0.86rem; font-weight: 900; letter-spacing: 0.12em; color: #ffb6d9; text-shadow: 0 0 12px rgba(255, 61, 165, 0.9), 0 1px 3px rgba(0, 0, 0, 0.8); }
+.race-hud .rh-mixer-recipe-bar { position: relative; width: 116px; height: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.race-hud .rh-mixer-recipe-fill { position: absolute; inset: 0; background: linear-gradient(90deg, #ff3da5, #ffd45e); transform-origin: left; box-shadow: 0 0 6px rgba(255, 61, 165, 0.8); }
+
+/* ---- the strobe edge: a white frame blink on every flash charge and roll ---- */
+.race-hud .rh-strobe { position: absolute; inset: 0; opacity: 0; box-shadow: inset 0 0 0 5px rgba(255, 255, 255, var(--rh-strobe, 0.6)), inset 0 0 40px rgba(255, 240, 200, calc(var(--rh-strobe, 0.6) * 0.5)); }
+.race-hud .rh-strobe.is-on { animation: rhStrobe 0.14s steps(2) both; }
+
+/* ---- the tint: the chrome goes pink with the wash, deeper at depth 2 ---- */
+.race-hud .rh-chrome.is-tint-1 .rh-plate, .race-hud .rh-chrome.is-tint-2 .rh-plate { border-color: rgba(255, 61, 165, 0.5); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 18px rgba(255, 61, 165, 0.3); background: linear-gradient(180deg, rgba(60, 8, 36, 0.58), rgba(40, 6, 26, 0.4)); }
+.race-hud .rh-chrome.is-tint-2 .rh-plate { border-color: rgba(255, 61, 165, 0.85); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 28px rgba(255, 61, 165, 0.55); background: linear-gradient(180deg, rgba(90, 10, 54, 0.66), rgba(60, 8, 36, 0.48)); }
+.race-hud .rh-chrome.is-tint-1 .rh-item-box, .race-hud .rh-chrome.is-tint-2 .rh-item-box { border-color: #ff3da5; box-shadow: 0 0 18px rgba(255, 61, 165, 0.7); }
+.race-hud .rh-chrome.is-tint-2 .rh-mult { background: rgba(255, 61, 165, 0.42); border-color: #ff3da5; color: #fff; }
+.race-hud .rh-chrome.is-tint-2 .rh-mixer-label { color: #ffb6d9; opacity: 0.9; }
 
 /* ---- fraught: a vignette that breathes with the heartbeat ---- */
 .race-hud .rh-vignette {
@@ -246,6 +307,8 @@
 @keyframes rhFade { 0% { opacity: 0; } 15% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes rhBeat { 0%, 100% { opacity: var(--rh-fraught); } 12% { opacity: calc(var(--rh-fraught) + 0.25); } 24% { opacity: var(--rh-fraught); } 36% { opacity: calc(var(--rh-fraught) + 0.15); } }
 @keyframes rhCardIn { from { opacity: 0; transform: translateY(12px) scale(0.96); } }
+@keyframes rhChipIn { 0% { opacity: 0; transform: translateY(8px) scale(0.6); } 100% { opacity: 1; transform: none; } }
+@keyframes rhStrobe { 0% { opacity: 1; } 100% { opacity: 0; } }
 
 /* reduced motion: banners as 120 ms fades, no shiver, no roll, no chase, tokens land at once (Law VI) */
 @media (prefers-reduced-motion: reduce) {
@@ -256,6 +319,8 @@
   .race-hud .rh-toast, .race-hud .rh-toast--almost, .race-hud .rh-toast--jackpot, .race-hud .rh-toast--item, .race-hud .rh-toast--effect { animation: rhFade var(--rh-hold, 1.2s) linear forwards; }
   .race-hud .rh-score.is-pop, .race-hud .rh-bank.is-pop, .race-hud .rh-mult.is-pulse, .race-hud .rh-item.is-bounce .rh-item-box, .race-hud .rh-score.is-flick, .race-hud .rh-pb, .race-hud .rh-card { animation: none; }
   .race-hud .rh-token { transition: opacity 0.12s; }
+  .race-hud .rh-strobe.is-on, .race-hud .rh-chip.is-in, .race-hud .rh-chip.is-bump, .race-hud .rh-chip-glyph.is-kick, .race-hud .rh-mixer-recipe.is-served { animation: none; }
+  .race-hud .rh-toast--recipe { animation: rhFade var(--rh-hold, 1.7s) linear forwards; }
 }
 
 /* ============================================================================
@@ -322,6 +387,18 @@
   mask-image: radial-gradient(ellipse 42% 40% at 50% 88%, transparent 0%, rgba(0, 0, 0, 0.55) 55%, #000 100%);
 }
 /* the pinned spiral already carries its own mask and a 0.5 ceiling; leave it */
+
+/* ---- THE MIX on the payload layers (run.js sets data-tint / data-ov on #race-root) ----
+   TINT depth 2: the pink wash goes past the cap, hotter and a touch more
+   saturated, so a second pink pop reads as deeper, not longer. OVERLAY
+   replace: payloadFx has no per-kind cancel, its holds only fade on their own
+   timers, so the crossfade is ours: the hold that lost the slot fades out
+   through the same filter the cap uses. The drain wash is spared while it is
+   the glitch's (sf-pfx-glitching), since corruption is its own category. */
+#race-root .sf-pfx-pink, #race-root .sf-pfx-spiral, #race-root .sf-pfx-drain { transition: opacity 0.45s ease, filter 0.55s ease; }
+#race-root[data-tint="2"] .sf-pfx-pink { filter: opacity(0.92) saturate(1.3); }
+#race-root[data-ov="spiral"] .sf-pfx-drain:not(.sf-pfx-glitching) { filter: opacity(0); }
+#race-root[data-ov="braindrain"] .sf-pfx-spiral { filter: opacity(0); }
 
 @media (prefers-reduced-motion: reduce) {
   #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
