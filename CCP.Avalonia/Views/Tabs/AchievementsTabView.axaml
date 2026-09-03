@@ -3,9 +3,9 @@
      directly. Documented deviations, all forced by real WPF/Avalonia differences:
 
        Style="{StaticResource X}"  ->  Theme="{StaticResource X}"   (keyed styles are ControlThemes)
-       {loc:Str key}               ->  {Binding LocX}               (LocExtension is a WPF
-                                       MarkupExtension and stays in the head; the strings still
-                                       come from CCP.Core's LocalizationManager, via the VM)
+       {loc:Str key}               ->  {loc:Str key}                (Localization/StrExtension.cs,
+                                       the Avalonia twin; formatted strings still come from
+                                       Loc.GetF in the VM, keys read from the WPF code-behind)
        helpers:EmojiTextBlock      ->  TextBlock                    (custom control not ported yet)
        Visibility="Collapsed"      ->  IsVisible="False"
        Panel.ZIndex                ->  ZIndex
@@ -13,6 +13,7 @@
        WrapPanel                   ->  WrapPanel (identical) -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.AchievementsTabView"
              x:DataType="vm:AchievementsTabViewModel"
              xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs">
@@ -20,11 +21,11 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
       <StackPanel>
         <Grid Margin="0,0,0,10">
-          <TextBlock Theme="{StaticResource SectionHeader}" Text="{Binding LocSectionAchievements}" Margin="0"/>
+          <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str section_achievements}" Margin="0"/>
           <Button x:Name="HelpBtnAchievements" Theme="{StaticResource HelpButtonStyle}"
                   HorizontalAlignment="Right" Tag="Achievements"/>
         </Grid>
-        <TextBlock Text="{Binding LocSubtitleRewards}"
+        <TextBlock Text="{loc:Str achv_subtitle_rewards}"
                    Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
 
         <!-- Filter chips (populated in code-behind: All / Unlocked / Locked / Rewards) -->
@@ -48,8 +49,8 @@
              Free and patron counts are never summed. -->
         <Border Height="1" Background="#33FFFFFF" Margin="0,24,0,0"/>
         <TextBlock Theme="{StaticResource SectionHeader}"
-                   Text="{Binding LocSectionPatronAchievements}" Margin="0,18,0,0"/>
-        <TextBlock Text="{Binding LocPatronSubtitle}"
+                   Text="{loc:Str section_patron_achievements}" Margin="0,18,0,0"/>
+        <TextBlock Text="{loc:Str label_patron_achievements_subtitle}"
                    Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,12"/>
 
         <Grid Margin="0,5,0,0">
@@ -65,14 +66,14 @@
                   ZIndex="100" IsVisible="{Binding PatronLocked}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20">
               <TextBlock Text="🔒" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-              <TextBlock Text="{Binding LocSectionPatronAchievements}"
+              <TextBlock Text="{loc:Str section_patron_achievements}"
                          Foreground="{DynamicResource PinkBrush}"
                          FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10">
                 <TextBlock.Effect>
                   <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
                 </TextBlock.Effect>
               </TextBlock>
-              <TextBlock Text="{Binding LocPatronLocked}" Foreground="{DynamicResource TextMutedBrush}"
+              <TextBlock Text="{loc:Str label_patron_achievements_locked}" Foreground="{DynamicResource TextMutedBrush}"
                          FontSize="14" HorizontalAlignment="Center" TextAlignment="Center"
                          TextWrapping="Wrap" MaxWidth="380"/>
               <!-- FIDELITY BUG, found by rendering this view: Avalonia's Button treats "_" in
@@ -84,7 +85,7 @@
               <Button Background="#FF424D" Foreground="White"
                       BorderThickness="0" Padding="18,8" Margin="0,15,0,0"
                       HorizontalAlignment="Center">
-                <TextBlock Text="{Binding LocVisitPatreon}"/>
+                <TextBlock Text="{loc:Str btn_visit_patreon}"/>
               </Button>
             </StackPanel>
           </Border>

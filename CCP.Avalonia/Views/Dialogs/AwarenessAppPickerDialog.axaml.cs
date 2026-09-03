@@ -67,6 +67,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <summary>The chosen entries, or null when the dialog was cancelled.</summary>
         public List<string>? Result { get; private set; }
 
+        /// <summary>Render/design constructor: sample rows so --render-view can draw the dialog.</summary>
+        internal AwarenessAppPickerDialog()
+            : this(AwarenessListKind.Deny, new[] { "firefox" }, new[] { "firefox", "steam", "discord" }) { }
+
         /// <param name="kind">Which list is being edited. Drives every string on the dialog.</param>
         /// <param name="listed">Entries currently in the list, raw (group tokens included).</param>
         /// <param name="candidates">Apps to offer as rows, already sanitised, newest-interesting first.</param>

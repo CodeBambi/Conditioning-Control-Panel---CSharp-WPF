@@ -42,6 +42,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         public Dictionary<string, bool>? ResultData { get; private set; }
 
+        /// <summary>Render/design constructor: sample data so --render-view can draw the dialog.</summary>
+        internal TextEditorDialog() : this("Sample", new Dictionary<string, bool> { ["first item"] = true, ["second item"] = false }) { }
+
         public TextEditorDialog(string title, Dictionary<string, bool> data)
         {
             AvaloniaXamlLoader.Load(this);

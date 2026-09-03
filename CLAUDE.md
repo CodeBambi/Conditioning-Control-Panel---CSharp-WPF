@@ -88,7 +88,7 @@ Measured on the first ported view (`Views/Tabs/AchievementsTabView`). The mappin
 | `<Style x:Key TargetType>` | `<ControlTheme x:Key TargetType>` |
 | `Visibility="Collapsed"` | `IsVisible="False"` |
 | `Panel.ZIndex` | `ZIndex` |
-| `{loc:Str key}` | a binding - `LocExtension` is a WPF `MarkupExtension` and stays in the head |
+| `{loc:Str key}` | `{loc:Str key}` unchanged, with `xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"` (the Avalonia twin lives in the head; the strings come from Core) |
 
 Three things that will bite, all found by rendering rather than by reading:
 
@@ -107,6 +107,32 @@ Three things that will bite, all found by rendering rather than by reading:
    verified on Linux with Noto Color Emoji. That collapses ~103 converter usages, the SharpVectors
    dependency and those `pack://` URIs to a plain `<TextBlock Text="🔒"/>` on that head.
    `BoolToVisibility` (~27 usages) likewise disappears: Avalonia binds `IsVisible` to a bool directly.
+   `helpers:EmojiTextBlock` (128 usages) is a `TextBlock` subclass for the same reason and becomes
+   a plain `TextBlock`.
+
+4. **A property-only `ControlTheme` on a templated control draws nothing.** A WPF keyed `<Style>`
+   overrides setters and keeps the control's default template. An Avalonia `ControlTheme` replaces
+   the theme wholesale, so a `ControlTheme` for `Button`, `CheckBox`, `Slider`, `ComboBox` etc. that
+   carries only setters leaves `Template` null. It compiles clean and throws nothing. Give it a
+   `Template`, or `BasedOn="{StaticResource {x:Type Button}}"`. `Border` and `TextBlock` are not
+   templated, so property-only is safe there.
+
+Static strings use `{loc:Str key}` with `xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"`
+- the Avalonia twin of the WPF extension, backed by the same `LocalizationManager` in Core.
+Formatted strings still come from `Loc.GetF` in code-behind, keys and argument order read from the
+WPF code-behind that populates the same control.
+
+**Definition of done for a ported view:** it renders headless on Linux with real strings and no
+blank templated controls. Prove it per view, not per app:
+
+```bash
+dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render-view <TypeName> out.png
+dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render-all <dir>   # what CI uploads
+```
+
+Read the PNG. A raw `snake_case` key, an empty region where a button sits, or a swallowed
+underscore is a failed port, whatever the compiler said. There is no WPF render on Linux, so
+fidelity against the original is not what this proves; drawing, strings and templates are.
 
 ## What actually remains in the UI
 
