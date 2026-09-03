@@ -245,6 +245,31 @@ namespace ConditioningControlPanel
             // ActiveModToken is an identity token only: VocabTokens ReferenceEquals it against
             // the previous value to decide whether to rebuild its cache, and never reads a
             // property off it. That is what lets Core stay free of ModManifest.
+            // The UI-thread seam. Core code that must touch the UI thread (a settings serialize
+            // racing an edit, a mod collection mutation) hops through here instead of reaching for
+            // System.Windows.Application.Current.Dispatcher, which Core cannot name.
+            CoreDispatch.PostProvider = action =>
+            {
+                var d = Current?.Dispatcher;
+                if (d is null || d.HasShutdownStarted) { action(); return; }
+                if (d.CheckAccess()) action(); else d.BeginInvoke(action);
+            };
+            CoreDispatch.InvokeProvider = (func, timeout) =>
+            {
+                var d = Current?.Dispatcher;
+                if (d is null || d.HasShutdownStarted || d.CheckAccess()) return (true, func());
+
+                var op = d.InvokeAsync(func);
+                // Observe a faulted op even if the wait times out, otherwise it resurfaces through
+                // TaskScheduler.UnobservedTaskException with no useful context.
+                op.Task.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                if (op.Task.Wait(timeout)) return (true, op.Task.Result);
+
+                // Bounded on purpose: a busy or wedged UI thread must never stall the engine.
+                op.Abort();
+                return (false, null);
+            };
+
             CoreMods.ActiveModTokenProvider = () => Mods?.ActiveMod?.Manifest;
             CoreMods.PetNameOverrideProvider = () => Mods?.GetPetNameOverride();
             CoreMods.CollectiveOverrideProvider = () => Mods?.GetCollectiveOverride();
