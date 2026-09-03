@@ -47,6 +47,11 @@ namespace ConditioningControlPanel.Avalonia
                 Settings = new SettingsService();
                 CoreSettings.ServiceProvider = () => Settings;
 
+                // No CoreMods seeding here, deliberately. ModService is still in the WPF head, so
+                // this head has nothing to seed the mod seam with and leaves every provider null.
+                // Unseeded is the supported state: CoreMods answers from the built-in default
+                // manifest, which is the same answer the WPF service gives with no mod active.
+
                 // Core cannot read the running build's version - the entry assembly is whichever
                 // head started the process, and Core is not it. Reading the version is a head job,
                 // so this head reports its own; unseeded, CoreReleaseContent answers "0.0.0".

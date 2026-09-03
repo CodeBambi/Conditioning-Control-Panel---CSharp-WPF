@@ -92,6 +92,9 @@ namespace ConditioningControlPanel
         public static volatile Func<string?>? AffirmationProvider;
         public static volatile Func<string, string[]?>? PhrasesProvider;
         public static volatile Func<string?>? PinkRushNameProvider;
+        public static volatile Func<string?>? PinkRushDescriptionProvider;
+        public static volatile Func<(byte R, byte G, byte B)?>? FilterColorRgbProvider;
+        public static volatile Func<IReadOnlyDictionary<string, bool>?>? DefaultSubliminalPoolProvider;
 
         private static readonly Lazy<IReadOnlyDictionary<string, ModPackage>> VanillaMods = new(() =>
             new Dictionary<string, ModPackage>(StringComparer.OrdinalIgnoreCase)
@@ -137,6 +140,64 @@ namespace ConditioningControlPanel
         public static string PinkRushName
         {
             get { try { return PinkRushNameProvider?.Invoke() ?? "PINK RUSH!"; } catch { return "PINK RUSH!"; } }
+        }
+
+        public static string PinkRushDescription
+        {
+            get
+            {
+                try { return PinkRushDescriptionProvider?.Invoke() ?? VanillaPinkRushDescription; }
+                catch { return VanillaPinkRushDescription; }
+            }
+        }
+
+        private static string VanillaPinkRushDescription =>
+            BuiltInMods.CCPDefault.EnhancementOverrides?.PinkRushDescription ?? "3x XP for 60 seconds!";
+
+        /// <summary>The tint colour of the pink filter. Vanilla walks the service's own chain -
+        /// the default manifest's filter colour, else its accent.</summary>
+        public static (byte R, byte G, byte B) GetFilterColorRgb()
+        {
+            try { return FilterColorRgbProvider?.Invoke() ?? VanillaFilterRgb.Value; }
+            catch { return VanillaFilterRgb.Value; }
+        }
+
+        private static readonly Lazy<(byte R, byte G, byte B)> VanillaFilterRgb = new(() =>
+        {
+            // A miss leaves rgb at hot pink, which is what ModService.ParseHexColor answers for an
+            // unparseable manifest colour, so the two chains cannot disagree.
+            TryParseHexColor(BuiltInMods.CCPDefault.Theme?.FilterColor ?? BuiltInMods.CCPDefault.Theme?.AccentColor,
+                             out var rgb);
+            return rgb;
+        });
+
+        /// <summary>Default subliminal phrases. Unseeded this is the BambiSleep pool, which is
+        /// exactly what the call sites' <c>App.Mods?.GetDefaultSubliminalPool() ?? BuiltInMods
+        /// .BambiSleep.SubliminalPool</c> answered with no mod layer up.</summary>
+        public static IReadOnlyDictionary<string, bool> GetDefaultSubliminalPool()
+        {
+            try { return DefaultSubliminalPoolProvider?.Invoke() ?? VanillaSubliminalPool.Value; }
+            catch { return VanillaSubliminalPool.Value; }
+        }
+
+        private static readonly Lazy<IReadOnlyDictionary<string, bool>> VanillaSubliminalPool = new(() =>
+            BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>());
+
+        /// <summary>Parses <c>#RRGGBB</c>, hash optional. On false <paramref name="rgb"/> is left at
+        /// hot pink, the same answer <c>ModService.ParseHexColor</c> gives unparseable input. Lives
+        /// here so the heads stop carrying their own copy.</summary>
+        public static bool TryParseHexColor(string? hex, out (byte R, byte G, byte B) rgb)
+        {
+            rgb = (255, 105, 180);
+            if (string.IsNullOrWhiteSpace(hex)) return false;
+            hex = hex.Trim().TrimStart('#');
+            if (hex.Length != 6) return false;
+            try
+            {
+                rgb = (Convert.ToByte(hex[..2], 16), Convert.ToByte(hex[2..4], 16), Convert.ToByte(hex[4..6], 16));
+                return true;
+            }
+            catch { return false; }
         }
 
         /// <summary>The active mod changed. The head forwards its service's event here so a view

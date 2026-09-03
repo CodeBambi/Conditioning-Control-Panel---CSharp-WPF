@@ -204,34 +204,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ColorSwatch.Background = new SolidColorBrush(Color.FromRgb(r, g, b));
         }
 
-        /// <summary>The colour the tint renders: the user's pick if set, else hot pink.</summary>
-        // ponytail: WPF's middle link is App.Mods.GetFilterColorRgb()
-        // (ModService.GetFilterColorRgb, ConditioningControlPanel/Services/ModService.cs); CoreMods
-        // exposes AccentColorHex/SecondaryColorHex but no filter colour, so the mod fallback is skipped.
-        private static (byte R, byte G, byte B) EffectiveColor()
-        {
-            if (TryParseHex(CoreSettings.Current.PinkFilterColor, out var rgb)) return rgb;
-            return (255, 105, 180);
-        }
-
-        // ponytail: third copy of the hex->RGB parse (WPF PinkFilterFeatureControl,
-        // ModService.ParseHexColor); hoist to CCP.Core and call it from both heads. Not done here:
-        // this layer adds no shared files.
-        private static bool TryParseHex(string? hex, out (byte R, byte G, byte B) rgb)
-        {
-            rgb = (255, 105, 180);
-            if (string.IsNullOrWhiteSpace(hex)) return false;
-            hex = hex.Trim().TrimStart('#');
-            if (hex.Length != 6) return false;
-            try
-            {
-                rgb = (Convert.ToByte(hex.Substring(0, 2), 16),
-                       Convert.ToByte(hex.Substring(2, 2), 16),
-                       Convert.ToByte(hex.Substring(4, 2), 16));
-                return true;
-            }
-            catch { return false; }
-        }
+        /// <summary>The colour the tint renders: the user's pick if set, else the active mod's
+        /// filter colour, which unseeded is the built-in default manifest's.</summary>
+        private static (byte R, byte G, byte B) EffectiveColor() =>
+            CoreMods.TryParseHexColor(CoreSettings.Current.PinkFilterColor, out var rgb)
+                ? rgb
+                : CoreMods.GetFilterColorRgb();
     }
 
     /// <summary>

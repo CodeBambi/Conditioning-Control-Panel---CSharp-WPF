@@ -282,6 +282,9 @@ namespace ConditioningControlPanel
             CoreMods.AffirmationProvider = () => Mods?.GetAffirmation();
             CoreMods.PhrasesProvider = category => Mods?.GetPhrases(category);
             CoreMods.PinkRushNameProvider = () => Mods?.GetPinkRushName();
+            CoreMods.PinkRushDescriptionProvider = () => Mods?.GetPinkRushDescription();
+            CoreMods.FilterColorRgbProvider = () => Mods?.GetFilterColorRgb();
+            CoreMods.DefaultSubliminalPoolProvider = () => Mods?.GetDefaultSubliminalPool();
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.ServiceProvider = () => Settings;
