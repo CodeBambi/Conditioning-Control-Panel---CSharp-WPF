@@ -28,6 +28,10 @@
          A desktop screenshot cannot run on a headless runner; this can. -->
     <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
     <PackageReference Include="Avalonia.Skia" Version="12.1.1" />
+    <!-- The Linux/Windows web view. Wraps WebKitGTK on Linux and WebView2 on Windows, so the
+         WPF head's Microsoft.Web.WebView2 dependency does not follow us across. Only Views/Controls/WebHost
+         touches it, and that control draws a fallback panel wherever no web view exists. -->
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.0" />
   </ItemGroup>
 
   <ItemGroup>
