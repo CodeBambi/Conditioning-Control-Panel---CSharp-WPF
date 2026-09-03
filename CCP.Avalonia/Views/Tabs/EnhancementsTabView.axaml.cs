@@ -22,7 +22,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <c>App.SkillTree</c> and <c>Models.SkillDefinition.All</c>, neither of which is on this head.
     /// This file paints a SAMPLE of each instead, with the real loc keys, so the 460dip board and
     /// the 90dip rail do not render as two unexplained blanks in the render proof.
-    /// ponytail: needs SkillTreeService + SkillDefinition, wired when they move to Core.</para>
+    /// ponytail: needs ConditioningControlPanel/Services/SkillTreeService.cs and
+    /// ConditioningControlPanel/Models/SkillTree.cs (SkillDefinition.All), both still in the WPF
+    /// head. The one number that IS live is the sparkle-point count, which is a plain setting.</para>
     /// </summary>
     public partial class EnhancementsTabView : UserControl
     {
@@ -138,8 +140,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             });
             var info = new StackPanel();
             info.Children.Add(Text(Loc.Get("label_sparkle_points"), Color.FromRgb(0xB0, 0xB0, 0xB0), 10));
-            // ponytail: the real count is settings.SkillPoints; needs SettingsService.
-            info.Children.Add(Text("0", Color.FromRgb(0xFF, 0x69, 0xB4), 24, bold: true));
+            // The live count, as CreateSkillTreeHeader reads it. Spending is what needs
+            // SkillTreeService; the balance is a plain setting and reads correctly today.
+            info.Children.Add(Text($"{CoreSettings.Current.SkillPoints}", Color.FromRgb(0xFF, 0x69, 0xB4), 24, bold: true));
             points.Children.Add(info);
 
             stack.Children.Add(new Border
