@@ -57,7 +57,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    accent recolour reaches it through <c>CardBorder.Effect</c>.
     ///  - <c>Dispatcher.BeginInvoke</c> -&gt; <c>Dispatcher.UIThread.Post</c>;
     ///    <c>PreviewKeyDown</c> -&gt; <c>KeyDown</c>; <c>DragMove()</c> -&gt; <c>BeginMoveDrag(e)</c>.
-    ///  - <c>App.Logger</c> has no twin here, so the guarded catches simply swallow.
+    ///  - <c>App.Logger</c> is Serilog's static <c>Log</c> here; the warning templates are
+    ///    unchanged. The bare catches in ApplyContent / AccentBrush / GlowBrush are bare in WPF too.
     /// </summary>
     public partial class FeatureIntroPopup : Window
     {
@@ -416,7 +417,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Dispatcher.UIThread.Post(() =>
             {
                 try { action(); }
-                catch { /* a CTA throwing must never take the card's caller with it */ }
+                catch (Exception ex) { Log.Warning(ex, "Feature intro CTA threw"); }
             }, DispatcherPriority.Normal);
         }
     }
