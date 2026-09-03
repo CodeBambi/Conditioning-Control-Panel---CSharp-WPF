@@ -1,9 +1,43 @@
 // PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.HeroFx.cs (789 lines).
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// The blanket header this file shipped with claimed every member reaches App.*, a service, a
+// device, WebView2 or Win32. That is FALSE here and is replaced. Nothing in this file touches a
+// device or the OS - it is the Start button, the XP bar and the save tick - and every element it
+// animates is already in MainShellWindow.axaml: StartRingHost, StartRingExhale, StartRingBurstA,
+// StartRingBurstB, BtnStart, XPBar, XPMeniscus, XPBarFlashOverlay, TxtLevelLabel, SaveRipple and
+// SaveTick. Two real things block it, and they are the same two for the whole file.
+//
+// 1. NO CALLER ON THIS HEAD. Every entry point is raised by something that is still a stub:
+//      ApplyStartHeroState, ApplyStartCharge, ReleaseStartCharge, TintStartCharge,
+//      ApplyStartRingExhale, StopStartRingExhale, FlashStartIgnition, FireStartRing,
+//      ApplyStartHeartbeat  <- the engine start/stop path. BtnStart_Click is a stub here
+//                              (MainShellWindow.StartStop.cs) and SessionEngine is head-side.
+//      AnimateXpMeniscus, ApplyXpMeniscusPulse
+//                           <- AnimateXpDisplay, the XP-bar writer (ConditioningControlPanel/
+//                              MainWindow/MainWindow.Progression.cs). The header bar on this head
+//                              is still the XAML's static "Lvl 1" / "0/70 XP", so there is no fill
+//                              width for the meniscus to ride and nothing for it to pulse over.
+//      PopLevelChip         <- the level-up beat, from that same progression path.
+//      FlashSaveAbsorb      <- the settings-save handler (MainWindow.Settings.cs; the Avalonia
+//                              twin MainShellWindow.Settings.cs is a stub for that half).
+//      InitializeHeroFx, ApplyHeroFxLoops
+//                           <- the window constructor and ApplyChromeFxLoops
+//                              (MainShellWindow.ChromeFx.cs, a stub).
+//
+// 2. THE NAMED TRANSFORMS AND BRUSHES ARE GONE. AVLN2000 forbids x:Name on a Brush or a Transform,
+//    so LevelChipScale, LevelChipRotate, the meniscus's TranslateTransform and the Start button's
+//    charge gradient have no names to reach. Each IS reachable through the element that owns it -
+//    TxtLevelLabel.RenderTransform is a TransformGroup of Scale+Rotate, XPMeniscus.RenderTransform
+//    is a TranslateTransform, and BtnStart's gradient must be swapped for a mutable clone at start
+//    (CLAUDE.md: "Avalonia cannot name a brush or an effect"). That is the port rather than a
+//    blocker, but it is not worth writing under 1.
+//
+// Three members have no Avalonia equivalent at all and are DROPPED rather than deferred:
+// Timeline.SetDesiredFrameRate on the exhale and heartbeat clocks (Avalonia has no per-animation
+// frame cap - the same reason AmbientFrameRate went, see MainShellWindow.AmbientFx.cs);
+// HandoffBehavior.SnapshotAndReplace on PopLevelChip's re-pop (an Avalonia Animation restarted on
+// the same property simply takes over); and _startChargeRestore, which exists only to put back a
+// frozen WPF resource brush that this head never freezes.
 //
 // Members dropped (62):
 //   private const double StartChargeDriftSeconds
