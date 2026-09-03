@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -12,10 +15,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// for bug reports and suggestions, newest first, each with a Copy button.
     ///
     /// PORTED from ConditioningControlPanel/Windows/MyReportsWindow.xaml.cs. Deviations:
-    ///  - The rows come from AppSettings.RecentBugReports via BugReportService.ParseRecentReports,
-    ///    both still in the WPF head, so LoadRows has no rows and the empty state shows.
+    ///  - AppSettings.RecentBugReports is in Core, but the parser that turns those raw entries
+    ///    into rows is not, so LoadRows still has no rows and the empty state shows (note below).
     ///  - The per-row Copy click is one handler on the ItemsControl; the row Button carries the
     ///    token in Tag exactly as before.
+    ///  - The Copy label is swapped by rebinding, not by assigning Text: the TextBlock carries a
+    ///    <c>{loc:Str}</c> binding and a local value would be undone on the next language change
+    ///    (CLAUDE.md, "setting text from code").
     /// </summary>
     public partial class MyReportsWindow : Window
     {
@@ -42,9 +48,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void LoadRows()
         {
-            // ponytail: needs AppSettings.RecentBugReports + BugReportService.ParseRecentReports,
-            // wired when they move to Core. No source means no rows, so the empty state shows;
-            // the row subtitle is "{local date}  •  {kind}" as in the WPF code-behind.
+            // ponytail: needs BugReportService.ParseRecentReports plus RecentReport/ReportKind
+            // (ConditioningControlPanel/Services/BugReportService.cs, internal static), still in the
+            // WPF head. AppSettings.RecentBugReports is already in Core, but the raw
+            // "token|stamp|kind" entries it holds are only meaningful through that parser, so no
+            // rows means the empty state shows; the row subtitle is "{local date}  •  {kind}"
+            // as in the WPF code-behind.
             var rows = new List<Row>();
 
             _reportsList.ItemsSource = rows;
@@ -58,12 +67,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (e.Source is not Button btn || btn.Tag is not string token) return;
                 if (string.IsNullOrWhiteSpace(token) || Clipboard is null) return;
                 await Clipboard.SetTextAsync(token);
-                if (btn.Content is TextBlock label) label.Text = Loc.Get("btn_copied");
+                if (btn.Content is TextBlock label) SetLocKey(label, "btn_copied");
             }
-            catch
+            catch (Exception ex)
             {
                 // Clipboard can be locked by another process — never crash the dialog over it.
+                Log.Warning(ex, "[BugReport] clipboard copy failed");
             }
         }
+
+        /// <summary>
+        /// Rebinds a label to another loc key. Assigning .Text instead would sit under the
+        /// {loc:Str} binding the DataTemplate installed and be undone on the next language change.
+        /// </summary>
+        private static void SetLocKey(TextBlock label, string key) =>
+            label.Bind(TextBlock.TextProperty, new Binding($"[{key}]")
+            {
+                Source = LocalizationManager.Instance,
+                Mode = BindingMode.OneWay,
+            });
     }
 }
