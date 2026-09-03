@@ -134,9 +134,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private DispatcherTimer? _uiTimer;
         private float[]? _peaks;
 
-        // Video clock read-back. See PollVideoTimeAsync.
+        // Video clock read-back. See PollVideoTimeAsync. _videoNavigated is the gate on every
+        // script call: an engine that exists is not a page that was loaded, and the rejected-
+        // MediaSource paths leave the pane up with nothing in it — polling that at 10 Hz is a
+        // debug line ten times a second and a Play button that would flip on an empty view.
         private bool _pollInFlight;
         private bool _pollDisabled;
+        private bool _videoNavigated;
 
         // One per window so EnhancementFetcher's per-session cache is worth having; disposed in
         // Window_Closing because it owns an HttpClient and its guarded handler.
@@ -539,6 +543,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // Refusing every navigation is the right resting state for a host with nothing loaded:
             // whatever page is still up cannot follow a link or a redirect out of it.
             _videoBrowser.AllowNavigation = _ => false;
+            _videoNavigated = false;
             UpdateHostUi(null, null);
         }
 
@@ -670,6 +675,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 ShowMediaPaneFor(MediaTypes.Video);
                 _txtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
                 _txtVideoStatus.IsVisible = true;
+                // Cleared up front so a load that is rejected below cannot inherit the previous
+                // load's "a page is up" and leave Play driving whatever is still on screen.
+                _videoNavigated = false;
 
                 // Extension AND rooted-path check before anything reaches the engine. File.Exists
                 // upstream only proves a file is there, not that it is media.
@@ -695,6 +703,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 var full = System.IO.Path.GetFullPath(path);
                 _videoBrowser.AllowNavigation = u => u.IsFile && PathsEqual(u.LocalPath, full);
                 _videoBrowser.Source = new Uri(full);
+                _videoNavigated = true;
             }
             catch (Exception ex)
             {
@@ -716,6 +725,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             {
                 _txtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
                 _txtVideoStatus.IsVisible = true;
+                // Cleared up front so a load that is rejected below cannot inherit the previous
+                // load's "a page is up" and leave Play driving whatever is still on screen.
+                _videoNavigated = false;
 
                 // ponytail: the WPF pre-flight was scheme + UrlSafety.HostMatches(uri,
                 // DeeperConfig.PreviewHostAllowlist). Both of those live in CCP.Core but are
@@ -748,6 +760,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 _videoBrowser.AllowNavigation = u =>
                     u.Scheme == Uri.UriSchemeHttps && HostsMatchIgnoringWww(u.Host, pinned);
                 _videoBrowser.Source = uri;
+                _videoNavigated = true;
             }
             catch (Exception ex)
             {
@@ -794,7 +807,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// Note that even in video mode the enhancement's RULES do not fire: that needs
         /// EnhancementHostService.Bind and the engine, both still in the WPF head.
         /// </summary>
-        private void BtnPlayPause_Click()
+        private async void BtnPlayPause_Click()
         {
             if (_loadedEnhancement == null && _durationSec <= 0)
             {
@@ -802,14 +815,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 return;
             }
 
-            if (!_isVideoMode || !_videoBrowser.HasEngine)
+            if (!_isVideoMode || !_videoNavigated)
             {
                 IngestErrorLine("playback engine unavailable on this platform: audio is not played here");
                 return;
             }
 
-            _isPlaying = !_isPlaying;
-            _ = _videoBrowser.InvokeScriptAsync(VideoScript(_isPlaying ? "play()" : "pause()"));
+            // Awaited, and the state flips only on the script's "ok". A page with no <video> yet —
+            // still loading, an error page, a navigation the gate refused — returns "" and the
+            // press reads as having done nothing, which is what happened. Flipping first and
+            // letting the poll correct it would show ⏸ / LIVE / "Playing" in the meantime, and on
+            // a page that never grows a video element it would never be corrected at all.
+            var want = !_isPlaying;
+            if (Unquote(await _videoBrowser.InvokeScriptAsync(VideoScript(want ? "play()" : "pause()"))) != "ok")
+                return;
+            _isPlaying = want;
             _txtPlayPauseGlyph.Text = _isPlaying ? "⏸" : "▶";
             _txtStatus.Text = Loc.Get(_isPlaying ? "deeper_player_status_playing" : "deeper_player_status_stopped");
             UpdateStatusPill();
@@ -817,7 +837,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void BtnStop_Click()
         {
-            if (_isVideoMode && _videoBrowser.HasEngine)
+            if (_isVideoMode && _videoNavigated)
                 _ = _videoBrowser.InvokeScriptAsync(VideoScript("pause(); l.currentTime=0"));
             _isPlaying = false;
             _currentSec = 0;
@@ -931,7 +951,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// </summary>
         private async Task PollVideoTimeAsync()
         {
-            if (_pollInFlight || _pollDisabled || !_videoBrowser.HasEngine) return;
+            if (_pollInFlight || _pollDisabled || !_videoNavigated) return;
             _pollInFlight = true;
             try
             {
@@ -942,6 +962,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
                 var parts = Unquote(raw).Split('|');
                 if (parts.Length != 3) return;
+                // A video element answered, so the page is up: "Loading video…" is now false. WPF
+                // hid this on NavigationCompleted; there the pane was Edge's own media viewer, so
+                // the navigation finishing WAS the video appearing. Here the page can be a site
+                // whose player mounts later, and the element answering is the honest signal.
+                _txtVideoStatus.IsVisible = false;
                 if (double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var cur))
                     _currentSec = cur;
                 if (double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var dur)
@@ -1592,7 +1617,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // clamps or refuses corrects itself rather than leaving the playhead somewhere the video
             // is not. ponytail: audio still needs EnhancementAudioPlayer.Seek, so in audio mode the
             // playhead moves and nothing else does.
-            if (_isVideoMode && _videoBrowser.HasEngine)
+            if (_isVideoMode && _videoNavigated)
             {
                 _ = _videoBrowser.InvokeScriptAsync(VideoScript(
                     "currentTime=" + _currentSec.ToString("0.###", CultureInfo.InvariantCulture)));
