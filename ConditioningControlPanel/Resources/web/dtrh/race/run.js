@@ -36,7 +36,7 @@ import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
 import { createSpeedFx } from './speed.js';
 import { createRaceAudio } from './audio.js';
 
-const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6, FOV_BASE = 72;
+const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE = 72;   // 1.6 read as ALMOST spam: the next lane over qualified
 // effect lives are cocktail.js CATEGORIES (scaled by the pop's durationMult); a glitch re-pop wobbles
 // the world clock this hard, this long (only when tea_time is not already holding it)
 const WOBBLE_SCALE = 0.82, WOBBLE_SEC = 0.3;

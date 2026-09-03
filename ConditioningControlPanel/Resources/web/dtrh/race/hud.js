@@ -24,6 +24,10 @@ const FLICK_MS = 450;
 const TOAST_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400, recipe: 1700 };
 /** Two "+N" pops inside this window merge into one counting toast ("+30 x3"). */
 const POP_MERGE_MS = 600;
+/** Two "almost +N" inside this window merge the same way ("almost +50 x2"). */
+const ALMOST_MERGE_MS = 900;
+/** Chatter kinds (pop, almost) may not open a NEW toast more often than this. */
+const CHATTER_GAP_MS = 180;
 
 /** The second-pass rung ladder. consts.js MULT_LADDER is the source of truth;
  * this is the documented fallback for when the import is missing or malformed. */
@@ -171,8 +175,26 @@ export function createRaceHud(root) {
   const wake = () => { if (!raf && !disposed) raf = requestAnimationFrame(tick); };
 
   let lastMult = 1, lastCombo = 0;
-  // the open "+N" run: the live toast, when it was last hit, and its running total
-  let popRun = { el: null, at: 0, sum: 0, n: 0, kill: 0 };
+  // the open runs: a live "+N" / "almost +N" toast, when it was last hit, and its running total
+  const RUN_OF = {
+    pop: { re: /^\+(\d+)$/, merge: POP_MERGE_MS, text: (s, n) => `+${fmt(s)} x${n}` },
+    almost: { re: /^almost \+(\d+)$/, merge: ALMOST_MERGE_MS, text: (s, n) => `almost +${fmt(s)} x${n}` },
+  };
+  const runs = {};
+  for (const k of Object.keys(RUN_OF)) runs[k] = { kind: k, ...RUN_OF[k], el: null, at: 0, sum: 0, n: 0, kill: 0 };
+  let lastChatterAt = -1e9;
+  function fold(run, gain, now) {
+    run.at = now; run.sum += gain; run.n += 1;
+    const node = run.el;
+    node.textContent = run.text(run.sum, run.n);
+    node.classList.toggle('is-run', run.n > 1);
+    // restart the toast's own hold animation so the merged toast re-pops
+    node.style.animation = 'none';
+    void node.offsetWidth;
+    node.style.animation = '';
+    if (run.kill) { clearTimeout(run.kill); timers.delete(run.kill); }
+    run.kill = later(() => { node.remove(); if (run.el === node) run.el = null; }, TOAST_HOLD[run.kind] + 60);
+  }
 
   // ---- BANK: tokens fly from low centre into the score; the counter ticks per landing ----
   function bankTokens(text) {
@@ -293,33 +315,27 @@ export function createRaceHud(root) {
     toast(text, kind) {
       kind = TOAST_HOLD[kind] ? kind : 'pop';
       let body = String(text == null ? '' : text);
-      // COALESCE: a dense run of "+10" pops used to stack four toasts on one
-      // spot and read as flicker. Inside POP_MERGE_MS they become one counting
-      // toast ("+30 x3") that re-pops on every hit. Only bare "+N" merges, so
-      // "x4" rung toasts and every other kind still stand alone.
-      const gain = kind === 'pop' ? /^\+(\d+)$/.exec(body) : null;
+      // COALESCE: dense chatter used to stack toasts on one spot and read as
+      // flicker (the owner counted ~10 a second). Inside its merge window a
+      // "+N" pop or an "almost +N" folds into one counting toast ("+30 x3",
+      // "almost +50 x2") that re-pops on every hit. Rung toasts ("x4") and every
+      // other kind still stand alone. A chatter kind also may not open a NEW
+      // toast more often than CHATTER_GAP_MS: a blocked one folds into its live
+      // run or is dropped (the score plate already moved).
+      const run = runs[kind] || null;
+      const m = run ? run.re.exec(body) : null;
       const now = typeof performance === 'object' ? performance.now() : Date.now();
-      if (gain && popRun.el && popRun.el.parentNode && now - popRun.at < POP_MERGE_MS) {
-        popRun.at = now;
-        popRun.sum += +gain[1];
-        popRun.n += 1;
-        popRun.el.textContent = `+${fmt(popRun.sum)} x${popRun.n}`;
-        popRun.el.classList.toggle('is-run', popRun.n > 1);
-        // restart the toast's own hold animation so the merged toast re-pops
-        popRun.el.style.animation = 'none';
-        void popRun.el.offsetWidth;
-        popRun.el.style.animation = '';
-        if (popRun.kill) { clearTimeout(popRun.kill); timers.delete(popRun.kill); }
-        popRun.kill = later(() => { if (popRun.el) popRun.el.remove(); popRun.el = null; }, TOAST_HOLD.pop + 60);
-        return;
-      }
+      const liveRun = !!(m && run.el && run.el.parentNode);
+      if (liveRun && now - run.at < run.merge) { fold(run, +m[1], now); return; }
+      if (run && now - lastChatterAt < CHATTER_GAP_MS) { if (liveRun) fold(run, +m[1], now); return; }
       if (kind === 'bank') body = bankTokens(body);
       if (kind === 'jackpot') hit(gold, 'is-on');
       const t = el(`rh-toast rh-toast--${kind}`, toasts, body);
       t.style.setProperty('--rh-hold', `${TOAST_HOLD[kind]}ms`);
       while (toasts.children.length > 3) toasts.firstChild.remove();
-      const kill = later(() => { t.remove(); if (popRun.el === t) popRun.el = null; }, TOAST_HOLD[kind] + 60);
-      if (gain) popRun = { el: t, at: now, sum: +gain[1], n: 1, kill };
+      const kill = later(() => { t.remove(); for (const k of Object.keys(runs)) if (runs[k].el === t) runs[k].el = null; }, TOAST_HOLD[kind] + 60);
+      if (run) lastChatterAt = now;
+      if (m) Object.assign(run, { el: t, at: now, sum: +m[1], n: 1, kill });
     },
     /** THE MIXER: `state` is cocktail.state(): { live: [slot...], recipe }. Cheap to call every frame. */
     mixer(state) {
