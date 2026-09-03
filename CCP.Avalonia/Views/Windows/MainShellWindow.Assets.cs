@@ -1,127 +1,76 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.Assets.cs (2911 lines).
+// PARTIALLY PORTED from ConditioningControlPanel/MainWindow/MainWindow.Assets.cs (2911 lines).
+// Sorted member by member against the fifteen Core seams. Only the tab's own entry point is real;
+// everything else is held back, and the two reasons below are different in kind.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// A REFUSAL, NOT A WAIT - the remote-media picker (InitializeRemoteMediaPicker,
+// BuildRemoteSourceChips, BuildRemoteNicheChips, RefreshRemoteMediaPicker, RemoteSourceChip_Changed,
+// RemoteNicheChip_Changed, AskRemoteMediaConsent, SliderRemoteRatio_Changed, AddRemoteCustomSub,
+// RemoveRemoteCustomSub, ToggleRemoteSubSelection, PersistRemoteChannelChange,
+// RebuildRemoteCustomSubChips, RebuildRemoteNicheSubs, BuildRemoteChip, MutedRemoteNote,
+// EndRemoteSubProbe, ShowRemoteSubError, TxtRemoteCustomSub_KeyDown, BtnRemoteAddSub_Click and the
+// MediaSrc* / RemoteCustomSubCap constants). Two things make a partial port worse than the stub:
+//   1. AskRemoteMediaConsent is a SYNCHRONOUS gate. RemoteSourceChip_Changed writes
+//      settings.MediaSource only if MessageBox.Show came back Yes (MainWindow.Assets.cs:2353-2360).
+//      This head's MessageDialog.ShowDialog<T> is async, so a straight transcription flips the chip
+//      and returns before the answer lands - a consent gate that is SKIPPED rather than degraded,
+//      on the one switch that starts fetching third-party adult content.
+//   2. Even with the ask solved, the switch calls FypOnlineCoordinator.ResetAllChannels()
+//      (ConditioningControlPanel/Services/Fyp/Online/FypOnlineCoordinator.cs) and
+//      InvalidateAssetPoolsAfterSelectionChange(). Without both, the media services keep serving
+//      pools built for the OLD source while the picker says the new one is live.
+// The picker comes back with the coordinator and an async consent gate, together, or not at all.
 //
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
+// A WAIT - the asset tree, and worth being exact because one dependency has already moved.
+// AssetTreeItem IS in Core (CCP.Core/Models/AssetTreeItem.cs), CorePaths.EffectiveAssets is the
+// asset root, and DisabledAssetPaths is a field of CoreSettings.Current. BuildFolderTree therefore
+// transcribes line for line, and is still left out because its only caller cannot be honest:
+// RefreshAssetTree's third branch is the Content Packs node, built from
+// App.ContentPacks.GetActivePackIds (ConditioningControlPanel/Services/Content/ContentPackService.cs), and
+// a tree that quietly omits every installed pack's media reads to the user as "those files are
+// gone" rather than "packs are not ported". It comes back with the pack service, in one piece.
+// The same holds for RefreshAssetTree, BuildPackTree, UpdateAssetCounts, CountAssetsRecursive,
+// RecalculateFolderCheckState, RecalculateAllFolderCheckStates, SetFolderAndChildrenChecked,
+// UpdateFolderFilesCheckState, UpdateFileCheckState, UpdateParentFolderCheckState,
+// FolderCheckBox_Changed, ThumbnailCheckBox_Changed, AssetTreeView_SelectedItemChanged,
+// BtnSelectAllAssets_Click, BtnDeselectAllAssets_Click, BtnSaveAssetSelection_Click and
+// InvalidateAssetPoolsAfterSelectionChange.
 //
-// Members dropped (106):
-//   private ObservableCollection<AssetTreeItem> _assetTree
-//   private ObservableCollection<AssetFileItem> _currentFolderFiles
-//   private AssetTreeItem? _selectedFolder
-//   private void BtnAssets_Click(…)
-//   internal void BtnOpenAssetsFolder_Click(…)
-//   internal void BtnDeleteDownloadedPacks_Click(…)
-//   private async Task RefreshPacksAsync(…)
-//   private void StartPackPreviewRotation(…)
-//   private void StopPackPreviewRotation(…)
-//   private async Task<List<BitmapImage>> LoadPreviewImagesFromUrlsAsync(…)
-//   private static string GetPackPreviewFileStem(…)
-//   private void OnPackDownloadProgress(…)
-//   private void OnPackDownloadCompleted(…)
-//   private void OnPackAuthenticationRequired(…)
-//   private void OnPackRateLimitExceeded(…)
-//   internal void BtnCreatorDiscord_Click(…)
-//   internal void BtnGetPacks_Click(…)
-//   internal void PacksScrollViewer_PreviewMouseWheel(…)
-//   internal void HorizontalScrollViewer_PreviewMouseWheel(…)
-//   internal void InnerScrollViewer_PreviewMouseWheel(…)
-//   internal void BtnRefreshPacks_Click(…)
-//   private void RefreshAssetTree(…)
-//   private AssetTreeItem? BuildPackTree(…)
-//   private AssetTreeItem BuildFolderTree(…)
-//   internal void AssetTreeView_SelectedItemChanged(…)
-//   private void RecalculateFolderCheckState(…)
-//   private void RecalculateAllFolderCheckStates(…)
-//   private void LoadPackFolderThumbnails(…)
-//   private const int MaxThumbnailCacheEntries
-//   private const long MaxThumbnailCacheBytes
-//   private static readonly Dictionary<string, ImageSource> _packThumbnailCache
-//   private static readonly Dictionary<string, long> _packThumbnailLastAccess
-//   private static readonly Dictionary<string, long> _packThumbnailSizes
-//   private static long _packThumbnailCacheBytes
-//   private static long _packThumbnailAccessCounter
-//   private static readonly SemaphoreSlim _thumbnailSemaphore
-//   private async Task LoadPackThumbnailAsync(…)
-//   private void LoadFolderThumbnails(…)
-//   private async Task LoadThumbnailAsync(…)
-//   private bool _isUpdatingFolderCheckState
-//   internal void FolderCheckBox_Changed(…)
-//   private void SetFolderAndChildrenChecked(…)
-//   private void RefreshThumbnailCheckboxes(…)
-//   private void UpdateFolderFilesCheckState(…)
-//   internal void ThumbnailCheckBox_Changed(…)
-//   internal void ThumbnailItem_Click(…)
-//   internal void ThumbnailItem_Preview_Click(…)
-//   internal void ThumbnailItem_OpenInExplorer_Click(…)
-//   private void OpenAssetPreview(…)
-//   private void UpdateFileCheckState(…)
-//   private void UpdateParentFolderCheckState(…)
-//   private void InvalidateAssetPoolsAfterSelectionChange(…)
-//   internal void BtnSelectAllAssets_Click(…)
-//   internal void BtnDeselectAllAssets_Click(…)
-//   private void BtnSaveAssetSelection_Click(…)
-//   private bool _isLoadingPreset
-//   private void InitializeAssetPresets(…)
-//   private void UpdatePresetCountsFromCurrentState(…)
-//   private void CountEnabledFilesRecursive(…)
-//   private void RefreshAssetPresetsComboBox(…)
-//   internal void CmbAssetPresets_SelectionChanged(…)
-//   internal void BtnSaveAssetPreset_Click(…)
-//   internal void BtnUpdateAssetPreset_Click(…)
-//   internal void BtnDeleteAssetPreset_Click(…)
-//   private bool _isLoadingPhrasePreset
-//   private void InitializePhrasePresets(…)
-//   private void RefreshPhrasePresetsComboBox(…)
-//   internal void CmbPhrasePresets_SelectionChanged(…)
-//   internal void BtnSavePhrasePreset_Click(…)
-//   internal void BtnDeletePhrasePreset_Click(…)
-//   private void UpdateAssetCounts(…)
-//   private void CountAssetsRecursive(…)
-//   internal async void BtnPackDownload_Click(…)
-//   internal void BtnPackActivate_Click(…)
-//   private void BtnPackUpgrade_Click(…)
-//   private void BtnPackPatreon_Click(…)
-//   private const string MediaSrcLocal
-//   private const string MediaSrcOnline
-//   private const string MediaSrcMixed
-//   private bool _remotePickerWired
-//   private bool _remotePickerSyncing
-//   private readonly List<ToggleButton> _remoteSourceChipButtons
-//   private readonly List<ToggleButton> _remoteNicheChipButtons
-//   private readonly HashSet<string> _remoteNicheExpanded
-//   private string? _remoteSubPending
-//   private const int RemoteCustomSubCap
-//   private void InitializeRemoteMediaPicker(…)
-//   private void BuildRemoteSourceChips(…)
-//   private void BuildRemoteNicheChips(…)
-//   private void RefreshRemoteMediaPicker(…)
-//   private void RemoteSourceChip_Changed(…)
-//   private bool AskRemoteMediaConsent(…)
-//   private void RemoteNicheChip_Changed(…)
-//   private void SliderRemoteRatio_Changed(…)
-//   private void BtnRemoteAddSub_Click(…)
-//   private void TxtRemoteCustomSub_KeyDown(…)
-//   private async void AddRemoteCustomSub(…)
-//   private void EndRemoteSubProbe(…)
-//   private void ShowRemoteSubError(…)
-//   private void RemoveRemoteCustomSub(…)
-//   private void ToggleRemoteSubSelection(…)
-//   private void PersistRemoteChannelChange(…)
-//   private void RebuildRemoteCustomSubChips(…)
-//   private Border BuildRemoteChip(…)
-//   private void RebuildRemoteNicheSubs(…)
-//   private static TextBlock MutedRemoteNote(…)
+// Checked and NOT the blocker anywhere in this file: CoreModArt. It answers a mod's art override
+// as a path, and this partial reads no mod art at all - its thumbnails come from the user's own
+// library and from downloaded packs. CorePaths.EffectiveAssets IS the right root for the tree, and
+// is named above rather than wired, because nothing here is wired yet.
+//
+// The rest, by blocker:
+//   App.ContentPacks - RefreshPacksAsync, BtnRefreshPacks_Click, BtnPackDownload_Click,
+//     BtnPackActivate_Click, BtnPackUpgrade_Click, BtnDeleteDownloadedPacks_Click, and the four
+//     OnPack* progress/auth/rate-limit callbacks.
+//   Thumbnail decode + cache - LoadPackFolderThumbnails, LoadPackThumbnailAsync,
+//     LoadFolderThumbnails, LoadThumbnailAsync, RefreshThumbnailCheckboxes and the six static cache
+//     fields. WPF decodes to BitmapImage with DecodePixelWidth; the Avalonia twin is
+//     new Avalonia.Media.Imaging.Bitmap(path), so this is a rewrite rather than a move, and it
+//     belongs with the tree that would display it.
+//   The OS - BtnOpenAssetsFolder_Click (Process.Start("explorer.exe")), ThumbnailItem_OpenInExplorer_Click,
+//     BtnCreatorDiscord_Click, BtnGetPacks_Click, BtnPackPatreon_Click. The shell already ships the
+//     folder PICKER (MainShellWindow.Settings.cs, RequestPickAssetsFolder); what is missing is the
+//     "show it to me" half, which is a file-manager launch and belongs in a head helper, not here.
+//   Preview windows - OpenAssetPreview, ThumbnailItem_Click, ThumbnailItem_Preview_Click,
+//     StartPackPreviewRotation, StopPackPreviewRotation, LoadPreviewImagesFromUrlsAsync,
+//     GetPackPreviewFileStem (pure, and held with the rotation that is its only caller).
+//   Preset dropdowns - InitializeAssetPresets, RefreshAssetPresetsComboBox,
+//     CmbAssetPresets_SelectionChanged, BtnSaveAssetPreset_Click, BtnUpdateAssetPreset_Click,
+//     BtnDeleteAssetPreset_Click, UpdatePresetCountsFromCurrentState, CountEnabledFilesRecursive,
+//     and the phrase-preset five. Blocked on the asset tree above, which is what they count.
+//   WPF input - PacksScrollViewer_PreviewMouseWheel, HorizontalScrollViewer_PreviewMouseWheel,
+//     InnerScrollViewer_PreviewMouseWheel. Avalonia has no PreviewMouseWheel; these are the
+//     nested-scroller workaround and need re-deriving, not porting.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.Assets.cs; wired when they move to Core.
-        private void BtnAssets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
-
+        /// <summary>The rail's Library door. One ShowTab call, exactly as in WPF
+        /// (MainWindow.Assets.cs:39). The tab it opens is still an empty shell.</summary>
+        private void BtnAssets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => ShowTab("assets");
     }
 }
