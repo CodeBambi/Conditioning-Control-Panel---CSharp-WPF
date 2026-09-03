@@ -108,14 +108,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             ManualDownloadRequested = true;
 
             // The WPF path went through BrowserLauncher, whose last resort was the clipboard, so
-            // a machine with no usable browser still got the link. Same two steps here.
+            // a machine with no usable browser still got the link. Same two steps here - and note
+            // the launcher REPORTS failure rather than throwing when nothing handles the URI
+            // (no xdg-open, no default browser), which is exactly the case that needs the
+            // fallback, so the result is checked as well as the exception.
+            var opened = false;
             try
             {
-                await Launcher.LaunchUriAsync(new Uri(ReleasesPageUrl));
+                opened = await Launcher.LaunchUriAsync(new Uri(ReleasesPageUrl));
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to open the download page; copying the link instead");
+                Log.Warning(ex, "Failed to open the download page");
+            }
+
+            if (!opened)
+            {
+                Log.Warning("Could not open the download page; copying the link instead");
                 try
                 {
                     if (Clipboard is not null) await Clipboard.SetTextAsync(ReleasesPageUrl);
