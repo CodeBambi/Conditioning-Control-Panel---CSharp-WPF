@@ -3579,6 +3579,7 @@
   "label_focus_gaze_description": "Mira una burbuja o un flash durante 1s para reventarlo.",
   "label_focus_gaze_consent_required": "Se requiere consentimiento de cámara.",
   "label_focus_gaze_active": "Activa — mira y sostén.",
+  "label_focus_gaze_waiting": "Activada - esperando la camara.",
   "label_focus_gaze_calibrate_first": "Calibra primero la webcam (pestaña Deeper → Configuración de Webcam → Calibrar).",
   "label_focus_gaze_webcam_failed_format": "No se pudo iniciar la webcam (estado: {0}).",
   "btn_open": "Abrir",

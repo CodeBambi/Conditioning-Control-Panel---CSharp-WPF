@@ -3739,6 +3739,7 @@
   "label_focus_gaze_description": "Look at a bubble or flash for 1s to pop it.",
   "label_focus_gaze_consent_required": "Camera consent is required.",
   "label_focus_gaze_active": "Active — gaze and dwell.",
+  "label_focus_gaze_waiting": "On - waiting for the camera.",
   "label_focus_gaze_calibrate_first": "Calibrate the webcam first (Deeper tab → Webcam Setup → Calibrate).",
   "label_focus_gaze_webcam_failed_format": "Couldn't start the webcam (state: {0}).",
   "btn_open": "Open",

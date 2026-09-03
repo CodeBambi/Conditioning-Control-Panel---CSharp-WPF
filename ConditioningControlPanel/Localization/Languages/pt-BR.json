@@ -3587,6 +3587,7 @@
   "label_focus_gaze_description": "Olhe para uma bolha ou flash por 1s para estourar.",
   "label_focus_gaze_consent_required": "É preciso consentimento para a câmera.",
   "label_focus_gaze_active": "Ativo — olhe e sustente.",
+  "label_focus_gaze_waiting": "Ativado - aguardando a camera.",
   "label_focus_gaze_calibrate_first": "Calibre a webcam primeiro (aba Deeper → Configurar Webcam → Calibrar).",
   "label_focus_gaze_webcam_failed_format": "Não deu para iniciar a webcam (estado: {0}).",
   "btn_open": "Abrir",

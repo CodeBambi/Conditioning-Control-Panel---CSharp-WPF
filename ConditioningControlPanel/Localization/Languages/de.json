@@ -3588,6 +3588,7 @@
   "label_focus_gaze_description": "Schau 1 Sek. auf eine Blase oder einen Flash, um sie platzen zu lassen.",
   "label_focus_gaze_consent_required": "Kamera-Einwilligung ist erforderlich.",
   "label_focus_gaze_active": "Aktiv — hinschauen und verweilen.",
+  "label_focus_gaze_waiting": "An - warte auf die Kamera.",
   "label_focus_gaze_calibrate_first": "Kalibriere zuerst die Webcam (Deeper-Tab → Webcam-Setup → Kalibrieren).",
   "label_focus_gaze_webcam_failed_format": "Die Webcam konnte nicht gestartet werden (Status: {0}).",
   "btn_open": "Öffnen",

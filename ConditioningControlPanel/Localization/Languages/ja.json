@@ -3579,6 +3579,7 @@
   "label_focus_gaze_description": "バブルやフラッシュを1秒見つめると割れます。",
   "label_focus_gaze_consent_required": "カメラの同意が必要です。",
   "label_focus_gaze_active": "有効 — 見つめて、留まって。",
+  "label_focus_gaze_waiting": "オン - カメラを待っています。",
   "label_focus_gaze_calibrate_first": "先にウェブカメラをキャリブレーションしてください（Deeperタブ → ウェブカメラ設定 → キャリブレーション）。",
   "label_focus_gaze_webcam_failed_format": "ウェブカメラを開始できませんでした（状態：{0}）。",
   "btn_open": "開く",

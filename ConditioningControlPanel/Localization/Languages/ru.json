@@ -3586,6 +3586,7 @@
   "label_focus_gaze_description": "Посмотри на пузырёк или вспышку 1 с, чтобы лопнуть.",
   "label_focus_gaze_consent_required": "Нужно согласие на камеру.",
   "label_focus_gaze_active": "Активно — смотри и задерживай взгляд.",
+  "label_focus_gaze_waiting": "Включено - ожидание камеры.",
   "label_focus_gaze_calibrate_first": "Сначала откалибруй веб-камеру (вкладка Deeper → Настройка камеры → Калибровка).",
   "label_focus_gaze_webcam_failed_format": "Не удалось запустить веб-камеру (состояние: {0}).",
   "btn_open": "Открыть",

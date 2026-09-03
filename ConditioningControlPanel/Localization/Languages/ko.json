@@ -3586,6 +3586,7 @@
   "label_focus_gaze_description": "버블이나 플래시를 1초간 바라보면 터져요.",
   "label_focus_gaze_consent_required": "카메라 동의가 필요해요.",
   "label_focus_gaze_active": "작동 중 — 바라보고 머무르세요.",
+  "label_focus_gaze_waiting": "켜짐 - 카메라를 기다리는 중.",
   "label_focus_gaze_calibrate_first": "웹캠을 먼저 보정하세요 (Deeper 탭 → 웹캠 설정 → 보정).",
   "label_focus_gaze_webcam_failed_format": "웹캠을 시작하지 못했어요 (상태: {0}).",
   "btn_open": "열기",
