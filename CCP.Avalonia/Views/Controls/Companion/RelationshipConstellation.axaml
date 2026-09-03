@@ -1,0 +1,206 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/RelationshipConstellation.xaml.
+     Structure, order, spacing and every resource key are preserved so the two can be diffed.
+     Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"     ->  Theme="{StaticResource X}"
+       pack:// merged dictionary      ->  avares:// ResourceInclude
+       DataTrigger on State           ->  Classes.filled / Classes.current bound to two bools on the
+                                          node vm, and ordered <Style> rules below that swap the
+                                          disc's and the label's Theme. Avalonia has no triggers,
+                                          and no CSS specificity either: later rules win, so the
+                                          three rules per part are written base -> filled -> current.
+       IsMouseOver Storyboard         ->  ^:pointerover RenderTransform="scale(1.12)" plus a
+                                          TransformOperationsTransition (same 0.18s)
+       ConstellationFillConverter     ->  the vm exposes FillFraction (its FillFraction() maths,
+       (MultiBinding)                     3 lines) and the two CmpFractionToStar twins do the rest
+       CmpBoolToVis/-Inverse          ->  IsVisible="{Binding IsLive}" / "{Binding !IsLive}"
+       DropShadowEffect               ->  DropShadowEffect (Avalonia.Media, ShadowDepth -> OffsetX/Y)
+       CmpShimmerSweepStoryboard /    ->  NOT ported. Both are one-shot intro flourishes played
+       CmpNodePulseStoryboard             from code-behind (CompanionTheme.axaml section 17 has the
+                                          numbers); the shimmer band and PlayIntro go with them.
+       implicit ToolTip Style         ->  <Style Selector="ToolTip"> in UserControl.Styles; the
+                                          template is left to Fluent, only the colours are set. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.RelationshipConstellation"
+             x:DataType="local:RelationshipConstellationViewModel"
+             mc:Ignorable="d"
+             d:DesignWidth="900" d:DesignHeight="120">
+
+    <!-- ================================================================
+         Z1 bottom band — THE RELATIONSHIP CONSTELLATION.
+         Five stage nodes on a gradient connector, sitting on the hero's
+         bottom edge. Ratchet design: names are visible, mechanics are not.
+
+         Live      → filled pink nodes behind you, a gold node where you
+                     are, faint outlines ahead, and the connector's pink
+                     run stops exactly on the current node's centre.
+         Dormant   → every node an outline, names still readable, and the
+                     promise copy. No lock glyph: this is not a paywall.
+
+         Geometry: the connector is laid across the span between the first
+         and last node CENTRES. With five equal columns those sit at 1/10
+         and 9/10 of the width, which is what the 1*/8*/1* frame below
+         reproduces without a single Bounds read.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- One node: glyph disc over a name. The three visual states are picked by the
+                 classes on the Button (see UserControl.Styles) so the item template stays code-free. -->
+            <DataTemplate x:Key="CmpConstellationNodeTemplate" x:DataType="local:ConstellationNodeViewModel">
+                <!-- ponytail: no Command. WPF binds the host's NodeCommand (the stage card, an
+                     achievement-toast-styled popup owned by the Companion tab); wire when that host
+                     view is ported. -->
+                <Button Classes.filled="{Binding IsFilled}" Classes.current="{Binding IsCurrent}"
+                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                        HorizontalAlignment="Stretch" Padding="0"
+                        ToolTip.Tip="{Binding Description}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <StackPanel Background="Transparent">
+                                <!-- outer transform = hover only -->
+                                <Grid x:Name="HoverScale" HorizontalAlignment="Center" RenderTransformOrigin="50%,50%">
+                                    <Grid.Transitions>
+                                        <Transitions>
+                                            <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18"/>
+                                        </Transitions>
+                                    </Grid.Transitions>
+                                    <Border x:Name="Node">
+                                        <TextBlock x:Name="Glyph" Text="{Binding Glyph}" FontSize="13"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock x:Name="Label" Text="{Binding Name}"/>
+                            </StackPanel>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- Node click → the stage card, styled like an achievement toast. One rule keeps every
+             node's popup consistent with no per-node markup. -->
+        <Style Selector="ToolTip">
+            <Setter Property="Background" Value="{StaticResource CmpElevBrush}"/>
+            <Setter Property="BorderBrush" Value="#66FF69B4"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusInner}"/>
+            <Setter Property="Padding" Value="12,9,12,9"/>
+            <Setter Property="Foreground" Value="{StaticResource CmpBodyBrush}"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontStyle" Value="Italic"/>
+            <Setter Property="MaxWidth" Value="240"/>
+        </Style>
+
+        <!-- the DataTrigger ladder: base, then Filled, then Current (last match wins) -->
+        <Style Selector="Button /template/ Border#Node">
+            <Setter Property="Theme" Value="{StaticResource CmpConstellationNodeStyle}"/>
+        </Style>
+        <Style Selector="Button /template/ TextBlock#Glyph">
+            <Setter Property="Foreground" Value="#40FFFFFF"/>
+        </Style>
+        <Style Selector="Button /template/ TextBlock#Label">
+            <Setter Property="Theme" Value="{StaticResource CmpConstellationLabelStyle}"/>
+        </Style>
+
+        <Style Selector="Button.filled /template/ Border#Node">
+            <Setter Property="Theme" Value="{StaticResource CmpConstellationNodeFilledStyle}"/>
+        </Style>
+        <Style Selector="Button.filled /template/ TextBlock#Glyph">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Button.filled /template/ TextBlock#Label">
+            <Setter Property="Theme" Value="{StaticResource CmpConstellationLabelReachedStyle}"/>
+        </Style>
+
+        <Style Selector="Button.current /template/ Border#Node">
+            <Setter Property="Theme" Value="{StaticResource CmpConstellationNodeCurrentStyle}"/>
+        </Style>
+        <Style Selector="Button.current /template/ TextBlock#Glyph">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Button.current /template/ TextBlock#Label">
+            <Setter Property="Theme" Value="{StaticResource CmpConstellationLabelCurrentStyle}"/>
+        </Style>
+
+        <!-- IsMouseOver storyboard pair -->
+        <Style Selector="Button:pointerover /template/ Grid#HoverScale">
+            <Setter Property="RenderTransform" Value="scale(1.12)"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border BorderBrush="{StaticResource CmpHairlineBrush}" BorderThickness="0,1,0,0"
+            Background="{StaticResource CmpConstellationBandBrush}"
+            Padding="26,15,26,17" ClipToBounds="True">
+        <Grid RowDefinitions="Auto,Auto,Auto">
+
+            <!-- nodes + the connector running behind them -->
+            <Grid Grid.Row="0">
+                <!-- The connector sits at the vertical centre of the 28px discs (14px down, less
+                     half its own 2px height) and spans first-centre to last-centre. -->
+                <Grid VerticalAlignment="Top" Height="2" Margin="0,13,0,0" IsHitTestVisible="False"
+                      ColumnDefinitions="1*,8*,1*">
+                    <Grid Grid.Column="1">
+                        <!-- the unearned run: a hairline the whole way, so the ladder is always
+                             legible even at stage 0 and in the dormant state -->
+                        <Border Background="{StaticResource CmpTrackSoftBrush}" CornerRadius="1"/>
+
+                        <!-- the earned run: pink→purple, stopping on the current node's centre -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{Binding FillFraction, Converter={StaticResource CmpFractionToStar}}"/>
+                                <ColumnDefinition Width="{Binding FillFraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="ConnectorLine" Grid.Column="0" CornerRadius="1"
+                                    Background="{StaticResource CmpPinkPurpleBrush}">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.45"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+
+                <!-- Five equal columns. UniformGrid keeps the nodes evenly spaced at any width.
+                     This is the one list on the page that is NOT virtualised: the ladder is exactly
+                     five items, forever, and the connector geometry depends on all five columns
+                     existing at once. -->
+                <ItemsControl x:Name="NodeStrip" ItemsSource="{Binding Nodes}"
+                              ItemTemplate="{StaticResource CmpConstellationNodeTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </Grid>
+
+            <!-- live flavor: one vague line, no numbers -->
+            <TextBlock Grid.Row="1" Margin="0,11,0,0" TextAlignment="Center" TextWrapping="Wrap"
+                       Theme="{StaticResource CmpFlavorTextStyle}"
+                       IsVisible="{Binding IsLive}">
+                <Run Text="{Binding FlavorLine}"/><Run Text="{Binding FlavorAccent}"
+                     Foreground="#FFFFD9A8" FontStyle="Normal" FontWeight="SemiBold"/>
+            </TextBlock>
+
+            <!-- dormant promise: outlines above, this underneath -->
+            <Grid Grid.Row="2" Margin="0,11,0,0" IsVisible="{Binding !IsLive}">
+                <Border x:Name="DormantHost" Theme="{StaticResource CmpDormantBlockStyle}">
+                    <TextBlock Text="{Binding DormantCopy}" TextAlignment="Center"
+                               Theme="{StaticResource CmpDormantCopyStyle}"/>
+                </Border>
+                <Rectangle Theme="{StaticResource CmpDashedOutlineStyle}"/>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>
