@@ -1,5 +1,8 @@
 using System;
+using System.Threading;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -7,6 +10,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
@@ -18,10 +22,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// chrome region.
     ///
     /// <para>PORTED from <c>ConditioningControlPanel/Windows/EmiDesk/EmiDeskWindow.xaml.cs</c> -
-    /// and that file is ONE of eight partials of the WPF class. The other seven
-    /// (<c>.Alive</c>, <c>.Bubble</c>, <c>.Fx</c>, <c>.Glass</c>, <c>.Props</c>, <c>.React</c>,
-    /// <c>.Ring</c>) are not part of this layer, so every member this file calls into them is a
-    /// one-line <c>ponytail:</c> stub below rather than an invention. The
+    /// and that file is ONE of eight partials of the WPF class. Six of the other seven
+    /// (<c>.Alive</c>, <c>.Bubble</c>, <c>.Fx</c>, <c>.Glass</c>, <c>.Props</c>, <c>.Ring</c>) are
+    /// still ahead, so every member this file calls into them is a one-line <c>ponytail:</c> stub
+    /// below rather than an invention. <c>.React</c> is the exception: its physical half - the click
+    /// squash and the drag wobble - needs nothing that is not already here, so it is REAL, in the
+    /// "she feels the pointer" region below, and only its pat (a chain) is still a stub. The
     /// <c>partial void ...Core(...)</c> seams are kept VERBATIM: with no implementing partial they
     /// compile to nothing, which is exactly what B2 and B3 need to plug into later without editing
     /// this file.</para>
@@ -1519,11 +1525,403 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
         }
 
+        // ---------------------------------------------------------------- she feels the pointer
+
+        // PORTED from ConditioningControlPanel/Windows/EmiDesk/EmiDeskWindow.React.cs, the physical
+        // half of her reactions: the squash on a click and the drag wobble. It lands in THIS file
+        // rather than a sibling partial because every call site is already here and both effects
+        // own transform slots this file builds. The PAT half of React.cs stays a stub - a pat is a
+        // chain, and no chain can run on this head yet (see PetFromClick below).
+        //
+        // Why raw animations and not chains, unchanged from the original: touch feedback must be
+        // UNCONDITIONAL and instant, and a line engine that says "not now" would eat the one bit of
+        // feedback a click has to give. _squashScale and _wobbleRotate are dedicated slots, so
+        // neither can collide with _crtScale's power-on or with _moveShift's nod / droop / shiver.
+
+        /// <summary>Squash down to this on Y, and the matching stretch on X. emi.css's own pop values.</summary>
+        private const double SquashY = 0.92;
+
+        /// <inheritdoc cref="SquashY"/>
+        private const double SquashX = 1.06;
+
+        /// <summary>How long the squash takes to reach its deepest point.</summary>
+        private const double SquashDownMs = 90;
+
+        /// <summary>...and how long the spring back takes. The two together are one animation.</summary>
+        private const double SquashUpMs = 260;
+
+        /// <summary>
+        /// THE WHOLE SQUASH AS ONE CURVE, normalised 0 -> 1 -> 0.
+        ///
+        /// <para>WPF built this from two <c>EasingDoubleKeyFrame</c>s, a cubic in and an
+        /// <c>ElasticEase</c> back out. Avalonia's <c>Animation.Easing</c> is animation-WIDE - a
+        /// keyframe carries no easing function, only a <c>KeySpline</c>, and an elastic overshoot is
+        /// not a cubic bezier - so the shape has to live in one <see cref="Easing"/> instead. The
+        /// animation is then a plain rest -> peak tween and this decides all of the motion: it
+        /// returns 1 at the deepest point and 0 at both ends, so one instance drives the X stretch
+        /// and the Y squash with their own peaks.</para>
+        ///
+        /// <para>The dip BELOW zero after the peak is the overshoot past rest - the one small
+        /// rebound that is the difference between "she reacted" and "the widget resized". WPF got it
+        /// from <c>ElasticEase { Oscillations = 1, Springiness = 4 }</c>, and this is that easing's
+        /// own arithmetic rather than a look-alike: exactly one negative excursion, reaching about
+        /// 22 % of the squash depth, checked numerically before it was written down.</para>
+        /// </summary>
+        private sealed class SquashCurve : Easing
+        {
+            private const double Osc = 1.0;          // WPF ElasticEase.Oscillations
+            private const double Spring = 4.0;       // WPF ElasticEase.Springiness
+
+            private static readonly double Down = SquashDownMs / (SquashDownMs + SquashUpMs);
+
+            public override double Ease(double progress)
+            {
+                if (progress <= 0 || progress >= 1) return 0;
+
+                if (progress < Down)
+                {
+                    // CubicEaseOut into the squash: she takes the hit immediately.
+                    double u = progress / Down;
+                    double inv = 1 - u;
+                    return 1 - inv * inv * inv;
+                }
+
+                // ElasticEaseOut back out of it, mirrored so 1 is the peak and 0 is rest.
+                double v = 1 - (progress - Down) / (1 - Down);
+                double expo = (Math.Exp(Spring * v) - 1) / (Math.Exp(Spring) - 1);
+                return expo * Math.Sin((2 * Math.PI * Osc + Math.PI / 2) * v);
+            }
+        }
+
+        private static readonly SquashCurve SquashEase = new();
+
+        /// <summary>Sine-in-out as a cubic bezier - WPF's <c>SineEase{EaseInOut}</c> per pendulum
+        /// segment, which here is a <c>KeySpline</c> because a keyframe carries no easing.</summary>
+        private static KeySpline SineInOut() => new(0.445, 0.05, 0.55, 0.95);
+
+        /// <summary>The squash's own animations. Cancelled and restarted rather than layered: a
+        /// second click mid-bump replaces the first, exactly as WPF's BeginAnimation did.</summary>
+        private CancellationTokenSource? _squashAnim;
+
+        /// <summary>
+        /// The click bump: she compresses about 8 % and springs back. Plays on EVERY click on her
+        /// body, alongside whatever that click actually did (the ring toggle, the glass tap, the
+        /// pat), and nothing else ever cancels it - it owns its own transform, so it cannot fight
+        /// a chain.
+        /// </summary>
+        public void PlayClickSquash()
+        {
+            try
+            {
+                if (_closingForGood) return;
+
+                _squashAnim?.Cancel();
+                _squashAnim?.Dispose();
+                var cts = new CancellationTokenSource();
+                _squashAnim = cts;
+
+                // REST IS THE BASE VALUE and FillMode.None reverts to it, so a squash that finishes
+                // - or one the next click cancels - lands on 1 rather than freezing her compressed.
+                _squashScale.ScaleX = 1;
+                _squashScale.ScaleY = 1;
+
+                double total = SquashDownMs + SquashUpMs;
+                Squash(ScaleTransform.ScaleXProperty, SquashX, total, cts.Token);
+                Squash(ScaleTransform.ScaleYProperty, SquashY, total, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] click squash failed");
+            }
+        }
+
+        private void Squash(AvaloniaProperty prop, double peak, double ms, CancellationToken token)
+        {
+            new Animation
+            {
+                Duration = TimeSpan.FromMilliseconds(ms),
+                Easing = SquashEase,
+                FillMode = FillMode.None,
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(prop, 1.0) } },
+                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(prop, peak) } },
+                },
+            }.RunAsync(_squashScale, token);
+        }
+
+        // ---- the drag wobble ------------------------------------------------------
+
+        /// <summary>Hardest she ever leans while being dragged, in degrees.</summary>
+        private const double WobbleMaxDeg = 9.0;
+
+        /// <summary>Degrees of lean per DIP/second of horizontal drag speed.</summary>
+        private const double WobbleDegPerVel = 0.010;
+
+        /// <summary>How much of the old velocity survives one tick. The low-pass; higher is smoother.</summary>
+        private const double WobbleVelKeep = 0.78;
+
+        /// <summary>How far the drawn angle closes on the target angle each tick. The second smoother.</summary>
+        private const double WobbleFollow = 0.35;
+
+        /// <summary>Above this drag speed (DIP/s) she pulls a face; above the second one, a worse one.</summary>
+        private const double WobbleFaceVel = 420.0;
+
+        /// <inheritdoc cref="WobbleFaceVel"/>
+        private const double WobbleDizzyVel = 1150.0;
+
+        /// <summary>The release pendulum's length. Two and a bit swings, each smaller than the last.</summary>
+        private const int WobbleSettleMs = 720;
+
+        /// <summary>
+        /// The sampling tick. WPF hung this on <c>CompositionTarget.Rendering</c>, which fires every
+        /// frame unconditionally; Avalonia's nearest twin,
+        /// <c>TopLevel.RequestAnimationFrame</c>, is a ONE-SHOT that only lands when the compositor
+        /// is producing a frame at all - so a pointer held still (target angle 0, nothing dirty)
+        /// can end the chain of requests and leave her frozen at a lean. A timer cannot stall that
+        /// way, and dt is measured rather than assumed below, so the physics is the same either way.
+        /// </summary>
+        private const int WobbleTickMs = 16;
+
+        private DispatcherTimer? _wobbleTimer;
+        private CancellationTokenSource? _wobbleSettle;
+        private bool _wobbleLive;
+        private double _wobbleLastX;
+        private double _wobbleVx;
+        private double _wobbleAngle;
+        private DateTime _wobbleLastTick;
+        private string? _wobbleFace;
+
+        /// <summary>
+        /// Start hanging. Called from the pointer-down, not from the first move, so the very first
+        /// tick of a drag already has a velocity baseline to measure against.
+        /// </summary>
+        private void BeginWobble()
+        {
+            try
+            {
+                if (_wobbleLive || _closingForGood) return;
+                _wobbleLive = true;
+
+                // ORDER MATTERS, and it is the inverse of WPF's. A settle still running from the
+                // last drop holds the angle at ANIMATION priority, which both masks a write and is
+                // what the getter returns - so read the live angle FIRST, then cancel, then write it
+                // back as the local value the ticks below will drive.
+                _wobbleAngle = _wobbleRotate.Angle;
+                CancelWobbleSettle();
+                _wobbleRotate.Angle = _wobbleAngle;
+
+                _wobbleLastX = Position.X / SafeScale();
+                _wobbleVx = 0;
+                _wobbleLastTick = DateTime.UtcNow;
+
+                _wobbleTimer = new DispatcherTimer(
+                    TimeSpan.FromMilliseconds(WobbleTickMs), DispatcherPriority.Render, OnWobbleTick);
+                _wobbleTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] wobble start failed");
+                _wobbleLive = false;
+            }
+        }
+
+        /// <summary>
+        /// One frame of hanging. Velocity is sampled off her actual window position on the tick
+        /// rather than off the pointer-move, because a pointer that stops moving stops raising
+        /// events: a move-driven wobble freezes mid-lean the instant you hold still, which is the
+        /// one thing that would make her look broken instead of heavy.
+        ///
+        /// <para>WPF read <c>Left</c>, which is DIPs. <see cref="Window.Position"/> is PHYSICAL
+        /// pixels, so the divide by the scale is what keeps <see cref="WobbleDegPerVel"/> meaning
+        /// the same thing it was tuned to mean on a 200 % desk.</para>
+        /// </summary>
+        private void OnWobbleTick(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (!_wobbleLive) return;
+
+                var now = DateTime.UtcNow;
+                double dt = (now - _wobbleLastTick).TotalSeconds;
+                _wobbleLastTick = now;
+                if (dt < 0.004) dt = 0.004;
+                if (dt > 0.064) dt = 0.064;      // a stalled tick must not read as a huge velocity
+
+                double x = Position.X / SafeScale();
+                double raw = (x - _wobbleLastX) / dt;
+                _wobbleLastX = x;
+
+                _wobbleVx = _wobbleVx * WobbleVelKeep + raw * (1.0 - WobbleVelKeep);
+
+                // She TRAILS the hand: drag her right and her feet swing left, which about a
+                // head-high pivot is a positive (clockwise) angle in a y-down frame.
+                double target = Math.Max(-WobbleMaxDeg, Math.Min(WobbleMaxDeg, _wobbleVx * WobbleDegPerVel));
+                _wobbleAngle += (target - _wobbleAngle) * WobbleFollow;
+                _wobbleRotate.Angle = _wobbleAngle;
+
+                UpdateWobbleFace(Math.Abs(_wobbleVx));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] wobble frame failed");
+            }
+        }
+
+        /// <summary>The face she pulls while she is being flung about. Never over a live chain.</summary>
+        private void UpdateWobbleFace(double speed)
+        {
+            try
+            {
+                if (ChainLive) return;
+
+                string? want = speed >= WobbleDizzyVel ? "@_@"
+                             : speed >= WobbleFaceVel ? ">_<"
+                             : null;
+
+                if (want == _wobbleFace) return;
+                _wobbleFace = want;
+                DrawFace(want ?? RestFace);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] wobble face failed");
+            }
+        }
+
+        /// <summary>
+        /// Let go. She keeps the lean she had and swings it off in two and a bit diminishing arcs -
+        /// the pendulum is what sells the mass, and stopping dead on the drop undoes the whole
+        /// effect.
+        /// </summary>
+        private void EndWobble()
+        {
+            try
+            {
+                if (!_wobbleLive) return;
+                _wobbleLive = false;
+                StopWobbleTimer();
+
+                if (_wobbleFace != null)
+                {
+                    _wobbleFace = null;
+                    if (!ChainLive) DrawFace(RestFace);
+                }
+
+                double a = _wobbleAngle;
+                _wobbleAngle = 0;
+                CancelWobbleSettle();
+
+                // Under half a degree there is nothing to swing off; snap and stop, so a click that
+                // just cleared the drag threshold does not end in a visible wobble. Same road when
+                // she is on her way out - a pendulum over a closing window is a callback into a
+                // dead surface.
+                if (Math.Abs(a) < 0.5 || _closingForGood)
+                {
+                    _wobbleRotate.Angle = 0;
+                    return;
+                }
+
+                var cts = new CancellationTokenSource();
+                _wobbleSettle = cts;
+
+                // THE LEAN SHE HAD is the base value, and FillMode.Forward holds the final 0 after
+                // the last keyframe. Both halves of that matter: an animation does not take the
+                // property until its clock first ticks, so a base of 0 would snap her upright for
+                // the frame between this call and the first swing; and Forward is what stops
+                // FillMode.None from handing her back that same lean when the pendulum ends.
+                //
+                // The held 0 outlives the animation, which is exactly why every road out of the
+                // settle - BeginWobble, EndWobble's snap, TearDownReactions - cancels the token and
+                // then WRITES the angle, in that order. Cancelling alone would expose this stale
+                // base again.
+                _wobbleRotate.Angle = a;
+
+                new Animation
+                {
+                    Duration = TimeSpan.FromMilliseconds(WobbleSettleMs),
+                    FillMode = FillMode.Forward,
+                    Children =
+                    {
+                        Swing(0.00, a),
+                        Swing(0.30, -a * 0.55),
+                        Swing(0.58, a * 0.28),
+                        Swing(0.82, -a * 0.12),
+                        Swing(1.00, 0.0),
+                    },
+                }.RunAsync(_wobbleRotate, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] wobble settle failed");
+                _wobbleLive = false;
+            }
+        }
+
+        private static KeyFrame Swing(double cue, double angle) => new()
+        {
+            Cue = new Cue(cue),
+            KeySpline = SineInOut(),
+            Setters = { new Setter(RotateTransform.AngleProperty, angle) },
+        };
+
+        /// <summary><see cref="DipScale"/>, never zero. It already guards; this only spares the
+        /// wobble's two hot lines the second check.</summary>
+        private double SafeScale()
+        {
+            double s = DipScale;
+            return s > 0 ? s : 1.0;
+        }
+
+        private void StopWobbleTimer()
+        {
+            try { _wobbleTimer?.Stop(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] wobble timer stop failed"); }
+            _wobbleTimer = null;
+        }
+
+        private void CancelWobbleSettle()
+        {
+            try { _wobbleSettle?.Cancel(); _wobbleSettle?.Dispose(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] wobble settle cancel failed"); }
+            _wobbleSettle = null;
+        }
+
+        /// <summary>
+        /// Everything this region owns, off. Called from the tear-down and the close handler: a
+        /// 16 ms timer that outlives the window is a callback into a dead surface for the rest of
+        /// the process.
+        /// </summary>
+        private void TearDownReactions()
+        {
+            try
+            {
+                _wobbleLive = false;
+                StopWobbleTimer();
+                CancelWobbleSettle();
+
+                try { _squashAnim?.Cancel(); _squashAnim?.Dispose(); }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] squash cancel failed"); }
+                _squashAnim = null;
+
+                _wobbleFace = null;
+                _wobbleAngle = 0;
+                _wobbleRotate.Angle = 0;
+                _squashScale.ScaleX = 1;
+                _squashScale.ScaleY = 1;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] reaction tear-down failed");
+            }
+        }
+
         // ---------------------------------------------------------------- sibling-partial stubs
 
         // Everything below lives in one of the seven OTHER partials of the WPF class, none of which
         // is part of this layer. Each is kept as a named no-op so the ported half of the widget
         // still reads as the same code and the later layers have the exact call sites to fill in.
+        // React.cs is no longer one of them: its physical half is real, above.
 
         /// <summary>ponytail: EmiDeskWindow.Alive.cs - the 100 ms gaze/idle poll. Starts with her.</summary>
         private void StartAlive() { }
@@ -1531,19 +1929,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: EmiDeskWindow.Alive.cs - stops the poll when she goes.</summary>
         private void StopAlive() { }
 
-        /// <summary>ponytail: EmiDeskWindow.React.cs - the click squash-and-stretch on _squashScale.</summary>
-        private void PlayClickSquash() { }
-
-        /// <summary>ponytail: EmiDeskWindow.React.cs - the drag sway on _wobbleRotate.</summary>
-        private void BeginWobble() { }
-
-        /// <summary>ponytail: EmiDeskWindow.React.cs - the release pendulum on _wobbleRotate.</summary>
-        private void EndWobble() { }
-
-        /// <summary>ponytail: EmiDeskWindow.React.cs - the pat chain, its cooldown and its wink.</summary>
+        /// <summary>
+        /// ponytail: the pat is FIVE things, not one file, and none of them is on this head yet:
+        /// EmiChains + EmiChains.Player for the <c>pet</c> chain and the poke flick,
+        /// <c>EmiSfx.Pat()</c> for the sound, <c>EmiState.NotePet()</c> for the count behind her
+        /// affection, <c>App.EmiDesk.Fire("petted")</c> for the moment, and EmiDeskWindow.Alive.cs's
+        /// poke ladder for which face the flick wears. The cooldown arithmetic on its own would give
+        /// a pat that changes nothing you can see or hear, so it stays here rather than half-landing:
+        /// the click still squashes her, which is the one bit of feedback this head CAN give.
+        /// </summary>
         private void PetFromClick() { }
 
-        /// <summary>ponytail: EmiDeskWindow.React.cs - the pat counter behind her affection state.</summary>
+        /// <summary>ponytail: needs EmiState.NotePet() - the pat counter behind her affection state.</summary>
         private void CountPat() { }
 
         /// <summary>ponytail: EmiDeskWindow.Fx.cs - ends the summon chain early so a click can land.</summary>
@@ -1560,9 +1957,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         /// <summary>ponytail: EmiDeskWindow.Props.cs - takes the held plate off.</summary>
         private void HideProp() { }
-
-        /// <summary>ponytail: EmiDeskWindow.React.cs - drops the reaction hooks.</summary>
-        private void TearDownReactions() { }
 
         /// <summary>ponytail: EmiDeskWindow.Bubble.cs - drops the voice hooks.</summary>
         private void TearDownVox() { }
