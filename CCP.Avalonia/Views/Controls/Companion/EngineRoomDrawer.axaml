@@ -1,0 +1,304 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/EngineRoomDrawer.xaml.
+     Structure, ordering, spacing, comments and every resource key are preserved so the two diff
+     cleanly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"   ->  Theme="{StaticResource X}"    (keyed styles are ControlThemes)
+       <Style x:Key TargetType>     ->  <ControlTheme x:Key TargetType>
+       {loc:Str key}                ->  {ReflectionBinding #Root.Strings.LocX} (LocExtension is a
+                                        WPF MarkupExtension and stays in the head; the strings
+                                        still come from CCP.Core's Loc, via the small view model in
+                                        the code-behind. It hangs off the VIEW, not the DataContext,
+                                        because the DataContext here belongs to the host's VM.)
+       every {Binding}              ->  {ReflectionBinding}: IEngineRoomDrawerVm lives in the WPF
+                                        head, so there is no x:DataType to compile against; the
+                                        property names are unchanged and bind to whatever VM the
+                                        host supplies.
+       Visibility + CmpEnumToVis    ->  IsVisible + CmpEnumEquals (Avalonia binds IsVisible to bool)
+       CmpBoolToVis                 ->  IsVisible="{Binding ShowLiveActions}"
+       CmpBoolToVisInverse          ->  IsVisible="{Binding !X}"
+       CmpHasContentToVis           ->  ObjectConverters.IsNotNull
+       Style.Triggers / DataTrigger ->  Classes.healthy="{Binding IsHealthy}" + a class selector
+       Image + CmpEmojiToImage      ->  <TextBlock Text="⚙"/>: Avalonia renders colour emoji
+                                        natively, so the Twemoji image pipeline is not needed
+       PasswordBox + PasswordChanged->  TextBox with PasswordChar, bound OneWayToSource. Avalonia
+                                        has no PasswordBox; see the comment at the field.
+       Content="{...}" on a button  ->  a <TextBlock> child (Avalonia reads "_" in Content as an
+                                        access key, and every loc key here is snake_case)
+       pack:// merged dictionary    ->  avares:// ResourceInclude -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:conv="clr-namespace:Avalonia.Data.Converters;assembly=Avalonia.Base"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.EngineRoomDrawer"
+             x:Name="Root"
+             mc:Ignorable="d"
+             d:DesignWidth="1160" d:DesignHeight="380">
+
+    <!-- ================================================================
+         Z7 — THE ENGINE ROOM (provider plumbing, demoted and proud of it).
+         Flat #16162B, thin gray border, no glow, no gradient. The contrast
+         with the room above IS the design: everything up there is her,
+         this is wiring.
+
+         Nothing is dropped. The four provider radios, the cloud status
+         line, Ollama model/host + Setup + Test, the BYO endpoint/key/model
+         + sampler + test, the daily request limit, and the live actions
+         feed all live in this one drawer.
+
+         They are grouped by provider exactly as the legacy card grouped
+         them (LocalConfigPanel / OpenAiCompatibleConfigPanel): the
+         segment you picked is the panel you see, so the drawer is a page
+         of wiring rather than a wall of it. Off shows its own one-liner
+         so the drawer is never an empty box.
+
+         The old full-card login veil is gone: logged-out is an inline row
+         here, and Z2's teaser does the selling. The page never fully veils.
+
+         The hero's AI pill deep-links here by setting IsExpanded=true and
+         calling BringIntoView() at DispatcherPriority.Normal (Loaded is
+         starved in this app).
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- the little all-caps rule that names a provider panel -->
+            <ControlTheme x:Key="CmpZ7GroupTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpFieldLabelStyle}">
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Foreground" Value="#FF8F88AD"/>
+                <Setter Property="Margin" Value="2,0,0,8"/>
+            </ControlTheme>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Expander x:Name="Drawer" Theme="{StaticResource CmpEngineDrawerStyle}"
+              IsExpanded="{ReflectionBinding IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock FontSize="14" Margin="0,0,10,0" VerticalAlignment="Center" Text="⚙"/>
+                <TextBlock Text="{ReflectionBinding #Root.Strings.LocHeader}"
+                           Theme="{StaticResource CmpDrawerHeaderTextStyle}"/>
+            </StackPanel>
+        </Expander.Header>
+
+        <StackPanel>
+            <TextBlock Text="{ReflectionBinding DrawerNote}" Theme="{StaticResource CmpDrawerNoteStyle}"/>
+
+            <!-- ========== provider segment (the four legacy radios) ========== -->
+            <Border Theme="{StaticResource CmpEngineSegmentStripStyle}" Margin="0,0,0,12">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton GroupName="CmpProviderSeg"
+                                 Theme="{StaticResource CmpEngineSegmentStyle}"
+                                 IsChecked="{ReflectionBinding Provider, Mode=TwoWay,
+                                             Converter={StaticResource CmpEnumEquals}, ConverterParameter=Off}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocProviderOff}"/>
+                    </RadioButton>
+                    <RadioButton GroupName="CmpProviderSeg"
+                                 Theme="{StaticResource CmpEngineSegmentStyle}"
+                                 IsChecked="{ReflectionBinding Provider, Mode=TwoWay,
+                                             Converter={StaticResource CmpEnumEquals}, ConverterParameter=Cloud}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocProviderCloud}"/>
+                    </RadioButton>
+                    <RadioButton GroupName="CmpProviderSeg"
+                                 Theme="{StaticResource CmpEngineSegmentStyle}"
+                                 IsChecked="{ReflectionBinding Provider, Mode=TwoWay,
+                                             Converter={StaticResource CmpEnumEquals}, ConverterParameter=LocalOllama}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocProviderLocal}"/>
+                    </RadioButton>
+                    <RadioButton GroupName="CmpProviderSeg"
+                                 Theme="{StaticResource CmpEngineSegmentStyle}"
+                                 IsChecked="{ReflectionBinding Provider, Mode=TwoWay,
+                                             Converter={StaticResource CmpEnumEquals}, ConverterParameter=Custom}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocProviderCustom}"/>
+                    </RadioButton>
+                </StackPanel>
+            </Border>
+
+            <!-- ========== status line (always — it is the "is she thinking?" readout) ========== -->
+            <TextBlock Text="{ReflectionBinding StatusLine}" FontSize="11" Margin="2,0,0,12" TextWrapping="Wrap"
+                       Classes.healthy="{ReflectionBinding IsHealthy}">
+                <!-- WPF used a Style with a DataTrigger on IsHealthy. Avalonia has no data
+                     triggers; a bound style class is the equivalent. Both foregrounds live in
+                     styles rather than on the element, because a local value would outrank the
+                     class setter. -->
+                <TextBlock.Styles>
+                    <Style Selector="TextBlock">
+                        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+                    </Style>
+                    <Style Selector="TextBlock.healthy">
+                        <Setter Property="Foreground" Value="#FF8FD9A8"/>
+                    </Style>
+                </TextBlock.Styles>
+            </TextBlock>
+
+            <!-- ========== OFF ========== -->
+            <TextBlock Text="{ReflectionBinding #Root.Strings.LocOffNote}" Theme="{StaticResource CmpDrawerNoteStyle}"
+                       Margin="2,0,0,4"
+                       IsVisible="{ReflectionBinding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=Off}"/>
+
+            <!-- ========== CLOUD ========== -->
+            <StackPanel IsVisible="{ReflectionBinding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=Cloud}">
+                <TextBlock Text="{ReflectionBinding #Root.Strings.LocGroupCloud}" Theme="{StaticResource CmpZ7GroupTitleStyle}"/>
+
+                <!-- inline logged-out row — this replaces the old page-wide lock veil -->
+                <Border Theme="{StaticResource CmpInsetPanelStyle}" Margin="0,0,0,12"
+                        IsVisible="{ReflectionBinding !IsLoggedIn}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{ReflectionBinding LoginPrompt}" VerticalAlignment="Center"
+                                   Theme="{StaticResource CmpDimTextStyle}"/>
+                        <Button Grid.Column="1"
+                                Theme="{StaticResource CmpGrayButtonStyle}" Margin="10,0,0,0"
+                                Command="{ReflectionBinding LoginCommand}">
+                            <TextBlock Text="{ReflectionBinding LoginButtonLabel}"/>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                            Command="{ReflectionBinding TestConnectionCommand}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocBtnTest}"/>
+                    </Button>
+                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                            Command="{ReflectionBinding DailyLimitCommand}">
+                        <TextBlock Text="{ReflectionBinding DailyLimitLabel}"/>
+                    </Button>
+                </WrapPanel>
+            </StackPanel>
+
+            <!-- ========== LOCAL (OLLAMA) ========== -->
+            <StackPanel IsVisible="{ReflectionBinding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=LocalOllama}">
+                <TextBlock Text="{ReflectionBinding #Root.Strings.LocGroupLocal}" Theme="{StaticResource CmpZ7GroupTitleStyle}"/>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocFieldOllamaModel}" Theme="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Theme="{StaticResource CmpFieldBoxStyle}" Text="{ReflectionBinding OllamaModel, Mode=TwoWay}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocFieldOllamaHost}" Theme="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Theme="{StaticResource CmpFieldBoxStyle}" Text="{ReflectionBinding OllamaHost, Mode=TwoWay}"/>
+                    </StackPanel>
+                </Grid>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                            Command="{ReflectionBinding SetupLocalCommand}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocBtnSetupLocal}"/>
+                    </Button>
+                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                            Command="{ReflectionBinding TestConnectionCommand}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocBtnTest}"/>
+                    </Button>
+                </WrapPanel>
+            </StackPanel>
+
+            <!-- ========== CUSTOM (BYO) ========== -->
+            <StackPanel IsVisible="{ReflectionBinding Provider, Converter={StaticResource CmpEnumToVis}, ConverterParameter=Custom}">
+                <TextBlock Text="{ReflectionBinding #Root.Strings.LocGroupCustom}" Theme="{StaticResource CmpZ7GroupTitleStyle}"/>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,10">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocFieldCustomEndpoint}" Theme="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Theme="{StaticResource CmpFieldBoxStyle}" Text="{ReflectionBinding CustomEndpoint, Mode=TwoWay}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,10">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocFieldCustomModel}" Theme="{StaticResource CmpFieldLabelStyle}"/>
+                        <TextBox Theme="{StaticResource CmpFieldBoxStyle}" Text="{ReflectionBinding CustomModel, Mode=TwoWay}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="0">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocFieldApiKey}" Theme="{StaticResource CmpFieldLabelStyle}"/>
+                        <!-- WPF used a PasswordBox, not a TextBox: Password is deliberately not a
+                             dependency property there, so a stored key cannot be round-tripped out
+                             through a binding, a screenshot or a UI-automation dump.
+                             AVALONIA HAS NO PasswordBox. This is a TextBox with PasswordChar, so
+                             the masking survives but the "cannot be read back" guarantee does not.
+                             The binding is OneWayToSource, which keeps the one behaviour markup
+                             still can keep: the key travels from the box to the viewmodel and is
+                             never read back out of it — the same direction the WPF code-behind's
+                             PasswordChanged handler pushed it. -->
+                        <TextBox x:Name="CustomKeyBox" Theme="{StaticResource CmpFieldPasswordStyle}"
+                                 Text="{ReflectionBinding CustomApiKey, Mode=OneWayToSource}"/>
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocApiKeyNote}"
+                                   Theme="{StaticResource CmpFaintTextStyle}" Margin="2,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                            Command="{ReflectionBinding TestConnectionCommand}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocBtnTest}"/>
+                    </Button>
+                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                            Command="{ReflectionBinding SamplerSettingsCommand}">
+                        <TextBlock Text="{ReflectionBinding #Root.Strings.LocBtnSampler}"/>
+                    </Button>
+                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                            Command="{ReflectionBinding DailyLimitCommand}">
+                        <TextBlock Text="{ReflectionBinding DailyLimitLabel}"/>
+                    </Button>
+                </WrapPanel>
+            </StackPanel>
+
+            <!-- ========== clear conversation ==========
+                 The legacy "🧹 Reset Memory" button's job, rehoused. Doc 01 §2.4 makes the diary's
+                 "Forget everything" THE wipe (facts + profile + conversation); this one is narrower
+                 and still worth having — she is stuck in a pattern, you want the thread gone, you do
+                 NOT want to lose that you are level 41. It calls CompanionBrain.ForgetConversation.
+
+                 The whole row hangs off the command's existence, so the design-time viewmodel (which
+                 has no such command, because it is the ZONE contract and this is a wiring-pass
+                 affordance) renders nothing rather than a dead button. -->
+            <StackPanel Margin="0,14,0,0"
+                        IsVisible="{ReflectionBinding ClearConversationCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                        HorizontalAlignment="Left" Command="{ReflectionBinding ClearConversationCommand}">
+                    <TextBlock Text="{ReflectionBinding ClearConversationLabel}"/>
+                </Button>
+                <TextBlock Text="{ReflectionBinding ClearConversationNote}" Theme="{StaticResource CmpFaintTextStyle}"
+                           Margin="2,5,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- ========== live actions feed (local effects channel) ========== -->
+            <TextBlock Text="{ReflectionBinding LiveActionsPlaceholder}" Theme="{StaticResource CmpDrawerNoteStyle}"
+                       Margin="0,14,0,0"
+                       IsVisible="{ReflectionBinding !ShowLiveActions}"/>
+
+            <Border Theme="{StaticResource CmpInsetPanelStyle}" Margin="0,12,0,0"
+                    IsVisible="{ReflectionBinding ShowLiveActions}">
+                <!-- WPF named this so the code-behind could attach CompanionWheelRelay: the list is
+                     capped and scrolls internally, so its unusable wheel notches must reach
+                     PageScroll. That relay is a WPF-head helper and is NOT ported; the name is kept
+                     for the diff and for whoever wires the equivalent here. -->
+                <ItemsControl x:Name="LiveActionsFeed" ItemsSource="{ReflectionBinding LiveActions}"
+                              Theme="{StaticResource CmpVirtualizedItemsControlStyle}" MaxHeight="140">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{ReflectionBinding}" Theme="{StaticResource CmpWorkshopRowStyle}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+    </Expander>
+</UserControl>
