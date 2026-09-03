@@ -50,7 +50,7 @@ namespace ConditioningControlPanel.Avalonia
         /// One headless platform per process. SetupWithoutStarting() throws if called twice,
         /// which is what --render-all would otherwise do for every view.
         /// </summary>
-        private static void EnsureSetUp()
+        internal static void EnsureSetUp()
         {
             if (_setUp) return;
             // Start from the app's own builder so the render uses the same Inter font the user

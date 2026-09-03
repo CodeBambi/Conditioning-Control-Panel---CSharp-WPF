@@ -25,7 +25,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow
     {
         // ponytail: needs the services in MainWindow.SpiralRoom.cs; wired when they move to Core.
-        private void BtnNavSpiral_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        private void BtnNavSpiral_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("spiral");  // WPF: ShowTab(SpiralRoom.TabKey)
 
     }
 }
