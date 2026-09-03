@@ -1,0 +1,177 @@
+/* ============================================================================
+ * race.css - The Caucus Race HUD skin. Implements CONTRACT.md "race/hud.js + race/race.css".
+ *
+ * Everything is scoped under .race-hud. Fonts and palette ride styles.css
+ * (--rh-font, --pink); nothing new is loaded. Layers: the chrome sits at z3,
+ * above the canvas (z0) and BELOW every payloadFx layer (.sf-pfx z4, the
+ * video card in .sf-pfx-front z9) so a freeze or a tape always covers it. The
+ * Brake and End screens are the only pointer targets and ride at z20.
+ * The .race-hud root itself must stay unpositioned so its children own z-index.
+ * ==========================================================================*/
+
+.race-hud { position: static; font-family: var(--rh-font); color: #fff; --rh-room: #ff69b4; --rh-fraught: 0; }
+.race-hud * { box-sizing: border-box; }
+.race-hud .rh-chrome { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+.race-hud .rh-chrome * { pointer-events: none; }
+.race-hud .rh-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+
+/* ---- score, top-left: the honest number (Law I), the pill, the combo drain, the bank ---- */
+.race-hud .rh-score-wrap {
+  position: absolute; top: calc(1rem + env(safe-area-inset-top, 0px)); left: 1.2rem;
+  display: flex; flex-direction: column; gap: 4px;
+  text-shadow: 0 0 12px rgba(255, 105, 180, 0.7), 0 2px 4px rgba(0, 0, 0, 0.85);
+}
+.race-hud .rh-label { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: lowercase; opacity: 0.6; }
+.race-hud .rh-score-row { display: flex; align-items: baseline; gap: 10px; }
+.race-hud .rh-score { font-size: 1.9rem; font-weight: 900; line-height: 1; transform-origin: left center; }
+.race-hud .rh-score.is-pop { animation: rhThud 0.34s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-score.is-flick { animation: rhFlick 0.45s steps(3) both; color: #bfe9ff; }
+.race-hud .rh-mult {
+  display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.9rem; font-weight: 800;
+  background: rgba(255, 105, 180, 0.22); border: 1px solid rgba(255, 105, 180, 0.7); color: #ffd6ea;
+  transform-origin: center; transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+.race-hud .rh-mult.is-gold { background: rgba(242, 193, 78, 0.28); border-color: #f2c14e; color: #fff0b8; box-shadow: 0 0 14px rgba(242, 193, 78, 0.6); }
+.race-hud .rh-mult.is-pulse { animation: rhPulse 0.42s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-rungs { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+.race-hud .rh-rung { width: 5px; height: 9px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); }
+.race-hud .rh-rung.is-lit { background: #ffd45e; box-shadow: 0 0 6px rgba(255, 212, 94, 0.9); }
+.race-hud .rh-combo-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; opacity: 0.85; min-height: 1rem; }
+.race-hud .rh-combo-bar { position: relative; width: 96px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.race-hud .rh-combo-fill { position: absolute; inset: 0; background: linear-gradient(90deg, #ff69b4, #ffd45e); transform-origin: left; transform: scaleX(0); }
+.race-hud .rh-combo-fill.is-draining { animation: rhDrain var(--rh-hold, 3s) linear forwards; }
+.race-hud .rh-combo-row.is-off { opacity: 0.35; }
+.race-hud .rh-bank { font-size: 0.78rem; color: #ffe082; opacity: 0.85; }
+.race-hud .rh-bank.is-pop { animation: rhThud 0.34s cubic-bezier(0.2, 1.6, 0.4, 1); }
+
+/* ---- MARQUEE: the room banner, top-centre, bulbs chase by transform ---- */
+.race-hud .rh-banner {
+  position: absolute; top: calc(4.2rem + env(safe-area-inset-top, 0px)); left: 50%;
+  transform: translate(-50%, -140%); opacity: 0; padding: 10px 26px; text-align: center;
+  border: 2px solid var(--rh-room); border-radius: 6px; background: rgba(8, 4, 14, 0.72);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--rh-room) 55%, transparent), inset 0 0 18px rgba(0, 0, 0, 0.6);
+  transition: transform 0.55s cubic-bezier(0.2, 1.3, 0.4, 1), opacity 0.35s ease-out; overflow: hidden;
+}
+.race-hud .rh-banner.is-on { transform: translate(-50%, 0); opacity: 1; }
+.race-hud .rh-banner::before, .race-hud .rh-banner::after {
+  content: ''; position: absolute; left: 0; right: -24px; height: 6px;
+  background: radial-gradient(circle at 3px 3px, var(--rh-room) 0 2px, transparent 2.6px) 0 0 / 12px 6px repeat-x;
+  animation: rhChase 0.5s steps(2) infinite;
+}
+.race-hud .rh-banner::before { top: 2px; } .race-hud .rh-banner::after { bottom: 2px; }
+.race-hud .rh-banner-name { font-size: 1.4rem; font-weight: 900; letter-spacing: 0.18em; color: #fff; text-shadow: 0 0 16px var(--rh-room); }
+.race-hud .rh-banner-tag { font-size: 0.74rem; letter-spacing: 0.12em; opacity: 0.75; margin-top: 2px; }
+
+/* ---- item slot, bottom-left: glyph, name, the E key that never moves (Law II) ---- */
+.race-hud .rh-item {
+  position: absolute; left: 1.2rem; bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 10px; opacity: 0.45; transition: opacity 0.25s;
+}
+.race-hud .rh-item.is-armed { opacity: 1; }
+.race-hud .rh-item-box {
+  width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center;
+  font-size: 1.6rem; font-weight: 900; color: #ffd6ea;
+  background: rgba(255, 105, 180, 0.14); border: 2px solid rgba(255, 105, 180, 0.55);
+  box-shadow: 0 0 0 rgba(255, 105, 180, 0); transition: box-shadow 0.3s;
+}
+.race-hud .rh-item.is-armed .rh-item-box { box-shadow: 0 0 18px rgba(255, 105, 180, 0.6); }
+.race-hud .rh-item.is-rolling .rh-item-box { animation: rhRoll 0.18s steps(2) infinite; }
+.race-hud .rh-item.is-bounce .rh-item-box { animation: rhBounce 0.36s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-item-name { font-size: 0.82rem; font-weight: 700; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+.race-hud .rh-item-key {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 0.66rem; font-weight: 800;
+  border: 1px solid rgba(255, 255, 255, 0.5); color: rgba(255, 255, 255, 0.8); line-height: 1.4;
+}
+
+/* ---- speed, bottom-right: a thin gauge and the pace number ---- */
+.race-hud .rh-speed {
+  position: absolute; right: 1.2rem; bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+  width: 160px; text-align: right; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.race-hud .rh-speed-n { font-size: 1.1rem; font-weight: 800; }
+.race-hud .rh-speed-u { font-size: 0.66rem; opacity: 0.6; margin-left: 4px; }
+.race-hud .rh-speed-bar { height: 3px; margin-top: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.race-hud .rh-speed-fill { height: 100%; background: linear-gradient(90deg, #7fe7f0, #ff69b4); transform-origin: left; transition: transform 0.18s linear; }
+
+/* ---- toasts: one word at a time, mid-screen, each kind with its own motion ---- */
+.race-hud .rh-toasts { position: absolute; top: 30%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.race-hud .rh-toast {
+  font-weight: 900; letter-spacing: 0.1em; text-align: center; will-change: transform, opacity;
+  text-shadow: 0 0 18px rgba(255, 105, 180, 0.8), 0 2px 4px rgba(0, 0, 0, 0.85);
+  animation: rhToastPop var(--rh-hold, 1.2s) ease-out forwards;
+}
+.race-hud .rh-toast--pop { font-size: 1.1rem; color: #ffd6ea; }
+.race-hud .rh-toast--almost { font-size: 1.5rem; color: #bfe9ff; animation: rhShiver 0.34s linear, rhToastPop 1.3s ease-out forwards; text-shadow: 0 0 18px rgba(150, 210, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); }
+.race-hud .rh-toast--jackpot { font-size: 2.4rem; color: #fff0b8; text-shadow: 0 0 26px rgba(242, 193, 78, 1), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.8s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+.race-hud .rh-toast--bank { font-size: 1.3rem; color: #ffe082; text-shadow: 0 0 18px rgba(255, 200, 60, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhToastPop 1.6s ease-out forwards; }
+.race-hud .rh-toast--item { font-size: 1.6rem; color: #ffd6ea; animation: rhBounce 0.36s cubic-bezier(0.2, 1.6, 0.4, 1), rhToastPop 1.4s ease-out forwards; }
+.race-hud .rh-toast--effect { font-size: 1.2rem; color: #e9c8ff; text-shadow: 0 0 18px rgba(180, 120, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhLean 1.4s ease-out forwards; }
+.race-hud .rh-gold { position: absolute; inset: 0; background: radial-gradient(60% 60% at 50% 50%, rgba(255, 230, 140, 0.55), rgba(242, 193, 78, 0.18)); opacity: 0; }
+.race-hud .rh-gold.is-on { animation: rhGold 0.7s ease-out forwards; }
+.race-hud .rh-token {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff4c2, #f2c14e 55%, #a67a12);
+  box-shadow: 0 0 8px rgba(242, 193, 78, 0.9); transform: translate(-50%, -50%);
+  transition: transform 0.62s cubic-bezier(0.3, 0, 0.2, 1), opacity 0.2s 0.5s;
+}
+.race-hud .rh-token.is-fly { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.5); opacity: 0; }
+
+/* ---- fraught: a vignette that breathes with the heartbeat ---- */
+.race-hud .rh-vignette {
+  position: absolute; inset: 0; opacity: var(--rh-fraught);
+  background: radial-gradient(70% 70% at 50% 50%, transparent 55%, rgba(120, 10, 60, 0.55) 100%);
+  transition: opacity 0.6s ease-out;
+}
+.race-hud .rh-vignette.is-beat { animation: rhBeat var(--rh-beat, 1.1s) ease-in-out infinite; }
+
+/* ---- screens: the Brake and the End card. The only pointer targets. ---- */
+.race-hud .rh-screen {
+  position: fixed; inset: 0; z-index: 20; display: none; place-items: center; pointer-events: auto;
+  background: rgba(8, 4, 14, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.race-hud .rh-screen.is-on { display: grid; }
+.race-hud .rh-card {
+  min-width: 300px; max-width: 420px; padding: 26px 30px; border-radius: 16px; text-align: center;
+  background: rgba(26, 26, 46, 0.92); border: 1px solid rgba(255, 105, 180, 0.35); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  animation: rhCardIn 0.3s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+.race-hud .rh-card h2 { margin: 0 0 4px; font-size: 1.5rem; font-weight: 900; letter-spacing: 0.12em; color: #ffd6ea; }
+.race-hud .rh-card p { margin: 0 0 16px; font-size: 0.86rem; opacity: 0.75; }
+.race-hud .rh-rows { display: grid; grid-template-columns: 1fr auto; gap: 6px 18px; margin: 0 0 18px; font-size: 0.9rem; text-align: left; }
+.race-hud .rh-rows dt { opacity: 0.6; } .race-hud .rh-rows dd { margin: 0; font-weight: 800; text-align: right; }
+.race-hud .rh-pb { display: inline-block; margin-bottom: 14px; padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.1em; color: #1a1a2e; background: #f2c14e; transform: rotate(-3deg); animation: rhReveal 0.6s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.race-hud .rh-btns { display: flex; gap: 10px; justify-content: center; }
+.race-hud .rh-btn {
+  font-family: inherit; font-size: 0.9rem; font-weight: 800; padding: 10px 20px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255, 105, 180, 0.6); background: rgba(255, 105, 180, 0.16); color: #fff; transition: transform 0.12s, background 0.2s;
+}
+.race-hud .rh-btn:hover { background: rgba(255, 105, 180, 0.34); }
+.race-hud .rh-btn:active { transform: scale(0.96); }
+.race-hud .rh-btn--quiet { border-color: rgba(255, 255, 255, 0.25); background: transparent; opacity: 0.8; }
+.race-hud .rh-hints { margin-top: 16px; font-size: 0.72rem; opacity: 0.55; line-height: 1.6; }
+
+/* ---- motion ---- */
+@keyframes rhThud { 0% { transform: scale(1); } 20% { transform: scale(1.32); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
+@keyframes rhPulse { 0% { transform: scale(1); } 30% { transform: scale(1.4); } 100% { transform: scale(1); } }
+@keyframes rhBounce { 0% { transform: scale(1); } 25% { transform: scale(0.94); } 65% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes rhDrain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes rhChase { from { transform: translateX(0); } to { transform: translateX(-12px); } }
+@keyframes rhRoll { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+@keyframes rhFlick { 0% { transform: translateX(-3px); opacity: 0.6; } 50% { transform: translateX(3px); opacity: 1; } 100% { transform: none; } }
+@keyframes rhToastPop { 0% { opacity: 0; transform: translateY(8px) scale(0.9); } 12% { opacity: 1; transform: translateY(0) scale(1.05); } 20% { transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
+@keyframes rhShiver { 0%, 100% { translate: 0; } 20% { translate: -7px; } 45% { translate: 6px; } 70% { translate: -4px; } }
+@keyframes rhReveal { 0% { opacity: 0; transform: scale(2.1) rotate(-6deg); } 18% { opacity: 1; transform: scale(0.86) rotate(1deg); } 32% { transform: scale(1) rotate(0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes rhLean { 0% { opacity: 0; transform: skewX(-12deg) translateX(-20px); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes rhGold { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes rhFade { 0% { opacity: 0; } 15% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes rhBeat { 0%, 100% { opacity: var(--rh-fraught); } 12% { opacity: calc(var(--rh-fraught) + 0.25); } 24% { opacity: var(--rh-fraught); } 36% { opacity: calc(var(--rh-fraught) + 0.15); } }
+@keyframes rhCardIn { from { opacity: 0; transform: translateY(12px) scale(0.96); } }
+
+/* reduced motion: banners as 120 ms fades, no shiver, no roll, no chase, tokens land at once (Law VI) */
+@media (prefers-reduced-motion: reduce) {
+  .race-hud .rh-banner { transition: opacity 0.12s linear; transform: translate(-50%, 0); }
+  .race-hud .rh-banner::before, .race-hud .rh-banner::after,
+  .race-hud .rh-item.is-rolling .rh-item-box, .race-hud .rh-vignette.is-beat, .race-hud .rh-gold.is-on { animation: none; }
+  .race-hud .rh-toast, .race-hud .rh-toast--almost, .race-hud .rh-toast--jackpot, .race-hud .rh-toast--item, .race-hud .rh-toast--effect { animation: rhFade var(--rh-hold, 1.2s) linear forwards; }
+  .race-hud .rh-score.is-pop, .race-hud .rh-bank.is-pop, .race-hud .rh-mult.is-pulse, .race-hud .rh-item.is-bounce .rh-item-box, .race-hud .rh-score.is-flick, .race-hud .rh-pb, .race-hud .rh-card { animation: none; }
+  .race-hud .rh-token { transition: opacity 0.12s; }
+}

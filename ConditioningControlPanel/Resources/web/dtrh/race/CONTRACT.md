@@ -172,12 +172,14 @@ hud.item(glyph | null, name)
 hud.toast(text, kind)                 // kind: 'pop' | 'almost' | 'jackpot' | 'bank' | 'item' | 'effect'
 hud.flicker()                         // Stat Flicker under glitch
 hud.setFraught(v)
-hud.setPaused(bool)
-hud.showEnd(summary) -> Promise<'again' | 'exit'>
+hud.setPaused(bool) -> Promise<'resume' | 'end'>   // the Brake; resolves on the player's pick, or 'resume' on setPaused(false)
+hud.showEnd(summary) -> Promise<'again' | 'exit'>  // summary = { score, banked, bestCombo, popped, laps, durationSec, personalBest, title? }
 hud.dispose()
 ```
 All HUD text is in the DtRH voice: lowercase, short, no em-dashes. `root` is the `.race-hud` div
 that `race.html` provides; `payloadFx` gets its own `.sf-hud` sibling so overlays never clip the HUD.
+`.race-hud` must stay unpositioned (no `position`/`z-index` of its own): the chrome rides at z3,
+below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own stacking.
 
 ### `race/run.js` + `raceBoot.js` + `race.html` (PR 5, integration)
 ```js
