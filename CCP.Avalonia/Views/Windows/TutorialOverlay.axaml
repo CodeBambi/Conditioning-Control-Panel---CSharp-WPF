@@ -1,0 +1,304 @@
+<!-- PORTED from ConditioningControlPanel/Windows/TutorialOverlay.xaml.
+     Structure, ordering, spacing, x:Name-s and every colour preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" + TransparencyLevelHint
+       ResizeMode="NoResize"                    -> CanResize="False"
+       Visibility="Collapsed"                   -> IsVisible="False"
+       <Button.Style><Style TargetType>         -> <ControlTheme x:Key TargetType> in
+                                                   Window.Resources + Theme="{StaticResource X}".
+                                                   The themes below are the WPF file's own INLINE
+                                                   styles, so they stay local here rather than
+                                                   moving to Theme/Styles.xaml — the shared
+                                                   PinkButton/OutlineButton differ (radius 8,
+                                                   white border, FontSize 14) and swapping them in
+                                                   would change the card's look.
+       ControlTemplate.Triggers                 -> ^:pointerover selectors
+       bare <ContentPresenter/>                 -> Content/ContentTemplate/Foreground
+                                                   TemplateBindings (CLAUDE.md trap 6)
+       DropShadowEffect ShadowDepth="0"         -> OffsetX="0" OffsetY="0"
+       Color="{DynamicResource PinkColor}" on   -> #FF69B4 literal; an Effect is not in the
+         the card's shadow                         logical tree, so it has no resource host to
+                                                   resolve a DynamicResource against.
+       Click="X_Click"                          -> wired in the constructor
+       Opacity fade in/out (DoubleAnimation)    -> dropped, see the code-behind note.
+
+     Every string here is hardcoded English in the WPF original too — the card's text comes from
+     TutorialStep, not from the resource dictionary — so there is no {loc:Str} and no key has been
+     invented for one. No Content string carries an underscore, so the access-key trap does not
+     bite the XAML buttons; the follow-up buttons, whose text comes from step data, get a TextBlock
+     in code-behind for exactly that reason. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay"
+        Title="Tutorial"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        CanResize="False">
+
+    <Window.Resources>
+        <!-- TutorialOverlay.xaml: BtnSupport / BtnNext / BtnFollowUp1 inline style.
+             Padding is a theme setter, so the follow-up variant only sets Padding="14,9" on the
+             instance — a local value beats a ControlTheme setter. -->
+        <ControlTheme x:Key="TutorialPrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource DarkPinkBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- TutorialOverlay.xaml: BtnPrevious / BtnFollowUp2 inline style. -->
+        <ControlTheme x:Key="TutorialOutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="#20FF69B4"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- TutorialOverlay.xaml: BtnFollowUp3 inline style (borderless, dim). -->
+        <ControlTheme x:Key="TutorialGhostButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#A0A0B0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="14,9"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- TutorialOverlay.xaml: BtnSkip inline Button.Template (flat text link). -->
+        <ControlTheme x:Key="TutorialSkipButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#808090"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="#A0A0B0"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- TutorialOverlay.xaml: BtnSkipStep inline Button.Template (small outlined chip). -->
+        <ControlTheme x:Key="TutorialSkipStepButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#A0A0B0"/>
+            <Setter Property="BorderBrush" Value="#404060"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4"
+                            Padding="10,4">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="#20808090"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid x:Name="RootGrid">
+        <!-- SpotlightCanvas paints the dark overlay (with optional hole) and absorbs clicks where it covers.
+             IMPORTANT: NO Background here. A Canvas with Background="Transparent" is hit-testable across its full
+             area — that swallows clicks even in the spotlight hole. With no Background, only the child Path
+             catches clicks; the hole (where the Excluded geometry isn't drawn) lets clicks fall through to the
+             underlying window. -->
+        <Canvas x:Name="SpotlightCanvas" IsHitTestVisible="True"/>
+
+        <Border x:Name="TextPanel"
+                Background="#F0252542"
+                CornerRadius="12"
+                BorderBrush="{DynamicResource PinkBrush}"
+                BorderThickness="2"
+                MaxWidth="460"
+                Padding="20"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top">
+            <Border.Effect>
+                <DropShadowEffect Color="#FF69B4" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.4"/>
+            </Border.Effect>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="TxtStepCounter"
+                           Grid.Row="0"
+                           Text="Step 1 of 6"
+                           Foreground="#808090"
+                           FontSize="11"
+                           Margin="0,0,0,8"/>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock x:Name="TxtIcon" Text="~" FontSize="24" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtTitle"
+                               Text="Welcome!"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <!-- Bounded + scrollable so a long (multi-bullet) description can't push the button row
+                     (Grid.Row 5) off the bottom of the screen — the "stuck on step 12, no buttons to
+                     advance" bug (#443). Tall cards scroll here; Skip/Prev/Next stay visible. -->
+                <ScrollViewer Grid.Row="2"
+                              MaxHeight="320"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Margin="0,0,0,10">
+                    <TextBlock x:Name="TxtDescription"
+                               Text="Description text goes here..."
+                               Foreground="#C0C0C0"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               LineHeight="20"/>
+                </ScrollViewer>
+
+                <Button x:Name="BtnSupport"
+                        Grid.Row="3"
+                        Content="Visit linktr.ee/CodeBambi"
+                        Theme="{StaticResource TutorialPrimaryButton}"
+                        IsVisible="False"
+                        HorizontalAlignment="Center"
+                        Margin="0,5,0,15"/>
+
+                <!-- Follow-up card action buttons (3 max) shown only when step.IsFollowUpCard. -->
+                <StackPanel x:Name="FollowUpPanel" Grid.Row="4" Orientation="Vertical" IsVisible="False" Margin="0,4,0,12">
+                    <Button x:Name="BtnFollowUp1" Margin="0,0,0,6"
+                            Theme="{StaticResource TutorialPrimaryButton}"
+                            Padding="14,9"
+                            HorizontalAlignment="Stretch" IsVisible="False"/>
+                    <Button x:Name="BtnFollowUp2" Margin="0,0,0,6"
+                            Theme="{StaticResource TutorialOutlineButton}"
+                            Padding="14,9"
+                            HorizontalAlignment="Stretch" IsVisible="False"/>
+                    <Button x:Name="BtnFollowUp3"
+                            Theme="{StaticResource TutorialGhostButton}"
+                            HorizontalAlignment="Stretch" IsVisible="False"/>
+                </StackPanel>
+
+                <Grid Grid.Row="5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button x:Name="BtnSkip"
+                            Grid.Column="0"
+                            Content="Skip Tutorial"
+                            Theme="{StaticResource TutorialSkipButton}"
+                            VerticalAlignment="Center"/>
+
+                    <Button x:Name="BtnSkipStep"
+                            Grid.Column="2"
+                            Content="Skip step"
+                            Theme="{StaticResource TutorialSkipStepButton}"
+                            Margin="0,0,10,0"
+                            IsVisible="False"/>
+
+                    <Button x:Name="BtnPrevious"
+                            Grid.Column="3"
+                            Content="Previous"
+                            Theme="{StaticResource TutorialOutlineButton}"
+                            Margin="0,0,10,0"
+                            IsVisible="False"/>
+
+                    <Button x:Name="BtnNext"
+                            Grid.Column="4"
+                            Content="Next"
+                            Theme="{StaticResource TutorialPrimaryButton}"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
