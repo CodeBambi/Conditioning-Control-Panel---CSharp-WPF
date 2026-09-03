@@ -925,23 +925,17 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                var dispatcher = System.Windows.Application.Current?.Dispatcher;
-                if (dispatcher == null || dispatcher.HasShutdownStarted || dispatcher.CheckAccess())
-                    throw;
-
-                App.Logger?.Debug("Settings serialize raced a UI-thread edit ({Error}) — retrying on the UI thread", ex.Message);
-
-                var op = dispatcher.InvokeAsync(() => JsonConvert.SerializeObject(Current, Formatting.Indented));
-                // Observe a faulted op even if the wait below times out, otherwise it resurfaces
-                // through TaskScheduler.UnobservedTaskException with no useful context.
-                op.Task.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
-
-                if (op.Task.Wait(SerializeMarshalTimeout))
-                    return op.Task.Result;
+                // Through CoreDispatch, not System.Windows: this file is one of the two that
+                // pinned the settings layer to the WPF head, and the seam does exactly what the
+                // block below did - hop if there is a UI thread, run in place if there is not,
+                // bounded so a wedged head can never stall a save.
+                var (completed, json) = CoreDispatch.Invoke(
+                    () => JsonConvert.SerializeObject(Current, Formatting.Indented),
+                    SerializeMarshalTimeout);
+                if (completed) return json!;
 
                 // Bounded: a busy (or wedged) UI thread must never stall the save path. Drop this
                 // save rather than write a snapshot we could not take cleanly — the next one wins.
-                op.Abort();
                 App.Logger?.Warning("Settings serialize could not reach the UI thread in time — skipping this save");
                 throw;
             }

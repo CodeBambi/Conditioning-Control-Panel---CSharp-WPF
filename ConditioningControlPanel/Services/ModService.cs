@@ -2239,22 +2239,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static void RunOnUi(Action action)
         {
-            try
-            {
-                var dispatcher = System.Windows.Application.Current?.Dispatcher;
-                if (dispatcher == null)
-                {
-                    action();   // no WPF app (tests/headless) — nothing to marshal onto
-                    return;
-                }
-                if (dispatcher.HasShutdownStarted) return;
-                if (dispatcher.CheckAccess()) action();
-                else dispatcher.BeginInvoke(action);
-            }
-            catch (Exception ex)
-            {
-                _log?.Debug("ModService: UI marshal failed: {Error}", ex.Message);
-            }
+            // Through CoreDispatch, not System.Windows: the seam already means "hop if there is a
+            // UI thread, run in place if there is not", which is exactly what this method did.
+            // Running in place is the documented behaviour under tests and the Linux smoke runner.
+            CoreDispatch.Post(action);
         }
 
         #endregion
