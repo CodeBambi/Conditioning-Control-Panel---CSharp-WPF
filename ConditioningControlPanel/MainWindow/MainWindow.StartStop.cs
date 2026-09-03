@@ -323,6 +323,13 @@ namespace ConditioningControlPanel
             if (!audioOnly && settings.SubliminalEnabled)
                 App.Subliminal.Start();
 
+            // Brain Drain random onset (#general 2026-08-31). Armed HERE, ahead of the overlay
+            // service, because the blur half asks BrainDrainService.OnsetPending at its own start -
+            // arm it later and the screen would haze over while the audio was still waiting.
+            // No-ops unless the user set a max delay; the Start() further down then no-ops too and
+            // the service kicks itself in when the wait runs out.
+            if (!audioOnly) App.BrainDrain?.ArmRandomOnset();
+
             // Always start overlay service (handles spiral and pink filter)
             // This allows toggling overlays on/off while engine is running.
             // Skipped for audio-only sessions (spiral/pink are visual).

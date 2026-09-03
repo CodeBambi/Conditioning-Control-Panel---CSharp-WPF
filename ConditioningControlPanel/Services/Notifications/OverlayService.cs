@@ -50,6 +50,15 @@ public class OverlayService : IDisposable
     internal static bool ShouldStopHeldOverlay(bool featureWantsIt, int timedHolds, bool sustainedHeld)
         => !featureWantsIt && timedHolds == 0 && !sustainedHeld;
 
+    /// <summary>
+    /// Does the BASE Brain Drain feature want its screen blur up right now? The setting, minus the
+    /// random-onset wait: while BrainDrainService has an onset armed the user asked for a delayed
+    /// kick-in, and delaying only the audio half would land the blur immediately and give it away.
+    /// Ad-hoc blurs (timed effects, Deeper bands) keep their own holds and are unaffected.
+    /// </summary>
+    private static bool BrainDrainFeatureWanted
+        => App.Settings.Current.BrainDrainEnabled && App.BrainDrain?.OnsetPending != true;
+
     // Deeper enhancement overlay bands are the ONE case where an overlay must sit ABOVE a playing
     // mandatory video: the pink/spiral tint IS the enhanced video's effect (pre-compositor it was a
     // fresh topmost window created per band, so it naturally drew over the just-created video window).
@@ -497,7 +506,7 @@ public class OverlayService : IDisposable
                 StartSpiral();
             }
 
-            if (settings.BrainDrainEnabled)
+            if (BrainDrainFeatureWanted)
             {
                 // Base feature: strength comes from the dedicated blur slider, NOT from
                 // BrainDrainIntensity (that is the AUDIO half's per-minute trigger probability).
@@ -704,7 +713,7 @@ public class OverlayService : IDisposable
             }
 
             // Stop and restart brain drain if enabled
-            if (settings.BrainDrainEnabled)
+            if (BrainDrainFeatureWanted)
             {
                 StopBrainDrainBlur();
                 StartBrainDrainBlur(settings.BrainDrainBlurStrength, settings.BrainDrainMeltEnabled);
@@ -757,7 +766,7 @@ public class OverlayService : IDisposable
         // other two overlays get - not a new policy.
         // Skipped entirely when the feature is off and nothing is up: teardown is owned by the
         // settings hook and the sustained/timed hide paths, and this must not run their work 2x/s.
-        if (settings.BrainDrainEnabled || BrainDrainShowing)
+        if (BrainDrainFeatureWanted || BrainDrainShowing)
             RefreshBrainDrainState();
 
         bool needed = ReassertZOrder();
@@ -1028,7 +1037,7 @@ public class OverlayService : IDisposable
                     // only checked the setting, so the first timed effect to end killed a co-active
                     // band (the setting is false for everyone while the feature is reworked).
                     if (_timedBrainDrainHolds > 0) _timedBrainDrainHolds--;
-                    if (ShouldStopHeldOverlay(_isRunning && settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                    if (ShouldStopHeldOverlay(_isRunning && BrainDrainFeatureWanted, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
                         hide();
                 }
             }
@@ -1137,7 +1146,7 @@ public class OverlayService : IDisposable
             {
                 _sustainedBrainDrainHeld = false;
                 _rampBrainDrainOpacity = null;
-                if (ShouldStopHeldOverlay(_isRunning && settings.BrainDrainEnabled, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
+                if (ShouldStopHeldOverlay(_isRunning && BrainDrainFeatureWanted, _timedBrainDrainHolds, _sustainedBrainDrainHeld))
                     StopBrainDrainBlur();
             },
             _ => null
@@ -3673,7 +3682,7 @@ public class OverlayService : IDisposable
             return;
         }
 
-        bool featureWantsIt = settings.BrainDrainEnabled;
+        bool featureWantsIt = BrainDrainFeatureWanted;
         if (featureWantsIt)
         {
             if (!BrainDrainShowing)

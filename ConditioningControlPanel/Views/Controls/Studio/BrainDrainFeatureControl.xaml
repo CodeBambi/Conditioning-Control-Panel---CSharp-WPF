@@ -132,6 +132,18 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ARMED. Shown while a random onset is counting down, so "nothing is
+                     happening" reads as "it is waiting" instead of "it is broken". Driven from
+                     code off BrainDrainService.OnsetStateChanged. -->
+                <Border x:Name="OnsetWaitingNotice" x:FieldModifier="internal"
+                        Background="#2A2A4A" BorderBrush="#66FF69B4" BorderThickness="1"
+                        CornerRadius="10" Padding="16,10" Margin="0,0,0,10"
+                        Visibility="Collapsed">
+                    <TextBlock x:Name="TxtOnsetWaiting" x:FieldModifier="internal"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="11.5"
+                               TextWrapping="Wrap"/>
+                </Border>
+
                 <!-- ONE dense controls card: the dial, then the perf switch. Both hints moved to the
                      row ToolTips. The intensity Slider keeps its EXPLICIT 1-100 range: a WPF Slider
                      defaults to Maximum=10, which silently clamps this percent value in the settings
@@ -210,6 +222,33 @@
                             </Grid>
 
                             <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- RANDOM START (asked for in #general on 2026-08-31: "i wish it
+                                 kicked on randomly not as soon as i press start"). 0 = off, the
+                                 default and the behaviour everyone has had until now. Anything
+                                 higher arms Brain Drain on Start instead of firing it: BOTH halves
+                                 wait a random 1..N minutes, then it kicks in on its own.
+                                 Prescribed dose - it decides when the run begins, so it locks with
+                                 the dials above mid-session. Explicit 0-30 range for the same
+                                 Slider-defaults-to-Maximum=10 reason as those dials. -->
+                            <Grid Height="36" ToolTip="{loc:Str st4_braindrain_random_start_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="72"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_random_start}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderRandomStart" x:FieldModifier="internal"
+                                        feat:SessionLock.Owned="True"
+                                        Minimum="0" Maximum="30" Value="0"
+                                        TickFrequency="1" IsSnapToTickEnabled="True"
+                                        VerticalAlignment="Center" Margin="10,0"
+                                        ValueChanged="SliderRandomStart_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtRandomStart" x:FieldModifier="internal"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                            </Grid>
 
                             <!-- High refresh. Comfort/perf knob, NOT prescribed dose: deliberately
                                  unmarked so it stays editable mid-session, exactly as in the dead XAML. -->

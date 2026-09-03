@@ -46,12 +46,17 @@ namespace ConditioningControlPanel.Views.Controls.Studio
             // mod switch must repaint them (a popup instance never lived long enough to care).
             ApplyFeatureArt();
             if (App.Mods != null) App.Mods.ModChanged += OnModChanged;
+            // The armed banner has to be right even when this panel is opened mid-wait, so it is
+            // painted here as well as on every later state change.
+            if (App.BrainDrain != null) App.BrainDrain.OnsetStateChanged += OnOnsetStateChanged;
+            RefreshOnsetState();
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             _settingsHook?.Unhook();
             if (App.Mods != null) App.Mods.ModChanged -= OnModChanged;
+            if (App.BrainDrain != null) App.BrainDrain.OnsetStateChanged -= OnOnsetStateChanged;
         }
 
         /// <summary>
@@ -100,8 +105,11 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 TxtBlurStrength.Text = $"{s.BrainDrainBlurStrength}%";
                 ChkMelt.IsChecked = s.BrainDrainMeltEnabled;
                 ChkAllowCapture.IsChecked = s.AllowOverlayCapture;
+                SliderRandomStart.Value = s.BrainDrainRandomStartMaxMinutes;
+                TxtRandomStart.Text = FormatRandomStart(s.BrainDrainRandomStartMaxMinutes);
 
                 RefreshClipCount();
+                RefreshOnsetState();
             }
             finally { _isLoading = false; }
         }
@@ -207,7 +215,8 @@ namespace ConditioningControlPanel.Views.Controls.Studio
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainHighRefresh) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainBlurStrength) ||
                 e.PropertyName == nameof(Models.AppSettings.BrainDrainMeltEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.AllowOverlayCapture))
+                e.PropertyName == nameof(Models.AppSettings.AllowOverlayCapture) ||
+                e.PropertyName == nameof(Models.AppSettings.BrainDrainRandomStartMaxMinutes))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -345,6 +354,67 @@ namespace ConditioningControlPanel.Views.Controls.Studio
         // pressed Start. Those reads were deleted in the same change (MainWindow.Settings.cs), and
         // ProgressionTabView no longer exists. This panel's own writes at ChkEnable_Changed /
         // SliderIntensity_Changed / ChkHighRefresh_Changed plus App.Settings.Save() are untouched.
+
+        // =====================================================================================
+        //  random onset (#general 2026-08-31: "i wish it kicked on randomly not as soon as i
+        //  press start")
+        // =====================================================================================
+
+        /// <summary>
+        /// Max wait, in minutes, before Brain Drain kicks in after Start. 0 reads as "Off" rather
+        /// than "0 min", because zero here is the old always-instant behaviour, not a zero wait.
+        /// </summary>
+        private static string FormatRandomStart(int minutes) => minutes <= 0
+            ? Localization.Loc.Get("st4_braindrain_random_start_off")
+            : Localization.Loc.GetF("st4_braindrain_random_start_max_0", minutes);
+
+        private void SliderRandomStart_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var v = (int)e.NewValue;
+            TxtRandomStart.Text = FormatRandomStart(v);
+            s.BrainDrainRandomStartMaxMinutes = v;
+
+            // Nothing to apply live: the wait is rolled once, at engine start
+            // (MainWindow.StartEngine -> BrainDrainService.ArmRandomOnset).
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// The service raises this on the UI thread, but it is reachable from a stop on the panic
+        /// thread, so the dispatcher check is the project's standard guard rather than decoration.
+        /// </summary>
+        private void OnOnsetStateChanged(object? sender, EventArgs e)
+        {
+            if (Application.Current?.Dispatcher == null) return;
+            Dispatcher.BeginInvoke(new Action(RefreshOnsetState));
+        }
+
+        /// <summary>
+        /// Show the armed banner while a random onset is counting down. Without it an armed
+        /// Brain Drain is indistinguishable from a broken one: the user pressed Start and nothing
+        /// happened, on purpose.
+        /// </summary>
+        private void RefreshOnsetState()
+        {
+            try
+            {
+                var pending = App.BrainDrain?.OnsetPending == true;
+                OnsetWaitingNotice.Visibility = pending ? Visibility.Visible : Visibility.Collapsed;
+                if (pending)
+                {
+                    TxtOnsetWaiting.Text = Localization.Loc.GetF(
+                        "st4_braindrain_waiting_0", App.BrainDrain?.OnsetMinutesRemaining ?? 1);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrainDrainFeatureControl.RefreshOnsetState: {E}", ex.Message);
+            }
+        }
 
         // =====================================================================================
         //  feature art (mod-aware)
