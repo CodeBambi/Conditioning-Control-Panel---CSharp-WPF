@@ -1,0 +1,145 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/AppSettings/DataSettingsSection.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"    ->  Theme="{StaticResource X}"
+       ToolTip="..."                 ->  ToolTip.Tip="..."
+       Image + EmojiToImageSource    ->  <TextBlock Text="emoji"/> (Avalonia renders colour emoji)
+       Content="{loc:Str btn_x}"     ->  a <TextBlock> child (access-key underscore trap)
+       x:FieldModifier="internal"    ->  dropped; x:Names kept. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.DataSettingsSection">
+
+    <StackPanel>
+
+        <TextBlock Text="{loc:Str set2_section_data}" Theme="{StaticResource SectionHeader}"/>
+
+        <!-- ============================ offline mode ========================== -->
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="📴" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_data_offline_title}"
+                                   Foreground="{StaticResource SectionHueDataBrush}"
+                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                    </StackPanel>
+
+                    <Grid MinHeight="34" ToolTip.Tip="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Text="{loc:Str setting_offline_mode}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkOfflineMode"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  IsCheckedChanged="ChkOfflineMode_Changed"/>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- =========================== phrase backup ========================== -->
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="📤" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_data_phrase_backup_title}"
+                                   Foreground="{StaticResource SectionHueDataBrush}"
+                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                    </StackPanel>
+                    <TextBlock Text="{loc:Str set2_data_phrase_backup_hint}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnExportPhrases"
+                                Theme="{StaticResource OutlineButton}" Padding="12,5" Margin="0,0,8,0"
+                                Click="BtnExportPhrases_Click"
+                                ToolTip.Tip="{loc:Str set2_tooltip_export_phrases}">
+                            <TextBlock Text="{loc:Str set2_btn_export_phrases}"/>
+                        </Button>
+                        <Button x:Name="BtnImportPhrases"
+                                Theme="{StaticResource OutlineButton}" Padding="12,5"
+                                Click="BtnImportPhrases_Click"
+                                ToolTip.Tip="{loc:Str set2_tooltip_import_phrases}">
+                            <TextBlock Text="{loc:Str set2_btn_import_phrases}"/>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ====================== cloud backup signpost ======================= -->
+        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueDataBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueDataBrush}"/>
+                <Grid Margin="15,12,15,12" MinHeight="34" ToolTip.Tip="{loc:Str set2_data_cloud_signpost}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                               Text="{loc:Str label_cloud_settings_backup}"
+                               Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                    <Button Grid.Column="1" x:Name="BtnGoToAccountBackup"
+                            Theme="{StaticResource OutlineButton}" Padding="12,5" VerticalAlignment="Center"
+                            Click="BtnGoToAccountBackup_Click">
+                        <TextBlock Text="{loc:Str set2_btn_open_account_section}"/>
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ============================ danger zone =========================== -->
+        <!-- Crimson on purpose: the warning colour outranks the section hue, and both
+             descriptions stay visible (load-bearing consequence text). -->
+        <Border x:Name="DangerZoneSection"
+                CornerRadius="12" Padding="0" Margin="0,8,0,10"
+                Background="{DynamicResource ElevatedSurfaceBrush}"
+                BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1">
+            <Grid>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{DynamicResource DangerBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="☠️" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_data_danger_title}"
+                                   Foreground="{DynamicResource DangerBrush}"
+                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                    </StackPanel>
+
+                    <TextBlock Text="{loc:Str set2_data_factory_reset_body}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextLightBrush}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBlock Text="{loc:Str set2_data_factory_reset_keeps}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+
+                    <Button x:Name="BtnFactoryReset"
+                            Theme="{StaticResource OutlineButton}"
+                            Foreground="{DynamicResource DangerBrush}"
+                            BorderBrush="{DynamicResource DangerBrush}"
+                            Padding="14,6" HorizontalAlignment="Left"
+                            Click="BtnFactoryReset_Click"
+                            ToolTip.Tip="{loc:Str set2_tooltip_factory_reset}">
+                        <TextBlock Text="{loc:Str set2_btn_factory_reset}"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+    </StackPanel>
+</UserControl>
