@@ -1,0 +1,299 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Studio/BrainDrainFeatureControl.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+       Style="{StaticResource X}"        ->  Theme="{StaticResource X}"
+       ToolTip="..."                     ->  ToolTip.Tip="..."
+       helpers:EmojiTextBlock            ->  TextBlock (Avalonia renders colour emoji natively)
+       Visibility="Collapsed"            ->  IsVisible="False"
+       Content="{loc:Str ...}" on Button ->  a <TextBlock> child (a snake_case key would lose an
+                                            underscore to Avalonia's access-key parsing)
+       ImageBrush HeroArtBrush/SideArtBrush -> dropped: Resources/features/brain_drain.png is not
+                                            an AvaloniaResource in this head yet and x:Name on a
+                                            brush is AVLN2000. The Studio wash stands in on both
+                                            plates, exactly as the SpiralFeatureControl port does.
+       feat:AdaptiveSideArt.CollapseBelow, feat:SessionLock.Owned -> dropped (WPF-head attached
+                                            behaviours; they follow the services to Core)
+       LinearGradientBrush "0,0"/"1,0"   ->  "0%,0%"/"100%,0%" (Avalonia points are absolute
+                                            unless given as %)
+       all event handlers                ->  wired in code-behind (porting convention)
+
+     Root MUST stay a Panel (StackPanel): the WPF session-lock banner is inserted at index 0 of
+     the hosting content, and into a Grid it would overlap the settings instead of stacking. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Studio.BrainDrainFeatureControl">
+
+    <StackPanel>
+
+        <!-- HERO. Absorbs the old master-enable card: the checkbox lives in the pill and its hint
+             is the subtitle. -->
+        <Border Height="72" CornerRadius="16" Margin="0,0,0,10"
+                Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2">
+            <Grid ClipToBounds="True">
+                <Border Width="240" HorizontalAlignment="Right" CornerRadius="0,16,16,0"
+                        Background="{StaticResource SectionHueStudioWashBrush}">
+                    <Border.OpacityMask>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                            <GradientStop Color="#00000000" Offset="0"/>
+                            <GradientStop Color="#E6000000" Offset="0.55"/>
+                        </LinearGradientBrush>
+                    </Border.OpacityMask>
+                </Border>
+
+                <StackPanel VerticalAlignment="Center" Margin="16,0,0,0">
+                    <TextBlock Text="{loc:Str section_brain_drain}" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource TextLightBrush}"/>
+                    <TextBlock Text="{loc:Str st4_braindrain_enable_hint}" FontSize="11.5"
+                               Foreground="{StaticResource TextMutedBrush}"
+                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"
+                        CornerRadius="9999" Padding="12,6"
+                        Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <CheckBox x:Name="ChkEnable"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- The settings column is capped (3*, MaxWidth 780) so a slider stops being a ~1200px
+             runway in the wide Studio detail pane; the width that buys back becomes the art card. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- Rework notice. Visibility is set in code from OverlayService.BrainDrainWithheld;
+                     hidden here so the harness never shows it by accident. -->
+                <Border x:Name="WithheldNotice"
+                        Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
+                        CornerRadius="10" Padding="16,12" Margin="0,0,0,10"
+                        IsVisible="False">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str section_rework}"
+                                   Foreground="#FFA500" FontSize="13" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str st4_braindrain_withheld_notice}"
+                                   Foreground="#FFA500" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ONE dense controls card. Both sliders keep their EXPLICIT 1-100 range: the WPF
+                     default Maximum=10 silently clamped these percent values on the settings
+                     round-trip, and the range is what the read-outs assume. -->
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <!-- AUDIO trigger rate (BrainDrainIntensity), NOT the blur. Its own key
+                                 deliberately, not the shared setting_intensity. -->
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str st4_braindrain_intensity_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_audio_rate}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderIntensity"
+                                        Minimum="1" Maximum="100" Value="50"
+                                        VerticalAlignment="Center" Margin="10,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtIntensity" Text="50%"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- VISUAL half's dial (BrainDrainBlurStrength): how hard the screen
+                                 blur presses in. -->
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str st4_braindrain_blur_strength_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_blur_strength}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderBlurStrength"
+                                        Minimum="1" Maximum="100" Value="50"
+                                        VerticalAlignment="Center" Margin="10,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtBlurStrength" Text="50%"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- Melting mode: same overlay, blur + slow Perlin displacement warp. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str st4_braindrain_melt_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_melt}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkMelt"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- High refresh. Comfort/perf knob, stays editable mid-session. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str st4_braindrain_high_refresh_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_high_refresh}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkHighRefresh"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- Show in screenshots (AllowOverlayCapture). Privacy stays the
+                                 default; this is the opt-out, and another live-editable knob. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str st4_braindrain_allow_capture_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_allow_capture}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkAllowCapture"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- CLIP LIBRARY. The audio half reads <assets>/braindrain; the legacy
+                     install-directory folder is still scanned, so its note appears only while it
+                     still holds clips. Plus the Refresh that makes a dropped-in clip work without
+                     an app restart. -->
+                <Border Theme="{StaticResource SettingCardStyle}" Margin="0,10,0,0">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,10,16,12">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str st4_braindrain_clip_library}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}"/>
+                                    <TextBlock x:Name="TxtClipCount"
+                                               FontSize="11" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" x:Name="BtnOpenAudioFolder"
+                                        Theme="{DynamicResource OutlineButton}"
+                                        Padding="10,5" Margin="0,0,6,0" FontSize="11"
+                                        ToolTip.Tip="{loc:Str st4_braindrain_open_folder_tt}">
+                                    <TextBlock Text="{loc:Str btn_open_folder}"/>
+                                </Button>
+                                <Button Grid.Column="2" x:Name="BtnRefreshAudio"
+                                        Theme="{DynamicResource OutlineButton}"
+                                        Padding="10,5" FontSize="11"
+                                        ToolTip.Tip="{loc:Str st4_braindrain_refresh_clips_tt}">
+                                    <TextBlock Text="{loc:Str btn_refresh_2}"/>
+                                </Button>
+                            </Grid>
+                            <TextBlock Text="{loc:Str st4_braindrain_folder_hint}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11" TextWrapping="Wrap"/>
+
+                            <!-- WHAT belongs in the folder: whole tracks, not one-second stings. -->
+                            <TextBlock Text="{loc:Str st4_braindrain_folder_contents}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                            <!-- The literal resolved path, filled in from the service in code -
+                                 never hardcoded here, the install root moves between per-user and
+                                 machine-wide installs. -->
+                            <TextBlock x:Name="TxtAudioFolderPath"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontFamily="Consolas, Courier New" FontSize="10.5"
+                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                            <!-- Shown ONLY when the old install-directory folder still holds clips.
+                                 Nothing is migrated automatically. -->
+                            <TextBlock x:Name="TxtLegacyFolderNote"
+                                       Text="{loc:Str st4_braindrain_legacy_folder_note}"
+                                       Foreground="#FFA500"
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       IsVisible="False"/>
+                            <TextBlock x:Name="TxtLegacyFolderPath"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontFamily="Consolas, Courier New" FontSize="10.5"
+                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,3,0,0"
+                                       IsVisible="False"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Shown only when BOTH clip folders are empty: without it the feature is a silent
+                     no-op with no way to tell why. Carries its OWN copy of the Open Folder button
+                     (same handler) because this banner is where the question is being asked. -->
+                <Border x:Name="NoAudioHint"
+                        Margin="0,10,0,0"
+                        Background="#2A2A4A" BorderBrush="#66FFA500" BorderThickness="1"
+                        CornerRadius="10" Padding="16,12" IsVisible="False">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_no_audio_hint}"
+                                   Foreground="#FFA500" FontSize="11" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Button Grid.Column="1" x:Name="BtnOpenAudioFolderEmpty"
+                                Theme="{DynamicResource OutlineButton}"
+                                Padding="10,5" FontSize="11" VerticalAlignment="Center"
+                                ToolTip.Tip="{loc:Str st4_braindrain_open_folder_tt}">
+                            <TextBlock Text="{loc:Str btn_open_folder}"/>
+                        </Button>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!-- SIDE ART. On WPF the art is the Border's BACKGROUND (an ImageBrush) so the rounded
+                 corners clip it; the wash stands in until feature art ships in this head. The
+                 scrim is kept verbatim. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
+
+    </StackPanel>
+</UserControl>
