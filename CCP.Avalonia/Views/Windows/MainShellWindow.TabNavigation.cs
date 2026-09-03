@@ -13,11 +13,18 @@
 //     partials.
 //   - Per-tab side effects on the way in (RefreshPresetsList, spending HasSeenProgramsTab and
 //     the first-run explainer, StopPolling on leaving Available Subjects, MaybeShowFeatureIntro,
-//     UpdatePatreonUI, RefreshSessionFeatureLock). Those reach App.* or a service. The TWO that
-//     do not are restored in OnTabShown below: StudioTab.OnTabShown() for "studio" and
-//     StudioTab.FocusRackEntry("haptics") for the haptics alias, both of which are ported view
-//     state on StudioTabView. Without the second, ShowTab("haptics") landed on the rack's last
-//     selection instead of the Haptics module - and OpenStudioModule routes haptics through it.
+//     UpdatePatreonUI, RefreshIntakePassTile, RefreshPremiumRail). Those reach App.* or a service.
+//     The FOUR that do not are restored in OnTabShown below:
+//       * StudioTab.OnTabShown() for "studio" and StudioTab.FocusRackEntry("haptics") for the
+//         haptics alias - ported view state on StudioTabView. Without the second, ShowTab("haptics")
+//         landed on the rack's last selection instead of the Haptics module, and OpenStudioModule
+//         routes haptics through it.
+//       * RefreshSessionFeatureLock() on "settings", "studio" and "haptics" - the same three cases
+//         WPF calls it from (MainWindow.TabNavigation.cs:260/476/501). It is real and idempotent on
+//         this head (MainShellWindow.SessionFeatureLock.cs) and is re-derived, never latched, so
+//         arriving at a tab cannot find a stale lock.
+//       * UpdateProfileSharingSummary() on "discord" - see the case itself for why it lands here
+//         and not in the FX partial WPF reaches it through.
 //   - Bark (App.Bark.NotifyTabNavigated) and EmiDesk (EmiTargets.NoteTabOpened) hooks.
 //   - The three keys that are WINDOWS, not tabs, and the one launcher door: "patreon" (opens
 //     Settings · Account via ShowAppInfoPopup), "fyp" (OpenFypFeed), "justdrop" (the shop host)
@@ -142,8 +149,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 switch (tab)
                 {
-                    case "studio": StudioRack?.OnTabShown(); break;
-                    case "haptics": StudioRack?.FocusRackEntry("haptics"); break;
+                    // WPF re-derives the session feature lock on the way into each of these
+                    // three (MainWindow.TabNavigation.cs:260/476/501): the Dashboard and the rack
+                    // both host real dose dials, so a lock that was latched rather than re-derived
+                    // could survive a crash, an abort or an out-of-order session event.
+                    case "settings": RefreshSessionFeatureLock(); break;
+                    case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); break;
+                    case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); break;
 
                     // WPF gets here through DiscordTabView's IsVisibleChanged ->
                     // MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged, which refreshes the

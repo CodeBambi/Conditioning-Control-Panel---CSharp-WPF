@@ -17,7 +17,7 @@
 // The handlers named by MainShellWindow.axaml are real (empty) methods, because a
 // missing one is a XAML compile error, not a runtime gap.
 //
-// Members dropped (61):
+// Members dropped (61, two of them since answered - see the annotations):
 //   private const double NavRailCollapsedWidth
 //   private const double NavRailExpandedWidth
 //   private const int NavRailAnimMs
@@ -46,14 +46,14 @@
 //   private const string NavDoorLabelHostTag
 //   private const string NavRailStaticTextTag
 //   private bool _navRailExpanded
-//   private bool _navRailReady
+//   private bool _navRailReady          (deliberately NOT ported - see InitializeNavRail below)
 //   private int _navRailHoldCount
 //   private readonly List<TextBlock> _navRailLabels
 //   private readonly List<ButtonBase> _navRailButtons
 //   private readonly List<NavDoorRow> _navDoorRows
 //   private readonly HashSet<TextBlock> _navDoorLabelTexts
 //   private sealed class NavDoorRow
-//   private void InitializeNavRail(…)
+//   private void InitializeNavRail(…)   (PARTLY PORTED below: its RefreshNavPremiumTags call)
 //   internal static Func<string, string?>? PossessionReroute
 //   private void HookNavDoorRerouteSeam(…)
 //   private void NavDoor_PossessionReroute(…)
