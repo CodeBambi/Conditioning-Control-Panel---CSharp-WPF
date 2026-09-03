@@ -138,7 +138,8 @@ kart.applyBoost(sec)             // boost pad / item
 kart.applySlow(mult, sec)        // effect pops slow, never stop (speed floor = KART_MIN_SPEED)
 kart.setMood(id)                 // 'calm' | 'streamed' | 'fraught' | 'smug' | 'shock' | 'jackpot'
 kart.setFraught(v)               // 0..1, drives sweat + antenna kink
-kart.camera(out)                 // out = { pos: Vector3, look: Vector3, roll: number }
+kart.camera(out)                 // out = { pos: Vector3, look: Vector3, up: Vector3, roll: number }; up follows the
+                                 // transported frame (inverts through the loop); level + roll 0 under reducedMotion
 kart.group                       // THREE.Group (cup + EMI back view)
 kart.dispose()
 ```
