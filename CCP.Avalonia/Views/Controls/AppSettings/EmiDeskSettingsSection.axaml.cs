@@ -1,57 +1,93 @@
 using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 {
     /// <summary>
-    /// SETTINGS - EMI DESK, ported from the WPF head.
+    /// SETTINGS - EMI DESK, ported from the WPF head with its settings logic restored against
+    /// <see cref="CoreSettings"/>. Seven live editors for the summoned desktop widget.
     ///
-    /// On WPF this section is self-contained: it reads <c>App.Settings.Current</c> on Loaded,
-    /// writes it back on every change, re-arms the summon chord through <c>App.EmiDesk</c> and
-    /// validates chords with <c>EmiDeskService.ValidateChord</c>. None of that is reachable from
-    /// this head, so the toggles render but persist nothing, and the hotkey button only enters and
-    /// leaves capture. What IS ported: the spice combo's three localized rows, and the capture
-    /// state machine's shape (click to start, Escape or focus loss to cancel).
+    /// <para><b>Self-contained, with no passthrough partial.</b> Every value here is read at the
+    /// moment it matters rather than at launch, so this section reads <c>CoreSettings.Current</c> on
+    /// attach and writes it back plus <c>CoreSettings.Save()</c> on every change - the same shape
+    /// the WPF original has, one for one.</para>
+    ///
+    /// <para><b>The hotkey row captures a CHORD</b>, and that is where this head stops: the arbiter
+    /// of what is a legal chord (<c>EmiDeskService.ValidateChord</c>) and the thing that arms it
+    /// (<c>App.EmiDesk.ApplyHotkey</c>) are both Win32 and still in the WPF head, so capture enters
+    /// and leaves but never rebinds. The button still shows the stored chord and still greys out
+    /// with the feature, because both of those are settings.</para>
     /// </summary>
     public partial class EmiDeskSettingsSection : UserControl
     {
-        private bool _loading;
+        private bool _loading = true;
         private bool _capturing;
-
-        private readonly ComboBox _cmbSpice;
-        private readonly Button _btnHotkey;
 
         public EmiDeskSettingsSection()
         {
-            AvaloniaXamlLoader.Load(this);
-            _cmbSpice = this.FindControl<ComboBox>("CmbSpice")!;
-            _btnHotkey = this.FindControl<Button>("BtnHotkey")!;
+            // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
+            // x:Name fields, and the seed below reads them.
+            InitializeComponent();
 
-            Loaded += OnLoaded;
-            Unloaded += (_, _) => CancelCapture();
+            // WPF wired Checked/Unchecked separately; Avalonia has one event for both.
+            ChkEnabled.IsCheckedChanged += OnEnabledChanged;
+            ChkMuteAvatar.IsCheckedChanged += OnMuteChanged;
+            ChkOffers.IsCheckedChanged += OnOffersChanged;
+            ChkGlass.IsCheckedChanged += OnGlassChanged;
 
-            _btnHotkey.AddHandler(KeyDownEvent, OnHotkeyPreviewKeyDown, RoutingStrategies.Tunnel);
-            _btnHotkey.LostFocus += (_, _) => CancelCapture();
+            BtnHotkey.AddHandler(KeyDownEvent, OnHotkeyPreviewKeyDown, RoutingStrategies.Tunnel);
+            BtnHotkey.LostFocus += (_, _) => CancelCapture();
+
+            SyncFromSettings();
         }
 
-        private void OnLoaded(object? sender, RoutedEventArgs e)
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            SyncFromSettings();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            CancelCapture();
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        // A cloud restore or a factory reset swaps the instance; repaint from it, on the UI thread.
+        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(SyncFromSettings);
+
+        // ------------------------------------------------------------------ load
+
+        internal void SyncFromSettings()
         {
             try
             {
                 _loading = true;
-                if (_cmbSpice.Items.Count == 0)
+
+                if (CmbSpice.Items.Count == 0)
                 {
-                    _cmbSpice.Items.Add(Loc.Get("emi_desk_spice_innocent"));
-                    _cmbSpice.Items.Add(Loc.Get("emi_desk_spice_suggestive"));
-                    _cmbSpice.Items.Add(Loc.Get("emi_desk_spice_anything"));
+                    CmbSpice.Items.Add(Loc.Get("emi_desk_spice_innocent"));
+                    CmbSpice.Items.Add(Loc.Get("emi_desk_spice_suggestive"));
+                    CmbSpice.Items.Add(Loc.Get("emi_desk_spice_anything"));
                 }
-                // ponytail: needs App.Settings.Current.EmiDesk*, wired when SettingsService moves to Core
-                _cmbSpice.SelectedIndex = 0;
+
+                var s = CoreSettings.Current;
+                ChkEnabled.IsChecked = s.EmiDeskEnabled;
+                ChkMuteAvatar.IsChecked = s.EmiDeskMuteAvatar;
+                ChkOffers.IsChecked = s.EmiDeskOffers;
+                ChkGlass.IsChecked = s.EmiDeskGlass;
+                // The combo's three rows ARE the 0..2 spice scale the lines file uses:
+                // 0 Innocent, 1 Suggestive, 2 Anything. No off-by-one translation.
+                CmbSpice.SelectedIndex = Math.Max(0, Math.Min(2, s.EmiDeskSpice));
+
                 RefreshHotkeyButton();
             }
             catch (Exception ex)
@@ -64,20 +100,82 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
         }
 
-        // ponytail: needs App.Settings.Save, wired when SettingsService moves to Core
+        // ------------------------------------------------------------------ toggles
+
+        private static void Persist(Action write)
+        {
+            try
+            {
+                write();
+                CoreSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] settings write failed");
+            }
+        }
+
+        private void OnEnabledChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool on = ChkEnabled.IsChecked == true;
+            Persist(() => CoreSettings.Current.EmiDeskEnabled = on);
+            // ponytail: turning her off must also take her off the screen and free the chord -
+            // needs App.EmiDesk.Dismiss / ApplyHotkey (ConditioningControlPanel/Services/EmiDesk/
+            // EmiDeskService.cs), Win32 and still in the WPF head.
+            RefreshHotkeyButton();
+        }
+
+        private void OnMuteChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool on = ChkMuteAvatar.IsChecked == true;
+            Persist(() =>
+            {
+                CoreSettings.Current.EmiDeskMuteAvatar = on;
+                // Flipping the switch clears "do not ask again": the user has just changed their
+                // mind about the whole arrangement, so the next summon asks again.
+                CoreSettings.Current.EmiDeskMuteDontAsk = false;
+            });
+        }
+
+        private void OnOffersChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool on = ChkOffers.IsChecked == true;
+            Persist(() => CoreSettings.Current.EmiDeskOffers = on);
+        }
+
+        private void OnGlassChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool on = ChkGlass.IsChecked == true;
+            Persist(() => CoreSettings.Current.EmiDeskGlass = on);
+        }
+
         private void CmbSpice_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (_loading) return;
+            int spice = Math.Max(0, Math.Min(2, CmbSpice.SelectedIndex));
+            Persist(() => CoreSettings.Current.EmiDeskSpice = spice);
         }
 
         // ------------------------------------------------------------------ hotkey capture
 
         private void BtnHotkey_Click(object? sender, RoutedEventArgs e)
         {
-            if (_capturing) { CancelCapture(); return; }
-            _capturing = true;
-            _btnHotkey.Content = Loc.Get("emi_desk_hotkey_capturing");
-            _btnHotkey.Focus();
+            try
+            {
+                if (_capturing) { CancelCapture(); return; }
+                _capturing = true;
+                BtnHotkey.Content = Loc.Get("emi_desk_hotkey_capturing");
+                BtnHotkey.Focus();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] hotkey capture start failed");
+                CancelCapture();
+            }
         }
 
         private void OnHotkeyPreviewKeyDown(object? sender, KeyEventArgs e)
@@ -95,25 +193,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 case Key.System: case Key.None:
                     return;
             }
-            // ponytail: needs EmiDeskService.ValidateChord/FormatChord + App.EmiDesk.ApplyHotkey; until
-            // then a completed chord ends capture without rebinding
+            // ponytail: needs EmiDeskService.ValidateChord / FormatChord and App.EmiDesk.ApplyHotkey
+            // (ConditioningControlPanel/Services/EmiDesk/EmiDeskService.cs), Win32 RegisterHotKey and
+            // still in the WPF head. Until then a completed chord ends capture without rebinding -
+            // writing EmiDeskHotkey with nothing able to validate or arm it would be worse.
             CancelCapture();
         }
 
         private void CancelCapture()
         {
-            if (!_capturing) return;
-            _capturing = false;
-            RefreshHotkeyButton();
+            try
+            {
+                if (!_capturing) return;
+                _capturing = false;
+                RefreshHotkeyButton();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] hotkey capture cancel failed");
+            }
         }
 
         private void RefreshHotkeyButton()
         {
-            // ponytail: needs App.Settings.Current.EmiDeskHotkey; the markup default stands in
-            _btnHotkey.Content = "Ctrl+Alt+E";
+            try
+            {
+                var s = CoreSettings.Current;
+                var chord = s.EmiDeskHotkey;
+                BtnHotkey.Content = string.IsNullOrWhiteSpace(chord)
+                    ? Loc.Get("emi_desk_hotkey_unbound")
+                    : chord;
+                BtnHotkey.IsEnabled = s.EmiDeskEnabled;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] hotkey button refresh failed");
+            }
         }
 
-        // ponytail: needs EmiRingPicker.ResetPins, wired when that control is ported
+        // ponytail: needs EmiRingPicker.ResetPins / HintText / CanReset / StateChanged
+        // (ConditioningControlPanel/Views/Controls/EmiRingPicker.xaml.cs, bucket B), not yet ported;
+        // the .axaml still holds a bare WrapPanel placeholder in its place.
         private void BtnRingReset_Click(object? sender, RoutedEventArgs e) { }
     }
 }

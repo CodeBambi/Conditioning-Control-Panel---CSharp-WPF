@@ -39,7 +39,9 @@
         <!-- idle interval -->
         <Grid>
             <TextBlock Text="{loc:Str label_idle_giggle_interval}" Theme="{StaticResource CmpCellLabelStyle}"/>
-            <TextBlock x:Name="TxtIdleIntervalCompanion" Text="{loc:Str label_120s}"
+            <!-- Plain text, not {loc:Str}: the code-behind writes this value, and a live loc
+                 binding under a local set is re-applied on the next language change. -->
+            <TextBlock x:Name="TxtIdleIntervalCompanion" Text="120s"
                        Theme="{StaticResource CmpCellValueStyle}"/>
         </Grid>
         <Slider x:Name="SliderIdleIntervalCompanion" Theme="{DynamicResource PinkSlider}"
