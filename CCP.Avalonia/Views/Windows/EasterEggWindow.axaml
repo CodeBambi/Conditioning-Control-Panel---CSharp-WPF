@@ -1,0 +1,132 @@
+<!-- PORTED from ConditioningControlPanel/Windows/EasterEggWindow.xaml.
+     Structure, order, spacing, every Run and every resource key preserved - the rant is the
+     content, so it is copied character for character. Deviations, all forced:
+       inline <Button.Style>        -> a keyed ControlTheme below; an Avalonia Button cannot carry
+                                       an anonymous Style, and a property-only ControlTheme would
+                                       draw nothing (CLAUDE.md trap 4), so it carries a Template
+                                       whose ContentPresenter binds Content (trap 6)
+       ControlTemplate.Triggers     -> ^:pointerover /template/ Border#border selector. The WPF
+                                       trigger set Background to PinkBrush, the same value as the
+                                       base setter, so hover is a no-op there and here. Kept so
+                                       the two files still diff, not "fixed".
+       ResizeMode="NoResize"        -> CanResize="False"
+       WindowStyle="None" +
+         AllowsTransparency="True"  -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       Visibility="Collapsed"       -> IsVisible="False"
+       Click="Handler"              -> wired in the constructor; both buttons gained x:Names
+                                       (BtnCloseTop / BtnCloseFooter) so the ctor can find them
+       Content="{loc:Str btn_close_2}" -> a <TextBlock> child (Avalonia parses "_" in Content as an
+                                       access key and every loc key here is snake_case, trap 1)
+       FontFamily="Consolas, Courier New" kept verbatim; neither face exists on Linux, so Avalonia
+       falls back to the app's Inter. That is a font-availability fact, not a port decision. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.EasterEggWindow"
+        Title="..."
+        Height="650" Width="550"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+    <Window.Resources>
+        <!-- The inline <Button.Style> on the footer button, setters verbatim. -->
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EasterEggWindow.xaml:footer button inline style, hoist when a second view needs it -->
+        <ControlTheme x:Key="FooterCloseButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="30,10"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Close Button -->
+            <Button x:Name="BtnCloseTop" Grid.Row="0" Content="×"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" FontSize="20"
+                    BorderThickness="0" Cursor="Hand" Margin="0,10,15,0"
+                    Padding="0"
+                    Width="30" Height="30"/>
+
+            <!-- Content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="25,10,25,10">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" FontFamily="Consolas, Courier New" FontSize="12" LineHeight="20">
+                        <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold">congrats.</Run>
+                        <LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">Either you were rlly bored, or u r a coder and looked trough the code, either way doesnt rlly matter, had to write a cupple of lines down.</Run>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">Its new year's eve, soon is midnight. I rlly wanted to drop the relese for the new year, but life never goes how we want i guess...</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">so here i am. 3 am now actually. drinking this piss warm bubbling water someone gave me for christmas, recycled trash gift just like how i felt my whole life. my cat is asleep on the keyboard, only thing breathing in this cold ass apartment. funny how people got so mad about v1. </Run>
+                        <Run Foreground="{DynamicResource PinkBrush}">'oh she used ai'</Run>
+                        <Run Foreground="{DynamicResource TextMutedBrush}"> </Run>
+                        <Run Foreground="{DynamicResource PinkBrush}">'oh its insecure'</Run>
+                        <Run Foreground="{DynamicResource TextMutedBrush}"> </Run>
+                        <Run Foreground="{DynamicResource PinkBrush}">'learn to code properly'</Run>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">. shut up. just shut up. you think i dont know? you think i dont know what it feels like to be told im doing it wrong? acting wrong being wrong? existing wrong?</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">i spent my whole life in a town where breathing the wrong way got you stared at or worse so sorry if my python script wasnt clean enough for your github standards or whatever. they tell you how to dress how to talk how to be a man how to not be a freak. and when you finally escape, when you finally find a way to make something... well i guess you know what, fuck it, doeesnt matter.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">well guess what. i spent the whole winter holidays here alone. while everyone else is kissing someone or lighting fireworks i was here fixing spirals overlays getting stuck or clippin sprites on canvas. </Run>
+                        <Run Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold">i built this. me.</Run>
+                        <Run Foreground="{DynamicResource TextMutedBrush}"> yeah i used tools who cares? do you build a house with your bare hands?</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">if ur reading this, maybe you get it. maybe ur lonely too. maybe its just pretentious crap. Either way, here we are.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource PinkBrush}">i made this beautiful thing out of spite and cheap champagne and sleepless nights, but i never felt so alive</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">so cheers. to 2026. to not letting anyone tell us who we are or how we should build our world.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}">im gonna go pet my cat and pass out. Happy new year.</Run>
+                        <LineBreak/>
+                        <Run Foreground="{DynamicResource TextMutedBrush}"> Love you , whoever u are.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource PinkBrush}" FontSize="18">&#x2764;</Run>
+                        <Run Foreground="{DynamicResource PinkBrush}" FontSize="14"> :3 </Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontStyle="Italic">CodeBambi</Run>
+                    </TextBlock>
+                    <TextBlock x:Name="TxtReaderCount"
+                               FontFamily="Consolas, Courier New" FontSize="11"
+                               Foreground="#FF4444"
+                               Margin="0,15,0,5"
+                               HorizontalAlignment="Center"
+                               IsVisible="False"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Footer -->
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,10,10" Padding="20,12">
+                <Button x:Name="BtnCloseFooter" Cursor="Hand" HorizontalAlignment="Center"
+                        Theme="{StaticResource FooterCloseButtonStyle}">
+                    <TextBlock Text="{loc:Str btn_close_2}"/>
+                </Button>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
