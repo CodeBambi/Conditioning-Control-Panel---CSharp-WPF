@@ -14,6 +14,11 @@ namespace ConditioningControlPanel.Avalonia
         {
             RenderProof.EnsureSetUp();
             var w = new MainShellWindow();
+            // Shown, not merely constructed: a TopLevel that was never opened has no popup host,
+            // so ToolTip.SetIsOpen throws from inside its own property-changed handler and the
+            // tooltip sweep below could not be probed at all. Show() is what RenderProof does too.
+            w.Show();
+            global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             bool Vis(string n) => w.FindControl<Control>(n)?.IsVisible == true;
             double H(string n) => w.FindControl<Control>(n)?.Height ?? -1;
 
@@ -79,6 +84,68 @@ namespace ConditioningControlPanel.Avalonia
             Check(Vis("MainTutorialOverlay"), "the ? panel opens");
             w.SetTutorialOverlay(false);
             Check(!Vis("MainTutorialOverlay"), "the ? panel closes");
+
+            // ---- the shell members that WERE restored but had no caller ------------------------
+            // Each assertion drives the CALL SITE, not the member, and checks something the user
+            // would see - a control found, a pill's state written, a footer with a number in it.
+            // Break the one line each adds and the corresponding check fails.
+
+            // 1. ShowTab closes a stale tooltip (MainShellWindow.ToolTipHygiene.cs). The window
+            //    itself stands in for the owner: FindOpenToolTipOwner descends the pointer-over
+            //    chain and tests the ROOT first, and headless there is no pointer to be over
+            //    anything, so the root is the only reachable owner. It needs a Tip - Avalonia's
+            //    IsOpenChanged puts IsOpen straight back to false on a control that has none, so
+            //    a tipless probe would pass whether or not ShowTab swept anything.
+            ToolTip.SetTip(w, "nav-check probe");
+            ToolTip.SetIsOpen(w, true);
+            Check(ToolTip.GetIsOpen(w), "the tooltip probe is actually open before the sweep");
+            w.ShowTab("presets");
+            Check(!ToolTip.GetIsOpen(w), "ShowTab closes a tooltip that was still open");
+            ToolTip.SetTip(w, null);
+
+            // 2. The rail's one-time setup paints the premium pills
+            //    (MainShellWindow.NavPremiumTags.RefreshNavPremiumTags, called by
+            //    MainShellWindow.NavRail.InitializeNavRail). Forced ON first, so a no-op wiring
+            //    leaves it on and fails; the answer for every key is "not locked" on a head with no
+            //    entitlement service, which is WPF's own documented fallback.
+            var pillNames = new[]
+            {
+                "TagPremiumHaptics", "TagPremiumTakeover", "TagPremiumSheListening",
+                "TagPremiumAwareness", "TagPremiumGradedIntake", "TagPremiumLockdown",
+                "TagPremiumBlinkTrainer", "TagPremiumRemoteControl",
+            };
+            var pillsFound = 0;
+            foreach (var n in pillNames)
+                if (w.FindControl<Border>(n) is { } pill) { pillsFound++; pill.IsVisible = true; }
+            Check(pillsFound == pillNames.Length,
+                  $"every rail premium pill resolves by name (saw {pillsFound} of {pillNames.Length})");
+
+            w.InitializeNavRail();
+            var pillsLit = 0;
+            foreach (var n in pillNames)
+                if (w.FindControl<Border>(n)?.IsVisible == true) pillsLit++;
+            Check(pillsLit == 0, $"the rail setup repaints every pill from the roster (saw {pillsLit} still lit)");
+
+            // 3. Landing on the Profile tab repaints the sharing footer
+            //    (MainShellWindow.ProfileCard.UpdateProfileSharingSummary, called from OnTabShown).
+            //    The string is "{0} on · {1} private", so the separator proves it was FORMATTED -
+            //    a raw key or an unresolved lookup carries no interpunct.
+            w.ShowTab("discord");
+            var sharing = w.ProfilePage?.FindControl<TextBlock>("TxtProfileSharingSummary")?.Text;
+            Check(!string.IsNullOrEmpty(sharing) && sharing!.Contains('\u00b7'),
+                  $"the Profile tab repaints its sharing footer (saw \"{sharing}\")");
+
+            // 4. DiscordTabView's ctor calls InitializeComponent, not AvaloniaXamlLoader.Load, so
+            //    its generated x:Name fields are ASSIGNED. Under the loader every one of them was
+            //    permanently null - which compiles, renders and reviews clean. Reading the field and
+            //    demanding it be the same object FindControl returns is the only thing that tells
+            //    the two ctors apart, and it fails the moment anyone puts the loader back.
+            var page = w.ProfilePage;
+            Check(page is not null && ReferenceEquals(page.TxtProfileSharingSummary,
+                                                     page.FindControl<TextBlock>("TxtProfileSharingSummary")),
+                  "DiscordTabView's generated x:Name fields are assigned (InitializeComponent, not the loader)");
+
+            w.ShowTab("settings");
 
             var shown = 0;
             foreach (var n in new[] { "SettingsTab","PresetsTab","QuestsTab","ProgramsTab","EnhancementsTab","DeeperTab","AchievementsTab","CompanionTab","PlayTab","LeaderboardTab","AssetsTab","DiscordTab","AwarenessTab","RemoteControlTab","AvailableSubjectsTab","BambiTakeoverTab","StudioTab","LockdownTab","BlinkTrainerTab","SheListeningTab","GradedIntakeTab","AppSettingsTab","SpiralTab","ExclusivesTab" })

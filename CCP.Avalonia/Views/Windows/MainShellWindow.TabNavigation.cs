@@ -35,7 +35,15 @@
 // the x:Name fields. So `AppSettingsTab`, `StudioTab`, `SettingsTab` and `MainTutorialOverlay`
 // COMPILE and are always null at runtime: a `?.` on one is a silent no-op, not a safe guard.
 // Named<T>() below is the only way to reach a control of this window from any of its partials.
-// (The tab views themselves do call InitializeComponent, so THEIR fields are real once found.)
+//
+// AND THE HAZARD IS NOT CONFINED TO THIS WINDOW. An earlier revision of this header claimed "the
+// tab views themselves do call InitializeComponent, so THEIR fields are real once found". That was
+// never true of all of them: DiscordTabView, PlayTabView, QuestsTabView and PresetsTabView loaded
+// the same way, so their named fields were null too and anything reaching in through a field of
+// theirs was the same silent no-op one level down. DiscordTabView is fixed at the source (its ctor
+// now calls InitializeComponent). The other three are NOT this layer's to touch and are still on
+// AvaloniaXamlLoader.Load - reach into them with FindControl, never with a field, until they are.
+// The general rule for any file: grep the view's ctor before you trust one of its x:Name fields.
 
 using System;
 using System.Collections.Generic;
@@ -117,6 +125,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CurrentTab = tab;
             SetExpandedDoor(NavDoorForTab(tab));
             SwitchTabFx(tab);
+            // A tooltip opened by a stationary pointer outlives the tab it belongs to, because
+            // nothing ever moved the pointer off its owner. Same call, same place, as WPF's
+            // MainWindow.TabNavigation.cs:186 (MainShellWindow.ToolTipHygiene.cs).
+            CloseStaleToolTip();
             OnTabShown(tab);
         }
 
@@ -132,6 +144,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     case "studio": StudioRack?.OnTabShown(); break;
                     case "haptics": StudioRack?.FocusRackEntry("haptics"); break;
+
+                    // WPF gets here through DiscordTabView's IsVisibleChanged ->
+                    // MainWindow.ProfileFx.cs:OnProfileTabVisibilityChanged, which refreshes the
+                    // community rail's sharing footer on every show because a toggle can be
+                    // flipped from Settings or the Goon tab in between. That FX partial is a stub
+                    // on this head, so the one line of it that resolves lands here instead - this
+                    // is the head's home for per-tab entry side effects, and "the Profile tab
+                    // became visible" is exactly the event WPF is reacting to.
+                    // ponytail: the rest of OnProfileTabVisibilityChanged (the OG border loop, the
+                    // vat poll, RefreshProfileShareButton, EnsureProfileMeFirst, StaggerProfileCards)
+                    // needs MainShellWindow.ProfileFx.cs / .ProfileVat.cs / .Browser.cs.
+                    case "discord": UpdateProfileSharingSummary(); break;
                 }
             }
             catch { /* a navigation must never throw */ }

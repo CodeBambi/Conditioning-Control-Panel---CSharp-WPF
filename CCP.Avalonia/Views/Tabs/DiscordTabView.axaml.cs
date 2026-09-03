@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Localization;
@@ -13,12 +12,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// PORTED from ConditioningControlPanel/Views/Tabs/DiscordTabView.xaml.cs — the Profile tab's
     /// "Trainer Card".
     ///
-    /// What is stubbed: every one of the WPF view's fourteen members that reached out of the view.
     /// The tab owns no logic of its own on WPF either — each handler is a one-line forward to
-    /// <c>Window.GetWindow(this) is MainWindow mw</c>, and that MainWindow is a
-    /// <c>System.Windows.Window</c> in the WPF head. Search, the profile ledger, the vat, the
-    /// faucet, the wardrobe, the spiral map and the two dialogs all live in MainWindow partials
-    /// that have not moved to Core, so every handler here is a no-op with a ponytail marker.
+    /// <c>Window.GetWindow(this) is MainWindow mw</c>. The Avalonia twin of that lookup is
+    /// <see cref="Host"/>, and the host is <see cref="MainShellWindow"/>, so a handler whose WPF
+    /// target has been restored on the shell is now a forward again rather than a no-op. One is:
+    /// <see cref="BtnProfilePrivacy_Click"/> opens the real Privacy &amp; Sharing dialog. The rest
+    /// still reach search, the profile ledger, the vat, the faucet, the wardrobe or the spiral map,
+    /// none of which exist on this head — each says which symbol it is waiting on.
+    ///
+    /// THE CTOR CALLS <c>InitializeComponent()</c>, NOT <c>AvaloniaXamlLoader.Load(this)</c>, and
+    /// that is not cosmetic: the loader never assigns the generated <c>x:Name</c> fields, so under
+    /// it all 85 of this view's named controls were permanently null and any <c>SomeControl?.X</c>
+    /// on this type was a silent no-op. The generated method assigns them. <see cref="Find{T}"/>
+    /// works either way and is kept — MainShellWindow.ProfileCard.cs reaches in with the same
+    /// FindControl call and must keep working whatever this ctor does.
     ///
     /// Dropped: the thirteen <c>ChkDiscordTab*</c> passthrough properties and the two
     /// <c>ProfileViewerAvatar</c>/<c>ProfileOnlineIndicator</c> ones. They exist solely so
@@ -47,9 +54,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal ProfilePrivacyPanel PrivacyPanel { get; }
 
+        /// <summary>The shell that hosts this tab, or null when it is rendered on its own (the
+        /// --render-view harness). The Avalonia twin of WPF's <c>Window.GetWindow(this)</c>.</summary>
+        private Windows.MainShellWindow? Host => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
+
         public DiscordTabView()
         {
-            AvaloniaXamlLoader.Load(this);
+            InitializeComponent();
             PrivacyPanel = new ProfilePrivacyPanel();
             LoadPlaceholderProfile();
         }
@@ -138,14 +149,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private T Find<T>(string name) where T : Control => this.FindControl<T>(name)!;
 
         // ------------------------------------------------------------------
-        // Handlers — every one forwards to MainWindow on WPF and is inert here.
-        // ponytail: needs MainWindow (profile partials), wired when they move to Core.
+        // Handlers — every one forwards to MainWindow on WPF, and to Host here.
         // ------------------------------------------------------------------
 
         private void BtnChangeDisplayName_Click(object? sender, RoutedEventArgs e) { }
+
+        // ponytail: WPF forwards to MainWindow.Browser.cs:ClearProfileViewer, which ends in
+        // SetProfileViewingSelf(true). The shell's twin (MainShellWindow.Browser.cs) is still a
+        // stub, and re-implementing the clear here would be a second copy competing for the same
+        // controls.
         private void BtnClearProfile_Click(object? sender, RoutedEventArgs e) { }
+
         private void BtnDeleteProfile_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProfileDiscord_Click(object? sender, RoutedEventArgs e) { }
+
+        // ponytail: both need MainWindow.Browser.cs:SearchAndDisplayProfile / DisplayOwnProfile -
+        // a leaderboard round-trip and the account service. Those are the two members that call
+        // MainShellWindow.SetProfileViewingSelf and UpdateProfileShowcase, so both stay uncalled
+        // until the shell's Browser partial is real.
         private void BtnProfileSearch_Click(object? sender, RoutedEventArgs e) { }
         private void BtnViewMyProfile_Click(object? sender, RoutedEventArgs e) { }
 
@@ -153,7 +174,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// WPF — that handler drives BtnDiscordTabLogin on the long-lived panel instance.</summary>
         private void BtnDiscordTabLogin_Click(object? sender, RoutedEventArgs e) { }
 
-        private void BtnProfilePrivacy_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>Opens the relocated sharing controls, exactly as the WPF handler does
+        /// (<c>mw.OpenProfilePrivacyDialog()</c>). The dialog borrows <see cref="PrivacyPanel"/>,
+        /// so the toggles inside it are the very controls the shell keeps writing to.</summary>
+        private void BtnProfilePrivacy_Click(object? sender, RoutedEventArgs e) =>
+            Host?.OpenProfilePrivacyDialog();
+
+        // ponytail: MainWindow.ProfileCosmetics.cs:OpenProfileCustomizeDialog - the wardrobe, still
+        // a stub on the shell (MainShellWindow.ProfileWardrobe.cs).
         private void BtnProfileCustomize_Click(object? sender, RoutedEventArgs e) { }
 
         /// <summary>The hero's Share Profile CTA. Same door as the header account menu's
