@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The VR head. OpenXR via StereoKit, consuming the same CCP.Core as the WPF and Avalonia heads.
+
+    Why StereoKit rather than Unity or Godot: it is C#, so it takes CCP.Core by ProjectReference
+    exactly like the other heads - no second language, no marshalling layer, no engine editor. It
+    is OpenXR-first, and targets Quest standalone and PC-class VR (Steam Frame) from one codebase.
+    MIT licensed.
+
+    net8.0 with no -windows suffix, same as Core, so the target framework forbids a WPF reference.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>ConditioningControlPanel.VR</RootNamespace>
+    <AssemblyName>CCP.VR</AssemblyName>
+    <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StereoKit" Version="0.3.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CCP.Core\CCP.Core.csproj" />
+  </ItemGroup>
+
+</Project>
