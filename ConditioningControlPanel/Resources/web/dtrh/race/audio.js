@@ -31,19 +31,24 @@ import { audioUrl, altAudioUrl } from '../shared/audioSrc.js';
 import { ROAD_HALF_W, KART_MIN_SPEED, KART_MAX_SPEED, makeRng } from './consts.js';
 
 export const SFX_BASE = '/dtrh/assets/bubbles/sfx/';
-export const MAX_VOICES = 6;            // one-shots at once; the quietest is dropped for the 7th
+export const MAX_VOICES = 8;            // one-shots at once; the quietest is dropped for the 9th
+export const POP_GAP_MS = 28;           // two pops closer than this are one pop (a chain, not a machine gun)
+export const ALMOST_GAP_MS = 260;       // the near-miss whisper at most this often
 export const PITCH_CAP_SEMIS = 7;       // the combo ladder tops out here
 export const PITCH_STEP_COMBO = 4;      // +1 semitone per this many combo
 
 /** Host catalogue names this page may send (verified against Resources/sounds/chaos/). */
 export const HOST_SFX = new Set([
   'depth_change', 'pb_fanfare', 'streak_milestone', 'golden_pop', 'ui_click',
-  'tunnel_powerup_collect', 'time_slow_in', 'time_slow_out', 'surface', 'thud',
+  'tunnel_powerup_collect', 'time_slow_in', 'time_slow_out', 'surface', 'thud', 'chain_pop',
 ]);
 
-const FILES = { pop: 'Pop.mp3', pop2: 'Pop2.mp3', pop3: 'Pop3.mp3', chime1: 'chime1.mp3', chime2: 'chime2.mp3', chime3: 'chime3.mp3', burst: 'Burst.mp3', gg: 'GG.mp3' };
+// Burst.mp3 and GG.mp3 are deliberately NOT here: the owner cut both (they read as random
+// stingers on a bubble pop). Golden, prism and the jackpot are pops + chimes now.
+const FILES = { pop: 'Pop.mp3', pop2: 'Pop2.mp3', pop3: 'Pop3.mp3', chime1: 'chime1.mp3', chime2: 'chime2.mp3', chime3: 'chime3.mp3' };
 const POPS = ['pop', 'pop2', 'pop3'];
-const LEVELS = { sfx: 1, pop: 0.34, effect: 0.42, whisper: 0.1, chime: 0.36, burst: 0.5, gg: 0.5, tick: 0.16, thud: 0.55 };
+const POP_KEYS = new Set(POPS);
+const LEVELS = { sfx: 1, pop: 0.34, effect: 0.42, whisper: 0.1, chime: 0.36, tick: 0.16, thud: 0.55 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const semisToRate = (s) => Math.pow(2, s / 12);
 
@@ -130,6 +135,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   const live = { world: null, run: null, kart: null };   // what update() last saw (run/kart are live objects)
   const edge = { room: null, airborne: false, boost: 0, d: null, drift: false };
   let ctx = null, master = null, sfxBus = null, noise = null, popRR = 0, disposed = false, dropped = 0, dropLogT = 0;
+  let lastPopAt = -1e9, lastAlmostAt = -1e9;   // performance.now() ms: the pop gap and the whisper gap
   let lastScorePop = null;       // the score 'pop' event that ran just before the field pop reaches us
   // music: the chain is duck -> lowpass (fraught / Undertow / tea time) -> highpass (Grey Ward) -> level -> master
   let musicDuck = null, musicLp = null, musicHp = null, musicLevelNode = null, elementMode = false;
@@ -327,6 +333,11 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const buf = buffers.get(key);
     if (!buf || buf === 'pending' || buf === 'failed') return null;
     const level = clamp(opts.level == null ? 0.3 : opts.level, 0, 1);
+    if (POP_KEYS.has(key) && !opts.at) {   // a chain of pops inside POP_GAP_MS is one pop
+      const nowMs = performance.now();
+      if (nowMs - lastPopAt < POP_GAP_MS) return null;
+      lastPopAt = nowMs;
+    }
     admit(level);
     try {
       const t = ctx.currentTime + Math.max(0, opts.at || 0);
@@ -373,18 +384,18 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const semis = pitchSemis(combo()), pan = panOf(p.x);
     const asEffect = p.kind === 'effect' && (!scored || scored.kindId !== 'treat');
     if (asEffect) { play('pop', { level: LEVELS.effect, semis: semis - 5, pan, lowpass: 1100 }); synth({ kind: 'sine', f0: 140, f1: 50, sec: 0.16, level: 0.28 }); return; }
-    if (p.id === 'golden') { play('burst', { level: LEVELS.burst, semis: 0, pan }); return; }
-    if (p.id === 'prism') { play('burst', { level: LEVELS.burst * 0.6, semis: 3 + semis, pan }); return; }
+    if (p.id === 'golden') { play('pop3', { level: LEVELS.pop, semis: semis + 2, pan }); play('chime3', { level: LEVELS.chime * 0.8, semis: 7, pan, at: 0.05 }); play('chime3', { level: LEVELS.chime * 0.6, semis: 12, pan, at: 0.14 }); return; }
+    if (p.id === 'prism') { play('pop2', { level: LEVELS.pop, semis: 3 + semis, pan }); play('chime1', { level: LEVELS.chime * 0.45, semis: 5 + semis, pan, at: 0.04 }); return; }
     if (p.id === 'lucky') { play('pop2', { level: LEVELS.pop, semis, pan }); play('chime1', { level: LEVELS.chime * 0.5, semis: 5, pan, at: 0.05 }); return; }
     play(POPS[popRR++ % POPS.length], { level: LEVELS.pop, semis, pan });
   }
   function onScore(e) {
     switch (e.type) {
       case 'pop': lastScorePop = e; break;
-      case 'almost': play('pop2', { level: LEVELS.whisper, semis: -4 }); break;
+      case 'almost': { const nowMs = performance.now(); if (nowMs - lastAlmostAt >= ALMOST_GAP_MS) { lastAlmostAt = nowMs; play('pop2', { level: LEVELS.whisper, semis: -4 }); } break; }
       case 'mult': if (e.to > e.from) { const c = chimeFor(e.to); play(c.file, { level: LEVELS.chime, semis: c.semis }); } break;
       case 'bank': bankThud(); arpeggio(LEVELS.chime * 0.8, 0.09); break;
-      case 'jackpot': play('gg', { level: e.tier === 'major' ? LEVELS.gg : LEVELS.gg * 0.7, at: 0.12 }); break;
+      case 'jackpot': arpeggio(e.tier === 'major' ? LEVELS.chime : LEVELS.chime * 0.7, 0.08); if (e.tier === 'major') play('chime3', { level: LEVELS.chime * 0.8, semis: 12, at: 0.3 }); break;
     }
   }
   function onItem(e) {
@@ -408,6 +419,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     if (!HOST_SFX.has(name)) { log('unknown host sfx dropped: ' + name); return; }
     const paused = !!(live.run && live.run.paused);
     if (name === 'streak_milestone' && scale < 0.8) return;   // the rung: the ladder above owns it
+    if (name === 'golden_pop') return;                        // the golden pop: the chime stack above owns it
     if (name === 'ui_click' && !paused) return;               // item roll / arm: the ticks own it
     if (name === 'surface') endSting();
     if (isMuted()) return;

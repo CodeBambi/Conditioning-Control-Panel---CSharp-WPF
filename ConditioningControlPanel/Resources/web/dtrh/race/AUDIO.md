@@ -17,7 +17,9 @@ per-frame edges (airborne, boost, drift, the Big Wheel span, the room).
 - Master = host `init.settings.masterVolume / 100` (60 standalone). `M` toggles the dive's shared
   mute (`shared/audioMute.js`, persisted in localStorage as `rh-audio-muted`) with a HUD toast;
   a persisted mute is announced on boot. Muted = no in-page voices AND no host legs.
-- One-shots are capped at **6 voices**; the 7th drops the quietest (logged, rate-limited 5 s).
+- One-shots are capped at **8 voices**; the 9th drops the quietest (logged, rate-limited 5 s).
+  Two pops inside 28 ms are one pop (a chain, not a machine gun); the near-miss whisper fires
+  at most every 260 ms. `Burst.mp3` and `GG.mp3` are not loaded: the owner cut both.
   Loops (music, the speed bed, drift sparks) do not count.
 - Pops climb with the combo: **+1 semitone per 4 combo, capped at +7**, plus +-20 cents of jitter
   so a chain never machine-guns. Rungs climb the chime ladder: x2 chime1, x3 chime2, x4 chime3,
@@ -47,9 +49,9 @@ on the ground, 0 otherwise (that is the crackle). Nothing here is built while mu
 |------|--------|--------------------|-----------------------|
 | treat pop | `field.onPop` treat | Pop / Pop2 / Pop3 round-robin, combo pitch, panned, 0.34 | - |
 | lucky pop | `field.onPop` lucky | Pop2 + chime1 at +5 (item incoming) | - |
-| prism pop | `field.onPop` prism | Burst at +3 (its chained pops sound themselves) | - |
-| golden pop | `field.onPop` golden | Burst 0.5 | `golden_pop` 0.9 |
-| jackpot | `score` jackpot | GG 0.5 (minor 0.35), 120 ms after the Burst | - |
+| prism pop | `field.onPop` prism | Pop2 at +3 + chime1 at +5 (its chained pops sound themselves) | - |
+| golden pop | `field.onPop` golden | Pop3 at +2, chime3 at +7 (50 ms), chime3 at +12 (140 ms) | swallowed (`golden_pop` 0.9) |
+| jackpot | `score` jackpot | chime1-2-3 arpeggio 80 ms (minor 0.7), major adds chime3 at +12 (300 ms) | - |
 | effect pop | `field.onPop` effect (not "held") | Pop at -5 semis through a 1.1 kHz lowpass + 140>50 Hz sine thud | - |
 | near miss | `score` almost | Pop2 at -4, 0.10 (the whisper) | - |
 | rung up | `score` mult (to > from) | chime ladder (above) | swallowed (`streak_milestone` 0.6) |
