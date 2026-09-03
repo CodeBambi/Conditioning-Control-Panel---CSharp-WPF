@@ -72,6 +72,12 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("CoreMods.AccentColorHex is the built-in default manifest's", CoreMods.AccentColorHex == Models.BuiltInMods.CCPDefault.Theme?.AccentColor, CoreMods.AccentColorHex);
                 Check("CoreMods.Affirmation is the built-in default manifest's", CoreMods.Affirmation == Models.BuiltInMods.CCPDefault.Identity?.Affirmation, CoreMods.Affirmation);
                 Check("CoreMods.GetPhrases is null with no mod layer", CoreMods.GetPhrases("BubbleCountMercy") == null);
+                var finished = false;
+                CoreAudio.PlayOneShot("/nowhere.mp3", 1f, "smoke", onFinished: () => finished = true);
+                Check("CoreAudio.PlayOneShot fires onFinished at once with no audio", finished);
+                CoreAudio.Duck(95); CoreAudio.Unduck();
+                Check("CoreAudio ducking is a no-op with no audio", CoreAudio.DuckGeneration == 0);
+                Check("CoreAi.IsAvailable is false with no head", !CoreAi.IsAvailable);
                 Check("CoreReleaseContent answers null with no pack service", CoreReleaseContent.GetPackInfo("mod-bambi") == null && CoreReleaseContent.GetStampFor("mod-bambi") == null);
                 Check("AwarenessIntensity.Current reads the ship default unseeded", Services.Awareness.AwarenessIntensityProfile.Current == Services.Awareness.AwarenessIntensity.Chatty);
                 // The subreddit rule moved from the online coordinator into Core with no test of its own.
