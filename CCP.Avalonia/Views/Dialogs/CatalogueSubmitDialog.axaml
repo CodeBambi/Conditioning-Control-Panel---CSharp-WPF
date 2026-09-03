@@ -1,0 +1,181 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/CatalogueSubmitDialog.xaml.
+     Structure, ordering, spacing and every x:Name / resource key preserved. Deviations, all forced:
+
+       Style="{StaticResource X}" / inline Button.Style / CheckBox.Style
+                                    -> Theme="{StaticResource X}" + the ControlThemes below
+       ControlTemplate.Triggers     -> ^:pointerover / ^:disabled / ^:checked selectors
+       Visibility="Collapsed"       -> IsVisible="False"
+       ResizeMode="NoResize"        -> CanResize="False"
+       WindowStyle="None" + AllowsTransparency + Background="Transparent"
+                                    -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+                                       + Background="Transparent"
+       Image + EmojiToImageSource   -> a plain TextBlock (Avalonia renders colour emoji natively;
+                                       see the porting notes in CLAUDE.md)
+       Hyperlink + RequestNavigate  -> HyperlinkButton NavigateUri (native; replaces Process.Start,
+                                       so the handler disappears rather than becoming a stub)
+       Click / Checked / Unchecked  -> wired in the constructor
+       Content="{loc:Str …}"        -> a <TextBlock> child (Avalonia parses "_" in Content as an
+                                       access key and every loc key here is snake_case) -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.CatalogueSubmitDialog"
+        Title="{loc:Str dialog_catalogue_submit_title}"
+        SizeToContent="Height" MinHeight="420" MaxHeight="780" Width="620"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of Dialogs/CatalogueSubmitDialog.xaml's inline CheckBox.Style and
+             Button.Style templates, hoist when a third view needs them -->
+        <ControlTheme x:Key="AffirmCheckBox" TargetType="CheckBox">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid>
+                        <Border x:Name="border" Width="24" Height="24" CornerRadius="4"
+                                Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" Cursor="Hand"/>
+                        <TextBlock x:Name="check" Text="✔" Foreground="{DynamicResource PinkBrush}" FontSize="16"
+                                   FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   IsVisible="False"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:checked /template/ TextBlock#check">
+                <Setter Property="IsVisible" Value="True"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#border">
+                <Setter Property="Background" Value="#3A2040"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgCancelButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PanelBgBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="24,14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="#303050"/>
+            </Style>
+        </ControlTheme>
+
+        <ControlTheme x:Key="DlgSubmitButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="24,14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6"
+                            Padding="{TemplateBinding Padding}" Opacity="1">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="#FF85C5"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Border#border">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                <TextBlock Text="📤" FontSize="24" Width="30" Height="30"
+                           VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <TextBlock Text="{loc:Str dialog_catalogue_submit_title}"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="22" FontWeight="Bold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Subtitle: which enhancement is being submitted -->
+            <TextBlock Grid.Row="1" x:Name="TxtSubtitle"
+                       Foreground="#B0B0C0" FontSize="13" Margin="0,0,0,16"
+                       TextTrimming="CharacterEllipsis"/>
+
+            <!-- Body copy (verbatim per spec) -->
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="320">
+                <TextBlock x:Name="TxtBody"
+                           Text="{loc:Str dialog_catalogue_submit_body}"
+                           Foreground="#E0E0E0" FontSize="14" TextWrapping="Wrap" LineHeight="20"
+                           VerticalAlignment="Top"/>
+            </ScrollViewer>
+
+            <!-- Guidelines hyperlink — separate localized string, sibling element.
+                 Keeps each translation atomic and avoids placeholder-inside-prose
+                 fragility across 9 languages. -->
+            <HyperlinkButton Grid.Row="3" x:Name="LinkGuidelines" Margin="0,14,0,0" Padding="0"
+                             HorizontalAlignment="Left"
+                             Foreground="#B084DC"
+                             NavigateUri="https://app.cclabs.app/catalogue/guidelines">
+                <TextBlock Text="{loc:Str dialog_catalogue_submit_view_guidelines}"
+                           FontSize="13" TextDecorations="Underline"/>
+            </HyperlinkButton>
+
+            <!-- Affirmation checkbox -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,20,0,24">
+                <CheckBox x:Name="ChkAffirm" VerticalAlignment="Top"
+                          Theme="{StaticResource AffirmCheckBox}"/>
+                <TextBlock Text="{loc:Str dialog_catalogue_submit_confirm_checkbox}"
+                           Foreground="#E0E0E0" FontSize="14" Margin="12,2,0,0" VerticalAlignment="Top" TextWrapping="Wrap"
+                           MaxWidth="520"/>
+            </StackPanel>
+
+            <!-- Spinner (visible during submission) -->
+            <StackPanel Grid.Row="5" x:Name="PnlSpinner" Orientation="Horizontal" Margin="0,0,0,12" IsVisible="False">
+                <TextBlock Text="⌛" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock Text="Submitting..." Foreground="#B0B0C0" FontSize="13" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Buttons -->
+            <Grid Grid.Row="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="BtnCancel" Grid.Column="0" Margin="0,0,10,0"
+                        Theme="{StaticResource DlgCancelButton}" IsCancel="True">
+                    <TextBlock Text="{loc:Str btn_cancel}"/>
+                </Button>
+
+                <Button x:Name="BtnSubmit" Grid.Column="1" Margin="10,0,0,0"
+                        Theme="{StaticResource DlgSubmitButton}" IsEnabled="False">
+                    <TextBlock Text="{loc:Str dialog_catalogue_submit_btn}"/>
+                </Button>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
