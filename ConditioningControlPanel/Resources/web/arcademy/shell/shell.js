@@ -124,6 +124,10 @@ import { initMail, triggerHolds } from './mail.js';
 import { openMailbox, closeMailbox, isMailboxOpen } from './mailbox.js';
 import { initCorkboard, openCorkboard, currentCorkboard } from './corkboard.js';
 import { initBugle, openBugle, currentBugle } from './bugle.js';
+/* THE TIME CAPSULE. The framed photograph in the entrance hall's trophy case -
+ * a campus overlay like the three above, and the only one with no state of its
+ * own to bank: a picture on a shelf is the same picture every night. */
+import { openTimeCapsule, currentTimeCapsule } from './timecapsule.js';
 import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
 /* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
  * (which dynamic-imports agent A's renderer optionally, so a broken face costs
@@ -844,6 +848,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     openBugle(null, { onClose: refreshCampusPost, log: say });
     fireMoment('campus.bugleOpened', { inClass: false });       // EMI SEAM
   }
+  /* THE CASE. Same guard and the same close-repaint as the three above, so a
+   * second press raises the picture already up rather than minting a second. */
+  function openTimeCapsuleOverlay() {
+    const up = currentTimeCapsule();
+    if (up && !up.closed) return;
+    openTimeCapsule({ onClose: refreshCampusPost });
+  }
 
   /** gameKey -> {grade, zen, composite, capped, tier, xp, levelUp} for TODAY. */
   const results = Object.create(null);
@@ -1241,6 +1252,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           try { if (isMailboxOpen()) return true; } catch (e) { /* noop */ }
           try { const c = currentCorkboard(); if (c && !c.closed) return true; } catch (e) { /* noop */ }
           try { const b = currentBugle(); if (b && !b.closed) return true; } catch (e) { /* noop */ }
+          try { const p = currentTimeCapsule(); if (p && !p.closed) return true; } catch (e) { /* noop */ }
           /* A door card is a modal over the plan; a slip behind it is a slip
            * nobody sees. `seepSeam().cardIsOpen()` is a READ - `closeCard()`
            * would have closed it. */
@@ -2173,6 +2185,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
             showPrizes();
           },
           annex: () => walkThen('annex', () => showAnnex()),
+          /* THE TIME CAPSULE in the trophy case. No walk: the case is in the
+           * hall you are already standing in, and picking a picture up off a
+           * shelf is not a door. The campus OFFERS the press from two places
+           * (the frame itself and the hall's card) and the shell owns the
+           * overlay, exactly as it owns the Records one. */
+          timeCapsule: () => openTimeCapsuleOverlay(),
           /* THE DOOR walks; THE GEAR does not. campus.js calls `registrarRoom`
            * for the Front Office room and falls back to `registrar` for the
            * topbar gear, so these two lines are the whole split. */
@@ -6715,6 +6733,12 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       {
         const up = currentBugle();
+        if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
+      }
+      /* THE TIME CAPSULE rides the same rung as its three neighbours: a campus
+       * overlay at z 38 that can only be up over the board. */
+      {
+        const up = currentTimeCapsule();
         if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
       }
       if (active && active.confirmEl) { dismissConfirm(); return true; }

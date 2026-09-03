@@ -2228,6 +2228,12 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     status: t('campus_notice_board', 'Notice Board'),
     desc: banner || t('campus_desc_entrance',
       'The notice board carries announcements. The trophy case waits for your diplomas.'),
+    /* THE CASE IS THE HALL'S DOOR NOW. The frame below is sixteen units wide on
+     * a plan that is 810 units across on a phone, so a thumb was never going to
+     * find it: the card is where a phone opens the capsule and the frame is
+     * where a pointer does. One handler, two ways in. */
+    action: handlers.timeCapsule ? (() => handlers.timeCapsule()) : null,
+    go: handlers.timeCapsule ? t('capsule_open', 'Open the case') : null,
   }));
   attachTip(hallG, () => ({
     name: t('campus_entrance_hall', 'Entrance Hall'),
@@ -2236,6 +2242,59 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       'The notice board carries announcements. The trophy case waits for your diplomas.'),
   }));
   orient.appendChild(stag(hallG, 860));
+
+  /* THE TIME CAPSULE - a small framed photograph on the bottom shelf of the
+   * trophy case (#general, 2026-09-02: the owner posted the very first
+   * screenshot the Control Panel ever took, and the room asked for it to live
+   * in the case under that name).
+   *
+   * DRAWN, NOT PLACED. The picture itself is shell/timecapsule.js's, because
+   * nothing raster may go into the plan (THE PEEK PLATE's ruling, above): what
+   * stands in the case is a frame, a mount and a glint, in the same two
+   * furniture classes the parcels and the locker doors use.
+   *
+   * IT GOES ON AFTER hallG so it is ON TOP of the hall's own hit rect - the
+   * case stands inside that 240x220 area, and a prop under it would never see a
+   * press. Its own hit rect stops at x 676 and at y 696, and both walls are the
+   * SAME neighbour: the hall's name plate lies across y 695..713 and, stood up
+   * for portrait, across x 677..695. Nothing else in the hall comes near.
+   *
+   * NO FIFTH LABEL. The hall deals four captions around the turned room already
+   * (the room, the case, the board, the desk) and a fifth would cross one of
+   * them at every width. The name is on the hover card, on the aria-label and
+   * on the plaque under the picture, which is where a caption belongs. */
+  const capsuleG = svg('g', null, 'campus-capsule');
+  capsuleG.appendChild(svg('rect', {
+    x: 652, y: 666, width: 24, height: 30, fill: 'transparent', stroke: 'none',
+  }, 'campus-hit'));
+  capsuleG.appendChild(svg('rect', { x: 659, y: 673, width: 16, height: 12 }, 'campus-capsule-frame'));
+  capsuleG.appendChild(svg('rect', { x: 661, y: 675, width: 12, height: 8 }, 'campus-capsule-shot'));
+  capsuleG.appendChild(svg('line', { x1: 662, y1: 682, x2: 668, y2: 676 }, 'campus-capsule-glint'));
+  /* A HOST WITH NO CAPSULE STILL GETS THE FRAME, and it is scenery: no cursor,
+   * no tab stop, no button role. Announcing a control that answers to nothing
+   * is worse than a shelf with a picture on it (the `post` bag's rule). */
+  if (handlers.timeCapsule) {
+    const openCapsule = () => {
+      sfx('door', 0.3);
+      try { handlers.timeCapsule(); } catch (e) { say('timeCapsule threw: ' + ((e && e.message) || e)); }
+    };
+    capsuleG.setAttribute('class', 'campus-capsule live');
+    capsuleG.setAttribute('role', 'button');
+    capsuleG.setAttribute('tabindex', '0');
+    capsuleG.setAttribute('aria-label', t('capsule_label', 'Time Capsule'));
+    capsuleG.addEventListener('click', openCapsule);
+    capsuleG.addEventListener('keydown', (ev) => {
+      if (!ev || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+      try { ev.preventDefault(); } catch (e) { /* noop */ }
+      openCapsule();
+    });
+  }
+  attachTip(capsuleG, () => ({
+    name: t('capsule_label', 'Time Capsule'),
+    status: t('campus_trophy_case', 'Trophy Case'),
+    desc: t('capsule_tip', 'A photograph propped on the bottom shelf. Somebody kept the very first one.'),
+  }));
+  orient.appendChild(stag(capsuleG, 880));
 
   /* corridor <-> entrance opening + main gate */
   /* THE OPENING NOW RUNS TO THE ALLEY'S FAR JAMB. It used to stop at 738 and
@@ -3058,7 +3117,10 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       // Front Office) is not a locked click and never fires one.
       try { fireMoment('lockedClick', { what: 'sealed' }); } catch (e) { /* noop */ }
     } else {
-      ccGo.textContent = t('campus_step_inside', 'Step inside').toUpperCase();
+      /* `go` renames the one button for a door that is not a room you step
+       * into - the Entrance Hall's case opens, it is not entered. Every caller
+       * without it is the card it always was. */
+      ccGo.textContent = String(d.go || t('campus_step_inside', 'Step inside')).toUpperCase();
       ccGo.disabled = !d.action;
       cardAction = d.action || null;
     }

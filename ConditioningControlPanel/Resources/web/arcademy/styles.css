@@ -1921,6 +1921,27 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 .campus-trophy.gold { fill:var(--gold); } .campus-trophy.lav { fill:var(--lav); }
 .campus-trophy.dim { fill:var(--campus-line-dim); }
 
+/* THE TIME CAPSULE on the bottom shelf of the case: a frame, the mount inside
+   it and one glint off the glass. Vector, like every other line on the plan -
+   the photograph itself only ever shows in the overlay (shell/timecapsule.css).
+   Nothing here animates; the hover and the focus ring are the whole feedback. */
+.campus-capsule.live { cursor:pointer; }
+.campus-capsule-frame {
+  fill:color-mix(in srgb, var(--campus-sky), black 24%);
+  stroke:var(--gold); stroke-width:1.1; opacity:.9;
+}
+.campus-capsule-shot { fill:color-mix(in srgb, var(--gold), transparent 72%); stroke:none; }
+.campus-capsule-glint { stroke:color-mix(in srgb, var(--ink), transparent 52%); stroke-width:.9; }
+.campus-capsule.live:hover .campus-capsule-frame { opacity:1; stroke-width:1.7; }
+.campus-capsule.live:hover .campus-capsule-shot { fill:color-mix(in srgb, var(--gold), transparent 46%); }
+.campus-capsule:focus { outline:none; }
+.campus-capsule:focus-visible .campus-capsule-frame {
+  opacity:1; stroke-width:1.7; stroke:var(--ink);
+}
+.campus-capsule:focus-visible .campus-capsule-shot {
+  fill:color-mix(in srgb, var(--gold), transparent 46%);
+}
+
 /* fireflies */
 .campus-fly {
   position:absolute; width:5px; height:5px; border-radius:50%; pointer-events:none;
