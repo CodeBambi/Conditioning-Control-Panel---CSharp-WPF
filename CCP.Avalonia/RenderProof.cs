@@ -41,8 +41,9 @@ namespace ConditioningControlPanel.Avalonia
                 if (viewFactory is not null)
                 {
                     window.Content = viewFactory();
-                    window.Width = 720;
-                    window.Height = 760;
+                    // Wide enough that the shell's 196px rail plus content is not clipped.
+                    window.Width = 1100;
+                    window.Height = 780;
                 }
                 window.Show();
 

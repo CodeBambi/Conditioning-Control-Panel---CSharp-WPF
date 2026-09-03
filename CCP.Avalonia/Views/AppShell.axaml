@@ -1,0 +1,56 @@
+<!-- The app shell: left nav rail + content host, ported from MainWindow.xaml's nav-door layout.
+
+     Faithful in the things that define the app's identity: the eight doors, their order, their
+     per-door hue (taken from MainWindow.xaml's BorderBrush on each DoorX button), the 56px
+     collapsed rail width, and the palette.
+
+     NOT yet faithful: the medallion itself. Each WPF door is an Ellipse glow + Border tile +
+     64px icon Viewbox + label host, whose child ORDER AND TYPES are load-bearing - NavRail.cs
+     picks them out by type, and ChromeFx nudges the first Image/Viewbox on hover. Reproducing
+     that needs the icon art and the hover/nudge behaviour, which is its own change. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.AppShell"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs">
+  <UserControl.Styles>
+    <Style Selector="Button.door">
+      <Setter Property="Height" Value="46"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Padding" Value="10,0"/>
+      <Setter Property="Margin" Value="6,4"/>
+      <Setter Property="BorderThickness" Value="0,0,0,0"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid ColumnDefinitions="196,*">
+
+    <!-- NAV RAIL -->
+    <Border Grid.Column="0" Background="{DynamicResource PanelBgBrush}">
+      <ScrollViewer>
+        <StackPanel Margin="0,10">
+          <TextBlock Text="Conditioning Control Panel" Foreground="{DynamicResource PinkBrush}"
+                     FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" Margin="14,4,14,14"/>
+
+          <!-- Door order and hues are MainWindow.xaml's, not invented. -->
+          <Button Classes="door" Background="#22FF69B4" BorderBrush="#FF69B4" BorderThickness="0,0,0,2" Content="Home"/>
+          <Button Classes="door" Background="#22B8E85C" BorderBrush="#B8E85C" BorderThickness="0,0,0,2" Content="Play"/>
+          <Button Classes="door" Background="#22FF7E6B" BorderBrush="#FF7E6B" BorderThickness="0,0,0,2" Content="Studio"/>
+          <Button Classes="door" Background="#22E85CE0" BorderBrush="#E85CE0" BorderThickness="0,0,0,2" Content="Companion"/>
+          <Button Classes="door" Background="#225ED4E8" BorderBrush="#5ED4E8" BorderThickness="0,0,0,2" Content="Library"/>
+          <Button Classes="door" Background="#225EA8FF" BorderBrush="#5EA8FF" BorderThickness="0,0,0,2" Content="You"/>
+          <Button Classes="door" Background="#225EC8F2" BorderBrush="#5EC8F2" BorderThickness="0,0,0,2" Content="Web App"/>
+          <Button Classes="door" Background="#225CE0A5" BorderBrush="#5CE0A5" BorderThickness="0,0,0,2" Content="Settings"/>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <!-- CONTENT -->
+    <Border Grid.Column="1" Background="{DynamicResource DarkerBgBrush}" Padding="14">
+      <tabs:AchievementsTabView/>
+    </Border>
+  </Grid>
+</UserControl>
