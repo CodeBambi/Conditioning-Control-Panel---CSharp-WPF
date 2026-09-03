@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,9 +11,12 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
@@ -67,24 +71,30 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// <see cref="RunOnAvatar"/> marshals to <c>Dispatcher.UIThread</c> and the setting has no
     /// meaning here. The guards are kept so callers from a worker thread still behave.</para>
     ///
-    /// <para><b>Three members from the partials DID cross</b>, because three other ported files
-    /// ask for them by name and each is self-contained: the chat-shortcut trio
+    /// <para><b>Members from the partials that DID cross</b>, because other ported files ask for
+    /// them by name and each is self-contained: the chat-shortcut trio
     /// (<see cref="FormatChatShortcut"/>, <see cref="SerializeModifiers"/>,
     /// <see cref="ApplyChatShortcutTo"/>, from ChatInput.cs - the setting they read is in Core and
-    /// Avalonia's <c>KeyBindings</c> replaces WPF's <c>InputBindings</c>) and
+    /// Avalonia's <c>KeyBindings</c> replaces WPF's <c>InputBindings</c>);
     /// <see cref="RefreshTubeLayout"/> with its margin maths (from Avatar.cs + Speech.cs, which
-    /// TubeFitDialog hot-refreshes the live tube with). <c>GigglePriority</c> did NOT: its
-    /// signature promises voice, and the queue, the interrupt rules and the TTS behind it are the
-    /// 2,873-line Speech.cs pipeline.</para>
+    /// TubeFitDialog hot-refreshes the live tube with); the art chain (<see cref="SetTubeStyle"/>,
+    /// <see cref="LoadAvatarPoses"/>, <see cref="ApplyAvatarTransform"/>,
+    /// <see cref="UpdateTitleDisplay"/>, from Avatar.cs + Windowing.cs); and
+    /// <see cref="GigglePriority"/> (Speech.cs), which <b>does</b> speak now that
+    /// <c>CoreAudio.PlayOneShot</c> exists - see its own remarks for the four things it drops.</para>
     ///
-    /// <para><b>ponytail: the eight partials did not come.</b> This layer ports the .xaml.cs only.
-    /// Avatar loading and the 60fps float loop (Avatar.cs), speech and barks (Speech.cs), chat and
-    /// the AI pipeline (ChatInput.cs), Circe emotes (CirceEmotes.cs), reactions (Reactions.cs), the
-    /// candle (DescentFuse.cs) and ALL of the attach/detach/scale/position/fullscreen windowing
-    /// (Windowing.cs) stay in the WPF head. Everything the WPF constructor called into them is a
-    /// stub below, and the whole <c>App.*</c> service-subscription block (Video, BubbleCount, Flash,
-    /// Subliminal, Bubbles, Achievements, Progression, Companion, WindowAwareness, MindWipe,
-    /// BrainDrain, ModerationCounter, Mods) is one stub: none of those services are in Core yet.</para>
+    /// <para><b>ponytail: the eight partials still did not come.</b> This layer ports the .xaml.cs
+    /// plus the members named above. The 60fps float loop (Avatar.cs), the speech QUEUE and the bark
+    /// engine (Speech.cs), chat and the AI pipeline (ChatInput.cs), Circe emotes (CirceEmotes.cs),
+    /// reactions (Reactions.cs), the candle (DescentFuse.cs) and ALL of the
+    /// attach/detach/scale/position/fullscreen windowing (Windowing.cs) stay in the WPF head.
+    /// The whole <c>App.*</c> service-subscription block (Video, BubbleCount, Flash, Subliminal,
+    /// Bubbles, Achievements, Progression, Companion, WindowAwareness, MindWipe, BrainDrain,
+    /// ModerationCounter, Mods) is still one stub: none of those services are in Core.</para>
+    ///
+    /// <para><b>The tube does not track a face.</b> Nothing here reads a camera. The webcam face
+    /// tracker that drives the avatar's gaze on the WPF head is a device, so it stays in a head;
+    /// this window renders art and speaks, and that is all it claims.</para>
     /// </summary>
     public partial class AvatarTubeWindow : Window
     {
@@ -104,10 +114,20 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private bool _isShowingAiBubble;
         private bool _isPlayingUninterruptibleClip;
 
-        // Pose cycling (static avatars only). The poses themselves load in Avatar.cs.
+        // Pose cycling (static avatars only). Four PNGs per set; a set with fewer than two that
+        // actually loaded never starts the timer, which is the WPF rule verbatim.
         private readonly DispatcherTimer _poseTimer;
         private int _currentPoseIndex;
-        private readonly int _currentAvatarSet = 1;
+        private readonly int _currentAvatarSet = Math.Max(1, CoreSettings.Current.SelectedAvatarSet);
+        private Bitmap?[] _avatarPoses = new Bitmap?[4];
+
+        // The bubble's auto-hide. One timer, replaced per bubble; the hover hold re-arms it at 1s.
+        private DispatcherTimer? _speechTimer;
+
+        /// <summary>When the last GENUINE AI reply went up. The bark system's chat-suppression
+        /// window reads this (WPF: IsCompanionBusy); bark output passes aiGenerated:false and so
+        /// deliberately does not move it.</summary>
+        private DateTime _lastAiBubbleUtc = DateTime.MinValue;
 
         // Moderation cooldown (P1.4).
         private DateTime? _cooldownEndsAt;
@@ -126,6 +146,13 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private readonly Grid _possessionGlitchLayer;
         private readonly Border _possessionNoteCard;
         private readonly TextBlock _txtPossessionNote;
+        private readonly TextBlock _txtSpeech;
+        private readonly Border _policyBadge;
+        private readonly Image _imgTubeFrame;
+        private readonly Image _imgAvatar;
+        private readonly Border _avatarBorder;
+        private readonly TextBlock _txtAvatarTitle;
+        private readonly TextBlock _txtAvatarLevel;
 
         /// <summary>Render-proof constructor: no parent window, and the states a reviewer cannot
         /// otherwise see (chat log, input panel, candle, Takeover bar) turned on with
@@ -136,7 +163,6 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             ChatHistory.Add(new ChatMessage { Text = "always, sweetie. i've been waiting for you to say something.", IsUser = false });
             ChatHistory.Add(new ChatMessage { Text = "what should we do tonight?", IsUser = true });
 
-            ShowChatHistory();
             _inputPanel.IsVisible = true;
             _txtUserInput.Text = "type something…";
             this.FindControl<Grid>("FuseCandleHost")!.IsVisible = true;
@@ -145,9 +171,11 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // proves ApplyTubeLayoutOffsets + ApplySpeechBubblePlacement execute and land on the
             // XAML defaults rather than only that they compile.
             RefreshTubeLayout();
-            // Note: the AI and POLICY badges are single-message-mode only (ShowChatHistory hides the
-            // AI one, exactly as the WPF original does), so they are not in this frame. Both were
-            // rendered separately during the port to confirm they draw with real strings.
+            // A real spoken line, so the frame carries the glass, the avatar, the caption AND the
+            // priority bubble with its AI badge. The bubble and the chat log share one slot, so
+            // showing this one hides the log; the log's own frame is the earlier layer's PNG.
+            GigglePriority("always, sweetie. i've been waiting for you to say something.",
+                           playSound: false, aiGenerated: true);
         }
 
         public AvatarTubeWindow(Window? parentWindow)
@@ -171,6 +199,13 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _possessionGlitchLayer = this.FindControl<Grid>("PossessionGlitchLayer")!;
             _possessionNoteCard = this.FindControl<Border>("PossessionNoteCard")!;
             _txtPossessionNote = this.FindControl<TextBlock>("TxtPossessionNote")!;
+            _txtSpeech = this.FindControl<TextBlock>("TxtSpeech")!;
+            _policyBadge = this.FindControl<Border>("PolicyBadge")!;
+            _imgTubeFrame = this.FindControl<Image>("ImgTubeFrame")!;
+            _imgAvatar = this.FindControl<Image>("ImgAvatar")!;
+            _avatarBorder = this.FindControl<Border>("AvatarBorder")!;
+            _txtAvatarTitle = this.FindControl<TextBlock>("TxtAvatarTitle")!;
+            _txtAvatarLevel = this.FindControl<TextBlock>("TxtAvatarLevel")!;
 
             // Bind chat history list to the rolling collection of conversational messages.
             _chatHistoryList.ItemsSource = ChatHistory;
@@ -187,8 +222,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _btnSendChat.Click += (_, _) => SendChat();
             _txtUserInput.KeyDown += (_, e) => { if (e.Key == Key.Enter) SendChat(); };
 
-            var avatarBorder = this.FindControl<Border>("AvatarBorder")!;
-            avatarBorder.PointerPressed += OnAvatarPointerPressed;
+            _avatarBorder.PointerPressed += OnAvatarPointerPressed;
             this.FindControl<Border>("BtnPrevAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(-1);
             this.FindControl<Border>("BtnNextAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(+1);
             this.FindControl<ContextMenu>("AvatarContextMenu")!.Opened += (_, _) => UpdateQuickMenuState();
@@ -198,11 +232,20 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _poseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             _poseTimer.Tick += (_, _) => AdvancePose();
 
-            // ponytail: needs App.Settings / App.Mods / App.Companion and AvatarTubeWindow.Avatar.cs.
-            // WPF read PlayerLevel here, picked the avatar set, loaded the poses (static or animated),
-            // applied the per-set transform, entered emotive-portrait or Circe-emote mode, refreshed
-            // the tube art from the active mod and reloaded the mod's video links. None of that is in
-            // Core, so the avatar layers render empty and the title box keeps its XAML defaults.
+            // The art. WPF did all of this in its constructor off App.Settings / App.Mods; every
+            // read it needs is in Core now (CoreSettings for the chosen set, CoreModArt for a mod's
+            // replacement PNG, CoreMods for the persona name), so the tube draws its glass, its
+            // avatar and its caption instead of rendering as an empty frame.
+            SetTubeStyle(!_isAttached);
+            ApplyAvatarSet();
+            // The caption is Loc-driven and set from code (a persona name has no static key), so it
+            // has to be re-run rather than bound - see the porting note about {loc:Str} and .Text.
+            LocalizationManager.Instance.LanguageChanged += OnTubeLanguageChanged;
+
+            // ponytail: still needs AvatarTubeWindow.Avatar.cs for the ANIMATED avatar (level 20+
+            // GIF sets, which need an Avalonia GIF decoder) and the emotive-portrait crossfade, and
+            // App.Mods.IsAvatarSetSupported / GetCustomAvatarSets for the set ARROWS - see
+            // SelectAvatarSet. The static four-pose path below is the one every set-1 user is on.
 
             // ponytail: needs the ~14 App.* services the WPF constructor subscribed to (Video,
             // BubbleCount, Flash, Subliminal, Bubbles, Achievements, Progression, Companion,
@@ -259,6 +302,15 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // target and method, which is what makes "is the sink still MINE?" answerable at all;
             // ReferenceEquals would be false every time because the conversion allocates.
             if (OpenChatSink == (Action)OpenChatInput) OpenChatSink = null;
+
+            // Every timer this window starts is stopped here. --render-all constructs ~180 windows
+            // in one process, and a tick against a torn-down visual tree is exactly the flaky
+            // failure the constructor's note refuses to risk.
+            LocalizationManager.Instance.LanguageChanged -= OnTubeLanguageChanged;
+            _poseTimer.Stop();
+            _speechTimer?.Stop();
+            _cooldownTickTimer?.Stop();
+            _possessionGlitchTimer?.Stop();
             base.OnClosed(e);
         }
 
@@ -411,15 +463,32 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             if (poseNumber < 1 || poseNumber > 4) return;
             _currentPoseIndex = poseNumber - 1;
-            // ponytail: needs _avatarPoses from AvatarTubeWindow.Avatar.cs (LoadAvatarPoses reads
-            // the active mod's PNG set). Without it there is no Bitmap to assign to ImgAvatar.
+            ShowCurrentPose();
         });
 
+        /// <summary>
+        /// Next pose that actually loaded. WPF walked the four slots blindly and let a null Source
+        /// blank the avatar for a beat; skipping the holes keeps a set that ships two PNGs cycling
+        /// between those two instead of flickering to empty every other tick.
+        /// <para>ponytail: WPF's PoseTimer_Tick also picks a TALKING pose while a bubble is up.
+        /// That lives in Avatar.cs with the pose-to-mouth mapping and did not port.</para>
+        /// </summary>
         private void AdvancePose()
         {
-            // ponytail: needs AvatarTubeWindow.Avatar.cs's PoseTimer_Tick, which also drives the
-            // talking/idle pose choice off the speech state.
-            _currentPoseIndex = (_currentPoseIndex + 1) % 4;
+            for (int i = 1; i <= _avatarPoses.Length; i++)
+            {
+                int next = (_currentPoseIndex + i) % _avatarPoses.Length;
+                if (_avatarPoses[next] == null) continue;
+                _currentPoseIndex = next;
+                ShowCurrentPose();
+                return;
+            }
+        }
+
+        private void ShowCurrentPose()
+        {
+            var pose = _avatarPoses[Math.Clamp(_currentPoseIndex, 0, _avatarPoses.Length - 1)];
+            if (pose != null) _imgAvatar.Source = pose;
         }
 
         /// <summary>Gets the current avatar set number</summary>
@@ -429,6 +498,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// True while ANY speech bubble (AI or ordinary "Preset" bark/chatter) is currently being
         /// displayed. Unlike <see cref="HasBubbleUp"/> this also covers non-AI bubbles, so the bark
         /// system can avoid stacking ordinary barks behind one that's already on screen.
+        /// <para>Written by <see cref="GigglePriority"/> and cleared by the auto-hide, so it is a
+        /// live answer now rather than a permanent false.</para>
         /// </summary>
         public bool IsSpeaking => _isGiggling;
 
@@ -645,9 +716,11 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private const double AttachedBubbleRightMargin =
             TubeArtRightPadding - SeamOverlapOverMain + AttachedBubbleSeamGap;
 
-        /// <summary>Attached = riding beside main. The attach/detach gesture itself lives in
-        /// Windowing.cs, which did not port, so the tube stays in the state it starts in.</summary>
-        private bool _isAttached = true;
+        /// <summary>Attached = riding beside main. Seeded from the state the user left the tube
+        /// in, which is what makes a detached user's layout and glass come back detached.
+        /// ponytail: the attach/detach GESTURE is Windowing.cs and did not port, so the tube stays
+        /// in the state it starts in - it just no longer always starts attached.</summary>
+        private bool _isAttached = !CoreSettings.Current.AvatarTubeDetached;
 
         /// <summary>
         /// Re-applies the tube layout after the user edits it (Mod Manager -> Tube Fit). Public so
@@ -753,25 +826,407 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _speechBubble.Margin = new Thickness(0, 0, right, 550);
         }
 
-        // ponytail: the five mod-layout reads are not in Core. WPF has them as
-        // App.Mods.GetAvatarScale / GetAvatarOffsetX / GetAvatarOffsetY /
-        // GetAvatarDetachedOffsetX / GetAvatarDetachedOffsetY, each combined with the Circe
-        // emote-set override in AvatarTubeWindow.CirceEmotes.cs (EffAvatar*). The neutral answers
-        // below are the ones WPF gives with no mod override and no emote running, which is why the
-        // margins above then equal the XAML defaults exactly.
-        private static double EffAvatarScale() => 1.0;
-        private static int EffAvatarOffsetX() => 0;
-        private static int EffAvatarOffsetY() => 0;
-        private static int EffAvatarDetachedOffsetX() => 0;
-        private static int EffAvatarDetachedOffsetY() => 0;
+        /// <summary>
+        /// The layout in force for the active mod: the user's Tube Fit override wins, else the mod
+        /// manifest's own <c>tubeLayout</c>, else null (all defaults). ModService.EffectiveTubeLayout
+        /// verbatim - both halves are in Core, which is what TubeFitDialog already reads, so the
+        /// dialog's preview and the live tube can no longer disagree about the same mod.
+        /// </summary>
+        private static ModTubeLayout? EffectiveTubeLayout()
+        {
+            var id = CoreMods.ActiveModId;
+            if (CoreSettings.Current.TubeLayoutOverridesByMod?.TryGetValue(id, out var user) == true && user != null)
+                return user;
+            return CoreMods.InstalledMods.TryGetValue(id, out var pkg) ? pkg?.Manifest?.TubeLayout : null;
+        }
+
+        // The clamps are ModService.GetAvatar*'s, verbatim: a mod manifest is author-written JSON,
+        // so an out-of-range number must be pinned here rather than thrown off the canvas.
+        //
+        // ponytail: WPF's EffAvatar* (AvatarTubeWindow.CirceEmotes.cs) ADD a running Circe emote's
+        // per-clip nudge on top of these. Emote mode needs an Avalonia WebP/GIF decoder and did not
+        // port, so the emote term is the neutral one it has when no emote set is animating - which
+        // is the state every non-Circe mod is in permanently.
+        private static double EffAvatarScale() => Math.Clamp(EffectiveTubeLayout()?.AvatarScale ?? 1.0, 0.1, 3.0);
+        private static int EffAvatarOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetX ?? 0, -1000, 1000);
+        private static int EffAvatarOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarOffsetY ?? 0, -500, 500);
+        private static int EffAvatarDetachedOffsetX() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetX ?? 0, -1000, 1000);
+        private static int EffAvatarDetachedOffsetY() => Math.Clamp(EffectiveTubeLayout()?.AvatarDetachedOffsetY ?? 0, -500, 500);
 
         /// <summary>
-        /// ponytail: needs <c>Services.ModResourceResolver.HasModOverride</c>, which is a WPF-head
-        /// service. False is the honest unseeded answer - no mod, so no partial tube override - and
-        /// it is the safe one: it keeps the detached layout detached instead of forcing a mod
-        /// chamber nobody installed.
+        /// True when the mod replaces tube.png but not tube2.png - then the detached state uses the
+        /// mod's attached pane AND the attached margins, or the avatar lands outside the chamber the
+        /// author drew (bug report #172). <see cref="CoreModArt"/> answers both halves, so this is
+        /// the WPF predicate rather than the old hard-coded false; with no mod layer up both are
+        /// false and the detached layout stays detached, exactly as before.
         /// </summary>
-        private static bool ModOverridesAttachedTubeOnly() => false;
+        private static bool ModOverridesAttachedTubeOnly()
+            => CoreModArt.HasOverride("tube.png") && !CoreModArt.HasOverride("tube2.png");
+
+        // =========================================================================================
+        //  Tube glass and avatar art. PORTED from AvatarTubeWindow.Windowing.cs (SetTubeStyle) and
+        //  Avatar.cs (LoadAvatarPoses / ApplyAvatarTransform / UpdateTitleDisplay).
+        // =========================================================================================
+
+        /// <summary>
+        /// Points ImgTubeFrame at tube.png or tube2.png - the mod's replacement if it ships one,
+        /// else this head's own shipped copy. A mod that overrides only the attached pane owns both
+        /// states (see <see cref="ModOverridesAttachedTubeOnly"/>).
+        ///
+        /// <para>ponytail: the MIDNIGHT glass pair is deliberately not here. WPF gates it on
+        /// <c>ArcademyHostService.WalletOwnsSku(SkuTubeMidnight)</c> - a purchased cosmetic - and
+        /// this head has no wallet seam, so the only answers available are "always show it" or
+        /// "never". Showing a player glass they have not bought is the worse of the two lies, so
+        /// the standard pair it is until an entitlement seam exists.</para>
+        /// </summary>
+        public void SetTubeStyle(bool useAlternative) => RunOnAvatar(() =>
+        {
+            try
+            {
+                if (useAlternative && ModOverridesAttachedTubeOnly()) useAlternative = false;
+                var name = useAlternative ? "tube2.png" : "tube.png";
+                var art = TryLoadImage(name);
+                if (art != null) _imgTubeFrame.Source = art;
+                Log.Information("Tube style changed to: {Style}", name);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Failed to change tube style"); }
+        });
+
+        /// <summary>Repaint the glass in place, without touching attach state - WPF's
+        /// RefreshTubeGlass, which the Companion workshop cell calls after a settings flip.</summary>
+        public void RefreshTubeGlass() => SetTubeStyle(!_isAttached);
+
+        /// <summary>Loads this set's four poses, shows the first that exists, sizes the border for
+        /// the set and captions the title box, then starts the idle rotation only when there is
+        /// more than one pose to rotate between.</summary>
+        private void ApplyAvatarSet()
+        {
+            _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
+            _currentPoseIndex = 0;
+            for (int i = 0; i < _avatarPoses.Length; i++)
+                if (_avatarPoses[i] != null) { _currentPoseIndex = i; break; }
+            ShowCurrentPose();
+
+            ApplyAvatarTransform(_currentAvatarSet);
+            UpdateTitleDisplay();
+
+            int loaded = 0;
+            foreach (var pose in _avatarPoses) if (pose != null) loaded++;
+            if (loaded > 1) _poseTimer.Start();
+        }
+
+        /// <summary>
+        /// The four pose PNGs for a set - set 1 is <c>avatar_pose{n}.png</c>, the rest
+        /// <c>avatar{set}_pose{n}.png</c> - falling back per slot to set 1's same pose, which is the
+        /// chain WPF's LoadAvatarPoses walks. A slot nothing resolves stays null and is skipped by
+        /// the rotation rather than blanking the avatar.
+        /// </summary>
+        private static Bitmap?[] LoadAvatarPoses(int setNumber)
+        {
+            var poses = new Bitmap?[4];
+            string prefix = setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose";
+            for (int i = 0; i < poses.Length; i++)
+            {
+                poses[i] = TryLoadImage($"{prefix}{i + 1}.png");
+                if (poses[i] == null && setNumber > 1) poses[i] = TryLoadImage($"avatar_pose{i + 1}.png");
+            }
+            return poses;
+        }
+
+        /// <summary>
+        /// The mod's override first (<see cref="CoreModArt"/>), then this head's own shipped copy
+        /// under <c>avares://</c>. Null when neither exists, which every caller treats as "draw
+        /// nothing here" rather than as a failure. Never throws: a mod's broken PNG degrades to the
+        /// built-in, and a missing built-in degrades to an empty slot.
+        /// <para>ponytail: the same two-step as TubeFitDialog.TryLoadImage. Second copy, so this is
+        /// the point where it earns a head-wide helper - it wants a file of its own, and this layer
+        /// owns one file.</para>
+        /// </summary>
+        private static Bitmap? TryLoadImage(string resourceName)
+        {
+            var overridePath = CoreModArt.OverridePath(resourceName);
+            if (overridePath != null)
+            {
+                try { if (File.Exists(overridePath)) return new Bitmap(overridePath); }
+                catch (Exception ex) { Log.Warning(ex, "[Tube] mod override {Path} would not load", overridePath); }
+            }
+
+            try
+            {
+                var uri = new Uri($"avares://CCP.Avalonia/Resources/{resourceName}");
+                if (!AssetLoader.Exists(uri)) return null;
+                using var stream = AssetLoader.Open(uri);
+                return new Bitmap(stream);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[Tube] built-in {Name} would not load", resourceName);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Per-set framing: sets 2+ read 12% bigger and 10px right, and Locked's set 1 ("The Lure")
+        /// is drawn smaller than its siblings so it gets 6%. WPF used LayoutTransform; the note on
+        /// <see cref="ApplyTubeLayoutOffsets"/> covers why RenderTransform is the twin here.
+        /// </summary>
+        private void ApplyAvatarTransform(int setNumber)
+        {
+            _avatarBorder.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+            if (setNumber > 1)
+            {
+                _avatarBorder.RenderTransform = new TransformGroup
+                {
+                    Children = { new ScaleTransform(1.12, 1.12), new TranslateTransform(10, 0) }
+                };
+            }
+            else if (CoreMods.ActiveModId == BuiltInMods.LockedId)
+                _avatarBorder.RenderTransform = new ScaleTransform(1.06, 1.06);
+            else
+                _avatarBorder.RenderTransform = null;
+        }
+
+        /// <summary>
+        /// Captions the title box: the persona's own name and level for the sets that have one,
+        /// else the legacy avatar title for that set. Both go through
+        /// <c>CoreMods.MakeModAware</c>, which is what lets a .ccpmod rename the companion in her
+        /// own tube the way it renames her everywhere else.
+        /// <para>Set from code rather than bound because a persona name has no static loc key, so
+        /// this re-runs on LanguageChanged - see <see cref="OnTubeLanguageChanged"/>.</para>
+        /// <para>ponytail: WPF's third branch captions from the emotive-portrait manifest's SKIN
+        /// title. Portrait mode needs the crossfade layer that did not port.</para>
+        /// </summary>
+        private void UpdateTitleDisplay()
+        {
+            var companionId = CompanionForAvatarSet(_currentAvatarSet);
+            if (companionId.HasValue)
+            {
+                var def = CompanionDefinition.GetById(companionId.Value);
+                var name = def.GetDisplayName(CoreSettings.Current.SlutModeEnabled);
+                _txtAvatarTitle.Text = CoreMods.MakeModAware(name).ToUpperInvariant();
+
+                CoreSettings.Current.CompanionProgressData.TryGetValue((int)companionId.Value, out var progress);
+                _txtAvatarLevel.IsVisible = true;
+                _txtAvatarLevel.Text = progress?.IsMaxLevel == true
+                    ? Loc.Get("avatar_level_max")
+                    : Loc.GetF("avatar_level_format", progress?.Level ?? 1);
+                return;
+            }
+
+            int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitleKeys.Length - 1);
+            _txtAvatarTitle.Text = CoreMods.MakeModAware(Loc.Get(AvatarTitleKeys[titleIndex]));
+            // Sets 1-2 are generic sprites: showing a level there reads as a PERSONA level and is
+            // the confusion WPF hides it for.
+            _txtAvatarLevel.IsVisible = false;
+        }
+
+        private void OnTubeLanguageChanged(object? sender, EventArgs e) => RunOnAvatar(UpdateTitleDisplay);
+
+        /// <summary>Avatar-set titles, in set order. Loc keys, from AvatarTubeWindow.Avatar.cs.</summary>
+        private static readonly string[] AvatarTitleKeys =
+        {
+            "avatar_title_basic_bimbo",           // Set 1
+            "avatar_title_dumb_airhead",          // Set 2
+            "avatar_title_synthetic_blowdoll",    // Set 3
+            "avatar_title_perfect_fuckpuppet",    // Set 4
+            "avatar_title_brainwashed_slavedoll", // Set 5
+            "avatar_title_platinum_puppet",       // Set 6
+            "avatar_title_bambi_cow",             // Set 7
+        };
+
+        /// <summary>The persona an avatar set belongs to; null for sets 1-2, which are generic
+        /// sprites with no companion behind them. From AvatarTubeWindow.Avatar.cs.</summary>
+        private static CompanionId? CompanionForAvatarSet(int setNumber) => setNumber switch
+        {
+            3 => CompanionId.OGBambiSprite,
+            4 => CompanionId.CultBunny,
+            5 => CompanionId.BrainParasite,
+            6 => CompanionId.BambiTrainer,
+            7 => CompanionId.BimboCow,
+            _ => null,
+        };
+
+        // =========================================================================================
+        //  Speech. PORTED from AvatarTubeWindow.Speech.cs - the PRIORITY path only.
+        // =========================================================================================
+
+        /// <summary>
+        /// Say a line now, cutting off whatever was on screen. The companion's interrupt path: an
+        /// AI reply, a scripted ceremony line, a high-priority bark. Keeps the full WPF signature so
+        /// every existing call site compiles unchanged.
+        ///
+        /// <para><b>What it does.</b> Cancels the running bubble, appends the line to the chat log,
+        /// shows or hides the AI badge from <paramref name="aiGenerated"/> (the CCBill addendum's
+        /// visible-labelling rule - a canned phrase must never wear it), plays the voice, renders
+        /// the bubble and hides it again after the user's own Bubble Duration, held open while the
+        /// pointer is over it. An uninterruptible recorded clip refuses it outright, as on WPF.</para>
+        ///
+        /// <para><b>What it drops, and why each is safe to drop rather than fake.</b></para>
+        /// <list type="bullet">
+        ///   <item>The speech QUEUE and its post-line delay. Priority speech CLEARS the queue on
+        ///         WPF, so the priority path never reads it; there is nothing here to enqueue
+        ///         behind, and the delay only spaces lines this head cannot yet emit.</item>
+        ///   <item>The typewriter. Cosmetic, and WPF adds its runtime to the display duration - so
+        ///         dropping it shortens the window rather than truncating the line. The reading
+        ///         floor below is kept, which is the half that protects a long reply.</item>
+        ///   <item>The lead-in timer and <paramref name="mood"/>. Both exist to time the avatar's
+        ///         emotive-portrait pose swap against the voice; that system did not port, so a
+        ///         lead-in would be a pause with nothing happening in it.</item>
+        ///   <item>EMI Desk's <c>NoteAvatarSpeaking</c> / <c>AvatarMuted</c>. Her service is
+        ///         head-side; her mute is a SECOND mute on top of the user's own, so leaving it out
+        ///         cannot silence a line that should sound, only fail to silence one she would
+        ///         have. Named in the blocked list.</item>
+        /// </list>
+        ///
+        /// <para><b>ponytail: two lines in quick succession can overlap.</b> WPF cuts the previous
+        /// voiceline with <c>StopSpokenAudio</c>, which needs an <c>AudioPlaybackHandle</c>;
+        /// <c>CoreAudio.PlayOneShot</c> is fire-and-forget and returns none. The bubble still
+        /// preempts correctly - this is audio only, and it is audible rather than silent, which is
+        /// why it ships as a note instead of as a dropped voiceline.</para>
+        /// </summary>
+        public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true,
+                                   string? phraseAudioPath = null, bool barkVoice = false,
+                                   string? mood = null)
+        {
+            if (_isPlayingUninterruptibleClip) return;
+            RunOnAvatar(() =>
+            {
+                try
+                {
+                    // Only a GENUINE AI reply anchors the bark system's chat-suppression window;
+                    // bark output passes aiGenerated:false and must not suppress the next bark.
+                    if (aiGenerated) _lastAiBubbleUtc = DateTime.UtcNow;
+
+                    _speechTimer?.Stop();
+                    AddToChatHistory(text, isUser: false);
+
+                    // The chat log owns the bubble while it is up - take it back before rendering.
+                    if (_isShowingChatHistory)
+                    {
+                        _isShowingChatHistory = false;
+                        _chatHistoryView.IsVisible = false;
+                        _speechScroller.IsVisible = true;
+                    }
+
+                    _aiBadge.IsVisible = aiGenerated;
+                    _policyBadge.IsVisible = false;   // mutually exclusive with the AI badge
+                    _isListeningBubble = false;
+
+                    // Mute silences her VOICE and keeps the text (#445) - a muted companion that
+                    // also stopped showing bubbles read as completely broken.
+                    if (!IsMuted) PlaySpeechAudio(playSound, phraseAudioPath, barkVoice);
+
+                    _txtSpeech.Text = text;
+                    _speechBubble.MaxWidth = 380;
+                    ApplySpeechBubblePlacement();
+                    _speechBubble.IsVisible = true;
+                    _isGiggling = true;
+                    _isShowingAiBubble = true;
+
+                    StartBubbleHideTimer(text);
+                    Log.Debug("Companion says ({Chars} chars, ai={Ai}): {Text}", text.Length, aiGenerated, text);
+                }
+                catch (Exception ex) { Log.Warning(ex, "AvatarTube GigglePriority failed"); }
+            });
+        }
+
+        /// <summary>
+        /// True while the companion is mid-chat: an AI bubble is on screen, or a genuine AI reply
+        /// landed within <paramref name="windowMs"/>. The bark system asks this to avoid talking
+        /// over a conversation.
+        /// <para>ponytail: WPF also returns true while an AI request is IN FLIGHT
+        /// (<c>_isWaitingForAi</c>), which is ChatInput.cs's inference pipeline. This head never
+        /// sets that flag, so the window opens when the reply lands rather than when it is asked
+        /// for - narrower, never wider, so no bark is let through that WPF would have held.</para>
+        /// </summary>
+        public bool IsCompanionBusy(int windowMs)
+        {
+            if (_isShowingAiBubble) return true;
+            return windowMs > 0 && (DateTime.UtcNow - _lastAiBubbleUtc).TotalMilliseconds < windowMs;
+        }
+
+        /// <summary>The user's avatar mute. WPF mirrors this setting into a field the quick menu
+        /// flips; reading the setting itself is the same answer with nothing to keep in sync.</summary>
+        public bool IsMuted => CoreSettings.Current.AvatarMuted;
+
+        /// <summary>
+        /// Auto-hide, at the user's Bubble Duration (1-10s). A long line gets an ESL-friendly
+        /// reading floor of ~12 chars/sec capped at 30s, so a 200-char reply is not gone in two
+        /// seconds (bug #193). Hovering the bubble holds it open, re-checked every second.
+        /// </summary>
+        private void StartBubbleHideTimer(string text)
+        {
+            double seconds = Math.Clamp(CoreSettings.Current.BubbleDurationSeconds, 1.0, 10.0);
+            seconds = Math.Max(seconds, Math.Min(30.0, text.Length / 12.0));
+
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+            timer.Tick += (_, _) =>
+            {
+                if (_isMouseOverSpeechBubble) { timer.Interval = TimeSpan.FromSeconds(1); return; }
+                timer.Stop();
+                _speechBubble.IsVisible = false;
+                _isShowingAiBubble = false;
+                _isGiggling = false;
+            };
+            _speechTimer = timer;
+            timer.Start();
+        }
+
+        /// <summary>
+        /// The voice for one bubble, with WPF's volume curves verbatim: a bark voiceline at
+        /// master^1.5 * 0.85, a phrase clip at * 0.56, the canned giggle at * 0.7. MasterVolume 0
+        /// means "attempt no audio at all" (the mute egg), so it returns before touching a file.
+        /// <para>"Mute Voice Lines" (#846) silences only the spoken VO and drops back to a sound
+        /// cue, so she still reads as present - the single choke point every voiced line funnels
+        /// through on WPF. The cue is the giggle; WPF's PlayFallbackBubbleSound picks between the
+        /// giggles and the "um" set, and that coin flip lives in Reactions.cs.</para>
+        /// </summary>
+        private void PlaySpeechAudio(bool playSound, string? phraseAudioPath, bool barkVoice)
+        {
+            try
+            {
+                var master = CoreSettings.Current.MasterVolume / 100f;
+                if (master <= 0f) return;
+                var curved = (float)Math.Pow(master, 1.5);
+
+                if (!string.IsNullOrEmpty(phraseAudioPath))
+                {
+                    if (barkVoice && CoreSettings.Current.CompanionVoiceLinesMuted)
+                    {
+                        PlayGiggleSound(curved);
+                        return;
+                    }
+                    if (!File.Exists(phraseAudioPath)) return;
+                    CoreAudio.PlayOneShot(phraseAudioPath!, curved * (barkVoice ? 0.85f : 0.56f),
+                                          barkVoice ? "bark-voice" : "phrase-audio");
+                    return;
+                }
+
+                if (playSound) PlayGiggleSound(curved);
+            }
+            catch (Exception ex) { Log.Debug("AvatarTube speech audio failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// One of giggle5-8. Bambi Sleep suppresses the canned "hehehe" outright - it sounds cheap
+        /// next to that mod's real voiceline barks, so a clip-less bubble there stays silent.
+        ///
+        /// <para><b>ponytail: this head ships no <c>Resources/sounds</c>.</b> Only a MOD's override
+        /// resolves today, so a stock install is silent here. That is a missing asset link in
+        /// CCP.Avalonia.csproj, not a missing seam - and File.Exists means a miss is silence rather
+        /// than a bogus path handed to the audio service, which is WPF's own behaviour for
+        /// giggle6 (it ships as .wav, and the shipped-file lookup only ever asks for .mp3).</para>
+        /// </summary>
+        private void PlayGiggleSound(float curvedVolume)
+        {
+            if (CoreMods.ActiveModId.Contains("bambi", StringComparison.OrdinalIgnoreCase)) return;
+
+            var name = $"giggle{5 + _random.Next(4)}.mp3";
+            var path = CoreModArt.OverridePath($"sounds/{name}")
+                       ?? System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", name);
+            if (!File.Exists(path)) return;
+            CoreAudio.PlayOneShot(path, curvedVolume * 0.7f, "giggle");
+        }
 
         // =========================================================================================
         //  Chat shortcut. PORTED from AvatarTubeWindow.ChatInput.cs. DevicesSettingsSection and the
@@ -939,8 +1394,14 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <summary>Step through the unlocked avatar sets with the title-box arrows.</summary>
         private void SelectAvatarSet(int delta)
         {
-            // ponytail: needs App.Settings (SelectedAvatarSet) and AvatarTubeWindow.Avatar.cs
-            // (GetUnlockedAvatarSets / LoadAvatarPoses / ApplyAvatarTransform / UpdateTitleDisplay).
+            // ponytail: the three things a SWITCH needs are here now (LoadAvatarPoses,
+            // ApplyAvatarTransform, UpdateTitleDisplay); the LIST of sets to step through is not.
+            // App.Mods.IsAvatarSetSupported and GetCustomAvatarSets (ModService.cs) decide which
+            // sets the active mod actually ships art for, and stepping onto a set with no PNG would
+            // leave the tube empty under a caption naming a persona who is not drawn. Both arrows
+            // are IsVisible=False in the XAML until WPF's UpdateNavigationArrows runs, so nothing
+            // reaches this today - the tube shows CoreSettings.Current.SelectedAvatarSet and stays
+            // on it.
         }
 
         /// <summary>Refresh the context menu's checkmarks and the remote-emote item swap.</summary>
