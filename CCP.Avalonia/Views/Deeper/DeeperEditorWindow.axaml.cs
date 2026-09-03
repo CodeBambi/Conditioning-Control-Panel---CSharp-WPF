@@ -16,6 +16,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
@@ -75,9 +76,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///         App.DeeperHost, the haptics bus and GazePickerWindow. App.EnhancementLibrary is
     ///         head-only too, but the five members the editor needs from it are inlined in the
     ///         file-ops region, so Save / Save As / Export / Swap / Change media / drag-drop are
-    ///         real. What is still missing there is a three-way Save/Discard/Cancel modal: this
-    ///         head ships MessageDialog (OK, OK/Cancel) only, so the unsaved-changes guard on
-    ///         swap, drop-load and close is still open. See ConfirmDiscardChangesAsync.</item>
+    ///         real, and the unsaved-changes guard on swap, drop-load and close asks
+    ///         Save / Discard / Cancel through <see cref="UnsavedChangesDialog"/> at the foot of
+    ///         this file.</item>
     /// </list>
     /// </summary>
     public partial class DeeperEditorWindow : Window
@@ -2064,13 +2065,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private async void MenuSave_Click(object? sender, RoutedEventArgs e)
         {
-            try
-            {
-                if (string.IsNullOrEmpty(_filePath)) await SaveAsAsync();
-                else await SaveToAsync(_filePath!);
-            }
+            try { await SaveCurrentAsync(); }
             catch (Exception ex) { Log.Warning(ex, "DeeperEditor: save failed"); }
         }
+
+        /// <summary>What Ctrl+S does, as something a caller can await. Both unsaved-changes
+        /// prompts have to let the save finish before they read <see cref="_isDirty"/> back for
+        /// their answer, and <see cref="MenuSave_Click"/> is an <c>async void</c> handler that
+        /// cannot be awaited - WPF got away with calling it because its save was synchronous.
+        /// </summary>
+        private Task SaveCurrentAsync()
+            => string.IsNullOrEmpty(_filePath) ? SaveAsAsync() : SaveToAsync(_filePath!);
 
         private async void MenuSaveAs_Click(object? sender, RoutedEventArgs e)
         {
@@ -2569,23 +2574,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                && path.EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
-        /// The one gate this layer deliberately leaves open, now that the editor can actually save.
+        /// The gate in front of anything that throws the loaded project away: swap-JSON,
+        /// drop-load and Close. True means "carry on", false means the user backed out.
         ///
-        /// WPF asked Save / Discard / Cancel and this head has no three-way modal - MessageDialog
-        /// offers OK and OK/Cancel only. Both two-way collapses are worse than the gap, so neither
-        /// was taken: mapping OK to Discard contradicts the localized prompt itself ("You have
-        /// unsaved changes. Save before continuing?"), and mapping OK to Save leaves a user who
-        /// wants to abandon an experiment with no way out except writing it over their original
-        /// file - which is a data loss of its own, not a smaller one.
-        ///
-        /// ponytail: this is async and every caller awaits it, so the layer that adds a three-way
-        /// dialog in CCP.Avalonia/Views/Dialogs/ replaces this body and touches nothing else.
+        /// Ported from WPF's MessageBoxButton.YesNoCancel, including its post-condition: after
+        /// Save the answer is <c>!_isDirty</c>, not <c>true</c>, so a save the user cancelled at
+        /// the file picker aborts the caller instead of discarding the work anyway.
         /// </summary>
-        private Task<bool> ConfirmDiscardChangesAsync()
+        private async Task<bool> ConfirmDiscardChangesAsync()
         {
-            if (!_isDirty) return Task.FromResult(true);
-            Log.Debug("DeeperEditor: discard-changes confirm needs a three-way modal; proceeding");
-            return Task.FromResult(true);
+            if (!_isDirty) return true;
+            var choice = await UnsavedChangesDialog.AskAsync(this,
+                Loc.Get("deeper_editor_unsaved_prompt_title"),
+                Loc.Get("deeper_editor_unsaved_prompt"));
+            if (choice == UnsavedChangesDialog.Choice.Cancel) return false;
+            if (choice == UnsavedChangesDialog.Choice.Save)
+            {
+                try { await SaveCurrentAsync(); }
+                catch (Exception ex) { Log.Warning(ex, "DeeperEditor: save from the unsaved-changes prompt failed"); }
+                return !_isDirty;
+            }
+            return true; // discard
         }
 
         private static bool IsLocalVideoFile(string path)
@@ -2720,20 +2729,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             try { Close(); } catch { }
         }
 
+        // Set once the user has answered the unsaved-changes prompt, so the Close() that
+        // follows falls straight through to teardown instead of asking again.
+        private bool _closeConfirmed;
+
         /// <summary>
-        /// ponytail: the unsaved-changes prompt needs the same three-way modal
-        /// <see cref="ConfirmDiscardChangesAsync"/> is waiting on. Teardown still runs, so nothing
-        /// leaks - but now that Save works, closing a dirty editor discards real work silently.
-        ///
-        /// The layer that adds the dialog cannot simply await here: Avalonia evaluates
-        /// <c>WindowClosingEventArgs.Cancel</c> synchronously, so it must set <c>e.Cancel = true</c>
-        /// BEFORE the first await, then call <c>Close()</c> again behind a <c>_closeConfirmed</c>
-        /// flag once the user has answered.
+        /// Avalonia reads <c>WindowClosingEventArgs.Cancel</c> synchronously, so the prompt cannot
+        /// simply be awaited here the way WPF's blocking MessageBox was: this cancels the close
+        /// FIRST, asks, and re-closes behind <see cref="_closeConfirmed"/>. Teardown therefore has
+        /// to sit on the other side of that branch - running it before the answer would dispose
+        /// the editor's timers under a user who chose Cancel.
         /// </summary>
-        private void Window_Closing(object? sender, WindowClosingEventArgs e)
+        private async void Window_Closing(object? sender, WindowClosingEventArgs e)
         {
-            if (_isDirty && !_suppressDirtyPromptOnClose)
-                Log.Debug("DeeperEditor: closing with unsaved changes; no modal prompt on this head");
+            if (_isDirty && !_suppressDirtyPromptOnClose && !_closeConfirmed)
+            {
+                e.Cancel = true;                    // before the first await, or it is not read
+                var choice = await UnsavedChangesDialog.AskAsync(this,
+                    Loc.Get("deeper_editor_close_unsaved_title"),
+                    Loc.Get("deeper_editor_close_unsaved_prompt"));
+                if (choice == UnsavedChangesDialog.Choice.Cancel) return;
+                if (choice == UnsavedChangesDialog.Choice.Save)
+                {
+                    try { await SaveCurrentAsync(); }
+                    catch (Exception ex) { Log.Warning(ex, "DeeperEditor: save on close failed"); }
+                    if (_isDirty) return;           // save cancelled or failed - stay open
+                }
+                _closeConfirmed = true;
+                Close();
+                return;
+            }
+
+            EndGazePick(commit: false);
             TeardownPreview();
             DisposePlayback();
         }
@@ -2853,5 +2880,118 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// <summary>ponytail: needs NAudio WaveOutEvent.PlaybackStopped - the audio twin of
         /// <see cref="OnVlcEndReached"/>.</summary>
         private void OnWaveOutPlaybackStopped(object? sender, EventArgs args) { }
+    }
+
+    /// <summary>
+    /// Save / Discard / Cancel - the one question this head's <c>MessageDialog</c> cannot ask.
+    /// WPF used <c>MessageBoxButton.YesNoCancel</c>, which does not exist off Windows, and both
+    /// two-way collapses of it lose something real: OK-as-Discard contradicts the prompt, and
+    /// OK-as-Save leaves someone abandoning an experiment no exit but overwriting their original.
+    ///
+    /// <para><b>It lives here, not in Views/Dialogs/, only because of layer file ownership.</b>
+    /// Nothing about it is editor-specific - the next layer that touches Views/Dialogs/ should
+    /// move it there and point the two callers at the new namespace.</para>
+    ///
+    /// <para>The Discard label is a hardcoded English constant: CCP.Core's language files carry
+    /// <c>btn_save</c> and <c>btn_cancel</c> but no <c>btn_discard</c>, and adding one is a Core
+    /// change this layer does not own. WPF's third button was localized by Windows itself, so this
+    /// is a real regression for the eight non-English languages - one JSON key wide.</para>
+    ///
+    /// Built in code rather than XAML for the same ownership reason (a .axaml would be a second
+    /// new file). Chrome copied from MessageDialog.axaml: DarkerBgBrush window, PinkBrush 18-bold
+    /// header, SecondaryButton/ActionButton footer, and a TextBlock inside every button because
+    /// Avalonia parses "_" in Content as an access key.
+    /// </summary>
+    internal sealed class UnsavedChangesDialog : Window
+    {
+        internal enum Choice { Save, Discard, Cancel }
+
+        // ponytail: hardcoded until CCP.Core's language files gain a btn_discard key.
+        private const string DiscardLabel = "Discard";
+
+        /// <summary>Render/design constructor, on the real close-path strings so the PNG proves
+        /// the localization lookups as well as the layout. Internal, like MessageDialog's.</summary>
+        internal UnsavedChangesDialog() : this(
+            Loc.Get("deeper_editor_close_unsaved_title"),
+            Loc.Get("deeper_editor_close_unsaved_prompt"))
+        { }
+
+        private UnsavedChangesDialog(string title, string message)
+        {
+            Title = title;
+            Width = 460;
+            MinHeight = 170;
+            SizeToContent = SizeToContent.Height;
+            CanResize = false;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            Background = Rsrc<IBrush>("DarkerBgBrush") ?? Brushes.Black;
+
+            var save = MakeButton(Loc.Get("btn_save"), "ActionButton", Choice.Save);
+            save.IsDefault = true;
+            var discard = MakeButton(DiscardLabel, "SecondaryButton", Choice.Discard);
+            discard.Margin = new Thickness(0, 0, 10, 0);
+            var cancel = MakeButton(Loc.Get("btn_cancel"), "SecondaryButton", Choice.Cancel);
+            cancel.IsCancel = true;
+            cancel.Margin = new Thickness(0, 0, 10, 0);
+
+            var footer = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto"),
+                Margin = new Thickness(0, 20, 0, 0),
+            };
+            Grid.SetColumn(cancel, 1);
+            Grid.SetColumn(discard, 2);
+            Grid.SetColumn(save, 3);
+            footer.Children.Add(cancel);
+            footer.Children.Add(discard);
+            footer.Children.Add(save);
+
+            var body = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto"), Margin = new Thickness(20) };
+            var head = new TextBlock
+            {
+                Text = title,
+                Foreground = Rsrc<IBrush>("PinkBrush") ?? Brushes.White,
+                FontSize = 18,
+                FontWeight = FontWeight.Bold,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12),
+            };
+            var text = new TextBlock
+            {
+                Text = message,
+                Foreground = Rsrc<IBrush>("TextLightBrush") ?? Brushes.White,
+                FontSize = 14,
+                LineHeight = 20,
+                TextWrapping = TextWrapping.Wrap,
+            };
+            Grid.SetRow(head, 0);
+            Grid.SetRow(text, 1);
+            Grid.SetRow(footer, 2);
+            body.Children.Add(head);
+            body.Children.Add(text);
+            body.Children.Add(footer);
+            Content = body;
+        }
+
+        private Button MakeButton(string label, string themeKey, Choice answer)
+        {
+            var b = new Button
+            {
+                Theme = Rsrc<ControlTheme>(themeKey),
+                Content = new TextBlock { Text = label },
+            };
+            b.Click += (_, _) => Close(answer);
+            return b;
+        }
+
+        /// <summary>The app dictionary, not this window's - nothing is merged locally, and the
+        /// lookup runs in the constructor, before there is a visual tree to walk.</summary>
+        private static T? Rsrc<T>(string key) where T : class
+            => Application.Current is { } app && app.TryFindResource(key, out var v) ? v as T : null;
+
+        /// <summary>Asks, and answers Cancel for the window X - the safe direction, since Cancel
+        /// is the only answer that keeps the unsaved work reachable.</summary>
+        internal static async Task<Choice> AskAsync(Window owner, string title, string message)
+            => await new UnsavedChangesDialog(title, message).ShowDialog<Choice?>(owner) ?? Choice.Cancel;
     }
 }
