@@ -362,6 +362,23 @@ kbd {
   padding:10px 12px; color:var(--ink-dim); overflow-x:auto; max-width:100%;
 }
 
+/* THE LONG-PRESS SHEET - shell/cardshot.js's last rung. A host with neither a
+   download nor an image clipboard (a phone webview) gets the PNG painted into
+   the page instead, so it can be held and saved. z 58 puts it over the report
+   stage and the corkboard and UNDER the toast, which is the thing telling you
+   to press and hold. Any press anywhere takes it away again. */
+.arc-shotsheet {
+  position:fixed; inset:0; z-index:58;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:24px;
+  background:color-mix(in srgb, var(--ground), transparent 6%);
+}
+.arc-shotsheet img {
+  max-width:min(560px, 92vw); max-height:72vh; width:auto; height:auto;
+  border-radius:14px; border:var(--hairline);
+  box-shadow:0 18px 48px rgba(0,0,0,.55);
+}
+
 /* ---- the fullscreen report beat (shell marks <html> arc-report-on) ----
    The stage is the night ground under a desk lamp; the report itself is a
    graded PAPER laid on it. Base .reportcard/.rcell/.grade rules above still

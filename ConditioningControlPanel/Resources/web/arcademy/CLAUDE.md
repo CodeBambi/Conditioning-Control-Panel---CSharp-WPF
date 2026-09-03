@@ -65,7 +65,22 @@ shell/splitflap.js departure-board reveal. The campus hangs it COLLAPSED behind 
                    first open of the day, store key boardOpenedDate); expanding
                    rolls the flaps, which is why there is no "flip the board
                    again" button any more
-shell/reportcard.js day summary + THE one share pipeline
+shell/reportcard.js day summary + THE one share pipeline. v1 = Daily Trigger's
+                   emoji grid copied as TEXT; v2 (Wobberjockey, 2026-09-02) adds
+                   SAVE AS IMAGE beside it, on every report whether or not the
+                   day had a grid. The picture is drawn from the render state,
+                   never from the DOM
+shell/cardshot.js  the drawing half of that: `drawCard(model)` paints the card
+                   onto a 1280px canvas in the HOUSE palette (literals, never
+                   init.palette) and `handOut(canvas)` walks the doors - on the
+                   web a download plus a best-effort image clipboard, on a NATIVE
+                   host (WebView2 / react-native-webview) the clipboard first,
+                   then the download, then `.arc-shotsheet`: the PNG painted into
+                   the page so a phone can long-press it. Imports nothing (no
+                   lexicon, no bridge, no store), because every word on the image
+                   is a neutral literal by trap 13 - the button and the toasts are
+                   the only mod-skinnable strings in the beat. There is NO host
+                   message for saving a file and this wave did not add one
 shell/settings.js  THE settings page (3 tiers) + SETTING_KEYS; `gameKey` scopes it to ONE
                    game group (the pause card's door) - argless = the full sheet
 shell/ceremonies.js stamp / 10-segment meter / reward beats (engine-delegated; the

@@ -8,9 +8,22 @@
  *
  * SHARE, v1 (DECISIONS #6, SYNTHESIS #5): exactly one renderer, and exactly one
  * payload shape reaches it - Daily Trigger's spoiler-free emoji grid, copied to
- * the clipboard as TEXT. No canvas, no image export, no URL. Every other game's
- * `share` payload is IGNORED with one log line (once per session, not once per
- * class - a shell that logs 60 times a day is a shell nobody reads).
+ * the clipboard as TEXT. No URL, ever. Every other game's `share` payload is
+ * IGNORED with one log line (once per session, not once per class - a shell
+ * that logs 60 times a day is a shell nobody reads).
+ *
+ * SHARE, v2 (Wobberjockey's ask, tier-2 2026-09-02): THE SAME CARD, AS A
+ * PICTURE. The text copy is untouched and still the first button; beside it is
+ * one that paints the whole night onto a canvas (shell/cardshot.js) and hands
+ * the PNG out. People were already doing this by hand - Wobberjockey pasted the
+ * grid himself on 08-27, Mort screenshotted his card on 08-26 - so this is the
+ * manual thing, done properly.
+ *
+ * The picture is drawn from THIS state, never from the DOM: no html2canvas, no
+ * screenshot API, nothing that can catch a stray overlay or a mod's skin. That
+ * is also what keeps it mod-anonymous end to end (trap 13), the way the share
+ * TEXT already was - neutral keys and literals on the image, the lexicon only
+ * on the button and the toast.
  *
  * The share header is deliberately MOD-ANONYMOUS: the literal string "The
  * Arcademy", not t('arcademy'). A skinned header would out the player's mod in a
@@ -20,6 +33,7 @@
 import { t, gradeLabel, tierLabel } from '../core/lexicon.js';
 import { gradeKey } from '../core/grades.js';
 import { exitBar, sign as signExit, campusPillRow } from './exits.js';
+import { drawCard, handOut } from './cardshot.js';
 
 /** Mod-anonymous, name-only, no URL. Do not "improve" this. */
 export const SHARE_HEADER = 'The Arcademy';
@@ -27,6 +41,17 @@ export const SHARE_HEADER = 'The Arcademy';
 export const SHARE_ALLOWED = Object.freeze(['daily_trigger']);
 /** Mod-anonymous display names for share text only (never for the UI). */
 const SHARE_NAMES = Object.freeze({ daily_trigger: 'Daily Trigger' });
+
+/**
+ * A class name for the PICTURE. Never `t('game_' + key)`: that row is the one a
+ * mod re-titles, and a re-titled class on a posted card outs the mod as loudly
+ * as a skinned header would (trap 13). The neutral system key de-snaked is the
+ * same name the share text has always used for Daily Trigger.
+ */
+function neutralName(key) {
+  if (SHARE_NAMES[key]) return SHARE_NAMES[key];
+  return String(key || '').replace(/_/g, ' ').replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+}
 
 let ignoredShareLogged = false;
 
@@ -109,6 +134,57 @@ export function buildShareText(payload, ctx) {
   const storm = Array.isArray(payload.storm) ? payload.storm.filter((s) => typeof s === 'string') : [];
   if (storm.length) { lines.push(''); lines.push(storm.slice(0, 8).join('')); }
   return lines.join('\n');
+}
+
+/**
+ * The same day, shaped for the canvas. Pure, so a suite can read the model
+ * without a DOM, and MOD-ANONYMOUS by construction: neutral class names, the
+ * raw grade letter rather than `gradeLabel()`, a plain 'Year N' rather than
+ * `tierLabel()`. Only the emoji marks go through the lexicon, exactly as the
+ * share text already does - a mod ships its own set and no set names the mod.
+ *
+ * @param {Object} state  the same object render() was handed
+ * @param {Object=} payload  the accepted share payload, if the day had one
+ */
+export function buildShotModel(state, payload) {
+  const s = state || {};
+  const results = s.results || {};
+  const classes = (s.timetable && s.timetable.classes) || [];
+  const streak = s.streak || { count: 0, perfectDays: 0 };
+  const rows = [];
+  let totalXp = 0;
+  let tickets = 0;
+  let token = false;
+  for (const c of classes) {
+    const r = results[c.gameKey];
+    rows.push({ name: neutralName(c.gameKey), grade: r ? (r.grade || '') : '', xp: (r && r.xp != null) ? r.xp : null });
+    if (r && r.xp) totalXp += Math.round(r.xp);
+    const p = r && r.payout;
+    if (p) {
+      tickets += Math.max(0, Math.round(Number(p.tickets) || 0));
+      if (p.token === true) token = true;
+    }
+  }
+  const grid = [];
+  const gridRows = (payload && Array.isArray(payload.rows)) ? payload.rows : [];
+  for (const row of gridRows.slice(0, 12)) {
+    const cells = Array.isArray(row) ? row : [];
+    grid.push(cells.slice(0, 12).map(markEmoji).join(''));
+  }
+  return {
+    header: SHARE_HEADER,
+    title: s.title || 'Report Card',
+    date: s.dateLabel || (s.timetable && s.timetable.dateSeed) || '',
+    rows,
+    totalXp,
+    tickets,
+    token,
+    streak: streak.count | 0,
+    perfectDays: streak.perfectDays | 0,
+    perfect: !!s.perfect,
+    tier: s.tier != null ? 'Year ' + s.tier : null,
+    grid,
+  };
 }
 
 /** Clipboard with a synchronous fallback (WebView2 without the async API). */
@@ -503,11 +579,12 @@ export function createReportCard({ ceremonies, seep, toast, log, onCounter } = {
       }
     }
 
+    const box = el('div', 'arc-sharebox');
+    let preview = null;
     if (sharePayload) {
       const r = results[sharePayload.gameKey] || {};
       const text = buildShareText(sharePayload, { grade: r.grade, streak: streak.count | 0 });
       if (text) {
-        const box = el('div', 'arc-sharebox');
         const btn = el('button', 'btn', t('share', 'Copy share card'));
         btn.type = 'button';
         btn.addEventListener('click', () => {
@@ -517,10 +594,44 @@ export function createReportCard({ ceremonies, seep, toast, log, onCounter } = {
           });
         });
         box.appendChild(btn);
-        box.appendChild(el('pre', 'arc-sharepreview', text));
-        put(box);
+        preview = el('pre', 'arc-sharepreview', text);
       }
     }
+
+    /* THE PICTURE (v2). It sits BESIDE the text copy and never in front of it:
+     * the grid paste is the small, fast, spoiler-free thing and stays first.
+     * This one is here on EVERY report, grid or no grid - a night with no Daily
+     * Trigger in it is still a night worth posting, and the card is the whole
+     * day anyway. The draw is synchronous and the hand-out is not, so the chip
+     * shuts its own door for the round trip (setBusy, same as the till's). */
+    const shot = el('button', 'btn', t('share_image', 'Save as image'));
+    shot.type = 'button';
+    shot.addEventListener('click', () => {
+      const nope = (why) => {
+        setBusy(shot, false);
+        shout(t('share_image_failed', 'The card would not save'));
+        if (why) say('card image: ' + why);
+      };
+      setBusy(shot, true);
+      let cv = null;
+      try { cv = drawCard(buildShotModel(s, sharePayload)); }
+      catch (e) { return nope('draw threw: ' + ((e && e.message) || e)); }
+      if (!cv) return nope('no canvas on this host');
+      const stamp = String(s.dateLabel || 'report').replace(/[^0-9A-Za-z]+/g, '-').replace(/^-|-$/g, '');
+      handOut(cv, {
+        filename: 'arcademy-' + (stamp || 'report') + '.png',
+        closeLabel: t('share_image_close', 'Close'),
+      }).then((how) => {
+        if (!how) return nope('every door refused');
+        setBusy(shot, false);
+        if (how === 'view') shout(t('share_image_hold', 'Press and hold the card to save it'));
+        else if (how === 'clipboard') shout(t('share_image_copied', 'Card copied. Paste it anywhere.'));
+        else shout(t('share_image_saved', 'Card saved as a picture'));
+      }).catch((e) => nope('hand-out threw: ' + ((e && e.message) || e)));
+    });
+    box.appendChild(shot);
+    if (preview) box.appendChild(preview);
+    put(box);
 
     /* --- out ---
      * A STICKY LIT SIGN, not a button at the bottom of a page. The paper
