@@ -31,9 +31,12 @@
 //     which is exactly the property ShowTab writes.
 //
 // One entry point cannot reach its dot yet: SetHapticsStatusPulse. Views/Tabs/HapticsTabView.axaml
-// is ported but nothing hosts it - StudioTabView.axaml:242 carries a placard where
-// <tabs:HapticsTabView x:Name="PanelHaptics"/> belongs. It starts working the moment that Border
-// is replaced, and no-ops safely until then.
+// is ported but nothing hosts it - StudioTabView.axaml:249 carries a placard named PanelHaptics
+// where <tabs:HapticsTabView x:Name="PanelHaptics"/> belongs. The lookup is deliberately TWO hops,
+// StudioRack -> PanelHaptics -> HapticStatusDot, because the dot lives in HapticsTabView's own
+// namescope and a single FindControl off the rack would search the rack's scope only - the
+// cross-namescope trap WPF's own MainWindow.Animations.cs comments describe. It no-ops safely
+// against today's placard and starts working the moment that Border becomes the page.
 
 using System;
 using System.Collections.Generic;
@@ -289,7 +292,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void SetHapticsStatusPulse(bool connected)
         {
             EnsurePr4aFx();
-            SetStatusPulse(StudioRack?.FindControl<Control>("HapticStatusDot"), connected);
+            SetStatusPulse(
+                StudioRack?.FindControl<Control>("PanelHaptics")?.FindControl<Control>("HapticStatusDot"),
+                connected);
         }
 
         /// <summary>She's Listening: the 64px mic disc breathes while the mic is armed.</summary>
