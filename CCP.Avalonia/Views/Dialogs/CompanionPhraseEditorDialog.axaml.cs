@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -11,7 +12,9 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Platform.Storage;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -26,20 +29,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>CollectionViewSource</c> has no Avalonia equivalent. Grouping and filtering move into
     ///    <see cref="Regroup"/>, which rebuilds a list of <see cref="PhraseGroup"/> and rebinds. The
     ///    WPF filter predicate is <see cref="Matches"/>, unchanged in behaviour.
-    ///  - <c>App.CompanionPhrases</c>, <c>App.Settings</c> and
-    ///    <c>Services.CompanionPhraseService</c> are all in the WPF head, not Core, so everything
-    ///    that loads or persists is a stub. Each carries a ponytail comment; the view-only halves
-    ///    (selection, filtering, the enable toggle, the count line) run for real.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so the
-    ///    "no phrases selected" and confirm prompts become ponytail comments and the action
-    ///    proceeds (QuizCategoryEditorWindow precedent).
-    ///  - <c>OpenFileDialog</c> plus <c>CopyAudioToFolder</c> is one stub: the picker would be
-    ///    <c>StorageProvider.OpenFilePickerAsync</c>, but the copy target is the service's.
+    ///  - <c>App.Settings</c> is <see cref="CoreSettings"/>, so every write runs for real: the
+    ///    disabled/removed id sets, the custom-phrase list and the audio overrides all persist,
+    ///    which is the bookkeeping issue #892 depends on. <c>CompanionPhraseService.GetAllPhrases</c>
+    ///    is still head-side, so <see cref="LoadPhrases"/> rebuilds its mod + custom halves from
+    ///    <see cref="CoreMods.GetPhrases"/>; voice-line files and bark lines stay missing.
+    ///  - <c>MessageBox.Show</c> becomes <see cref="MessageDialog"/>, this head's replacement, so
+    ///    the "no phrases selected" notice and both destructive confirms are kept.
+    ///  - <c>OpenFileDialog</c> -> <c>StorageProvider.OpenFilePickerAsync</c>;
+    ///    <c>CopyAudioToFolder</c> is a file copy into the install tree, so it is inlined here.
     ///  - <c>HitsInteractive</c> is dropped. Avalonia's Button (so also the row CheckBoxes) and
     ///    TextBox mark PointerPressed handled, so a click on them never reaches the row handler -
     ///    which is exactly what that WPF visual-tree walk existed to emulate.
-    ///  - <c>TxtCustomPhrase_LostFocus</c> only persisted, so it is gone with the persistence; the
-    ///    TextBox still writes back to the bound row.
+    ///  - <c>TxtCustomPhrase_LostFocus</c> is one list-level LostFocus handler rather than a
+    ///    per-row one: template content has no name scope to FindControl through.
     /// </summary>
     public partial class CompanionPhraseEditorDialog : Window
     {
@@ -93,19 +96,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             { BarkCategory, "🐰 Bark Lines" },
         };
 
-        // ponytail: needs Services.CompanionPhraseService.GetCategoryNames(), wired when it moves to
-        // Core. Verbatim copy of that service's _categoryNames plus its VoiceLineCategory, which is
-        // what GetCategoryNames() returns.
-        private static readonly string[] _categoryNames =
+        /// <summary>Categories carrying a mod-supplied phrase pool - CompanionPhraseService's
+        /// own <c>_categoryNames</c>, which is what <see cref="LoadPhrases"/> iterates.</summary>
+        private static readonly string[] _modCategoryNames =
         {
             "Greeting", "StartupGreeting", "Idle", "RandomFloating", "Generic",
             "Gaming", "Browsing", "Shopping", "Social", "Discord",
             "TrainingSite", "HypnoContent", "Working", "Media", "Learning",
             "WindowAwarenessIdle", "EngineStop", "FlashPre", "SubliminalAck",
             "RandomBubble", "BubbleCountMercy", "BubblePop", "GameFailed",
-            "BubbleMissed", "FlashClicked", "LevelUp", "MindWipe", "BrainDrain",
-            "VoiceLine"
+            "BubbleMissed", "FlashClicked", "LevelUp", "MindWipe", "BrainDrain"
         };
+
+        // ponytail: what Services.CompanionPhraseService.GetCategoryNames() returns - the mod pool
+        // categories plus its VoiceLineCategory. Collapses into that call when the service moves to
+        // Core. Shared with AwarenessPresetDetailDialog's fallback-pool dropdown.
+        internal static readonly string[] CategoryNames =
+            _modCategoryNames.Append(VoiceLineCategory).ToArray();
+
+        private const string VoiceLineCategory = "VoiceLine";
 
         private static string GetDisplayName(string category) =>
             _categoryDisplayNames.TryGetValue(category, out var dn) ? dn : category;
@@ -132,7 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnEnableSelected")!.Click += (_, _) => SetSelectedEnabled(true);
             this.FindControl<Button>("BtnDisableSelected")!.Click += (_, _) => SetSelectedEnabled(false);
             this.FindControl<Button>("BtnAddPhrase")!.Click += (_, _) => BtnAddPhrase_Click();
-            this.FindControl<Button>("BtnRemoveSelected")!.Click += (_, _) => BtnRemoveSelected_Click();
+            this.FindControl<Button>("BtnRemoveSelected")!.Click += async (_, _) => await BtnRemoveSelected_Click();
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
 
             // Two handlers on the list instead of per-row handlers inside the DataTemplate: template
@@ -140,6 +149,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // buttons carry x:Names so one handler can tell them apart.
             _phraseList.AddHandler(Button.ClickEvent, PhraseList_RowButtonClick);
             _phraseList.AddHandler(InputElement.PointerPressedEvent, PhraseList_PointerPressed);
+            _phraseList.AddHandler(InputElement.LostFocusEvent, PhraseList_LostFocus);
         }
 
         private void PopulateCategoryFilter()
@@ -148,7 +158,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 new() { Content = "All Categories", Tag = "All Categories" }
             };
-            foreach (var cat in _categoryNames)
+            foreach (var cat in CategoryNames)
                 items.Add(new ComboBoxItem { Content = GetDisplayName(cat), Tag = cat });
             items.Add(new ComboBoxItem { Content = GetDisplayName("Custom"), Tag = "Custom" });
             // One entry for the ~1,200 bark lines; the list still groups them per rule via GroupLabel.
@@ -168,9 +178,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // Preserve selection across the rebuild (rows are fresh CompanionPhrase instances).
             var selected = new HashSet<string>(_phrases.Where(p => p.IsSelected).Select(p => p.Id));
 
-            // ponytail: needs App.CompanionPhrases (CompanionPhraseService), wired when it moves to
-            // Core. Sample rows until then - see SamplePhrases.
-            var all = SamplePhrases();
+            // With no head attached (headless render, tests) CoreSettings hands out one shared
+            // default instance and CoreMods answers nothing, so the pool would be empty; the sample
+            // set draws the template instead. See SamplePhrases.
+            var all = CoreSettings.HasProvider ? LoadPhrases() : SamplePhrases();
             var fresh = new ObservableCollection<CompanionPhrase>();
             foreach (var p in all)
             {
@@ -187,6 +198,60 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _phrases = fresh;
             Regroup();
             UpdateTotalCount();
+        }
+
+        /// <summary>
+        /// The mod-pool and custom halves of <c>CompanionPhraseService.GetAllPhrases()</c>, resolved
+        /// against the user's bookkeeping: <c>RemovedPhraseIds</c> hides a row for good,
+        /// <c>DisabledPhraseIds</c> mutes it, <c>PhraseAudioOverrides</c> re-points its audio. That
+        /// order is what keeps a mod top-up from resurrecting a phrase the user deleted (#892).
+        ///
+        /// ponytail: voice-line files (CompanionPhraseService.ResolveVoiceLineFolder) and bark lines
+        /// (BarkService.GetAllBarkLines) are still head-side, so those two row kinds are missing
+        /// here. Collapses into one GetAllPhrases() call when the service moves to Core.
+        /// </summary>
+        private static List<CompanionPhrase> LoadPhrases()
+        {
+            var settings = CoreSettings.Current;
+            var disabled = settings.DisabledPhraseIds;
+            var removed = settings.RemovedPhraseIds;
+            var overrides = settings.PhraseAudioOverrides;
+            var result = new List<CompanionPhrase>();
+
+            foreach (var category in _modCategoryNames)
+            {
+                var phrases = CoreMods.GetPhrases(category) ?? Array.Empty<string>();
+                for (int i = 0; i < phrases.Length; i++)
+                {
+                    var id = $"{category}:{i}";
+                    if (removed.Contains(id)) continue;
+
+                    result.Add(new CompanionPhrase
+                    {
+                        Id = id,
+                        Text = phrases[i],
+                        Category = category,
+                        IsBuiltIn = true,
+                        IsEnabled = !disabled.Contains(id),
+                        AudioFileName = overrides.TryGetValue(id, out var audio) ? audio : null,
+                    });
+                }
+            }
+
+            foreach (var custom in settings.CustomCompanionPhrases)
+            {
+                result.Add(new CompanionPhrase
+                {
+                    Id = custom.Id,
+                    Text = custom.Text,
+                    Category = custom.Category,
+                    IsBuiltIn = false,
+                    IsEnabled = custom.Enabled,
+                    AudioFileName = custom.AudioFileName,
+                });
+            }
+
+            return result;
         }
 
         // ============================================================
@@ -261,8 +326,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             switch (b.Name)
             {
                 case "RemoveBtn": BtnRemovePhrase_Click(p); break;
-                case "BrowseBtn": BrowseAndSetAudio(p); break;
+                case "BrowseBtn": _ = BrowseAndSetAudio(p); break;
                 case "ClearAudioBtn": BtnClearAudio_Click(p); break;
+            }
+        }
+
+        /// <summary>
+        /// WPF's TxtCustomPhrase_LostFocus. The row TextBox writes straight back to the bound
+        /// CompanionPhrase; this is what copies that edit onto the stored CustomCompanionPhrase so
+        /// it survives a reload.
+        /// </summary>
+        private void PhraseList_LostFocus(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (e.Source is not TextBox txt || PhraseOf(txt) is not CompanionPhrase p) return;
+
+            var custom = CoreSettings.Current.CustomCompanionPhrases.FirstOrDefault(c => c.Id == p.Id);
+            if (custom != null && custom.Text != txt.Text)
+            {
+                custom.Text = txt.Text;
+                CoreSettings.Save();
             }
         }
 
@@ -281,10 +363,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private void PersistEnabled(CompanionPhrase p)
         {
-            // ponytail: needs App.Settings (SettingsService), wired when it moves to Core. The WPF
-            // body moved p.Id in or out of DisabledPhraseIds, or set custom.Enabled, then saved.
+            var settings = CoreSettings.Current;
+
+            if (p.IsBuiltIn)
+            {
+                if (p.IsEnabled) settings.DisabledPhraseIds.Remove(p.Id);
+                else settings.DisabledPhraseIds.Add(p.Id);
+            }
+            else
+            {
+                var custom = settings.CustomCompanionPhrases.FirstOrDefault(c => c.Id == p.Id);
+                if (custom != null) custom.Enabled = p.IsEnabled;
+            }
+
             if (!_bulkUpdating)
+            {
+                CoreSettings.Save();
                 UpdateTotalCount();
+            }
         }
 
         private void UpdateTotalCount()
@@ -296,27 +392,113 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void BtnRemovePhrase_Click(CompanionPhrase phrase)
         {
-            // ponytail: needs App.Settings, wired when it moves to Core. Built-in and bark rows went
-            // into RemovedPhraseIds; custom rows were deleted from CustomCompanionPhrases. Dropping
-            // the row locally keeps the view honest until then.
-            _phrases.Remove(phrase);
-            Regroup();
-            UpdateTotalCount();
+            var settings = CoreSettings.Current;
+            if (phrase.IsBuiltIn)
+                settings.RemovedPhraseIds.Add(phrase.Id);   // bark + built-in: hide (also silences barks)
+            else
+                settings.CustomCompanionPhrases.RemoveAll(c => c.Id == phrase.Id);
+
+            CoreSettings.Save();
+            RefreshPhraseList();
         }
 
         private void BtnClearAudio_Click(CompanionPhrase phrase)
         {
-            // ponytail: needs App.Settings, wired when it moves to Core (PhraseAudioOverrides for
-            // built-ins, custom.AudioFileName otherwise).
-            phrase.AudioFileName = null;
-            Regroup();
+            var settings = CoreSettings.Current;
+            if (phrase.IsBuiltIn)
+                settings.PhraseAudioOverrides.Remove(phrase.Id);
+            else
+            {
+                var custom = settings.CustomCompanionPhrases.FirstOrDefault(c => c.Id == phrase.Id);
+                if (custom != null) custom.AudioFileName = null;
+            }
+
+            CoreSettings.Save();
+            RefreshPhraseList();
         }
 
-        private void BrowseAndSetAudio(CompanionPhrase phrase)
+        private async Task BrowseAndSetAudio(CompanionPhrase phrase)
         {
-            // ponytail: needs App.Settings and App.CompanionPhrases.CopyAudioToFolder, wired when
-            // they move to Core. The picker itself would be StorageProvider.OpenFilePickerAsync with
-            // an mp3/wav/ogg/flac filter, but there is nowhere to copy the file to yet.
+            var picked = await PickAudioFile();
+            if (picked == null) return;
+
+            var fileName = CopyAudioToFolder(picked, phrase.Text);
+            if (fileName == null) return;
+
+            var settings = CoreSettings.Current;
+            if (phrase.IsBuiltIn)
+                settings.PhraseAudioOverrides[phrase.Id] = fileName;
+            else
+            {
+                var custom = settings.CustomCompanionPhrases.FirstOrDefault(c => c.Id == phrase.Id);
+                if (custom != null) custom.AudioFileName = fileName;
+            }
+
+            CoreSettings.Save();
+            RefreshPhraseList();
+        }
+
+        /// <summary>WPF's <c>Microsoft.Win32.OpenFileDialog</c>; the Avalonia picker is native.</summary>
+        private async Task<string?> PickAudioFile()
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Select audio file for phrase",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("Audio Files") { Patterns = new[] { "*.mp3", "*.wav", "*.ogg", "*.flac" } },
+                    new FilePickerFileType("All Files") { Patterns = new[] { "*" } },
+                },
+            });
+            var picked = files.FirstOrDefault();
+            return picked?.TryGetLocalPath();
+        }
+
+        /// <summary>
+        /// CompanionPhraseService.CopyAudioToFolder: copy a user-picked clip into the folder the
+        /// rows read audio back from (<see cref="CompanionPhrase.DefaultAudioFolder"/>, which is
+        /// that service's CompanionAudioFolder) and hand back the bare filename that gets stored in
+        /// settings. A name collision gets a _1, _2 suffix rather than overwriting someone else's
+        /// clip.
+        /// </summary>
+        private static string? CopyAudioToFolder(string sourcePath, string phraseText)
+        {
+            try
+            {
+                var folder = CompanionPhrase.DefaultAudioFolder;
+                Directory.CreateDirectory(folder);
+                var ext = Path.GetExtension(sourcePath);
+                var sanitized = SanitizeFileName(phraseText);
+                var fileName = $"{sanitized}{ext}";
+                var destPath = Path.Combine(folder, fileName);
+
+                int counter = 1;
+                while (File.Exists(destPath))
+                {
+                    fileName = $"{sanitized}_{counter}{ext}";
+                    destPath = Path.Combine(folder, fileName);
+                    counter++;
+                }
+
+                File.Copy(sourcePath, destPath);
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("Failed to copy audio file: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        private static string SanitizeFileName(string text)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var sanitized = new string(text.Where(c => !invalid.Contains(c)).ToArray());
+            sanitized = sanitized.Replace(' ', '_');
+            if (sanitized.Length > 50) sanitized = sanitized[..50];
+            if (string.IsNullOrWhiteSpace(sanitized)) sanitized = "phrase";
+            return sanitized;
         }
 
         // ============================================================
@@ -343,23 +525,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             foreach (var p in selected) p.IsEnabled = enabled; // PropertyChanged → PersistEnabled (Save deferred)
             _bulkUpdating = false;
 
-            // ponytail: needs App.Settings.Save(), wired when it moves to Core.
+            CoreSettings.Save();
             UpdateTotalCount();
         }
 
-        private void BtnRemoveSelected_Click()
+        private async Task BtnRemoveSelected_Click()
         {
             var selected = _phrases.Where(p => p.IsSelected).ToList();
-            // ponytail: WPF showed a MessageBox here ("No phrases selected." / the remove-N confirm).
-            // Avalonia has no MessageBox and no package may be added, so both are silent: nothing
-            // selected is a no-op, and a selection is removed without the confirm.
-            if (selected.Count == 0) return;
+            if (selected.Count == 0)
+            {
+                await MessageDialog.ShowAsync(this, "Remove Selected", "No phrases selected.");
+                return;
+            }
 
+            var confirm = await MessageDialog.ConfirmAsync(this, "Remove Selected",
+                $"Remove {selected.Count} selected phrase(s)?\n\nBuilt-in phrases and bark lines will be hidden (can be restored by clearing settings).\nCustom phrases will be permanently deleted.");
+            if (!confirm) return;
+
+            var settings = CoreSettings.Current;
             foreach (var phrase in selected)
-                _phrases.Remove(phrase);
+            {
+                if (phrase.IsBuiltIn)
+                    settings.RemovedPhraseIds.Add(phrase.Id);
+                else
+                    settings.CustomCompanionPhrases.RemoveAll(c => c.Id == phrase.Id);
+            }
 
-            Regroup();
-            UpdateTotalCount();
+            CoreSettings.Save();
+            RefreshPhraseList();
         }
 
         private IEnumerable<CompanionPhrase> VisiblePhrases() => _phrases.Where(Matches);
@@ -416,7 +609,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (this.TryFindResource("DarkComboBoxStyle", out var darkStyle) && darkStyle is ControlTheme ct)
                 categoryCombo.Theme = ct;
 
-            var categoryItems = _categoryNames
+            var categoryItems = CategoryNames
                 .Select(cat => new ComboBoxItem { Content = GetDisplayName(cat), Tag = cat })
                 .ToList();
             categoryCombo.ItemsSource = categoryItems;
@@ -482,24 +675,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             var selectedCategory = (categoryCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Custom";
 
-            // ponytail: needs App.Settings (to add a CustomCompanionPhrase and save) and the
-            // MessageBox + OpenFileDialog audio prompt that followed it; wired when they move to
-            // Core. Until then the new row is added to the in-memory list only.
-            var added = new CompanionPhrase
+            var newPhrase = new CustomCompanionPhrase
             {
                 Id = Guid.NewGuid().ToString("N")[..8],
                 Text = text,
                 Category = selectedCategory,
-                GroupLabel = GetDisplayName(selectedCategory),
-                IsBuiltIn = false,
-                IsEnabled = true
+                Enabled = true
             };
-            // WPF got this from the RefreshPhraseList() that followed its save; the stub cannot
-            // reload, so the new row subscribes here or its On/Off toggle never updates the count.
-            added.PropertyChanged += Phrase_PropertyChanged;
-            _phrases.Add(added);
-            Regroup();
-            UpdateTotalCount();
+
+            if (await MessageDialog.ConfirmAsync(this, "Audio File",
+                    "Would you like to connect an audio file to this phrase?"))
+            {
+                var picked = await PickAudioFile();
+                if (picked != null)
+                {
+                    var fileName = CopyAudioToFolder(picked, text);
+                    if (fileName != null) newPhrase.AudioFileName = fileName;
+                }
+            }
+
+            CoreSettings.Current.CustomCompanionPhrases.Add(newPhrase);
+            CoreSettings.Save();
+            RefreshPhraseList();
         }
 
         // ============================================================

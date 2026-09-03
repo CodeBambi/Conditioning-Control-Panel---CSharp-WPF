@@ -11,7 +11,11 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Moderation;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -32,15 +36,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/AwarenessPresetDetailDialog.xaml.cs.
     /// Deviations, all forced:
-    ///  - Every <c>App.*</c> reach is a stub behind <see cref="IsInstalled"/> / <see cref="Persist"/>
-    ///    (see the ponytail notes on both). The preset object itself is a Core model, so all list
-    ///    and action editing below is the real logic operating on the real type; only persistence,
-    ///    install/uninstall, clone and the live-clone mirror in <c>settings.KeywordTriggers</c> are
-    ///    missing, which is also why the installed branch of Add/Delete trigger collapses to the
-    ///    source list.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so
-    ///    <see cref="Confirm"/> is a minimal stand-in (same shape as TextEditorDialog.Ask). The two
-    ///    destructive confirmations are kept: they are the guard against silent data loss.
+    ///  - <c>App.Settings</c> is <see cref="CoreSettings"/> and <c>App.KeywordPresets</c> is a
+    ///    local <see cref="KeywordTriggerPresetService"/>, both in Core, so install / uninstall /
+    ///    clone / delete, the live-clone list in <c>settings.KeywordTriggers</c> and every
+    ///    per-action save run for real.
+    ///  - <c>MessageBox.Show</c> becomes <see cref="MessageDialog"/>, this head's replacement. The
+    ///    two destructive confirmations are kept: they guard against silent data loss.
     ///  - <c>Microsoft.Win32.OpenFileDialog</c> -> <c>StorageProvider.OpenFilePickerAsync</c>, the
     ///    native Avalonia picker. Not a stub: it needs no service and no Win32.
     ///  - <c>Checked</c>/<c>Unchecked</c> -> one <c>IsCheckedChanged</c> handler.
@@ -122,7 +123,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnPolicyReadSlim")!.Click += (_, _) => BtnPolicyRead_Click();
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
             _btnInstall.Click += (_, _) => BtnInstall_Click();
-            _btnClone.Click += (_, _) => BtnClone_Click();
+            _btnClone.Click += async (_, _) => await BtnClone_Click();
             _btnDeletePreset.Click += async (_, _) => await BtnDeletePreset_Click();
 
             _preset = preset;
@@ -188,44 +189,53 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         // ============================================================
-        // Service stubs — the whole App.* surface this dialog used
+        // Services — App.KeywordPresets and App.Settings, both now in Core
         // ============================================================
 
-        // ponytail: needs App.KeywordPresets (KeywordTriggerPresetService), wired when it moves to
-        // Core. Until then the dialog toggles its own flag so the Activate/Deactivate button and
-        // the editable/read-only split still behave.
-        private bool _installed;
+        /// <summary>
+        /// WPF's <c>App.KeywordPresets</c>. The service is stateless — every read and write goes
+        /// through <see cref="CoreSettings.Current"/> — so a local instance installs, uninstalls
+        /// and clones exactly as the head-owned one does.
+        ///
+        /// ponytail: its <c>PresetsChanged</c> event therefore fires only on this instance. Nothing
+        /// on this head subscribes yet (the Awareness tab refreshes off <see cref="Changed"/>);
+        /// give the head one shared instance if a listener ever needs it.
+        /// </summary>
+        private static readonly KeywordTriggerPresetService Presets = new();
 
-        private bool IsInstalled() => _installed;
+        private string LiveClonePrefix => "preset:" + _preset.Id + ":";
 
-        // ponytail: needs App.Settings.Save(); wired when settings move to Core. Every edit below
-        // already mutates the Core model in place, so this is the only missing half.
-        private void Persist() { }
+        private bool IsInstalled() => Presets.IsInstalled(_preset.Id);
+
+        private void Persist() => CoreSettings.Save();
 
         /// <summary>
         /// CCBill AI Addendum: show full content-policy banner until acked, then slim version.
         /// </summary>
         private void ApplyPolicyBannerState()
         {
-            // ponytail: needs App.Settings.Current.CompanionPrompt.PromptEditorDisclaimerAcknowledged,
-            // wired when settings move to Core. The default is "not yet acknowledged".
-            var acked = _policyAcked;
+            var acked = CoreSettings.Current.CompanionPrompt?.PromptEditorDisclaimerAcknowledged == true;
             this.FindControl<Border>("PolicyBannerFull")!.IsVisible = !acked;
             this.FindControl<Border>("PolicyBannerSlim")!.IsVisible = acked;
         }
 
-        private bool _policyAcked;
-
         private void BtnPolicyGotIt_Click()
         {
-            _policyAcked = true; // ponytail: persisted via App.Settings.Save() once settings move to Core
+            var prompt = CoreSettings.Current.CompanionPrompt;
+            if (prompt != null)
+            {
+                prompt.PromptEditorDisclaimerAcknowledged = true;
+                CoreSettings.Save();
+            }
             ApplyPolicyBannerState();
         }
 
-        private void BtnPolicyRead_Click()
+        private async void BtnPolicyRead_Click()
         {
-            // ponytail: needs a launcher for https://app.cclabs.app/policies/prohibited-content;
-            // Process.Start(UseShellExecute) is per-platform and belongs behind a Core interface.
+            // WPF used Process.Start(UseShellExecute); TopLevel.Launcher is Avalonia's own, so no
+            // seam is needed. Same precedent as CompanionPromptEditorDialog.
+            try { await Launcher.LaunchUriAsync(new Uri("https://app.cclabs.app/policies/prohibited-content")); }
+            catch (Exception ex) { Log.Warning(ex, "AwarenessPresetDetailDialog: failed to open policy URL"); }
         }
 
         /// <summary>
@@ -236,11 +246,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             if (_isCustomPresetUnsaved)
             {
-                // ponytail: needs App.Settings.Current.KeywordTriggerPresets to add _preset to.
+                var list = CoreSettings.Current.KeywordTriggerPresets;
+                if (list != null && !list.Any(p => p.Id == _preset.Id))
+                    list.Add(_preset);
                 _isCustomPresetUnsaved = false;
                 Changed = true;
             }
             Persist();
+        }
+
+        /// <summary>
+        /// For user-created presets that are currently installed, mirror the live cloned triggers
+        /// in <c>settings.KeywordTriggers</c> back into <c>preset.Triggers</c>. Keeps the preset
+        /// source-of-truth in sync so a later Uninstall -> Install cycle preserves user edits.
+        /// No-op for built-ins (their source is owned by the bundled preset JSON).
+        /// </summary>
+        private void MirrorLiveClonesToCustomSource()
+        {
+            if (_preset.IsBuiltIn) return;
+            if (!IsInstalled()) return;
+
+            var prefix = LiveClonePrefix;
+            var synced = new List<KeywordTrigger>();
+            foreach (var clone in CoreSettings.Current.KeywordTriggers
+                         .Where(t => t?.Id?.StartsWith(prefix, StringComparison.Ordinal) == true)
+                         .ToList())
+            {
+                var copy = clone.Clone();
+                copy.Id = clone.Id!.Substring(prefix.Length);
+                copy.LastTriggeredAt = DateTime.MinValue;
+                synced.Add(copy);
+            }
+            _preset.Triggers = synced;
         }
 
         /// <summary>
@@ -266,10 +303,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             var editable = IsEditable();
 
-            // ponytail: when installed, WPF edits the LIVE CLONES out of
-            // settings.KeywordTriggers (id prefix "preset:<id>:") so every mutation flows back via
-            // App.Settings.Save(). No settings service here, so both states edit preset.Triggers.
-            var triggers = _preset.Triggers?.Where(t => t != null).ToList() ?? new List<KeywordTrigger>();
+            // Installed: edit the LIVE CLONES out of settings.KeywordTriggers (id prefix
+            // "preset:<id>:") so every mutation flows back through CoreSettings.Save(). Uninstalled:
+            // edit preset.Triggers directly (custom presets) or preview them read-only (built-ins).
+            var prefix = LiveClonePrefix;
+            var triggers = IsInstalled()
+                ? CoreSettings.Current.KeywordTriggers
+                    .Where(t => t?.Id?.StartsWith(prefix, StringComparison.Ordinal) == true)
+                    .ToList()
+                : _preset.Triggers?.Where(t => t != null).ToList() ?? new List<KeywordTrigger>();
 
             foreach (var trigger in triggers)
                 _triggerStack.Children.Add(BuildTriggerBorder(trigger, editable));
@@ -358,10 +400,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             // exactly what they want via the per-trigger "+ Add action" menu.
             newTrigger.Actions = new List<KeywordAction>();
 
-            // ponytail: when installed, WPF also adds a live clone to settings.KeywordTriggers under
-            // the "preset:<presetId>:<sourceId>" id convention so the trigger fires immediately.
-            _preset.Triggers ??= new List<KeywordTrigger>();
-            _preset.Triggers.Add(newTrigger);
+            if (IsInstalled())
+            {
+                // Live clone list uses the "preset:<presetId>:<sourceId>" id convention, so the
+                // trigger fires immediately.
+                var sourceId = Guid.NewGuid().ToString("N")[..8];
+                newTrigger.Id = LiveClonePrefix + sourceId;
+                CoreSettings.Current.KeywordTriggers.Add(newTrigger);
+
+                // For custom presets, also add a matching source entry so
+                // uninstall -> reinstall preserves this addition.
+                if (!_preset.IsBuiltIn)
+                {
+                    var sourceCopy = newTrigger.Clone();
+                    sourceCopy.Id = sourceId;
+                    _preset.Triggers ??= new List<KeywordTrigger>();
+                    _preset.Triggers.Add(sourceCopy);
+                }
+            }
+            else
+            {
+                _preset.Triggers ??= new List<KeywordTrigger>();
+                _preset.Triggers.Add(newTrigger);
+            }
 
             PersistAndMaybeCreate();
             Changed = true;
@@ -373,9 +434,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private void DeleteTrigger(KeywordTrigger trigger)
         {
-            // ponytail: when installed, WPF also strips the live clone from
-            // settings.KeywordTriggers so the keyword stops firing at once.
-            _preset.Triggers?.RemoveAll(t => t.Id == trigger.Id);
+            if (IsInstalled())
+            {
+                // Strip the live clone so the keyword stops firing at once.
+                CoreSettings.Current.KeywordTriggers.RemoveAll(t => t.Id == trigger.Id);
+
+                if (!_preset.IsBuiltIn)
+                {
+                    // Source id == live clone id with the prefix stripped.
+                    var prefix = LiveClonePrefix;
+                    if (trigger.Id?.StartsWith(prefix, StringComparison.Ordinal) == true)
+                        _preset.Triggers?.RemoveAll(t => t.Id == trigger.Id.Substring(prefix.Length));
+                }
+            }
+            else
+            {
+                _preset.Triggers?.RemoveAll(t => t.Id == trigger.Id);
+            }
 
             PersistAndMaybeCreate();
             Changed = true;
@@ -486,7 +561,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 deleteTriggerBtn.Click += async (_, _) =>
                 {
                     var label = string.IsNullOrWhiteSpace(trigger.Keyword) ? "(unnamed trigger)" : $"\"{trigger.Keyword}\"";
-                    var confirm = await Confirm(
+                    var confirm = await MessageDialog.ConfirmAsync(this,
                         "Delete trigger",
                         $"Delete trigger {label}?\n\nThis removes the keyword and all its actions.");
                     if (confirm)
@@ -692,11 +767,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             body.Children.Add(browseBtn);
 
             var testBtn = MakeChipButton("▶ Test", editable);
-            testBtn.Click += (_, _) =>
-            {
-                // ponytail: needs App.KeywordTriggers.PreviewAudioClip(path, volume), wired when the
-                // keyword-trigger service moves to Core.
-            };
+            testBtn.Click += (_, _) => PreviewAudioClip(pa.FilePath, pa.Volume);
             Grid.SetColumn(testBtn, 2);
             body.Children.Add(testBtn);
 
@@ -1008,10 +1079,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private static IEnumerable<string> GetAvailableFallbackCategories()
         {
-            // ponytail: needs Services.CompanionPhraseService.GetCategoryNames() +
-            // App.Settings.Current.CustomCompanionPhrases; wired when both move to Core. Placeholder
-            // pools so the dropdown renders with realistic content.
-            var result = new List<string> { "BimboGiggle", "ChastityShame", "PuppyPraise", "TranceMurmur" };
+            // ponytail: the built-in half is CompanionPhraseEditorDialog's copy of
+            // CompanionPhraseService.GetCategoryNames(); both collapse into that call when the
+            // service moves to Core.
+            var result = new List<string>(CompanionPhraseEditorDialog.CategoryNames);
+            foreach (var c in CoreSettings.Current.CustomCompanionPhrases
+                         .Select(c => c.Category)
+                         .Where(c => !string.IsNullOrWhiteSpace(c)))
+            {
+                if (!result.Contains(c, StringComparer.OrdinalIgnoreCase)) result.Add(c);
+            }
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result;
         }
@@ -1178,22 +1255,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (_isCustomPresetUnsaved)
                 PersistAndMaybeCreate();
 
-            // ponytail: needs App.KeywordPresets.InstallPreset / UninstallPreset, and for a custom
-            // preset the MirrorLiveClonesToCustomSource() pass that copies live clone edits back
-            // into preset.Triggers before uninstall wipes them. Wired when the service moves to
-            // Core; the flag below keeps the button and the editable/read-only split honest.
-            _installed = !_installed;
+            if (IsInstalled())
+            {
+                // For custom presets: capture any in-place edits to the live clones back into the
+                // source list before uninstall wipes the clones, so a later re-install keeps the
+                // user's tuning.
+                if (!_preset.IsBuiltIn)
+                    MirrorLiveClonesToCustomSource();
+                Presets.UninstallPreset(_preset.Id);
+            }
+            else
+            {
+                Presets.InstallPreset(_preset.Id);
+            }
 
             Changed = true;
             RebuildRows();
             UpdateInstallButton();
         }
 
-        private void BtnClone_Click()
+        private async Task BtnClone_Click()
         {
-            // ponytail: needs App.KeywordPresets.CloneToCustom(_preset.Id), which returns the copy
-            // this dialog then reopens itself on. Wired when the service moves to Core.
+            var copy = Presets.CloneToCustom(_preset.Id);
             Changed = true;
+            if (copy == null)
+            {
+                await MessageDialog.ShowAsync(this, "Copy failed", "Couldn't copy this preset.");
+                return;
+            }
+
+            // Close this preview and open the fresh editable copy so the user lands straight in the
+            // new preset (which is also now a card in the grid). Owner is captured BEFORE Close():
+            // Avalonia clears it on close, and ShowDialog needs a live owner.
+            var owner = Owner as Window;
+            Close();
+            var dlg = new AwarenessPresetDetailDialog(copy);
+            if (owner != null) await dlg.ShowDialog(owner);
+            else dlg.Show();
         }
 
         /// <summary>
@@ -1212,13 +1310,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
 
             var label = string.IsNullOrWhiteSpace(_preset.Name) ? "this preset" : $"\"{_preset.Name}\"";
-            var confirm = await Confirm(
+            var confirm = await MessageDialog.ConfirmAsync(this,
                 "Delete preset",
                 $"Delete {label}?\n\nThis removes the preset and all its triggers permanently.");
             if (!confirm) return;
 
-            // ponytail: needs App.KeywordPresets.UninstallPreset (to clean up cloned triggers and
-            // injected phrases) and App.Settings.Current.KeywordTriggerPresets.RemoveAll.
+            // Uninstall first so cloned triggers / canned phrases are cleaned up.
+            if (IsInstalled())
+                Presets.UninstallPreset(_preset.Id);
+
+            CoreSettings.Current.KeywordTriggerPresets?.RemoveAll(p => p.Id == _preset.Id);
             Persist();
 
             Changed = true;
@@ -1237,9 +1338,54 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private void RunAwarenessPromptValidation(TextBox promptBox)
         {
-            // ponytail: needs App.PromptValidator (+ App.ModerationLog.RecordEdit and the
-            // "prompt_validator_warning" string with the match count), wired when the validator
-            // moves to Core. The paint-and-warn half is three lines once it is there.
+            if (promptBox == null) return;
+
+            var result = new PromptValidator().Validate(promptBox.Text ?? string.Empty);
+            if (result.Clean)
+            {
+                promptBox.BorderBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x5A));
+                promptBox.BorderThickness = new Thickness(1);
+                promptBox.ClearValue(ToolTip.TipProperty);
+                return;
+            }
+
+            promptBox.BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xC7, 0x6B));
+            promptBox.BorderThickness = new Thickness(2);
+            ToolTip.SetTip(promptBox, Loc.GetF("prompt_validator_warning", result.MatchedPatterns.Count));
+
+            // Through the seam, so the app's ONE moderation log takes the entry. Unseeded on this
+            // head, so nothing is written here yet.
+            CoreModerationLog.RecordEdit("avatarPromptTemplate", result.MatchedPatterns.Count, "awareness_preset");
+            Log.Information(
+                "PromptValidator flagged AwarenessPresetDetailDialog avatar prompt ({Count} matches)",
+                result.MatchedPatterns.Count);
+        }
+
+        /// <summary>
+        /// WPF's <c>App.KeywordTriggers.PreviewAudioClip</c>: audition a clip a user is about to
+        /// assign to a trigger, resolving relative preset paths the way dispatch does.
+        ///
+        /// ponytail: the resolve is KeywordTriggerService.ResolveAudioPath verbatim; both collapse
+        /// into that call when the keyword-trigger service moves to Core. WPF's NAudio path also
+        /// applied a pow(1.5) master-volume curve, which lives inside the audio service the seam
+        /// calls, so playback here is the seam's own curve, not that one.
+        /// </summary>
+        private static void PreviewAudioClip(string? path, int volumePercent)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+
+            var resolved = path;
+            if (!Path.IsPathRooted(path))
+            {
+                // Preset-bundled audio under Resources/ first (install dir, then content pack),
+                // then the legacy sub_audio folder.
+                var res = ContentLocator.Resolve(Path.Combine("Resources", path));
+                var sub = ContentLocator.Resolve(Path.Combine("Resources", "sub_audio", path));
+                resolved = File.Exists(res) ? res : File.Exists(sub) ? sub : path;
+            }
+
+            if (!File.Exists(resolved)) return;
+            CoreAudio.PlayOneShot(resolved, volumePercent / 100f, "keyword-preview");
         }
 
         private static Button MakeChipButton(string label, bool editable)
@@ -1308,63 +1454,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 }
             }
             return sb.ToString().TrimEnd();
-        }
-
-        /// <summary>
-        /// Minimal stand-in for WPF's MessageBox Yes/No confirm, which Avalonia has no equivalent
-        /// of and no package may be added for. Same shape as TextEditorDialog.Ask; dismissing the
-        /// window counts as No. Buttons hold a TextBlock, not Content, for the access-key reason
-        /// in CLAUDE.md.
-        /// </summary>
-        private async Task<bool> Confirm(string title, string message)
-        {
-            var row = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Spacing = 8,
-                Margin = new Thickness(0, 16, 0, 0),
-            };
-
-            var dialog = new Window
-            {
-                Title = title,
-                SizeToContent = SizeToContent.WidthAndHeight,
-                CanResize = false,
-                ShowInTaskbar = false,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Background = Background,
-                Content = new StackPanel
-                {
-                    Margin = new Thickness(20),
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = message,
-                            Foreground = Brushes.White,
-                            FontSize = 13,
-                            TextWrapping = TextWrapping.Wrap,
-                            MaxWidth = 360,
-                        },
-                        row,
-                    },
-                },
-            };
-
-            foreach (var (label, value) in new[] { ("Yes", true), ("No", false) })
-            {
-                var button = new Button
-                {
-                    Content = new TextBlock { Text = label },
-                    Padding = new Thickness(14, 6),
-                    Cursor = new Cursor(StandardCursorType.Hand),
-                };
-                button.Click += (_, _) => dialog.Close(value);
-                row.Children.Add(button);
-            }
-
-            return await dialog.ShowDialog<bool>(this);
         }
 
         /// <summary>
