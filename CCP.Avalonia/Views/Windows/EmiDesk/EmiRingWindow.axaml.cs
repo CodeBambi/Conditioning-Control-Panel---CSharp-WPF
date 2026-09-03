@@ -61,12 +61,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///    tests the whole rectangle, and <c>X11Overlay.SetClickThrough</c> is all-or-nothing - the
     ///    whole window, which would kill the cards too. ponytail: needs X11Overlay to take a
     ///    REGION (XFixes can express it; the shim's own doc note says so), and that is its own
-    ///    layer. Until then the fan's gaps swallow the click that opened them.
+    ///    layer. Until then a click in a gap does not reach the desktop - but it is no longer
+    ///    swallowed either, see <see cref="InstallHooks"/>.
     ///  - <b>The global hooks.</b> <c>GlobalMouseHook</c> / <c>GlobalKeyboardHook</c> are
-    ///    <c>SetWindowsHookEx</c>, which has NO equivalent on this head. Click-outside-to-close and
-    ///    Escape-to-close are therefore both gone, and with them <c>_hotPx</c> - the frozen rect
-    ///    snapshot existed only to answer the hook thread. Every other road into
-    ///    <see cref="CloseRing"/> (the pick, <see cref="Kill"/>, the caller's own toggle) is intact.
+    ///    <c>SetWindowsHookEx</c>, which has NO equivalent on this head, and with them goes
+    ///    <c>_hotPx</c> - the frozen rect snapshot existed only to answer the hook thread. The half
+    ///    of click-outside-to-close that lands INSIDE this window is recovered locally
+    ///    (<see cref="InstallHooks"/>); the desktop-wide half and Escape-to-close are still gone.
+    ///    Every other road into <see cref="CloseRing"/> (the pick, <see cref="Kill"/>, the caller's
+    ///    own toggle) is intact.
     ///  - <b>The DPI.</b> <c>PresentationSource…TransformToDevice</c> and the
     ///    <c>System.Drawing.Graphics</c> fallback become <c>Screens.ScreenFromWindow(this).Scaling</c>;
     ///    <c>System.Windows.Forms.Screen.FromPoint</c> becomes <c>Screens.ScreenFromPoint</c>.
@@ -633,7 +636,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
 
             // The frozen hit-rect snapshot lived here. It answered the global mouse hook and nothing
-            // else, and the hook has no equivalent on this head - see InstallHooks.
+            // else; the local click-away that replaces part of that hook reads the cards' own hit
+            // testing instead, so there is nothing to snapshot - see InstallHooks.
 
             // Information, not Debug: the file sink's floor is Information, so a Debug line here is
             // invisible in the log the owner actually sends back. Everything needed to reproduce a
@@ -1138,21 +1142,54 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // ---------------------------------------------------------------- the hooks
 
         /// <summary>
-        /// ponytail: needs a global input hook. WPF installed a low-level <c>SetWindowsHookEx</c>
-        /// mouse hook (click outside the hot rects folds the ring, and NEVER swallows the click) and
-        /// a keyboard one (Escape folds it). X11 has no equivalent this head can reach today - a
-        /// passive grab through XI2 would be the shape of it, and that belongs in its own layer next
-        /// to X11Overlay rather than bolted onto a view.
+        /// CLICK AWAY TO FOLD, as far as this head can reach it.
         ///
-        /// <para>WHAT IS LOST until then: the ring does not close when the user clicks somewhere
-        /// else, and Escape does not close it either. A local <c>KeyDown</c> would not recover the
-        /// second one - this window is <c>Focusable="False"</c> and <c>ShowActivated="False"</c>, so
-        /// it never has the keyboard. Every other road out (picking a card, the widget's own toggle,
-        /// <see cref="Kill"/>) is intact.</para>
+        /// <para>WPF installed a low-level <c>SetWindowsHookEx</c> MOUSE hook: a click anywhere on
+        /// the desktop outside the cards' hot rects folded the ring, and the hook never swallowed
+        /// that click. X11 has no equivalent a view can reach - the shape of it is a passive XI2
+        /// grab, which belongs next to <c>X11Overlay</c> in its own layer, not bolted onto a
+        /// window - so the desktop-wide half of the gesture stays lost.</para>
+        ///
+        /// <para>WHAT IS RECOVERED HERE is the part that lands inside this window, and it is the
+        /// part the port actually broke. On Windows a layered window does not hit-test fully
+        /// transparent pixels, so a click in a GAP between two cards fell straight through to
+        /// whatever was underneath and the hook read it as a dismissal. On X11 the server hit-tests
+        /// the whole rectangle, so that same click hits this window and, with no handler, is
+        /// silently eaten - the fan's own gaps swallowing the click that opened them. Folding on it
+        /// is strictly better than eating it and is the same OUTCOME the hook produced; what is
+        /// still missing is that the click also reached the desktop.</para>
+        ///
+        /// <para>On <c>PointerReleased</c>, not pressed: a card's own handler marks the release
+        /// handled, and Avalonia does not raise a bubbled handler for an already-handled event, so
+        /// a pick can never be read as a dismissal. Escape stays lost either way - this window is
+        /// <c>Focusable="False"</c> and <c>ShowActivated="False"</c>, so it never has the keyboard
+        /// and a local <c>KeyDown</c> would recover nothing.</para>
         /// </summary>
-        private static void InstallHooks() { }
+        private void InstallHooks()
+        {
+            PointerReleased -= OnClickAway;
+            PointerReleased += OnClickAway;
+        }
 
         /// <inheritdoc cref="InstallHooks"/>
-        private static void RemoveHooks() { }
+        private void RemoveHooks() => PointerReleased -= OnClickAway;
+
+        /// <inheritdoc cref="InstallHooks"/>
+        private void OnClickAway(object? sender, PointerReleasedEventArgs e)
+        {
+            try
+            {
+                if (!_open || _folding) return;
+
+                // Any button, exactly as the hook: it read a right-click outside the hot rects as a
+                // dismissal too.
+                Log.Information("[EmiDesk] ring dismissed by a click in the fan");
+                CloseRing();
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] ring click-away failed");
+            }
+        }
     }
 }
