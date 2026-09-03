@@ -44,6 +44,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             BtnChooseColor.Click += BtnChooseColor_Click;
             BtnResetColor.Click += BtnResetColor_Click;
 
+            // ponytail: WPF also repaints a mod-aware hero and side plate here and on ModChanged
+            // (ApplyFeatureArt, Resources/features/Pink_filter.png). The port dropped both
+            // silently. CoreModArt.OverridePath("features/Pink_filter.png") answers the override
+            // half now and the built-in ships at
+            // avares://CCP.Avalonia/Resources/features/Pink_filter.png, so the only thing still
+            // missing is an x:Name on the two plate Borders in PinkFilterFeatureControl.axaml -
+            // without one this file has no control to paint. See BubbleCountFeatureControl for
+            // the full note and TubeFitDialog.TryLoadImage for the decode.
+
             LoadFromSettings();
         }
 

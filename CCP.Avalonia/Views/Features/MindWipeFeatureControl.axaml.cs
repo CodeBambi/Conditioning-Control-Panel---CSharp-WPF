@@ -45,9 +45,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             Loaded += (_, _) => RebindToCurrentSettings();
             Unloaded += (_, _) => Unhook();
 
-            // ponytail: WPF also repaints the hero and side plates on ModChanged through
-            // Services/ModResourceResolver.cs (WPF head) from Resources/features/Mind_Wipers.png.
-            // The Avalonia .axaml drops both plates deliberately, so nothing here to repaint yet.
+            // ponytail: hero and side plates, same state as BubbleCount's - see the longer note
+            // there. CoreModArt.OverridePath("features/Mind_Wipers.png") answers the override half
+            // and the built-in ships at avares://CCP.Avalonia/Resources/features/Mind_Wipers.png;
+            // MindWipeFeatureControl.axaml just gives neither plate an x:Name to paint into.
 
             RebindToCurrentSettings();
         }
