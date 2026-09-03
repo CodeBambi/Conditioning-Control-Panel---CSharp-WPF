@@ -89,10 +89,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                // ponytail: needs App.Lockdown, wired when it moves to Core. Lockdown owns the
-                // screen, and a navigation palette floating above it reads as an escape hatch even
-                // though it only ever calls ShowTab - so the real check must come back before this
-                // is reachable from a hotkey.
+                // ponytail: needs LockdownService.IsActive
+                // (ConditioningControlPanel/Services/Haptics/LockdownService.cs), reached through
+                // App.Lockdown; there is no Core seam for it. Lockdown owns the screen, and a
+                // navigation palette floating above it reads as an escape hatch even though it only
+                // ever calls ShowTab - so that check must come back before this is reachable from a
+                // hotkey.
                 if (_instance != null)
                 {
                     _instance.ClosePalette(fromEscape: false);
@@ -105,9 +107,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 win.Show(owner);
                 win._txtQuery.Focus();
             }
-            catch
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger, wired when it moves to Core.
+                Serilog.Log.Warning(ex, "Settings palette failed to open");
                 _instance = null;
             }
         }
@@ -187,26 +189,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// ponytail: needs Services.SettingsPaletteIndex, wired when it moves to Core. The real
-        /// Refresh rebuilds rows from loc keys on every keystroke, so a language change between two
-        /// opens always shows current strings - there is no cache. Until the index moves, these are
-        /// placeholder rows, filtered the same way so the empty state and the arrow keys are still
-        /// exercised.
+        /// ponytail: needs SettingsPaletteIndex.Search and SettingsPaletteEntry
+        /// (ConditioningControlPanel/Services/SettingsPaletteIndex.cs); the index is not in Core, and
+        /// every row it returns points at a MainWindow tab key and an AppSettingsTabView section, so
+        /// it cannot move ahead of the shell. The real Refresh rebuilds rows from loc keys on every
+        /// keystroke, so a language change between two opens always shows current strings - there is
+        /// no cache. Until the index moves, these are placeholder rows, filtered the same way so the
+        /// empty state and the arrow keys are still exercised.
         /// </summary>
         private void Refresh()
         {
-            var query = (_txtQuery.Text ?? "").Trim();
-            var rows = SampleRows
-                .Where(r => query.Length == 0 ||
-                            r.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                            r.Context.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            try
+            {
+                var query = (_txtQuery.Text ?? "").Trim();
+                var rows = SampleRows
+                    .Where(r => query.Length == 0 ||
+                                r.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                                r.Context.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
 
-            _listResults.ItemsSource = rows;
-            if (rows.Count > 0) _listResults.SelectedIndex = 0;
+                _listResults.ItemsSource = rows;
+                if (rows.Count > 0) _listResults.SelectedIndex = 0;
 
-            _listResults.IsVisible = rows.Count > 0;
-            _txtEmpty.IsVisible = rows.Count == 0;
+                _listResults.IsVisible = rows.Count > 0;
+                _txtEmpty.IsVisible = rows.Count == 0;
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug("Settings palette refresh failed: {E}", ex.Message);
+            }
         }
 
         private static IReadOnlyList<PaletteRow> SampleRows { get; } = new[]
@@ -269,11 +280,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// Closes first - the highlight pulse should be visible against the real page, and the
         /// owner needs focus back before anything navigates.
         ///
-        /// ponytail: needs MainWindow.ShowTab, AppSettingsTabView.FocusSection and the accent
-        /// pulse, wired when the shell ports. The WPF original navigated via ShowTab (which opens
+        /// ponytail: needs MainWindow.ShowTab
+        /// (ConditioningControlPanel/MainWindow/MainWindow.TabNavigation.cs) and
+        /// AppSettingsTabView.FocusSection
+        /// (ConditioningControlPanel/Views/Tabs/AppSettingsTabView.xaml.cs) - the shell has not
+        /// ported, so there is no window to navigate. The WPF original called ShowTab (which opens
         /// the owning door, fires the nav bark and moves the active indicator), then walked the
         /// visual tree by x:Name across namescopes and hung a 2s self-removing DropShadow glow on
-        /// whatever it found. None of that has a target on this head yet.
+        /// whatever it found; the glow needs Avalonia's DropShadowEffect rather than WPF's, so it
+        /// is a reimplementation, not a move.
         /// </summary>
         private void ActivateSelected()
         {
