@@ -1,0 +1,136 @@
+<!-- PORTED from ConditioningControlPanel/Features/BubbleCountFeatureControl.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"        -> Theme="{StaticResource X}"
+       ToolTip="..."                     -> ToolTip.Tip="..."
+       helpers:EmojiTextBlock            -> TextBlock
+       Content="{loc:Str btn_test_now}"  -> a TextBlock child (Avalonia parses "_" as an access key)
+       ImageBrush + BitmapImage pack://  -> dropped (ponytail: Resources/features/*.png does not ship
+                                            in CCP.Avalonia; the hero plate and side card keep the
+                                            section wash so the layout survives. Restore with an
+                                            avares:// ImageBrush when the art crosses.)
+       Border.OpacityMask gradient       -> dropped with the art it masked
+       feat:SessionLock.Owned            -> dropped (ponytail: WPF-head attached prop)
+       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: same)
+       LinearGradientBrush "0,1"/"0,0"   -> "0%,100%"/"0%,0%" (bare numbers are pixels here)
+       <Slider> (unstyled)               -> Theme="{StaticResource PinkSlider}" (the WPF theme applies
+                                            PinkSlider implicitly to every Slider: Resources/Theme/MainWindow.xaml:341)
+       Checked/Unchecked/Click/...       -> wired in the constructor -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.BubbleCountFeatureControl">
+
+    <StackPanel>
+
+        <!-- HERO. No subtitle line: this module's only description string is three lines long and
+             would overflow the 72px strip, so it rides the enable pill as a ToolTip instead. -->
+        <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
+            <Grid>
+                <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                        Background="{StaticResource SectionHueStudioWashBrush}"/>
+                <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
+                    <TextBlock Text="{loc:Str label_bubble_count}" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource TextLightBrush}"/>
+                </StackPanel>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" CornerRadius="99"
+                        Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="12,5,8,5"
+                        ToolTip.Tip="{loc:Str tooltip_count_the_bubbles_challenge_memory_and_attent}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str btn_enable}" FontSize="11.5" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <CheckBox x:Name="ChkEnable"
+                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card -->
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_challenges_per_hour_1_10}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_per_hour}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderFreq" Minimum="1" Maximum="10" Value="2"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtFreq" Text="2" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <Grid Height="36">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_difficulty}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbDifficulty" Width="130"
+                                          VerticalAlignment="Center"
+                                          Theme="{DynamicResource DarkComboBoxStyle}">
+                                    <ComboBoxItem Content="{loc:Str btn_easy}" Tag="0"/>
+                                    <ComboBoxItem Content="{loc:Str btn_medium}" Tag="1"/>
+                                    <ComboBoxItem Content="{loc:Str btn_hard}" Tag="2"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_prevent_closing_until_correctly_answered}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_strict_lock}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkStrict"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Button x:Name="BtnTest" Theme="{DynamicResource OutlineButton}">
+                    <TextBlock Text="{loc:Str btn_test_now}"/>
+                </Button>
+            </StackPanel>
+
+            <!-- SIDE ART. Plate dropped (see header); the wash and the scrim keep the card's shape. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <!-- Scrim so the plate sits under the page instead of fighting it. -->
+                <Border CornerRadius="12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                            <GradientStop Color="#66000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="0.45"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Grid>
+
+    </StackPanel>
+</UserControl>

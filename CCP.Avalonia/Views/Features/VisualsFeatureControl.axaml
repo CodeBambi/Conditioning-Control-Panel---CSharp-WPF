@@ -1,0 +1,141 @@
+<!-- PORTED from ConditioningControlPanel/Features/VisualsFeatureControl.xaml.
+     Structure, order, spacing, every x:Name and every loc key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"        -> Theme="{StaticResource X}"
+       ToolTip="..."                     -> ToolTip.Tip="..."
+       helpers:EmojiTextBlock            -> TextBlock (Avalonia renders colour emoji natively)
+       Image + EmojiToImageSource        -> TextBlock with the emoji
+       feat:SessionLock.Owned            -> dropped (ponytail: session-lock attached prop lives in
+                                            the WPF head; restore when the banner is ported)
+       feat:AdaptiveSideArt.CollapseBelow-> dropped (ponytail: same, the art column stays)
+       <Slider> (unstyled)               -> Theme="{StaticResource PinkSlider}" (the WPF theme applies
+                                            PinkSlider implicitly to every Slider: Resources/Theme/MainWindow.xaml:341)
+       ValueChanged= / Checked= / ...    -> wired in the constructor -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Features.VisualsFeatureControl">
+
+    <!-- Velvet Kit 2 density pass. The root stays a StackPanel: MainWindow.SessionFeatureLock.cs
+         inserts the session-lock banner at index 0 of this panel. -->
+    <StackPanel>
+
+        <!-- HERO. No art (Resources/features has no visuals plate) and no enable pill: Visuals is
+             the one module with no master toggle at all. Title only. -->
+        <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
+            <Grid>
+                <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
+                    <TextBlock Text="{loc:Str section_visuals}" FontSize="17" FontWeight="Bold"
+                               Foreground="{StaticResource TextLightBrush}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MaxWidth="780"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <!-- ONE dense card -->
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_scale_of_flash_images_100_original_size_200_d}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_size}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderSize" Minimum="50" Maximum="250" Value="100"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtSize" Text="100%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_transparency_of_flash_images_lower_more_see_t}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_opacity}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtOpacity" Text="100%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_fade_in_out_animation_speed_0_instant_appear}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_fade}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderFade" Minimum="0" Maximum="100" Value="50"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtFade" Text="50%" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_how_long_images_stay_on_screen_only_used_when}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_duration}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" Theme="{StaticResource PinkSlider}" x:Name="SliderDuration" Minimum="1" Maximum="30" Value="5"
+                                        VerticalAlignment="Center" Margin="14,0"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtDuration" Text="5s" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
+                            <!-- Link to Audio. Deliberately NOT SessionLock.Owned: killing sound is the one
+                                 change a user most often needs to make RIGHT NOW. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_when_enabled_flash_duration_matches_audio_len}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_link_to_audio_trigger}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkAudio"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
+            <!-- SIDE CARD, no art: the page's own glyph, huge and nearly transparent, on the section wash. -->
+            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                    BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                    Background="{StaticResource SectionHueStudioWashBrush}"
+                    VerticalAlignment="Stretch" MinHeight="200">
+                <TextBlock Text="👁" FontSize="120" Opacity="0.18"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+    </StackPanel>
+</UserControl>
