@@ -45,12 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             SliderOpacity.ValueChanged += SliderOpacity_Changed;
             CmbColorMode.SelectionChanged += CmbColorMode_Changed;
             CmbFont.SelectionChanged += CmbFont_Changed;
-            BtnChooseColor.Click += (_, _) =>
-            {
-                // ponytail: needs a colour picker. WPF opens System.Windows.Forms.ColorDialog;
-                // Avalonia's equivalent is the Avalonia.Controls.ColorPicker package, which is
-                // NOT referenced by CCP.Avalonia.csproj (a csproj edit is the coordinator's call).
-            };
+            BtnChooseColor.Click += BtnChooseColor_Click;
             BtnResetColor.Click += BtnResetColor_Click;
             ChkFxBreathing.IsCheckedChanged += FxToggle_Changed;
             ChkFxWobble.IsCheckedChanged += FxToggle_Changed;
@@ -221,6 +216,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (string.IsNullOrWhiteSpace(name) || s.BouncingTextFont == name) return;
             s.BouncingTextFont = name!;
             CoreSettings.Save();
+            SafeRefresh();
+        }
+
+        /// <summary>
+        /// The Fixed-mode colour pick. WPF opened a blocking <c>System.Windows.Forms.ColorDialog</c>
+        /// seeded with the effective colour; this awaits <see cref="ColorPickerDialog"/> instead,
+        /// which needs a non-null owner Window. Cancel answers null and writes nothing, matching
+        /// WPF's early return on anything but DialogResult.OK. The stored form is the WPF one,
+        /// <c>#RRGGBB</c> - EffectiveColor parses exactly that back.
+        /// </summary>
+        private async void BtnChooseColor_Click(object? sender, RoutedEventArgs e)
+        {
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            if (owner is null) return;   // detached, or a headless render: nothing to own the modal
+
+            var (er, eg, eb) = EffectiveColor();
+            var picked = await ColorPickerDialog.PickAsync(owner, Color.FromRgb(er, eg, eb));
+            if (picked is not { } c) return;
+
+            CoreSettings.Current.BouncingTextFixedColor = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+            CoreSettings.Save();
+            UpdateSwatch();
             SafeRefresh();
         }
 

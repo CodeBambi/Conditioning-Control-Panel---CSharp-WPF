@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -9,12 +10,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ColorEditorDialog.xaml.cs. Deviations:
     ///  - DialogResult becomes Close(bool).
-    ///  - App.Settings (AppSettings lives in the WPF head) is stubbed: the dialog opens on the
-    ///    WPF defaults and Save writes nowhere. FontPickerHelper is likewise a head helper, so the
-    ///    preview keeps the markup's Arial.
-    ///  - System.Windows.Forms.ColorDialog has no Avalonia twin in the referenced packages, so
-    ///    ShowColorPicker is a stub that returns null (no change).
+    ///  - System.Windows.Forms.ColorDialog becomes <see cref="ColorPickerDialog"/>, which is async
+    ///    and needs an owner, so the three swatch handlers await where WPF blocked inline.
+    ///  - FontPickerHelper is a WPF-head helper (it resolves the bundled Fredoka face from a
+    ///    pack:// URI), so the preview keeps the markup's Arial rather than the chosen face.
     ///  - The text outline stays a DropShadowEffect - Avalonia.Media has the same type.
+    ///
+    /// Save mutates <c>CoreSettings.Current</c> WITHOUT calling Save(), exactly as the WPF original
+    /// does: it is the live instance, and the shutdown SaveImmediate flushes it.
     /// </summary>
     public partial class ColorEditorDialog : Window
     {
@@ -47,9 +50,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             LoadCurrentSettings();
             UpdatePreview();
 
-            _btnBgColor.Click += (_, _) => Pick(ref _bgColor);
-            _btnTextColor.Click += (_, _) => Pick(ref _textColor);
-            _btnBorderColor.Click += (_, _) => Pick(ref _borderColor);
+            _btnBgColor.Click += (_, _) => Pick(_bgColor, c => _bgColor = c);
+            _btnTextColor.Click += (_, _) => Pick(_textColor, c => _textColor = c);
+            _btnBorderColor.Click += (_, _) => Pick(_borderColor, c => _borderColor = c);
             _chkBgTransparent.IsCheckedChanged += (_, _) => UpdatePreview();
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close(false);
             this.FindControl<Button>("BtnSave")!.Click += (_, _) => BtnSave_Click();
@@ -57,15 +60,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void LoadCurrentSettings()
         {
-            // ponytail: needs SettingsManager (App.Settings.Current.Sub*), wired when it moves to Core.
-            // Values below are the WPF fallbacks for an unset setting.
-            _bgColor = ParseColor("", Colors.Black);
-            _textColor = ParseColor("", Color.FromRgb(255, 0, 255));
-            _borderColor = ParseColor("", Colors.White);
+            var settings = CoreSettings.Current;
 
-            _chkBgTransparent.IsChecked = false;
-            _chkTextTransparent.IsChecked = false;
-            _chkStealsFocus.IsChecked = false;
+            _bgColor = ParseColor(settings.SubBackgroundColor, Colors.Black);
+            _textColor = ParseColor(settings.SubTextColor, Color.FromRgb(255, 0, 255));
+            _borderColor = ParseColor(settings.SubBorderColor, Colors.White);
+
+            _chkBgTransparent.IsChecked = settings.SubBackgroundTransparent;
+            _chkTextTransparent.IsChecked = settings.SubTextTransparent;
+            _chkStealsFocus.IsChecked = settings.SubliminalStealsFocus;
 
             UpdateColorButtons();
         }
@@ -104,27 +107,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             };
         }
 
-        private void Pick(ref Color target)
+        /// <summary>The three swatch handlers, WPF's body with the blocking ColorDialog swapped for
+        /// the awaited head picker. A cancelled pick answers null and changes nothing.</summary>
+        private async void Pick(Color current, Action<Color> assign)
         {
-            var color = ShowColorPicker(target);
+            var color = await ColorPickerDialog.PickAsync(this, current);
             if (color.HasValue)
             {
-                target = color.Value;
+                assign(color.Value);
                 UpdateColorButtons();
                 UpdatePreview();
             }
         }
 
-        private Color? ShowColorPicker(Color currentColor)
-        {
-            // ponytail: needs a colour picker (WPF used System.Windows.Forms.ColorDialog); Avalonia's
-            // ColorPicker lives in a package this head does not reference yet. Returns "no change".
-            return null;
-        }
-
         private void BtnSave_Click()
         {
-            // ponytail: needs SettingsManager to persist Sub* colours and the two toggles, wired when it moves to Core
+            var settings = CoreSettings.Current;
+
+            settings.SubBackgroundColor = ColorToHex(_bgColor);
+            settings.SubTextColor = ColorToHex(_textColor);
+            settings.SubBorderColor = ColorToHex(_borderColor);
+            settings.SubBackgroundTransparent = _chkBgTransparent.IsChecked ?? false;
+            settings.SubTextTransparent = _chkTextTransparent.IsChecked ?? false;
+            settings.SubliminalStealsFocus = _chkStealsFocus.IsChecked ?? false;
+
             Serilog.Log.Information("Subliminal settings updated");
             Close(true);
         }
@@ -135,5 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (!hex.StartsWith("#")) hex = "#" + hex;
             return Color.TryParse(hex, out var color) ? color : fallback;
         }
+
+        private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     }
 }

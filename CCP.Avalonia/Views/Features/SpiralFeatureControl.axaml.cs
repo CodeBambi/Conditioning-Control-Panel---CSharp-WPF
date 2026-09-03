@@ -14,6 +14,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.UI;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
@@ -32,12 +33,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// </summary>
     public partial class SpiralFeatureControl : UserControl
     {
-        // ponytail: local copy of App.MonitorTargetFollowGlobal / App.MonitorTargetAll
-        // (ConditioningControlPanel/App.ScreenResolver.cs), still in the WPF head. They are the
-        // sentinels persisted in AppSettings.SpiralTargetMonitor, so both heads must agree.
-        private const int MonitorTargetFollowGlobal = -1;
-        private const int MonitorTargetAll = -2;
-
         private static readonly string[] SpiralImageExts =
             { ".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp" };
         private static readonly string[] SpiralVideoExts =
@@ -216,8 +211,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             try
             {
                 CmbMonitor.Items.Clear();
-                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_default"), Tag = MonitorTargetFollowGlobal });
-                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_all"), Tag = MonitorTargetAll });
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_default"), Tag = MonitorTarget.FollowGlobal });
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_all"), Tag = MonitorTarget.All });
 
                 var screens = ScreenList.Enumerate(this);
                 string monitorLabel = Loc.Get("monitor_label");
