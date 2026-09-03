@@ -304,6 +304,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     switch (e.type) {
       case 'driftTier': sfx('ui_click', 0.3 + 0.15 * e.tier); break;
       case 'driftBoost': hud.toast(TURBO[e.tier] || 'turbo', 'pop'); sfx('tunnel_powerup_collect', 0.5 + 0.15 * e.tier); if (e.tier >= 2) shake.shake(0.12 * e.tier, 160); poke(e.tier >= 3 ? 'smug' : 'streamed', 1.0); break;
+      case 'trick': { const g = w.score.trick(e.points, e.name); hud.toast(`${e.name} +${g}`, 'pop'); sfx('chain_pop', 0.8); poke('smug', 0.6); break; }
+      case 'landing': if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost'); if (e.clean) sfx('surface', 0.5); } break;
+      case 'inverted': w.score.setInverted(e.on); if (e.on) { hud.toast('upside down', 'effect'); poke('shock', 0.8); } break;
     }
   }
 
@@ -340,6 +343,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
     if (S.wasAirborne && !ks.airborne) { shake.shake(0.8, 300); poke('smug', 0.7); }
     S.wasAirborne = ks.airborne;
+    for (const n of w.score.drainNotes()) { hud.toast(n.text, n.kind); if (n.mood) poke(n.mood, 1.2); if (n.sfx) sfx(n.sfx, 0.9); }   // upside down, full circle, hot lap
 
     // tube + fx + rooms
     S.tunnelTime += wdt * (0.5 + ks.speed / 12);

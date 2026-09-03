@@ -8,6 +8,9 @@
 //   { type:'driftTier', tier }        the drift charge crossed a tier (1 blue, 2 orange, 3 purple)
 //   { type:'driftBoost', tier, sec }  drift released with a charge: that many seconds of boost
 //   { type:'scrub', sec }             the road edge has been scrubbed for WALL_SCRUB_SEC (speed eases off a touch)
+//   { type:'trick', name, points, streak }   a ramp trick was thrown (one per launch): 'spin left' | 'spin right' | 'backflip'
+//   { type:'landing', clean, trick, streak } touched down; clean = not on the kerb; a clean trick landing boosts
+//   { type:'inverted', on }           roll past 120 degrees (inside THE BIG WHEEL) began / ended; state.inverted mirrors it
 
 import * as THREE from 'three';
 import {
@@ -23,6 +26,12 @@ const DRIFT_SNAP = 1.6;       // m/s of counter-steer kick when a drift lets go 
 const WALL_SOFT = 0.7;        // metres from the road edge where the soft wall starts easing you back
 const WALL_SCRUB_MULT = 0.9;  // speed target while scrubbing the edge past WALL_SCRUB_SEC; the floor still holds
 const HOP_SEC = 0.28, HOP_H = 0.3;      // the drift-press hop: cosmetic, the pop box never leaves the road
+const TRICK_SEC = 0.62;                 // one full rotation of the cup (spin about up, backflip about right)
+const TRICK_POINTS = { spin: 150, flip: 250 };
+const TRICK_STREAK_MAX = 4;             // consecutive clean trick landings scale trick points by 1 + 0.5 * streak
+const LAND_BOOST_SEC = 0.7;             // a clean landing after a trick
+const LAND_CLEAN_M = 0.45;              // metres inside the road edge that still count as clean
+const INVERT_DEG = 120;                 // roll past this = upside down (pops count double, score.js)
 const TIER_COLORS = [0xFFD27A, 0x5BB8FF, 0xFF8A3D, 0xC46BFF];   // tier 0 (gold) is emi.js's own sparks
 const TARGET_AHEAD = POP_HIT_D * 0.5;   // the pop ring floats this far in front of the cup
 const TARGET_H = LANE_H - 0.15;         // ring centre: between the road box centre and a lane bubble
@@ -31,7 +40,7 @@ const CAM_BOOST_BACK = 0.7;             // the seat slides back a touch under bo
 const WORLD_UP = new THREE.Vector3(0, 1, 0), ZERO = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3();
 const _fwd = new THREE.Vector3(), _up = new THREE.Vector3(), _right = new THREE.Vector3(), _lvl = new THREE.Vector3();
-const AX_X = new THREE.Vector3(1, 0, 0), AX_Z = new THREE.Vector3(0, 0, 1);
+const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0), AX_Z = new THREE.Vector3(0, 0, 1);
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (k, dt) => 1 - Math.exp(-k * dt);
@@ -75,6 +84,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     d: 0, x: 0, h: 0, vh: 0, speed: KART_BASE_SPEED, steer: 0, drift: false, airborne: false,
     boostSec: 0, slowMult: 1, slowSec: 0, lap: 0,
     driftSec: 0, driftTier: 0, scrub: false,
+    inverted: false, roll: 0, trick: null, trickStreak: 0,
   };
   const rig = createEmiRig({ scene, reducedMotion });
   const group = rig.group;
@@ -93,6 +103,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
 
   let vx = 0, lean = 0, pitch = 0, elapsed = 0, lastRampD = -1, driftSide = 1, camReady = false, camX = 0, camH = 0;
   let camBoost = 0, steerS = 0, hopT = 0, scrubSec = 0, sparkAcc = 0, driftWas = false;
+  let airWas = false, steerWas = 0, trickArmed = false, trickKind = null, trickDir = 1, trickT = 1;
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
   const ctx = { t: 0, up: _up, right: _right, tangent: _fwd, speedNorm: 0, airborne: false, steerVel: 0, drift: false, driftSide: 1, driftTier: 0 };
   const listeners = [];
@@ -212,6 +223,31 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     return HOP_H * Math.sin(Math.PI * (1 - hopT / HOP_SEC));
   }
 
+  /** Airborne input: a fresh drift press backflips, a fresh steer past half lock spins. One per launch. */
+  function stepTricks(dt, inp, driftPress) {
+    if (trickT < 1) trickT = Math.min(1, trickT + dt / TRICK_SEC);
+    if (state.airborne && !airWas) { trickArmed = true; state.trick = null; }
+    if (state.airborne && trickArmed) {
+      let kind = null, dir = 1;
+      if (driftPress) kind = 'flip';
+      else if (Math.abs(inp.steer) > 0.5 && Math.abs(steerWas) <= 0.5) { kind = 'spin'; dir = inp.steer > 0 ? 1 : -1; }
+      if (kind) {
+        trickArmed = false; trickKind = kind; trickDir = dir; trickT = 0;
+        state.trick = kind === 'flip' ? 'backflip' : dir > 0 ? 'spin right' : 'spin left';
+        const points = Math.round(TRICK_POINTS[kind] * (1 + 0.5 * Math.min(state.trickStreak, TRICK_STREAK_MAX)));
+        emit({ type: 'trick', name: state.trick, points, streak: state.trickStreak });
+      }
+    }
+    if (!state.airborne && airWas) {
+      const clean = Math.abs(state.x) < ROAD_HALF_W - LAND_CLEAN_M, trick = state.trick;
+      if (trick && clean) { applyBoost(LAND_BOOST_SEC); state.trickStreak = Math.min(state.trickStreak + 1, TRICK_STREAK_MAX + 1); }
+      else state.trickStreak = 0;
+      emit({ type: 'landing', clean, trick, streak: state.trickStreak });
+      state.trick = null; trickArmed = false;
+    }
+    airWas = state.airborne; steerWas = inp.steer;
+  }
+
   function stepTierSparks(dt) {
     if (!tierSparks) return;
     const on = state.drift && state.driftTier > 0 && !state.airborne;
@@ -234,7 +270,15 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     group.quaternion.setFromRotationMatrix(_m);
     ring.quaternion.copy(group.quaternion);                            // the ring never leans
     group.quaternion.multiply(_q.setFromAxisAngle(AX_Z, lean)).multiply(_q.setFromAxisAngle(AX_X, pitch));
+    if (trickT < 1) {                                                  // the trick: one full turn, eased
+      const ang = Math.PI * 2 * smooth(trickT);
+      group.quaternion.multiply(trickKind === 'flip' ? _q.setFromAxisAngle(AX_X, -ang) : _q.setFromAxisAngle(AX_Y, ang * trickDir));
+    }
     group.updateMatrixWorld(true);
+    // upside down: how far the road's up has rolled from the world's (THE BIG WHEEL)
+    state.roll = Math.acos(clamp(_up.dot(WORLD_UP), -1, 1)) * 180 / Math.PI;
+    const inv = state.roll > INVERT_DEG;
+    if (inv !== state.inverted) { state.inverted = inv; emit({ type: 'inverted', on: inv }); }
     lay.toWorld(lay.wrap(state.d + TARGET_AHEAD), state.x, state.h + TARGET_H, ring.position);
     const swell = 1 + 0.22 * pulse;
     ring.scale.set(POP_HIT_X * reach * swell, POP_HIT_H * reach * swell, 1);
@@ -281,6 +325,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     const inp = { steer: +input.steer || 0, accel: clamp(+input.accel || 0, 0, 1), brake: clamp(+input.brake || 0, 0, 1), drift: !!input.drift };
     elapsed += dt;
     if (pulse > 0) pulse = Math.max(0, pulse - pulse * ease(7, dt) - 0.2 * dt);
+    const driftPress = inp.drift && !driftWas;
     stepSpeed(dt, inp);
     stepSteer(dt, inp);
     const prevD = state.d;
@@ -289,6 +334,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     d = lay.wrap(d);
     state.d = d;
     stepRamps(dt, lay, prevD);
+    stepTricks(dt, inp, driftPress);
     place(lay, stepHop(dt));
     stepCamera(dt, lay);
     stepTierSparks(dt);
