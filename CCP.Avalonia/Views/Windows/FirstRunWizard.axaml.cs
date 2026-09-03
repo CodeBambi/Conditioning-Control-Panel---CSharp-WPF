@@ -439,7 +439,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         ///
         /// <para>WPF returned false when <c>App.Settings</c> was null. The Core seam's
         /// <c>Current</c> is never null - with no head attached it is a throwaway default - so
-        /// <see cref="CoreSettings.HasProvider"/> is what stands in for that check. Without it the
+        /// <see cref="CoreSettings.Service"/> is what stands in for that check. Without it the
         /// headless render and the smoke runner would claim a first run against an object nobody
         /// ever saves.</para>
         /// </summary>
@@ -447,7 +447,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                if (!CoreSettings.HasProvider) return false;
+                // WPF's `App.Settings?.Current` null check. The seam's Current is never null - with
+                // no head attached it is a throwaway default nobody saves - so the service itself is
+                // what "is there settings to claim against" has to ask.
+                if (CoreSettings.Service == null) return false;
 
                 var settings = CoreSettings.Current;
                 if (settings.Welcomed) return false;
@@ -477,7 +480,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                if (!CoreSettings.HasProvider) return;
+                if (CoreSettings.Service == null) return;
 
                 var settings = CoreSettings.Current;
                 settings.Welcomed = false;

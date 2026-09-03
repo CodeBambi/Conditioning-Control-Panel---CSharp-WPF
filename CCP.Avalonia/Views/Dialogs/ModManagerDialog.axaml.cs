@@ -145,19 +145,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         /// <summary>
         /// Paints the pack row for the selected mod. Collapsed unless this is a built-in whose pack
-        /// is mapped and the pack is not stamped yet.
+        /// is mapped, there is a pack service to fetch it with, and the pack is not stamped yet.
         ///
-        /// <para>WPF also collapsed the row on a full/dev install. <c>IsFullInstall</c> has no Core
-        /// seam, and <see cref="ModPacks.IsInstalled"/> answers false with no pack service, so this
-        /// head shows the row wherever a mapped pack is not stamped - the download button under it
-        /// is the stub below.</para>
+        /// <para>The no-pack-service branch is WPF's <c>svc == null</c> collapse, and it has to
+        /// agree with <see cref="ModPacks.NeedsDownload"/>: without it the list row says nothing is
+        /// missing while this panel says "not downloaded" over a button that cannot download.
+        /// <c>IsFullInstall</c> is the one condition with no Core seam, so a full/dev layout still
+        /// shows the row here where WPF hid it.</para>
         /// </summary>
         private void UpdatePackPanel(ModPackage mod)
         {
             var entry = ModPacks.ForMod(mod.Id);
             var packId = entry?.PackId;
 
-            if (string.IsNullOrEmpty(packId))
+            if (string.IsNullOrEmpty(packId) || CoreReleaseContent.StampProvider is null)
             {
                 _packPanel.IsVisible = false;
                 return;
