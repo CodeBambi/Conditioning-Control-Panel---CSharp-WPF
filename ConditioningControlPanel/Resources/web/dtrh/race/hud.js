@@ -424,7 +424,7 @@ export function createRaceHud(root) {
     },
     dispose() {
       disposed = true;
-      popRun = { el: null, at: 0, sum: 0, n: 0, kill: 0 };
+      for (const k of Object.keys(runs)) Object.assign(runs[k], { el: null, at: 0, sum: 0, n: 0, kill: 0 });
       settleBrake('resume');
       settleEnd('exit');
       for (const t of timers) clearTimeout(t);
