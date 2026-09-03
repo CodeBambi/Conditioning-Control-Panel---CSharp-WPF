@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -65,6 +67,16 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// <see cref="RunOnAvatar"/> marshals to <c>Dispatcher.UIThread</c> and the setting has no
     /// meaning here. The guards are kept so callers from a worker thread still behave.</para>
     ///
+    /// <para><b>Three members from the partials DID cross</b>, because three other ported files
+    /// ask for them by name and each is self-contained: the chat-shortcut trio
+    /// (<see cref="FormatChatShortcut"/>, <see cref="SerializeModifiers"/>,
+    /// <see cref="ApplyChatShortcutTo"/>, from ChatInput.cs - the setting they read is in Core and
+    /// Avalonia's <c>KeyBindings</c> replaces WPF's <c>InputBindings</c>) and
+    /// <see cref="RefreshTubeLayout"/> with its margin maths (from Avatar.cs + Speech.cs, which
+    /// TubeFitDialog hot-refreshes the live tube with). <c>GigglePriority</c> did NOT: its
+    /// signature promises voice, and the queue, the interrupt rules and the TTS behind it are the
+    /// 2,873-line Speech.cs pipeline.</para>
+    ///
     /// <para><b>ponytail: the eight partials did not come.</b> This layer ports the .xaml.cs only.
     /// Avatar loading and the 60fps float loop (Avatar.cs), speech and barks (Speech.cs), chat and
     /// the AI pipeline (ChatInput.cs), Circe emotes (CirceEmotes.cs), reactions (Reactions.cs), the
@@ -129,6 +141,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _txtUserInput.Text = "type something…";
             this.FindControl<Grid>("FuseCandleHost")!.IsVisible = true;
             this.FindControl<Border>("TakeoverCountdownBar")!.IsVisible = true;
+            // Runs the layout maths in the render (OnOpened never fires headless), so the frame
+            // proves ApplyTubeLayoutOffsets + ApplySpeechBubblePlacement execute and land on the
+            // XAML defaults rather than only that they compile.
+            RefreshTubeLayout();
             // Note: the AI and POLICY badges are single-message-mode only (ShowChatHistory hides the
             // AI one, exactly as the WPF original does), so they are not in this frame. Both were
             // rendered separately during the port to confirm they draw with real strings.
@@ -198,6 +214,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // calls into a partial this layer does not have, and --render-all constructs ~180 windows
             // in one process, where a stray timer firing at a closed window is a flaky failure.
 
+            // WPF did this from Loaded on this window; same here. See ApplyChatShortcutTo for why
+            // the binding on THIS window is the lesser half.
+            Loaded += (_, _) => ApplyChatShortcutTo(this);
+
             Log.Information("AvatarTubeWindow initialized with avatar set {Set}", _currentAvatarSet);
         }
 
@@ -216,12 +236,30 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (_parentWindow is not null)
                 X11Overlay.RestackAbove(this, _parentWindow);
 
+            // The live tube owns the static chat command for as long as it is open. WPF routed the
+            // RoutedUICommand up the tree to whichever window handled it; there is no routed-command
+            // tree here, so the command holds one sink and the open tube is it.
+            OpenChatSink = OpenChatInput;
+
+            // WPF's OnLoaded ran this as part of the layout pass; it is idempotent and it is what
+            // puts the avatar, title, input panel, Takeover bar and speech bubble on the mod's
+            // chamber rather than on the stock one.
+            RefreshTubeLayout();
+
             // ponytail: needs AvatarTubeWindow.Windowing.cs. WPF's OnLoaded also ran
-            // CalculateScaleFactor / UpdatePosition / StartFloatingAnimation /
-            // ApplySpeechBubblePlacement / RestoreSavedPlacement / StartFullscreenDetection and
-            // InitTakeoverCountdownBar. Screens.ScreenFromPoint + screen.WorkingArea/Scaling are the
-            // replacements for GetDpiForMonitor / MonitorFromPoint / SystemParameters.WorkArea when
-            // that partial ports; nothing here needs them yet.
+            // CalculateScaleFactor / UpdatePosition / StartFloatingAnimation / RestoreSavedPlacement
+            // / StartFullscreenDetection and InitTakeoverCountdownBar. Screens.ScreenFromPoint +
+            // screen.WorkingArea/Scaling are the replacements for GetDpiForMonitor /
+            // MonitorFromPoint / SystemParameters.WorkArea when that partial ports.
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // Never leave the static command pointing at a closed window. Delegate == compares
+            // target and method, which is what makes "is the sink still MINE?" answerable at all;
+            // ReferenceEquals would be false every time because the conversion allocates.
+            if (OpenChatSink == (Action)OpenChatInput) OpenChatSink = null;
+            base.OnClosed(e);
         }
 
         // =========================================================================================
@@ -582,6 +620,295 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             }
             catch (Exception ex) { Log.Debug("AvatarTube HidePossessionNote failed: {Error}", ex.Message); }
         });
+
+        // =========================================================================================
+        //  Tube layout. PORTED from AvatarTubeWindow.Avatar.cs (RefreshTubeLayout /
+        //  ApplyTubeLayoutOffsets), Speech.cs (ApplySpeechBubblePlacement) and the constants in
+        //  Windowing.cs. TubeFitDialog calls RefreshTubeLayout to hot-refresh the live tube.
+        // =========================================================================================
+
+        /// <summary>Design reference width the XAML is drawn at.</summary>
+        private const double DesignWidth = 780;
+
+        /// <summary>Transparent right margin of the tube frame, MEASURED off tube.png's alpha
+        /// bounds - see the derivation in AvatarTubeWindow.Windowing.cs. Everything right of it is
+        /// alpha-0, i.e. click-through, which is why the tube's RECT may overlap main's rail.</summary>
+        private const double TubeArtRightPadding = 353;
+
+        /// <summary>Canvas px of OPAQUE art allowed over main's left edge. 0 = flush against the
+        /// door rail; 60 is the ceiling. The seam is a HIT-TEST budget, not just a look.</summary>
+        private const double SeamOverlapOverMain = 0;
+
+        /// <summary>12px of daylight so a short bubble does not read as glued to main's frame.</summary>
+        private const double AttachedBubbleSeamGap = 12;
+
+        private const double AttachedBubbleRightMargin =
+            TubeArtRightPadding - SeamOverlapOverMain + AttachedBubbleSeamGap;
+
+        /// <summary>Attached = riding beside main. The attach/detach gesture itself lives in
+        /// Windowing.cs, which did not port, so the tube stays in the state it starts in.</summary>
+        private bool _isAttached = true;
+
+        /// <summary>
+        /// Re-applies the tube layout after the user edits it (Mod Manager -> Tube Fit). Public so
+        /// the dialog can hot-refresh the live tube without a mod reload. Self-marshalling: the
+        /// dialog's OK handler may not be on the UI thread.
+        /// </summary>
+        public void RefreshTubeLayout() => RunOnAvatar(() =>
+        {
+            try { ApplyTubeLayoutOffsets(); }
+            catch (Exception ex) { Log.Warning("RefreshTubeLayout failed: {Error}", ex.Message); }
+        });
+
+        /// <summary>
+        /// Applies the active mod's tube layout offsets to the avatar, title, input panel, Takeover
+        /// bar and speech bubble. A mod's tube art may put the glass cylinder somewhere else, so the
+        /// offset shifts every element horizontally to line up with the chamber the author drew.
+        /// <para>The margins are the WPF ones verbatim, and with the offsets at 0 they are exactly
+        /// the XAML defaults - so an unseeded head lays out identically to today.</para>
+        /// </summary>
+        private void ApplyTubeLayoutOffsets()
+        {
+            // Deviation: WPF used LayoutTransform, which Avalonia has no per-control equivalent for
+            // (its twin is a LayoutTransformControl wrapper). RenderTransform about the feet is the
+            // same visual for a bottom-aligned avatar; only the parent's measured size differs, and
+            // AvatarBorder's size is margin-driven anyway.
+            var scale = EffAvatarScale();
+            var transform = Math.Abs(scale - 1.0) > 0.001 ? new ScaleTransform(scale, scale) : null;
+            foreach (var name in new[] { "ImgAvatar", "ImgAvatarAnimated", "ImgAvatarAnimatedB" })
+            {
+                var img = this.FindControl<Image>(name);
+                if (img == null) continue;
+                img.RenderTransformOrigin = new RelativePoint(0.5, 1.0, RelativeUnit.Relative);
+                img.RenderTransform = transform;
+            }
+
+            // When the mod only overrides the ATTACHED tube image, force the attached layout in the
+            // detached state too - otherwise the avatar lands outside the chamber the mod author
+            // drew (bug report #172).
+            var useAttachedLayout = _isAttached || ModOverridesAttachedTubeOnly();
+
+            var avatarBorder = this.FindControl<Border>("AvatarBorder");
+            var titleBox = this.FindControl<Border>("TitleBox");
+            var takeoverBar = this.FindControl<Border>("TakeoverCountdownBar");
+
+            if (useAttachedLayout)
+            {
+                var dx = EffAvatarOffsetX();
+                var dy = EffAvatarOffsetY();
+                if (avatarBorder != null) avatarBorder.Margin = new Thickness(5, 100, 126 - dx, 210 + dy);
+                if (titleBox != null) titleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
+                _inputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
+                if (takeoverBar != null) takeoverBar.Margin = new Thickness(0, 0, 116 - dx, 246);
+            }
+            else
+            {
+                var dx = EffAvatarDetachedOffsetX();
+                var dy = EffAvatarDetachedOffsetY();
+                // Detached nudge: 20px higher and net 5px left (the element is centred, so the
+                // offset is (L-R)/2).
+                if (avatarBorder != null) avatarBorder.Margin = new Thickness(5, 100, 436 - dx, 228 + dy);
+                if (titleBox != null) titleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
+                _inputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
+                // Keep the Takeover bar glued to the pod; it is not in the XAML's attached-only
+                // default, so without this it floats at the attached spot whenever the tube
+                // detaches (#464).
+                if (takeoverBar != null) takeoverBar.Margin = new Thickness(0, 0, 416 - dx, 264);
+            }
+
+            ApplySpeechBubblePlacement();
+        }
+
+        /// <summary>
+        /// Places the speech bubble. Attached it is anchored by its RIGHT edge on the seam and grows
+        /// leftward, because an OPAQUE pixel right of the tube art is NOT click-through: it swallows
+        /// the click and main's door rail goes dead for as long as she is talking (v6.8.6). A bubble
+        /// too wide to fit left of the seam gives the seam up rather than hang off the canvas and get
+        /// clipped - an unreadable bubble is the worse bug. Detached there is nothing underneath to
+        /// protect, so that mode keeps the centred placement it has always had.
+        /// </summary>
+        private void ApplySpeechBubblePlacement()
+        {
+            var useAttached = _isAttached || ModOverridesAttachedTubeOnly();
+            var dx = useAttached ? EffAvatarOffsetX() : EffAvatarDetachedOffsetX();
+
+            double right;
+            if (useAttached)
+            {
+                // A mod's avatar offset may pull the bubble LEFT with the art it belongs to, never
+                // right - the seam is main's, not the mod's.
+                right = Math.Max(AttachedBubbleRightMargin, AttachedBubbleRightMargin - dx);
+
+                var maxWidth = _speechBubble.MaxWidth;
+                if (double.IsFinite(maxWidth) && maxWidth > 0)
+                    right = Math.Min(right, Math.Max(0, DesignWidth - maxWidth));
+            }
+            else
+            {
+                right = 425 - dx;
+            }
+
+            _speechBubble.HorizontalAlignment = useAttached ? HorizontalAlignment.Right
+                                                            : HorizontalAlignment.Center;
+            _speechBubble.Margin = new Thickness(0, 0, right, 550);
+        }
+
+        // ponytail: the five mod-layout reads are not in Core. WPF has them as
+        // App.Mods.GetAvatarScale / GetAvatarOffsetX / GetAvatarOffsetY /
+        // GetAvatarDetachedOffsetX / GetAvatarDetachedOffsetY, each combined with the Circe
+        // emote-set override in AvatarTubeWindow.CirceEmotes.cs (EffAvatar*). The neutral answers
+        // below are the ones WPF gives with no mod override and no emote running, which is why the
+        // margins above then equal the XAML defaults exactly.
+        private static double EffAvatarScale() => 1.0;
+        private static int EffAvatarOffsetX() => 0;
+        private static int EffAvatarOffsetY() => 0;
+        private static int EffAvatarDetachedOffsetX() => 0;
+        private static int EffAvatarDetachedOffsetY() => 0;
+
+        /// <summary>
+        /// ponytail: needs <c>Services.ModResourceResolver.HasModOverride</c>, which is a WPF-head
+        /// service. False is the honest unseeded answer - no mod, so no partial tube override - and
+        /// it is the safe one: it keeps the detached layout detached instead of forcing a mod
+        /// chamber nobody installed.
+        /// </summary>
+        private static bool ModOverridesAttachedTubeOnly() => false;
+
+        // =========================================================================================
+        //  Chat shortcut. PORTED from AvatarTubeWindow.ChatInput.cs. DevicesSettingsSection and the
+        //  companion hero card read the label; the capture dialog writes the setting back through
+        //  SerializeModifiers.
+        // =========================================================================================
+
+        /// <summary>
+        /// Where <see cref="OpenChatCommand"/> lands. WPF used a <c>RoutedUICommand</c> and let the
+        /// routed-command tree find whichever window handled it; Avalonia has no routed commands, so
+        /// the open tube claims this in <c>OnOpened</c> and releases it in <c>OnClosed</c>. Volatile
+        /// and null-tolerant for the same reason every seam here is: with no tube open the shortcut
+        /// must do nothing, not throw into a keypress handler.
+        /// </summary>
+        private static volatile Action? OpenChatSink;
+
+        /// <summary>The command the chat-shortcut KeyBinding is bound to on every window that
+        /// carries it. Always executable - the sink decides whether there is anything to open.</summary>
+        public static readonly ICommand OpenChatCommand = new OpenChatCommandImpl();
+
+        private sealed class OpenChatCommandImpl : ICommand
+        {
+            // Never raised: enablement does not change, so Avalonia's one-shot CanExecute read is
+            // the whole story here (see the porting note about CanExecuteChanged).
+            public event EventHandler? CanExecuteChanged { add { } remove { } }
+            public bool CanExecute(object? parameter) => true;
+            public void Execute(object? parameter)
+            {
+                try { OpenChatSink?.Invoke(); } catch { /* a hotkey must never take the app down */ }
+            }
+        }
+
+        /// <summary>Opens the chat input panel and puts the caret in it.</summary>
+        public void OpenChatInput() => RunOnAvatar(() =>
+        {
+            _inputPanel.IsVisible = true;
+            // Input priority, not inline: the panel has just become visible and is not laid out yet,
+            // so focusing it in the same beat silently does nothing.
+            Dispatcher.UIThread.Post(() => _txtUserInput.Focus(), DispatcherPriority.Input);
+        });
+
+        /// <summary>
+        /// Rebuilds the chat-shortcut KeyBinding on a window from the user's setting. Removes any
+        /// prior binding for <see cref="OpenChatCommand"/> first, so repeated calls do not stack
+        /// duplicates. Falls back to Ctrl+T on an empty or unparseable setting.
+        /// <para>The binding on the TUBE is the lesser half: the tube is
+        /// <c>ShowActivated="False"</c> and rarely holds focus, so the binding that actually fires
+        /// is the one the shell puts on itself - WPF calls this for MainWindow too.</para>
+        /// <para>Deviation: WPF caught <c>NotSupportedException</c> from <c>KeyGesture</c>, which
+        /// rejects a bare letter. Avalonia's <c>KeyGesture</c> accepts any pair, so there is nothing
+        /// to catch; the capture dialog already refuses a modifier-less letter at the source.</para>
+        /// </summary>
+        public static void ApplyChatShortcutTo(Window? window)
+        {
+            if (window == null) return;
+
+            var (key, mods) = CurrentChatShortcut();
+
+            for (int i = window.KeyBindings.Count - 1; i >= 0; i--)
+                if (ReferenceEquals(window.KeyBindings[i].Command, OpenChatCommand))
+                    window.KeyBindings.RemoveAt(i);
+
+            window.KeyBindings.Add(new KeyBinding
+            {
+                Gesture = new KeyGesture(key, mods),
+                Command = OpenChatCommand,
+            });
+        }
+
+        /// <summary>"Ctrl+T" / "Alt+Shift+B" — for the hero card button and the Devices row.</summary>
+        public static string FormatChatShortcut()
+        {
+            var (key, mods) = CurrentChatShortcut();
+
+            var parts = new List<string>();
+            if ((mods & KeyModifiers.Control) != 0) parts.Add("Ctrl");
+            if ((mods & KeyModifiers.Alt) != 0) parts.Add("Alt");
+            if ((mods & KeyModifiers.Shift) != 0) parts.Add("Shift");
+            if ((mods & KeyModifiers.Meta) != 0) parts.Add("Win");
+            parts.Add(key.ToString());
+            return string.Join("+", parts);
+        }
+
+        /// <summary>
+        /// The stored shortcut, defaulted. One reader for both the label and the binding so they can
+        /// never disagree about what an unparseable setting means.
+        /// </summary>
+        private static (Key Key, KeyModifiers Mods) CurrentChatShortcut()
+        {
+            var s = CoreSettings.Current.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.ChatShortcutKey) ? "T" : s!.ChatShortcutKey;
+            var modsName = s?.ChatShortcutModifiers ?? "Control";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.T;
+            if (!TryParseModifiers(modsName, out var mods)) mods = KeyModifiers.Control;
+            return (key, mods);
+        }
+
+        /// <summary>
+        /// Parses the stored "Control,Shift" form. Hand-mapped rather than
+        /// <c>Enum.TryParse&lt;KeyModifiers&gt;</c>: Avalonia calls the Windows key <c>Meta</c>, so a
+        /// settings file written on the WPF head - which stores "Windows" - would fail to parse and
+        /// silently drop the whole combo back to Ctrl+T.
+        /// </summary>
+        private static bool TryParseModifiers(string s, out KeyModifiers result)
+        {
+            result = KeyModifiers.None;
+            if (string.IsNullOrWhiteSpace(s)) return true;
+            foreach (var part in s.Split(new[] { ',', '+', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                switch (part.Trim().ToLowerInvariant())
+                {
+                    case "control": case "ctrl": result |= KeyModifiers.Control; break;
+                    case "alt": result |= KeyModifiers.Alt; break;
+                    case "shift": result |= KeyModifiers.Shift; break;
+                    case "windows": case "win": case "meta": result |= KeyModifiers.Meta; break;
+                    case "none": break;
+                    default: return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// The stored form, written back by the capture dialog. Still serializes <c>"Windows"</c>
+        /// rather than Avalonia's <c>"Meta"</c>, so one settings file keeps working on both heads.
+        /// </summary>
+        public static string SerializeModifiers(KeyModifiers m)
+        {
+            if (m == KeyModifiers.None) return "";
+            var parts = new List<string>();
+            if ((m & KeyModifiers.Control) != 0) parts.Add("Control");
+            if ((m & KeyModifiers.Alt) != 0) parts.Add("Alt");
+            if ((m & KeyModifiers.Shift) != 0) parts.Add("Shift");
+            if ((m & KeyModifiers.Meta) != 0) parts.Add("Windows");
+            return string.Join(",", parts);
+        }
 
         // =========================================================================================
         //  Stubs. Each one is a handler the WPF XAML wired inline whose body lives in a partial
