@@ -83,7 +83,8 @@ namespace ConditioningControlPanel
         // The service itself stays in the WPF head: on a switch it clears caches on a dozen head
         // services, and moving that is a project. So the head seeds these, and a head with no mod
         // layer (Linux today) gets exactly what the service answers with no mod active: the
-        // built-in CCP default manifest, which is in Core.
+        // built-in CCP default manifest, which is in Core - or, where a WPF call site carried its
+        // own null-App.Mods fallback, that fallback. See GetDefaultSubliminalPool.
 
         public static volatile Func<string?>? ActiveModIdProvider;
         public static volatile Func<IReadOnlyDictionary<string, ModPackage>?>? InstalledModsProvider;
