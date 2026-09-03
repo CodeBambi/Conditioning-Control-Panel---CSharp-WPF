@@ -16,6 +16,12 @@ namespace ConditioningControlPanel
     {
         public static volatile Action<string?>? SettingChangedSink;
 
+        /// <summary>Backs the saved settings up to the account's cloud profile, when the head has
+        /// one and the user is signed in. Null means "no cloud on this head", and Save skips the
+        /// backup without logging, because nothing is missing. The WPF head seeds it from
+        /// ProfileSyncService; the throttle that stops a 401 storm stays in SettingsService.</summary>
+        public static volatile Func<System.Threading.Tasks.Task>? CloudBackup;
+
         public static void NotifySettingChanged(string? name)
         {
             try { SettingChangedSink?.Invoke(name); } catch { /* never break settings for a listener */ }

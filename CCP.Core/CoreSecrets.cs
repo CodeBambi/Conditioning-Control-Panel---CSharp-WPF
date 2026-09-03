@@ -27,6 +27,11 @@ namespace ConditioningControlPanel
         public static volatile Func<string, string?>? RetrieveProvider;
         public static volatile Action<string, string?>? StoreProvider;
 
+        /// <summary>True when a head has attached a store. The plaintext-to-encrypted migration in
+        /// SettingsService runs only then: with no store there is nothing to migrate INTO, and
+        /// stripping the plaintext anyway would lose the value.</summary>
+        public static bool HasStore => StoreProvider is not null;
+
         /// <summary>The stored value, or null when there is none or no store is attached.
         /// Faults are swallowed: a broken store must not take the settings model down.</summary>
         public static string? Retrieve(string name)

@@ -240,5 +240,46 @@ namespace ConditioningControlPanel.Models
             var json = JsonConvert.SerializeObject(this);
             return JsonConvert.DeserializeObject<KeywordTrigger>(json)!;
         }
+    
+        /// <summary>
+        /// Rebuild <see cref="Actions"/> from the legacy flat fields. Used by the settings
+        /// migration on load and by the Exclusives editor on save, so a trigger edited through
+        /// the flat-field UI stays compatible with the dispatcher loop. Pure model logic, which
+        /// is why it lives here and not on the service that fires the actions.
+        /// </summary>
+        public void RebuildActionsFromFlatFields()
+        {
+
+            var list = new List<KeywordAction>();
+
+            if (!string.IsNullOrEmpty(this.AudioFilePath))
+            {
+                list.Add(new PlayAudioAction
+                {
+                    FilePath = this.AudioFilePath,
+                    Volume = this.AudioVolume,
+                    PlayCount = this.AudioPlayCount,
+                    DelayBetweenMs = this.AudioDelayBetweenMs,
+                    DuckSystemAudio = this.DuckAudio,
+                });
+            }
+
+            if (this.VisualEffect != KeywordVisualEffect.None &&
+                this.VisualEffect != KeywordVisualEffect.HighlightOnly)
+            {
+                list.Add(new VisualEffectAction { Effect = this.VisualEffect });
+            }
+
+            // Always include Highlight — it self-guards on matchedWords != null & global setting.
+            list.Add(new HighlightAction());
+
+            if (this.HapticEnabled)
+                list.Add(new HapticAction { Intensity = this.HapticIntensity });
+
+            if (this.XPAward > 0)
+                list.Add(new AddXpAction { Amount = this.XPAward });
+
+            this.Actions = list;
+        }
     }
 }
