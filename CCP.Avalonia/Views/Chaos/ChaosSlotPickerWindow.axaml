@@ -1,0 +1,163 @@
+<!-- PORTED from ConditioningControlPanel/Chaos/ChaosSlotPickerWindow.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" + TransparencyLevelHint
+       Background="Transparent" (was x:Null-ish) -> Background="Transparent" (unchanged)
+       ResizeMode="NoResize"                    -> CanResize="False"
+       shell:WindowChrome                       -> dropped; Win32-only, and SystemDecorations
+                                                   already removes the caption
+       <Style x:Key TargetType="Button">        -> <ControlTheme x:Key TargetType="Button">
+       Style="{StaticResource X}"               -> Theme="{StaticResource X}"
+       ControlTemplate.Triggers                 -> ^:pointerover / ^:disabled selectors
+       bare <ContentPresenter/>                 -> Content/ContentTemplate TemplateBindings
+                                                   (Avalonia's presenter does not find its content)
+       LinearGradientBrush "0,0"/"1,1"          -> "0%,0%"/"100%,100%" (a bare pair is ABSOLUTE px,
+                                                   which collapses the ramp to one pixel)
+       DropShadowEffect ShadowDepth="0"         -> OffsetX="0" OffsetY="0"
+       FontFamily="Segoe UI"                    -> dropped (Windows-only face)
+       Click= / MouseLeftButtonDown=            -> wired in the constructor
+
+     Buttons carry a TextBlock child rather than Content: Avalonia parses "_" in Content as an
+     access key. See the porting notes in CLAUDE.md. Every string here is hardcoded English in
+     the WPF original too - the picker was never localized - so there is no {loc:Str} in this
+     view and no key has been invented for one. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Chaos.ChaosSlotPickerWindow"
+        Title="Down the Rabbit Hole"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="Manual" Width="720" Height="560">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="Pink" Color="#FFE84393"/>
+        <SolidColorBrush x:Key="Purple" Color="#FF8B5CF6"/>
+        <SolidColorBrush x:Key="Bg" Color="#FF14122A"/>
+        <SolidColorBrush x:Key="TextDim" Color="#AAB8B8D0"/>
+        <SolidColorBrush x:Key="TextMut" Color="#88A0A0C0"/>
+        <!-- ponytail: local copy of ChaosSlotPickerWindow.xaml:Brand, hoist when a second view
+             needs it. Theme/Brushes.xaml has BrandGradient with the same two stops, but its
+             endpoints are written "0,0"/"1,1", which Avalonia reads as absolute pixels. -->
+        <LinearGradientBrush x:Key="Brand" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#FFE84393" Offset="0"/>
+            <GradientStop Color="#FF8B5CF6" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Ghost / flat button (Cancel, Open Folder) -->
+        <ControlTheme x:Key="GhostBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="Background" Value="#22FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#33E84393"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#b">
+                <Setter Property="Background" Value="#33FFFFFF"/>
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="White"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- Primary CTA (Descend) -->
+        <ControlTheme x:Key="PrimaryBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{StaticResource Brand}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="30,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="9"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#b">
+                <Setter Property="Opacity" Value="0.9"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border CornerRadius="16" Background="{StaticResource Bg}" BorderBrush="#55E84393" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" BlurRadius="28" OffsetX="0" OffsetY="0" Opacity="0.7"/>
+        </Border.Effect>
+        <Grid Margin="26,22,26,22" RowDefinitions="Auto,*,Auto,Auto">
+
+            <!-- Header (also the drag handle) -->
+            <Grid Grid.Row="0" x:Name="HeaderBar" Background="Transparent">
+                <StackPanel HorizontalAlignment="Left">
+                    <TextBlock Text="🐇 Down the Rabbit Hole" FontSize="13" Foreground="{StaticResource Pink}"
+                               FontWeight="SemiBold" Opacity="0.85"/>
+                    <TextBlock Text="Choose your save" FontSize="26" FontWeight="Bold" Foreground="White" Margin="0,2,0,0"/>
+                    <TextBlock Text="Pick a slot to descend into. Each keeps its own progress." FontSize="13"
+                               Foreground="{StaticResource TextDim}" Margin="0,3,0,0"/>
+                </StackPanel>
+                <Button x:Name="BtnClose" Width="34" Height="34" VerticalAlignment="Top"
+                        HorizontalAlignment="Right" Theme="{StaticResource GhostBtn}" Padding="0"
+                        FontSize="15" ToolTip.Tip="Cancel">
+                    <TextBlock Text="✕"/>
+                </Button>
+            </Grid>
+
+            <!-- Slot cards get built in code-behind -->
+            <StackPanel Grid.Row="1" x:Name="SlotsPanel" Orientation="Horizontal"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+            <!-- Local-storage note -->
+            <Border Grid.Row="2" Background="#1AFFFFFF" CornerRadius="9" Padding="14,10" Margin="0,4,0,14">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="🔒" FontSize="14" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                    <StackPanel>
+                        <TextBlock Text="All saves are stored locally on this PC" FontSize="12.5"
+                                   Foreground="{StaticResource TextDim}" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="PathText" FontSize="11" Foreground="{StaticResource TextMut}"
+                                   TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                    </StackPanel>
+                    <Button x:Name="BtnOpenFolder" Theme="{StaticResource GhostBtn}"
+                            Padding="12,6" FontSize="12" Margin="14,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="Open folder"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- Actions -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnCancel" Theme="{StaticResource GhostBtn}" Margin="0,0,10,0">
+                    <TextBlock Text="Cancel"/>
+                </Button>
+                <Button x:Name="BtnDescend" Theme="{StaticResource PrimaryBtn}">
+                    <TextBlock Text="Descend  ↓"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

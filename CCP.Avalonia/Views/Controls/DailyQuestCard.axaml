@@ -1,0 +1,140 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/DailyQuestCard.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     The original's long design essay is not transcribed; it still explains the WPF file, and the
+     shape it argues for (vertical card, near-square art frame, caption printed ON the art, body
+     down to bar + reroll, everything painted from code) is preserved here unchanged.
+
+     Deviations, all forced:
+
+       Style="{StaticResource OutlineButton}" -> Theme="{StaticResource OutlineButton}"
+       Visibility="Collapsed"                 -> IsVisible="False"
+       helpers:EmojiTextBlock                 -> TextBlock (Avalonia draws colour emoji natively)
+       hover:HoverPop.IsEnabled               -> dropped; the behaviour lives in the WPF head
+       DropShadowEffect ShadowDepth="2"       -> OffsetX/OffsetY (Avalonia has no ShadowDepth)
+       RenderTransformOrigin="0.5,0.5"        -> "50%,50%"  (a bare pair parses as ABSOLUTE px)
+       LinearGradientBrush 0,0 -> 0,1         -> 0%,0% -> 0%,100%  (same reason: the scrim would
+                                                 otherwise be a 1px-tall ramp)
+       Click="BtnReroll_Click"                -> wired in the constructor
+       ToolTipService.ShowOnDisabled          -> ToolTip.ShowOnDisabled
+       FontFamily="Segoe UI Emoji, ..."       -> dropped (Windows-only face list)
+       d:DesignWidth/Height                   -> MaxWidth/MaxHeight, the same 257x320 the WPF
+                                                 header argues the board caps the seat at. In WPF
+                                                 the board imposed it; here the card also renders
+                                                 alone in the render proof, and without the cap the
+                                                 star-height art frame eats the whole host window.
+
+     BtnReroll holds a TextBlock rather than Content: Avalonia parses "_" in Content as an access
+     key. See the porting notes in CLAUDE.md. No string in this view is localized in the WPF
+     original either - every one is set from code by MainWindow - so there is no {loc:Str} here. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.DailyQuestCard"
+             MaxWidth="257" MaxHeight="320">
+
+    <Border x:Name="Root" CornerRadius="12" Background="{DynamicResource PanelBgBrush}"
+            BorderThickness="1.5" BorderBrush="#3D3D60"
+            RenderTransformOrigin="50%,50%">
+        <!-- NO Effect at rest, on purpose: a shadow at rest is a shader pass per frame on a tab
+             that is mostly static. The hover glow is attached in code and cleared on exit. -->
+
+        <Grid RowDefinitions="*,Auto">
+
+            <!-- ============================ ART ============================ -->
+            <Border Grid.Row="0" MinHeight="240" Background="{DynamicResource DarkerBgBrush}"
+                    CornerRadius="11,11,0,0" ClipToBounds="True">
+                <Grid>
+                    <Image x:Name="Art" Stretch="UniformToFill"/>
+
+                    <!-- Bottom scrim. It carries the whole caption, so it reaches high and lands
+                         nearly opaque: most shipped quest art has the quest's own name baked into
+                         the bottom of the picture, and the ramp buries it. -->
+                    <Border Height="112" VerticalAlignment="Bottom" IsHitTestVisible="False">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                <GradientStop Color="#00000000" Offset="0"/>
+                                <GradientStop Color="#8A000000" Offset="0.28"/>
+                                <GradientStop Color="#FC000000" Offset="0.52"/>
+                                <GradientStop Color="#FF000000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+
+                    <!-- Stamped. Sits UNDER the caption: a finished quest should still say which
+                         quest it was. -->
+                    <Border x:Name="CompletedOverlay" Background="#992D4A2D" IsVisible="False">
+                        <TextBlock Text="&#x2713;" Foreground="#00E676" FontSize="72" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Margin="0,0,0,38">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="8" OffsetX="0" OffsetY="2"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+
+                    <!-- Seat number: with three cards up, "which one is this" has to be answerable
+                         without reading the quest name. -->
+                    <Border x:Name="SlotChip" Background="#B01A1A2E" CornerRadius="9"
+                            Padding="7,2" Margin="8" HorizontalAlignment="Left" VerticalAlignment="Top"
+                            IsHitTestVisible="False">
+                        <TextBlock x:Name="TxtSlot" Text="1" Foreground="#FFD700"
+                                   FontSize="11" FontWeight="Bold"/>
+                    </Border>
+
+                    <!-- XP on the art, not in the body: it is the price tag. -->
+                    <Border x:Name="XpChip" Background="#B01A1A2E" CornerRadius="9"
+                            Padding="7,2" Margin="8" HorizontalAlignment="Right" VerticalAlignment="Top"
+                            IsHitTestVisible="False">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="TxtXp" Text="" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtXpBonus" Text="" Foreground="#FFB347"
+                                       FontSize="10" FontWeight="Bold" Margin="4,0,0,0"
+                                       VerticalAlignment="Center" IsVisible="False"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- CAPTION. Name and ask, on the picture, over the scrim. -->
+                    <StackPanel VerticalAlignment="Bottom" Margin="11,0,11,9" IsHitTestVisible="False">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <TextBlock x:Name="TxtIcon" Text="" FontSize="15"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="TxtName" Text="" Foreground="White" FontSize="14" FontWeight="Bold"
+                                       TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtDesc" Text="" Foreground="#D6D6E8"
+                                   FontSize="11" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                   MaxHeight="31"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ============================ BODY: TWO ROWS ============================ -->
+            <Grid Grid.Row="1" Margin="11,9,11,11" RowDefinitions="Auto,Auto">
+
+                <!-- ROW 1: the bar and, beside it, what is left of the quest. The counts sit ON
+                     the bar's line, not under it - a bar alone never says how much is missing. -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                    <Border x:Name="Track" Grid.Column="0" Background="{DynamicResource DarkerBgBrush}"
+                            CornerRadius="4" Height="10" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <Border x:Name="Fill" Background="#FFD700" CornerRadius="4"
+                                HorizontalAlignment="Left" Width="0"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtProgress" Text="" Foreground="#FFD700"
+                                   FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtRemaining" Text="" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ROW 2: per-seat reroll. The rerolls are still one shared daily pool; this
+                     button only chooses WHICH seat one is spent on. -->
+                <Button x:Name="BtnReroll" Grid.Row="1" Theme="{StaticResource OutlineButton}"
+                        FontSize="11" Padding="8,4" Margin="0,8,0,0"
+                        ToolTip.ShowOnDisabled="True">
+                    <TextBlock x:Name="TxtReroll" Text=""/>
+                </Button>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>
