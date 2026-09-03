@@ -1887,6 +1887,20 @@
           <TextBlock Text="CCP Catalogue" Foreground="White" VerticalAlignment="Center"/>
         </StackPanel>
       </Button>
+
+      <!-- Diagnostics. Deliberately small and last in the row: a developer affordance, not a
+           setting. Opens this head's diagnostics window (platform, Core paths, engine values, a
+           live moderation verdict) as a SECOND window, so the shell keeps its state and that
+           window's own Back button is just a close. -->
+      <Button Grid.Column="6" x:Name="BtnOpenDiagnostics"
+              HorizontalAlignment="Right" VerticalAlignment="Bottom"
+              Margin="0,0,4,-2" Padding="8,2" FontSize="10"
+              Background="Transparent" BorderThickness="0" Cursor="Hand"
+              Foreground="{DynamicResource TextMutedBrush}"
+              Click="BtnOpenDiagnostics_Click"
+              ToolTip.Tip="Open the Linux head's diagnostics window">
+        <TextBlock Text="diagnostics"/>
+      </Button>
     </Grid>
 
     <!-- Scrolling Marquee Banner - row 3, spans all columns -->

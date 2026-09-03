@@ -28,8 +28,12 @@ namespace ConditioningControlPanel.Avalonia
         public override void OnFrameworkInitializationCompleted()
         {
 
+            // The app shell is the startup window. Until now this head opened the diagnostics
+            // MainWindow, which was right while the shell did not exist and is wrong now that it
+            // does. The diagnostics window is still reachable, from Settings, and RenderProof
+            // still hosts single views inside it - neither depends on it being the startup window.
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
-                desktop.MainWindow = new MainWindow();
+                desktop.MainWindow = new Views.Windows.MainShellWindow();
             base.OnFrameworkInitializationCompleted();
         }
     }

@@ -341,6 +341,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void VelvetBtnSchedulerRamp_Click(object? sender, RoutedEventArgs e) { }     // mw.VelvetBtnSchedulerRamp_Click(...)
         private void VelvetBtnCatalogue_Click(object? sender, RoutedEventArgs e) { }         // mw.BtnCatalogue_Click(...)
 
+        /// <summary>
+        /// Opens the head's diagnostics window. A second window rather than a swap, so the shell
+        /// keeps its state and the diagnostics window's own Back button is just a Close.
+        /// Re-entrant: a second click focuses the window that is already open instead of stacking
+        /// duplicates.
+        /// </summary>
+        private void BtnOpenDiagnostics_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_diagnostics is { } open)
+            {
+                open.Activate();
+                return;
+            }
+
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            _diagnostics = new MainWindow();
+            _diagnostics.Closed += (_, _) => _diagnostics = null;
+
+            if (owner is not null) _diagnostics.Show(owner);
+            else _diagnostics.Show();
+        }
+
+        private MainWindow? _diagnostics;
+
         // -- training programs "today" card ----------------------------------------------
         private void ProgramTodayCard_Loaded(object? sender, RoutedEventArgs e) { }          // mw.ProgramTodayCard_Loaded(...)
         private void ProgramTodayCard_Click(object? sender, RoutedEventArgs e) { }           // mw.ProgramTodayCard_Click(...)
