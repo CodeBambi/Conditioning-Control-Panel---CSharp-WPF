@@ -1,0 +1,151 @@
+/* ============================================================================
+ * shell/timecapsule.css - the skin for shell/timecapsule.js.
+ *
+ * A framed photograph under the trophy case light: gold rule, dark mount board,
+ * an engraved plaque under the picture. A real stylesheet file rather than a
+ * template literal in the module (traps 37 and 84 cannot happen here at all);
+ * shell/timecapsule.js links it once, lazily, resolved against the module.
+ *
+ * HOUSE LAWS OBEYED
+ *   no serif   the plaque is the shell's own display and mono faces, both
+ *              already declared - nothing here fetches a font (trap 2).
+ *   trap 27    no bare `display:` on anything the shell toggles; the stage is
+ *              REMOVED, never hidden.
+ *   trap 36    the entry is transform and opacity only, once, on mount.
+ *   trap 46    the stage scrolls, so a short window never buries the cross.
+ *
+ * COLOUR: every value is a color-mix off the shell's own tokens, so
+ * init.palette reskins the case for free.
+ *
+ * LAYER: z-index 38, the same rung the corkboard and the Bugle take - all three
+ * are campus overlays and never up at once. Over the campus and its chrome (up
+ * to 36), under fx (40), the ceremony (42/45), the annex reveal (48), EMI (50).
+ * ==========================================================================*/
+
+.arc-capsulestage {
+  --cap-mount:  color-mix(in srgb, var(--navy), black 26%);
+  --cap-frame:  color-mix(in srgb, var(--gold), var(--navy) 44%);
+  --cap-glow:   color-mix(in srgb, var(--gold), transparent 86%);
+  --cap-brass:  color-mix(in srgb, var(--gold), var(--panel) 30%);
+  --cap-ink:    var(--ink);
+  --cap-dim:    color-mix(in srgb, var(--ink), var(--slate) 46%);
+
+  position: fixed; inset: 0; z-index: 38;
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(10px, 3vh, 40px) clamp(10px, 3vw, 40px);
+  overflow: auto;                /* the case scrolls, the cross never clips */
+  animation: arc-capsule-dusk .2s ease-out both;
+}
+@keyframes arc-capsule-dusk { from { opacity: 0; } to { opacity: 1; } }
+
+/* The dusk behind it, warmed at the top the way a case light warms a shelf. */
+.arc-capsule-veil {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(760px 420px at 50% 16%, var(--cap-glow), transparent 66%),
+    radial-gradient(ellipse at 50% 44%, rgba(12, 8, 22, .76) 0%, rgba(4, 3, 10, .93) 76%);
+}
+
+/* ------------------------------------------------------------------ the frame */
+.arc-capsule {
+  position: relative;
+  margin: auto;
+  width: min(920px, 96vw);
+  padding: clamp(10px, 1.6vw, 18px);
+  background: linear-gradient(178deg, var(--cap-mount), color-mix(in srgb, var(--cap-mount), black 34%));
+  border: 2px solid var(--cap-frame);
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, .72),
+    0 0 0 1px color-mix(in srgb, var(--gold), transparent 74%) inset;
+  animation: arc-capsule-lift .34s cubic-bezier(.2, 1.14, .4, 1) both;
+}
+@keyframes arc-capsule-lift {
+  from { transform: translateY(14px) scale(.985); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+/* ---------------------------------------------------------------- the picture */
+/* THE PICTURE IS CAPPED, NOT FULL WIDTH. A 1200px screenshot in a 920px frame
+   is taller than a laptop window, and a plaque you have to scroll to find is a
+   plaque nobody reads. The cap is on the IMAGE (max-height, auto width) rather
+   than a crop, so a short window loses none of the shot and the mount board
+   shows either side of it, which is what a mount board is for. */
+/* NOT A FLEX ROW, deliberately. A flex item's automatic minimum size is its
+   INTRINSIC width, so a 1200px screenshot in a flex box ignores max-width:100%
+   and drags the whole frame off the side of a phone (seen, and fixed, in a
+   390px headless capture). A block-level replaced element with `width:auto` and
+   `margin:0 auto` sizes to its own picture, obeys both caps, and centres. */
+.arc-capsule-shot {
+  background: color-mix(in srgb, var(--ground), black 30%);
+  border: 1px solid color-mix(in srgb, var(--gold), transparent 76%);
+  line-height: 0;                /* no descender gap under the image */
+}
+.arc-capsule-shot[data-art="off"] { min-height: 120px; }
+.arc-capsule-img {
+  display: block; margin: 0 auto; width: auto; height: auto;
+  max-width: 100%; max-height: min(62vh, 640px);
+}
+
+/* ----------------------------------------------------------------- the plaque */
+.arc-capsule-plaque {
+  margin-top: clamp(10px, 1.4vw, 16px);
+  padding: clamp(10px, 1.4vw, 16px) clamp(12px, 1.8vw, 20px);
+  text-align: center;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--cap-brass), transparent 84%),
+    color-mix(in srgb, var(--cap-brass), transparent 94%));
+  border-top: 1px solid color-mix(in srgb, var(--gold), transparent 68%);
+}
+.arc-capsule-kicker {
+  margin: 0 0 4px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .22em;
+  color: var(--gold); opacity: .86;
+}
+.arc-capsule-title {
+  margin: 0 0 8px;
+  font-family: var(--disp); font-size: clamp(22px, 3.4vw, 34px); font-weight: 400;
+  letter-spacing: .04em; color: var(--cap-ink);
+}
+.arc-capsule-line {
+  margin: 0 auto; max-width: 56ch;
+  font-family: var(--body); font-size: clamp(13px, 1.5vw, 15px); line-height: 1.5;
+  color: var(--cap-ink);
+}
+.arc-capsule-fine {
+  margin: 8px 0 0;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+  color: var(--cap-dim);
+}
+
+/* ------------------------------------------------------------------ the cross */
+.arc-capsule-x {
+  position: absolute; top: -14px; right: -14px;
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 15px; line-height: 1;
+  color: var(--cap-ink); cursor: pointer;
+  background: color-mix(in srgb, var(--panel), black 18%);
+  border: 1px solid color-mix(in srgb, var(--gold), transparent 56%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .6);
+  transition: background .14s ease, transform .14s ease;
+}
+.arc-capsule-x:hover { background: color-mix(in srgb, var(--panel), var(--gold) 22%); }
+.arc-capsule-x:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------- the phone
+   A phone holds the picture edge to edge and the cross comes back inside the
+   frame, because a control hanging off the corner of a full-bleed card is a
+   control half off the screen. */
+@media (max-width: 640px) {
+  .arc-capsulestage { padding: 8px; align-items: flex-start; }
+  .arc-capsule { width: 100%; padding: 8px; }
+  .arc-capsule-x { top: 4px; right: 4px; width: 34px; height: 34px; }
+  .arc-capsule-line { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-capsulestage, .arc-capsule { animation: none; }
+  .arc-capsule-x { transition: none; }
+}

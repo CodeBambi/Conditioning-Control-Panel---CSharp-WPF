@@ -1857,6 +1857,19 @@ internal static class ArcademyHostService
         ["campus_desc_entrance"] = "The notice board carries announcements. The trophy case waits for your diplomas.",
         ["campus_notice_board"] = "Notice Board",
         ["campus_trophy_case"] = "Trophy Case",
+        // THE TIME CAPSULE - the one photograph in the trophy case
+        // (Resources/web/arcademy/shell/timecapsule.js). Seven rows: the name,
+        // the plaque's three lines, the alt text a screen reader gets instead
+        // of the picture, the hover card's line and the hall card's button.
+        // Every one is under the 96-char MergeModTable cap, so a mod can
+        // re-voice the plaque without touching the page.
+        ["capsule_label"] = "Time Capsule",
+        ["capsule_title"] = "Day One",
+        ["capsule_line"] = "The first screenshot ever taken of the Control Panel. Everything here grew out of this.",
+        ["capsule_fine"] = "Donated to the case by the community, September 2026.",
+        ["capsule_alt"] = "The Conditioning Dashboard on day one: flash, mandatory shorts, visuals, subliminals.",
+        ["capsule_tip"] = "A photograph propped on the bottom shelf. Somebody kept the very first one.",
+        ["capsule_open"] = "Open the case",
         ["campus_admissions"] = "Admissions",
         ["campus_bell_tower"] = "Bell Tower",
         ["campus_main_gate"] = "Main Gate",
