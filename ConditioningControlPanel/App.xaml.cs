@@ -2703,6 +2703,16 @@ namespace ConditioningControlPanel
                 else Logger?.Information("--dtrh ignored: {Reason}", dtrhGate.Reason);
             }
 
+            // The Caucus Race (the kart run on the descent's media), dev shortcut: `--race` opens
+            // the race window straight away. Same door as `--dtrh` - the race is a DtRH sibling
+            // and answers to the descent's tier gate, not one of its own.
+            if (e.Args.Contains("--race"))
+            {
+                var raceGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
+                if (raceGate.Allowed) Services.Chaos.CaucusHostService.Launch();
+                else Logger?.Information("--race ignored: {Reason}", raceGate.Reason);
+            }
+
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
             // window natively above main and ducks main out of the way at launch.
