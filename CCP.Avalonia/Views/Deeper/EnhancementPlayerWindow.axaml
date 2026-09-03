@@ -1,0 +1,605 @@
+<!-- PORTED from ConditioningControlPanel/Views/Deeper/EnhancementPlayerWindow.xaml.
+     Structure, row order, x:Names, sizes and every resource key preserved. Deviations, all forced:
+
+       Style="{StaticResource X}"        -> Theme="{StaticResource X}" / additive Style Selector
+       <Style x:Key TargetType>          -> <ControlTheme x:Key TargetType> WITH a Template
+       Visibility="Collapsed"            -> IsVisible="False"
+       Panel.ZIndex                      -> ZIndex
+       ToolTip="{loc:Str …}"             -> ToolTip.Tip="{loc:Str …}"
+       Image + EmojiToImageSource        -> plain TextBlock (Avalonia draws colour emoji natively)
+       Line X1/X2/Y1/Y2                  -> StartPoint / EndPoint
+       Click="…"                         -> wired in the constructor
+       wv2:WebView2 x:Name="VideoBrowser"-> controls:WebHost — Microsoft.Web.WebView2 is Windows-only
+       AllowDrop="True"                  -> DragDrop.AllowDrop="True"
+       <Run x:Name="TxtFilterCount…"/>   -> a TextBlock in a horizontal StackPanel. Run is not a
+                                            Control, so FindControl<Run> cannot reach it; the split
+                                            also dodges Avalonia's access-key parsing of "_".
+
+     Text that the code-behind writes (status pill, enhancement name/meta/path, audio path, video
+     status, play/pause glyph, eye-tracking label) carries NO {loc:Str}: Avalonia keeps a binding
+     alive under a local value, so assigning .Text would be undone on the next language change.
+     Those are seeded with Loc.Get in the constructor under the SAME keys — see the code-behind. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:controls="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+        xmlns:deeper="clr-namespace:ConditioningControlPanel.Avalonia.Views.Deeper"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Deeper.EnhancementPlayerWindow"
+        Title="Deeper Player"
+        Height="768" Width="900" MinHeight="504" MinWidth="640"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        DragDrop.AllowDrop="True">
+
+    <Window.Resources>
+        <!-- Filter pill — single-select toggle for the event log filter strip.
+             ponytail: local copy of ConditioningControlPanel/Views/Deeper/EnhancementPlayerWindow.xaml:EventFilterPill,
+             hoist when a second view needs it. A ControlTheme replaces the theme wholesale, so the
+             Template (and its ContentPresenter's Content binding) is mandatory, not decoration. -->
+        <ControlTheme x:Key="EventFilterPill" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="9,3"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="bd" CornerRadius="10"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <!-- WPF's ControlTemplate.Triggers become selectors on the theme. -->
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+            </Style>
+            <Style Selector="^:checked /template/ Border#bd">
+                <Setter Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#bd">
+                <Setter Property="Opacity" Value="0.85"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- The implicit rounded-button style. WPF used
+             <Style TargetType="Button" BasedOn="{StaticResource DeeperRoundButton}"/>; here it is an
+             ADDITIVE Style rather than a ControlTheme so the Fluent template survives (a
+             property-only ControlTheme on a templated control draws nothing) and the per-button
+             inline Background/Foreground/BorderBrush keep winning over these setters.
+             ponytail: local copy of Resources/Theme/Controls.xaml:DeeperRoundButton, hoist when a
+             second Avalonia view needs the 8px Deeper button. -->
+        <Style Selector="Button">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Opacity" Value="0.85"/>
+        </Style>
+        <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Opacity" Value="0.70"/>
+        </Style>
+        <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Opacity" Value="0.40"/>
+        </Style>
+        <!-- ponytail: the WPF DeeperScrollBarRepeat/Thumb/ScrollBar re-skin is dropped; Avalonia's
+             Fluent scrollbar is already a thin dark overlay bar rather than WPF's white Windows
+             chrome, which is the whole reason that style existed. Port it if the accent tint is
+             actually missed. -->
+
+        <!-- HeaderText / DimText from Window.Resources. TextBlock is not templated, so these are
+             safe as property-only. -->
+        <Style Selector="TextBlock.headerText">
+            <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid Margin="18,14" RowDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+        <!-- 0 header strip / 1 file context strip / 2 media pane / 3 mini-timeline /
+             4 transport / 5 structured event log -->
+
+        <!-- =====================================================================
+             Row 0: HEADER STRIP — wave icon + title + status pill + Open in editor
+             Status pill states: Live (playing) / Loaded (paused) / Empty (nothing)
+             ===================================================================== -->
+        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
+            <TextBlock DockPanel.Dock="Left" Text="🌊" FontSize="20"
+                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock DockPanel.Dock="Left" Text="{loc:Str deeper_player_title}"
+                       Classes="headerText" Margin="0,0,12,0"
+                       VerticalAlignment="Center" FontSize="18"/>
+            <Border DockPanel.Dock="Left" x:Name="StatusPill"
+                    CornerRadius="9" Padding="9,2"
+                    BorderThickness="1" VerticalAlignment="Center"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}">
+                <TextBlock x:Name="StatusPillText"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="10" FontWeight="SemiBold"/>
+            </Border>
+            <Button DockPanel.Dock="Right" x:Name="BtnOpenInEditor"
+                    ToolTip.Tip="{loc:Str deeper_player_tip_open_in_editor}"
+                    Padding="12,4" FontSize="11"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                    IsVisible="False">
+                <TextBlock Text="{loc:Str deeper_player_open_in_editor}"/>
+            </Button>
+        </DockPanel>
+
+        <!-- =====================================================================
+             Row 1: FILE CONTEXT STRIP — single compact row.
+             Layout:  [Icon 36x36] [Title + meta line]   [Source pill] [Change]
+             AudioFileRow / BtnPickAudio / TxtAudioPath live inside the Change popover, with
+             BtnPickEnhancement / BtnLoadUrl / BtnCreateNewEnhancement / BtnUnloadEnhancement.
+             ===================================================================== -->
+        <Border Grid.Row="1" Margin="0,0,0,10"
+                Background="{DynamicResource PanelBgBrush}"
+                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                CornerRadius="8" Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                <!-- Media-type icon (36x36 tinted square) -->
+                <Border Grid.Column="0" x:Name="MediaTypeIconBg"
+                        Width="36" Height="36" CornerRadius="6"
+                        Background="{DynamicResource DeeperHubAudioBadgeBgBrush}"
+                        Margin="0,0,10,0">
+                    <TextBlock x:Name="MediaTypeIcon" Text="🎵" FontSize="17"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Center: title + inline meta -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtEnhName"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="13" FontWeight="Medium"
+                               TextTrimming="CharacterEllipsis"/>
+                    <DockPanel LastChildFill="True" Margin="0,2,0,0">
+                        <TextBlock x:Name="TxtEnhPath" DockPanel.Dock="Bottom"
+                                   Foreground="{DynamicResource TextDimBrush}"
+                                   FontSize="9"
+                                   TextTrimming="CharacterEllipsis"
+                                   IsVisible="False"/>
+                        <TextBlock x:Name="TxtEnhMetadata"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="10"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </DockPanel>
+                </StackPanel>
+
+                <!-- Right: browser zoom cluster (video mode only) + source pill + Change popover.
+                     The WPF cluster bound its Visibility to VideoPane's; here ShowMediaPaneFor sets
+                     both in the same statement, which is the same rule without a binding. -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel x:Name="BrowserZoomCluster" Orientation="Horizontal"
+                                VerticalAlignment="Center" Margin="0,0,8,0"
+                                IsVisible="False">
+                        <TextBlock Text="🔍" FontSize="11"
+                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnZoomOut"
+                                ToolTip.Tip="{loc:Str deeper_zoom_out_tt}"
+                                Width="22" Height="22" Padding="0" FontSize="13" FontWeight="Bold"
+                                CornerRadius="6"
+                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1">
+                            <TextBlock Text="−"/>
+                        </Button>
+                        <Button x:Name="BtnZoomIn"
+                                ToolTip.Tip="{loc:Str deeper_zoom_in_tt}"
+                                Width="22" Height="22" Padding="0" FontSize="13" FontWeight="Bold" Margin="3,0,0,0"
+                                CornerRadius="6"
+                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1">
+                            <TextBlock Text="+"/>
+                        </Button>
+                    </StackPanel>
+                    <Border x:Name="SourcePill" CornerRadius="9" Padding="8,2"
+                            Margin="0,0,8,0" VerticalAlignment="Center"
+                            BorderThickness="1"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                            IsVisible="False">
+                        <TextBlock x:Name="TxtEnhSource"
+                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                   FontSize="10" FontWeight="SemiBold"/>
+                    </Border>
+                    <Button x:Name="BtnChange"
+                            ToolTip.Tip="{loc:Str deeper_player_tip_change}"
+                            Padding="10,4" FontSize="11"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            Foreground="{DynamicResource DeeperAccentBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
+                        <TextBlock Text="{loc:Str deeper_player_change}"/>
+                    </Button>
+                    <!-- Popover with the four file-loading actions plus the audio path picker.
+                         PlacementTarget is assigned in the constructor. -->
+                    <Popup x:Name="ChangePopup"
+                           Placement="Bottom" IsLightDismissEnabled="True">
+                        <Border Background="{DynamicResource PanelBgBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                BorderThickness="1" CornerRadius="8" Padding="6"
+                                MinWidth="220">
+                            <StackPanel>
+                                <!-- Audio-mode-only: pick a media file. Hidden via AudioFileRow's
+                                     IsVisible (toggled by ShowMediaPaneFor). -->
+                                <Grid x:Name="AudioFileRow" Margin="2,2,2,4" ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" x:Name="TxtAudioPath"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               VerticalAlignment="Center" FontSize="10"
+                                               TextTrimming="CharacterEllipsis" Margin="6,0,6,0"/>
+                                    <Button Grid.Column="1" x:Name="BtnPickAudio"
+                                            ToolTip.Tip="{loc:Str deeper_player_tip_pick_media}"
+                                            Padding="8,3" FontSize="10"
+                                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                            Foreground="{DynamicResource DeeperAccentBrush}"
+                                            BorderBrush="{DynamicResource DeeperAccentBrush}"
+                                            BorderThickness="1">
+                                        <TextBlock Text="{loc:Str deeper_player_pick_media}"/>
+                                    </Button>
+                                </Grid>
+
+                                <Button x:Name="BtnPickEnhancement"
+                                        ToolTip.Tip="{loc:Str deeper_player_tip_pick_enh}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextLightBrush}"
+                                        BorderThickness="0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📄 "/>
+                                        <TextBlock Text="{loc:Str deeper_player_pick_enh}"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnLoadUrl"
+                                        ToolTip.Tip="{loc:Str deeper_player_tip_load_url}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextLightBrush}"
+                                        BorderThickness="0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🌐 "/>
+                                        <TextBlock Text="{loc:Str deeper_player_load_url}"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnCreateNewEnhancement"
+                                        ToolTip.Tip="{loc:Str deeper_player_tip_create_new}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextLightBrush}"
+                                        BorderThickness="0"
+                                        IsVisible="False">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="✨ "/>
+                                        <TextBlock Text="{loc:Str deeper_player_create_new_btn}"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnUnloadEnhancement"
+                                        ToolTip.Tip="{loc:Str deeper_player_tip_unload}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextMutedBrush}"
+                                        BorderThickness="0"
+                                        IsVisible="False">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="✕ "/>
+                                        <TextBlock Text="{loc:Str deeper_player_unload}"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- =====================================================================
+             Row 2: MEDIA PANE — audio waveform OR the embedded web view.
+             Hosts a "Now: [region label]" overlay (top-right) that appears when the playhead is
+             inside a region.
+             ===================================================================== -->
+        <Grid Grid.Row="2" Margin="0,0,0,10">
+            <!-- Audio mode -->
+            <Border x:Name="AudioPane"
+                    Background="{DynamicResource DeeperLaneCanvasBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                    CornerRadius="4" Height="80" VerticalAlignment="Top">
+                <Canvas x:Name="WaveformCanvas" ClipToBounds="True" Background="Transparent">
+                    <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
+                          StrokeThickness="1.2" StrokeLineCap="Round"/>
+                    <Line x:Name="PlayheadLine" StartPoint="0,0" EndPoint="0,0"
+                          Stroke="White" StrokeThickness="1.5" IsHitTestVisible="False"/>
+                </Canvas>
+            </Border>
+
+            <!-- Video mode. WebHost draws its own fallback panel where no engine is installed,
+                 which is what a headless render (and a fresh Linux box) shows. -->
+            <Border x:Name="VideoPane" Background="Black"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                    CornerRadius="4" IsVisible="False">
+                <Grid>
+                    <controls:WebHost x:Name="VideoBrowser"/>
+                    <!-- Bottom-centred, not centred as in WPF: WebHost's fallback panel owns the
+                         middle of the pane on any machine with no web engine, and two centred
+                         messages on top of each other read as one broken one. -->
+                    <TextBlock x:Name="TxtVideoStatus"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                               Margin="0,0,0,10"
+                               IsHitTestVisible="False"/>
+                </Grid>
+            </Border>
+
+            <!-- "Now: [region]" overlay — top-right of the media pane, above both panes. -->
+            <Border x:Name="NowRegionPanel"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,10,0" Padding="8,3" CornerRadius="6"
+                    Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
+                    IsVisible="False" IsHitTestVisible="False" ZIndex="20">
+                <StackPanel Orientation="Horizontal">
+                    <Rectangle x:Name="NowRegionSwatch" Width="8" Height="8"
+                               RadiusX="2" RadiusY="2" Margin="0,0,6,0"
+                               VerticalAlignment="Center"
+                               Fill="{DynamicResource DeeperAccentBrush}"/>
+                    <TextBlock x:Name="TxtNowRegion" Text=""
+                               Foreground="White" FontSize="10" FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- =====================================================================
+             Row 3: MINI-TIMELINE READ-OUT
+             32px strip: region bands + rule pins + live playhead, click/drag to seek.
+             Hidden when no enhancement is loaded.
+             ===================================================================== -->
+        <StackPanel Grid.Row="3" x:Name="MiniTimelinePanel" Margin="0,0,0,10"
+                    IsVisible="False">
+            <DockPanel LastChildFill="False" Margin="0,0,0,3">
+                <TextBlock DockPanel.Dock="Left"
+                           Text="{loc:Str deeper_player_minitimeline_label}"
+                           Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                           FontSize="10" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right" x:Name="TxtMiniTimelineReadout"
+                           Text="0:00 / 0:00"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="10" FontFamily="monospace"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+            <Border x:Name="MiniTimelineHost"
+                    Background="{DynamicResource DeeperLaneCanvasBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                    BorderThickness="1" CornerRadius="4" Height="32"
+                    Cursor="Hand"
+                    ToolTip.Tip="{loc:Str deeper_player_tip_minitimeline}">
+                <Canvas x:Name="MiniTimelineCanvas" ClipToBounds="True"
+                        Background="Transparent"/>
+            </Border>
+        </StackPanel>
+
+        <!-- =====================================================================
+             Row 4: TRANSPORT — primary cluster (left) + secondary cluster (right)
+             ===================================================================== -->
+        <DockPanel Grid.Row="4" LastChildFill="False" Margin="0,0,0,10">
+            <Button x:Name="BtnPlayPause" DockPanel.Dock="Left"
+                    ToolTip.Tip="{loc:Str deeper_player_tip_play_pause}"
+                    Width="38" Height="32" Padding="0"
+                    Background="{DynamicResource DeeperAccentBrush}"
+                    Foreground="White" BorderThickness="0" FontSize="15">
+                <TextBlock x:Name="TxtPlayPauseGlyph" Text="▶"/>
+            </Button>
+            <Button x:Name="BtnStop" DockPanel.Dock="Left"
+                    ToolTip.Tip="{loc:Str deeper_player_tip_stop}"
+                    Width="32" Height="32" Padding="0" Margin="6,0,0,0"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                    FontSize="13">
+                <TextBlock Text="⏹"/>
+            </Button>
+            <TextBlock x:Name="TxtCurrent" DockPanel.Dock="Left"
+                       Text="0:00" Foreground="{DynamicResource TextLightBrush}"
+                       FontSize="12" FontFamily="monospace"
+                       VerticalAlignment="Center" Margin="14,0,4,0"/>
+            <TextBlock DockPanel.Dock="Left" Text="/" Foreground="{DynamicResource TextDimBrush}"
+                       FontSize="12" VerticalAlignment="Center"/>
+            <TextBlock x:Name="TxtTotal" DockPanel.Dock="Left"
+                       Text="0:00" Foreground="{DynamicResource TextMutedBrush}"
+                       FontSize="12" FontFamily="monospace"
+                       VerticalAlignment="Center" Margin="4,0,0,0"/>
+
+            <!-- Secondary cluster (right side). DockPanel.Dock=Right reverses visual order — the
+                 FIRST Right child sits furthest right, so these are wired right-to-left. -->
+            <StackPanel x:Name="VolumePanel" DockPanel.Dock="Right"
+                        Orientation="Horizontal" VerticalAlignment="Center"
+                        Margin="12,0,0,0">
+                <TextBlock Text="🔊" FontSize="12"
+                           VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <Slider x:Name="SliderVolume"
+                        Width="90" Minimum="0" Maximum="100" Value="80"
+                        VerticalAlignment="Center"
+                        ToolTip.Tip="{loc:Str deeper_player_tip_volume}"/>
+            </StackPanel>
+            <Button x:Name="BtnEyeTracking" DockPanel.Dock="Right"
+                    ToolTip.Tip="{loc:Str deeper_player_tt_eye_tracking}"
+                    Padding="12,0" Height="32" Margin="8,0,0,0" FontSize="11"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
+                <TextBlock x:Name="TxtEyeTracking"/>
+            </Button>
+            <Button x:Name="BtnPictureInPicture" DockPanel.Dock="Right"
+                    ToolTip.Tip="{loc:Str deeper_player_tt_pip}"
+                    Padding="12,0" Height="32" Margin="8,0,0,0" FontSize="11"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                    IsVisible="False">
+                <TextBlock Text="{loc:Str deeper_player_btn_pip}"/>
+            </Button>
+        </DockPanel>
+
+        <!-- =====================================================================
+             Row 5: STRUCTURED EVENT LOG
+             Header: label + filter pills (All / Actions / Engine / Errors) + clear + collapse.
+             Body: ScrollViewer + ItemsControl over the filtered EventLogEntry list.
+             TxtStatus (engine state messages) sits in a thin info bar at the top.
+             ===================================================================== -->
+        <Border Grid.Row="5"
+                Background="{DynamicResource PanelBgBrush}"
+                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                CornerRadius="6" Padding="0">
+            <StackPanel>
+                <Border Background="{DynamicResource DeeperLaneHeaderBrush}"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                        Padding="12,6">
+                    <TextBlock x:Name="TxtStatus"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="10" TextWrapping="Wrap"/>
+                </Border>
+
+                <!-- Filter strip -->
+                <DockPanel LastChildFill="False" Margin="10,6,10,4">
+                    <TextBlock DockPanel.Dock="Left" Text="📋" FontSize="11"
+                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="{loc:Str deeper_player_event_log}"
+                               Foreground="{DynamicResource DeeperAccentBrush}"
+                               FontSize="11" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterAll"
+                                  Theme="{StaticResource EventFilterPill}"
+                                  IsChecked="True" Margin="0,0,4,0"
+                                  Tag="all"
+                                  ToolTip.Tip="{loc:Str deeper_player_tip_pill_all}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str deeper_player_pill_all}"/>
+                            <TextBlock Text=" "/>
+                            <TextBlock x:Name="TxtFilterCountAll" Text="0"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterActions"
+                                  Theme="{StaticResource EventFilterPill}"
+                                  Margin="0,0,4,0" Tag="action"
+                                  ToolTip.Tip="{loc:Str deeper_player_tip_pill_actions}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str deeper_player_pill_actions}"/>
+                            <TextBlock Text=" "/>
+                            <TextBlock x:Name="TxtFilterCountActions" Text="0"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterEngine"
+                                  Theme="{StaticResource EventFilterPill}"
+                                  Margin="0,0,4,0" Tag="engine"
+                                  ToolTip.Tip="{loc:Str deeper_player_tip_pill_engine}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str deeper_player_pill_engine}"/>
+                            <TextBlock Text=" "/>
+                            <TextBlock x:Name="TxtFilterCountEngine" Text="0"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterErrors"
+                                  Theme="{StaticResource EventFilterPill}"
+                                  Margin="0,0,4,0" Tag="error"
+                                  ToolTip.Tip="{loc:Str deeper_player_tip_pill_errors}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str deeper_player_pill_errors}"/>
+                            <TextBlock Text=" "/>
+                            <TextBlock x:Name="TxtFilterCountErrors" Text="0"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <Button DockPanel.Dock="Right" x:Name="BtnCollapseEventLog"
+                            ToolTip.Tip="{loc:Str deeper_player_tip_collapse}"
+                            Width="22" Height="20" Padding="0" FontSize="11"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            BorderThickness="0">
+                        <TextBlock x:Name="TxtCollapseGlyph" Text="▾"/>
+                    </Button>
+                    <Button DockPanel.Dock="Right" x:Name="BtnClearEvents"
+                            ToolTip.Tip="{loc:Str deeper_player_tip_clear}"
+                            Width="22" Height="20" Padding="0" FontSize="10"
+                            Margin="0,0,4,0"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            BorderThickness="0">
+                        <TextBlock Text="🗑"/>
+                    </Button>
+                </DockPanel>
+
+                <!-- Body -->
+                <ScrollViewer x:Name="EventScroll" MaxHeight="140"
+                              VerticalScrollBarVisibility="Auto" Padding="10,2,10,8">
+                    <ItemsControl x:Name="LstEvents">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="deeper:EventLogEntry">
+                                <Border Margin="0,1,0,1" Padding="6,3" CornerRadius="3"
+                                        Background="{Binding RowBgBrush}">
+                                    <Grid ColumnDefinitions="50,18,*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding TimestampDisplay}"
+                                                   Foreground="{DynamicResource TextDimBrush}"
+                                                   FontFamily="monospace" FontSize="9"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding IconGlyph}"
+                                                   Foreground="{Binding IconBrush}"
+                                                   FontSize="10" VerticalAlignment="Center"/>
+                                        <!-- WPF used two <Run>s in one TextBlock; Avalonia's Run is
+                                             not addressable per-brush as cleanly, and two TextBlocks
+                                             trim identically. -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                    VerticalAlignment="Center" Margin="2,0,0,0">
+                                            <TextBlock Text="{Binding RuleLabel}"
+                                                       Foreground="{Binding RuleLabelBrush}"
+                                                       FontWeight="SemiBold"
+                                                       FontFamily="monospace" FontSize="10"
+                                                       IsVisible="{Binding HasRuleLabel}"/>
+                                            <TextBlock Text="{Binding Description}"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontFamily="monospace" FontSize="10"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="3"
+                                                Tag="{Binding RuleId}"
+                                                ToolTip.Tip="{loc:Str deeper_player_tip_event_open}"
+                                                IsVisible="{Binding HasRuleId}"
+                                                Padding="6,1" FontSize="9"
+                                                Background="Transparent"
+                                                Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                                BorderThickness="1">
+                                            <TextBlock Text="{loc:Str deeper_player_event_open_in_editor}"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
