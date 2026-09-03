@@ -38,7 +38,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnOk")!.Click += (_, _) => Close(true);
         }
 
-        /// <summary>Tells the user something. One OK button; the result is always true.</summary>
+        /// <summary>Tells the user something. One OK button, so the result is true unless they
+        /// dismissed the window with the X; a caller of this form normally ignores it.</summary>
         public static async Task<bool> ShowAsync(Window owner, string title, string message)
             => await new MessageDialog(title, message, showCancel: false).ShowDialog<bool?>(owner) == true;
 
