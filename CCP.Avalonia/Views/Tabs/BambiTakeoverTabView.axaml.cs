@@ -1,65 +1,80 @@
 using System;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
     /// "Bambi Takeover" - the autonomy Exclusive, PORTED from
-    /// ConditioningControlPanel/Views/Tabs/BambiTakeoverTabView.xaml.cs.
+    /// ConditioningControlPanel/Views/Tabs/BambiTakeoverTabView.xaml.cs with its settings logic
+    /// restored against <see cref="CoreSettings"/>.
     ///
-    /// <para><b>Almost every handler on the WPF head is a one-line shim</b> - it looks up the
-    /// hosting MainWindow and forwards to a MainWindow.Autonomy partial
-    /// (BtnAutonomyStartStop_Click, BtnForceStartAutonomy_Click, BtnGateUnlock_Click,
-    /// BtnTestAutonomy_Click, BtnTestVoice_Click, ChkAutonomyVoice_Changed,
-    /// ChkAutonomyResume_Changed, ChkShowTakeoverCountdown_Changed, OpenDeviceSettings,
-    /// ChkAutonomyBehavior_Changed, BtnWallpaperFolder_Click, ChkWallpaperKeep_Changed,
-    /// SliderWallpaperDuration_Changed, ChkAutonomyEnabled_Changed, ChkAutonomyIdle_Changed,
-    /// ChkAutonomyRandom_Changed, ChkAutonomyTimeAware_Changed, and the four
-    /// SliderAutonomy*_Changed). None of those partials is on this head, so each is a stub with
-    /// the same name so the eventual wiring diffs cleanly.</para>
+    /// <para><b>Where the logic came from.</b> On WPF this view is almost all one-line shims into
+    /// <c>MainWindow.Autonomy.cs</c>, and the seed lives in <c>MainWindow.Settings.cs</c>
+    /// (LoadSettingsIntoUI, lines 155-207). Every one of those bodies that is a pure
+    /// <c>App.Settings.Current.X = …; App.Settings.Save();</c> pair is here directly now - the four
+    /// autonomy bars, the three trigger toggles, the fourteen-box behaviour grid, resume-on-startup,
+    /// the countdown bar, the whole wallpaper block and Mantra Chant. What is left is only what
+    /// needs a service, a device or a Win32 dialog, and each of those is named where it sits.</para>
     ///
-    /// <para>The six value readouts beside the sliders ARE ported: painting a number next to its
-    /// slider is pure view state, and the formats are copied verbatim from
-    /// MainWindow.Autonomy.cs (253/261/269/438/447) and this view's own LoadMantraChant, so the
-    /// truncating cast and the "s"/"%" suffixes match. Only the settings write and the service
-    /// call each handler also does are the stubbed half. Same split SheListeningTabView made for
-    /// the mic-sensitivity readout.</para>
+    /// <para><b>_isLoading starts true</b> and the seed runs inside it, exactly as WPF's
+    /// <c>_isLoading</c> gate does: Avalonia raises <c>IsCheckedChanged</c> and <c>ValueChanged</c>
+    /// on a PROGRAMMATIC set, so without the guard the seed would write itself back over the user's
+    /// file. Each bar paints its readout BEFORE the guard returns, which is why the numbers are
+    /// honest on the first frame (#485).</para>
+    ///
+    /// <para><b>Re-read on every show.</b> WPF hooked <c>IsVisibleChanged</c> for Mantra Chant
+    /// because panic clears <c>MantraChantEnabled</c> behind this tab's back (#685). The shell here
+    /// shows a tab by flipping <c>IsVisible</c> and never re-attaches, so the whole seed re-runs on
+    /// the IsVisible edge as well as on attach and on a settings-instance swap.</para>
     ///
     /// <para><b>Dropped:</b> the mod-aware feature art (ModService.ModChanged -&gt;
     /// ModResourceResolver repainting the hero and side takeover.png plates, including the
     /// BambiSleep "bambi takeover.png" fork). Both plates are art-less on this head - see the
-    /// .axaml header - so there is nothing to repaint yet. ponytail: needs ModService +
-    /// ModResourceResolver, restore together with the plates when Resources/features ships here.
-    /// The Mantra Chant load/save (App.Settings + App.MantraChant) is the same story.</para>
+    /// .axaml header - so there is nothing to repaint yet. ponytail: needs
+    /// ConditioningControlPanel/Helpers/ModResourceResolver.cs; restore together with the plates
+    /// when Resources/features ships here.</para>
     /// </summary>
     public partial class BambiTakeoverTabView : UserControl
     {
+        /// <summary>True while the seed writes the controls, so no handler mistakes the echo for a
+        /// user edit. Starts true: the .axaml gives every Slider a Value, which raises ValueChanged
+        /// during InitializeComponent, before settings are read.</summary>
+        private bool _isLoading = true;
+
         public BambiTakeoverTabView()
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
 
-            // ponytail: needs MainWindow.Autonomy (AutonomyService, the premium gate, the wallpaper
-            // folder picker, Settings → Devices); wired when they move to Core.
+            // ponytail: needs ConditioningControlPanel/Services/AutonomyService.cs (start/stop,
+            // TestTrigger, TestVoiceCommand) and the premium gate behind the unlock button.
             BtnAutonomyStartStop.Click += (_, _) => { };   // mw.BtnAutonomyStartStop_Click(...)
             BtnForceStartAutonomy.Click += (_, _) => { };  // mw.BtnForceStartAutonomy_Click(...)
             BtnGateUnlock.Click += (_, _) => { };          // mw.BtnGateUnlock_Click(...)
             BtnTestAutonomy.Click += (_, _) => { };        // mw.BtnTestAutonomy_Click(...)
             BtnTestVoice.Click += (_, _) => { };           // mw.BtnTestVoice_Click(...)
-            BtnOpenDeviceSettings.Click += (_, _) => { };  // mw.OpenDeviceSettings()
-            BtnWallpaperFolder.Click += (_, _) => { };     // mw.BtnWallpaperFolder_Click(...)
+            BtnOpenDeviceSettings.Click += BtnOpenDeviceSettings_Click;
+            BtnWallpaperFolder.Click += BtnWallpaperFolder_Click;
 
             // Triggers + session toggles. WPF split these across Checked/Unchecked; Avalonia 11
             // raises one IsCheckedChanged for both edges.
-            ChkAutonomyIdle.IsCheckedChanged += (_, _) => { };              // mw.ChkAutonomyIdle_Changed(...)
-            ChkAutonomyRandom.IsCheckedChanged += (_, _) => { };            // mw.ChkAutonomyRandom_Changed(...)
-            ChkAutonomyTimeAware.IsCheckedChanged += (_, _) => { };         // mw.ChkAutonomyTimeAware_Changed(...)
-            ChkAutonomyResumeOnStartup.IsCheckedChanged += (_, _) => { };   // mw.ChkAutonomyResume_Changed(...)
-            ChkAutonomyVoice.IsCheckedChanged += (_, _) => { };             // mw.ChkAutonomyVoice_Changed(...)
-            ChkShowTakeoverCountdown.IsCheckedChanged += (_, _) => { };     // mw.ChkShowTakeoverCountdown_Changed(...)
-            ChkWallpaperKeep.IsCheckedChanged += (_, _) => { };             // mw.ChkWallpaperKeep_Changed(...)
-            ChkAutonomyEnabled.IsCheckedChanged += (_, _) => { };           // mw.ChkAutonomyEnabled_Changed(...)
+            ChkAutonomyIdle.IsCheckedChanged += ChkAutonomyIdle_Changed;
+            ChkAutonomyRandom.IsCheckedChanged += ChkAutonomyRandom_Changed;
+            ChkAutonomyTimeAware.IsCheckedChanged += ChkAutonomyTimeAware_Changed;
+            ChkAutonomyResumeOnStartup.IsCheckedChanged += ChkAutonomyResume_Changed;
+            ChkAutonomyVoice.IsCheckedChanged += ChkAutonomyVoice_Changed;
+            ChkShowTakeoverCountdown.IsCheckedChanged += ChkShowTakeoverCountdown_Changed;
+            ChkWallpaperKeep.IsCheckedChanged += ChkWallpaperKeep_Changed;
+            ChkAutonomyEnabled.IsCheckedChanged += ChkAutonomyEnabled_Changed;
 
-            // The behaviour grid: eleven toggles that all route to the SAME handler on WPF.
+            // The behaviour grid: fourteen toggles that all route to the SAME handler on WPF,
+            // which rewrites every one of them on any change. Kept that way.
             foreach (var chk in new[]
                      {
                          ChkAutonomyFlash, ChkAutonomyVideo, ChkAutonomyWebVideo, ChkProtectBrowserVideo,
@@ -67,31 +82,412 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                          ChkAutonomyLockCard, ChkAutonomyBouncingText, ChkAutonomyMindWipe, ChkAutonomyWallpaper,
                          ChkAutonomySpiral, ChkAutonomyBubbleCount,
                      })
-                chk.IsCheckedChanged += (_, _) => { };  // mw.ChkAutonomyBehavior_Changed(...)
+                chk.IsCheckedChanged += ChkAutonomyBehavior_Changed;
 
-            // View-only half of the five slider handlers: the readout beside each one. Formats
-            // copied verbatim - a truncating (int) cast, not Math.Round, so 59.9 reads 59 the way
-            // it does on WPF. The settings write + RefreshRandomTimer() are the stubbed half.
-            SliderAutonomyInterval.ValueChanged += (_, e) => TxtAutonomyInterval.Text = $"{(int)e.NewValue}s";
-            SliderAutonomyCooldown.ValueChanged += (_, e) => TxtAutonomyCooldown.Text = $"{(int)e.NewValue}s";
-            SliderAutonomyIntensity.ValueChanged += (_, e) => TxtAutonomyIntensity.Text = $"{(int)e.NewValue}";
-            SliderAutonomyAnnounce.ValueChanged += (_, e) => TxtAutonomyAnnounce.Text = $"{(int)e.NewValue}%";
-            SliderWallpaperDuration.ValueChanged += (_, e) => TxtWallpaperDuration.Text = $"{(int)e.NewValue}s";
+            // Each bar paints its readout first and writes second. Formats verbatim from
+            // MainWindow.Autonomy.cs - a truncating (int) cast, not Math.Round, so 59.9 reads 59.
+            SliderAutonomyInterval.ValueChanged += SliderAutonomyInterval_Changed;
+            SliderAutonomyCooldown.ValueChanged += SliderAutonomyCooldown_Changed;
+            SliderAutonomyIntensity.ValueChanged += SliderAutonomyIntensity_Changed;
+            SliderAutonomyAnnounce.ValueChanged += SliderAutonomyAnnounce_Changed;
+            SliderWallpaperDuration.ValueChanged += SliderWallpaperDuration_Changed;
 
-            // Mantra Chant (#653) is the one block whose handlers really live in this view. The
-            // settings read/write and App.MantraChant.Start/Stop/ApplyVolume are stubbed; the two
-            // readouts are real, with LoadMantraChant's Math.Round formats
-            // (BambiTakeoverTabView.xaml.cs:118/120) rather than the sliders' truncating cast.
-            // ponytail: needs App.Settings + MantraChantService, wired when they move to Core.
-            SldMantraChantVolume.ValueChanged += (_, e) => TxtMantraChantVolume.Text = $"{(int)Math.Round(e.NewValue)}%";
-            SldMantraChantGap.ValueChanged += (_, e) => TxtMantraChantGap.Text = $"{(int)Math.Round(e.NewValue)}s";
-            ChkMantraChant.IsCheckedChanged += (_, _) => { };
+            // Mantra Chant (#653) is the one block whose handlers really live in this view on WPF
+            // too. Its two readouts use LoadMantraChant's Math.Round format, not the bars' cast.
+            SldMantraChantVolume.ValueChanged += SldMantraChantVolume_Changed;
+            SldMantraChantGap.ValueChanged += SldMantraChantGap_Changed;
+            ChkMantraChant.IsCheckedChanged += ChkMantraChant_Changed;
 
-            // Placeholder start values; the real ones come from settings when the services land.
-            // These fire the two handlers above, so the em-dash placeholders in the XAML are
-            // replaced by real readings in --render-all rather than staying "—".
-            SldMantraChantVolume.Value = 70;
-            SldMantraChantGap.Value = 8;
+            SyncFromSettings();
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            SyncFromSettings();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>The shell shows a tab by flipping IsVisible, never by re-attaching. This is the
+        /// Avalonia twin of WPF's <c>IsVisibleChanged -&gt; LoadMantraChant()</c>: re-read on every
+        /// show, or the toggles lie after panic disarmed something behind our back (#685).</summary>
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            if (change.Property == IsVisibleProperty && change.GetNewValue<bool>()) SyncFromSettings();
+        }
+
+        // A cloud restore or a factory reset swaps the instance; repaint from it, on the UI thread.
+        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(SyncFromSettings);
+
+        // =====================================================================================
+        //  seed - MainWindow.Settings.cs LoadSettingsIntoUI, the Autonomy Mode block
+        // =====================================================================================
+
+        internal void SyncFromSettings()
+        {
+            _isLoading = true;
+            try
+            {
+                var s = CoreSettings.Current;
+
+                ChkAutonomyEnabled.IsChecked = s.AutonomyModeEnabled;
+                // ponytail: WPF also calls UpdateAutonomyButtonState here (MainWindow.Autonomy.cs);
+                // it reads AutonomyService's live state, which is not on this head.
+
+                // Clamp persisted values into the bars' ranges BEFORE assigning: an out-of-range
+                // stored value (old-version scale, cloud-restored settings) would silently snap the
+                // bar while the label kept its XAML default (#485). Write the clamped value back so
+                // the setting and the UI agree.
+                s.AutonomyIntensity = Math.Clamp(s.AutonomyIntensity,
+                    (int)SliderAutonomyIntensity.Minimum, (int)SliderAutonomyIntensity.Maximum);
+                s.AutonomyCooldownSeconds = Math.Clamp(s.AutonomyCooldownSeconds,
+                    (int)SliderAutonomyCooldown.Minimum, (int)SliderAutonomyCooldown.Maximum);
+                s.AutonomyRandomIntervalSeconds = Math.Clamp(s.AutonomyRandomIntervalSeconds,
+                    (int)SliderAutonomyInterval.Minimum, (int)SliderAutonomyInterval.Maximum);
+                s.AutonomyAnnouncementChance = Math.Clamp(s.AutonomyAnnouncementChance, 0, 100);
+
+                SliderAutonomyIntensity.Value = s.AutonomyIntensity;
+                SliderAutonomyCooldown.Value = s.AutonomyCooldownSeconds;
+                SliderAutonomyInterval.Value = s.AutonomyRandomIntervalSeconds;
+                SliderAutonomyAnnounce.Value = s.AutonomyAnnouncementChance;
+
+                ChkAutonomyIdle.IsChecked = s.AutonomyIdleTriggerEnabled;
+                ChkAutonomyRandom.IsChecked = s.AutonomyRandomTriggerEnabled;
+                ChkAutonomyTimeAware.IsChecked = s.AutonomyTimeAwareEnabled;
+
+                ChkAutonomyFlash.IsChecked = s.AutonomyCanTriggerFlash;
+                ChkAutonomyVideo.IsChecked = s.AutonomyCanTriggerVideo;
+                ChkAutonomyWebVideo.IsChecked = s.AutonomyCanTriggerWebVideo;
+                ChkProtectBrowserVideo.IsChecked = s.ProtectBrowserVideoPlayback;
+                ChkAutonomySubliminal.IsChecked = s.AutonomyCanTriggerSubliminal;
+                ChkAutonomyBubbles.IsChecked = s.AutonomyCanTriggerBubbles;
+                ChkAutonomyComment.IsChecked = s.AutonomyCanComment;
+                ChkAutonomyMindWipe.IsChecked = s.AutonomyCanTriggerMindWipe;
+                ChkAutonomyLockCard.IsChecked = s.AutonomyCanTriggerLockCard;
+                ChkAutonomySpiral.IsChecked = s.AutonomyCanTriggerSpiral;
+                ChkAutonomyPinkFilter.IsChecked = s.AutonomyCanTriggerPinkFilter;
+                ChkAutonomyBouncingText.IsChecked = s.AutonomyCanTriggerBouncingText;
+                ChkAutonomyBubbleCount.IsChecked = s.AutonomyCanTriggerBubbleCount;
+                ChkAutonomyWallpaper.IsChecked = s.AutonomyCanTriggerWallpaper;
+
+                RefreshWallpaperBlock(s);
+
+                // The mic gate is part of the seed on WPF too: an armed voice toggle with no
+                // consent on file reads OFF rather than claiming a microphone it may not open.
+                ChkAutonomyVoice.IsChecked = s.AutonomyCanTriggerVoiceCommand && s.MicConsentGiven;
+                ChkAutonomyResumeOnStartup.IsChecked = s.AutonomyResumeOnStartup;
+                ChkShowTakeoverCountdown.IsChecked = s.ShowTakeoverCountdownBar;
+
+                // The bars' handlers paint their labels themselves, but only for a value that
+                // actually changed; set all four explicitly so a seed that lands on the current
+                // value still leaves the number and the bar agreeing (#485).
+                TxtAutonomyIntensity.Text = $"{s.AutonomyIntensity}";
+                TxtAutonomyCooldown.Text = $"{s.AutonomyCooldownSeconds}s";
+                TxtAutonomyInterval.Text = $"{s.AutonomyRandomIntervalSeconds}s";
+                TxtAutonomyAnnounce.Text = $"{s.AutonomyAnnouncementChance}%";
+
+                // Mantra Chant, WPF's LoadMantraChant.
+                ChkMantraChant.IsChecked = s.MantraChantEnabled;
+                SldMantraChantVolume.Value = s.MantraChantVolume;
+                TxtMantraChantVolume.Text = $"{(int)Math.Round(s.MantraChantVolume)}%";
+                SldMantraChantGap.Value = s.MantraChantGapSeconds;
+                TxtMantraChantGap.Text = $"{s.MantraChantGapSeconds}s";
+                // ponytail: WPF's RefreshMantraChantHint swaps TxtMantraChantHint between
+                // desc_mantra_chant and desc_mantra_chant_none on App.MantraChant.CanChant().
+                // Needs ConditioningControlPanel/Services/MantraChantService.cs. The hint keeps its
+                // {loc:Str desc_mantra_chant} binding meanwhile - a .Text write here would be undone
+                // by the next language change anyway.
+
+                // ponytail: WPF also calls RefreshAutonomyVoiceHint (MainWindow.Autonomy.cs) to
+                // amber TxtAutonomyVoiceHint while the mic is being driven by wake word / PTT or the
+                // speech model is missing. Needs ConditioningControlPanel/Services/Speech/SpeechService.cs.
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("BambiTakeoverTabView.SyncFromSettings: {E}", ex.Message);
+            }
+            finally { _isLoading = false; }
+        }
+
+        /// <summary>WPF's RefreshWallpaperFolderLabel + RefreshWallpaperDurationVisibility.</summary>
+        private void RefreshWallpaperBlock(Models.AppSettings s)
+        {
+            TxtWallpaperFolder.Text = string.IsNullOrWhiteSpace(s.WallpaperSourceFolder)
+                ? Loc.Get("label_wallpaper_folder_default")
+                : s.WallpaperSourceFolder;
+
+            ChkWallpaperKeep.IsChecked = s.WallpaperEnabled;
+            // Clamp before assigning, like the other Takeover bars (#485).
+            s.WallpaperPulseSeconds = Math.Clamp(s.WallpaperPulseSeconds,
+                (int)SliderWallpaperDuration.Minimum, (int)SliderWallpaperDuration.Maximum);
+            SliderWallpaperDuration.Value = s.WallpaperPulseSeconds;
+            TxtWallpaperDuration.Text = $"{s.WallpaperPulseSeconds}s";
+
+            // The pulse duration is meaningless while "keep it" is on - hide it rather than lie.
+            PanelWallpaperDuration.IsVisible = !s.WallpaperEnabled;
+        }
+
+        // =====================================================================================
+        //  bars
+        // =====================================================================================
+
+        private void SliderAutonomyIntensity_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            TxtAutonomyIntensity.Text = $"{(int)e.NewValue}";
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyIntensity = (int)e.NewValue;
+            CoreSettings.Save();
+        }
+
+        private void SliderAutonomyCooldown_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            TxtAutonomyCooldown.Text = $"{(int)e.NewValue}s";
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyCooldownSeconds = (int)e.NewValue;
+            CoreSettings.Save();
+        }
+
+        private void SliderAutonomyInterval_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            TxtAutonomyInterval.Text = $"{(int)e.NewValue}s";
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyRandomIntervalSeconds = (int)e.NewValue;
+            // ponytail: WPF also calls App.Autonomy.RefreshRandomTimer() so a running takeover picks
+            // the new interval up mid-session. Needs ConditioningControlPanel/Services/AutonomyService.cs.
+            CoreSettings.Save();
+        }
+
+        private void SliderAutonomyAnnounce_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            TxtAutonomyAnnounce.Text = $"{(int)e.NewValue}%";
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyAnnouncementChance = (int)e.NewValue;
+            CoreSettings.Save();
+        }
+
+        private void SliderWallpaperDuration_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            TxtWallpaperDuration.Text = $"{(int)e.NewValue}s";
+            if (_isLoading) return;
+            CoreSettings.Current.WallpaperPulseSeconds = (int)e.NewValue;
+            CoreSettings.Save();
+        }
+
+        // =====================================================================================
+        //  triggers and session toggles
+        // =====================================================================================
+
+        private void ChkAutonomyIdle_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyIdleTriggerEnabled = ChkAutonomyIdle.IsChecked ?? false;
+            // ponytail: WPF also calls App.Autonomy.RefreshIdleTimer() (Services/AutonomyService.cs).
+            CoreSettings.Save();
+        }
+
+        private void ChkAutonomyRandom_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyRandomTriggerEnabled = ChkAutonomyRandom.IsChecked ?? false;
+            // ponytail: WPF also calls App.Autonomy.RefreshRandomTimer() (Services/AutonomyService.cs).
+            CoreSettings.Save();
+        }
+
+        private void ChkAutonomyTimeAware_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyTimeAwareEnabled = ChkAutonomyTimeAware.IsChecked ?? false;
+            CoreSettings.Save();
+        }
+
+        private void ChkAutonomyResume_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.AutonomyResumeOnStartup = ChkAutonomyResumeOnStartup.IsChecked == true;
+            CoreSettings.Save();
+        }
+
+        private void ChkShowTakeoverCountdown_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.ShowTakeoverCountdownBar = ChkShowTakeoverCountdown.IsChecked == true;
+            CoreSettings.Save();
+        }
+
+        /// <summary>
+        /// One handler, every box, exactly as WPF does it: the grid is rewritten whole on any
+        /// change, so a box set from somewhere else can never be left behind.
+        /// </summary>
+        private void ChkAutonomyBehavior_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            s.AutonomyCanTriggerFlash = ChkAutonomyFlash.IsChecked ?? false;
+            s.AutonomyCanTriggerVideo = ChkAutonomyVideo.IsChecked ?? false;
+            s.AutonomyCanTriggerWebVideo = ChkAutonomyWebVideo.IsChecked ?? false;
+            s.ProtectBrowserVideoPlayback = ChkProtectBrowserVideo.IsChecked ?? false;
+            // Takeover has no strictness toggle of its own: a Takeover video is a plain mandatory
+            // video and follows the global StrictLockEnabled flag, which carries its own warning.
+            s.AutonomyCanTriggerSubliminal = ChkAutonomySubliminal.IsChecked ?? false;
+            s.AutonomyCanTriggerBubbles = ChkAutonomyBubbles.IsChecked ?? false;
+            s.AutonomyCanComment = ChkAutonomyComment.IsChecked ?? false;
+            s.AutonomyCanTriggerMindWipe = ChkAutonomyMindWipe.IsChecked ?? false;
+            s.AutonomyCanTriggerLockCard = ChkAutonomyLockCard.IsChecked ?? false;
+            s.AutonomyCanTriggerSpiral = ChkAutonomySpiral.IsChecked ?? false;
+            s.AutonomyCanTriggerPinkFilter = ChkAutonomyPinkFilter.IsChecked ?? false;
+            s.AutonomyCanTriggerBouncingText = ChkAutonomyBouncingText.IsChecked ?? false;
+            s.AutonomyCanTriggerBubbleCount = ChkAutonomyBubbleCount.IsChecked ?? false;
+            s.AutonomyCanTriggerWallpaper = ChkAutonomyWallpaper.IsChecked ?? false;
+            CoreSettings.Save();
+        }
+
+        /// <summary>
+        /// The master switch. WPF gates it on a consent dialog, the Patreon check and the lockdown
+        /// refusal before it starts AutonomyService. None of those is on this head, so only the
+        /// half that cannot arm anything the user has not already agreed to is restored: turning it
+        /// OFF always writes, turning it ON writes only when consent is already on file.
+        /// </summary>
+        private void ChkAutonomyEnabled_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            var enabled = ChkAutonomyEnabled.IsChecked ?? false;
+            if (s.AutonomyModeEnabled == enabled) return;
+
+            if (enabled && !s.AutonomyConsentGiven)
+            {
+                // ponytail: WPF shows the Autonomy consent MessageBox here and writes
+                // AutonomyConsentGiven on Yes (MainWindow.Autonomy.cs:55). No ported dialog exists
+                // for it, and arming her without consent is not a safe default, so the box reverts.
+                _isLoading = true;
+                ChkAutonomyEnabled.IsChecked = false;
+                _isLoading = false;
+                Log.Information("Takeover master switch refused: no consent on file and no consent dialog on this head");
+                return;
+            }
+
+            s.AutonomyModeEnabled = enabled;
+            CoreSettings.Save();
+            // ponytail: WPF then starts or stops App.Autonomy behind the Patreon / daily-free check,
+            // and refuses a stop while Lockdown is active (#514). Needs Services/AutonomyService.cs
+            // and Services/LockdownService.cs, neither on this head.
+            Log.Information("Autonomy Mode toggled: {Enabled} (setting only - no service on this head)", enabled);
+        }
+
+        /// <summary>
+        /// First time on, the surprise-mantra prompt needs mic consent - the shared offline-audio
+        /// contract, the same flow LockCardFeatureControl uses. Decline reverts the box and writes
+        /// nothing.
+        /// </summary>
+        private async void ChkAutonomyVoice_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            var on = ChkAutonomyVoice.IsChecked == true;
+            if (s.AutonomyCanTriggerVoiceCommand == on) return;
+
+            if (on && !s.MicConsentGiven)
+            {
+                var owner = TopLevel.GetTopLevel(this) as Window;
+                var dlg = new Dialogs.MicConsentDialog();
+                var ok = owner != null && await dlg.ShowDialog<bool?>(owner) == true && dlg.ConsentGiven;
+                if (!ok)
+                {
+                    _isLoading = true;
+                    ChkAutonomyVoice.IsChecked = false;
+                    _isLoading = false;
+                    return;
+                }
+                // ponytail: on WPF the consent dialog itself flips AppSettings.MicConsentGiven and
+                // saves; the ported one does not yet (CCP.Avalonia/Views/Dialogs/MicConsentDialog
+                // .axaml.cs, Enable()). Until it does, the seed's "&& MicConsentGiven" clears this
+                // box again on the next repaint. Fixing it belongs in that dialog, not here.
+            }
+
+            s.AutonomyCanTriggerVoiceCommand = on;
+            CoreSettings.Save();
+        }
+
+        // =====================================================================================
+        //  wallpaper
+        // =====================================================================================
+
+        /// <summary>
+        /// "Keep the wallpaper": her changes stay on the desktop instead of reverting after a few
+        /// seconds (#694). The pulse bar is meaningless while it is on, so it hides.
+        /// </summary>
+        private void ChkWallpaperKeep_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            var keep = ChkWallpaperKeep.IsChecked ?? false;
+            if (s.WallpaperEnabled == keep) return;
+
+            s.WallpaperEnabled = keep;
+            CoreSettings.Save();
+            PanelWallpaperDuration.IsVisible = !keep;
+            // ponytail: WPF also puts the original wallpaper straight back when this goes off
+            // (App.Wallpaper.Deactivate) and warns on an empty library when it goes on
+            // (MainWindow.StartStop.cs WarnIfWallpaperLibraryEmpty). Needs
+            // ConditioningControlPanel/Services/WallpaperService.cs, which is Win32.
+        }
+
+        private void BtnWallpaperFolder_Click(object? sender, RoutedEventArgs e)
+        {
+            // ponytail: needs a folder picker AND the refusal that makes it safe -
+            // ConditioningControlPanel/Services/Auth/SecurityHelper.cs IsPersonalFolderRoot (#1053).
+            // Every top-level image in the chosen folder becomes a wallpaper she can put on screen,
+            // so this stays shut rather than opening a picker with no personal-folder guard.
+        }
+
+        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e)
+        {
+            // WPF: mw.OpenDeviceSettings() = ShowTab("appsettings") + AppSettingsTab.FocusSection("devices").
+            // ponytail: the second half is the shell's helper, and MainShellWindow has no
+            // OpenDeviceSettings yet (CCP.Avalonia/Views/Windows/MainShellWindow.Presets.cs lists
+            // the stubbed navigation helpers), so this lands on the Settings door's first section.
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ShowTab("appsettings");
+        }
+
+        // =====================================================================================
+        //  Mantra Chant (#653) - the one block whose handlers live in this view on WPF too
+        // =====================================================================================
+
+        private void ChkMantraChant_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = CoreSettings.Current;
+            var on = ChkMantraChant.IsChecked == true;
+            if (s.MantraChantEnabled == on) return;
+            s.MantraChantEnabled = on;
+            CoreSettings.Save();
+            // ponytail: WPF then calls App.MantraChant.Start()/Stop() and re-reads the hint. Needs
+            // ConditioningControlPanel/Services/MantraChantService.cs.
+        }
+
+        private void SldMantraChantVolume_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            TxtMantraChantVolume.Text = $"{(int)Math.Round(e.NewValue)}%";
+            if (_isLoading) return;
+            CoreSettings.Current.MantraChantVolume = e.NewValue;
+            CoreSettings.Save();
+            // ponytail: WPF also live-applies to a clip already playing (App.MantraChant.ApplyVolume).
+        }
+
+        private void SldMantraChantGap_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+        {
+            var seconds = (int)Math.Round(e.NewValue);
+            TxtMantraChantGap.Text = $"{seconds}s";
+            if (_isLoading) return;
+            CoreSettings.Current.MantraChantGapSeconds = seconds;
+            CoreSettings.Save();
         }
     }
 }

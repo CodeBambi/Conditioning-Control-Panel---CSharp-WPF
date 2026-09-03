@@ -2,27 +2,33 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Views.Windows;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// PORTED from ConditioningControlPanel/Views/Tabs/PlayTabView.xaml.cs.
+    /// PORTED from ConditioningControlPanel/Views/Tabs/PlayTabView.xaml.cs (the host) and
+    /// PlayTabView.Cards.cs (the shims).
     ///
-    /// The Play door (tab key <c>play</c>): a card wall over the game-shaped features.
+    /// <para>The Play door (tab key <c>play</c>): a card wall over the game-shaped features.</para>
     ///
-    /// <para><b>This file is the host only.</b> It owns the page frame and the one ambient loop.
-    /// It owns no card content, no launch, and no tier decision. On WPF every card's click is a
-    /// one-line shim in a <c>PlayTabView.&lt;Area&gt;.cs</c> partial that forwards to the
-    /// MainWindow handler of the same name; MainWindow is a WPF type, so on this head every shim
-    /// is a stub instead. The handler NAMES are kept verbatim - they are the launch-parity
-    /// contract, and the wiring is a rename away once those handlers reach Core.</para>
+    /// <para><b>This file is the host plus the shims.</b> It owns the page frame and the one
+    /// ambient loop; it owns no card content, no launch, and no tier decision. On WPF every card's
+    /// click is a one-line passthrough to the MainWindow handler of the same name. That pattern
+    /// ports: <see cref="Owner"/> is <c>Window.GetWindow(this) as MainWindow</c> written for
+    /// Avalonia, and every click that WPF answers with <c>ShowTab</c> is answered with the shell's
+    /// <c>ShowTab</c> here, so the Play wall navigates for real. The clicks that WPF answers with a
+    /// host service (Chaos, Goon, Arcademy, the gaze minigame, the blink trainer) have no service on
+    /// this head and each one names what it is waiting for.</para>
     ///
-    /// <para><b>The one loop.</b> <c>RabbitHoleFx</c> is this surface's single focal ambient
-    /// canvas (FX_OVERHAUL_PLAN: one per surface). It is composed once, on first attach, and on
-    /// WPF is then handed to <c>MainWindow.RegisterTabFx("play", …)</c> - simultaneously the
-    /// park/resume hook and the motion kill-switch's reach. Starting the layers is portable and
-    /// carried over for real; the registration is the stub.</para>
+    /// <para><b>The one loop.</b> <c>RabbitHoleFx</c> is this surface's single focal ambient canvas
+    /// (FX_OVERHAUL_PLAN: one per surface). It is composed once, on first attach, and on WPF is then
+    /// handed to <c>MainWindow.RegisterTabFx("play", …)</c> - simultaneously the park/resume hook
+    /// and the motion kill-switch's reach. Starting the layers is portable and carried over for
+    /// real; the registration is what is still missing.</para>
     /// </summary>
     public partial class PlayTabView : UserControl
     {
@@ -40,9 +46,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private bool _fxComposed;
 
         // The compiled-XAML x:Name fields are only populated by a generated InitializeComponent();
-        // this head loads its views with AvaloniaXamlLoader.Load, so the one control the code
-        // touches is resolved by name here, as in LockdownTabView and AdornedAvatar.
+        // this view loads with AvaloniaXamlLoader.Load, so the one control the code touches is
+        // resolved by name here, as in LockdownTabView and AdornedAvatar.
         private readonly AmbientFxCanvas? _rabbitHoleFx;
+
+        /// <summary>The one cast every shim makes - the port of WPF's
+        /// <c>Window.GetWindow(this) as MainWindow</c>. Null while the view is being built and under
+        /// <c>--render-view</c>, where a card that fires simply does nothing, exactly as WPF's
+        /// designer case does.</summary>
+        private MainShellWindow? Owner => TopLevel.GetTopLevel(this) as MainShellWindow;
 
         public PlayTabView()
         {
@@ -73,72 +85,97 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     Intensity = RabbitHoleFxIntensity,
                 });
 
-                // ponytail: needs MainWindow.RegisterTabFx(TabKey, _rabbitHoleFx) - the park/resume
-                // hook and the motion kill-switch's reach. MainWindow is a WPF type; wired when
-                // the ambient registry moves to Core. Until then the canvas parks itself on
-                // detach (AmbientFxCanvas.Evaluate), which is why running it here is safe.
+                // ponytail: needs RegisterTabFx(TabKey, _rabbitHoleFx) - the park/resume hook and
+                // the motion kill-switch's reach. It is one of the four members stubbed out of
+                // CCP.Avalonia/Views/Windows/MainShellWindow.AmbientFx.cs. Until it exists the
+                // canvas parks itself on detach (AmbientFxCanvas.Evaluate), which is why running
+                // it here is safe.
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ponytail: needs App.Logger. Swallowed rather than crashing the tab, same as WPF.
+                Log.Debug("PlayTabView FX compose: {E}", ex.Message);
             }
         }
 
         // ==================================================================================
-        // Launch shims. Every name below is the MainWindow handler the WPF card forwards to -
-        // `if (Window.GetWindow(this) is MainWindow mw) mw.<Handler>(sender, e);` - and launch
-        // parity is the contract, so the names are kept even though the bodies are empty here.
-        // Nothing on this surface may re-implement a launch, and nothing here decides a tier:
-        // the lockbands are decoration and TierGate does the refusing inside the handler.
+        // Launch shims. Every name below is the MainWindow handler the WPF card forwards to,
+        // and launch parity is the contract, so the names are kept. Nothing on this surface
+        // re-implements a launch, and nothing here decides a tier: the lockbands are
+        // decoration and TierGate does the refusing inside the handler.
         // ==================================================================================
 
-        /// <summary>ponytail: needs MainWindow.BtnStartChaos_Click (TierGate.DemandLab + the hub).</summary>
+        // ---- DESCENT ---------------------------------------------------------------------
+
+        /// <summary>ponytail: needs the Chaos slot picker behind MainWindow.BtnStartChaos_Click
+        /// (TierGate.DemandLab + ChaosHostService); neither is on this head.</summary>
         private void BtnStartChaos_Click(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.BtnQuickStartChaos_Click (straight into a saved run).</summary>
+        /// <summary>ponytail: needs MainWindow.BtnQuickStartChaos_Click (straight into a saved run,
+        /// same ChaosHostService).</summary>
         private void BtnQuickStartChaos_Click(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.BtnStartGoon_Click (GoonHostService).</summary>
+        // ---- TOGETHER --------------------------------------------------------------------
+
+        /// <summary>ponytail: needs ConditioningControlPanel/Services/Goon/GoonHostService.cs.</summary>
         private void BtnStartGoon_Click(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.ShowTab("remotecontrol").</summary>
-        private void BtnPlayRemoteControl_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnPlayRemoteControl_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("remotecontrol");
 
-        /// <summary>ponytail: needs MainWindow.ShowTab("settings") + the Devices section.</summary>
-        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
+        // ---- EYES ------------------------------------------------------------------------
 
-        /// <summary>ponytail: needs MainWindow.BtnGazeMinigame_Click.</summary>
+        /// <summary>WPF: <c>mw.OpenDeviceSettings()</c> = ShowTab("appsettings") +
+        /// AppSettingsTab.FocusSection("devices"). ponytail: the focus half is the shell's helper and
+        /// MainShellWindow has no OpenDeviceSettings yet, so this lands on the door's first
+        /// section.</summary>
+        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("appsettings");
+
+        /// <summary>ponytail: needs MainWindow.BtnGazeMinigame_Click - the gaze minigame window plus
+        /// Services/Webcam/WebcamTrackingService.cs and its consent flow.</summary>
         private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.ChkFocusGaze_Changed - it reads ChkPlayFocusGaze and
-        /// writes TxtPlayFocusGazeStatus. WPF's Checked + Unchecked pair is one event here.</summary>
+        /// <summary>The only Focus Gaze switch in the app. ponytail: needs
+        /// ConditioningControlPanel/Services/Webcam/GazeFocusService.cs, WebcamTrackingService and
+        /// TierGate - MainWindow.LabTab.cs:817 gates the ON edge on Tier 2 and on webcam consent
+        /// before it arms anything, and there is nothing safe to write without them. Turning the box
+        /// OFF is never gated on WPF either, but there is no consumer here to release.</summary>
         private void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.BtnLabBlinkTrainerOpenNew_Click.</summary>
+        /// <summary>ponytail: needs MainWindow.BtnLabBlinkTrainerOpenNew_Click; the Blink Trainer
+        /// page exists here but its host service does not.</summary>
         private void BtnLabBlinkTrainerOpenNew_Click(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.ShowTab("gradedintake") - every gate state navigates.</summary>
-        private void BtnPlayGradedIntake_Click(object? sender, RoutedEventArgs e) { }
+        // ---- SESSIONS --------------------------------------------------------------------
 
-        /// <summary>ponytail: needs MainWindow.ShowTab("home") - the pass comes from the logo tile.</summary>
-        private void BtnPlayIntakePassHome_Click(object? sender, RoutedEventArgs e) { }
+        // All four pass states navigate: the page's own gate is what explains a spent week or a
+        // missing login, so a locked click has to ARRIVE somewhere rather than be swallowed.
+        private void BtnPlayGradedIntake_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("gradedintake");
 
-        /// <summary>ponytail: needs MainWindow.ShowTab("fyp"), which intercepts into OpenFypFeed.
-        /// Never FypHostService.Launch() - that would be a second, ungated launch path.</summary>
-        private void BtnPlayFyp_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>"Where does a pass come from?" - the Home logo tile's flip ceremony hands them
+        /// out, and "settings" is Home's tab key (the Settings DOOR is "appsettings").</summary>
+        private void BtnPlayIntakePassHome_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("settings");
 
-        /// <summary>ponytail: needs MainWindow.ShowTab("justdrop"), which owns the withheld refusal.</summary>
-        private void BtnPlayJustDrop_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>ShowTab("fyp"), never FypHostService.Launch() - that would be a second, ungated
+        /// launch path. ponytail: "fyp" is one of the shell's WindowKeys, so the call is a
+        /// documented no-op until OpenFypFeed exists (MainShellWindow.TabNavigation.cs).</summary>
+        private void BtnPlayFyp_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("fyp");
 
-        /// <summary>ponytail: needs MainWindow.ShowTab("lockdown").</summary>
-        private void BtnPlayLockdown_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>ShowTab("justdrop"), which owns the withheld refusal. ponytail: also a
+        /// WindowKey on this head, so it no-ops until the shop host lands.</summary>
+        private void BtnPlayJustDrop_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("justdrop");
 
-        /// <summary>ponytail: needs MainWindow.BtnStartArcademy_Click (ArcademyHostService.Launch,
-        /// which owns the door, the T2 check and the AudioOnlySession refusal).</summary>
+        private void BtnPlayLockdown_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("lockdown");
+
+        // ---- MORE ------------------------------------------------------------------------
+
+        /// <summary>ponytail: needs ArcademyHostService.Launch, which owns the door, the T2 check
+        /// and the AudioOnlySession refusal. A launch, not navigation - the Arcademy has no tab.</summary>
         private void BtnStartArcademy_Click(object? sender, RoutedEventArgs e) { }
 
-        /// <summary>ponytail: needs MainWindow.OpenStudioModule("spiral") - ShowTab("studio") plus
-        /// FocusRackEntry("spiral"). Loom NAVIGATES; a Launch() here would be a second editor.</summary>
-        private void BtnPlayLoom_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>Loom NAVIGATES; a Launch() here would be a second editor. WPF calls
+        /// <c>OpenStudioModule("spiral")</c> = ShowTab("studio") + StudioTab.FocusRackEntry("spiral").
+        /// ponytail: OpenStudioModule is one of the helpers stubbed out of
+        /// CCP.Avalonia/Views/Windows/MainShellWindow.Presets.cs, so this lands on the Studio rack's
+        /// default module instead of the Spiral one.</summary>
+        private void BtnPlayLoom_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("studio");
     }
 }

@@ -11,8 +11,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// PORTED from ConditioningControlPanel/Views/Deeper/NewEnhancementDialog.xaml.cs. Deviations:
     ///  - DialogResult becomes Close(bool); callers use ShowDialog&lt;bool&gt;.
     ///  - OpenFileDialog becomes the StorageProvider file picker.
-    ///  - The three interactive tutorials and the last-directory memory are stubs: TutorialService,
-    ///    TutorialOverlay, EnhancementLibrary and AppSettings all still live in the WPF head.
+    ///  - The three interactive tutorials and the last-directory memory are stubs:
+    ///    ConditioningControlPanel/Services/TutorialService.cs (TutorialType, TutorialEventBus),
+    ///    ConditioningControlPanel/TutorialOverlay and
+    ///    ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs all still live in the WPF
+    ///    head. AppSettings does NOT: the HypnoTube flow's one settings write is restored below.
     /// </summary>
     public partial class NewEnhancementDialog : Window
     {
@@ -44,7 +47,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private async System.Threading.Tasks.Task BrowseAsync()
         {
             var isVideo = _rbVideo.IsChecked == true;
-            // ponytail: needs EnhancementLibrary.LastDirectory for SuggestedStartLocation, wired when it moves to Core
+            // ponytail: WPF seeds InitialDirectory from App.EnhancementLibrary.LastDirectory;
+            // ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs is still head-only, so
+            // there is no SuggestedStartLocation and the picker opens where the OS last left it.
             var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = Loc.Get(isVideo ? "deeper_dialog_pick_video" : "deeper_dialog_pick_audio"),
@@ -63,15 +68,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void BtnTryHypnoTubeTutorial_Click()
         {
-            // ponytail: needs AvatarTubeWindow.KnownVideoLinks and AppSettings.HasSeenDeeperHTInteractiveTutorial, wired when they move to Core
+            // ponytail: WPF prefers the first TikTok entry of
+            // ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Speech.cs KnownVideoLinks and
+            // falls back to this literal; that window is WebView2-hosted and not on this head, so
+            // only the fallback is available - which is the value WPF ships when the lookup misses.
             _rbVideo.IsChecked = true;
             _txtSource.Text = "https://hypnotube.com/video/bambis-naughty-tiktok-collection-117314.html";
+
+            // Mark the flag so a future first-time hint does not double up. Same write WPF makes,
+            // and it lands here for the same reason: the user has now seen the walkthrough offer.
+            try
+            {
+                CoreSettings.Current.HasSeenDeeperHTInteractiveTutorial = true;
+                CoreSettings.Save();
+            }
+            catch { /* a settings write must never take the dialog down */ }
+
             StartInteractiveTutorial();
         }
 
         private void StartInteractiveTutorial()
         {
-            // ponytail: needs TutorialService + TutorialOverlay + TutorialEventBus.PendingPart2Tutorial, wired when they move to Core
+            // ponytail: needs ConditioningControlPanel/Services/TutorialService.cs (TutorialType,
+            // TutorialEventBus.PendingPart2Tutorial) and ConditioningControlPanel/TutorialOverlay,
+            // both still in the WPF head. Without them the three "walk me through" buttons still
+            // pick the media type and pre-fill the source, which is Part 1's whole visible effect.
         }
 
         private void BtnCreate_Click()
