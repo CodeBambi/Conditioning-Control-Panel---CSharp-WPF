@@ -6,6 +6,9 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Services;
 using Serilog;
+using ModPackage = ConditioningControlPanel.Models.ModPackage;
+using MotionLevel = ConditioningControlPanel.Models.MotionLevel;
+using PerformanceTier = ConditioningControlPanel.Models.PerformanceTier;
 
 namespace ConditioningControlPanel.Avalonia.Controls
 {
@@ -223,6 +226,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// </summary>
         private readonly List<IDisposable> _windowHooks = new();
         private Window? _window;
+        private bool _modHooked;
 
         public AmbientFxCanvas()
         {
@@ -310,10 +314,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         }
 
         /// <summary>
-        /// Re-read the mod palette and repaint. The WPF original subscribed to
-        /// <c>App.Mods.ModChanged</c> for this; the Avalonia head has no mod service yet, so the
-        /// shell calls it instead.
-        /// ponytail: needs ModService.ModChanged, wired when it moves to Core.
+        /// Re-read the mod palette and repaint. Wired to <see cref="CoreMods.ModChanged"/> while
+        /// attached, exactly as the WPF twin subscribes to <c>App.Mods.ModChanged</c>; still public
+        /// because a host that repaints for its own reasons (a live event tint) pushes it too.
         /// </summary>
         public void RefreshPalette()
         {
@@ -592,8 +595,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             try
             {
                 HookWindow(TopLevel.GetTopLevel(this) as Window);
-                // ponytail: needs ModService.ModChanged to re-read the palette on a mod switch,
-                // wired when it moves to Core; RefreshPalette() is the seam it will call.
+                if (!_modHooked) { CoreMods.ModChanged += OnModChanged; _modHooked = true; }
                 Evaluate();
             }
             catch (Exception ex) { Log.Debug("AmbientFxCanvas.OnAttachedToVisualTree: {E}", ex.Message); }
@@ -605,9 +607,21 @@ namespace ConditioningControlPanel.Avalonia.Controls
             {
                 StopClock();
                 UnhookWindow();
+                if (_modHooked) { CoreMods.ModChanged -= OnModChanged; _modHooked = false; }
             }
             catch (Exception ex) { Log.Debug("AmbientFxCanvas.OnDetachedFromVisualTree: {E}", ex.Message); }
             base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>
+        /// A mod switch re-reads the palette and repaints; it never reseeds, so the fog keeps its
+        /// drift and only its colour moves. The head raises this from whatever thread its mod
+        /// service switched on, so it is marshalled before touching the brushes.
+        /// </summary>
+        private void OnModChanged(object? sender, ModPackage mod)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) RefreshPalette();
+            else Dispatcher.UIThread.Post(RefreshPalette);
         }
 
         /// <summary>The WPF twin's IsVisibleChanged handler; Avalonia routes it through the property system.</summary>
@@ -1087,39 +1101,29 @@ namespace ConditioningControlPanel.Avalonia.Controls
         }
 
         /// <summary>
-        /// Local copy of ConditioningControlPanel/Models/AppSettings.cs:PerformanceTier. The WPF
-        /// enum lives beside <c>AppSettings</c>, which is pinned to the head by <c>App.</c>; this
-        /// canvas only needs the three names to keep its tier switches a line-for-line diff against
-        /// the original. Nested and private on purpose: every FX control in this port hits the same
-        /// missing enum, and a second top-level copy in this namespace would be a CS0101 the moment
-        /// the stack is chained.
-        /// ponytail: local copy of Models/AppSettings.cs:PerformanceTier, delete when AppSettings
-        /// moves to Core.
-        /// </summary>
-        private enum PerformanceTier
-        {
-            Quality,
-            Balanced,
-            Performance,
-        }
-
-        /// <summary>
-        /// Everything this canvas asks the app about. In the WPF head these are
-        /// <c>PerformanceProfile</c>, <c>MotionFx</c> and <c>FxTheme</c>, all three of which read
-        /// <c>App.Settings</c>, <c>App.Mods</c> and <c>Application.Current.Resources</c> and so
-        /// cannot come along yet.
+        /// Everything the FX controls in this head ask the app about, in one place. In the WPF head
+        /// these are three services - <c>PerformanceProfile</c>, <c>MotionFx</c> and <c>FxTheme</c>.
+        /// The first two read <c>App.Settings</c>, which is <see cref="CoreSettings"/> now, so the
+        /// tier and the motion gate below are the real decision rather than a placeholder.
         ///
-        /// <para>ponytail: needs PerformanceProfile, MotionFx and FxTheme, wired when they move to
-        /// Core. The values below are the WPF Quality tier and FxTheme's own #FF69B4 fallback -
-        /// placeholder data, chosen so the canvas draws its full composition rather than silently
-        /// rendering nothing while the services are missing.</para>
+        /// <para>ponytail: internal and nested rather than a file of its own, because
+        /// <see cref="TakeoverOrb"/> and <see cref="VatGlassCanvas"/> read it and the per-tier
+        /// tables must exist exactly once. Those tables are pure and belong in Core beside
+        /// <c>PerformanceTier</c>; when PerformanceProfile moves, this becomes a forwarder.</para>
         /// </summary>
-        private static class Env
+        internal static class Env
         {
-            /// <summary>FxTheme.Fallback, the colour every slot resolves to with no mod loaded.</summary>
+            /// <summary>FxTheme.Fallback, the colour every slot resolves to with no palette set.</summary>
             private static readonly Color Fallback = Color.FromRgb(0xFF, 0x69, 0xB4);
 
-            public static PerformanceTier CurrentTier => PerformanceTier.Quality;
+            /// <summary>
+            /// PerformanceProfile.CurrentTier. Its automatic escalation counts live flash windows
+            /// and ambient bubbles; this head has neither, so HeavyElementCount is 0,
+            /// AutoPerformanceMode can never escalate, and the explicit toggle IS the whole
+            /// decision. Do not "fix" the missing Balanced branch - it is unreachable here.
+            /// </summary>
+            public static PerformanceTier CurrentTier =>
+                CoreSettings.Current.PerformanceMode ? PerformanceTier.Performance : PerformanceTier.Quality;
 
             /// <summary>PerformanceProfile.MaxAmbientParticles, verbatim.</summary>
             public static int MaxAmbientParticles(PerformanceTier tier) => tier switch
@@ -1140,17 +1144,49 @@ namespace ConditioningControlPanel.Avalonia.Controls
             /// <summary>PerformanceProfile.AllowAmbientMotion, verbatim.</summary>
             public static bool AllowAmbientMotion(PerformanceTier tier) => tier != PerformanceTier.Performance;
 
-            /// <summary>MotionFx.AllowAmbientLoops - the reduced-motion half is the missing piece.</summary>
-            public static bool AllowAmbientLoops => AllowAmbientMotion(CurrentTier);
+            /// <summary>
+            /// MotionFx.Level. WPF caps the user's setting to Reduced when Windows' animation-
+            /// effects flag is off; Avalonia exposes no cross-platform twin, and that cap can only
+            /// ever REMOVE motion, so its absence shows the user exactly what they picked rather
+            /// than more than they asked for.
+            /// ponytail: read the desktop's reduced-motion preference here when Avalonia has one.
+            /// </summary>
+            public static MotionLevel Level => CoreSettings.Current.MotionLevel;
+
+            /// <summary>MotionFx.AllowAmbientLoops, now the real gate.</summary>
+            public static bool AllowAmbientLoops =>
+                Level == MotionLevel.Full && AllowAmbientMotion(CurrentTier);
 
             /// <summary>MotionFx.AllowParticles.</summary>
             public static bool AllowParticles => AllowAmbientLoops && MaxAmbientParticles(CurrentTier) > 0;
 
-            public static Color MistColor => Fallback;
-            public static Color ParticleColor => Fallback;
-            public static Color GlowColor => Fallback;
-            public static Color FlashTintColor => Fallback;
+            // FxTheme's colours are read, not computed: it writes four Color keys into the app
+            // resources from the mod palette and every consumer reads them back. Theme/Colors.xaml
+            // already carries the keys, so this is that same read path - and nothing on this head
+            // writes them yet, which means the CCP default accent until an FxTheme twin lands.
+            public static Color MistColor => ThemeColor("FxMistColor");
+            public static Color ParticleColor => ThemeColor("FxParticleColor");
+            public static Color GlowColor => ThemeColor("FxGlowColor");
+            public static Color FlashTintColor => ThemeColor("FxFlashTintColor");
+
+            /// <summary>
+            /// FxTheme.MistOpacity. ponytail: needs <c>App.Mods.GetMistOpacity()</c>, which
+            /// CoreMods does not expose; 1.0 is what that call answers with no mod loaded.
+            /// </summary>
             public static double MistOpacity => 1.0;
+
+            /// <summary>FxTheme.Read's Avalonia twin: the same key out of the app resources.</summary>
+            private static Color ThemeColor(string key)
+            {
+                try
+                {
+                    var app = Application.Current;
+                    if (app != null && app.TryGetResource(key, app.ActualThemeVariant, out var v) && v is Color c)
+                        return c;
+                }
+                catch { /* decoration; the fallback is FxTheme's own */ }
+                return Fallback;
+            }
         }
     }
 }
