@@ -45,7 +45,7 @@ namespace ConditioningControlPanel.Avalonia
                 // callback, so a CI render cannot touch a user's profile. Unseeded, Core hands
                 // out one default instance, which is what the renders bind against.
                 Settings = new SettingsService();
-                CoreSettings.CurrentProvider = () => Settings?.Current;
+                CoreSettings.ServiceProvider = () => Settings;
                 desktop.MainWindow = new Views.Windows.MainShellWindow();
             }
             base.OnFrameworkInitializationCompleted();
