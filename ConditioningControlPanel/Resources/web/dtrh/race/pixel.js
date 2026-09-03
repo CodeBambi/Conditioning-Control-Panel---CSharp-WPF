@@ -24,8 +24,11 @@
  *
  * PIXEL_STEPS is the P-key cycle: off, 2, 3, 4, 6 screen pixels per block.
  * Put an object on the crisp layer with `obj.layers.set(CRISP_LAYER)`.
- * `stats` is last frame's draw calls + triangles summed over the passes; with
- * `log` given, a line goes out every PERF_LOG_SEC seconds.
+ * `stats` is last frame's draw calls + triangles summed over the passes plus
+ * the frame time (avg + p95 ms over the last FRAME_WIN frames); with `log`
+ * given, a line goes out every PERF_LOG_SEC seconds. THE GOVERNOR: on a
+ * high-DPI screen an average frame above SLOW_MS drops the canvas to one
+ * device pixel per CSS pixel, and one under FAST_MS restores the native ratio.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -38,6 +41,8 @@ const WORLD_MASK = 1 << 0, CRISP_MASK = 1 << CRISP_LAYER, ALL_MASK = WORLD_MASK 
 const MAP_KEYS = ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap'];
 const FAR_FADE = [42, 80];     // metres: the world pass fades to the fog colour across this band
 const PERF_LOG_SEC = 5;
+const FRAME_WIN = 300;         // frames kept for the avg / p95
+const SLOW_MS = 24, FAST_MS = 13;   // governor thresholds on the avg frame (about 42 and 77 fps)
 
 /** Snap any input to a step: 0 (off) or the nearest listed block size. */
 export function normalizeBlock(n) {
@@ -78,7 +83,9 @@ const BLIT_FRAG = `
 export function createPixelizer({ renderer, canvas, block = PIXEL_DEFAULT, log = null }) {
   let cur = normalizeBlock(block);
   let w = 1, h = 1;
-  const nativeDpr = () => Math.min(window.devicePixelRatio || 1, Q.maxDpr, 1.5);
+  let dprCap = Infinity;         // the governor's lid on the device pixel ratio (1 while slow)
+  const screenDpr = () => Math.min(window.devicePixelRatio || 1, Q.maxDpr, 1.5);
+  const nativeDpr = () => Math.min(screenDpr(), dprCap);
   const caps = renderer.capabilities || {};
   const depthOk = caps.isWebGL2 !== false;   // r163+ is WebGL2 only; the guard keeps an older fork honest
 
@@ -132,19 +139,42 @@ export function createPixelizer({ renderer, canvas, block = PIXEL_DEFAULT, log =
   }
 
   // ---- the frame ---------------------------------------------------------------------------
-  const stats = { calls: 0, triangles: 0, passes: 0 };
+  const stats = { calls: 0, triangles: 0, passes: 0, frameMs: 0, frameP95: 0 };
   let fCalls = 0, fTris = 0, fPasses = 0, perfLast = 0;
   const info = renderer.info;
   function tally() { if (!info || !info.render) return; fCalls += info.render.calls; fTris += info.render.triangles; fPasses++; }
+  // frame gaps in a ring; a gap over 250 ms is a tab switch or a hitch, not a frame
+  const gaps = new Float32Array(FRAME_WIN);
+  let gapN = 0, gapI = 0, lastFrameAt = 0;
+  const sorted = new Float32Array(FRAME_WIN);
+  function frameStats() {
+    if (!gapN) return { avg: 0, p95: 0 };
+    let sum = 0;
+    for (let i = 0; i < gapN; i++) { sum += gaps[i]; sorted[i] = gaps[i]; }
+    const view = sorted.subarray(0, gapN); view.sort();
+    return { avg: sum / gapN, p95: view[Math.min(gapN - 1, Math.floor(gapN * 0.95))] };
+  }
+  function govern(avg) {
+    if (gapN < 60) return;
+    const native = screenDpr();
+    if (avg > SLOW_MS && dprCap > 1 && native > 1) { dprCap = 1; apply(); if (log) log(`[race-perf] governor: dpr 1 (avg frame ${avg.toFixed(1)} ms)`); }
+    else if (avg < FAST_MS && dprCap < native) { dprCap = Infinity; apply(); if (log) log(`[race-perf] governor: dpr native (avg frame ${avg.toFixed(1)} ms)`); }
+  }
   function closeFrame() {
     stats.calls = fCalls; stats.triangles = fTris; stats.passes = fPasses;
     fCalls = fTris = fPasses = 0;
-    if (!log) return;
-    const now = performance.now() / 1000;
+    const nowMs = performance.now();
+    if (lastFrameAt) { const g = nowMs - lastFrameAt; if (g < 250) { gaps[gapI] = g; gapI = (gapI + 1) % FRAME_WIN; if (gapN < FRAME_WIN) gapN++; } }
+    lastFrameAt = nowMs;
+    const now = nowMs / 1000;
     if (!perfLast) perfLast = now;
     if (now - perfLast < PERF_LOG_SEC) return;
     perfLast = now;
-    try { log(`[race-perf] t+${Math.round(now)}s calls ${stats.calls} tris ${stats.triangles} ${label()}${rt ? ` rt ${rtW}x${rtH}` : ''}`); } catch (e) { /* host gone */ }
+    const { avg, p95 } = frameStats();
+    stats.frameMs = avg; stats.frameP95 = p95;
+    govern(avg);
+    if (!log) return;
+    try { log(`[race-perf] t+${Math.round(now)}s calls ${stats.calls} tris ${stats.triangles} frame ${avg.toFixed(1)}ms p95 ${p95.toFixed(1)} dpr ${renderer.getPixelRatio().toFixed(2)} ${label()}${rt ? ` rt ${rtW}x${rtH}` : ''}`); } catch (e) { /* host gone */ }
   }
 
   function render(scene, camera) {

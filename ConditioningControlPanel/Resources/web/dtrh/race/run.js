@@ -97,7 +97,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
   let W = null;                       // the world: everything that is rebuilt on "again"
   let raf = 0, last = 0, lastBeat = 0, payoutResolve = null;
-  const trail = [];                   // last ~1 s of kart {d,x,h}, for the ALMOST on a miss
+  // last ~1 s of kart {d,x,h} for the ALMOST on a miss: a fixed ring, no per-frame objects
+  const TRAIL_N = 70, trail = [];
+  for (let i = 0; i < TRAIL_N; i++) trail.push({ d: 0, x: 0, h: 0, ok: false });
+  let trailI = 0;
+  const trailClear = () => { for (const s of trail) s.ok = false; trailI = 0; };
 
   function poke(mood, sec) { S.moodHeld = mood; S.moodHold = sec; }
   function setFlip(on) { S.flip = !!on; canvas.style.transform = on ? 'scaleX(-1)' : ''; }
@@ -146,7 +150,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
       jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed });
-    setFlip(false); trail.length = 0;
+    setFlip(false); trailClear();
     mix.reset(); S.wobble = 0; clearMixChrome();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.item(null, 'no item yet');
   }
@@ -262,7 +266,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function onMiss(w, m) {
     // ALMOST: the treat slid past inside NEAR_MISS_M but outside the hit box; else the streak lets go
     let best = null, bestGap = Infinity;
-    for (const s of trail) { const g = Math.abs(w.layout.wrap(s.d - m.d + w.layout.totalDepth / 2) - w.layout.totalDepth / 2); if (g < bestGap) { bestGap = g; best = s; } }
+    for (const s of trail) { if (!s.ok) continue; const g = Math.abs(w.layout.wrap(s.d - m.d + w.layout.totalDepth / 2) - w.layout.totalDepth / 2); if (g < bestGap) { bestGap = g; best = s; } }
     const near = best && m.x != null && Math.abs(m.x - best.x) < NEAR_MISS_M && Math.abs((m.h || 0) - best.h) < NEAR_MISS_M;
     if (near) w.score.nearMiss(); else w.score.miss();
   }
@@ -322,11 +326,14 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const prevD = ks.d;
     k.update(dt, input.read(), lay);
     w.score.tick(dt); w.items.update(dt);
-    trail.push({ d: ks.d, x: ks.x, h: ks.h }); if (trail.length > 70) trail.shift();
+    { const tr = trail[trailI]; tr.d = ks.d; tr.x = ks.x; tr.h = ks.h; tr.ok = true; trailI = (trailI + 1) % TRAIL_N; }
     for (const e of mix.tick(dt)) onMix(w, e);
     if (S.wobble > 0) { S.wobble -= dt; if (S.wobble <= 0 && S.timeScale === WOBBLE_SCALE) S.timeScale = 1; }
     const mixed = mix.state(); S.effects = mixed.live;
-    if (hud.mixer) hud.mixer(mixed);
+    // the mixer rail only needs a frame while something is live (or just went dark)
+    const mixOn = mixed.live.length > 0 || !!mixed.recipe;
+    if (hud.mixer && (mixOn || S.mixWasOn)) hud.mixer(mixed);
+    S.mixWasOn = mixOn;
 
     // bubbles: seed the chunks ahead, drip spawns, rain bursts
     for (const c of lay.chunks) { const rel = lay.wrap(c.d0 - ks.d + lay.totalDepth / 2) - lay.totalDepth / 2; if (rel > -20 && rel < 250) w.field.seedChunk(c); }
@@ -470,6 +477,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     teardown();
     audio.dispose();
     input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    pixel.dispose();
     scene.clear(); renderer.dispose();
     setFlip(false);
   }
