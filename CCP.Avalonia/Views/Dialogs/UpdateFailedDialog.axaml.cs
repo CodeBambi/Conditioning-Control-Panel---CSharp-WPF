@@ -22,17 +22,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>BrowserLauncher.OpenUrlOrPrompt</c> is a Win32 explorer/cmd/rundll32 chain and will
     ///    never be in Core; <c>TopLevel.Launcher.LaunchUriAsync</c> is this head's equivalent and
     ///    the chain's last resort - copying the link to the clipboard - is kept.
-    ///  - <c>UpdateService.ReleasesPageUrl</c> still lives in the WPF head (ponytail note below).
+    ///  - <c>UpdateService.ReleasesPageUrl</c> is now <c>ReleaseLinks.ReleasesPageUrl</c> in Core.
     ///  - The copy-link label is swapped by rebinding, not by assigning Text: the TextBlock carries
     ///    a <c>{loc:Str}</c> binding and a local value would be undone on the next language change
     ///    (CLAUDE.md, "setting text from code").
     /// </summary>
     public partial class UpdateFailedDialog : Window
     {
-        // ponytail: needs UpdateService.ReleasesPageUrl (ConditioningControlPanel/Services/UpdateService.cs),
-        // still in the WPF head.
-        private const string ReleasesPageUrl =
-            "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest";
+        // The address lives in Core (Services/ReleaseLinks.cs); UpdateService.ReleasesPageUrl in
+        // the WPF head aliases the same const, so both heads send the user to one page.
+        private const string ReleasesPageUrl = ConditioningControlPanel.Services.ReleaseLinks.ReleasesPageUrl;
 
         private DispatcherTimer? _copyResetTimer;
         private readonly TextBlock _txtCopyLink;

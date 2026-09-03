@@ -49,7 +49,7 @@ namespace ConditioningControlPanel.Features
         {
             try
             {
-                var dialog = new BugReportWindow(BugReportService.ReportKind.Suggestion)
+                var dialog = new BugReportWindow(ReportKind.Suggestion)
                 {
                     Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
                 };

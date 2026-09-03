@@ -161,8 +161,8 @@ public class BugReportDiagnosticsTests
         var list = new List<string>();
         var when = new DateTime(2026, 8, 3, 14, 30, 0, DateTimeKind.Utc);
 
-        BugReportService.AppendRecentReport(list, "BUG-0123456789", when, BugReportService.ReportKind.Bug);
-        BugReportService.AppendRecentReport(list, "BUG-9876543210", when, BugReportService.ReportKind.Suggestion);
+        BugReportService.AppendRecentReport(list, "BUG-0123456789", when, ReportKind.Bug);
+        BugReportService.AppendRecentReport(list, "BUG-9876543210", when, ReportKind.Suggestion);
 
         Assert.Equal(2, list.Count);
         Assert.StartsWith("BUG-0123456789|2026-08-03T14:30:00", list[0]);
@@ -176,7 +176,7 @@ public class BugReportDiagnosticsTests
         var list = new List<string>();
         int total = BugReportService.MaxRecentReports + 15;
         for (int i = 0; i < total; i++)
-            BugReportService.AppendRecentReport(list, $"BUG-{i:D10}", DateTime.UtcNow, BugReportService.ReportKind.Bug);
+            BugReportService.AppendRecentReport(list, $"BUG-{i:D10}", DateTime.UtcNow, ReportKind.Bug);
 
         Assert.Equal(BugReportService.MaxRecentReports, list.Count);
         // The kept window is the NEWEST entries, still oldest-first in storage order.
@@ -190,12 +190,12 @@ public class BugReportDiagnosticsTests
     public void RecentReports_BlankToken_And_NullList_Ignored()
     {
         var list = new List<string>();
-        BugReportService.AppendRecentReport(list, null, DateTime.UtcNow, BugReportService.ReportKind.Bug);
-        BugReportService.AppendRecentReport(list, "   ", DateTime.UtcNow, BugReportService.ReportKind.Bug);
+        BugReportService.AppendRecentReport(list, null, DateTime.UtcNow, ReportKind.Bug);
+        BugReportService.AppendRecentReport(list, "   ", DateTime.UtcNow, ReportKind.Bug);
         Assert.Empty(list);
 
         // Null list must not throw.
-        BugReportService.AppendRecentReport(null!, "BUG-0000000001", DateTime.UtcNow, BugReportService.ReportKind.Bug);
+        BugReportService.AppendRecentReport(null!, "BUG-0000000001", DateTime.UtcNow, ReportKind.Bug);
     }
 
     [Fact]
@@ -203,18 +203,18 @@ public class BugReportDiagnosticsTests
     {
         var list = new List<string>();
         BugReportService.AppendRecentReport(list, "BUG-1111111111",
-            new DateTime(2026, 8, 1, 10, 0, 0, DateTimeKind.Utc), BugReportService.ReportKind.Bug);
+            new DateTime(2026, 8, 1, 10, 0, 0, DateTimeKind.Utc), ReportKind.Bug);
         BugReportService.AppendRecentReport(list, "BUG-2222222222",
-            new DateTime(2026, 8, 2, 10, 0, 0, DateTimeKind.Utc), BugReportService.ReportKind.Suggestion);
+            new DateTime(2026, 8, 2, 10, 0, 0, DateTimeKind.Utc), ReportKind.Suggestion);
 
         var rows = BugReportService.ParseRecentReports(list);
 
         Assert.Equal(2, rows.Count);
         Assert.Equal("BUG-2222222222", rows[0].Token);           // newest first
-        Assert.Equal(BugReportService.ReportKind.Suggestion, rows[0].Kind);
+        Assert.Equal(ReportKind.Suggestion, rows[0].Kind);
         Assert.Equal(new DateTime(2026, 8, 2, 10, 0, 0, DateTimeKind.Utc), rows[0].TimestampUtc);
         Assert.Equal("BUG-1111111111", rows[1].Token);
-        Assert.Equal(BugReportService.ReportKind.Bug, rows[1].Kind);
+        Assert.Equal(ReportKind.Bug, rows[1].Kind);
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public class BugReportDiagnosticsTests
         Assert.Null(rows[0].TimestampUtc);
         Assert.Equal("BUG-BARE0000001", rows[1].Token);
         Assert.Null(rows[1].TimestampUtc);
-        Assert.Equal(BugReportService.ReportKind.Bug, rows[1].Kind);
+        Assert.Equal(ReportKind.Bug, rows[1].Kind);
 
         Assert.Empty(BugReportService.ParseRecentReports(null));
     }
@@ -258,7 +258,7 @@ public class BugReportDiagnosticsTests
         // What AppendRecentReport writes must be exactly what ParseRecentReports accepts.
         var list = new List<string>();
         var when = new DateTime(2026, 8, 3, 14, 30, 0, DateTimeKind.Utc);
-        BugReportService.AppendRecentReport(list, "BUG-0123456789", when, BugReportService.ReportKind.Bug);
+        BugReportService.AppendRecentReport(list, "BUG-0123456789", when, ReportKind.Bug);
 
         var rows = BugReportService.ParseRecentReports(list);
         Assert.Equal(when, rows[0].TimestampUtc);
@@ -271,13 +271,13 @@ public class BugReportDiagnosticsTests
         // The record is pipe-delimited; an unsanitized pipe would push the stamp into the kind slot.
         var list = new List<string>();
         var when = new DateTime(2026, 8, 3, 14, 30, 0, DateTimeKind.Utc);
-        BugReportService.AppendRecentReport(list, "BUG-123|456", when, BugReportService.ReportKind.Suggestion);
+        BugReportService.AppendRecentReport(list, "BUG-123|456", when, ReportKind.Suggestion);
 
         Assert.Equal(3, list[0].Split('|').Length);
         var rows = BugReportService.ParseRecentReports(list);
         Assert.Equal("BUG-123456", rows[0].Token);
         Assert.Equal(when, rows[0].TimestampUtc);
-        Assert.Equal(BugReportService.ReportKind.Suggestion, rows[0].Kind);
+        Assert.Equal(ReportKind.Suggestion, rows[0].Kind);
     }
 
     // ------------------------------------------------------------------

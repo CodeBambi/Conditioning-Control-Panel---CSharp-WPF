@@ -5,7 +5,9 @@ using ConditioningControlPanel;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services.GoonGame;
+using ConditioningControlPanel.Services.Awareness;
 using ConditioningControlPanel.Services.Moderation;
+using ConditioningControlPanel.Services.Webcam;
 
 namespace ConditioningControlPanel.LinuxSmoke
 {
@@ -48,6 +50,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             Determinism();
             Scrubbing();
             Arithmetic();
+            ConsentAndReports();
 
             Console.WriteLine();
             if (_failures == 0)
@@ -249,6 +252,64 @@ namespace ConditioningControlPanel.LinuxSmoke
             var (rootScrubbed, _) = LogScrubber.Scrub("failed at /home/root/x.json");
             Check("root is deliberately preserved",
                   rootScrubbed.Contains("root", StringComparison.Ordinal), rootScrubbed);
+        }
+
+
+        /// <summary>
+        /// The consent contract and the report ledger (wire/22). Pure logic that used to sit in the
+        /// WPF head, so this is the first time it is executed with no head at all: the deny groups
+        /// must apply BEFORE they are seeded, the cooldown migration must not read a slider that was
+        /// never moved as a preference, and a stored report entry must decode to what was written.
+        /// </summary>
+        private static void ConsentAndReports()
+        {
+            Console.WriteLine("\nConsent contract and report ledger");
+
+            var s = new Models.AppSettings();
+
+            // Seeded groups apply before EnsureSeeded runs - a fresh install is protected on the
+            // first frame, not on the second launch.
+            var bank = new AwarenessSightRequest("chrome", "Chrome", null, "Chase Online — Sign in");
+            Check("banking title is denied before the groups are seeded",
+                  !AwarenessPrivacyRules.Evaluate(bank, s, DateTime.Now).Allowed);
+
+            var priv = new AwarenessSightRequest("firefox", "Firefox", null, "Private Browsing");
+            Check("a private window is denied outright",
+                  !AwarenessPrivacyRules.Evaluate(priv, s, DateTime.Now).Allowed);
+
+            Check("EnsureSeeded writes the recommended groups once",
+                  AwarenessPrivacyRules.EnsureSeeded(s) && s.AwarenessDenyList.Count > 0);
+            Check("EnsureSeeded is idempotent", !AwarenessPrivacyRules.EnsureSeeded(s));
+
+            // The trap the migration exists to avoid: a slider left where it shipped is not a
+            // preference, so it must NOT map to Unhinged.
+            var fresh = new Models.AppSettings();
+            AwarenessIntensityMigration.EnsureMigrated(fresh);
+            Check("an untouched cooldown keeps the default intensity",
+                  fresh.AwarenessIntensity == AwarenessIntensity.Chatty && fresh.AwarenessIntensityMigrated,
+                  fresh.AwarenessIntensity.ToString());
+
+            var dragged = new Models.AppSettings { AwarenessReactionCooldownSeconds = 600 };
+            AwarenessIntensityMigration.EnsureMigrated(dragged);
+            Check("a long cooldown migrates to Subtle",
+                  dragged.AwarenessIntensity == AwarenessIntensity.Subtle, dragged.AwarenessIntensity.ToString());
+
+            // Report ledger: what Append writes, Parse must read back - newest first.
+            var stored = new List<string>();
+            RecentReports.Append(stored, "BUG-1111111111", new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), ReportKind.Bug);
+            RecentReports.Append(stored, "BUG-2222222222", new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc), ReportKind.Suggestion);
+            var rows = RecentReports.Parse(stored);
+            Check("a stored report round-trips newest first",
+                  rows.Count == 2 && rows[0].Token == "BUG-2222222222" &&
+                  rows[0].Kind == ReportKind.Suggestion && rows[1].TimestampUtc.HasValue);
+            Check("a corrupt stamp reads as no stamp, not a plausible date",
+                  RecentReports.Parse(new[] { "BUG-3333333333|5|bug" })[0].TimestampUtc == null);
+
+            // The webcam contract: a Given=true record with no version is NOT consent.
+            var cam = new Models.AppSettings { WebcamConsentGiven = true, WebcamConsentVersion = "" };
+            Check("consent with a stale version is not current", !WebcamConsent.IsCurrent(cam));
+            cam.WebcamConsentVersion = WebcamConsent.ConsentVersion;
+            Check("consent with the contract version is current", WebcamConsent.IsCurrent(cam));
         }
 
         /// <summary>Pure math must not drift with locale or floating-point defaults.</summary>

@@ -234,17 +234,4 @@ namespace ConditioningControlPanel.Services.Awareness
             string.Equals(AppCluster, AwarenessClusters.Adult, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// Cluster ids the awareness code branches on by name. A constant rather than a literal in four
-    /// files: a typo in the adult-cluster string would silently widen the cloud projection, which is
-    /// the one bug in this feature that cannot be walked back after it ships.
-    /// </summary>
-    public static class AwarenessClusters
-    {
-        /// <summary>Adult content. Cluster id only ever crosses the wire — never a service name or title.</summary>
-        public const string Adult = "site_eh";
-
-        /// <summary>The infinite-feed cluster. Source of <see cref="TrendKind.Backslide"/>.</summary>
-        public const string Doomscroll = "site_doomscroll";
-    }
 }
