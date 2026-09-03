@@ -1,0 +1,171 @@
+<!-- PORTED from ConditioningControlPanel/GoonTestWindow.xaml (a repo-root view -> Views/Windows/).
+     Structure, ordering and every resource key preserved so the two diff cleanly.
+     No {loc:Str}: this is a dev-only cockpit and the original has no loc keys at all - every
+     string is a hardcoded English literal there, and inventing keys is forbidden.
+     Deviations, all forced:
+
+       <Style TargetType="X"> (implicit, no key)  ->  <Style Selector="X"> in Window.Styles.
+                             NOT a ControlTheme: a keyless WPF Style overrides setters and keeps
+                             the default template, which is what a Selector style does here. A
+                             ControlTheme would replace the template wholesale (trap 4).
+       <Style TargetType="TextBlock">  ->  DROPPED, its three setters inlined on the one TextBlock
+                             that needed them ("Mode:"). Avalonia styles reach INSIDE control
+                             templates and WPF implicit styles do not, so a window-wide TextBlock
+                             Foreground would have repainted the ComboBox popup's own item text
+                             light-on-light.
+       ControlTemplate + ControlTemplate.Triggers on Button
+                             ->  setters plus `Button:pointerover /template/ ContentPresenter`
+                             (hover) and `Button:disabled` (the 0.4 opacity). The Fluent template
+                             already draws a rounded, bordered, TemplateBinding-fed button, so
+                             re-declaring one buys nothing.
+       {StaticResource GgX}  ->  {DynamicResource GgX} inside Window.Styles, where a Styles block
+                             does not see Window.Resources at parse time.
+       DockPanel children    ->  unchanged, but LastChildFill is explicit (Avalonia defaults it
+                             true as well; stated so the intent survives).
+
+     The two player panels are GoonTestPanel, a code-built WPF UserControl in the head that owns
+     GoonGameService/GoonMatchService. Nothing of that is in Core, so PanelHostA/B carry
+     placeholder content - see the code-behind. The TextBox/CheckBox/ListBox/ListBoxItem/Slider
+     styles below are unused until that panel lands; they are the panel's, kept verbatim. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.GoonTestWindow"
+        Title="Goon Game Test Cockpit"
+        Height="940" Width="1560"
+        MinHeight="640" MinWidth="1100"
+        WindowStartupLocation="CenterScreen"
+        Background="#FF1A1A2E">
+
+    <!-- Dev-only play-test cockpit for the Goon Game 1v1 duel (Services\GoonGame\).
+         Two independent player panels in one process: real server signaling + WebRTC,
+         or the in-process loopback transport pair. Launched with the goon-test flag.
+         Converters/styles live HERE (Window.Resources/Window.Styles) per CLAUDE.md,
+         never in a child Grid. -->
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="GgBg" Color="#FF1A1A2E" />
+        <SolidColorBrush x:Key="GgPanel" Color="#FF252542" />
+        <SolidColorBrush x:Key="GgPanelDeep" Color="#FF15152B" />
+        <SolidColorBrush x:Key="GgAccent" Color="#FFFF69B4" />
+        <SolidColorBrush x:Key="GgText" Color="#FFEDEDF5" />
+        <SolidColorBrush x:Key="GgMuted" Color="#FF9A9ABF" />
+        <SolidColorBrush x:Key="GgButton" Color="#FF35355F" />
+        <SolidColorBrush x:Key="GgButtonHot" Color="#FF4A4A82" />
+    </Window.Resources>
+
+    <Window.Styles>
+        <Style Selector="Button">
+            <Setter Property="Foreground" Value="{DynamicResource GgText}" />
+            <Setter Property="Background" Value="{DynamicResource GgButton}" />
+            <Setter Property="BorderBrush" Value="#FF50508C" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource GgButtonHot}" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource GgText}" />
+        </Style>
+        <Style Selector="Button:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+
+        <Style Selector="TextBox">
+            <Setter Property="Foreground" Value="{DynamicResource GgText}" />
+            <Setter Property="Background" Value="#FF1E1E38" />
+            <Setter Property="BorderBrush" Value="#FF50508C" />
+            <Setter Property="Padding" Value="3,2" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource GgText}" />
+            <Setter Property="Margin" Value="4,2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource GgText}" />
+            <Setter Property="Margin" Value="6,2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- The cockpit opens in Server mode, so this box starts DISABLED and the render proof
+             shows Avalonia's own disabled chrome, not the light #D8D8EC these setters ask for:
+             the Fluent ComboBox theme repaints its background from a template-child style while
+             :disabled. The setters are still the right copy of the WPF style and take effect the
+             moment Loopback mode enables the box. Not worth chasing a template part name for a
+             dev-only cockpit. -->
+        <Style Selector="ComboBox">
+            <Setter Property="Foreground" Value="#FF101024" />
+            <Setter Property="Background" Value="#FFD8D8EC" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="MinWidth" Value="90" />
+        </Style>
+
+        <Style Selector="ListBox">
+            <Setter Property="Foreground" Value="{DynamicResource GgText}" />
+            <Setter Property="Background" Value="{DynamicResource GgPanelDeep}" />
+            <Setter Property="BorderBrush" Value="#FF3A3A68" />
+            <Setter Property="FontFamily" Value="Consolas, Courier New" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource GgText}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="2,0" />
+        </Style>
+
+        <Style Selector="Slider">
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- Mode bar -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource GgPanel}" Padding="10,6" Margin="0,0,0,2">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="GOON GAME TEST COCKPIT" FontWeight="Bold" FontSize="14"
+                           Foreground="{StaticResource GgAccent}" Margin="0,0,20,0"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="Mode:" Margin="0,0,4,0"
+                           Foreground="{StaticResource GgText}" FontSize="12" VerticalAlignment="Center" />
+                <RadioButton x:Name="RadioServer" Content="Server (real /v2/goon + WebRTC)" IsChecked="True"
+                             GroupName="GgMode" />
+                <RadioButton x:Name="RadioLoopback" Content="Loopback (in-process, no server)"
+                             GroupName="GgMode" />
+                <ComboBox x:Name="CmbLoopProfile" SelectedIndex="0" IsEnabled="False" Width="150"
+                          VerticalAlignment="Center">
+                    <ComboBoxItem Content="P2P (25ms)" />
+                    <ComboBoxItem Content="Relay (900ms)" />
+                    <ComboBoxItem Content="Instant (0ms)" />
+                </ComboBox>
+                <Button x:Name="BtnCreateLoopback" Content="Create Loopback Pair" IsEnabled="False" />
+                <Button x:Name="BtnOutage" Content="Simulate 20s Outage" IsEnabled="False" />
+                <Button x:Name="BtnTearDown" Content="Tear Down Both" />
+            </StackPanel>
+        </Border>
+
+        <!-- Status strip -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource GgPanel}" Padding="10,4" Margin="0,2,0,0">
+            <TextBlock x:Name="TxtStatus" Text="idle" Foreground="{StaticResource GgMuted}"
+                       FontSize="12" TextWrapping="Wrap" />
+        </Border>
+
+        <Grid ColumnDefinitions="*,*">
+            <Border x:Name="PanelHostA" Grid.Column="0" Background="{StaticResource GgPanel}"
+                    Margin="2" Padding="6" CornerRadius="4" />
+            <Border x:Name="PanelHostB" Grid.Column="1" Background="{StaticResource GgPanel}"
+                    Margin="2" Padding="6" CornerRadius="4" />
+        </Grid>
+    </DockPanel>
+</Window>

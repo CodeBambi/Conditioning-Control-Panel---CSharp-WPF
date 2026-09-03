@@ -1,0 +1,132 @@
+<!-- PORTED from ConditioningControlPanel/Windows/SplashScreen.xaml.
+     Structure, ordering, spacing and every literal colour preserved so the two diff cleanly.
+     No {loc:Str}: the original has no loc keys at all - every string here is a hardcoded
+     English literal in the WPF XAML/code-behind, and inventing keys is forbidden.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True"
+                                     -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"         -> CanResize="False"
+       DropShadowEffect ShadowDepth=5 (WPF default Direction 315) -> OffsetX/OffsetY 3.5 each
+       ScaleTransform x:Name         -> unnamed; the Border's RenderTransform is assigned from
+                                        code-behind (Avalonia generates no field for a named
+                                        non-Control element)
+       TranslateTransform x:Name + a Forever DoubleAnimation
+                                     -> a Style.Animations sweep on Border#Shimmer. The WPF sweep
+                                        distance was Math.Max(200, ActualWidth-60); the window is
+                                        a fixed 400 wide and cannot resize, so that is 340.
+       RenderTransformOrigin Point 0,0.5 -> RelativePoint "0%,50%"
+       FontFamily="Segoe UI"         -> dropped; the head ships Inter and Segoe UI does not exist
+                                        on Linux, so naming it only forces a fallback lookup.
+       <RowDefinition> block         -> RowDefinitions="Auto,Auto,Auto,Auto,*" (same rows)
+
+     Title/status/hint text stays literal, exactly as in the original. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.SplashScreen"
+        Title="Loading..."
+        Height="215" Width="400"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True">
+
+    <!-- NOTE: on WPF this window ran on its OWN UI thread (SplashScreen.ShowOnOwnThread) so it
+         stayed responsive while App.OnStartup ground through service init. Avalonia has exactly
+         one UI thread, so that trick is gone (see the code-behind). The window stays fully
+         self-contained anyway - hardcoded colours, no resource lookups - because that costs
+         nothing and keeps it renderable before App resources exist. -->
+
+    <Window.Styles>
+        <!-- ponytail: local copy of Windows/SplashScreen.xaml.cs:StartShimmer (a code-behind
+             DoubleAnimation there), hoist when a second view needs a sweep -->
+        <Style Selector="Border#Shimmer">
+            <Style.Animations>
+                <Animation Duration="0:0:1.6" IterationCount="Infinite">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="TranslateTransform.X" Value="-90"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="TranslateTransform.X" Value="340"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="#FF121220" CornerRadius="15" BorderBrush="#FFFF69B4" BorderThickness="2">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="20" OffsetX="3.5" OffsetY="3.5" Opacity="0.6"/>
+        </Border.Effect>
+
+        <Grid Margin="30,20" RowDefinitions="Auto,Auto,Auto,Auto,*">
+
+            <!-- Title -->
+            <TextBlock Grid.Row="0"
+                       Text="Conditioning Control Panel"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       Foreground="#FFFF69B4"
+                       HorizontalAlignment="Center"/>
+
+            <!-- Loading status -->
+            <TextBlock x:Name="TxtStatus"
+                       Grid.Row="1"
+                       Text="Starting up..."
+                       FontSize="12"
+                       Foreground="#AAAAAA"
+                       HorizontalAlignment="Center"
+                       Margin="0,10,0,12"/>
+
+            <!-- Progress bar -->
+            <Grid Grid.Row="2" Height="8">
+                <Border Background="#FF1C1C35" CornerRadius="4"/>
+                <Border x:Name="ProgressFill" CornerRadius="4" RenderTransformOrigin="0%,50%">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                            <GradientStop Color="#FFFF69B4" Offset="0"/>
+                            <GradientStop Color="#DA70D6" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <!-- Shimmer sweep: a continuously-animated highlight band. On WPF it was proof the
+                     app had not hung while the main thread was busy; with one UI thread it stops
+                     when startup blocks, so it is decoration now. -->
+                <Grid ClipToBounds="True">
+                    <Border x:Name="Shimmer" Width="90" HorizontalAlignment="Left" CornerRadius="4">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                <GradientStop Color="#50FFFFFF" Offset="0.5"/>
+                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- Patience hint (escalates to reassurance text on long loads) -->
+            <TextBlock x:Name="TxtHint"
+                       Grid.Row="3"
+                       Text="Please wait, this can take a moment..."
+                       FontSize="10"
+                       Foreground="#8888A0"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="0,10,0,0"/>
+
+            <!-- Version -->
+            <TextBlock x:Name="TxtVersion"
+                       Grid.Row="4"
+                       Text="v4.3.12"
+                       FontSize="10"
+                       Foreground="#666666"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom"/>
+        </Grid>
+    </Border>
+</Window>
