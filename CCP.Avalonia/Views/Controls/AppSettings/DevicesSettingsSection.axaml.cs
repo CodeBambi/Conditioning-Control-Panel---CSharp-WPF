@@ -177,8 +177,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             if (_loading) return;
             bool v = ChkWebcamDriftCorrection.IsChecked == true;
-            // No Save: WPF leaves this to the settings sweep, so the flag is written the same way.
             CoreSettings.Current.WebcamAutoDriftCorrection = v;
+            // WPF's handler has no Save because MainWindow's settings sweep picks the flag up
+            // later; this head has no sweep, so the write would sit in memory. Same call the
+            // Performance section makes for the same reason.
+            CoreSettings.Save();
             AppendWebcamDebugLog(v
                 ? "Auto drift correction enabled — clicks near your gaze will fine-tune calibration."
                 : "Auto drift correction disabled.");
@@ -187,8 +190,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         private void ChkRestrictGazeToCalScreen_Changed(object? sender, RoutedEventArgs e)
         {
             if (_loading) return;
-            // No Save here either, matching MainWindow.LabTab.cs:1220.
             CoreSettings.Current.RestrictGazeContentToCalibratedScreen = ChkRestrictGazeToCalScreen.IsChecked == true;
+            CoreSettings.Save();   // no sweep on this head - see ChkWebcamDriftCorrection_Changed
         }
 
         /// <summary>MainWindow.LabTab.cs:1399, moved to the control that owns the TextBlock.</summary>
@@ -255,8 +258,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             if (isNoPanic)
             {
+                // No window to parent the warning to: the gate cannot be shown, so the answer is
+                // no. Revert rather than return - a checked box over PanicKeyEnabled=true would
+                // tell the user the escape hatch is off when it is still armed.
                 var owner = TopLevel.GetTopLevel(this) as Window;
-                if (owner == null) return;   // no window to parent the warning to: refuse, do not silently disable
+                if (owner == null) { RevertNoPanic(); return; }
 
                 var confirmed = await WarningDialog.ShowDoubleWarningAsync(owner,
                     "Disable Panic Key",
@@ -265,16 +271,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     "• Combined with Strict Lock, this is VERY restrictive\n" +
                     "• Make sure you know what you're doing!");
 
-                if (!confirmed)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        _loading = true;
-                        ChkNoPanic.IsChecked = false;
-                        _loading = false;
-                    });
-                    return;
-                }
+                if (!confirmed) { RevertNoPanic(); return; }
 
                 CoreSettings.Current.PanicKeyEnabled = false;
                 CoreSettings.Save();
@@ -290,6 +287,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // _keyboardHook, ConditioningControlPanel/Services/Input/), a Win32 WH_KEYBOARD_LL hook
             // with no equivalent on this head - so there is no hook to leave running either.
         }
+
+        /// <summary>Posted, not assigned inline: the revert has to run after the dialog's event
+        /// stack unwinds or the toggle animation sticks in the ON position, exactly as on WPF.</summary>
+        private void RevertNoPanic() => Dispatcher.UIThread.Post(() =>
+        {
+            _loading = true;
+            ChkNoPanic.IsChecked = false;
+            _loading = false;
+        });
 
         // ponytail: BtnPanicKey / BtnPauseKey capture the next key through MainWindow's global
         // keyboard hook (MainWindow.xaml.cs UpdatePanicKeyButton / _isCapturingPanicKey); the
