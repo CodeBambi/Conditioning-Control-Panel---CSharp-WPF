@@ -11,8 +11,12 @@
 //     NaN) and shut (0); the WPF MeasureDoorPanel + NavDoorExpandMs tween returns with the FX
 //     partials.
 //   - Per-tab side effects on the way in (RefreshPresetsList, spending HasSeenProgramsTab and
-//     the first-run explainer, StopPolling on leaving Available Subjects, SelectRack for the
-//     studio rack, ShowSettingsSection for "progression"). All reach App.* or a service.
+//     the first-run explainer, StopPolling on leaving Available Subjects, MaybeShowFeatureIntro,
+//     UpdatePatreonUI, RefreshSessionFeatureLock). Those reach App.* or a service. The TWO that
+//     do not are restored in OnTabShown below: StudioTab.OnTabShown() for "studio" and
+//     StudioTab.FocusRackEntry("haptics") for the haptics alias, both of which are ported view
+//     state on StudioTabView. Without the second, ShowTab("haptics") landed on the rack's last
+//     selection instead of the Haptics module - and OpenStudioModule routes haptics through it.
 //   - Bark (App.Bark.NotifyTabNavigated) and EmiDesk (EmiTargets.NoteTabOpened) hooks.
 //   - The three keys that are WINDOWS, not tabs, and the one launcher door: "patreon" (opens
 //     Settings · Account via ShowAppInfoPopup), "fyp" (OpenFypFeed), "justdrop" (the shop host)
@@ -24,6 +28,13 @@
 //
 // Every panel and door is resolved by x:Name through FindControl, never by generated field, so
 // a panel this head does not carry is skipped rather than a compile error.
+//
+// THAT IS NOT OPTIONAL ON THIS WINDOW. MainShellWindow.axaml.cs:87 loads with
+// AvaloniaXamlLoader.Load(this), which - unlike the generated InitializeComponent - never assigns
+// the x:Name fields. So `AppSettingsTab`, `StudioTab`, `SettingsTab` and `MainTutorialOverlay`
+// COMPILE and are always null at runtime: a `?.` on one is a silent no-op, not a safe guard.
+// Named<T>() below is the only way to reach a control of this window from any of its partials.
+// (The tab views themselves do call InitializeComponent, so THEIR fields are real once found.)
 
 using System;
 using System.Collections.Generic;
@@ -33,6 +44,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
+        /// <summary>The one way to reach a control of this window - see the header. Cheap: a
+        /// namescope dictionary lookup, no tree walk.</summary>
+        internal T? Named<T>(string name) where T : Control => this.FindControl<T>(name);
+
+        /// <summary>The Settings door, and the effects rack. Resolved on every read for the same
+        /// reason: the generated fields of this window are never assigned.</summary>
+        internal Tabs.AppSettingsTabView? AppSettingsPage => Named<Tabs.AppSettingsTabView>("AppSettingsTab");
+        internal Tabs.StudioTabView? StudioRack => Named<Tabs.StudioTabView>("StudioTab");
+
         /// <summary>The tab key currently shown, lower-case. "settings" until the first switch,
         /// which is the panel the XAML leaves visible.</summary>
         internal string CurrentTab { get; private set; } = "settings";
@@ -95,6 +115,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             CurrentTab = tab;
             SetExpandedDoor(NavDoorForTab(tab));
+            SwitchTabFx(tab);
+            OnTabShown(tab);
+        }
+
+        /// <summary>
+        /// The per-tab side effects that resolve on this head. Guarded as a whole: an entry-time
+        /// repaint must never cost the navigation that asked for it.
+        /// </summary>
+        private void OnTabShown(string tab)
+        {
+            try
+            {
+                switch (tab)
+                {
+                    case "studio": StudioRack?.OnTabShown(); break;
+                    case "haptics": StudioRack?.FocusRackEntry("haptics"); break;
+                }
+            }
+            catch { /* a navigation must never throw */ }
         }
 
         private static string? NavDoorForTab(string tab)

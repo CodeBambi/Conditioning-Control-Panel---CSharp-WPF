@@ -1,20 +1,66 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.AmbientFx.cs (57 lines).
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.AmbientFx.cs (57 lines).
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// The registry is REAL here, not a stub: CCP.Avalonia/Controls/AmbientFxCanvas.cs is a full port
+// with the same Pause()/Resume() contract, so the tab-level park/resume hook the WPF window uses
+// works on this head unchanged. SwitchTabFx is called from ShowTab.
 //
-// Members dropped (4):
-//   internal const int AmbientFrameRate
-//   private readonly Dictionary<string, List<AmbientFxCanvas>> _tabFxCanvases
-//   internal void RegisterTabFx(…)
-//   private void SwitchTabFx(…)
+// What is NOT here: AmbientFrameRate. It is a storyboard frame-rate cap
+// (System.Windows.Media.Animation.Timeline.DesiredFrameRate) and this head has no storyboards -
+// AmbientFxCanvas drives its own clock and gates it on reduced motion, the Performance tier and
+// window activation itself (see its Evaluate()). A constant nothing reads would be a lie about a
+// knob that does not exist here.
+//
+// No caller yet: every RegisterTabFx call site on WPF is inside an FX partial
+// (MainWindow.EnhancementsFx / DashboardFx / ProgramsFx / SubjectsFx.cs) or a tab view
+// (Views/Tabs/PlayTabView.xaml.cs:86), all of which are still stubs on this head. The hook lands
+// first so each of those is one line when it arrives rather than a second registry.
+
+using System;
+using System.Collections.Generic;
+using ConditioningControlPanel.Avalonia.Controls;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // No member of this partial is referenced from MainShellWindow.axaml.
+        private readonly Dictionary<string, List<AmbientFxCanvas>> _tabFxCanvases =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Registers a canvas against the tab key ShowTab uses. Call once, after the canvas exists.
+        /// The canvas still self-parks on visibility/activation - this is the tab-level hook.
+        /// </summary>
+        internal void RegisterTabFx(string tab, AmbientFxCanvas? canvas)
+        {
+            if (string.IsNullOrEmpty(tab) || canvas == null) return;
+            try
+            {
+                if (!_tabFxCanvases.TryGetValue(tab, out var list))
+                    _tabFxCanvases[tab] = list = new List<AmbientFxCanvas>();
+                if (!list.Contains(canvas)) list.Add(canvas);
+            }
+            catch (Exception ex) { Log.Debug("RegisterTabFx: {E}", ex.Message); }
+        }
+
+        /// <summary>Pauses every registered canvas that does not belong to the incoming tab, and
+        /// resumes the ones that do. Must never throw - it runs inside ShowTab.</summary>
+        private void SwitchTabFx(string tab)
+        {
+            if (_tabFxCanvases.Count == 0) return;
+            try
+            {
+                foreach (var kvp in _tabFxCanvases)
+                {
+                    bool incoming = string.Equals(kvp.Key, tab, StringComparison.OrdinalIgnoreCase);
+                    foreach (var canvas in kvp.Value)
+                    {
+                        if (incoming) canvas.Resume();
+                        else canvas.Pause();
+                    }
+                }
+            }
+            catch (Exception ex) { Log.Debug("SwitchTabFx: {E}", ex.Message); }
+        }
     }
 }
