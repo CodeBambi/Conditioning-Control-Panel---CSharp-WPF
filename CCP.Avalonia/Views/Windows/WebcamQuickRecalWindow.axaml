@@ -1,0 +1,76 @@
+<!-- PORTED from ConditioningControlPanel/Windows/WebcamQuickRecalWindow.xaml.
+     Structure, ordering, spacing and every colour preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None"        -> SystemDecorations="None"
+       ResizeMode="NoResize"     -> CanResize="False"
+       Visibility="Collapsed"    -> IsVisible="False"
+       DropShadowEffect          -> Avalonia.Media.DropShadowEffect; ShadowDepth="0" is
+                                    OffsetX/OffsetY="0", the rest copies verbatim
+       KeyDown/Loaded/Closed     -> wired in the constructor (Loaded becomes Opened)
+
+     The window carries no {loc:Str}: every string in the WPF original is a literal, and
+     inventing keys here would be worse than keeping them. The Close button holds a
+     TextBlock rather than a string Content, per the access-key trap in CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WebcamQuickRecalWindow"
+        Title="Quick Recalibrate"
+        Background="#000000"
+        SystemDecorations="None"
+        WindowState="Maximized"
+        CanResize="False"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Ellipse x:Name="Dot" Width="40" Height="40"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsVisible="False">
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#FFFFB6E1" Offset="0"/>
+                    <GradientStop Color="#FFFF69B4" Offset="0.6"/>
+                    <GradientStop Color="#FFC71585" Offset="1"/>
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+            <Ellipse.Effect>
+                <DropShadowEffect Color="#FF69B4" BlurRadius="32" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+            </Ellipse.Effect>
+        </Ellipse>
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
+            <TextBlock Text="Quick Recalibrate" Foreground="White"
+                       FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TxtStatus"
+                       Text="Get comfortable, then look at the pink dot."
+                       Foreground="#FFB6E1" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            <TextBlock Text="ESC to cancel."
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Center"/>
+            <!-- Teaches the global chord at the one moment it is guaranteed to be relevant:
+                 the user has just dug this window out of a setup card. Text is set in the
+                 constructor (it quotes the user's own, rebindable, camera chord). -->
+            <TextBlock x:Name="TxtHotkeyHint" Text=""
+                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,10,0,0"
+                       MaxWidth="620" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <Border x:Name="ErrorPanel" IsVisible="False"
+                Background="#221A1A" BorderBrush="#FF69B4" BorderThickness="2"
+                CornerRadius="10" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="520">
+            <StackPanel>
+                <TextBlock Text="Quick recal unavailable" Foreground="#FF69B4" FontSize="18"
+                           FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtErrorDetail" Text="" Foreground="White" FontSize="13"
+                           Margin="0,12,0,16" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                <Button x:Name="BtnErrorClose" Padding="20,8"
+                        Background="#FF69B4" Foreground="Black" BorderThickness="0"
+                        FontWeight="Bold" Cursor="Hand"
+                        HorizontalAlignment="Center">
+                    <TextBlock Text="Close"/>
+                </Button>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
