@@ -23,9 +23,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// General owns the startup four and the startup video, Settings ▸ Devices owns the panic key,
     /// Settings ▸ Data owns offline mode. This panel shows them and links there.</para>
     ///
-    /// <para>What is still head-side is named at each handler: the four "configure in settings"
-    /// buttons and the assets-folder picker need the shell's navigation, which is stubbed in
-    /// <c>MainShellWindow</c> on this head too. Opening the assets folder works: it is
+    /// <para>The four "configure in settings" buttons (three handlers - General is on both the
+    /// startup and the video row) and the assets-folder picker now call the
+    /// shell's real entry points (<c>MainShellWindow.OpenAppSettingsSection</c>,
+    /// <c>OpenDeviceSettings</c>, <c>RequestPickAssetsFolder</c>). Opening the assets folder is
     /// <see cref="CorePaths.EffectiveAssets"/> plus the platform launcher.</para>
     /// </summary>
     public partial class SystemFeatureControl : UserControl
@@ -202,21 +203,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 : string.Join(" · ", parts);
         }
 
-        // ponytail: the four navigation buttons need three shell methods this head does not have
-        // yet, each still a commented-out stub naming itself:
-        //   MainShellWindow.OpenAppSettingsSection  - Views/Windows/MainShellWindow.Settings.cs:12
-        //   MainShellWindow.OpenDeviceSettings      - Views/Windows/MainShellWindow.LabTab.cs:47
-        //   MainShellWindow.RequestPickAssetsFolder - Views/Windows/MainShellWindow.axaml.cs:245
-        // PlayTabView's Owner?.ShowTab("appsettings") approximation is deliberately NOT used here:
-        // this control is popup-hosted, so TopLevel.GetTopLevel(this) is not the shell and the call
-        // would be a null no-op dressed up as a restore.
-        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>
+        /// The shell, found the way WPF's <c>App.MainWindowRef ?? Application.Current.MainWindow</c>
+        /// did. NOT <c>TopLevel.GetTopLevel(this)</c>: this control is popup-hosted, so the nearest
+        /// TopLevel is the popup and every navigation would be a null no-op dressed up as a restore.
+        /// </summary>
+        private Windows.MainShellWindow? Main =>
+            (global::Avalonia.Application.Current?.ApplicationLifetime
+                as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                ?.MainWindow as Windows.MainShellWindow;
 
-        private void BtnOpenGeneralSettings_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Main?.OpenDeviceSettings();
 
-        private void BtnOpenDataSettings_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnOpenGeneralSettings_Click(object? sender, RoutedEventArgs e) => Main?.OpenAppSettingsSection("general");
 
-        private void BtnPickAssets_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnOpenDataSettings_Click(object? sender, RoutedEventArgs e) => Main?.OpenAppSettingsSection("data");
+
+        /// <summary>Fire and forget: Avalonia's folder picker is async where WPF's
+        /// FolderBrowserDialog blocked. The shell owns the picker so it also owns the dialog.</summary>
+        private void BtnPickAssets_Click(object? sender, RoutedEventArgs e)
+        {
+            if (Main is { } shell) _ = shell.RequestPickAssetsFolder();
+        }
 
         private void BtnOpenAssets_Click(object? sender, RoutedEventArgs e)
         {

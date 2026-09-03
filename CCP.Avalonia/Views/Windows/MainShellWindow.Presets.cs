@@ -8,7 +8,7 @@
 // The handlers named by MainShellWindow.axaml are real (empty) methods, because a
 // missing one is a XAML compile error, not a runtime gap.
 //
-// Members dropped (88):
+// Members dropped (87):
 //   private void SetupHelpButtons(…)
 //   private void SetHelpContent(…)
 //   private void HelpVideoButton_Click(…)
@@ -39,7 +39,6 @@
 //   private MediaDropChoice ShowMediaDropChoiceDialog(…)
 //   private Features.FeaturePopupWindow? _activeFeaturePopup
 //   private void ShowFeaturePopup(…)
-//   internal void OpenStudioModule(…)
 //   internal void CardFlash_Click(…)
 //   internal void CardSubliminal_Click(…)
 //   internal void CardBouncingText_Click(…)
@@ -98,10 +97,46 @@
 //   internal void BtnSaveOverPreset_Click(…)
 //   internal void BtnDeletePreset_Click(…)
 
+// ONE member of that list is NOT blocked and is restored below: OpenStudioModule. It is
+// ShowTab("studio") + StudioTab.FocusRackEntry(key), and both halves are on this head - ShowTab is
+// real (MainShellWindow.TabNavigation.cs) and StudioTabView.FocusRackEntry is a full port. It is
+// the single editor entry every mosaic tile and the Play door's Loom card route through, so
+// leaving it stubbed meant every one of them landed on whichever module the rack had selected last.
+
+using System;
+using Serilog;
+
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
+        /// <summary>
+        /// Selects one module of the Studio rack and shows the Studio tab.
+        ///
+        /// <para><b>Haptics is the one rack key that must NOT come through the rack row.</b> It is
+        /// the only module that is also a ShowTab key, and everything it owns hangs off that key
+        /// rather than off the row - the bark (<c>NotifyTabNavigated("haptics")</c>) and the
+        /// first-visit intro card both fire from the top of ShowTab with the INCOMING key. Routing
+        /// it as a plain module would land on the right panel while silently saying nothing.
+        /// ShowTab("haptics") selects the same row itself, so the landing is identical.</para>
+        ///
+        /// <para>ponytail: WPF opens with <c>Services.EmiDesk.EmiTargets.NoteRackOpened(rackKey)</c>,
+        /// so opening Flashes scores Flashes rather than the Studio. EmiTargets is not in Core
+        /// (CCP.Core/Services/EmiDesk holds only the chrome/layout half), so the scoring is the one
+        /// thing missing here.</para>
+        /// </summary>
+        internal void OpenStudioModule(string rackKey)
+        {
+            if (string.Equals(rackKey, "haptics", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowTab("haptics");
+                return;
+            }
+            try { StudioRack?.FocusRackEntry(rackKey); }
+            catch (Exception ex) { Log.Debug("OpenStudioModule({Key}): {E}", rackKey, ex.Message); }
+            ShowTab("studio");
+        }
+
         // ponytail: needs the services in MainWindow.Presets.cs; wired when they move to Core.
         private void BtnCatalogue_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
 
