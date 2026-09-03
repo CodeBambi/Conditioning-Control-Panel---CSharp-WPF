@@ -1,0 +1,310 @@
+<!-- PORTED from ConditioningControlPanel/Windows/EmiDesk/EmiBookWindow.xaml.
+     Structure, ordering, spacing, geometry and every colour literal preserved so the two diff
+     cleanly. The original's design notes live in that file and are not copied here; only the
+     deviations are, and every one of them is forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" +
+                                                   TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"                    -> CanResize="False"
+       SnapsToDevicePixels / RenderOptions.
+         BitmapScalingMode="NearestNeighbor"    -> RenderOptions.BitmapInterpolationMode="None"
+       PanningMode="VerticalOnly"               -> dropped (Avalonia scrolls by touch already)
+       Visibility="Collapsed"                   -> IsVisible="False"
+       RenderTransformOrigin="0,0.5"            -> "0%,50%".  A BARE PAIR IS ABSOLUTE PIXELS in
+                                                   Avalonia, so "0,0.5" would hinge the unfurl on
+                                                   half a pixel and the panel would slide, not open.
+       <Style x:Key TargetType="Button">        -> <ControlTheme> with the SAME Template
+       Trigger Property="IsMouseOver"           -> ^:pointerover selector
+       Trigger Property="IsEnabled" False       -> ^:disabled selector
+       Trigger Property="Tag" Value="on"        -> an "on" style CLASS and a ^.on selector. Avalonia
+                                                   has no property trigger; Classes is the
+                                                   guaranteed equivalent and the code-behind sets it
+                                                   where the WPF original set Tag.
+       <ContentPresenter/>                      -> ContentPresenter Content="{TemplateBinding Content}"
+                                                   (CLAUDE.md trap 6 - a bare presenter draws nothing)
+       ScrollChanged="OnNudgeScrollChanged"     -> wired in the constructor, per the repo convention.
+
+     The two ScaleTransforms the unfurl drives are BUILT IN CODE rather than named here: only
+     Controls come back from FindControl, and this head does not lean on generated x:Name fields.
+
+     THE WINDOW RECIPE, in this head's terms. WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE was stamped in
+     OnSourceInitialized; ShowInTaskbar="False" covers the first and ShowActivated="False" covers
+     as much of the second as Avalonia exposes. See the code-behind for what that loses.
+
+     NO Visibility="Hidden" HERE, exactly as in the original, and for a reason that survives the
+     port: the book is built and shown in the same turn. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiBookWindow"
+        Title="EMI"
+
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        CanResize="False"
+        SizeToContent="Manual"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        Topmost="True"
+        Width="364" Height="728">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiBookWindow.xaml:TabChip,
+             hoist when a second view needs it. One tab chip. Lit chip is her pink with ink text; the
+             rest are ink with a dull label. -->
+        <ControlTheme x:Key="TabChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="#FF6B6890"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="#FF0E0E1C" BorderBrush="#FF1C1C31" BorderThickness="0,0,2,0">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.on /template/ Border#Bd">
+                <Setter Property="Background" Value="#FFFF69B4"/>
+            </Style>
+            <Style Selector="^.on">
+                <Setter Property="Foreground" Value="#FF0E0E1C"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Foreground" Value="#FF3A3856"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiBookWindow.xaml:ChromeChip,
+             hoist when a second view needs it. The pager arrows, and the close x. -->
+        <ControlTheme x:Key="ChromeChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="#FFF5F0E1"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="#FF0E0E1C">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="#FFFF69B4"/>
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="#FF0E0E1C"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Foreground" Value="#FF3A3856"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiBookWindow.xaml:RailChip,
+             hoist when a second view needs it. ONE RAIL CHIP. The lit one wears her pink down its
+             left edge and a raised ground; the rest are flat and their icon is dimmed in code. -->
+        <ControlTheme x:Key="RailChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
+                            BorderThickness="3,0,0,0">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="#FF2E2A45"/>
+            </Style>
+            <Style Selector="^.on /template/ Border#Bd">
+                <Setter Property="Background" Value="#FF2E2A45"/>
+                <Setter Property="BorderBrush" Value="#FFFF69B4"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- ponytail: local copy of ConditioningControlPanel/Windows/EmiDesk/EmiBookWindow.xaml:GoChip,
+             hoist when a second view needs it. TAKE ME THERE. Ghosted when the card has no detour,
+             or when the door is locked. -->
+        <ControlTheme x:Key="GoChip" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="#FF0E0E1C"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="#FFFF69B4" BorderBrush="#FFA8386F" BorderThickness="0,0,0,3">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Bd">
+                <Setter Property="Background" Value="#FFFF87C4"/>
+            </Style>
+            <Style Selector="^:disabled /template/ Border#Bd">
+                <Setter Property="Background" Value="#FF34314F"/>
+                <Setter Property="BorderBrush" Value="#FF242239"/>
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Foreground" Value="#FF7E7BA4"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid>
+        <!--
+            Two nested scale transforms, because the unfurl is two moves and they have different
+            origins: a flat line shoots out FROM HER EDGE (ScaleX about the near edge), then it
+            opens like a CRT coming on (ScaleY about the middle). SweepHost's origin is flipped to
+            the right edge in code when the panel sits on her left.
+        -->
+        <Border x:Name="SweepHost" RenderTransformOrigin="0%,50%">
+            <Grid x:Name="OpenHost" RenderTransformOrigin="50%,50%">
+
+                <!-- THE SHADOW IS A HARD OFFSET BLOCK, not a blur: the right shadow for an 8-bit
+                     panel, and the cheap one. -->
+                <Border Background="#B3000000" Margin="7,7,-7,-7" IsHitTestVisible="False"/>
+
+                <Border x:Name="Panel"
+                        Background="#FF252542"
+                        BorderBrush="#FFFF69B4"
+                        BorderThickness="2">
+
+                    <Grid>
+                    <DockPanel LastChildFill="True">
+
+                    <!-- the three tab chips, and the way out -->
+                    <Grid DockPanel.Dock="Top" Height="34" Background="#FF0E0E1C">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="34"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="Tab0" Grid.Column="0" Theme="{StaticResource TabChip}"/>
+                        <Button x:Name="Tab1" Grid.Column="1" Theme="{StaticResource TabChip}"/>
+                        <Button x:Name="Tab2" Grid.Column="2" Theme="{StaticResource TabChip}"/>
+                        <Button x:Name="BtnClose" Grid.Column="3" Theme="{StaticResource ChromeChip}"
+                                Content="x" ToolTip.Tip="{loc:Str emi_book_close}"/>
+                        <Border Grid.ColumnSpan="4" VerticalAlignment="Bottom" Height="2"
+                                Background="#FF0E0E1C"/>
+                    </Grid>
+
+                    <!-- the pager -->
+                    <Grid DockPanel.Dock="Bottom" Height="44" Background="#FF1E1D34">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="44"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.ColumnSpan="3" VerticalAlignment="Top" Height="2" Background="#FF0E0E1C"/>
+                        <Button x:Name="BtnPrev" Grid.Column="0" Margin="6,8,2,8"
+                                Theme="{StaticResource ChromeChip}" Content="&lt;"/>
+                        <WrapPanel x:Name="Dots" Grid.Column="1" Orientation="Horizontal"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnNext" Grid.Column="2" Margin="2,8,6,8"
+                                Theme="{StaticResource ChromeChip}" Content="&gt;"/>
+                    </Grid>
+
+                    <!-- THE RAIL: one icon per card ON THIS TAB, docked left BEFORE the card so the
+                         card keeps the whole remaining width. Never more than eight. -->
+                    <Border DockPanel.Dock="Left" Width="44" Background="#FF1E1D34"
+                            BorderBrush="#FF0E0E1C" BorderThickness="0,0,2,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Hidden"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="Rail" VerticalAlignment="Center"/>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- THE CARD. The nudge row is the STRETCHY one and everything else is Auto, so
+                         the bullets take the slack and the catch and the button sit against the foot
+                         of the panel where the chrome belongs. -->
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- the demo stage -->
+                            <RowDefinition Height="Auto"/>  <!-- title          -->
+                            <RowDefinition Height="Auto"/>  <!-- gist           -->
+                            <RowDefinition Height="*"/>     <!-- the four nudges, and the slack -->
+                            <RowDefinition Height="Auto"/>  <!-- the catch strip -->
+                            <RowDefinition Height="Auto"/>  <!-- the one button  -->
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" x:Name="StageFrame" BorderBrush="#FF3B3962" BorderThickness="2"
+                                Background="#FF0E0E1C" HorizontalAlignment="Left">
+                            <Grid>
+                                <Image x:Name="Stage" Width="288" Height="216"
+                                       RenderOptions.BitmapInterpolationMode="None"/>
+                                <Border Background="#FF3B3962" HorizontalAlignment="Right"
+                                        VerticalAlignment="Top" Padding="4,3">
+                                    <TextBlock x:Name="StageLabel" Foreground="#FF0E0E1C"
+                                               Text="{loc:Str emi_book_stage}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Grid.Row="1" x:Name="CardTitle" Margin="0,12,0,0"
+                                   Foreground="#FFF5F0E1" TextWrapping="Wrap" LineHeight="22"/>
+
+                        <TextBlock Grid.Row="2" x:Name="CardGist" Margin="0,10,0,0"
+                                   Foreground="#FFFF69B4" TextWrapping="Wrap" LineHeight="16"/>
+
+                        <!-- The bullets scroll rather than clip, with the scrollbar hidden and the
+                             cue drawn by us: a chevron that shows only while there is something
+                             below, in its own band so it never sits on the words. -->
+                        <Grid Grid.Row="3" Margin="0,12,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <ScrollViewer Grid.Row="0" x:Name="NudgeScroll"
+                                          VerticalScrollBarVisibility="Hidden"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="Nudges" VerticalAlignment="Top"/>
+                            </ScrollViewer>
+
+                            <Border Grid.Row="1" x:Name="MoreBelow" IsVisible="False"
+                                    IsHitTestVisible="False" HorizontalAlignment="Right"
+                                    Margin="0,3,0,0" Padding="6,2">
+                                <Polygon Points="0,0 10,0 5,6" Fill="#FFFF69B4"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- The honest bit, in gold, with a rule down its left edge instead of a
+                             bullet. Same fixed place on every card. -->
+                        <Border Grid.Row="4" x:Name="CatchStrip" Margin="0,10,0,0"
+                                Background="#FF2E2A45" BorderBrush="#FFF0C050"
+                                BorderThickness="3,0,0,0" Padding="8,6,8,7">
+                            <TextBlock x:Name="CardCatch" TextWrapping="Wrap" LineHeight="15"
+                                       Foreground="#FFE8C46A"/>
+                        </Border>
+
+                        <Button Grid.Row="5" x:Name="BtnGo" Height="36" Margin="0,12,0,0"
+                                Theme="{StaticResource GoChip}"/>
+                    </Grid>
+
+                    </DockPanel>
+
+                    <!-- The CRT flash on the unfurl. Never hit-testable, and INSIDE the panel
+                         border: as a sibling it would paint over the transparent air the unfurl
+                         scales through. -->
+                    <Border x:Name="Flash" Background="#FFF5F0E1" Opacity="0" IsHitTestVisible="False"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
