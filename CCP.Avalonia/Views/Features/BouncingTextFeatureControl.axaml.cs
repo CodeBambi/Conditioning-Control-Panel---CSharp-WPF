@@ -158,9 +158,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (s.BouncingTextEnabled == want) return;   // an echo of the seed must not save
             s.BouncingTextEnabled = want;
             CoreSettings.Save();
-            // ponytail: WPF then live-applies through App.BouncingText.Start()/Stop() while
-            // App.IsEngineRunning (ConditioningControlPanel/Services/Subliminal/BouncingTextService.cs),
-            // still in the WPF head - it draws Win32 layered windows.
+
+            // Live-apply: start/stop the bouncing-text service if the engine is running.
+            if (CoreSession.IsEngineRunning)
+            {
+                // ponytail: App.BouncingText.Start()/Stop() - BouncingTextService
+                // (ConditioningControlPanel/Services/Subliminal/BouncingTextService.cs), still in
+                // the WPF head - it draws Win32 layered windows.
+            }
         }
 
         private void SliderSpeed_Changed(object? sender, RangeBaseValueChangedEventArgs e)

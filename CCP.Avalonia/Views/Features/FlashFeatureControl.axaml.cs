@@ -50,10 +50,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             LoadFromSettings();
 
             // ponytail: WPF also repaints the hero and side art plates here (ApplyFeatureArt +
-            // App.Mods.ModChanged). Needs Services.ModResourceResolver.ResolveImageDecoded
-            // (ConditioningControlPanel/Services/, still in the WPF head) AND a named ImageBrush
-            // in the .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port
-            // draws a static wash instead, so there is nothing here to repaint.
+            // App.Mods.ModChanged). The mod-override half of ResolveImageDecoded is portable now
+            // (CoreModArt.OverridePath), but the plate still needs a named ImageBrush in the
+            // .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port draws a
+            // static wash instead, so there is nothing here to repaint.
         }
 
         // ---- settings instance tracking (WPF: SettingsHook + ISettingsRebindable) --------------
@@ -198,9 +198,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (_isLoading) return;
             CoreSettings.Current.FlashEnabled = ChkEnable.IsChecked ?? false;
             CoreSettings.Save();
-            // ponytail: WPF also live-applies here - App.Flash.Start()/Stop() when
-            // App.IsEngineRunning. Needs FlashService (ConditioningControlPanel/Services/) and the
-            // engine-running flag off App, both still in the WPF head.
+
+            // Live-apply: start/stop the flash service if the engine is running. The GATE is real
+            // now (CoreSession); what it gates is not.
+            if (CoreSession.IsEngineRunning)
+            {
+                // ponytail: App.Flash.Start()/Stop() - FlashService
+                // (ConditioningControlPanel/Services/Flash/FlashService.cs), still in the WPF head:
+                // it spawns Win32 layered flash windows.
+            }
         }
 
         private void SliderFrequency_Changed(object? sender, RangeBaseValueChangedEventArgs e)

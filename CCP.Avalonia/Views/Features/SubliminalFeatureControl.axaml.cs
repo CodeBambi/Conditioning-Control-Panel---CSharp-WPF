@@ -187,9 +187,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var on = ChkEnable.IsChecked ?? false;
             if (s.SubliminalEnabled == on) return;
             s.SubliminalEnabled = on;
-            // ponytail: SubliminalService.SetEnabled also does the live Start()/Stop() gated on
-            // App.IsEngineRunning - ConditioningControlPanel/Services/Subliminal/SubliminalService.cs,
-            // still in the WPF head. Route this whole handler back through it when it moves.
+
+            // SetEnabled's gate, in its original position: between the write and the save.
+            if (CoreSession.IsEngineRunning)
+            {
+                // ponytail: the idempotent Start()/Stop() SetEnabled does here - SubliminalService
+                // (ConditioningControlPanel/Services/Subliminal/SubliminalService.cs), still in the
+                // WPF head. Route this whole handler back through it when it moves.
+            }
+
             CoreSettings.Save();
             Log.Information("Subliminals toggled: {Enabled}", on);
         }
