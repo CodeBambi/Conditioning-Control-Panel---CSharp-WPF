@@ -88,8 +88,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private readonly Bitmap?[] _poses = new Bitmap?[4];
         /// <summary>Drawn in place of a pose that would not load, so the stepper still reads.</summary>
         private static readonly string[] PoseGlyphs = { "🧍", "🙋", "💃", "🧎" };
-        /// <summary>The XAML gradient, kept so a null pose can put the placeholder back.</summary>
+        /// <summary>The XAML gradient and its frame, kept so a null pose puts the placeholder back.
+        /// WPF's PreviewAvatar is a bare Image, so real art must drop the frame or the pink glow
+        /// hugs a rectangle instead of the sprite's alpha.</summary>
         private readonly IBrush? _placeholderAvatarBrush;
+        private readonly Thickness _placeholderAvatarBorder;
+        private readonly CornerRadius _placeholderAvatarRadius;
         private int _poseIndex;
 
         private readonly RadioButton _rbAttached;
@@ -149,6 +153,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close();
 
             _placeholderAvatarBrush = _previewAvatar.Background;
+            _placeholderAvatarBorder = _previewAvatar.BorderThickness;
+            _placeholderAvatarRadius = _previewAvatar.CornerRadius;
             LoadPoses();
 
             LoadWorkingValues(EffectiveLayout());
@@ -310,6 +316,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _previewAvatar.Background = pose != null
                 ? new ImageBrush(pose) { Stretch = Stretch.Uniform }
                 : _placeholderAvatarBrush;
+            // Real art drops the placeholder's frame: WPF paints a bare <Image>, so the pink glow
+            // below must hug the sprite's alpha rather than a rounded rectangle around it.
+            _previewAvatar.BorderThickness = pose != null ? default : _placeholderAvatarBorder;
+            _previewAvatar.CornerRadius = pose != null ? default : _placeholderAvatarRadius;
 
             // Avatar box + glow (portrait mode shrinks the box and drops the pink glow)
             double maxW = _portraitMode ? LegacyAvatarMaxWidth * PortraitSizeScale : LegacyAvatarMaxWidth;
