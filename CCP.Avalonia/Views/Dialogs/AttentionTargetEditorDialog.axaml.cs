@@ -10,10 +10,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// Dialog for customizing attention target appearance.
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/AttentionTargetEditorDialog.xaml.cs. Deviations:
-    ///  - Settings load/save, the colour picker (WinForms ColorDialog) and the test target
-    ///    (Services.FloatingText on a Win32 screen) are stubs - see the ponytail comments.
+    ///  - Settings load/save run for real against <see cref="CoreSettings"/>; the colour buttons
+    ///    open this head's <see cref="ColorPickerDialog"/> instead of WinForms' ColorDialog.
+    ///  - The test target (Services.FloatingText on a Win32 screen) is still a stub - see BtnTest.
     ///  - <c>PreviewTextShadow</c> is gone with the DropShadowEffect it coloured.
-    ///  - <c>DialogResult = x; Close()</c> becomes <c>Close(x)</c>.
+    ///  - <c>DialogResult = x; Close()</c> becomes <c>Close(x)</c>. WPF's picker was modal and
+    ///    inline; Avalonia's is awaited, so the four colour handlers are async void.
     /// </summary>
     public partial class AttentionTargetEditorDialog : Window
     {
@@ -46,24 +48,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _borderColorRow = this.FindControl<Grid>("BorderColorRow")!;
 
             // Load current settings
-            // ponytail: needs App.Settings.Current.Attention*, wired when settings move to Core.
-            // These are the "purple classic" preset values.
-            _color1 = "#9B59B6";
-            _color2 = "#8E44AD";
-            _textColor = "#FFFFFF";
-            _borderColor = "#FFFFFF";
-            _showBorder = false;
-            _floatingText = false;
-            _font = "Segoe UI";
+            var settings = CoreSettings.Current;
+            _color1 = settings.AttentionColor1;
+            _color2 = settings.AttentionColor2;
+            _textColor = settings.AttentionTextColor;
+            _borderColor = settings.AttentionBorderColor;
+            _showBorder = settings.AttentionShowBorder;
+            _floatingText = settings.AttentionFloatingText;
+            _font = settings.AttentionFont;
 
             this.FindControl<Button>("PresetPurple")!.Click += (_, _) => PresetPurple_Click();
             this.FindControl<Button>("PresetPink")!.Click += (_, _) => PresetPink_Click();
             this.FindControl<Button>("PresetGreen")!.Click += (_, _) => PresetGreen_Click();
             this.FindControl<Button>("PresetBlue")!.Click += (_, _) => PresetBlue_Click();
-            this.FindControl<Button>("BtnColor1")!.Click += (_, _) => PickInto(ref _color1);
-            this.FindControl<Button>("BtnColor2")!.Click += (_, _) => PickInto(ref _color2);
-            this.FindControl<Button>("BtnTextColor")!.Click += (_, _) => PickInto(ref _textColor);
-            this.FindControl<Button>("BtnBorderColor")!.Click += (_, _) => PickInto(ref _borderColor);
+            this.FindControl<Button>("BtnColor1")!.Click += (_, _) => Pick(_color1, v => _color1 = v);
+            this.FindControl<Button>("BtnColor2")!.Click += (_, _) => Pick(_color2, v => _color2 = v);
+            this.FindControl<Button>("BtnTextColor")!.Click += (_, _) => Pick(_textColor, v => _textColor = v);
+            this.FindControl<Button>("BtnBorderColor")!.Click += (_, _) => Pick(_borderColor, v => _borderColor = v);
             this.FindControl<Button>("BtnTest")!.Click += (_, _) => BtnTest_Click();
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close(false);
             this.FindControl<Button>("BtnSave")!.Click += (_, _) => BtnSave_Click();
@@ -164,17 +165,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             catch { }
         }
 
-        private void PickInto(ref string field)
+        /// <summary>
+        /// WPF's <c>PickColor</c>: seed the picker with the colour we already hold, and on OK take
+        /// the six-digit hex the settings model stores. A ref parameter cannot cross an await, so
+        /// the field is handed in as a setter instead. Cancel leaves everything alone, exactly as
+        /// <c>DialogResult.Cancel</c> did.
+        /// </summary>
+        private async void Pick(string current, Action<string> assign)
         {
-            // ponytail: needs a colour picker; WPF used WinForms ColorDialog. Avalonia's ColorPicker
-            // is a separate package and no dependency may be added here. Wired when one is chosen.
-            string? color = null;
-            if (color != null)
-            {
-                field = color;
-                UpdateColorButtons();
-                UpdatePreview();
-            }
+            Color initial;
+            try { initial = Color.Parse(current); }
+            catch { initial = Colors.Magenta; }   // WPF swallowed an unparseable hex the same way
+
+            var chosen = await ColorPickerDialog.PickAsync(this, initial);
+            if (chosen is not { } c) return;
+
+            assign($"#{c.R:X2}{c.G:X2}{c.B:X2}");   // never Color.ToString(): Avalonia writes #AARRGGBB
+            UpdateColorButtons();
+            UpdatePreview();
         }
 
         private void ChkFloatingText_Changed()
@@ -204,8 +212,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void PresetPurple_Click()
         {
-            // ponytail: App.Mods?.GetSecondaryColorHex() fallback kept; wired when Mods moves to Core.
-            _color1 = "#9B59B6";
+            _color1 = CoreMods.SecondaryColorHex;
             _color2 = "#8E44AD";
             _textColor = "#FFFFFF";
             _showBorder = false;
@@ -262,14 +269,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private void BtnTest_Click()
         {
-            // ponytail: needs Services.FloatingText (a Win32 layered window, bucket E) and
-            // App.Settings; wired when the overlay has a per-platform implementation.
+            // ponytail: needs ConditioningControlPanel/Services/Video/VideoService.cs:8130
+            // (internal class FloatingText : IAttentionTarget - a Win32 layered
+            // click-through window, bucket E) and System.Windows.Forms.Screen.PrimaryScreen. The
+            // settings half is ready - WPF applies these seven fields, spawns the target on the
+            // primary screen and restores the old values in a finally - so this is one window
+            // reimplementation away, not a settings problem.
         }
 
         private void BtnSave_Click()
         {
-            // ponytail: needs App.Settings.Current.Attention* to persist; wired when settings move
-            // to Core. The chosen values live in the fields above until then.
+            // Save to settings. No CoreSettings.Save() here on purpose: WPF's BtnSave_Click writes
+            // the fields and closes, and neither caller (MainWindow.BtnAttentionStyle_Click,
+            // VideoFeatureControl.BtnAttentionStyle_Click) saves either - the values ride out with
+            // the next write of the settings file, and adding a flush would not be the same app.
+            var settings = CoreSettings.Current;
+            settings.AttentionColor1 = _color1;
+            settings.AttentionColor2 = _color2;
+            settings.AttentionTextColor = _textColor;
+            settings.AttentionBorderColor = _borderColor;
+            settings.AttentionShowBorder = _showBorder;
+            settings.AttentionFloatingText = _floatingText;
+            settings.AttentionFont = _font;
+
             Close(true);
         }
     }
