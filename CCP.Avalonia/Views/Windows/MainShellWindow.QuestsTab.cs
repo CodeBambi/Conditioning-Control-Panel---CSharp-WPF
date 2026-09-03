@@ -37,8 +37,12 @@
 //                             not restored because all it does is call RefreshQuestUI, so on this
 //                             head it would be a subscription that repaints nothing.
 //
-// Trap for whoever wires this: Views/Tabs/QuestsTabView loads with AvaloniaXamlLoader.Load, so ITS
-// x:Name fields are null - reach every control with tab.FindControl<T>(name).
+// One correction for whoever wires this: an earlier revision of this header warned that
+// Views/Tabs/QuestsTabView loads with AvaloniaXamlLoader.Load and so has null x:Name fields. That
+// was fixed at the source - QuestsTabView's constructor calls InitializeComponent() and already
+// uses DailyCard0..2, BtnRerollWeekly and StreakCalendarCanvas directly, so its fields can be used
+// as written. The hazard is still real for THIS window, whose partials must reach controls through
+// Named<T>(name).
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {

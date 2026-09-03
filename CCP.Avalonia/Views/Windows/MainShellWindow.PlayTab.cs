@@ -36,9 +36,11 @@
 //   GoonPerkLockedOpacity   - the 0.42 dim for an unbought Goon perk. A constant with no reader
 //                             until RefreshPlayCards has its two entitlement answers.
 //
-// One more trap for whoever wires this: Views/Tabs/PlayTabView loads with AvaloniaXamlLoader.Load,
-// so ITS x:Name fields (PlayLockDtrh, SlotArcademy, TxtPlayGoonPerkSend, …) are null too - the same
-// hazard this window has. Every one of them must be reached with tab.FindControl<T>(name).
+// One correction for whoever wires this: an earlier revision of this header warned that
+// Views/Tabs/PlayTabView loads with AvaloniaXamlLoader.Load and so has null x:Name fields. That was
+// fixed at the source - PlayTabView's constructor calls InitializeComponent(), so PlayLockDtrh,
+// SlotArcademy, TxtPlayGoonPerkSend and the rest are populated and can be used directly. The hazard
+// is still real for THIS window, whose partials must reach controls through Named<T>(name).
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
