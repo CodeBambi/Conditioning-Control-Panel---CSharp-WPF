@@ -246,9 +246,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void OnProfileBubbleWindowPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            // A click INSIDE the menu must not dismiss it before the row's Click runs. On a
-            // separate-window popup this handler never sees popup content at all; with overlay
-            // popups it does, which is exactly what the descendant test is for.
+            // A click INSIDE the menu must not dismiss it before the row's Click runs. Unlike
+            // WPF's HWND popup - whose content never reached the owner window at all, which is why
+            // the WPF twin needs no such test - Avalonia routes a PopupRoot's input through the
+            // Popup to its logical parent, in overlay and separate-window mode alike. So this
+            // handler DOES see row presses, and the descendant test is what keeps them.
             if (ProfileBubblePopupHost?.Child is Visual child && e.Source is Visual src &&
                 (ReferenceEquals(src, child) || child.IsVisualAncestorOf(src)))
                 return;
