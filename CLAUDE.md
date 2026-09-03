@@ -117,6 +117,23 @@ Three things that will bite, all found by rendering rather than by reading:
    `Template`, or `BasedOn="{StaticResource {x:Type Button}}"`. `Border` and `TextBlock` are not
    templated, so property-only is safe there.
 
+5. **Avalonia never re-polls `ICommand.CanExecute`.** WPF's `CommandManager.RequerySuggested`
+   re-queried every command on each input event, so a `CanExecute` that reads mutable state just
+   worked. Avalonia only re-evaluates when the command raises `CanExecuteChanged`. A ported command
+   with dynamic enablement must raise it itself when that state changes, or the button stays in
+   its first state forever. Found porting `ChatThresholdView`.
+
+6. **A bare `<ContentPresenter/>` in an inline template draws nothing.** WPF's presenter finds its
+   content implicitly; Avalonia's needs `Content="{TemplateBinding Content}"` (and usually
+   `ContentTemplate="{TemplateBinding ContentTemplate}"`). Compiles clean, renders an empty
+   button. Found porting `SeasonRecapCard`; every `ControlTheme` in `Theme/Styles.xaml` carries
+   the binding for this reason.
+
+Two more that bite on setting text from code, both because Avalonia keeps a binding alive under a
+local value where WPF would have cleared it: assigning `.Text` to a control that carries
+`{loc:Str}` is undone on the next language change, so choose the key in code and bind it instead;
+and a `$parent[Window]` binding inside a dialog resolves to whatever Window actually hosts it.
+
 Static strings use `{loc:Str key}` with `xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"`
 - the Avalonia twin of the WPF extension, backed by the same `LocalizationManager` in Core.
 Formatted strings still come from `Loc.GetF` in code-behind, keys and argument order read from the
