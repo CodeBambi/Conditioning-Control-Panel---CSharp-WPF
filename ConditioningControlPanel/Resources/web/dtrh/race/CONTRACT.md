@@ -69,9 +69,14 @@ export function rollRoomOrder(seed) -> id[]     // teagarden first, then shuffle
 export function createRoomDresser({ scene, layout, rooms }) -> { update(d), applyRoom(fx, roomId, fadeSec), dispose }
 ```
 Room spec: `{ id, name, tagline, biome, colors:{ road, edge, prop, fog, banner }, propKind,
-bubbleBias:{ [bubbleKindId]: weightMult }, ambient:{ kind, colors } }`. `biome` is a key of
-`game/biomes.js BIOMES_BY_ROOM`; `applyRoom` calls `fx.applyRegionGrade(style, fadeSec)`. Rooms:
-`teagarden, toybox, casino, undertow, mirrors, chapel, greyward, coronation`.
+bubbleBias:{ [bubbleKindId]: weightMult }, ambient:{ kind, colors } }`. `biome` is a biome ID from
+`game/biomes.js` (`BIOMES_BY_ROOM` is keyed by chamber index 1..4, so the id is resolved with
+`biomeById`); `applyRoom` calls `fx.applyRegionGrade(biomeById(biome).style, fadeSec)`. The Tea
+Garden borrows `mirrorlake` (no teagarden biome exists); the other seven map to their namesakes.
+Rooms: `teagarden, toybox, casino, undertow, mirrors, chapel, greyward, coronation`; each spec also
+carries `loud` (rollRoomOrder deals loud/soft alternately after the Tea Garden). `rooms` may be
+specs or ids. The dresser adds its own hemisphere + directional light (the props are Lambert; the
+tunnel shader ignores lights) and exposes `group`, `spans` (`{id, d0, d1}` per room) and `rooms`.
 
 ### `race/bubbles.js` (PR 2)
 ```js
