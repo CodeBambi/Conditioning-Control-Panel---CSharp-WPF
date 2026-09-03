@@ -29,11 +29,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <b>Width=400/Height=300 in the ctor are dropped.</b> They were dead in WPF too - the XAML
     ///    already carries <c>WindowState="Maximized"</c> and Loaded re-asserts it, so the 400x300
     ///    box was never on screen.
-    ///  - <b>Services are stubbed</b> (see the ponytail comments): App.Settings.DualMonitorEnabled,
-    ///    App.GetAllScreensCached, App.Progression.AddXP, App.Achievements.TrackBubbleCountResult,
-    ///    App.Mods.GetPhrases, App.Logger, BubbleCountService.ScaleXpByDuration and LockCardWindow.
-    ///    Everything that only touches the view - the 3-attempt loop, the too-high/too-low hints,
-    ///    the cross-window input mirroring, the inactivity watchdog - is ported verbatim.
+    ///  - <b>The monitor set and the mercy card are real.</b> <c>DualMonitorEnabled</c> is in Core
+    ///    and the screens come from <c>ScreenList.Enumerate</c> (the same helper the pink-filter
+    ///    control uses); the mercy phrase comes from <c>CoreMods.GetPhrases("BubbleCountMercy")</c>
+    ///    and drives <c>LockCardWindow.ShowOnAllMonitors</c> plus the 500 ms
+    ///    <c>IsAnyOpen()</c> poll, exactly as WPF. Those two LockCardWindow statics are no-ops on
+    ///    this head - that note lives in LockCardWindow, not here.
+    ///  - <b>Still stubbed</b>: the XP and achievement writes (see the ponytail comment in
+    ///    CheckAnswer). Everything that only touches the view - the 3-attempt loop, the
+    ///    too-high/too-low hints, the cross-window input mirroring, the inactivity watchdog - is
+    ///    ported verbatim.
     ///  - <c>PreviewTextInput</c> -> a tunnelling <c>TextInputEvent</c> handler; <c>Visibility</c>
     ///    -> <c>IsVisible</c>; <c>SourceInitialized</c>/<c>Loaded</c> -> <c>Opened</c>/<c>Loaded</c>.
     ///  - The feedback and attempt strings stay the hardcoded English of the WPF original: there is
@@ -145,9 +150,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// Show result window on all monitors.
         ///
-        /// ponytail: needs App.Settings.Current.DualMonitorEnabled and App.GetAllScreensCached() to
-        /// pick the screen set, wired when those move to Core. Until then this shows one window on
-        /// the primary screen, which is the single-monitor path the setting defaults to.
+        /// <para>Avalonia has no screen list without a TopLevel, so the primary window is built
+        /// first and its <c>Screens</c> is what the set is drawn from - the reverse of WPF's
+        /// secondaries-first order, which nothing depends on. An empty enumeration (headless, or a
+        /// window with no platform impl yet) is the single-screen path rather than WPF's
+        /// <c>onComplete(false)</c>: on this head empty means "no topology reported", not "no
+        /// display".</para>
         /// </summary>
         public static void ShowOnAllMonitors(int correctAnswer, bool strictMode, Action<bool> onComplete)
         {
@@ -155,6 +163,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _sharedInput = "";
 
             var primaryWindow = new BubbleCountResultWindow(correctAnswer, strictMode, onComplete, null, true);
+
+            if (CoreSettings.Current.DualMonitorEnabled)
+            {
+                var all = Features.ScreenList.Enumerate(primaryWindow);
+                var primary = all.FirstOrDefault(s => s.IsPrimary) ?? all.FirstOrDefault();
+                foreach (var screen in all.Where(s => s != primary))
+                {
+                    var window = new BubbleCountResultWindow(correctAnswer, strictMode, onComplete, screen, false);
+                    window.Show();
+                }
+            }
+
             primaryWindow.Show();
             primaryWindow.Activate();   // WPF SetForegroundWindow equivalent
         }
@@ -216,8 +236,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (answer == _correctAnswer)
             {
                 // Correct! XP scaled by video duration.
-                // ponytail: needs BubbleCountService.ScaleXpByDuration(250), App.Progression.AddXP
-                // and App.Achievements.TrackBubbleCountResult(true); wired when they move to Core.
+                // ponytail: needs BubbleCountService.ScaleXpByDuration(250)
+                // (ConditioningControlPanel/Services/BubbleCountService.cs), then
+                // ProgressionService.AddXP(xp, XPSource.BubbleCount) - the enum lives in
+                // ConditioningControlPanel/Services/Companion/CompanionService.cs - and
+                // AchievementService.TrackBubbleCountResult(true). None of the three has a Core
+                // seam; CCP.Core/Services has no Progression or Achievements at all.
                 var xp = 250;
                 ShowFeedbackOnAll($"🎉 CORRECT! +{xp} XP 🎉", Color.FromRgb(50, 205, 50));
                 DisableInputOnAll();
@@ -238,8 +262,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _attemptsRemaining--;
                 UpdateAttemptsOnAll();
 
-                // ponytail: needs App.Achievements.TrackBubbleCountResult(false) - a wrong answer
-                // breaks the streak; wired when the service moves to Core.
+                // ponytail: needs AchievementService.TrackBubbleCountResult(false) - a wrong answer
+                // breaks the streak. Same missing service as above.
 
                 if (_attemptsRemaining <= 0)
                 {
@@ -328,12 +352,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 window.Hide();
             }
 
-            // ponytail: needs App.Mods.GetPhrases("BubbleCountMercy") and LockCardWindow
-            // (not ported yet). The WPF original picks a mod-aware mercy phrase - never one that
-            // contains the answer - and makes the user type it twice on a lock card, then polls
-            // LockCardWindow.IsAnyOpen() before completing. Without the card there is nothing to
-            // wait for, so this completes straight away, as the poll would have.
-            CompleteAll(false);
+            // Mod-aware mercy phrases (no answer included!)
+            var mercyPhrases = CoreMods.GetPhrases("BubbleCountMercy") ?? new[] { "GOOD GIRLS PAY ATTENTION" };
+
+            var phrase = mercyPhrases[Random.Shared.Next(mercyPhrases.Length)];
+
+            // Show mercy lock card (no answer in phrase!)
+            LockCardWindow.ShowOnAllMonitors(
+                phrase,
+                2, // Type twice
+                _strictMode);
+
+            // After lock card closes, complete
+            // Note: LockCardWindow handles its own close, we just complete after a delay
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                // Panic/engine stop force-closed everything while we were polling: bail without
+                // firing the completion callback — in strict mode OnGameComplete(false) retries
+                // the game, resurrecting a fullscreen bubble count seconds after "stop everything".
+                // (Normal mercy flow keeps the hidden result windows in _allWindows until
+                // CompleteAll, so an empty list can only mean ForceCloseAll ran.)
+                if (_allWindows.Count == 0) return;
+                // Check if lock card is still open
+                if (LockCardWindow.IsAnyOpen())
+                {
+                    timer.Start(); // Keep checking
+                }
+                else
+                {
+                    CompleteAll(false);
+                }
+            };
+            timer.Start();
         }
 
         /// <summary>
