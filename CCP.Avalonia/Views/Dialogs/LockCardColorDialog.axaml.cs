@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
@@ -9,10 +10,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/LockCardColorDialog.xaml.cs. Deviations:
     ///  - DialogResult becomes Close(bool).
-    ///  - App.Settings and App.Mods (both WPF-head services) are stubbed: the dialog opens on the
-    ///    WPF defaults with the stock #FF69B4 accent, and Save writes nowhere.
-    ///  - System.Windows.Forms.ColorDialog has no Avalonia twin in the referenced packages, so
-    ///    ShowColorPicker is a stub that returns null (no change).
+    ///  - App.Settings / App.Mods become CoreSettings / CoreMods. CoreMods.AccentColorHex never
+    ///    answers null, so WPF's <c>?? "#FF69B4"</c> survives only as the parse fallback.
+    ///  - System.Windows.Forms.ColorDialog becomes <see cref="ColorPickerDialog"/>, which is async
+    ///    and needs an owner, so the five swatch handlers await where WPF blocked inline.
+    ///
+    /// Save mutates <c>CoreSettings.Current</c> WITHOUT calling Save(), exactly as the WPF original
+    /// does: it is the live instance, and the shutdown SaveImmediate flushes it.
     /// </summary>
     public partial class LockCardColorDialog : Window
     {
@@ -41,25 +45,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             LoadCurrentSettings();
             UpdatePreview();
 
-            _btnBgColor.Click += (_, _) => Pick(ref _bgColor);
-            _btnTextColor.Click += (_, _) => Pick(ref _textColor);
-            _btnInputBgColor.Click += (_, _) => Pick(ref _inputBgColor);
-            _btnInputTextColor.Click += (_, _) => Pick(ref _inputTextColor);
-            _btnAccentColor.Click += (_, _) => Pick(ref _accentColor);
+            _btnBgColor.Click += (_, _) => Pick(_bgColor, c => _bgColor = c);
+            _btnTextColor.Click += (_, _) => Pick(_textColor, c => _textColor = c);
+            _btnInputBgColor.Click += (_, _) => Pick(_inputBgColor, c => _inputBgColor = c);
+            _btnInputTextColor.Click += (_, _) => Pick(_inputTextColor, c => _inputTextColor = c);
+            _btnAccentColor.Click += (_, _) => Pick(_accentColor, c => _accentColor = c);
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close(false);
             this.FindControl<Button>("BtnSave")!.Click += (_, _) => BtnSave_Click();
         }
 
         private void LoadCurrentSettings()
         {
-            // ponytail: needs SettingsManager (App.Settings.Current.LockCard*) and Mods.GetAccentColorHex,
-            // wired when they move to Core. Values below are the WPF fallbacks for an unset setting.
-            var accent = Color.Parse("#FF69B4");
-            _bgColor = ParseColor("", Color.FromRgb(26, 26, 46));
-            _textColor = ParseColor("", accent);
-            _inputBgColor = ParseColor("", Color.FromRgb(37, 37, 66));
-            _inputTextColor = ParseColor("", Colors.White);
-            _accentColor = ParseColor("", accent);
+            var settings = CoreSettings.Current;
+
+            var accent = ParseColor(CoreMods.AccentColorHex, Color.FromRgb(255, 105, 180)); // #FF69B4
+            _bgColor = ParseColor(settings.LockCardBackgroundColor, Color.FromRgb(26, 26, 46));
+            _textColor = ParseColor(settings.LockCardTextColor, accent);
+            _inputBgColor = ParseColor(settings.LockCardInputBackgroundColor, Color.FromRgb(37, 37, 66));
+            _inputTextColor = ParseColor(settings.LockCardInputTextColor, Colors.White);
+            _accentColor = ParseColor(settings.LockCardAccentColor, accent);
 
             UpdateColorButtons();
         }
@@ -92,27 +96,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Border>("PreviewProgressBar")!.Background = new SolidColorBrush(_accentColor);
         }
 
-        private void Pick(ref Color target)
+        /// <summary>The five swatch handlers, WPF's body with the blocking ColorDialog swapped for
+        /// the awaited head picker. A cancelled pick answers null and changes nothing.</summary>
+        private async void Pick(Color current, Action<Color> assign)
         {
-            var color = ShowColorPicker(target);
+            var color = await ColorPickerDialog.PickAsync(this, current);
             if (color.HasValue)
             {
-                target = color.Value;
+                assign(color.Value);
                 UpdateColorButtons();
                 UpdatePreview();
             }
         }
 
-        private Color? ShowColorPicker(Color currentColor)
-        {
-            // ponytail: needs a colour picker (WPF used System.Windows.Forms.ColorDialog); Avalonia's
-            // ColorPicker lives in a package this head does not reference yet. Returns "no change".
-            return null;
-        }
-
         private void BtnSave_Click()
         {
-            // ponytail: needs SettingsManager to persist the five LockCard* colours, wired when it moves to Core
+            var settings = CoreSettings.Current;
+
+            settings.LockCardBackgroundColor = ColorToHex(_bgColor);
+            settings.LockCardTextColor = ColorToHex(_textColor);
+            settings.LockCardInputBackgroundColor = ColorToHex(_inputBgColor);
+            settings.LockCardInputTextColor = ColorToHex(_inputTextColor);
+            settings.LockCardAccentColor = ColorToHex(_accentColor);
+
             Serilog.Log.Information("Lock card colors updated");
             Close(true);
         }
@@ -123,5 +129,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (!hex.StartsWith("#")) hex = "#" + hex;
             return Color.TryParse(hex, out var color) ? color : fallback;
         }
+
+        private static string ColorToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     }
 }

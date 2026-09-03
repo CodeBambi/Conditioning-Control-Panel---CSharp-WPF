@@ -9,7 +9,9 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.UI;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
@@ -27,12 +29,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// </summary>
     public partial class PinkFilterFeatureControl : UserControl
     {
-        // ponytail: local copy of App.MonitorTargetFollowGlobal / App.MonitorTargetAll
-        // (ConditioningControlPanel/App.ScreenResolver.cs), still in the WPF head. They are the
-        // sentinels persisted in AppSettings.PinkFilterTargetMonitor, so both heads must agree.
-        private const int MonitorTargetFollowGlobal = -1;
-        private const int MonitorTargetAll = -2;
-
         private bool _isLoading = true;
         private bool _monitorPopulating;
         private AppSettings? _hooked;
@@ -45,12 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             SliderOpacity.ValueChanged += SliderOpacity_Changed;
             CmbMonitor.DropDownOpened += (_, _) => PopulateMonitors();
             CmbMonitor.SelectionChanged += CmbMonitor_Changed;
-            BtnChooseColor.Click += (_, _) =>
-            {
-                // ponytail: needs a colour picker. WPF opens System.Windows.Forms.ColorDialog;
-                // Avalonia's equivalent is the Avalonia.Controls.ColorPicker package, which is
-                // NOT referenced by CCP.Avalonia.csproj (a csproj edit is the coordinator's call).
-            };
+            BtnChooseColor.Click += BtnChooseColor_Click;
             BtnResetColor.Click += BtnResetColor_Click;
 
             LoadFromSettings();
@@ -151,8 +142,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             try
             {
                 CmbMonitor.Items.Clear();
-                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_default"), Tag = MonitorTargetFollowGlobal });
-                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_all"), Tag = MonitorTargetAll });
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_default"), Tag = MonitorTarget.FollowGlobal });
+                CmbMonitor.Items.Add(new ComboBoxItem { Content = Loc.Get("monitor_target_all"), Tag = MonitorTarget.All });
 
                 var screens = ScreenList.Enumerate(this);
                 string monitorLabel = Loc.Get("monitor_label");
@@ -187,6 +178,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             s.PinkFilterTargetMonitor = target;
             CoreSettings.Save();
             // ponytail: WPF then calls App.Overlay.RefreshOverlays() - see ChkEnable_Changed.
+        }
+
+        /// <summary>
+        /// The tint colour pick. WPF opened a blocking <c>System.Windows.Forms.ColorDialog</c>
+        /// seeded with the effective colour; this awaits <see cref="ColorPickerDialog"/> instead,
+        /// which needs a non-null owner Window. Cancel answers null and writes nothing, matching
+        /// WPF's early return on anything but DialogResult.OK. The stored form is the WPF one,
+        /// <c>#RRGGBB</c> - <c>CoreMods.TryParseHexColor</c> parses exactly that back.
+        /// </summary>
+        private async void BtnChooseColor_Click(object? sender, RoutedEventArgs e)
+        {
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            if (owner is null) return;   // detached, or a headless render: nothing to own the modal
+
+            var (er, eg, eb) = EffectiveColor();
+            var picked = await ColorPickerDialog.PickAsync(owner, Color.FromRgb(er, eg, eb));
+            if (picked is not { } c) return;
+
+            CoreSettings.Current.PinkFilterColor = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+            CoreSettings.Save();
+            UpdateSwatch();
+            // ponytail: WPF then calls App.Overlay.RefreshFilterColor() + RefreshOverlays() to push
+            // the colour into a tint already on screen - see ChkEnable_Changed.
         }
 
         private void BtnResetColor_Click(object? sender, RoutedEventArgs e)
