@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -13,6 +14,7 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -33,14 +35,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// the selection contract (<see cref="FocusRackEntry"/> / <see cref="PreselectRackEntry"/> /
     /// <see cref="OnTabShown"/>) and the detail header's OwnHeader collapse.</para>
     ///
+    /// <para><b>Wired against Core.</b> The thirteen state dots read their own
+    /// <c>CoreSettings.Current.&lt;Feature&gt;Enabled</c> flag (Haptics the nested
+    /// <c>Haptics.Enabled</c>) and repaint from a filtered <c>PropertyChanged</c> listener plus a
+    /// <c>CurrentReplaced</c> rebind, so a cloud restore cannot leave the rack reading - and
+    /// writing back to - a discarded settings instance. Row captions go through
+    /// <see cref="CoreMods.MakeModAware"/>, the accent through
+    /// <see cref="CoreMods.GetFilterColorRgb"/>, and <see cref="CoreMods.ModChanged"/> drives
+    /// <see cref="RepaintModAwareChrome"/>. The Scheduler and Ramp quick-toggles flip their
+    /// panel's own master checkbox, which is what WPF does and what keeps the write and the Save
+    /// in one place.</para>
+    ///
     /// <para><b>What is stubbed, and why.</b> Everything the WPF code-behind reaches into the app
-    /// head for: <c>App.Settings</c> (the dots and their live PropertyChanged listener, the
-    /// CurrentReplaced rebind), <c>App.Bark.NotifyFeatureOpened</c>, <c>App.Logger</c>,
-    /// <c>MainWindow.ModAwareLabel</c> and <c>MainWindow.ToggleWallFeature</c>,
-    /// <c>ModResourceResolver</c> (the rack's feature art and the door medallion),
-    /// <c>FxTheme.GlowColor</c> (the mod accent), <c>MotionFx</c> and
-    /// <c>PerimeterCometAdorner</c> (the detail crossfade, the dot ping and the active tile's
-    /// comet), and <c>HapticsTabView</c>. Each is marked <c>ponytail:</c> at its site.</para>
+    /// head for: <c>MainWindow.ToggleWallFeature</c> (the eleven wall modules' quick-toggle, which
+    /// owns the session-lock refusal and the per-feature service start/stop),
+    /// <c>BarkService.NotifyFeatureOpened</c>, <c>ModResourceResolver</c> (the rack's feature art
+    /// and the door medallion), <c>MotionFx</c> and <c>PerimeterCometAdorner</c> (the detail
+    /// crossfade, the dot ping and the active tile's comet), and <c>HapticsTabView</c> with its
+    /// <c>ChkHapticsEnabled</c> master box. Each is marked <c>ponytail:</c> at its site.</para>
     ///
     /// <para><b>Quiet surface (PLAN §2.7).</b> No ambient loop is registered for this view and
     /// none may be. On WPF the one exception is the checked tile's perimeter comet, gated twice on
@@ -159,12 +171,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private readonly List<Action<Color>> _accentTints = new();
 
         /// <summary>
-        /// The accent this page paints with.
-        /// <para>ponytail: needs <c>Services.FxTheme.GlowColor</c>, wired when it moves to Core.
-        /// #FF69B4 is FxTheme's OWN fallback for a missing theme key, so a mod-less head paints
-        /// exactly what the WPF head paints today; only a mod's accent is missing.</para>
+        /// The accent this page paints with: the active mod's colour, re-read on every
+        /// <see cref="RetintChrome"/>.
+        /// <para>Deviation from WPF, which reads <c>FxTheme.GlowColor</c>. That resolves
+        /// glowColor -&gt; filterColor -&gt; accentColor; Core carries the last two links as
+        /// <see cref="CoreMods.GetFilterColorRgb"/>, so a mod that sets a DISTINCT
+        /// <c>fxPalette.glowColor</c> paints its filter colour on this rack instead. Unseeded that
+        /// is the built-in manifest's #FF69B4 - what the WPF head paints today.</para>
         /// </summary>
-        private static Color Accent => Color.FromRgb(0xFF, 0x69, 0xB4);
+        private static Color Accent
+        {
+            get
+            {
+                var (r, g, b) = CoreMods.GetFilterColorRgb();
+                return Color.FromRgb(r, g, b);
+            }
+        }
 
         public StudioTabView()
         {
@@ -408,44 +430,72 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BuildRack()
         {
             _layout.Add("st4_studio_group_effects");
-            Add("flash", "⚡", "flash.png", "Flash Images", "section_flash_images", HostFlash, PanelFlash, "Flash");
-            Add("video", "🎬", "mandatory_videos.png", "Mandatory Video", "section_mandatory_video", HostVideo, PanelVideo, "Video");
-            Add("subliminal", "💭", "subliminal.png", "Subliminals", "section_subliminals_2", HostSubliminal, PanelSubliminal, "Subliminal");
-            Add("spiral", "🌀", "spiral_overlay.png", "Spiral Overlay", "label_spiral_overlay", HostSpiral, PanelSpiral, "Spiral");
-            Add("pinkfilter", "💗", "Pink_filter.png", "Pink Filter", "label_pink_filter", HostPinkFilter, PanelPinkFilter, "PinkFilter");
+            Add("flash", "⚡", "flash.png", "Flash Images", "section_flash_images", HostFlash, PanelFlash, "Flash",
+                () => CoreSettings.Current.FlashEnabled);
+            Add("video", "🎬", "mandatory_videos.png", "Mandatory Video", "section_mandatory_video", HostVideo, PanelVideo, "Video",
+                () => CoreSettings.Current.MandatoryVideosEnabled);
+            Add("subliminal", "💭", "subliminal.png", "Subliminals", "section_subliminals_2", HostSubliminal, PanelSubliminal, "Subliminal",
+                () => CoreSettings.Current.SubliminalEnabled);
+            Add("spiral", "🌀", "spiral_overlay.png", "Spiral Overlay", "label_spiral_overlay", HostSpiral, PanelSpiral, "Spiral",
+                () => CoreSettings.Current.SpiralEnabled);
+            Add("pinkfilter", "💗", "Pink_filter.png", "Pink Filter", "label_pink_filter", HostPinkFilter, PanelPinkFilter, "PinkFilter",
+                () => CoreSettings.Current.PinkFilterEnabled);
             // Visuals has no single master toggle - the dashboard card is deliberately neutral too.
             // A dot that cannot be wired honestly is omitted, and with it the right-click gesture.
-            Add("visuals", "👁", null, "Visuals", "section_visuals", HostVisuals, PanelVisuals, "Visuals", dot: false);
+            Add("visuals", "👁", null, "Visuals", "section_visuals", HostVisuals, PanelVisuals, "Visuals", null);
 
             _layout.Add("st4_studio_group_games");
-            Add("bubbles", "🫧", "Bubble_pop.png", "Bubble Pop", "label_bubble_pop", HostBubblePop, PanelBubblePop, "BubblePop");
-            Add("bubblecount", "🔢", "Bubble_count.png", "Bubble Count", "label_bubble_count", HostBubbleCount, PanelBubbleCount, "BubbleCount");
-            Add("lockcard", "📐", "Phrase_Lock.png", "Lock Card", "label_lock_card", HostLockCard, PanelLockCard, "LockCard");
-            Add("bouncingtext", "📺", "bouncing_text.png", "Bouncing Text", "label_bouncing_text", HostBouncingText, PanelBouncingText, "BouncingText");
+            Add("bubbles", "🫧", "Bubble_pop.png", "Bubble Pop", "label_bubble_pop", HostBubblePop, PanelBubblePop, "BubblePop",
+                () => CoreSettings.Current.BubblesEnabled);
+            Add("bubblecount", "🔢", "Bubble_count.png", "Bubble Count", "label_bubble_count", HostBubbleCount, PanelBubbleCount, "BubbleCount",
+                () => CoreSettings.Current.BubbleCountEnabled);
+            Add("lockcard", "📐", "Phrase_Lock.png", "Lock Card", "label_lock_card", HostLockCard, PanelLockCard, "LockCard",
+                () => CoreSettings.Current.LockCardEnabled);
+            Add("bouncingtext", "📺", "bouncing_text.png", "Bouncing Text", "label_bouncing_text", HostBouncingText, PanelBouncingText, "BouncingText",
+                () => CoreSettings.Current.BouncingTextEnabled);
 
             _layout.Add("st4_studio_group_immersion");
-            Add("mindwipe", "🧠", "Mind_Wipers.png", "Mind Wipe", "label_mind_wipe", HostMindWipe, PanelMindWipe, "MindWipe");
+            Add("mindwipe", "🧠", "Mind_Wipers.png", "Mind Wipe", "label_mind_wipe", HostMindWipe, PanelMindWipe, "MindWipe",
+                () => CoreSettings.Current.MindWipeEnabled);
             // "BrainDrain" is a NEW feature_eq value; all three built-in mods carry a matching
             // feat_braindrain FeatureOpened rule.
-            Add("braindrain", "💧", "brain_drain.png", "Brain Drain", "section_brain_drain", HostBrainDrain, PanelBrainDrain, "BrainDrain");
+            Add("braindrain", "💧", "brain_drain.png", "Brain Drain", "section_brain_drain", HostBrainDrain, PanelBrainDrain, "BrainDrain",
+                () => CoreSettings.Current.BrainDrainEnabled);
             // Haptics: no FeatureOpened key. ShowTab("haptics") still fires
             // NotifyTabNavigated("haptics"), which is what its 3 rules per mod match on. Panel is
             // null because the placard is not a UserControl the session-lock sweep can paint, and
             // on WPF the real page is excluded from that sweep for its own reasons anyway.
+            // The dot reads a nested settings object with no INPC of its own, so it repaints on
+            // every Studio show and every selection rather than live - exactly as on WPF.
             // Tier 1: the rack's one paid module, same bar as the premium rail's chip.
-            Add("haptics", "📳", "vibe.png", "Haptics", "tab_haptics", PanelHaptics, null, null, tier: 1);
+            Add("haptics", "📳", "vibe.png", "Haptics", "tab_haptics", PanelHaptics, null, null,
+                () => CoreSettings.Current.Haptics?.Enabled,
+                // ponytail: WPF flips PanelHaptics.ChkHapticsEnabled here, so the page's own
+                // handler AND its premium gate run with the write. HapticsTabView is not on this
+                // head, so the row keeps its honest dot and loses only the gesture; writing the
+                // nested flag from here would skip the gate, which is the unsafe direction.
+                toggle: null,
+                tier: 1);
 
             _layout.Add("st4_studio_group_timing");
             // Both fire the popup's single "SchedulerRamp" key so the existing rules keep firing.
-            Add("scheduler", "📅", null, "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp");
-            Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp");
+            // Neither is a wall tile and neither drives a service directly (the scheduler tick and
+            // the session ramp read the flags), so the honest quick-toggle is the panel's own
+            // enable box - it writes the flag and Saves in one place.
+            Add("scheduler", "📅", null, "Scheduler", "section_scheduler", HostScheduler, PanelScheduler, "SchedulerRamp",
+                () => CoreSettings.Current.SchedulerEnabled,
+                toggle: () => FlipMasterCheckBox(PanelScheduler?.Inner.FindControl<CheckBox>("ChkEnabled")));
+            Add("ramp", "📈", null, "Intensity Ramp", "section_intensity_ramp", HostRamp, PanelRamp, "SchedulerRamp",
+                () => CoreSettings.Current.IntensityRampEnabled,
+                toggle: () => FlipMasterCheckBox(PanelRamp?.Inner.FindControl<CheckBox>("ChkEnabled")));
 
             RenderRackRows();
             RefreshRackLabels();
             RefreshDots();
 
             void Add(string key, string glyph, string? art, string english, string locKey, Control? host,
-                     UserControl? panel, string? bark, bool ownHeader = true, int tier = 0, bool dot = true)
+                     UserControl? panel, string? bark, Func<bool?>? dot, bool ownHeader = true,
+                     Action? toggle = null, int tier = 0)
             {
                 var entry = new StudioRackEntry
                 {
@@ -457,11 +507,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     Host = host,
                     Panel = panel,
                     BarkFeature = bark,
-                    Dot = dot ? () => PlaceholderDotOn.Contains(key) : null,
+                    Dot = dot,
                     OwnHeader = ownHeader,
                     Tier = tier,
-                    // A module with no single on/off gets no gesture rather than a guessed one.
-                    Toggle = dot ? () => QuickToggle(key) : null,
+                    // Default: route the rack key into the dashboard's own quick-toggle. Derived
+                    // rather than hand-listed per row so adding a wall tile for a module (or a
+                    // module for a wall tile) cannot leave the rack behind.
+                    Toggle = toggle ?? (WallToggleKeys.Contains(key) ? () => QuickToggle(key) : null),
                 };
                 _entries.Add(entry);
                 _layout.Add(entry);
@@ -469,18 +521,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>
-        /// Placeholder dot states.
-        /// <para>ponytail: needs <c>App.Settings.Current</c> — on WPF each row reads its own
-        /// <c>AppSettings.&lt;Feature&gt;Enabled</c> flag (and Haptics the nested
-        /// <c>Haptics.Enabled</c>), repainting from a filtered PropertyChanged listener plus a
-        /// <c>CurrentReplaced</c> rebind for cloud restore. Wired when settings move to Core. This
-        /// mixed set exists so the render proves BOTH dot states, the lit one's accent halo and
-        /// the tooltip that goes with each.</para>
+        /// Flips a panel's own master checkbox. Going through the box rather than the settings flag
+        /// is what makes the panel's real handler - and any premium or session gate on it - run
+        /// with the write instead of behind its back. A disabled box has refused already.
         /// </summary>
-        private static readonly HashSet<string> PlaceholderDotOn = new(StringComparer.OrdinalIgnoreCase)
+        private static void FlipMasterCheckBox(CheckBox? cb)
         {
-            "flash", "subliminal", "pinkfilter", "bouncingtext", "braindrain",
-        };
+            if (cb == null || !cb.IsEnabled) return;
+            cb.IsChecked = !(cb.IsChecked ?? false);
+        }
 
         private void RenderRackRows()
         {
@@ -569,7 +618,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 e.Row.Click += RackEntry_Click;
                 // Right-click = quick-toggle, the same second gesture the dashboard tiles carry.
                 // On the ROW, not on the dot: the dot is 7px, and the gesture belongs to the whole
-                // entry. Rows with no Toggle fall through unhandled (Visuals).
+                // entry. Rows with no Toggle fall through unhandled (Visuals, and Haptics until
+                // its page lands with the master box the gesture has to go through).
                 e.Row.PointerReleased += RackEntry_RightClick;
                 // Instant, animation-free state swap. Wired to the checked change rather than
                 // driven from SelectEntry so the swap can never drift out of step with IsChecked -
@@ -1052,13 +1102,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>
-        /// ponytail: needs <c>MainWindow.ModAwareLabel(english, locKey)</c>, which lets a
-        /// <c>.ccpmod</c> rename a feature. Without it this is the localized string, which is what
-        /// ModAwareLabel itself returns when no mod overrides the name — and the English column is
-        /// kept as the fallback ModAwareLabel takes for a missing key.
+        /// WPF's <c>MainWindow.ModAwareLabel(english, locKey)</c>, inlined: a <c>.ccpmod</c> that
+        /// renames a feature renames the rack row too, and with no override the localized string
+        /// wins. <see cref="CoreMods.MakeModAware"/> returns its argument unchanged when no mod
+        /// layer is up, which is what makes the first branch fall through.
         /// </summary>
         private static string LabelFor(StudioRackEntry e)
         {
+            var modText = CoreMods.MakeModAware(e.English);
+            if (!string.IsNullOrEmpty(modText) && !string.Equals(modText, e.English, StringComparison.Ordinal))
+                return StripLeadingGlyph(modText);
+
             var text = Loc.Get(e.LocKey);
             // LocalizationManager returns the key itself when it has no string for it; showing a
             // raw snake_case key on the rack is a failed render, so fall back to the English column.
@@ -1139,15 +1193,103 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
-            // ponytail: WPF also hooks App.Settings.PropertyChanged (filtered to the thirteen
-            // *Enabled flags that move a dot), App.Settings.CurrentReplaced (a cloud restore or a
-            // factory Reset SWAPS the settings instance out from under a rack that lives for the
-            // whole session) and the haptics page's own master checkbox, whose enable lives on a
-            // nested object with no INPC of its own. All three are settings-service work; wired
-            // when App.Settings moves to Core.
             RefreshRackLabels();
             ApplyDoorIcon();
             RefreshDots();
         }
+
+        // =====================================================================================
+        //  live state — the settings listener and the mod hook
+        // =====================================================================================
+
+        /// <summary>The AppSettings properties whose changes move a rack dot. Filtered rather than
+        /// repainting on every PropertyChanged, because the session engine rewrites the ramped
+        /// dials about once a second.</summary>
+        private static readonly HashSet<string> DotProperties = new(StringComparer.Ordinal)
+        {
+            nameof(AppSettings.FlashEnabled),
+            nameof(AppSettings.MandatoryVideosEnabled),
+            nameof(AppSettings.SubliminalEnabled),
+            nameof(AppSettings.SpiralEnabled),
+            nameof(AppSettings.PinkFilterEnabled),
+            nameof(AppSettings.BubblesEnabled),
+            nameof(AppSettings.BubbleCountEnabled),
+            nameof(AppSettings.LockCardEnabled),
+            nameof(AppSettings.BouncingTextEnabled),
+            nameof(AppSettings.MindWipeEnabled),
+            nameof(AppSettings.BrainDrainEnabled),
+            nameof(AppSettings.SchedulerEnabled),
+            nameof(AppSettings.IntensityRampEnabled),
+        };
+
+        /// <summary>The instance the dot listener is currently on. Tracked rather than re-read
+        /// from <see cref="CoreSettings.Current"/>, which after a restore is already a DIFFERENT
+        /// object - detaching from that one leaves the old subscription live and the new one
+        /// absent.</summary>
+        private AppSettings? _hookedSettings;
+        private bool _modHooked;
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+
+            // A cloud restore or a factory Reset SWAPS the settings instance out from under a rack
+            // that lives for the whole session; without this the rack shows - and writes back to -
+            // the discarded one for the rest of it.
+            if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnSettingsCurrentReplaced;
+            BindDotListener();
+
+            if (!_modHooked)
+            {
+                CoreMods.ModChanged += OnModChanged;
+                _modHooked = true;
+            }
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnSettingsCurrentReplaced;
+            UnbindDotListener();
+
+            if (_modHooked) CoreMods.ModChanged -= OnModChanged;
+            _modHooked = false;
+
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private void BindDotListener()
+        {
+            UnbindDotListener();
+            _hookedSettings = CoreSettings.Current;
+            _hookedSettings.PropertyChanged += OnSettingsPropertyChanged;
+        }
+
+        private void UnbindDotListener()
+        {
+            if (_hookedSettings != null) _hookedSettings.PropertyChanged -= OnSettingsPropertyChanged;
+            _hookedSettings = null;
+        }
+
+        /// <summary>Re-point the listener at the live instance and repaint. Posted rather than run
+        /// inline: CurrentReplaced can be raised off the UI thread by the restore that swapped
+        /// it.</summary>
+        private void OnSettingsCurrentReplaced() => Dispatcher.UIThread.Post(() =>
+        {
+            try { BindDotListener(); RefreshDots(); }
+            catch { /* a rebind must never take the rack down */ }
+        });
+
+        private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == null || !DotProperties.Contains(e.PropertyName)) return;
+            // Marshalled because the writer may be the session engine's timer thread.
+            Dispatcher.UIThread.Post(RefreshDots, DispatcherPriority.Normal);
+        }
+
+        /// <summary>ModChanged can be raised off the UI thread; marshal before touching brushes.
+        /// This is the authoritative "the mod answers differently now" signal and the only one the
+        /// rack gets on this head, so the accent and the captions ride on it.</summary>
+        private void OnModChanged(object? sender, ModPackage mod) =>
+            Dispatcher.UIThread.Post(RepaintModAwareChrome);
     }
 }
