@@ -1,0 +1,126 @@
+<!-- PORTED from ConditioningControlPanel/Windows/TeaseRevealPopup.xaml.
+     Structure, x:Names, spacing and every loc key preserved. Deviations, all forced:
+
+       WindowStyle="None" / AllowsTransparency  -> SystemDecorations="None" / TransparencyLevelHint
+       ResizeMode="NoResize"                    -> CanResize="False"
+       Visibility="Collapsed"                   -> IsVisible="False"
+       DropShadowEffect ShadowDepth="0"         -> dropped; Avalonia's effect has OffsetX/Y, both 0
+       DynamicResource on the shadow Color      -> StaticResource (SeasonRecapCard precedent)
+       LinearGradient 0,0 -> 1,0                -> 0%,0% -> 100%,0%: bare numbers are ABSOLUTE
+                                                   pixels in Avalonia, so the sheen would smear
+       Button.Style + IsMouseOver/IsPressed     -> the TeaseDismiss ControlTheme below, with
+         triggers                                  ^:pointerover / ^:pressed selectors
+       PreviewKeyDown / MouseLeftButtonDown     -> KeyDown / PointerPressed, wired in the ctor
+
+     The dismiss button carries a TextBlock child rather than Content: Avalonia parses "_" in
+     Content as an access key and every loc key here is snake_case. See CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.TeaseRevealPopup"
+        Title="???"
+        Width="430" SizeToContent="Height"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!-- ponytail: local copy of Windows/TeaseRevealPopup.xaml:BtnDismiss inline Style,
+             hoist when a second view needs it -->
+        <ControlTheme x:Key="TeaseDismiss" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="#12121F"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}"
+                            CornerRadius="18" Padding="18,6">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Opacity" Value="0.85"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Opacity" Value="0.7"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <!-- The house dark/pink dialog card (same surface, radius and margin as
+         FeatureIntroPopup), re-trimmed in TIER LIVERY: the rim, the glow and the
+         glyph are all painted from Features\TierLivery in code, so a gold tease and
+         a diamond tease are the same window with one number changed. -->
+    <Border x:Name="CardBorder" Background="#F0151530" CornerRadius="14"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+            ClipToBounds="True"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="{StaticResource PinkColor}"
+                              BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <Grid>
+            <!-- SHIMMER. A single sheen bar swept across the card, and the only clock in
+                 this window. Under the content in z-order so it never washes out the copy. -->
+            <Border x:Name="ShimmerHost" CornerRadius="12"
+                    IsHitTestVisible="False" ClipToBounds="True"
+                    IsVisible="False">
+                <Rectangle x:Name="ShimmerBar" Width="150" HorizontalAlignment="Left">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                            <GradientStop Color="#00FFFFFF" Offset="0"/>
+                            <GradientStop Color="#30FFFFFF" Offset="0.5"/>
+                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                    <Rectangle.RenderTransform>
+                        <TransformGroup>
+                            <SkewTransform AngleX="-18"/>
+                            <TranslateTransform X="-200"/>
+                        </TransformGroup>
+                    </Rectangle.RenderTransform>
+                </Rectangle>
+            </Border>
+
+            <StackPanel Margin="26,24,26,20">
+                <!-- The mark. A text glyph, not emoji, exactly as in WPF - the shape is the
+                     point, and the livery brush paints it. -->
+                <TextBlock x:Name="TxtGlyph"
+                           Text="?"
+                           FontSize="54" FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Margin="0,2,0,10"/>
+
+                <TextBlock x:Name="TxtTitle"
+                           Text="{loc:Str tease_popup_title}"
+                           FontSize="19" FontWeight="Bold"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,0,0,10"/>
+
+                <TextBlock x:Name="TxtBody"
+                           Text="{loc:Str tease_popup_body}"
+                           Foreground="#CCD5D5E5" FontSize="13"
+                           LineHeight="20"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,0,0,20"/>
+
+                <Button x:Name="BtnDismiss"
+                        Theme="{StaticResource TeaseDismiss}"
+                        HorizontalAlignment="Center"
+                        MinWidth="140" Height="36"
+                        Cursor="Hand"
+                        FontSize="14" FontWeight="SemiBold"
+                        IsDefault="True">
+                    <TextBlock Text="{loc:Str tease_popup_dismiss}"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

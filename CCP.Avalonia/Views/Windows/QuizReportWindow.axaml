@@ -1,0 +1,87 @@
+<!-- PORTED from ConditioningControlPanel/Windows/QuizReportWindow.xaml.
+     Structure, x:Names, ordering and every loc key preserved. Deviations, all forced:
+
+       WindowStyle="None" / AllowsTransparency  -> SystemDecorations="None" / TransparencyLevelHint
+       RadialGradient Center="0.5,0.5"          -> "50%,50%" (and RadiusX/Y "80%" / "75%"):
+         RadiusX="0.8" GradientOrigin="0.5,0.4"    bare numbers are ABSOLUTE pixels in Avalonia,
+                                                   so both washes would render as a dot
+       DropShadowEffect ShadowDepth="0"         -> dropped; Avalonia's effect has OffsetX/Y, both 0
+       DynamicResource on a shadow Color        -> StaticResource (SeasonRecapCard precedent)
+       Button.Resources <Style TargetType=      -> CornerRadius="10" on the Button itself; the WPF
+         "Border"> CornerRadius hack               hack existed because WPF's Button has no such
+                                                   property, Avalonia's does
+       KeyDown / Click in markup                -> wired in the constructor
+
+     The close button carries a TextBlock child rather than Content: Avalonia parses "_" in
+     Content as an access key and every loc key here is snake_case. See CLAUDE.md. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.QuizReportWindow"
+        Title="{loc:Str dialog_quiz_report}"
+        Width="700" Height="750"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Black">
+
+    <Grid>
+        <!-- Background -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,40%" RadiusX="80%" RadiusY="80%">
+                    <GradientStop Color="#1A0A2E" Offset="0"/>
+                    <GradientStop Color="#0A0514" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Vignette -->
+        <Border IsHitTestVisible="False">
+            <Border.Background>
+                <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,50%" RadiusX="75%" RadiusY="75%">
+                    <GradientStop Color="Transparent" Offset="0.5"/>
+                    <GradientStop Color="#80000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <Grid Margin="30,20,30,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,16">
+                <TextBlock Text="{loc:Str label_quiz_report}" FontSize="28" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" Margin="0,0,0,4">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="25" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock x:Name="TxtSubtitle" Foreground="#808090" FontSize="13"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock x:Name="TxtScore" FontSize="32" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="15" OffsetX="0" OffsetY="0" Opacity="0.4"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+            </StackPanel>
+
+            <!-- Scrollable content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
+                <StackPanel x:Name="ContentPanel" MaxWidth="600" HorizontalAlignment="Center"/>
+            </ScrollViewer>
+
+            <!-- Close button -->
+            <Button x:Name="BtnClose" Grid.Row="2" Cursor="Hand" HorizontalAlignment="Center"
+                    Background="#20FFFFFF" Foreground="#B0B0C8" FontWeight="Bold" FontSize="14"
+                    BorderBrush="#40FFFFFF" BorderThickness="1" CornerRadius="10" Padding="28,10">
+                <TextBlock Text="{loc:Str btn_close}"/>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>
