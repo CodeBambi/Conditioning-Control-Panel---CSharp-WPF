@@ -108,6 +108,17 @@ namespace ConditioningControlPanel.Services
         private static int BucketUp(int v) => ((Math.Max(0, v) + FLASH_SHELL_SLACK + FLASH_SHELL_BUCKET - 1) / FLASH_SHELL_BUCKET) * FLASH_SHELL_BUCKET;
         private List<string> _imageList = new();  // Cached image list for random selection
         private List<(string PackId, PackFileEntry File)> _packImageList = new();  // Cached pack images for random selection
+
+        // Draw-without-replacement over each pool. Until now every flash was an independent
+        // Random.Next(pool.Count), i.e. a draw WITH replacement: 1000 draws from a 1000-gif folder
+        // surface only ~632 distinct files, a third of the folder never shows at all, and the ones
+        // that do repeat three or four times. That is the "I have 1000 gifs and keep seeing the
+        // same 50" report. The bags deal the whole pool in a random order and only reshuffle once
+        // it is spent. Both are guarded by _lockObj, like every other read of the pools.
+        private readonly ShuffleBag<string> _imageBag;
+        private readonly ShuffleBag<(string PackId, PackFileEntry File)> _packImageBag;
+        // When the pools were last re-listed, for the bag-exhaustion rescan (MaybeRescanExhaustedPools).
+        private DateTime _lastPoolScanUtc = DateTime.MinValue;
         // Size of DisabledAssetPaths when the live pools were last reconciled against it. Every
         // asset-manager toggle moves that count, so one int compare per draw is enough to notice a
         // pool that predates the user's latest selection — see PruneDeselectedFromPools.
@@ -374,6 +385,10 @@ namespace ConditioningControlPanel.Services
 
         public FlashService()
         {
+            // Before RefreshImagesPath: it clears the pools, which touches the bags.
+            _imageBag = new ShuffleBag<string>(_random);
+            _packImageBag = new ShuffleBag<(string PackId, PackFileEntry File)>(_random);
+
             RefreshImagesPath();
             // Same hazard as SubliminalService's ctor: the voice-line folder is install-dir anchored
             // and Program Files is read-only, so once flashes_audio ships as a downloadable content
@@ -2888,6 +2903,10 @@ namespace ConditioningControlPanel.Services
                 // wrote DisabledAssetPaths forgot to invalidate the pools.
                 PruneDeselectedFromPools();
 
+                // Both bags spent = the library has been shown end to end. Cheapest honest moment
+                // to notice files the user dropped in while the app was running.
+                MaybeRescanExhaustedPools();
+
                 // Third pool: remote stills. Non-blocking - it only kicks a background top-up
                 // and reads how many URLs are already warm. No-op when the user is on "local".
                 EnsureRemotePrefetch();
@@ -2934,11 +2953,10 @@ namespace ConditioningControlPanel.Services
                         usePackImage = true;
                     }
 
-                    if (usePackImage && _packImageList.Count > 0)
+                    if (usePackImage && _packImageBag.TryNext(_packImageList, out var packImage))
                     {
-                        // Randomly select a pack image (true random, not sequential)
-                        var index = _random.Next(_packImageList.Count);
-                        var packImage = _packImageList[index];
+                        // Drawn from the shuffle bag: every pack image gets its turn before any
+                        // of them comes round again.
                         // Decrypt pack image to temp file
                         var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
                         if (!string.IsNullOrEmpty(tempPath))
@@ -2951,11 +2969,11 @@ namespace ConditioningControlPanel.Services
                         // If decryption failed, try regular list
                     }
 
-                    if (_imageList.Count > 0)
+                    if (_imageBag.TryNext(_imageList, out var diskImage))
                     {
-                        // Randomly select an image (true random, not sequential)
-                        var index = _random.Next(_imageList.Count);
-                        result.Add(_imageList[index]);
+                        // Shuffle bag, not Random.Next: consecutive draws are distinct until the
+                        // whole folder has been shown once.
+                        result.Add(diskImage);
                     }
                 }
                 return result;
@@ -3010,18 +3028,20 @@ namespace ConditioningControlPanel.Services
                 if (_imageList.Count == 0 && _packImageList.Count == 0 && remoteReady == 0)
                     return new List<string>();
 
-                // Dedup on the SOURCE index (disk image / pack entry), not the resulting path: a pack
-                // image decrypts to a fresh temp path each call, so path-level dedup would neither
-                // catch pack dupes nor stop us re-decrypting the same file. Distinct sources also mean
-                // each chosen pack image decrypts exactly once. Cap at the pool size.
+                // Dedup on the SOURCE identity (disk path / pack entry key), not the resulting path:
+                // a pack image decrypts to a fresh temp path each call, so temp-path dedup would
+                // neither catch pack dupes nor stop us re-decrypting the same file. Distinct sources
+                // also mean each chosen pack image decrypts exactly once. Cap at the pool size.
+                // The shuffle bags already hand out distinct entries until they wrap, so these sets
+                // now only catch a wrap inside one oversized batch.
                 // Remote picks dedup on the URL itself — there the URL *is* the source identity
                 // (no decrypt step, no temp path, so it is stable across picks).
                 int localPool = _imageList.Count + _packImageList.Count;
                 int poolSize = localPool + remoteReady;
                 int want = Math.Min(count, poolSize);
                 bool haveLocal = localPool > 0;
-                var chosenDisk = new HashSet<int>();
-                var chosenPack = new HashSet<int>();
+                var chosenDisk = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var chosenPack = new HashSet<string>(StringComparer.Ordinal);
                 var chosenRemote = new HashSet<string>(StringComparer.Ordinal);
                 var result = new List<string>(want);
                 int guard = 0, maxGuard = poolSize * 8 + 16;   // backstop vs. random-collision / decrypt-fail retries
@@ -3060,24 +3080,22 @@ namespace ConditioningControlPanel.Services
                     else if (_packImageList.Count > 0)
                         usePackImage = true;
 
-                    if (usePackImage && _packImageList.Count > 0)
+                    if (usePackImage && _packImageBag.TryNext(_packImageList, out var packImage))
                     {
-                        var index = _random.Next(_packImageList.Count);
-                        if (!chosenPack.Add(index)) continue;   // already drew this pack entry
-                        var packImage = _packImageList[index];
+                        if (!chosenPack.Add($"{packImage.PackId}|{packImage.File.OriginalName}"))
+                            continue;   // already drew this pack entry
                         var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
                         if (!string.IsNullOrEmpty(tempPath))
                         {
                             _tempPackFiles.Add(tempPath);   // track for cleanup
                             result.Add(tempPath);
                         }
-                        // decrypt failed → index stays marked chosen so we don't retry a broken entry
+                        // decrypt failed → entry stays marked chosen so we don't retry a broken one
                     }
-                    else if (_imageList.Count > 0)
+                    else if (_imageBag.TryNext(_imageList, out var diskImage))
                     {
-                        var index = _random.Next(_imageList.Count);
-                        if (!chosenDisk.Add(index)) continue;   // already drew this disk image
-                        result.Add(_imageList[index]);
+                        if (!chosenDisk.Add(diskImage)) continue;   // already drew this disk image
+                        result.Add(diskImage);
                     }
                 }
                 return result;
@@ -3092,7 +3110,17 @@ namespace ConditioningControlPanel.Services
         {
             // Clean up old temp pack files
             CleanupTempPackFiles();
+            ReloadPoolsFromDisk();
+        }
 
+        /// <summary>
+        /// Re-lists both pools and reshuffles the bags over them. Split out of
+        /// <see cref="RefreshImageLists"/> so the periodic rescan can pick up newly added files
+        /// WITHOUT deleting the temp files a pack flash currently on screen is still reading.
+        /// Caller must hold <see cref="_lockObj"/>.
+        /// </summary>
+        private void ReloadPoolsFromDisk()
+        {
             // Load regular images (include common extensions and variants)
             // GetMediaFiles has its own 60-second cache, so this is efficient
             _imageList = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".ico" });
@@ -3103,8 +3131,29 @@ namespace ConditioningControlPanel.Services
             // Both sources filtered against the live disabled set, so the pools are in sync with it.
             _poolDisabledStamp = App.Settings?.Current?.DisabledAssetPaths.Count ?? 0;
 
+            // These are NEW lists, so any order the bags already dealt points at the old ones.
+            _imageBag.Invalidate();
+            _packImageBag.Invalidate();
+            _lastPoolScanUtc = DateTime.UtcNow;
+
             App.Logger?.Information("Image lists refreshed: {RegularCount} regular images, {PackCount} pack images from {Path}",
                 _imageList.Count, _packImageList.Count, _imagesPath);
+        }
+
+        /// <summary>
+        /// Re-lists the pools once both bags have been dealt out end to end, so files added while
+        /// the app is running start showing up without a restart. Before the bags existed,
+        /// <see cref="RefreshImageLists"/> only ran when the pools were EMPTY - and since they were
+        /// drawn from by random index and never drained, that meant "once per LoadAssets", so a gif
+        /// dropped into the folder mid-session stayed invisible until the user reloaded assets.
+        /// Rate-limited to the listing cache's own expiry so a small pool cannot turn this into a
+        /// disk scan per flash. Caller must hold <see cref="_lockObj"/>.
+        /// </summary>
+        private void MaybeRescanExhaustedPools()
+        {
+            if (_imageBag.Remaining > 0 || _packImageBag.Remaining > 0) return;
+            if ((DateTime.UtcNow - _lastPoolScanUtc).TotalSeconds < CACHE_EXPIRY_SECONDS) return;
+            ReloadPoolsFromDisk();
         }
 
         #endregion
@@ -3668,7 +3717,13 @@ namespace ConditioningControlPanel.Services
                 disabled.Contains($"pack:{p.PackId}/{p.File.OriginalName}"));
 
             if (removed > 0)
+            {
+                // The pools are shorter now, so the dealt order points past the end (or at the
+                // wrong entries). Reshuffle over what is left.
+                _imageBag.Invalidate();
+                _packImageBag.Invalidate();
                 App.Logger?.Information("FlashService: dropped {Count} deselected image(s) from the live pool", removed);
+            }
         }
 
         /// <summary>
@@ -3782,6 +3837,11 @@ namespace ConditioningControlPanel.Services
 
             // Scan directory (cache miss or expired)
             var files = new List<string>();
+            // Windows matches a THREE-character search extension as a prefix (documented behaviour of
+            // Directory.GetFiles: "*.xls" also returns "book.xlsx"), so "*.jpe" also returns every
+            // .jpeg and "*.tif" every .tiff. Those files were being added to the pool twice and drawn
+            // twice as often as everything else. Seen paths keep one entry per file.
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var blockedCount = 0;
             var sanitizeFailedCount = 0;
 
@@ -3791,6 +3851,8 @@ namespace ConditioningControlPanel.Services
                 // Note: Directory.GetFiles is case-insensitive on Windows NTFS
                 foreach (var file in Directory.GetFiles(folder, $"*{ext}", SearchOption.AllDirectories))
                 {
+                    if (!seen.Add(file)) continue;   // already matched by a shorter extension pattern
+
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
                     var isInUserAssets = SecurityHelper.IsPathSafe(file, App.UserDataPath);
