@@ -61,8 +61,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         public const double BodyAspect = 869.0 / 859.0;
 
         /// <summary>
-        /// Her width when nothing has been persisted. WPF read <c>App.Settings.EmiDeskWidth</c>;
-        /// ponytail: needs App.Settings, wired when the settings service moves to Core.
+        /// Her width when nothing has been persisted - the fallback behind
+        /// <c>CoreSettings.Current.EmiDeskWidth</c>, which is where her width actually lives.
         /// </summary>
         public const double DefaultBodyWidth = 220.0;
 
@@ -337,9 +337,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             _btnGear.IsHitTestVisible = false;
             _btnHelp.IsHitTestVisible = false;
 
-            // ponytail: needs App.Settings.Current.EmiDeskWidth, wired when the settings service
-            // moves to Core. Until then she is born at her default width.
-            _bodyWidth = ClampWidth(DefaultBodyWidth);
+            // Her width has ONE home and it is the setting (BRIEF 5: the rect, the pins and the
+            // usage counters live in EmiState, the width does not).
+            try { _bodyWidth = ClampWidth(CoreSettings.Current.EmiDeskWidth); }
+            catch { _bodyWidth = DefaultBodyWidth; }
 
             // One controlled re-clamp when the monitor scale settles. This is the useful half of
             // WPF's WM_DPICHANGED hook; the deadlock the other half guarded against was a WPF
@@ -630,13 +631,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// into that monitor's work area. A monitor that is gone, or no saved rect at all, parks her
         /// bottom right on the main window's monitor.
         /// </summary>
-        // ponytail: needs EmiState (Services/EmiDesk/EmiState.cs) for the saved rect and monitor
-        // name, and App.Settings for the width re-read; neither is in Core. Until they are she is
-        // parked by default on every summon, which is what a first run does anyway.
+        // ponytail: needs EmiState (Services/EmiDesk/EmiState.cs) for the saved rect and the
+        // monitor name, which is not in Core. Until it is she is parked by default on every summon,
+        // which is what a first run does anyway. The WIDTH half of the WPF body is ported: it lives
+        // in the setting, not in EmiState, and re-reading it here is what puts a change made while
+        // she was away - the shrink offer, the settings slider - on her the next time she comes out.
         public void RestorePlacement()
         {
-            try { ParkBottomRightOfMain(); }
-            catch (Exception ex) { Log.Warning(ex, "[EmiDesk] RestorePlacement failed"); }
+            try
+            {
+                double wantW = CoreSettings.Current.EmiDeskWidth;
+                if (Math.Abs(wantW - _bodyWidth) > 0.5) ApplyBodyWidth(wantW);
+                ParkBottomRightOfMain();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] RestorePlacement failed, parking her by default");
+                try { ParkBottomRightOfMain(); } catch { /* out of options */ }
+            }
         }
 
         private void SetBodyPhysical(double bodyLeftPx, double bodyTopPx)
@@ -1273,21 +1285,60 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         // ---- her options panel ----------------------------------------------------
 
-        /// <summary>True while her options panel is beside her. Read by the glass before it flips.</summary>
-        // ponytail: needs EmiOptionsWindow, which has no Avalonia twin yet (its own layer).
-        public bool OptionsOpen => false;
+        private EmiOptionsWindow? _options;
 
-        /// <summary>Show her options beside her.</summary>
-        // ponytail: needs EmiOptionsWindow. It is built lazily and KEPT in WPF, because it carries a
-        // 25-tile pin picker and rebuilding that per gear click is a wall of decoded thumbnails.
-        // While it is up the chrome stays lit (EmiChromeHold.Menu), which is why that latch exists.
+        /// <summary>True while her options panel is beside her. Read by the glass before it flips.</summary>
+        public bool OptionsOpen
+        {
+            get
+            {
+                try { return _options?.IsOpen == true; }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
+        /// Show her options beside her. Built lazily and KEPT, the way the ring window is: it
+        /// carries a 25-tile pin picker, and rebuilding that on every gear click is a wall of
+        /// decoded thumbnails per open.
+        /// </summary>
         private void OpenOptionsPanel()
         {
+            try
+            {
+                if (_options == null)
+                {
+                    _options = new EmiOptionsWindow(this);
+                    // While the panel is up the chrome stays lit, so the gear that opened it is
+                    // still there to close it again after the round trip across the desktop.
+                    _options.PanelClosed += (_, _) => ChromeHold(EmiChromeHold.Menu, false);
+                    _options.CardsRequested += (_, _) => ToggleRingFromGesture();
+                }
+
+                ChromeHold(EmiChromeHold.Menu, true);
+                _options.OpenPanel();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[EmiDesk] options panel failed to open");
+                ChromeHold(EmiChromeHold.Menu, false);
+            }
         }
 
         /// <summary>Fold her options. Idempotent, and safe where the panel was never built.</summary>
         public void CloseOptionsPanel()
         {
+            try { _options?.ClosePanel(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options panel close failed"); }
+        }
+
+        /// <summary>Drop the options panel for good. It is a sibling window holding a subscription
+        /// to this one's Moved/Resized, so it has to go before she does.</summary>
+        private void KillOptionsPanel()
+        {
+            try { _options?.Kill(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] options kill failed"); }
+            _options = null;
         }
 
         /// <summary>Let the panel keep the chrome lit while the pointer is inside it.</summary>
@@ -1451,9 +1502,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 e.Handled = true;
                 ClampIntoWorkArea();
                 SavePlacement();
-                // ponytail: needs App.Settings.EmiDeskWidth + Save() - her width's one home is the
-                // setting, not EmiState - and App.EmiDesk.Fire("resized"). Both move with the app
-                // shell to Core.
+                // Her width's one home is the setting, not EmiState. Half a pixel of slack, as WPF
+                // had: a save rewrites the whole file and a grip drag ends on a fractional DIP.
+                if (Math.Abs(CoreSettings.Current.EmiDeskWidth - _bodyWidth) > 0.5)
+                {
+                    CoreSettings.Current.EmiDeskWidth = _bodyWidth;
+                    CoreSettings.Save();
+                }
+                // ponytail: needs App.EmiDesk.Fire("resized") - her own event bus, which moves with
+                // the app shell.
                 FireDeskEvent("resized");
             }
             catch (Exception ex)
@@ -1535,7 +1592,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _closingForGood = true;
                 try { OnTearDownCore(); }
                 catch (Exception ex) { Log.Debug(ex, "[EmiDesk] teardown seam threw"); }
-                CloseOptionsPanel();
+                KillOptionsPanel();
                 StopIdleBeats();
                 StopAlive();
                 DisarmPet();
@@ -1557,7 +1614,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 _closingForGood = true;
-                CloseOptionsPanel();
+                KillOptionsPanel();
                 StopIdleBeats();
                 StopAlive();
                 DisarmPet();
