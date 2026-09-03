@@ -1,11 +1,34 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.Leaderboard.cs (1452 lines).
+// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.Leaderboard.cs (1452 lines) - and
+// for most of it, NOT HERE either. The old header said "the bodies come back when the services
+// move to Core", which is wrong twice: it names the wrong destination for a third of the file, and
+// the wrong blocker for the pure half.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// WHERE THIS WORK NOW GOES. WPF's MainWindow owned the board because the leaderboard markup was
+// inline in MainWindow.xaml. The port gave it a view, CCP.Avalonia/Views/Tabs/LeaderboardTabView,
+// which already owns the parts that need no service: the season countdown and its timer
+// start/stop discipline, SetLeaderboardMode + the Level-column relabel for the All-Time board, the
+// tier band construction (its Band(index) is BuildTierBand with the same four bound tables), and a
+// placeholder board so the page renders finished rather than gapped. Anything restored HERE that
+// paints a row would be a second copy no click can reach - the tab's own axaml names the tab's
+// handlers, not this window's, and NO member of this partial is referenced from
+// MainShellWindow.axaml at all. That is why the class body below is deliberately empty.
 //
-// Members dropped (54):
+// WHAT IS ACTUALLY BLOCKED, and by what:
+//   The rows. RefreshLeaderboardAsync / RankLeaderboardEntries / RebuildLeaderboardView /
+//   UpdateYouBar / UpdateYourRankDisplay / UpdateTrophyCaseColumns all start from
+//   Services.LeaderboardEntry over the account API (and the trophy-case columns additionally need
+//   SkillService). Neither is in Core. Sorting, searching and filtering are pure list work over
+//   those rows and are blocked only by having no rows - they are a half-hour once the fetch exists,
+//   and they belong in the VIEW when it happens.
+//   BtnLeaderboardDiscord_Click needs the Discord DM path; ReleaseLinks in Core carries links, not
+//   the DM.
+//   BtnJumpToMe_Click and the whole _lbFx* group are WPF-specific: an attached DependencyProperty
+//   (LbScrollOffsetProperty) animated to drive ScrollViewer offset, plus FindVisualDescendant,
+//   ScrollViewer clip fiddling and an overscroll bounce. Avalonia has no attached-DP animation
+//   twin; the port is Offset transitions on the ListBox's ScrollViewer, and it is view work, not
+//   window work. Explicitly a rewrite, not a move.
+//
+// Members dropped (54 - all of them; see above for which are simply in the wrong file now):
 //   private List<Services.LeaderboardEntry> _leaderboardRanked
 //   private string _leaderboardSortKey
 //   private string _leaderboardFilter
@@ -65,6 +88,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // No member of this partial is referenced from MainShellWindow.axaml.
+        // Deliberately empty - see the header. No member of this partial is referenced from
+        // MainShellWindow.axaml, and the parts that are not service-bound already live on
+        // CCP.Avalonia/Views/Tabs/LeaderboardTabView.
     }
 }
