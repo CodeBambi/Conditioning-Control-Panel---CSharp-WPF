@@ -11,10 +11,115 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
+    /// <summary>
+    /// The Avalonia twin of the WPF head's <c>ModPackCatalog</c>: THE mapping between built-in mod
+    /// ids and release-content pack ids, plus the sizes and copy that the first-run picker and the
+    /// Mod Manager both draw from.
+    ///
+    /// <para>Every id comes from Core (<see cref="BuiltInMods"/>, <see cref="CoreReleaseContent"/>)
+    /// rather than being retyped. The placeholder table this replaces carried invented ids
+    /// (<c>"bambi_sleep"</c>, <c>"ccp_default"</c>) that match nothing the mod service answers, so
+    /// the wizard's pre-selection could never find the active mod.</para>
+    ///
+    /// <para>Two things the WPF catalogue has that this cannot: the <c>pack://</c> card art (this
+    /// head ships no Resources/) and <c>ReleaseContentService.IsFullInstall</c>, which has no Core
+    /// seam - a full/dev layout therefore reads here as "pack state unknown", not as installed.</para>
+    ///
+    /// <para>ponytail: belongs in its own file beside the dialogs, exactly as ModPackCatalog does.
+    /// It is here because the layer that wrote it owns no third file; moving it is a rename.</para>
+    /// </summary>
+    internal static class ModPacks
+    {
+        private const long Mb = 1024L * 1024L;
+
+        internal sealed record Entry(
+            string ModId,
+            string? PackId,
+            string NameLocKey,
+            string DescriptionLocKey,
+            string AccentHex,
+            long ApproxBytes,
+            bool PremiumProgramNote = false,
+            bool NoVoiceNote = false);
+
+        /// <summary>Display order: the baseline first, then the five optional mods.</summary>
+        internal static readonly Entry[] All =
+        {
+            // PackId null: CCP Default ships in the box, so "skip everything" still gets a mod.
+            new(BuiltInMods.CCPDefaultId, null, "modpicker_name_ccp_default", "modpicker_desc_ccp_default", "#E84393", 0),
+            new(BuiltInMods.BambiSleepId, CoreReleaseContent.PackModBambi, "label_bambi_sleep", "modpicker_desc_bambi", "#FF69B4", 77 * Mb),
+            new(BuiltInMods.SissyHypnoId, CoreReleaseContent.PackModSissy, "label_sissy_hypno", "modpicker_desc_sissy", "#9B59B6", 331 * Mb),
+            // The "kept" program is Premium; the mod itself is free.
+            new(BuiltInMods.LockedId, CoreReleaseContent.PackModLocked, "modpicker_name_circe", "modpicker_desc_circe", "#E81CA8", 329 * Mb, PremiumProgramNote: true),
+            // "firmware_install" is Premium, and drone-mode.ccpmod carries no companion_audio at all.
+            new(BuiltInMods.DronificationId, CoreReleaseContent.PackModDrone, "modpicker_name_drone", "modpicker_desc_drone", "#00FF41", 184 * Mb, PremiumProgramNote: true, NoVoiceNote: true),
+            new(BuiltInMods.InfectionControlId, CoreReleaseContent.PackModInfection, "modpicker_name_infection", "modpicker_desc_infection", "#2855F0", 209 * Mb),
+        };
+
+        internal static Entry? ForMod(string? modId) =>
+            string.IsNullOrEmpty(modId)
+                ? null
+                : All.FirstOrDefault(e => string.Equals(e.ModId, modId, StringComparison.OrdinalIgnoreCase));
+
+        /// <summary>Pack id for a built-in mod id, or null (CCP Default and every user mod).</summary>
+        internal static string? PackIdForMod(string? modId) => ForMod(modId)?.PackId;
+
+        /// <summary>
+        /// Best known download size: the manifest's real number once the head has fetched it,
+        /// otherwise the baked-in approximation so an offline picker still tells the truth.
+        /// </summary>
+        internal static long SizeBytesFor(Entry? entry)
+        {
+            if (entry == null || string.IsNullOrEmpty(entry.PackId)) return 0;
+            var info = CoreReleaseContent.GetPackInfo(entry.PackId!);
+            return info != null && info.SizeBytes > 0 ? info.SizeBytes : entry.ApproxBytes;
+        }
+
+        /// <summary>"331 MB" / "1.2 GB". Empty for a zero size.</summary>
+        internal static string FormatSize(long bytes)
+        {
+            try
+            {
+                if (bytes <= 0) return "";
+                var mb = bytes / (double)Mb;
+                if (mb >= 1024)
+                    return Loc.GetF("modpicker_size_gb", (mb / 1024.0).ToString("0.0"));
+                return Loc.GetF("modpicker_size_mb", Math.Max(1, (int)Math.Round(mb)));
+            }
+            catch { return ""; }
+        }
+
+        /// <summary>
+        /// The pack's bytes are stamped on disk. An unseeded <c>StampProvider</c> is this head's
+        /// version of WPF's <c>svc == null</c>: nothing is KNOWN to be installed, and nothing is
+        /// reported missing either - see <see cref="NeedsDownload"/>. Never guess "missing" from
+        /// the absence of a service, or every built-in wears a download badge it cannot act on.
+        /// </summary>
+        internal static bool IsInstalled(string? packId) =>
+            !string.IsNullOrEmpty(packId)
+            && CoreReleaseContent.StampProvider is not null
+            && CoreReleaseContent.GetStampFor(packId!) != null;
+
+        /// <summary>
+        /// True when this mod's media has to come off the network. False for CCP Default and, as in
+        /// WPF, whenever there is no pack service to fetch it with.
+        /// </summary>
+        internal static bool NeedsDownload(string? modId)
+        {
+            var packId = PackIdForMod(modId);
+            if (string.IsNullOrEmpty(packId)) return false;
+            if (CoreReleaseContent.StampProvider is null) return false;
+            return CoreReleaseContent.GetStampFor(packId!) == null;
+        }
+    }
+
     /// <summary>
     /// One mod row on the wizard's second step. Deliberately a separate view-model from
     /// <c>ModPickerCard</c> even though the two look alike: the picker's card is a multi-select
@@ -176,16 +281,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// popup gauntlet a fresh install used to walk through.
     ///
     /// <para>PORTED from ConditioningControlPanel/Windows/FirstRunWizard.xaml.cs. What survives is
-    /// everything the VIEW owns: the three steps and their copy, the step counter and footer
-    /// captions, card selection, the seven door rows, and the chrome (drag, Esc, X, Back/Next/Skip).
-    /// What does not survive is everything that reaches out of the view - the whole
-    /// <c>ShouldRunAndClaim</c> / <c>HandBackFirstRun</c> / <c>Run</c> entry-point trio, the
-    /// ReleaseContentService download and manifest paths, the offline offer bookkeeping and the mod
-    /// activation commit. Those need <c>App.Settings</c>, <c>App.ReleaseContent</c>,
-    /// <c>App.Mods</c>, <c>ModPickerDialog</c>, <c>PendingModActivation</c> and
-    /// <c>MainWindow</c>, all of which live in the WPF head; each is a stub with a ponytail note
-    /// naming what it needs. The mod cards therefore carry PLACEHOLDER catalogue data (see
-    /// <see cref="Catalogue"/>): the real <c>ModPackCatalog</c> is a WPF-head type.</para>
+    /// everything the VIEW owns - the three steps and their copy, the step counter and footer
+    /// captions, card selection, the seven door rows, the chrome (drag, Esc, X, Back/Next/Skip) -
+    /// plus everything the Core seams can now answer: the <c>Welcomed</c> gate
+    /// (<see cref="ShouldRunAndClaim"/> / <see cref="HandBackFirstRun"/>, on
+    /// <c>CoreSettings</c> and <c>CoreReleaseContent.AppVersion</c>), the affirmation in the
+    /// welcome heading, the active mod the cards pre-select against, the real pack ids and sizes
+    /// (see <see cref="ModPacks"/>), and the pack-installed signal.</para>
+    ///
+    /// <para>What does not survive: <see cref="Run"/> (it drives <c>MainWindow</c>'s folder picker
+    /// and <c>TutorialService</c>), <see cref="PrepareModStep"/> (the offline-offer bookkeeping is
+    /// <c>ModPickerDialog</c>'s, and reimplementing it is how a modular install loses its mod media)
+    /// and <see cref="CommitModChoice"/> (<c>PendingModActivation</c> and
+    /// <c>ModManagerService.ActivateMod</c>). Each is a stub naming what it needs.</para>
     ///
     /// <para>The hardening lessons the original documents are preserved as comments where the code
     /// they guard still exists, and dropped with the code where it does not - a comment about
@@ -278,9 +386,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             BuildDoorRows();
             _modCardsList.ItemsSource = _cards;
 
-            // ponytail: needs App.ReleaseContent (PackProgressChanged / PackInstalled) and App.Mods
-            // (ModAvailabilityChanged), wired when they move to Core. Nothing to unsubscribe either,
-            // so the WPF Closed handler's teardown half is gone with it.
+            // A pack finishing while this window is open flips its card to Installed. Raised on the
+            // head's download thread, hence the hop. CoreReleaseContent.PackInstalled is a STATIC
+            // event, so the Closed handler below must detach or the window outlives its own close.
+            //
+            // ponytail: still needs App.ReleaseContent's PackProgressChanged (the per-percent
+            // MarkProgress) and App.Mods' ModAvailabilityChanged (extracted, not merely downloaded);
+            // neither has a Core seam yet, so a download shows nothing until it lands.
+            CoreReleaseContent.PackInstalled += OnPackInstalled;
 
             // Handlers live here rather than in markup, per the porting convention.
             this.FindControl<Border>("TitleBar")!.PointerPressed += TitleBar_PointerPressed;
@@ -305,21 +418,78 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // ------------------------------------------------------------------ entry points
 
         /// <summary>
-        /// ponytail: needs App.Settings (the Welcomed / FirstRunAssetsPromptShown /
-        /// LastSeenVersion one-shots) and UpdateService, wired when they move to Core. The WPF
-        /// original spends all three flags here, BEFORE the window opens, so a crash inside the
-        /// wizard can never turn it into an every-launch popup - keep that ordering when this is
-        /// filled in.
+        /// First launch? Reads <c>Welcomed</c> and latches it (plus the assets-prompt one-shot),
+        /// exactly where <c>WelcomeDialog.ShowIfNeeded</c> used to. On this head that dialog still
+        /// carries its own copy of the latch and has no caller: whoever wires startup calls ONE of
+        /// the two, never both, or the second sees an already-claimed flag and shows nothing.
+        ///
+        /// <para>Three flags are spent here rather than when the window opens, on purpose:</para>
+        /// <list type="bullet">
+        /// <item><c>Welcomed</c> - a crash inside the wizard must not make it an every-launch
+        /// screen (the ModPickerShown lesson).</item>
+        /// <item><c>FirstRunAssetsPromptShown</c> - the "choose a content folder" prompt fires
+        /// before this wizard can open, so spending it in the gate is the only way a first-run user
+        /// never gets that modal on top of the wizard; the Welcome step carries the affordance.</item>
+        /// <item><c>LastSeenVersion</c> - the first-run branch is the ONE path that never reaches
+        /// the What's New check, which is where every other launch stamps it. Left blank, this
+        /// install's first upgrade reads as a fresh install and has its first ever patch notes
+        /// stamped away unshown. Correct on both wizard outcomes, so
+        /// <see cref="HandBackFirstRun"/> deliberately does not undo it.</item>
+        /// </list>
+        ///
+        /// <para>WPF returned false when <c>App.Settings</c> was null. The Core seam's
+        /// <c>Current</c> is never null - with no head attached it is a throwaway default - so
+        /// <see cref="CoreSettings.HasProvider"/> is what stands in for that check. Without it the
+        /// headless render and the smoke runner would claim a first run against an object nobody
+        /// ever saves.</para>
         /// </summary>
-        public static bool ShouldRunAndClaim() => false;
+        public static bool ShouldRunAndClaim()
+        {
+            try
+            {
+                if (!CoreSettings.HasProvider) return false;
+
+                var settings = CoreSettings.Current;
+                if (settings.Welcomed) return false;
+
+                settings.Welcomed = true;
+                settings.FirstRunAssetsPromptShown = true;
+                settings.LastSeenVersion = CoreReleaseContent.AppVersion;
+                CoreSettings.Save();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] Gate check failed - skipping the first-run wizard");
+                return false;
+            }
+        }
 
         /// <summary>
-        /// ponytail: needs App.Settings, wired when it moves to Core. Undoes
-        /// <see cref="ShouldRunAndClaim"/> when the caller decided NOT to open the wizard after all;
-        /// a crash INSIDE the wizard is deliberately not covered, which is what spending up front
-        /// buys.
+        /// Undoes <see cref="ShouldRunAndClaim"/> when the caller decided NOT to open the wizard
+        /// after all (an update dialog outlasted its wait, the window never loaded). Without this
+        /// the flags are spent on a screen nobody ever saw and the install silently never gets a
+        /// first run. A crash INSIDE the wizard is deliberately NOT covered - that is what spending
+        /// up front buys. <c>LastSeenVersion</c> is not handed back: it IS a fresh install of this
+        /// version either way, and the next launch re-stamps whatever version it is.
         /// </summary>
-        public static void HandBackFirstRun(string reason) { }
+        public static void HandBackFirstRun(string reason)
+        {
+            try
+            {
+                if (!CoreSettings.HasProvider) return;
+
+                var settings = CoreSettings.Current;
+                settings.Welcomed = false;
+                settings.FirstRunAssetsPromptShown = false;
+                CoreSettings.Save();
+                Log.Information("[FirstRun] Not shown ({Reason}) - handing the first run back to the next launch", reason);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] Could not hand the first run back");
+            }
+        }
 
         /// <summary>
         /// ponytail: needs MainWindow (BtnPickAssetsFolder_Click, StartTutorial) and
@@ -368,9 +538,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // ShowStep(1) so Back-navigation after a mod pick repaints the right wordmark.
 
             _txtAppTitle.Text = Loc.Get("app_title");
-            // ponytail: needs App.Mods.GetAffirmation(), wired when it moves to Core. "Subject" is
-            // the WPF fallback for exactly this case.
-            _txtWelcomeHeading.Text = StrF("fr8_welcome_heading", "Welcome, {0}.", "Subject");
+            _txtWelcomeHeading.Text = StrF("fr8_welcome_heading", "Welcome, {0}.", CoreMods.Affirmation);
             _txtWelcomeBody.Text = Str("fr8_welcome_body",
                 "Conditioning Control Panel layers the effects you choose - flashes, videos, subliminals, " +
                 "screen overlays and a companion who reacts to all of it - over whatever you are already doing. " +
@@ -454,48 +622,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ------------------------------------------------------------------ step 2: mod pick
 
-        /// <summary>
-        /// ponytail: PLACEHOLDER for <c>ModPackCatalog.All</c>, which lives in the WPF head
-        /// (Dialogs/ModPackCatalog.cs) alongside BuiltInMods and ReleaseContentService's pack ids.
-        /// Mod ids and pack ids are the literals those constants hold; every name, description and
-        /// note is a real loc key, so the rendered copy is the real copy. Delete this and read the
-        /// catalogue when it moves to Core.
-        /// </summary>
-        private static readonly (string ModId, string? PackId, string NameLocKey, string DescriptionLocKey,
-                                 string AccentHex, long ApproxBytes, bool PremiumProgramNote, bool NoVoiceNote)[] Catalogue =
-        {
-            ("ccp_default",       null,            "modpicker_name_ccp_default", "modpicker_desc_ccp_default", "#E84393",         0, false, false),
-            ("bambi_sleep",       "mod-bambi",     "label_bambi_sleep",          "modpicker_desc_bambi",       "#FF69B4",  77 * Mb, false, false),
-            ("sissy_hypno",       "mod-sissy",     "label_sissy_hypno",          "modpicker_desc_sissy",       "#9B59B6", 331 * Mb, false, false),
-            ("locked",            "mod-locked",    "modpicker_name_circe",       "modpicker_desc_circe",       "#E81CA8", 329 * Mb, true,  false),
-            ("dronification",     "mod-drone",     "modpicker_name_drone",       "modpicker_desc_drone",       "#00FF41", 184 * Mb, true,  true),
-            ("infection_control", "mod-infection", "modpicker_name_infection",   "modpicker_desc_infection",   "#2855F0", 209 * Mb, false, false),
-        };
-
-        private const long Mb = 1024L * 1024L;
-
-        /// <summary>"331 MB" / "1.2 GB". Empty for a zero size. Copied from ModPackCatalog.FormatSize.</summary>
-        private static string FormatSize(long bytes)
-        {
-            try
-            {
-                if (bytes <= 0) return "";
-                var mb = bytes / (double)Mb;
-                if (mb >= 1024)
-                    return Loc.GetF("modpicker_size_gb", (mb / 1024.0).ToString("0.0"));
-                return Loc.GetF("modpicker_size_mb", Math.Max(1, (int)Math.Round(mb)));
-            }
-            catch { return ""; }
-        }
-
         private void BuildModCards()
         {
             var installedBadge = Loc.Get("modpicker_installed_badge");
-            // ponytail: needs App.Mods.ActiveModId, wired when it moves to Core. A fresh install IS
-            // CCP Default, which is what the WPF fallback (BuiltInMods.CCPDefaultId) resolves to.
-            var activeModId = "ccp_default";
+            var activeModId = CoreMods.ActiveModId;
 
-            foreach (var entry in Catalogue)
+            foreach (var entry in ModPacks.All)
             {
                 IBrush accent;
                 try { accent = new SolidColorBrush(Color.Parse(entry.AccentHex)); }
@@ -526,10 +658,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 else
                 {
-                    // ponytail: needs App.ReleaseContent (IsFullInstall / IsInstalled) to mark the
-                    // packs already on disk, wired when it moves to Core. Every optional mod reads
-                    // as available with its baked-in size, which is the WPF no-service path.
-                    card.SizeText = FormatSize(entry.ApproxBytes);
+                    card.SizeText = ModPacks.FormatSize(ModPacks.SizeBytesFor(entry));
+                    if (ModPacks.IsInstalled(entry.PackId)) card.State = FirstRunModCard.CardState.Installed;
                 }
 
                 _cards.Add(card);
@@ -654,10 +784,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ------------------------------------------------------------------ pack events
 
-        // ponytail: needs App.ReleaseContent's PackProgressChanged / PackInstalled and App.Mods'
-        // ModAvailabilityChanged, wired when they move to Core. Each handler marshalled onto the UI
-        // thread and called FindCard(packId)?.MarkProgress/MarkInstalled; FindCard survives below
-        // because the commit path will want it back unchanged.
+        private void OnPackInstalled(object? sender, string packId) =>
+            Dispatcher.UIThread.Post(() => FindCard(packId)?.MarkInstalled());
 
         private FirstRunModCard? FindCard(string? packId) =>
             string.IsNullOrEmpty(packId)
@@ -714,6 +842,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void OnWizardClosed(object? sender, EventArgs e)
         {
+            // Detached first and unconditionally: a static event holding a closed window is a leak
+            // whatever the rest of this handler decides to do.
+            CoreReleaseContent.PackInstalled -= OnPackInstalled;
+
             if (_closed) return;
             _closed = true;
 

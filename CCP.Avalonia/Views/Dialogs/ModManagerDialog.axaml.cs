@@ -11,7 +11,9 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -19,14 +21,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// Mod browser/manager dialog — list, details, install/uninstall/activate.
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ModManagerDialog.xaml.cs. Deviations:
-    ///  - <c>App.Mods</c> (ModManagerService), <c>App.ReleaseContent</c>, <c>App.Settings</c>,
-    ///    <c>ModPackage</c>/<c>ModManifest</c> and <c>ModPackCatalog</c> all live in the WPF head,
-    ///    so <see cref="LoadMods"/> returns placeholder rows and every service call is a stub with
-    ///    a <c>ponytail:</c> marker. The list building, selection, details painting, art summary,
-    ///    pack-row state machine and button visibility rules are ported verbatim and run against
-    ///    those rows.
-    ///  - <see cref="ModRow"/> stands in for <c>ModPackage</c> + its manifest for the same reason.
-    ///    Swapping it for the real model when it reaches Core is a field-for-field rename.
+    ///  - The listing reads the real thing: <c>CoreMods.InstalledMods</c> and
+    ///    <c>CoreMods.ActiveModId</c>, over the real <c>ModPackage</c>/<c>ModManifest</c> models in
+    ///    Core. With no mod service seeded (this head today) that is the one built-in CCP Default,
+    ///    which is exactly what <c>App.Mods</c> answered before its service came up.
+    ///  - <c>ModPackCatalog</c> is a WPF-head type, so the mod-id → pack-id mapping comes from
+    ///    <see cref="ModPacks"/>, its twin on this head.
+    ///  - Installing, uninstalling, activating for real, exporting and sharing all need
+    ///    <c>ModManagerService</c> / the catalogue client, which stay in the WPF head; each is a
+    ///    stub with a <c>ponytail:</c> marker. Activation still flips in memory, so the star, the
+    ///    active indicator and the button rules behave.
     ///  - The release-content event plumbing (<c>SubscribeToPackEvents</c>,
     ///    <c>OnPackProgressChanged</c>, <c>OnPackInstalled</c>, <c>OnModAvailabilityChanged</c>,
     ///    <c>RefreshListKeepingSelection</c>, <c>MarshalToUi</c>) is dropped rather than stubbed:
@@ -39,8 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>BitmapImage</c> -> <c>Bitmap</c> (<c>DecodePixelWidth</c> becomes
     ///    <c>DecodeToWidth</c>); <c>OpenFileDialog</c>/<c>SaveFileDialog</c> -> the
     ///    <c>StorageProvider</c> pickers.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so
-    ///    <see cref="Ask"/> is the same minimal stand-in the other ported dialogs use.
+    ///  - <c>MessageBox.Show</c> becomes <c>MessageDialog.ConfirmAsync</c>, this head's message box.
     ///  - <c>MainWindow.CreateCatalogueStatusBadge</c> lives in the WPF head, so the share-status
     ///    pill is omitted from the list row (stubbed, see <see cref="RefreshModList"/>).
     ///  - Handlers are wired in the constructor rather than in markup, per the porting convention.
@@ -52,7 +55,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         public bool ModWasChanged { get; private set; }
 
-        private ModRow? _selectedMod;
+        private ModPackage? _selectedMod;
 
         /// <summary>Pack ids currently being downloaded from THIS dialog (per-mod button guard).</summary>
         private readonly HashSet<string> _packDownloads = new(StringComparer.OrdinalIgnoreCase);
@@ -64,9 +67,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private readonly HashSet<string> _packsJustInstalled = new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Placeholder stand-in for <c>App.Mods.InstalledMods</c> / <c>ActiveModId</c>.</summary>
-        private readonly List<ModRow> _mods = LoadMods();
-        private string _activeModId = "bambisleep";
+        /// <summary>
+        /// Which mod the star, the active indicator and the button rules read as active. Seeded from
+        /// <c>CoreMods.ActiveModId</c>; the Activate button flips it in memory because the real
+        /// switch is head-side (see <see cref="BtnActivate_Click"/>).
+        /// </summary>
+        private string _activeModId = CoreMods.ActiveModId;
 
         private readonly ListBox _modList;
         private readonly StackPanel _detailsPanel;
@@ -123,52 +129,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             RefreshModList();
         }
 
-        /// <summary>
-        /// WPF read <c>App.Mods.InstalledMods</c>. ponytail: needs ModManagerService, wired when it
-        /// moves to Core. Until then these rows let the list, the details panel, the pack row and
-        /// every button-visibility rule draw their real states.
-        /// </summary>
-        private static List<ModRow> LoadMods() => new()
-        {
-            new ModRow
-            {
-                Id = "bambisleep",
-                Name = "Bambi Sleep",
-                Author = "CC Labs",
-                Version = "6.9.1",
-                Description = "The default conditioning persona.",
-                AccentColor = "#FF69B4",
-                CompanionName = "BambiSprite",
-                IsBuiltIn = true,
-            },
-            new ModRow
-            {
-                Id = "dtrh",
-                Name = "Rabbit Hole",
-                Author = "CC Labs",
-                Version = "2.4.0",
-                Description = "Alternate persona with its own barks and colour scheme.",
-                AccentColor = "#8A2BE2",
-                CompanionName = "Alice",
-                IsBuiltIn = true,
-                PackId = "pack-dtrh",
-                PackSize = "331 MB",
-            },
-            new ModRow
-            {
-                Id = "velvet-static",
-                Name = "Velvet Static",
-                Author = "moonpetal",
-                Version = "1.2.0",
-                Description = "Community mod: soft pink overlays, a slower cadence and a full nav repaint.",
-                AccentColor = "#E0457B",
-                CompanionName = "Static",
-                IsBuiltIn = false,
-                InstalledPath = "/home/user/.ccp/mods/velvet-static",
-                PreviewImage = "preview.png",
-            },
-        };
-
         // ------------------------------------------------------------------ content packs
         //
         // Built-in mods ship without their media on a modular install (docs/CONTENT_PACKS_PLAN.md §4):
@@ -180,20 +140,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private bool IsPackRowShowing(string packId)
         {
             if (_selectedMod == null) return false;
-            return string.Equals(_selectedMod.PackId, packId, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(ModPacks.PackIdForMod(_selectedMod.Id), packId, StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>
-        /// Paints the pack row for the selected mod. Collapsed unless this is a built-in whose pack is
-        /// mapped, the app is a modular install, and the pack is not stamped yet.
+        /// Paints the pack row for the selected mod. Collapsed unless this is a built-in whose pack
+        /// is mapped and the pack is not stamped yet.
         ///
-        /// ponytail: needs ModPackCatalog + ReleaseContentService (IsFullInstall / IsInstalled /
-        /// FormatSize), wired when they move to Core. The row's own state machine is ported whole and
-        /// driven off <see cref="ModRow.PackId"/> in the meantime.
+        /// <para>WPF also collapsed the row on a full/dev install. <c>IsFullInstall</c> has no Core
+        /// seam, and <see cref="ModPacks.IsInstalled"/> answers false with no pack service, so this
+        /// head shows the row wherever a mapped pack is not stamped - the download button under it
+        /// is the stub below.</para>
         /// </summary>
-        private void UpdatePackPanel(ModRow mod)
+        private void UpdatePackPanel(ModPackage mod)
         {
-            var packId = mod.PackId;
+            var entry = ModPacks.ForMod(mod.Id);
+            var packId = entry?.PackId;
 
             if (string.IsNullOrEmpty(packId))
             {
@@ -201,7 +163,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 return;
             }
 
-            if (mod.PackInstalled)
+            if (ModPacks.IsInstalled(packId))
             {
                 // Already on disk: show a confirmation only if it landed during this session,
                 // otherwise the row has no reason to exist.
@@ -216,7 +178,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 _packProgress.Value = 100;
                 _txtPackState.Text = Loc.Get("modmgr_pack_ready");
                 _btnDownloadPack.IsEnabled = false;
-                SetDownloadPackLabel(mod);
+                SetDownloadPackLabel(entry!);
                 return;
             }
 
@@ -230,7 +192,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 ? Loc.GetF("modmgr_pack_downloading", (int)Math.Round(_packProgress.Value))
                 : Loc.Get("modmgr_pack_not_downloaded");
 
-            SetDownloadPackLabel(mod);
+            SetDownloadPackLabel(entry!);
             _btnDownloadPack.IsEnabled = !inFlight;
         }
 
@@ -238,10 +200,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// The download button's caption. A TextBlock child rather than Content, because Avalonia
         /// parses "_" in Content as an access key (CLAUDE.md trap 1) and this string is formatted.
         /// </summary>
-        private void SetDownloadPackLabel(ModRow mod) =>
+        private void SetDownloadPackLabel(ModPacks.Entry entry) =>
             _btnDownloadPack.Content = new TextBlock
             {
-                Text = Loc.GetF("modmgr_btn_download_pack", mod.PackSize)
+                Text = Loc.GetF("modmgr_btn_download_pack", ModPacks.FormatSize(ModPacks.SizeBytesFor(entry)))
             };
 
         private void BtnDownloadPack_Click()
@@ -282,7 +244,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             _modList.Items.Clear();
 
-            foreach (var mod in _mods.OrderBy(m => !m.IsBuiltIn).ThenBy(m => m.Name))
+            foreach (var mod in CoreMods.InstalledMods.Values.OrderBy(m => !m.IsBuiltIn).ThenBy(m => m.Name))
             {
                 var prefix = mod.Id == _activeModId ? "★ " : "  "; // star for active
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -296,7 +258,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 // when the catalogue client moves to Core. WPF appended a share-status pill here.
 
                 // "media not downloaded yet" marker for built-ins on a modular install.
-                if (mod.NeedsDownload)
+                if (ModPacks.NeedsDownload(mod.Id))
                 {
                     row.Children.Add(new TextBlock
                     {
@@ -326,8 +288,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             if (_modList.SelectedItem is ListBoxItem item && item.Tag is string modId)
             {
-                var mod = _mods.FirstOrDefault(m => m.Id == modId);
-                if (mod != null)
+                if (CoreMods.InstalledMods.TryGetValue(modId, out var mod))
                 {
                     ShowModDetails(mod);
                     return;
@@ -336,21 +297,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _detailsPanel.IsVisible = false;
         }
 
-        private void ShowModDetails(ModRow mod)
+        private void ShowModDetails(ModPackage mod)
         {
             _selectedMod = mod;
             _detailsPanel.IsVisible = true;
 
             _txtModName.Text = mod.Name;
-            _txtModAuthor.Text = Loc.GetF("label_by_author", mod.Author);
-            _txtModVersion.Text = Loc.GetF("label_version_prefix", mod.Version);
-            _txtModDescription.Text = mod.Description ?? "";
+            _txtModAuthor.Text = Loc.GetF("label_by_author", mod.Manifest.Author);
+            _txtModVersion.Text = Loc.GetF("label_version_prefix", mod.Manifest.Version);
+            _txtModDescription.Text = mod.Manifest.Description ?? "";
 
             // Preview image + what the mod actually overrides on disk.
             ShowArtSummary(mod);
 
             // Theme color
-            var colorHex = mod.AccentColor ?? "#FF69B4";
+            var colorHex = mod.Manifest.Theme?.AccentColor ?? "#FF69B4";
             _txtThemeColor.Text = colorHex;
             try
             {
@@ -362,7 +323,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
 
             // Companion
-            _txtCompanion.Text = mod.CompanionName ?? "BambiSprite";
+            _txtCompanion.Text = mod.Manifest.Identity?.CompanionName ?? "BambiSprite";
 
             // Active state
             var isActive = mod.Id == _activeModId;
@@ -392,7 +353,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         // per top-level folder is an honest picture of how much of the app the mod repaints.
         // Both rows stay hidden for built-in mods, which have no InstalledPath to read.
 
-        private void ShowArtSummary(ModRow mod)
+        private void ShowArtSummary(ModPackage mod)
         {
             _imgModPreview.Source = null;
             _previewImagePanel.IsVisible = false;
@@ -401,7 +362,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             var installed = mod.InstalledPath;
             if (string.IsNullOrEmpty(installed) || !Directory.Exists(installed)) return;
 
-            var preview = LoadPreviewImage(installed!, mod.PreviewImage);
+            var preview = LoadPreviewImage(installed!, mod.Manifest.PreviewImage);
             if (preview != null)
             {
                 _imgModPreview.Source = preview;
@@ -517,29 +478,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (_selectedMod == null) return;
             if (_selectedMod.IsBuiltIn) return;
 
-            var result = await Ask(
+            var confirmed = await MessageDialog.ConfirmAsync(
+                this,
                 Loc.Get("title_confirm_uninstall"),
-                Loc.GetF("msg_confirm_uninstall_mod", _selectedMod.Name),
-                ("Yes", true), ("No", false));
+                Loc.GetF("msg_confirm_uninstall_mod", _selectedMod.Name));
 
-            if (result == true)
-            {
-                var wasActive = _selectedMod.Id == _activeModId;
+            if (!confirmed) return;
 
-                // ponytail: needs ModManagerService.UninstallMod (deletes the folder) + settings
-                // persistence, wired when they move to Core.
-                _mods.Remove(_selectedMod);
-
-                if (wasActive)
-                {
-                    _activeModId = _mods.FirstOrDefault()?.Id ?? "";
-                    ModWasChanged = true;
-                }
-
-                _selectedMod = null;
-                _detailsPanel.IsVisible = false;
-                RefreshModList();
-            }
+            // ponytail: needs ModManagerService.UninstallMod (it deletes the folder and drops the
+            // mod from InstalledMods) plus the CoreSettings.ActiveModId write WPF does when the
+            // uninstalled mod was the active one. The listing is the service's dictionary now, so
+            // there is nothing local to remove and the row correctly stays until it really goes.
+            // Unreachable with no mod service anyway: the button only shows for a non-built-in,
+            // non-active mod, and the built-in default is the only thing an unseeded seam lists.
+            _selectedMod = null;
+            _detailsPanel.IsVisible = false;
+            RefreshModList();
         }
 
         private async void BtnInstall_Click()
@@ -574,7 +528,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private async void BtnExport_Click()
         {
-            var active = _mods.FirstOrDefault(m => m.Id == _activeModId) ?? _mods.FirstOrDefault();
+            var mods = CoreMods.InstalledMods;
+            var active = (mods.TryGetValue(_activeModId, out var byId) ? byId : null)
+                         ?? mods.Values.FirstOrDefault();
             if (active == null) return;
 
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -615,94 +571,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             // ponytail: ModCreatorWindow is not ported to this head yet; WPF opened it modally here.
         }
-
-        /// <summary>
-        /// Minimal stand-in for WPF's MessageBox, which Avalonia has no equivalent of. Copied from
-        /// TextEditorDialog: each button carries the value Close() hands back, and dismissing the
-        /// window yields null. The app has no btn_yes/btn_no loc keys — WPF got those strings from
-        /// the OS — so Yes and No are English here.
-        /// </summary>
-        private Task<bool?> Ask(string title, string message, params (string Label, bool? Value)[] buttons)
-        {
-            var row = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Spacing = 8,
-                Margin = new Thickness(0, 16, 0, 0)
-            };
-
-            var dialog = new Window
-            {
-                Title = title,
-                SizeToContent = SizeToContent.WidthAndHeight,
-                CanResize = false,
-                ShowInTaskbar = false,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Background = this.TryFindResource("DarkerBgBrush", out var bg) ? bg as IBrush : null,
-                Content = new StackPanel
-                {
-                    Margin = new Thickness(20),
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = message,
-                            Foreground = Brushes.White,
-                            FontSize = 13,
-                            TextWrapping = TextWrapping.Wrap,
-                            MaxWidth = 360
-                        },
-                        row
-                    }
-                }
-            };
-
-            foreach (var (label, value) in buttons)
-            {
-                var button = new Button
-                {
-                    Content = new TextBlock { Text = label },
-                    Padding = new Thickness(14, 6),
-                    Cursor = new Cursor(StandardCursorType.Hand)
-                };
-                button.Click += (_, _) => dialog.Close(value);
-                row.Children.Add(button);
-            }
-
-            return dialog.ShowDialog<bool?>(this);
-        }
-    }
-
-    /// <summary>
-    /// Stands in for <c>ModPackage</c> plus the manifest fields this dialog reads, and for the
-    /// <c>ModPackCatalog</c> lookup that maps a mod id to its release-hosted media pack. All of
-    /// those live in the WPF head; this port may not reference it. Field-for-field, so restoring
-    /// the real model when it reaches Core is a rename.
-    /// </summary>
-    internal sealed class ModRow
-    {
-        public string Id { get; init; } = "";
-        public string Name { get; init; } = "";
-        public string Author { get; init; } = "";
-        public string Version { get; init; } = "";
-        public string? Description { get; init; }
-        public string? AccentColor { get; init; }
-        public string? CompanionName { get; init; }
-        public bool IsBuiltIn { get; init; }
-        public string? InstalledPath { get; init; }
-        public string? PreviewImage { get; init; }
-
-        /// <summary>ModPackCatalog.PackIdForMod(Id), or null when the mod ships its media inline.</summary>
-        public string? PackId { get; init; }
-
-        /// <summary>ModPackCatalog.FormatSize(SizeBytesFor(entry)).</summary>
-        public string PackSize { get; init; } = "";
-
-        /// <summary>ReleaseContentService.IsInstalled(PackId).</summary>
-        public bool PackInstalled { get; init; }
-
-        /// <summary>ModPackCatalog.NeedsDownload(Id).</summary>
-        public bool NeedsDownload => !string.IsNullOrEmpty(PackId) && !PackInstalled;
     }
 }
