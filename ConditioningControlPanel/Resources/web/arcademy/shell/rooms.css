@@ -586,6 +586,28 @@ html.arc-mobile .arm-hot.arm-exit .arm-hot-tag {
   bottom: -40px;
   padding: 6px 16px;
   font-size: 22px;
+
+  /* ...AND IT HANGS OFF THE RIGHT EDGE OF THE PLANE UNLESS IT IS PINNED (owner
+     report 2026-09-03, iPhone portrait: the sign under Homeroom 101's corridor
+     door reads "BACK TO CAMPU"). The tag is centred on its OWN door (the base
+     rule's `left: 50%` + `translateX(-50%)`) and every painted exit in the
+     school is right of centre: Homeroom's rect is [1240, 115, 106, 350], so the
+     centre sits at stage x1293 with 83px of plane left before the frame edge,
+     while 14 tracked caps at 22px measure ~260px and spend ~130 of them to the
+     right. `.arm-root` is `overflow: hidden`, so the tail is cut. It is a
+     phone-only break because it is bought with the doubled type: at the
+     desktop's 13px the same label is ~156px wide and its half still clears
+     1376, which is why a mouse never saw it.
+
+     Pinned to the door's RIGHT edge the sign grows leftwards INTO the room, so
+     it cannot reach the frame however long the localised string runs. Safe for
+     every `.arm-exit` in the building - the three painted class doors sit at
+     x1240, x1028 and x936 and the Records office storeroom at x1175, all of
+     them right of centre, none anywhere near the left edge. The rect under it
+     is unchanged, so the press is the same press. Desktop keeps the centre. */
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 html.arc-mobile .arm-bar {
