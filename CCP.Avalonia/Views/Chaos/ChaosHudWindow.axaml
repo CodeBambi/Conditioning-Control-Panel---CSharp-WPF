@@ -1,0 +1,469 @@
+<!-- PORTED from ConditioningControlPanel/Chaos/ChaosHudWindow.xaml.
+     Structure, ordering, spacing, x:Name-s and every resource key preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency  -> SystemDecorations="None" + TransparencyLevelHint
+       ResizeMode="NoResize"                    -> CanResize="False"
+       FontFamily="Segoe UI"                    -> dropped (Windows-only face)
+       FontFamily="/Fonts/#Fredoka, Segoe UI"   -> "Fredoka, Segoe UI" (the asset is not packed on
+                                                   this head; resolved by NAME where installed)
+       Visibility="Collapsed"                   -> IsVisible="False"
+       <Style x:Key TargetType="TextBlock">     -> <ControlTheme x:Key TargetType="TextBlock">
+                                                   (TextBlock is NOT templated, so property-only is
+                                                   safe here - CLAUDE.md trap 4 does not apply)
+       Style="{StaticResource Hdr}"             -> Theme="{StaticResource Hdr}"
+       Style x:Key="BoonTipChrome" (ToolTip)    -> <Style Selector="ToolTip"> in Window.Styles: a
+                                                   ControlTheme would blank the tip (trap 4), a
+                                                   plain Style keeps Avalonia's own template
+       <Grid.ToolTip><ToolTip Content=... />    -> ToolTip.Tip = a ContentControl carrying the same
+                                                   shared ContentTemplate
+       Grid.Clip RectangleGeometry RadiusX/Y    -> Border CornerRadius + ClipToBounds="True"
+                                                   (Avalonia's RectangleGeometry has no corner radii)
+       Style.Triggers / DataTrigger             -> IsVisible bound to a bool on the state, or set
+                                                   from code-behind (the RIPPLE colour)
+       RenderTransformOrigin="0.5,0.5"          -> "50%,50%" (a bare pair is ABSOLUTE px)
+       LinearGradientBrush "0,0"/"1,1"          -> "0%,0%"/"100%,100%" (same reason)
+       <Button.Resources><Style TargetType=     -> CornerRadius="N" on the Button; Avalonia's
+         "Border"><Setter CornerRadius>            Fluent template already TemplateBinds it
+       Button Content="text"                    -> a TextBlock child (Avalonia parses "_" in
+                                                   Content as an access key)
+       ToolTip="..."                            -> ToolTip.Tip="..."
+       PanningMode="VerticalOnly"               -> dropped (WPF touch panning has no twin)
+       ProgressBar (bar inside a sized Grid)    -> keeps an explicit Height. Avalonia's Fluent
+                                                   ProgressBar draws NOTHING - no track, no fill -
+                                                   when it is only stretched by its parent; found
+                                                   by rendering, both FOCUS bars were blank while
+                                                   BarLust (Height="5") drew fine
+       SlimScroll / SlimScrollBar templates     -> selectors on the DEFAULT ScrollBar template; see
+                                                   the ponytail note on those styles
+       MouseEnter/MouseLeave/MouseLeftButtonDown-> PointerEntered/PointerExited/PointerPressed
+       named RenderTransforms (StreakScale ...) -> built in the code-behind; Avalonia's FindControl
+                                                   only finds Controls, so a named Transform is not
+                                                   reachable the way WPF's generated field was
+
+     Every string here is hardcoded English in the WPF original too - this HUD was never
+     localized - so there is no {loc:Str} in this view and no key has been invented for one. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Chaos.ChaosHudWindow"
+        xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Chaos"
+        x:DataType="local:ChaosHudState"
+        Title="Rabbit Hole HUD"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        CanResize="False" WindowStartupLocation="Manual" Width="300">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="Pink" Color="#FF69B4"/>
+        <SolidColorBrush x:Key="StripBg" Color="#E6121026"/>
+        <SolidColorBrush x:Key="PanelBg" Color="#F2151226"/>
+        <SolidColorBrush x:Key="PanelBorder" Color="#55FF69B4"/>
+        <SolidColorBrush x:Key="TextDim" Color="#AAB8B8D0"/>
+        <ControlTheme x:Key="Hdr" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Pink}"/>
+            <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,12,0,6"/>
+        </ControlTheme>
+
+        <!-- Hover card shared by every boon tile (pockets + run picks). The chrome moved to the
+             ToolTip selector in Window.Styles; this is only the content. -->
+        <DataTemplate x:Key="BoonTipContent" x:DataType="local:ChaosHudBoon">
+            <StackPanel MaxWidth="240">
+                <TextBlock Text="{Binding TipTitle}" FontWeight="Bold" FontSize="13" Foreground="{Binding AccentBrush}"/>
+                <TextBlock Text="{Binding Desc}" Foreground="#DDE0E0F0" FontSize="12" TextWrapping="Wrap"
+                           Margin="0,3,0,0" IsVisible="{Binding HasDesc}"/>
+                <TextBlock Text="{Binding Flavor}" IsVisible="{Binding HasFlavor}" FontStyle="Italic" FontSize="11"
+                           Foreground="#CCB0B0C8" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                <TextBlock Text="{Binding Extra}" Foreground="#FFD700" FontSize="12" TextWrapping="Wrap"
+                           Margin="0,3,0,0" IsVisible="{Binding HasExtra}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Equipped-boon tile for the collapsed strip (toys group above, accessories group below) -->
+        <DataTemplate x:Key="StripBoonTile" x:DataType="local:ChaosHudBoon">
+            <Grid Width="64" Height="64" Margin="0,0,0,8" HorizontalAlignment="Center" Opacity="{Binding TileOpacity}">
+                <ToolTip.Tip>
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
+                </ToolTip.Tip>
+                <!-- rounded clip so square art can't poke past the ring corners -->
+                <Border CornerRadius="13" Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                    <Panel>
+                        <TextBlock Text="{Binding Glyph}" FontSize="30" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
+                        <!-- ring ABOVE the art: full-bleed sprites bury a behind-border -->
+                        <Border CornerRadius="13" BorderBrush="{Binding AccentBrush}" BorderThickness="3.5" IsHitTestVisible="False"/>
+                    </Panel>
+                </Border>
+                <Border Background="#DD121026" CornerRadius="6" Padding="4,0"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-3,-3"
+                        IsVisible="{Binding HasLevelBadge}">
+                    <TextBlock Text="{Binding LevelText}" Foreground="{StaticResource Pink}" FontSize="11" FontWeight="Bold"/>
+                </Border>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Pocket tile for the expanded panel: pre-run, click a filled tile to take it off -->
+        <DataTemplate x:Key="PocketTile" x:DataType="local:ChaosHudBoon">
+            <Grid Width="57" Height="57" Margin="0,0,8,6" Opacity="{Binding TileOpacity}"
+                  Background="Transparent" Cursor="Hand"
+                  Tag="{Binding Id}" PointerPressed="PocketTile_Click">
+                <ToolTip.Tip>
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
+                </ToolTip.Tip>
+                <Border CornerRadius="12" Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                    <Panel>
+                        <TextBlock Text="{Binding Glyph}" FontSize="26" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
+                        <Border CornerRadius="12" BorderBrush="{Binding AccentBrush}" BorderThickness="3.5" IsHitTestVisible="False"/>
+                    </Panel>
+                </Border>
+                <Border Background="#DD121026" CornerRadius="6" Padding="4,0"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-3,-3"
+                        IsVisible="{Binding HasLevelBadge}">
+                    <TextBlock Text="{Binding LevelText}" Foreground="{StaticResource Pink}" FontSize="11" FontWeight="Bold"/>
+                </Border>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- ponytail: local copy of ChaosHudWindow.xaml:BoonTipChrome, hoist when a second view
+             needs it. HasDropShadow="False" has no twin and needs none - Avalonia's tip is not a
+             layered HWND, so it cannot collide with one. -->
+        <Style Selector="ToolTip">
+            <Setter Property="Background" Value="#F2151226"/>
+            <Setter Property="BorderBrush" Value="#55FF69B4"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="10,8"/>
+        </Style>
+
+        <!-- ponytail: approximates ChaosHudWindow.xaml:SlimScroll + SlimScrollBar. WPF replaced
+             the whole ScrollViewer AND ScrollBar template to get a 5px pink rail with no arrows;
+             Avalonia's ScrollBar template is a different shape, and a property-only ControlTheme
+             for it would leave Template null and draw nothing (CLAUDE.md trap 4). So the look is
+             reproduced with selectors over the default template instead. Re-author the template
+             properly if the rail ever has to match pixel-for-pixel. -->
+        <Style Selector="ScrollBar:vertical">
+            <Setter Property="Width" Value="5"/>
+            <Setter Property="MinWidth" Value="5"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ScrollBar:vertical /template/ Thumb">
+            <Setter Property="Background" Value="#80FF69B4"/>
+            <Setter Property="CornerRadius" Value="2.5"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- Root has NO background -> unpainted area is alpha-0 and click-through (desktop usable). -->
+    <Grid>
+        <!-- COLLAPSED STRIP (always visible, left edge) -->
+        <Border x:Name="Strip" HorizontalAlignment="Left" Width="116"
+                Background="{StaticResource StripBg}" BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,8,8"
+                CornerRadius="0,0,18,0" PointerEntered="Hud_MouseEnter" PointerExited="Strip_MouseLeave"
+                PointerPressed="Strip_Click">
+            <StackPanel VerticalAlignment="Top" Margin="0,20,0,0" HorizontalAlignment="Center">
+                <TextBlock Text="🐇" Foreground="{StaticResource Pink}" FontSize="30" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtStripClock" Text="{Binding ClockText}" Foreground="White" FontFamily="Consolas, Courier New" FontSize="17"
+                           HorizontalAlignment="Center" Margin="0,12,0,0"/>
+
+                <!-- left/right side switch - parks the whole sidebar on the other screen edge so it's
+                     out of the way of bubbles. Sits right under the clock; click a side to re-anchor. -->
+                <Border Margin="0,8,0,0" HorizontalAlignment="Center" Background="#33000000" CornerRadius="9" Padding="2">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="SideLeftBtn" Width="28" Height="19" CornerRadius="8" Cursor="Hand"
+                                Background="Transparent" PointerPressed="SideLeft_Click">
+                            <TextBlock x:Name="SideLeftGlyph" Text="◀" FontSize="11" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border x:Name="SideRightBtn" Width="28" Height="19" CornerRadius="8" Cursor="Hand" Margin="2,0,0,0"
+                                Background="Transparent" PointerPressed="SideRight_Click">
+                            <TextBlock x:Name="SideRightGlyph" Text="▶" FontSize="11" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+                <TextBlock x:Name="TxtStripScore" Text="{Binding ScoreText}" Foreground="White" FontWeight="Bold" FontSize="16"
+                           HorizontalAlignment="Center" TextAlignment="Center" Margin="0,14,0,0"/>
+                <!-- STREAK: Balatro-style combo readout - heats through color tiers as it climbs,
+                     jitters when hot, punches on every gain, shakes hard on a drop (code-behind).
+                     Sits ABOVE the multiplier (the hero stat); ~20% larger than before.
+                     The TransformGroup is built in the code-behind, not here. -->
+                <StackPanel x:Name="StreakBlock" Margin="0,12,0,0" HorizontalAlignment="Center"
+                            RenderTransformOrigin="50%,50%">
+                    <TextBlock x:Name="TxtStreakLbl" Text="STREAK" Foreground="{StaticResource TextDim}"
+                               FontSize="12" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtStreakNum" Text="x0" Foreground="White" FontWeight="Bold"
+                               FontFamily="Consolas, Courier New" FontSize="29" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock x:Name="TxtStripMult" Text="{Binding TotalMultText}" Foreground="#FFD24DFF" FontWeight="Bold" FontSize="15"
+                           FontFamily="Fredoka, Segoe UI" RenderTransformOrigin="50%,50%"
+                           HorizontalAlignment="Center" Margin="0,12,0,0"/>
+
+                <!-- FOCUS: the defuse fuel - a core resource like streak, so it lives on the
+                     always-visible strip too. Dims + pulses when below a defuse's cost. -->
+                <StackPanel x:Name="FocusStripBlock" Margin="0,14,0,0" HorizontalAlignment="Center">
+                    <TextBlock Text="FOCUS" Foreground="#FF9CE8FF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <Grid Width="86" Height="8" Margin="0,3,0,0">
+                        <ProgressBar x:Name="FocusStripBar" Minimum="0" Maximum="{Binding FocusMax, Mode=OneWay}"
+                                     Value="{Binding Focus, Mode=OneWay}" MinWidth="0" Height="8"
+                                     Foreground="#FF5AC8FA" Background="#33000000" BorderThickness="0"/>
+                        <!-- the 30-mark: a defuse's price, etched on the bar -->
+                        <Grid IsHitTestVisible="False">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3*"/>
+                                <ColumnDefinition Width="7*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="1.5" HorizontalAlignment="Right" Background="#88FFFFFF"/>
+                        </Grid>
+                    </Grid>
+                    <TextBlock Text="{Binding FocusText}" Foreground="White" FontWeight="Bold" FontSize="13"
+                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <!-- RIPPLE: the right-click wave - one charge on a slow gather. Dims while charging;
+                     READY breathes a soft cyan glow (code-behind, same pulse as the toy hero button).
+                     The WPF DataTrigger on RippleReady is applied by SetRippleReadyVisual instead. -->
+                <StackPanel x:Name="RippleStripBlock" Margin="0,12,0,0" HorizontalAlignment="Center">
+                    <TextBlock Text="RIPPLE" Foreground="#FF7AE0FF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="RippleStripText" Text="{Binding RippleText}" Foreground="White"
+                               FontWeight="Bold" FontFamily="Consolas, Courier New" FontSize="13"
+                               HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <!-- equipped toys (max 2), then accessories (max 2) - separate groups, thin seam between -->
+                <ItemsControl ItemsSource="{Binding ActiveSidebarToys}" Margin="0,18,0,0" HorizontalAlignment="Center"
+                              ItemTemplate="{StaticResource StripBoonTile}"/>
+                <Border Height="1" Width="48" Background="{StaticResource PanelBorder}" Margin="0,0,0,8"
+                        IsVisible="{Binding ShowGroupSeam}"/>
+                <ItemsControl ItemsSource="{Binding ActiveSidebarAccessories}" HorizontalAlignment="Center"
+                              ItemTemplate="{StaticResource StripBoonTile}"/>
+
+                <!-- mantras/sins drafted this run now ride the horizontal ribbon across the TOP of
+                     the screen (ChaosBoonBarOverlay), next to the clock - they outgrew this narrow
+                     strip. Still listed in full under CONDITIONING in the expanded panel below. -->
+            </StackPanel>
+        </Border>
+
+        <!-- EXPANDED PANEL (shown on hover). The TranslateTransform is built in the code-behind. -->
+        <Border x:Name="Panel" HorizontalAlignment="Left" Width="300" IsVisible="False"
+                Background="{StaticResource PanelBg}" BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,8,8"
+                CornerRadius="0,0,18,0" PointerExited="Hud_MouseLeave">
+            <Grid Margin="20,18,20,18">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- header -->
+                <StackPanel Grid.Row="0">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="PortraitHost" Width="44" Height="44" Margin="0,0,10,0" CornerRadius="10" VerticalAlignment="Center"
+                                Background="#33FF69B4" BorderThickness="0" ClipToBounds="True">
+                            <Panel>
+                                <Image x:Name="Portrait" Stretch="UniformToFill"/>
+                                <Border CornerRadius="10" BorderBrush="{StaticResource PanelBorder}" BorderThickness="3" IsHitTestVisible="False"/>
+                            </Panel>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="🐇 THE HOLE" Foreground="{StaticResource Pink}" FontWeight="Bold" FontSize="22"/>
+                                <TextBlock x:Name="TxtActWave" Text="{Binding ActWaveText}" Foreground="White" FontSize="13" VerticalAlignment="Bottom" Margin="8,0,0,3"/>
+                            </StackPanel>
+                            <!-- Run clock + fill bar: Pocket Watch perks only (SetClockVisible) - time stays a mystery otherwise. -->
+                            <TextBlock x:Name="TxtRunTime" Text="{Binding RunTimeText}" Foreground="{StaticResource TextDim}" FontSize="13" Margin="0,2,0,0" IsVisible="False"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <!-- same left/right side switch, mirrored UNDER the title so it's reachable while the
+                         panel is open (e.g. the pre-run loadout glance, before you fall in) without
+                         overlapping "THE HOLE - DEPTH". -->
+                    <Border HorizontalAlignment="Left" Margin="0,6,0,0" Background="#33000000" CornerRadius="9" Padding="2">
+                        <StackPanel Orientation="Horizontal">
+                            <Border x:Name="SideLeftBtn2" Width="28" Height="19" CornerRadius="8" Cursor="Hand"
+                                    Background="Transparent" PointerPressed="SideLeft_Click">
+                                <TextBlock x:Name="SideLeftGlyph2" Text="◀" FontSize="11" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="SideRightBtn2" Width="28" Height="19" CornerRadius="8" Cursor="Hand" Margin="2,0,0,0"
+                                    Background="Transparent" PointerPressed="SideRight_Click">
+                                <TextBlock x:Name="SideRightGlyph2" Text="▶" FontSize="11" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                    <ProgressBar x:Name="BarRunProgress" Minimum="0" Maximum="1" Value="{Binding RunProgress, Mode=OneWay}" Height="5" Margin="0,4,0,0"
+                                 Foreground="#FF8A7DBD" Background="#33000000" BorderThickness="0" IsVisible="False"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <TextBlock x:Name="TxtPanelScore" Text="{Binding ScoreText}" Foreground="White" FontWeight="Bold" FontSize="22" Margin="0,0,16,0"/>
+                        <TextBlock x:Name="TxtPanelMult" Text="{Binding TotalMultText}" Foreground="#FFD24DFF" FontWeight="Bold" FontSize="18"
+                                   FontFamily="Fredoka, Segoe UI" RenderTransformOrigin="50%,50%" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- middle: stack + boons (scrolls when the lists outgrow the panel) -->
+                <ScrollViewer Grid.Row="1" Margin="0,6,0,0" VerticalScrollBarVisibility="Auto" Focusable="False">
+                <StackPanel>
+                    <TextBlock x:Name="HdrStack" Text="MULTIPLIER STACK" Theme="{StaticResource Hdr}"/>
+                    <Grid x:Name="RowStreak" Margin="0,1" Background="Transparent"><TextBlock Text="{Binding Combo, StringFormat=streak x{0}}" Foreground="{StaticResource TextDim}" FontSize="13"/><TextBlock Text="{Binding ComboMult, StringFormat=x{0:0.0}}" Foreground="White" FontSize="13" HorizontalAlignment="Right"/></Grid>
+                    <Grid x:Name="RowDifficulty" Margin="0,1" Background="Transparent"><TextBlock Text="difficulty" Foreground="{StaticResource TextDim}" FontSize="13"/><TextBlock Text="{Binding DifficultyMult, StringFormat=x{0:0.0}}" Foreground="White" FontSize="13" HorizontalAlignment="Right"/></Grid>
+                    <Grid x:Name="RowLust" Margin="0,1" Background="Transparent"><TextBlock Text="lust" Foreground="{StaticResource TextDim}" FontSize="13"/><TextBlock Text="{Binding HeatMult, StringFormat=x{0:0.0}}" Foreground="White" FontSize="13" HorizontalAlignment="Right"/></Grid>
+                    <Grid x:Name="RowMantras" Margin="0,1" Background="Transparent"><TextBlock Text="mantras" Foreground="{StaticResource TextDim}" FontSize="13"/><TextBlock Text="{Binding BoonMult, StringFormat=x{0:0.0}}" Foreground="White" FontSize="13" HorizontalAlignment="Right"/></Grid>
+                    <ProgressBar x:Name="BarLust" Minimum="0" Maximum="1" Value="{Binding Heat, Mode=OneWay}" Height="5" Margin="0,6,0,0"
+                                 Foreground="#FFFF7A3D" Background="#33000000" BorderThickness="0"/>
+
+                    <TextBlock x:Name="HdrResistance" Text="RESISTANCE" Theme="{StaticResource Hdr}"/>
+                    <TextBlock x:Name="TxtShields" Text="{Binding ShieldText}" Foreground="#FFFF6EC7" FontSize="22"
+                               RenderTransformOrigin="0%,50%">
+                        <TextBlock.RenderTransform><ScaleTransform/></TextBlock.RenderTransform>
+                    </TextBlock>
+
+                    <!-- focus: pops fill it, hold-channels spend it. Low = dim + pulse warning. -->
+                    <TextBlock x:Name="HdrFocus" Text="FOCUS" Theme="{StaticResource Hdr}"/>
+                    <StackPanel x:Name="FocusPanelBlock">
+                        <Grid>
+                            <TextBlock Text="pops fill it · a hold spends it" Foreground="{StaticResource TextDim}" FontSize="12"/>
+                            <TextBlock Text="{Binding FocusText}" Foreground="#FF9CE8FF" FontWeight="Bold" FontSize="13" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <Grid Height="8" Margin="0,4,0,0">
+                            <ProgressBar x:Name="FocusPanelBar" Minimum="0" Maximum="{Binding FocusMax, Mode=OneWay}"
+                                         Value="{Binding Focus, Mode=OneWay}" MinWidth="0" Height="8"
+                                         Foreground="#FF5AC8FA" Background="#33000000" BorderThickness="0"/>
+                            <Grid IsHitTestVisible="False">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="3*"/>
+                                    <ColumnDefinition Width="7*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="1.5" HorizontalAlignment="Right" Background="#88FFFFFF"/>
+                            </Grid>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- loadout: what you took down with you, split by group (max 2 each). hover a tile
+                         for its card; pre-run, click a filled tile to take it off (no-op once SINK fires) -->
+                    <TextBlock x:Name="HdrPockets" Text="TOYS" Theme="{StaticResource Hdr}" IsVisible="{Binding HasToys}"/>
+                    <ItemsControl ItemsSource="{Binding ActiveSidebarToys}" ItemTemplate="{StaticResource PocketTile}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <TextBlock x:Name="HdrAccessories" Text="ACCESSORIES" Theme="{StaticResource Hdr}" IsVisible="{Binding HasAccessories}"/>
+                    <ItemsControl ItemsSource="{Binding ActiveSidebarAccessories}" ItemTemplate="{StaticResource PocketTile}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <!-- mantras/sins taken this run: tile + name rows, hover for the description -->
+                    <TextBlock x:Name="HdrConditioning" Text="CONDITIONING" Theme="{StaticResource Hdr}"/>
+                    <ItemsControl ItemsSource="{Binding RunPickTiles}">
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="local:ChaosHudBoon">
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <ToolTip.Tip>
+                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
+                                </ToolTip.Tip>
+                                <Border Width="33" Height="33" CornerRadius="8"
+                                        Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                                    <Panel>
+                                        <TextBlock Text="{Binding Glyph}" FontSize="16" Foreground="{Binding AccentBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
+                                        <Border CornerRadius="8" BorderBrush="{Binding AccentBrush}" BorderThickness="3" IsHitTestVisible="False"/>
+                                    </Panel>
+                                </Border>
+                                <TextBlock Text="{Binding Name}" Foreground="{Binding AccentBrush}" FontSize="13"
+                                           Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- passive modifiers: always-on owned upgrades shaping this run (purple tiles, hover for desc) -->
+                    <TextBlock x:Name="HdrModifiers" Text="MODIFIERS" Theme="{StaticResource Hdr}"/>
+                    <ItemsControl ItemsSource="{Binding RunModifiers}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:ChaosHudBoon">
+                                <Border Width="45" Height="45" Margin="0,0,7,7" CornerRadius="10"
+                                        Background="{Binding TileBackBrush}" BorderThickness="0" ClipToBounds="True">
+                                    <ToolTip.Tip>
+                                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BoonTipContent}"/>
+                                    </ToolTip.Tip>
+                                    <Panel>
+                                        <TextBlock Text="{Binding Glyph}" FontSize="20" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
+                                        <Border CornerRadius="10" BorderBrush="{Binding AccentBrush}" BorderThickness="3" IsHitTestVisible="False"/>
+                                    </Panel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="HdrFeed" Text="FEED" Theme="{StaticResource Hdr}"/>
+                    <ItemsControl ItemsSource="{Binding RecentEvents}">
+                        <ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{Binding}" Foreground="{StaticResource TextDim}" FontSize="13" Margin="0,1" TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                </ScrollViewer>
+
+                <!-- bottom: one hero button - FALL IN on the Warren-phase sidebar, PAUSE mid-run.
+                     Pausing swaps in the continue-or-wake-up choice (the run stays held meanwhile).
+                     Pre-run only, a ✖ beside the hero closes the whole mode (Warren + sidebar). -->
+                <StackPanel x:Name="ControlsRow" Grid.Row="2" Margin="0,12,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" x:Name="BtnHero" Click="BtnHero_Click" FontSize="16" FontWeight="Bold"
+                                Foreground="White" BorderThickness="0" Padding="0,13" Cursor="Hand" CornerRadius="12"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Center">
+                            <Button.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                    <GradientStop Color="#FFE84393" Offset="0"/>
+                                    <GradientStop Color="#FF8B5CF6" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Button.Background>
+                            <TextBlock x:Name="TxtHero" Text="⏸ PAUSE"/>
+                        </Button>
+                        <Button Grid.Column="1" x:Name="BtnCloseMode" Click="BtnCloseMode_Click" FontSize="15" FontWeight="Bold"
+                                Width="46" Margin="8,0,0,0" Background="#66FF5050" Foreground="White" BorderThickness="0" Cursor="Hand"
+                                CornerRadius="12" HorizontalContentAlignment="Center"
+                                ToolTip.Tip="leave the rabbit hole" IsVisible="False">
+                            <TextBlock Text="✖"/>
+                        </Button>
+                    </Grid>
+                    <Grid x:Name="PauseChoiceRow" IsVisible="False">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Click="BtnResume_Click" FontSize="14" FontWeight="Bold"
+                                Padding="0,12" Margin="0,0,5,0" Background="#449CE8A0" Foreground="White" BorderThickness="0" Cursor="Hand"
+                                CornerRadius="12" HorizontalContentAlignment="Center">
+                            <TextBlock Text="▶ continue"/>
+                        </Button>
+                        <Button Grid.Column="1" Click="BtnExit_Click" FontSize="14" FontWeight="Bold"
+                                Padding="0,12" Margin="5,0,0,0" Background="#66FF5050" Foreground="White" BorderThickness="0" Cursor="Hand"
+                                CornerRadius="12" HorizontalContentAlignment="Center">
+                            <TextBlock Text="✖ wake up"/>
+                        </Button>
+                    </Grid>
+                    <TextBlock x:Name="TxtPauseHint" Text="⏸ HELD · your panic key again wakes you up"
+                               Foreground="{StaticResource TextDim}" FontSize="11" HorizontalAlignment="Center"
+                               Margin="0,6,0,0" IsVisible="False"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
