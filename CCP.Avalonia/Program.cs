@@ -25,6 +25,13 @@ namespace ConditioningControlPanel.Avalonia
             if (rv >= 0 && rv + 1 < args.Length)
                 return RenderProof.Run(args[rv + 1], () => new Views.AppShell());
 
+            // --x11-probe drives the X11 overlay shim against a real window and asks the X
+            // server which window owns the pointer. Every way that shim can fail returns
+            // success and changes nothing, so only the server's answer proves it works.
+            // Run it inside a nested compositor - scripts/x11-overlay-probe.sh does that.
+            if (Array.IndexOf(args, "--x11-probe") >= 0)
+                return X11OverlayProbe.Run();
+
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
             return 0;
         }
