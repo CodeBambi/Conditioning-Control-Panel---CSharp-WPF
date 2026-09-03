@@ -1,0 +1,226 @@
+<!-- PORTED from ConditioningControlPanel/Chaos/ChaosOverlayWindow.xaml.
+     Structure, ordering, spacing, x:Names and every resource key preserved so the two diff
+     cleanly. Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency -> SystemDecorations="None" + TransparencyLevelHint
+       ShowInTaskbar="False"                   -> unchanged; it is also what replaces the
+                                                  WS_EX_TOOLWINDOW the code-behind used to OR in
+       ShowActivated="False"                   -> unchanged; replaces WS_EX_NOACTIVATE
+       ResizeMode="NoResize"                   -> CanResize="False"
+       FontFamily="Segoe UI"                   -> dropped (Windows-only face)
+       Visibility="Collapsed"                  -> IsVisible="False"
+       RenderTransformOrigin="0.5,0.5"         -> "50%,50%" (a bare pair is ABSOLUTE px in
+                                                  Avalonia, which puts the origin in the corner)
+       LinearGradientBrush "0,0"/"1,1"         -> "0%,0%"/"100%,100%" (same reason)
+       DropShadowEffect ShadowDepth="0"        -> OffsetX="0" OffsetY="0"
+       Grid.Clip = RectangleGeometry with      -> a Border with CornerRadius="13,13,0,0" and
+         RadiusX/RadiusY (rounds the top          ClipToBounds="True" around the hero. Avalonia's
+         corners only, its rect running off       RectangleGeometry has no corner radius at all,
+         the bottom)                              and the rounded corners are the whole point.
+       Width/Height                            -> the WPF ctor sized the window off
+                                                  SystemParameters.PrimaryScreen*; these are the
+                                                  fallback the headless render frames, and the
+                                                  ctor still resizes to the real screen when
+                                                  there is one.
+       Click= / PreviewMouseLeftButtonDown=    -> wired in the constructor
+       x:Name on the six transforms            -> dropped. Avalonia has no Name on a Transform at
+                                                  all (AVLN2000), and nothing needs one now that
+                                                  the animations they existed for are stubbed -
+                                                  the one offset the code-behind still sets is
+                                                  reached through StoryPortrait.RenderTransform.
+       Button Content="..."                    -> a named TextBlock child. Avalonia parses "_" in
+                                                  Content as an access key, and the code-behind
+                                                  rewrites three of these captions at runtime.
+
+     Every string here is hardcoded English in the WPF original too - the overlay was never
+     localized - so there is no {loc:Str} in this view and no key has been invented for one. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Chaos.ChaosOverlayWindow"
+        Title="Down the Rabbit Hole"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        CanResize="False" WindowStartupLocation="Manual"
+        Width="1280" Height="720">
+    <Window.Resources>
+        <SolidColorBrush x:Key="Pink" Color="#FF69B4"/>
+        <SolidColorBrush x:Key="PanelBg" Color="#EE151226"/>
+        <SolidColorBrush x:Key="TextDim" Color="#AAB8B8D0"/>
+    </Window.Resources>
+
+    <Grid>
+        <!-- dim backdrop (only for draft/results; hidden during countdown) -->
+        <Rectangle x:Name="Backdrop" Fill="Black" Opacity="0.72" IsVisible="False"/>
+
+        <!-- COUNTDOWN -->
+        <Viewbox x:Name="CountdownBox" IsVisible="False" Width="360" Height="360"
+                 HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock x:Name="CountdownText" Text="3" Foreground="White" FontWeight="Bold" FontSize="200"
+                       RenderTransformOrigin="50%,50%">
+                <TextBlock.Effect>
+                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="40" OffsetX="0" OffsetY="0" Opacity="0.9"/>
+                </TextBlock.Effect>
+                <TextBlock.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </TextBlock.RenderTransform>
+            </TextBlock>
+        </Viewbox>
+
+        <!-- BOON DRAFT -->
+        <Border x:Name="DraftPanel" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="{StaticResource PanelBg}" BorderBrush="{StaticResource Pink}" BorderThickness="2"
+                CornerRadius="16" Padding="28">
+            <StackPanel>
+                <TextBlock x:Name="DraftTitle" Text="LOOP CLEARED · CHOOSE A MANTRA"
+                           Foreground="{StaticResource Pink}" FontWeight="Bold" FontSize="18"
+                           HorizontalAlignment="Center" Margin="0,0,0,18"/>
+                <StackPanel x:Name="BoonCardHost" Orientation="Horizontal" HorizontalAlignment="Center"/>
+                <Grid Margin="0,18,0,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                        <Button x:Name="BtnSkipBoon"
+                                Padding="12,6" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
+                                ToolTip.Tip="resist the table: take no card, gain one resistance for this descent">
+                            <TextBlock x:Name="BtnSkipBoonText" Text="SKIP · +1 RESISTANCE"/>
+                        </Button>
+                        <!-- Taking Chances: re-draw the options; visible only while rerolls remain. -->
+                        <Button x:Name="BtnReroll" IsVisible="False"
+                                Margin="10,0,0,0" Padding="12,6" Background="#338B5CF6" Foreground="White" BorderThickness="0">
+                            <TextBlock x:Name="BtnRerollText" Text="🎲 tempt fate again"/>
+                        </Button>
+                    </StackPanel>
+                    <TextBlock x:Name="DraftCountdown" Foreground="{StaticResource TextDim}" FontSize="13"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- RESULTS: hero-banner recap card. The art ships at assets/Chaos/recap.png
+             (ChaosArt.ResolveRecap); until it exists the gradient wash underneath shows. -->
+        <Border x:Name="ResultsPanel" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+                Background="{StaticResource PanelBg}" BorderBrush="{StaticResource Pink}" BorderThickness="3"
+                CornerRadius="16" Width="560">
+            <StackPanel>
+                <!-- HERO: full-bleed banner, top corners clipped inside the card ring. -->
+                <Border CornerRadius="13,13,0,0" ClipToBounds="True">
+                    <Grid Height="190">
+                        <Border>
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                    <GradientStop Color="#FF221340" Offset="0"/>
+                                    <GradientStop Color="#FF44195C" Offset="0.55"/>
+                                    <GradientStop Color="#FF7E2A6E" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <Image x:Name="ResultsHero" Stretch="UniformToFill"/>
+                        <!-- scrim so the title reads over any art -->
+                        <Border>
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                    <GradientStop Color="#00000000" Offset="0.30"/>
+                                    <GradientStop Color="#E0120F22" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <StackPanel VerticalAlignment="Bottom" Margin="26,0,26,13">
+                            <TextBlock Text="YOU SURFACE" Foreground="White" FontWeight="Bold" FontSize="30">
+                                <TextBlock.Effect>
+                                    <DropShadowEffect Color="#FFFF69B4" BlurRadius="24" OffsetX="0" OffsetY="0" Opacity="0.85"/>
+                                </TextBlock.Effect>
+                            </TextBlock>
+                            <TextBlock Text="it lets you go. for now." Foreground="#D8FFD7EF"
+                                       FontSize="12" FontStyle="Italic" Margin="2,1,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <StackPanel Margin="28,18,28,26">
+                    <StackPanel x:Name="ResultsBody"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                        <Button x:Name="BtnRunAgain"
+                                Padding="18,10" Margin="0,0,12,0" Background="{StaticResource Pink}" Foreground="White" FontWeight="Bold" BorderThickness="0">
+                            <TextBlock x:Name="BtnRunAgainText" Text="▸ FALL DEEPER"/>
+                        </Button>
+                        <Button x:Name="BtnClose"
+                                Padding="18,10" Background="#33FFFFFF" Foreground="White" BorderThickness="0">
+                            <TextBlock x:Name="BtnCloseText" Text="wake up"/>
+                        </Button>
+                        <!-- the door: from run 1 onward the recap always offers the Dollhouse -->
+                        <Button x:Name="BtnDollhouse" IsVisible="False"
+                                Padding="18,10" Margin="12,0,0,0" Background="#338B5CF6" Foreground="White" BorderThickness="0">
+                            <TextBlock x:Name="BtnDollhouseText" Text="the dollhouse"/>
+                        </Button>
+                        <!-- straight to run setup: tweak the fall without hunting through the hub -->
+                        <Button x:Name="BtnAdjust" IsVisible="False"
+                                Padding="18,10" Margin="12,0,0,0" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
+                                ToolTip.Tip="open run setup — difficulty, length, the whole outfit">
+                            <TextBlock x:Name="BtnAdjustText" Text="adjust the fall"/>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- STORY CARD: a Hades-style character scene for STORY beats. A full-screen background image
+             pans slowly behind a full-bleed hero (no frame), with the dialogue plaque on top. Advances
+             ONLY on user input (click / Space / Enter / →) — never auto-advances. -->
+        <Grid x:Name="StoryCardPanel" IsVisible="False" Background="#01000000">
+            <!-- BACKGROUND scene: full-screen, slow ken-burns pan -->
+            <Image x:Name="StoryBg" Stretch="UniformToFill" RenderTransformOrigin="50%,50%">
+                <Image.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform ScaleX="1.08" ScaleY="1.08"/>
+                        <TranslateTransform X="0" Y="0"/>
+                    </TransformGroup>
+                </Image.RenderTransform>
+            </Image>
+            <!-- darken + bottom scrim so the dialogue reads over any art -->
+            <Border Background="#59000000"/>
+            <Border>
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Color="#00000000" Offset="0.45"/>
+                        <GradientStop Color="#F2080612" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <!-- FOREGROUND hero: full-bleed, bottom-anchored, no frame; slides in from its side -->
+            <Image x:Name="StoryPortrait" Stretch="Uniform" VerticalAlignment="Bottom"
+                   HorizontalAlignment="Left">
+                <Image.RenderTransform>
+                    <TranslateTransform X="-260"/>
+                </Image.RenderTransform>
+            </Image>
+
+            <!-- dialogue plaque: bottom-center -->
+            <Border x:Name="StoryBox" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                    Margin="0,0,0,72" MaxWidth="980" Background="#F2140F26" BorderBrush="{StaticResource Pink}"
+                    BorderThickness="2" CornerRadius="16" Padding="38,28,38,30" RenderTransformOrigin="50%,100%">
+                <Border.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="#CC000000" BlurRadius="34" OffsetX="0" OffsetY="0" Opacity="0.78"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock x:Name="StoryName" Text="The Madam" Foreground="{StaticResource Pink}"
+                               FontWeight="Bold" FontSize="30" Margin="0,0,0,1"/>
+                    <TextBlock x:Name="StoryTitle" Text="" Foreground="{StaticResource TextDim}"
+                               FontSize="16" FontStyle="Italic" Margin="0,0,0,10"/>
+                    <TextBlock x:Name="StoryText" Text="" Foreground="White" FontSize="24"
+                               TextWrapping="Wrap" LineHeight="34"/>
+                    <!-- press-forward chevron (user-driven only) -->
+                    <TextBlock x:Name="StoryAdvance" Text="▸" Foreground="{StaticResource Pink}" FontSize="26"
+                               FontWeight="Bold" HorizontalAlignment="Right" Margin="0,10,0,0"
+                               RenderTransformOrigin="50%,50%">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform X="0"/>
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
