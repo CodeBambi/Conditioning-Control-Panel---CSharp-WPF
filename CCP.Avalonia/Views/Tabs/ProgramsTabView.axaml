@@ -1,0 +1,1275 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/ProgramsTabView.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     cleanly. The original's long design essays (why the rail is a capped star column, why the task
+     column is capped, why the crest is a masked Rectangle and never an Image, why the node area is
+     62 and not 42) are NOT transcribed - they still explain the WPF file and the shape they argue
+     for is preserved here unchanged. Only the notes that a reader of THIS file needs are kept.
+
+     Deviations, all forced:
+
+       Style="{StaticResource X}"        -> Theme="{StaticResource X}"
+       <Style x:Key TargetType>          -> <ControlTheme x:Key TargetType> carrying a Template
+                                            (CLAUDE.md trap 4)
+       Visibility="Collapsed"            -> IsVisible="False"
+       helpers:EmojiTextBlock            -> TextBlock  (Avalonia draws colour emoji natively, trap 3)
+       Image + EmojiToImageSource        -> TextBlock  (same reason)
+       Content="{loc:Str ...}" on Button -> a child <TextBlock>; Avalonia parses "_" in Content as
+                                            an access key and every loc key here is snake_case
+                                            (trap 1)
+       ToolTip="..."                     -> ToolTip.Tip="..."
+       hover:HoverPop.IsEnabled          -> dropped; the behaviour lives in the WPF head
+       RenderOptions.BitmapScalingMode   -> dropped for now; the Avalonia twin is
+                                            RenderOptions.BitmapInterpolationMode, worth setting on
+                                            the two <Image>s once real feature icons resolve there
+       RenderTransformOrigin="0,0.5"     -> "0%,50%"   (a bare pair is ABSOLUTE px in Avalonia)
+       LinearGradientBrush "0.5,0"       -> "50%,0%"   (same reason)
+       ImageBrush ImageSource=           -> ImageBrush Source=
+       x:FieldModifier="internal"        -> dropped (no such directive on Avalonia; the code-behind
+                                            reaches its own controls through FindControl)
+       x:Name on a non-Control           -> dropped. Avalonia's XAML compiler rejects x:Name on
+                                            anything that is not a Control, so the names on the six
+                                            ColumnDefinitions (RailWidthColumn, RailSpacerColumn,
+                                            RailDoneColumn, RailRestColumn, HeroArtColumn,
+                                            TaskListColumn), on every Scale/TranslateTransform and
+                                            on the two mask ImageBrushes are gone. Code reaches the
+                                            rail's two track columns through the fill Border's
+                                            parent Grid instead; the transforms and the masks were
+                                            only ever addressed by the storyboards and the art
+                                            loader, both of which live in MainWindow on the WPF head.
+       Click="..."                       -> kept; the handlers are stubs, see the code-behind
+
+     ONE x:Name is new, TxtProgramPauseResume: BtnProgramPauseResume's caption is set from code on
+     WPF (Content = Loc.Get("btn_program_pause"/"..._resume")), and a Button Content string carrying
+     a snake_case loc key is exactly trap 1, so the caption is a named TextBlock inside the button.
+
+     DROPPED, and the only real losses:
+       DataTemplate.Triggers + Storyboard  - the today-node breathing halo, the day-complete node
+         ignite and the task-card completion pop. WPF DataTriggers with BeginStoryboard have no
+         Avalonia equivalent worth hand-rolling from a template, and every one of them is
+         decoration on top of a state the static markup already shows (the halo Ellipse, the
+         ignite Ellipse and the done chip all still draw, they just do not animate).
+         ponytail: no node breathe / ignite / card pop, restore with Avalonia animations when the
+         program services move to Core and the run view is live.
+
+     Every panel below is IsVisible="False" exactly as in the original: on WPF the MainWindow
+     partial (MainWindow.ProgramsTab.cs) shows exactly one of Browse / Run / Lapsed / Graduated.
+     That partial is not on this head, so the code-behind seeds all four with sample data instead -
+     see the note there. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.ProgramsTabView"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <!-- Session-progress bar, hero sized. Foreground is overwritten in code with the program's
+             accent brush; the fallbacks stay DynamicResource so mods re-theme it at runtime. The
+             track background is transparent because the bar sits inside SessionBarHost, which owns
+             the track colour and the rounded clip (see SessionBarHost_SizeChanged).
+             ponytail: local copy of Views/Tabs/ProgramsTabView.xaml:ProgramHeroBar, hoist when a
+             second view needs it. PART_Track is gone - Avalonia's ProgressBar only looks up
+             PART_Indicator and sizes it itself. -->
+        <ControlTheme x:Key="ProgramHeroBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="ProgressBar">
+                    <Grid>
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8"/>
+                        <Border x:Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="8"
+                                Background="{TemplateBinding Foreground}">
+                            <!-- Static top gloss so the fill reads as a lit bar, not a flat strip.
+                                 Gradient only - no per-frame work. -->
+                            <Border CornerRadius="8">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="50%,0%" EndPoint="50%,100%">
+                                        <GradientStop Color="#50FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#00FFFFFF" Offset="0.55"/>
+                                        <GradientStop Color="#22000000" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </UserControl.Resources>
+    <Grid>
+        <Border Theme="{StaticResource SectionPanel}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="15">
+
+                    <!-- ================= Header ================= -->
+                    <StackPanel Margin="0,0,0,14">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📅" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str programs_browse_header}"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <!-- Same gold BETA pill as the nav button, scaled up for the header. -->
+                            <Border Margin="8,0,0,0" VerticalAlignment="Center" CornerRadius="9999"
+                                    Padding="7,2" Background="#33FFD700"
+                                    BorderBrush="#AAFFD700" BorderThickness="1">
+                                <TextBlock Text="BETA" FontSize="10" FontWeight="Bold" Foreground="#FFD700"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Str programs_browse_sub}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" MaxWidth="720"
+                                   HorizontalAlignment="Left"/>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- BROWSE: nothing enrolled. One card per program in App.Programs.Library -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsBrowsePanel" IsVisible="False">
+
+                        <TextBlock x:Name="TxtProgramsBrowseEmpty"
+                                   Text="{loc:Str programs_browse_empty}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="13" Margin="2,10,0,0" IsVisible="False"/>
+
+                        <ItemsControl x:Name="ProgramLibraryList" Margin="0,10,0,0">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="tabs:ProgramBrowseItem">
+                                    <!-- Tall hero card. Fixed width so cards read as objects, not strips;
+                                         VerticalAlignment=Stretch lets the WrapPanel line height equalise
+                                         every card in a row so the buttons line up. -->
+                                    <Border Width="350" MinHeight="280" Margin="0,0,14,14" CornerRadius="12"
+                                            VerticalAlignment="Stretch"
+                                            Opacity="{Binding CardOpacity}"
+                                            Background="{DynamicResource ElevatedSurfaceBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                                            <!-- Accent strip across the top -->
+                                            <Border Grid.Row="0" Height="5" VerticalAlignment="Top"
+                                                    CornerRadius="11,11,0,0"
+                                                    Background="{Binding AccentBrush}"/>
+
+                                            <!-- Banner art band. UniformToFill with AlignmentX=Right crops
+                                                 to the richest slice of the Today card's 24.6:1 strip and
+                                                 the pre-faded left half bleeds into the card surface on its
+                                                 own. Margin 1 keeps the fill inside the card's 1px border. -->
+                                            <Border Grid.Row="1" Height="64" Margin="1,0,1,0"
+                                                    ClipToBounds="True"
+                                                    IsVisible="{Binding BannerVisible}">
+                                                <Rectangle IsHitTestVisible="False">
+                                                    <Rectangle.Fill>
+                                                        <ImageBrush Source="{Binding BannerArt}"
+                                                                    Stretch="UniformToFill"
+                                                                    AlignmentX="Right" AlignmentY="Center"/>
+                                                    </Rectangle.Fill>
+                                                </Rectangle>
+                                            </Border>
+
+                                            <!-- Header + copy -->
+                                            <StackPanel Grid.Row="2" Margin="18,16,18,0">
+                                                <!-- Identity crest. Exactly one of this and the bare glyph
+                                                     below it is ever visible. The negative margins are
+                                                     load-bearing: the halo is 8px wider than the chip on
+                                                     every side, so pulling the host back by 8 lands the CHIP
+                                                     on the StackPanel's 18,16 origin. -->
+                                                <Grid Width="88" Height="88" HorizontalAlignment="Left"
+                                                      Margin="-8,-8,0,2"
+                                                      IsVisible="{Binding ArtVisible}">
+                                                    <Ellipse Width="88" Height="88" Opacity="0.55"
+                                                             IsHitTestVisible="False"
+                                                             Fill="{Binding ArtGlowBrush}"/>
+
+                                                    <Border Width="72" Height="72" CornerRadius="36"
+                                                            Background="{DynamicResource SurfaceBgBrush}"
+                                                            BorderBrush="{DynamicResource GlassBorderBrush}"
+                                                            BorderThickness="1">
+                                                        <!-- Program art is white RGB with its luminance in the
+                                                             ALPHA channel (Services/Program/ProgramArt.cs), so
+                                                             it is a Rectangle FILLED with the program accent and
+                                                             MASKED by the image - never an <Image>, which renders
+                                                             a near-invisible white-on-transparent smear. Rounded
+                                                             to match the chip: the art does not fall off to pure
+                                                             black at its edges, so a square Rectangle paints a
+                                                             faint accent SQUARE inside the round host. -->
+                                                        <Rectangle Width="66" Height="66"
+                                                                   RadiusX="33" RadiusY="33" Opacity="0.8"
+                                                                   Fill="{Binding AccentBrush}"
+                                                                   OpacityMask="{Binding ArtMask}"/>
+                                                    </Border>
+
+                                                    <!-- The program's own glyph, on its own art: four of the
+                                                         five shipped programs land on the same shared archetype
+                                                         plate, so the glyph is what keeps their crests apart. -->
+                                                    <TextBlock Text="{Binding Icon}" FontSize="30"
+                                                               IsHitTestVisible="False"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Grid>
+
+                                                <TextBlock Text="{Binding Icon}" FontSize="44"
+                                                           HorizontalAlignment="Left"
+                                                           Margin="0,0,0,10"
+                                                           IsVisible="{Binding IconOnlyVisible}"/>
+                                                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="18" FontWeight="Bold" TextWrapping="Wrap"/>
+                                                <WrapPanel Margin="0,8,0,0">
+                                                    <Border CornerRadius="9999" Padding="8,2" Margin="0,0,6,4"
+                                                            Background="{Binding TierBackground}">
+                                                        <TextBlock Text="{Binding TierLabel}" Foreground="{Binding TierBrush}"
+                                                                   FontSize="10" FontWeight="Bold"/>
+                                                    </Border>
+                                                    <Border CornerRadius="9999" Padding="8,2" Margin="0,0,6,4"
+                                                            Background="{DynamicResource SurfaceBgBrush}"
+                                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                                        <TextBlock Text="{Binding LengthLabel}"
+                                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                                   FontSize="10" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </WrapPanel>
+                                                <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Pitch}" Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="12" Margin="0,10,0,0" TextWrapping="Wrap" LineHeight="18"/>
+                                                <TextBlock Text="{Binding ReasonText}" IsVisible="{Binding ReasonVisible}"
+                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="11" FontStyle="Italic" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                            </StackPanel>
+
+                                            <!-- Enroll / locked - pinned to the bottom of the card -->
+                                            <Button Grid.Row="3" Margin="18,16,18,16"
+                                                    HorizontalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Center"
+                                                    Tag="{Binding ProgramId}"
+                                                    IsEnabled="{Binding IsActionEnabled}"
+                                                    Theme="{StaticResource PinkButton}"
+                                                    Click="BtnProgramEnroll_Click">
+                                                <TextBlock Text="{Binding ActionText}"/>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- RUN: an active or paused enrollment.                               -->
+                    <!--                                                                    -->
+                    <!-- Battle-pass framing: identity + a reward TRACK on one surface,     -->
+                    <!-- then a hero band for today with the art bleeding in from the       -->
+                    <!-- right, then the session bar and the task cards. Every accent      -->
+                    <!-- comes from the program (the mod theme), never from a hard pink.   -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsRunPanel" IsVisible="False">
+
+                        <!-- =================================================================
+                             WHERE YOU ARE. Identity (sigil, title, badges) + run stats on the
+                             first row, the reward track underneath, one surface.
+                             ================================================================= -->
+                        <Border x:Name="RunHeaderPanel"
+                                Padding="22,20" CornerRadius="14" Margin="0,0,0,14"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+
+                                <!-- Identity slot. Exactly one of these is ever visible: the sigil
+                                     when Resources/programs/sigil_<id>.png resolves, otherwise the
+                                     original 4px accent bar. The screen is never broken by missing
+                                     art, only plainer. -->
+                                <Grid Grid.Column="0" Margin="0,0,18,0" VerticalAlignment="Top">
+                                    <Border x:Name="RunAccentBar"
+                                            Width="4" CornerRadius="2"
+                                            HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                            Background="{DynamicResource PinkBrush}"/>
+
+                                    <!-- Named so code can collapse the WHOLE 84px box, not just its
+                                         two children: a hidden child inside a visible fixed-size
+                                         Grid still measures 84, which kept a 102px identity column
+                                         reserved for a 4px accent bar. -->
+                                    <Grid x:Name="RunSigilBox" Width="84" Height="84">
+                                        <!-- Soft accent halo behind the sigil chip. Fill is a radial
+                                             built from the program accent in code; static, no
+                                             animation, just presence. -->
+                                        <Ellipse x:Name="RunSigilGlow"
+                                                 Width="84" Height="84" Opacity="0.55"
+                                                 IsHitTestVisible="False" IsVisible="False"/>
+
+                                        <!-- White-RGB / luminance-in-alpha art, rendered as the program
+                                             accent masked by the image, so it glows out of the panel
+                                             with no rectangle edge and no hue clash under any mod. -->
+                                        <Border x:Name="RunSigilHost"
+                                                Width="64" Height="64" CornerRadius="32"
+                                                IsVisible="False"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                            <!-- Clipped to a circle to match the chip behind it; the
+                                                 residual halo would otherwise paint a faint SQUARE of
+                                                 accent inside a round host. -->
+                                            <Rectangle x:Name="RunSigil"
+                                                       Width="60" Height="60" RadiusX="30" RadiusY="30">
+                                                <Rectangle.OpacityMask>
+                                                    <ImageBrush Stretch="Uniform"/>
+                                                </Rectangle.OpacityMask>
+                                            </Rectangle>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtRunProgramTitle"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               FontSize="28" FontWeight="Bold" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                        <TextBlock x:Name="TxtRunChapterName"
+                                                   Foreground="{DynamicResource PinkBrush}"
+                                                   FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="  ·  " Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="13" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtRunDayCounter"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Border x:Name="RunStrictBadge"
+                                                CornerRadius="9999" Padding="8,2" Margin="0,0,6,4"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                                IsVisible="False">
+                                            <TextBlock Text="{loc:Str programs_strict_badge}"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+                                        <Border x:Name="RunAttemptBadge"
+                                                CornerRadius="9999" Padding="8,2" Margin="0,0,6,4"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                                                IsVisible="False">
+                                            <TextBlock x:Name="TxtRunAttempt"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="10" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </WrapPanel>
+                                </StackPanel>
+
+                                <!-- Run stats. Battle-pass season chips: what you've banked, at a
+                                     glance. Values are plain numbers set in code. -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                            VerticalAlignment="Center" Margin="0,0,18,0">
+                                    <Border CornerRadius="10" Padding="14,8" Margin="0,0,8,0" MinWidth="86"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="TxtRunStatDone"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{loc:Str programs_stat_days_done}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border CornerRadius="10" Padding="14,8" Margin="0,0,8,0" MinWidth="86"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="TxtRunStatPerfect"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{loc:Str programs_stat_perfect}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border CornerRadius="10" Padding="14,8" MinWidth="86"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="TxtRunStatDaysOff"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="{loc:Str programs_stat_days_off}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Pause / Resume + Withdraw. Withdraw is always here, always plain. -->
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
+                                    <Button x:Name="BtnProgramPauseResume"
+                                            Theme="{StaticResource SecondaryButton}" MinWidth="90"
+                                            HorizontalContentAlignment="Center"
+                                            Margin="0,0,8,0" Click="BtnProgramPauseResume_Click">
+                                        <TextBlock x:Name="TxtProgramPauseResume"/>
+                                    </Button>
+                                    <Button x:Name="BtnProgramWithdraw"
+                                            Theme="{StaticResource SecondaryButton}" MinWidth="90"
+                                            HorizontalContentAlignment="Center"
+                                            Click="BtnProgramWithdraw_Click">
+                                        <TextBlock Text="{loc:Str btn_program_withdraw}"/>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- ============ The reward track ============
+                                 Day nodes distributed along a single track by a UniformGrid, not a
+                                 WrapPanel: seven squares huddled at the left of a 1700px box read
+                                 as a rendering accident. Done days are filled accent checks, today
+                                 carries the halo, milestone days carry a reward glyph under the
+                                 node. Width is clamped in code. -->
+                            <StackPanel Margin="0,20,0,0">
+                                <Grid Margin="0,0,0,12" ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0" Text="{loc:Str programs_track_header}"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <!-- Chapter reward chip: the carrot at the end of the track. -->
+                                    <Border x:Name="RunChapterRewardChip"
+                                            Grid.Column="2" CornerRadius="9999" Padding="10,3"
+                                            IsVisible="False"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🎁" FontSize="12" VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+                                            <TextBlock Text="{loc:Str programs_chapter_reward}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="10" FontWeight="Bold" VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+                                            <TextBlock x:Name="TxtRunChapterReward"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       MaxWidth="420" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <!-- The rail is width-limited by a capped star COLUMN, not by
+                                     MaxWidth on the rail itself: a left-aligned element sizes to
+                                     its content, so MaxWidth would never bind and the nodes would
+                                     huddle at their natural width each. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MaxWidth="840"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                <Grid x:Name="ProgramDayRail" Grid.Column="0">
+                                    <!-- Track. Node centres sit at y=31 of every 82px item (62px
+                                         node area on top, glyph strip below), so the 5px line is
+                                         top-aligned at 28.5 instead of centred in the rail. The
+                                         done segment is sized in star units so it ends exactly on
+                                         today's node centre at any program length. Keep three
+                                         numbers in step: node area (62), item height (82), and
+                                         this offset (28.5). -->
+                                    <Grid Height="5" VerticalAlignment="Top" Margin="0,28.5,0,0">
+                                        <Border CornerRadius="2.5"
+                                                Background="{DynamicResource PanelAccentBrush}"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="0*"/>
+                                                <ColumnDefinition Width="1*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <!-- The grow-in entrance animation on this transform is
+                                                 dropped with the rest of the storyboards; it rests
+                                                 at 1, which is what it rested at on WPF too. -->
+                                            <Border x:Name="RailProgressFill"
+                                                    Grid.Column="0" CornerRadius="2.5"
+                                                    RenderTransformOrigin="0%,50%">
+                                                <Border.RenderTransform>
+                                                    <ScaleTransform
+                                                                    ScaleX="1" ScaleY="1"/>
+                                                </Border.RenderTransform>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- T4 only: a comet running the rail. Clipped to the track
+                                             by its host and hidden (not merely transparent) at every
+                                             tier below Ignited. The slide clock lives in
+                                             MainWindow.ProgramsFx.cs, which is not on this head. -->
+                                        <Grid x:Name="RailCometHost" ClipToBounds="True" IsVisible="False">
+                                            <Rectangle x:Name="RailComet"
+                                                       Width="130" HorizontalAlignment="Left"
+                                                       IsHitTestVisible="False" Opacity="0">
+                                                <Rectangle.RenderTransform>
+                                                    <TranslateTransform X="-140"/>
+                                                </Rectangle.RenderTransform>
+                                            </Rectangle>
+                                        </Grid>
+                                    </Grid>
+
+                                    <ItemsControl x:Name="ProgramDayStrip">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Rows="1"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="tabs:ProgramDayPip">
+                                                <!-- Width is the CELL's, not a fixed 54: the UniformGrid
+                                                     divides the rail by the program length, and a 54px
+                                                     item arranged into a 49px slot picks up the
+                                                     automatic layout clip that sliced the nodes and the
+                                                     58px today halo flat down both sides. Height stays
+                                                     fixed: it is in step with the 62px node area and the
+                                                     track's 28.5 offset. -->
+                                                <Grid Height="82" HorizontalAlignment="Stretch">
+                                                    <Grid Height="62" VerticalAlignment="Top">
+                                                        <!-- Panel-coloured backing so the track stops at
+                                                             every node instead of drawing a line through
+                                                             the transparent-filled today/missed states. -->
+                                                        <Ellipse Width="{Binding NodeSize}" Height="{Binding NodeSize}"
+                                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                 Fill="{DynamicResource ElevatedSurfaceBrush}"/>
+                                                        <!-- Today's halo. On WPF a DataTrigger breathed it
+                                                             from 0.35 to 0.95; here it rests at its static
+                                                             mid value, so today's node still reads as
+                                                             today. -->
+                                                        <Ellipse x:Name="PipGlow" Width="52" Height="52" Opacity="0.65"
+                                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                 IsHitTestVisible="False"
+                                                                 Fill="{Binding GlowBrush}"
+                                                                 IsVisible="{Binding GlowVisible}"
+                                                                 RenderTransformOrigin="50%,50%">
+                                                            <Ellipse.RenderTransform>
+                                                                <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                                            </Ellipse.RenderTransform>
+                                                        </Ellipse>
+                                                        <!-- The day-complete IGNITE flare. Kept as its own
+                                                             element (never folded into the halo above) so
+                                                             the two can be re-animated apart when the
+                                                             storyboards come back. Rests invisible. -->
+                                                        <Ellipse x:Name="PipIgnite" Width="52" Height="52" Opacity="0"
+                                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                 IsHitTestVisible="False"
+                                                                 Fill="{Binding IgniteBrush}"
+                                                                 RenderTransformOrigin="50%,50%">
+                                                            <Ellipse.RenderTransform>
+                                                                <ScaleTransform ScaleX="0.6" ScaleY="0.6"/>
+                                                            </Ellipse.RenderTransform>
+                                                        </Ellipse>
+                                                        <Border Width="{Binding NodeSize}" Height="{Binding NodeSize}"
+                                                                CornerRadius="9999"
+                                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                Background="{Binding Fill}"
+                                                                BorderBrush="{Binding Stroke}"
+                                                                BorderThickness="{Binding PipBorderThickness}"
+                                                                Opacity="{Binding PipOpacity}"
+                                                                ToolTip.Tip="{Binding Tip}">
+                                                            <TextBlock Text="{Binding Label}" Foreground="{Binding LabelBrush}"
+                                                                       FontWeight="{Binding LabelWeight}"
+                                                                       FontSize="{Binding LabelSize}"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </Grid>
+                                                    <!-- Milestone reward glyph under the node (boss crown /
+                                                         reward gift). Hidden on plain days. -->
+                                                    <TextBlock Text="{Binding RewardGlyph}" FontSize="13"
+                                                               IsVisible="{Binding RewardVisible}"
+                                                               ToolTip.Tip="{Binding RewardTip}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Bottom"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
+                                </Grid>
+                            </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Paused note -->
+                        <Border x:Name="RunPausedNote" IsVisible="False"
+                                Padding="14,10" CornerRadius="10" Margin="0,0,0,12"
+                                Background="{DynamicResource SurfaceBgBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="{loc:Str programs_paused_note}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap"/>
+                        </Border>
+
+                        <!-- =================================================================
+                             WHAT YOU DO NOW. A hero band: the day's art (keyed off the SESSION
+                             TEMPLATE archetype) bleeds in from the right under a gradient fade,
+                             with an accent wash behind the whole band. Below it, the session
+                             bar and the task cards.
+                             ================================================================= -->
+                        <Border x:Name="TodayPanel"
+                                Padding="22,20" CornerRadius="14"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+
+                            <Grid x:Name="TodayHeroGrid">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <!-- Width driven from code: 0 with no art (the copy takes the
+                                         whole band - a star column would reserve empty space),
+                                         2* capped when the hero art resolves. -->
+                                    <ColumnDefinition Width="0" MaxWidth="560"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Ambient accent wash across the band. Radial built from the
+                                     program accent in code; negative margins bleed it to the panel
+                                     edge past the padding, radius matches the panel corner. -->
+                                <Rectangle x:Name="TodayHeroGlow"
+                                           Grid.ColumnSpan="2" IsHitTestVisible="False"
+                                           Opacity="0.4" RadiusX="14" RadiusY="14"
+                                           Margin="-22,-20,-22,-6"/>
+
+                                <!-- ============ the ignition rig, over the band ============
+                                     Three hit-test-invisible layers sharing the wash's bleed
+                                     margins. They sit ABOVE the wash and BELOW the copy: the FX
+                                     are a lighting rig over the art, and no spark is ever allowed
+                                     in front of a word. -->
+
+                                <!-- T2+: the particle field. An AmbientFxCanvas is added here on
+                                     first use on WPF; empty and clockless below Charged, and empty
+                                     on this head until MainWindow.ProgramsFx.cs has a twin. -->
+                                <Grid x:Name="TodayFxLayer"
+                                      Grid.ColumnSpan="2" IsHitTestVisible="False"
+                                      Margin="-22,-20,-22,-6"/>
+
+                                <!-- Day complete: an accent wave washing out across the band. A
+                                     Rectangle whose RADIAL BRUSH grows, not an ellipse that
+                                     scales - a scaled ellipse big enough to cover a 1400px band
+                                     hangs a thousand pixels past the panel on every side. -->
+                                <Rectangle x:Name="TodayWave"
+                                           Grid.ColumnSpan="2" IsHitTestVisible="False"
+                                           Opacity="0" RadiusX="14" RadiusY="14"
+                                           Margin="-22,-20,-22,-6"/>
+
+                                <!-- The floating "+XP" on a day that just completed. Parked at
+                                     opacity 0 and hit-test invisible, so between days it is an
+                                     empty TextBlock in an overlay cell. -->
+                                <TextBlock x:Name="TxtTodayXpFloat"
+                                           Grid.ColumnSpan="2" IsHitTestVisible="False"
+                                           Opacity="0" FontSize="26" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock.RenderTransform>
+                                        <TranslateTransform Y="0"/>
+                                    </TextBlock.RenderTransform>
+                                </TextBlock>
+
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="{loc:Str programs_today_header}"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <Border x:Name="TodayBossBadge" IsVisible="False"
+                                                CornerRadius="9999" Padding="8,2" Margin="10,0,0,0"
+                                                Background="{DynamicResource TransparentPinkBrush}"
+                                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                            <TextBlock Text="{loc:Str programs_boss_badge}"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+                                        <Border x:Name="TodayReturnBadge" IsVisible="False"
+                                                CornerRadius="9999" Padding="8,2" Margin="6,0,0,0"
+                                                Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                            <TextBlock Text="{loc:Str programs_return_badge}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <TextBlock x:Name="TxtTodayTitle"
+                                               Foreground="{DynamicResource TextLightBrush}"
+                                               FontSize="34" FontWeight="Bold" TextWrapping="Wrap"/>
+                                    <!-- Clamped: unclamped this ran as a 1400px one-line ribbon. -->
+                                    <TextBlock x:Name="TxtTodayBlurb"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="14" TextWrapping="Wrap" LineHeight="22" Margin="0,10,0,0"
+                                               MaxWidth="820" HorizontalAlignment="Left"/>
+
+                                    <!-- ============ What today actually runs ============
+                                         The blurb says what today FEELS like; this says what the
+                                         session will DO - the template's own identity plus one chip
+                                         per layer it turns on, with the layers that were not in
+                                         yesterday's session marked NEW. MaxWidth matches the blurb
+                                         so the chips never run under the hero art's fade. -->
+                                    <StackPanel x:Name="TodayLayersPanel"
+                                                IsVisible="False" Margin="0,16,0,0"
+                                                MaxWidth="820" HorizontalAlignment="Left">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{loc:Str programs_layers_header}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Text="  ·  " Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtTodayTemplateName"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="TxtTodayTemplateBlurb"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
+
+                                        <ItemsControl x:Name="TodayLayerList" Margin="0,9,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="tabs:ProgramLayerChip">
+                                                    <Border CornerRadius="9999" Padding="9,4" Margin="0,0,7,7"
+                                                            Background="{DynamicResource SurfaceBgBrush}"
+                                                            BorderBrush="{Binding BorderBrush}" BorderThickness="1"
+                                                            ToolTip.Tip="{Binding Tip}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Image Width="15" Height="15" Margin="0,0,7,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Source="{Binding Icon}"
+                                                                   IsVisible="{Binding IconVisible}"/>
+                                                            <TextBlock Text="{Binding Label}"
+                                                                       Foreground="{Binding LabelBrush}"
+                                                                       FontSize="11" FontWeight="SemiBold"
+                                                                       VerticalAlignment="Center"/>
+                                                            <!-- NEW pill: this layer was not in yesterday's
+                                                                 session. The label's ink is computed from the
+                                                                 fill in code (NewForeground) - a fixed
+                                                                 near-white disappears on a pale accent. -->
+                                                            <Border CornerRadius="9999" Padding="5,0" Margin="7,0,0,0"
+                                                                    VerticalAlignment="Center"
+                                                                    IsVisible="{Binding NewVisible}"
+                                                                    Background="{Binding AccentBrush}">
+                                                                <TextBlock Text="{loc:Str programs_layer_new}"
+                                                                           Foreground="{Binding NewForeground}"
+                                                                           FontSize="9" FontWeight="Bold"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <!-- Today's reward chip (rare - boss days mostly) -->
+                                    <Border x:Name="TodayRewardChip" IsVisible="False"
+                                            CornerRadius="9999" Padding="10,4" Margin="0,12,0,0"
+                                            HorizontalAlignment="Left"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🎁" FontSize="12" VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+                                            <TextBlock Text="{loc:Str programs_day_reward}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="10" FontWeight="Bold" VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+                                            <TextBlock x:Name="TxtTodayReward"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       MaxWidth="480" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Day-complete banner. The scale pop is dropped with the rest
+                                         of the storyboards; it rested at 1. -->
+                                    <Border x:Name="TodayCompleteBanner" IsVisible="False"
+                                            Padding="14,10" CornerRadius="10" Margin="0,14,0,0"
+                                            HorizontalAlignment="Left"
+                                            Background="{DynamicResource TransparentPinkBrush}"
+                                            RenderTransformOrigin="0%,50%">
+                                        <Border.RenderTransform>
+                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                        </Border.RenderTransform>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="✨" FontSize="14" VerticalAlignment="Center"
+                                                       Margin="0,0,8,0"/>
+                                            <TextBlock Text="{loc:Str programs_day_complete}"
+                                                       Foreground="{DynamicResource PinkBrush}"
+                                                       FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Hero art: the accent-tinted luminance plate, cropped to fill the
+                                     band and faded into the panel on its left edge so it reads as
+                                     part of the surface, not a pasted image. Hidden (and the column
+                                     zeroed) when no art resolves. -->
+                                <Border x:Name="RunHeroHost"
+                                        Grid.Column="1" MinHeight="240" IsVisible="False">
+                                    <Border.OpacityMask>
+                                        <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                            <GradientStop Color="#00000000" Offset="0"/>
+                                            <GradientStop Color="#FF000000" Offset="0.4"/>
+                                            <GradientStop Color="#FF000000" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.OpacityMask>
+                                    <!-- Corners cut for the same reason as the sigil: the art's
+                                         residual halo is a square, and a square of accent inside a
+                                         rounded panel reads as a bounding box nobody drew. -->
+                                    <Rectangle x:Name="RunHeroPlate" RadiusX="18" RadiusY="18">
+                                        <Rectangle.OpacityMask>
+                                            <ImageBrush Stretch="UniformToFill"/>
+                                        </Rectangle.OpacityMask>
+                                    </Rectangle>
+                                </Border>
+                            </Grid>
+
+                                <!-- Session slot.
+                                     Row 0 is the always-present slot; row 1 is the live bar, shown
+                                     only while THIS program's session is running - and then the bar
+                                     is the hero: 16px tall, accent fill, a sheen sweeping it, the
+                                     clock large beside the button. -->
+                                <Border Padding="16,14" CornerRadius="12" Margin="0,16,0,0"
+                                        Background="{DynamicResource SurfaceBgBrush}">
+                                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*,Auto,Auto">
+                                        <TextBlock x:Name="TxtTodaySessionGlyph"
+                                                   Grid.Row="0" Grid.Column="0" Text="○" FontSize="17" Margin="0,0,12,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextMutedBrush}"/>
+                                        <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Str programs_session_label}"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="14" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="TxtTodaySessionMinutes"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <!-- Live clock. Foreground is set to the program accent in
+                                             code; hidden unless our session is in flight. -->
+                                        <TextBlock x:Name="TxtTodaySessionProgress"
+                                                   Grid.Row="0" Grid.Column="2" Margin="0,0,18,0"
+                                                   VerticalAlignment="Center" IsVisible="False"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="20" FontWeight="Bold"/>
+                                        <Button x:Name="BtnStartTodaySession"
+                                                Grid.Row="0" Grid.Column="3" MinWidth="190"
+                                                HorizontalContentAlignment="Center"
+                                                Theme="{StaticResource PinkButton}"
+                                                Click="BtnStartTodaySession_Click">
+                                            <TextBlock Text="{loc:Str btn_program_start_session}"/>
+                                        </Button>
+
+                                        <!-- Live progress bar (hidden unless the program's own session is in flight) -->
+                                        <Grid x:Name="TodaySessionProgressRow"
+                                              Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                                              Margin="0,14,0,2" IsVisible="False">
+                                            <!-- Host owns the track colour and a rounded Clip (set in
+                                                 SessionBarHost_SizeChanged) so the sweeping sheen can
+                                                 never spill past the bar's rounded ends. -->
+                                            <Border x:Name="SessionBarHost"
+                                                    Height="16" CornerRadius="8"
+                                                    Background="{DynamicResource PanelAccentBrush}"
+                                                    SizeChanged="SessionBarHost_SizeChanged">
+                                                <Grid>
+                                                    <ProgressBar x:Name="TodaySessionProgressBar"
+                                                                 Minimum="0" Maximum="100" Value="0"
+                                                                 Theme="{StaticResource ProgramHeroBar}"/>
+                                                    <!-- The sheen: a narrow white gradient swept across
+                                                         the bar. The loop is started/stopped in code on
+                                                         WPF; opacity 0 at rest here too. -->
+                                                    <Rectangle x:Name="SessionSheen"
+                                                               Width="150" HorizontalAlignment="Left"
+                                                               Opacity="0" IsHitTestVisible="False">
+                                                        <Rectangle.Fill>
+                                                            <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                                <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                                                <GradientStop Color="#46FFFFFF" Offset="0.5"/>
+                                                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                                            </LinearGradientBrush>
+                                                        </Rectangle.Fill>
+                                                        <Rectangle.RenderTransform>
+                                                            <TranslateTransform X="-160"/>
+                                                        </Rectangle.RenderTransform>
+                                                    </Rectangle>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Ambient row (only when the day carries one) -->
+                                <Border x:Name="TodayAmbientRow" IsVisible="False"
+                                        Padding="14,12" CornerRadius="10" Margin="0,8,0,0"
+                                        Background="{DynamicResource SurfaceBgBrush}">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str programs_ambient_header}"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="TxtTodayAmbient"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="TxtTodayAmbientProgress"
+                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- ============ Checklist + the arc ============
+                                     Tasks are quest cards, not full-width strips. The card column is
+                                     CAPPED in code to the width the cards actually occupy (3 per
+                                     row) and everything that cap frees goes to the arc, so both
+                                     columns hold real content at one task and at five.
+
+                                     The cap is a ColumnDefinition MaxWidth on a STAR column, not an
+                                     Auto column: an Auto column measures the WrapPanel at infinity,
+                                     so five cards would lay out in one ~1850px row and the overflow
+                                     would be clipped silently. -->
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <!-- 2:1 so the cards reach their cap on a normal window; the
+                                             surplus a capped star does not use flows to the column
+                                             beside it, and MinWidth keeps the arc readable when the
+                                             window is narrow enough that the cap never binds. -->
+                                        <ColumnDefinition Width="2*" MaxWidth="370"/>
+                                        <ColumnDefinition Width="1*" MinWidth="240"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <Grid Margin="0,0,0,10" ColumnDefinitions="Auto,*,Auto">
+                                            <TextBlock Grid.Column="0" Text="{loc:Str programs_tasks_header}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <!-- Done counter: a lone card is a checklist of one, not
+                                                 an orphan, once the set it belongs to is stated. -->
+                                            <Border x:Name="TodayTasksDonePill"
+                                                    Grid.Column="2" IsVisible="False"
+                                                    CornerRadius="9999" Padding="8,2" Margin="10,0,10,0"
+                                                    Background="{DynamicResource SurfaceBgBrush}"
+                                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                                <TextBlock x:Name="TxtTodayTasksDone"
+                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="10" FontWeight="Bold"/>
+                                            </Border>
+                                        </Grid>
+
+                                <TextBlock x:Name="TxtTodayNoTasks" IsVisible="False"
+                                           Text="{loc:Str programs_no_tasks}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" Margin="2,0,0,0"/>
+
+                                <ItemsControl x:Name="TodayTaskList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="tabs:ProgramTaskItem">
+                                            <Border Width="360" MinHeight="92" Margin="0,0,10,10" Padding="14,12"
+                                                    CornerRadius="12"
+                                                    Opacity="{Binding RowOpacity}"
+                                                    Background="{DynamicResource SurfaceBgBrush}"
+                                                    BorderBrush="{Binding CardBorderBrush}" BorderThickness="1"
+                                                    RenderTransformOrigin="50%,50%">
+                                                <Border.RenderTransform>
+                                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                                </Border.RenderTransform>
+                                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="*,Auto,Auto">
+
+                                                    <!-- The app's own product icon for whatever verifies
+                                                         this task. Full-colour on purpose: the Dashboard
+                                                         already shows this exact set full-colour under
+                                                         every mod. With no feature behind the task, the
+                                                         status glyph carries the slot instead. -->
+                                                    <Image Grid.Column="0" Grid.RowSpan="2" Width="38" Height="38"
+                                                           Margin="0,0,12,0" VerticalAlignment="Center"
+                                                           Source="{Binding Icon}"
+                                                           IsVisible="{Binding IconVisible}"/>
+                                                    <TextBlock Grid.Column="0" Grid.RowSpan="2" Text="{Binding StatusGlyph}"
+                                                               IsVisible="{Binding GlyphVisible}"
+                                                               Foreground="{Binding StatusBrush}"
+                                                               FontSize="24" Margin="0,0,12,0" VerticalAlignment="Center"/>
+
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Description}"
+                                                                   Foreground="{Binding TextBrush}"
+                                                                   FontSize="13" FontWeight="SemiBold"
+                                                                   TextWrapping="Wrap"/>
+                                                        <!-- Mechanics line: which feature verifies this task and
+                                                             what has to happen. The description above stays in the
+                                                             program's voice; this one is deliberately literal. -->
+                                                        <TextBlock Text="{Binding HowTo}"
+                                                                   IsVisible="{Binding HowToVisible}"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                                   FontSize="11" TextWrapping="Wrap"
+                                                                   Margin="0,3,0,0"/>
+                                                        <Border CornerRadius="9999" Padding="7,1" Margin="0,4,0,0"
+                                                                HorizontalAlignment="Left"
+                                                                IsVisible="{Binding BadgeVisible}"
+                                                                Background="{DynamicResource ElevatedSurfaceBrush}">
+                                                            <TextBlock Text="{Binding BadgeText}"
+                                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                                       FontSize="10" FontWeight="SemiBold"/>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <!-- Done chip, top-right - the battle-pass claim tick.
+                                                         Its ink comes from the accent behind it
+                                                         (DoneChipForeground), not from a fixed near-white:
+                                                         a pale program accent rendered the tick white on
+                                                         white. -->
+                                                    <Border Grid.Column="2" Width="22" Height="22" CornerRadius="11"
+                                                            VerticalAlignment="Top" HorizontalAlignment="Right"
+                                                            IsVisible="{Binding DoneChipVisible}"
+                                                            Background="{Binding StatusBrush}"
+                                                            RenderTransformOrigin="50%,50%">
+                                                        <Border.RenderTransform>
+                                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                                        </Border.RenderTransform>
+                                                        <TextBlock Text="✓" Foreground="{Binding DoneChipForeground}"
+                                                                   FontSize="12" FontWeight="Bold"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+
+                                                    <!-- Mini progress bar for counted tasks -->
+                                                    <Grid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                                                          Margin="0,10,0,0" IsVisible="{Binding BarVisible}"
+                                                          ColumnDefinitions="*,Auto">
+                                                        <Grid Grid.Column="0" Height="6" VerticalAlignment="Center">
+                                                            <Border CornerRadius="3"
+                                                                    Background="{DynamicResource PanelAccentBrush}"/>
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="{Binding ProgressStar}"/>
+                                                                    <ColumnDefinition Width="{Binding RemainderStar}"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Border Grid.Column="0" CornerRadius="3"
+                                                                        Background="{Binding AccentBrush}"/>
+                                                            </Grid>
+                                                        </Grid>
+                                                        <TextBlock Grid.Column="1" Text="{Binding ProgressText}"
+                                                                   Foreground="{DynamicResource TextMutedBrush}"
+                                                                   FontSize="11" FontWeight="SemiBold"
+                                                                   Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                                    </Grid>
+
+                                                    <Button Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                                                            MinWidth="120" Margin="0,10,0,0"
+                                                            HorizontalAlignment="Left"
+                                                            HorizontalContentAlignment="Center"
+                                                            IsVisible="{Binding SubmitVisible}"
+                                                            Tag="{Binding TaskId}"
+                                                            Theme="{StaticResource SecondaryButton}"
+                                                            Click="BtnProgramSubmitRitual_Click">
+                                                        <TextBlock Text="{loc:Str btn_program_submit_photo}"/>
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock x:Name="TxtRitualPrivacyNote" IsVisible="False"
+                                           Text="{loc:Str programs_photo_local_note}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" FontStyle="Italic" Margin="2,2,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+
+                                    <!-- The arc, beside the checklist: what the next days are, the
+                                         hour today closes at (the single mechanic that actually
+                                         costs people a day), and the streak. Top-aligned so a
+                                         two-row card list does not stretch it. -->
+                                    <Border Grid.Column="1" Margin="14,0,0,0" Padding="14,12"
+                                            VerticalAlignment="Top" CornerRadius="12"
+                                            Background="{DynamicResource SurfaceBgBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str programs_next_header}"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" FontWeight="SemiBold" Margin="0,0,0,10"/>
+
+                                            <ItemsControl x:Name="TodayUpNextList">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="tabs:ProgramUpNextItem">
+                                                        <!-- Title and meta live in a STAR column, not a
+                                                             horizontal StackPanel: a StackPanel measures
+                                                             its children at infinite width, so
+                                                             TextTrimming would never engage and a long
+                                                             authored title would be clipped instead. -->
+                                                        <Grid Margin="0,0,0,10" Opacity="{Binding RowOpacity}"
+                                                              ColumnDefinitions="Auto,*,Auto">
+                                                            <Border Grid.Column="0" MinWidth="48" CornerRadius="6"
+                                                                    Padding="7,3" Margin="0,0,10,0"
+                                                                    VerticalAlignment="Top"
+                                                                    Background="{DynamicResource ElevatedSurfaceBrush}">
+                                                                <TextBlock Text="{Binding DayLabel}"
+                                                                           Foreground="{Binding DayBrush}"
+                                                                           FontSize="10" FontWeight="Bold"
+                                                                           HorizontalAlignment="Center"/>
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1">
+                                                                <TextBlock Text="{Binding Title}"
+                                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                                           FontSize="12" FontWeight="SemiBold"
+                                                                           TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="{Binding Meta}"
+                                                                           Foreground="{DynamicResource TextMutedBrush}"
+                                                                           FontSize="11" Margin="0,2,0,0"
+                                                                           TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="2" Text="{Binding Glyph}"
+                                                                       FontSize="12" Margin="8,0,0,0"
+                                                                       VerticalAlignment="Top"
+                                                                       ToolTip.Tip="{Binding GlyphTip}"
+                                                                       IsVisible="{Binding GlyphVisible}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- Shown on the last day, where there is no "next". -->
+                                            <TextBlock x:Name="TxtTodayUpNextFinal"
+                                                       IsVisible="False"
+                                                       Text="{loc:Str programs_next_final}"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="12" TextWrapping="Wrap"/>
+
+                                            <Border Height="1" Margin="0,4,0,10"
+                                                    Background="{DynamicResource GlassBorderBrush}"/>
+
+                                            <TextBlock x:Name="TxtTodayCloses"
+                                                       Foreground="{DynamicResource TextLightBrush}"
+                                                       FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock x:Name="TxtTodayClosesNote"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                            <TextBlock x:Name="TxtTodayStreak"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- LAPSED: one screen, two buttons, no editorialising                 -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsLapsedPanel" IsVisible="False">
+                        <Border Padding="24,22" CornerRadius="12"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str programs_lapsed_title}"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="18" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtLapsedBody"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="13" TextWrapping="Wrap" LineHeight="20"
+                                           Margin="0,10,0,0" MaxWidth="620" HorizontalAlignment="Left"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                                    <Button x:Name="BtnProgramRestart"
+                                            Theme="{StaticResource PinkButton}" MinWidth="150"
+                                            HorizontalContentAlignment="Center"
+                                            Click="BtnProgramRestart_Click">
+                                        <TextBlock Text="{loc:Str btn_program_restart}"/>
+                                    </Button>
+                                    <Button Theme="{StaticResource SecondaryButton}" MinWidth="120"
+                                            HorizontalContentAlignment="Center"
+                                            Margin="10,0,0,0" Click="BtnProgramWithdraw_Click">
+                                        <TextBlock Text="{loc:Str btn_program_withdraw}"/>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- ================================================================= -->
+                    <!-- GRADUATED                                                          -->
+                    <!-- ================================================================= -->
+                    <StackPanel x:Name="ProgramsGraduatedPanel" IsVisible="False">
+                        <!-- Named so the ignition rig can hand the finish card the run's own accent
+                             and crossfade it to gold. The PinkBrush here is the resting value for a
+                             card nobody has graduated onto yet. -->
+                        <Border x:Name="ProgramsGraduatedCard"
+                                Padding="24,22" CornerRadius="12"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🏆" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str programs_graduated_title}"
+                                               Foreground="{DynamicResource PinkBrush}"
+                                               FontSize="19" FontWeight="Bold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock x:Name="TxtGraduatedSub"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="14" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="TxtGraduatedStats"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                <Button x:Name="BtnProgramDismissGraduated"
+                                        Theme="{StaticResource PinkButton}" MinWidth="130"
+                                        HorizontalAlignment="Left" HorizontalContentAlignment="Center"
+                                        Margin="0,20,0,0"
+                                        Click="BtnProgramDismissGraduated_Click">
+                                    <TextBlock Text="{loc:Str btn_program_dismiss}"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- ===================================================================
+             THE IGNITION RIG's two panel-wide surfaces. Both are siblings of the
+             scrolling content, never children of it: they must not scroll, must
+             not measure, and must never take a click. On WPF everything about
+             them - brush, opacity, whether they exist at all - is driven from the
+             one heat scalar in MainWindow.ProgramsFx.cs, which is not on this
+             head, so both rest exactly as they rest on WPF at tier 0.
+             =================================================================== -->
+
+        <!-- T4 / boss day: a soft inner edge glow around the whole tab. Margin and
+             radius track the SectionPanel style exactly (Margin 0,0,0,8,
+             CornerRadius 12): these two overlays are siblings of that panel, not
+             children of it. -->
+        <Rectangle x:Name="ProgramsEdgeGlow"
+                   IsHitTestVisible="False" Opacity="0" Margin="0,0,0,8"
+                   RadiusX="12" RadiusY="12"/>
+
+        <!-- Chapter-cleared seal stamp. Hidden until a chapter is actually cleared,
+             then ~1.6s of scale-and-fade and back to hidden. Copy is the chapter's
+             own authored name plus its day range: this surface adds no new
+             localisation keys. -->
+        <Grid x:Name="ProgramsSealHost"
+              IsHitTestVisible="False" IsVisible="False" Opacity="0"
+              Margin="0,0,0,8">
+            <Rectangle x:Name="ProgramsSealScrim"
+                       RadiusX="12" RadiusY="12" Fill="#B0000000"/>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                        RenderTransformOrigin="50%,50%">
+                <StackPanel.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                </StackPanel.RenderTransform>
+                <Border x:Name="ProgramsSealRing"
+                        Width="104" Height="104" CornerRadius="52" BorderThickness="3"
+                        HorizontalAlignment="Center">
+                    <TextBlock x:Name="TxtProgramsSealGlyph"
+                               Text="✓" FontSize="48" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock x:Name="TxtProgramsSealTitle"
+                           FontSize="30" FontWeight="Bold" Margin="0,18,0,0"
+                           TextAlignment="Center" MaxWidth="620" TextWrapping="Wrap"
+                           HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtProgramsSealSub"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0"
+                           TextAlignment="Center" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>
