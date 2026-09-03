@@ -314,6 +314,12 @@ namespace ConditioningControlPanel
             CoreProgression.AddXPProvider = (amount, source) =>
                 Progression?.AddXP(amount, Enum.TryParse<Services.XPSource>(source, out var s) ? s : Services.XPSource.Other);
             CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+            // The engine-running flag, for the feature cards that only live-apply while a session
+            // is up. The engine stays here; the flag is the whole seam.
+            CoreSession.IsEngineRunningProvider = () => IsEngineRunning;
+            // The app's one moderation log. Read lazily on every call because ModerationLog is
+            // constructed in OnStartup, long after this ctor - and it is declared null! until then.
+            CoreModerationLog.InstanceProvider = () => ModerationLog;
             // Speech capability, for the views that ask whether voice input is worth offering.
             // SpeechService itself stays here - it owns a capture device. Reading ModelStatus
             // lazily probes the model exactly as the WPF views already did.
