@@ -19,11 +19,12 @@ import { createTunnel, FOG_DENSITY } from '../engine/tunnel.js';
 import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
 import { createScreenShake } from '../game/screenShake.js';
-import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, makeRng } from './consts.js';
+import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, makeRng } from './consts.js';
 import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
 import { createWalls } from './walls.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
+import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
@@ -35,10 +36,10 @@ import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
 import { createSpeedFx } from './speed.js';
 
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6, FOV_BASE = 72;
-// how long each payload paints over the road: scaled ones follow payloadFx's durationMult, fixed ones do not
-// (subliminal and bambiFreeze are fixed in payloadFx; the host's video length is its own, 9 s is the budget)
-const EFFECT_SEC = { flash: 2.6, overlay: 4.5, glitch: 4.5, gifCascade: 6 };
-const EFFECT_FIXED_SEC = { subliminal: 0.5, bambiFreeze: 1.7, video: 9 };
+// effect lives are cocktail.js CATEGORIES (scaled by the pop's durationMult); a glitch re-pop wobbles
+// the world clock this hard, this long (only when tea_time is not already holding it)
+const WOBBLE_SCALE = 0.82, WOBBLE_SEC = 0.3;
+const ladderMult = (combo) => { let m = 1; for (const [at, mult] of MULT_LADDER) if (combo >= at) m = mult; return m; };
 const SPAWN_T0 = 2.5, RAIN_T0 = 20, EARLY_SLOW = 1.5;   // the opening drips slower (TREATS_ONLY_SEC)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
@@ -88,8 +89,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
     flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: 72, fovBoost: 0, gates: 0, room: null,
-    wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed,
+    wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
   };
+  const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
   let W = null;                       // the world: everything that is rebuilt on "again"
   let raf = 0, last = 0, lastBeat = 0, payoutResolve = null;
   const trail = [];                   // last ~1 s of kart {d,x,h}, for the ALMOST on a miss
@@ -141,6 +143,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed });
     setFlip(false); trail.length = 0;
+    mix.reset(); S.wobble = 0; clearMixChrome();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.item(null, 'no item yet');
   }
 
@@ -172,19 +175,85 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     w.kart.pulseTarget();
     if (p.kind === 'treat') return treat(w, p);
     if (S.parasol) { S.parasol = false; hud.toast('parasol', 'item'); return treat(w, p); }
-    // effect budget: one screen-level effect at a time (video included); the rest score as treats
-    if (S.effects.length > 0) { w.score.pop(p.points, 'treat'); hud.toast('held', 'effect'); return; }
-    w.score.pop(p.points, p.id);
-    const strength = Math.round(clamp(p.strength, 0, 1) * 100);
+    // THE MIX: one live effect per category, each with its own re-pop rule (cocktail.js); 'held' scores as a treat
     const durationMult = 0.5 + 0.5 * S.intensity;
-    if (p.payload === 'video') send({ type: 'fire-payload', kind: 'video', strength, durationMult });
-    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
-    w.kart.applySlow(0.92, 2.0);
-    hud.toast((KIND_BY_ID[p.id] || {}).label || p.id, 'effect');
-    if (p.payload === 'glitch') hud.flicker();
-    S.effects.push(EFFECT_FIXED_SEC[p.payload] || (EFFECT_SEC[p.payload] || 3) * durationMult);
+    const r = mix.add(p.id, { durationMult });
+    if (r.action === 'held' || r.action === 'ignore') { w.score.pop(p.points, 'treat'); hud.toast('held', 'effect'); return; }
+    w.score.pop(p.points, p.id);
+    pour(w, p, r, Math.round(clamp(p.strength, 0, 1) * 100), durationMult);
     shake.shake(p.payload === 'video' ? 0.9 : 0.5, 300);
     poke('shock', 0.9);
+    if (r.recipe) serve(w, r.recipe);
+  }
+
+  // ---- THE MIX: actions -> payloadFx + chrome, recipes -> the ledger ----
+  const fire = (p, strength, durationMult) => {
+    if (p.payload === 'video') send({ type: 'fire-payload', kind: 'video', strength, durationMult });
+    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
+  };
+  function clearMixChrome() { root.removeAttribute('data-ov'); root.removeAttribute('data-tint'); if (hud.setTint) hud.setTint(0); }
+  /** Pour one action. Sustained holds (tint / overlay / corruption) get a durationMult that lands payloadFx's
+   *  fade on the mixer's drain, so a tint that was extended stays pink for as long as the rail says it will. */
+  function pour(w, p, r, strength, durationMult) {
+    const label = (KIND_BY_ID[p.id] || {}).label || p.id;
+    const slot = mix.live(r.category);
+    const holdMult = slot && CATEGORIES[r.category].scaled ? clamp(slot.sec / CATEGORIES[r.category].sec, 0.1, 10) : durationMult;
+    switch (r.category) {
+      case 'strobe':
+        fire(p, strength, durationMult); w.kart.applySlow(0.92, 2.0);
+        hud.toast(r.charges > 1 ? `flash x${r.charges}` : 'flash', 'effect');
+        if (hud.strobe) hud.strobe(r.charges);
+        break;
+      case 'tint':
+        fire(p, strength, holdMult);
+        root.dataset.tint = String(r.depth); if (hud.setTint) hud.setTint(r.depth);   // race.css deepens the wash and the chrome
+        hud.toast(r.action === 'extend' ? (r.depth >= 2 ? 'pinker' : 'pink, longer') : label, 'effect');
+        break;
+      case 'overlay':
+        fire(p, strength, holdMult);
+        root.dataset.ov = p.overlayKind;   // race.css crossfades the other hold out (the replace)
+        hud.toast(r.action === 'refresh' ? 'deeper' : r.action === 'replace' ? `${label} takes over` : label, 'effect');
+        break;
+      case 'corruption':
+        fire(p, strength, holdMult); hud.flicker();
+        if (r.action === 'refresh') {
+          poke('shock', 0.6); w.kart.applySlow(0.85, 0.6);
+          if (S.timeScale === 1) { S.timeScale = WOBBLE_SCALE; S.wobble = WOBBLE_SEC; }
+        }
+        hud.toast(r.action === 'refresh' ? 'more static' : label, 'effect');
+        break;
+      case 'video': fire(p, strength, durationMult); hud.toast(label, 'effect'); break;
+      default:   // cards, freeze
+        fire(p, strength, durationMult); w.kart.applySlow(0.92, 2.0);
+        hud.toast(r.charges > 1 ? `${label} x${r.charges}` : label, 'effect');
+    }
+  }
+  /** A recipe is served: the boost never lowers what lucky_star already put on the ledger, the combo holds. */
+  function serve(w, rc) {
+    const cur = w.score.state.mult / ladderMult(w.score.state.combo);
+    w.score.boostMult(Math.max(rc.mult, cur), cur > rc.mult ? Math.max(rc.sec, 8) : rc.sec);
+    w.score.freezeCombo(rc.sec);
+    hud.toast(rc.name, 'recipe');
+    if (rc.marquee) hud.banner(rc.name, rc.line, '#ff3da5');
+    sfx(rc.marquee ? 'pb_fanfare' : 'streak_milestone', 0.8);
+    shake.shake(rc.marquee ? 0.7 : 0.35, 260);
+    poke(rc.marquee ? 'jackpot' : 'smug', rc.marquee ? 1.6 : 1.2);
+  }
+  function onMix(w, e) {
+    switch (e.type) {
+      case 'pulse':   // the strobe: burst extras after a stacking pop, the roll at 4 and 5 charges (no roll under reduced motion)
+        if (e.kind === 'roll' && reducedMotion) break;
+        w.fx.pulseFlash(e.kind === 'burst' ? 0.55 : 0.28 + 0.05 * e.charges);
+        if (hud.strobe) hud.strobe(e.charges);
+        if (e.kind === 'burst' && e.charges >= 3) payloadFx.applyPayload({ payload: { kind: 'flash' }, strength: 40 }, { durationMult: 0.6 });
+        break;
+      case 'decay': if (hud.strobe) hud.strobe(e.charges); break;
+      case 'expire':
+        if (e.category === 'overlay') root.removeAttribute('data-ov');
+        else if (e.category === 'tint') { root.removeAttribute('data-tint'); if (hud.setTint) hud.setTint(0); }
+        break;
+      case 'recipeEnd': break;   // the rail drops the name; nothing to take back
+    }
   }
   function onMiss(w, m) {
     // ALMOST: the treat slid past inside NEAR_MISS_M but outside the hit box; else the streak lets go
@@ -236,7 +305,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     k.update(dt, input.read(), lay);
     w.score.tick(dt); w.items.update(dt);
     trail.push({ d: ks.d, x: ks.x, h: ks.h }); if (trail.length > 70) trail.shift();
-    for (let i = S.effects.length - 1; i >= 0; i--) { S.effects[i] -= dt; if (S.effects[i] <= 0) S.effects.splice(i, 1); }
+    for (const e of mix.tick(dt)) onMix(w, e);
+    if (S.wobble > 0) { S.wobble -= dt; if (S.wobble <= 0 && S.timeScale === WOBBLE_SCALE) S.timeScale = 1; }
+    const mixed = mix.state(); S.effects = mixed.live;
+    if (hud.mixer) hud.mixer(mixed);
 
     // bubbles: seed the chunks ahead, drip spawns, rain bursts
     for (const c of lay.chunks) { const rel = lay.wrap(c.d0 - ks.d + lay.totalDepth / 2) - lay.totalDepth / 2; if (rel > -20 && rel < 250) w.field.seedChunk(c); }

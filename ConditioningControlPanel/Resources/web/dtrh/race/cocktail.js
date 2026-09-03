@@ -283,7 +283,7 @@ if (typeof process !== 'undefined' && process.env && process.env.RACE_SELFCHECK)
     ok(got && got.id === rc.id, 'recipe ' + rc.id + ' fires from ' + rc.needs.join('+'));
     ok(m.state().recipe && m.state().recipe.name === rc.name, 'recipe ' + rc.id + ' is live');
     ok(rc.mult >= 1 && rc.sec > 0, 'recipe ' + rc.id + ' never subtracts');
-    ok(!/—|–/.test(rc.name + rc.line) && rc.name === rc.name.toLowerCase(), 'recipe ' + rc.id + ' copy is house voice');
+    ok(!/[\u2013\u2014]/.test(rc.name + rc.line) && rc.name === rc.name.toLowerCase(), 'recipe ' + rc.id + ' copy is house voice');
     const again = m.add(seed[rc.needs[0]]);
     ok(again.recipe === null, 'recipe ' + rc.id + ' does not re-serve while live');
   }
