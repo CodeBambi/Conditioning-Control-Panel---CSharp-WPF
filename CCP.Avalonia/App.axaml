@@ -12,6 +12,11 @@
         <ResourceInclude Source="avares://CCP.Avalonia/Theme/Brushes.xaml"/>
         <!-- Keyed styles the views are written against, as ControlThemes. -->
         <ResourceInclude Source="avares://CCP.Avalonia/Theme/Styles.xaml"/>
+        <!-- The Workshop cells' interior typography. Kept beside the cells rather than folded
+             into Styles.xaml, matching the WPF head where all six Workshop*Cell views merge
+             this same dictionary. Merged once here so every cell resolves the keys without
+             each repeating a ResourceInclude. -->
+        <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Runtime/WorkshopCellTheme.axaml"/>
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

@@ -1,0 +1,96 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/Runtime/WorkshopTriggersCell.xaml.
+     Structure, order, spacing and every resource key are preserved so the two diff cleanly.
+     Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"   ->  Theme="{StaticResource X}"    (keyed styles are ControlThemes)
+       Style="{DynamicResource X}"  ->  Theme="{DynamicResource X}"   (same, resolved late)
+       {loc:Str key}                ->  {Binding LocX}                (LocExtension is a WPF
+                                        MarkupExtension and stays in the head; the strings still
+                                        come from CCP.Core's Loc, via the view model)
+       Visibility="Collapsed"       ->  IsVisible="False"
+       ToolTip="..."                ->  ToolTip.Tip="..."
+       Content="{loc:Str ...}"      ->  a <TextBlock> child (Avalonia's Button reads "_" in Content
+                                        as an access key, and every loc string here is snake_case)
+       pack:// merged dictionary    ->  avares:// ResourceInclude
+       Checked/Unchecked, Click,
+       ValueChanged, SelectionChanged -> wired in the constructor
+       DisplayMemberPath/
+       SelectedValuePath            ->  DisplayMemberBinding/SelectedValueBinding, as
+                                        ReflectionBinding: the item type (Models.PhrasePreset)
+                                        still lives in the WPF head, so it cannot be compiled. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime.WorkshopTriggersCell"
+             x:DataType="vm:WorkshopTriggersCellViewModel"
+             mc:Ignorable="d" d:DesignWidth="312">
+
+    <!-- ================================================================
+         Z8 · TRIGGERS & PHRASES — the System B keyword engine's mode
+         switch, its interval, the phrase editor, and the phrase-preset
+         shelf. Design §6 keeps all six controls; this is a container
+         move only.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Runtime/WorkshopCellTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <Grid Margin="0,0,0,4">
+            <StackPanel Margin="0,0,44,0">
+                <TextBlock Text="{Binding LocTriggerMode}" Theme="{StaticResource CmpCellLabelStyle}"/>
+                <TextBlock Text="{Binding LocRandomPhrasesHint}" Theme="{StaticResource CmpCellHintStyle}"/>
+            </StackPanel>
+            <CheckBox x:Name="ChkTriggerModeCompanion" Theme="{DynamicResource ToggleStyle}"
+                      HorizontalAlignment="Right" VerticalAlignment="Center"/>
+        </Grid>
+
+        <StackPanel x:Name="TriggerSettingsPanelCompanion" IsVisible="False" Margin="0,0,0,9">
+            <Grid>
+                <TextBlock Text="{Binding LocInterval}" Theme="{StaticResource CmpCellLabelStyle}"/>
+                <TextBlock x:Name="TxtTriggerIntervalCompanion" Text="{Binding LocIntervalValue}"
+                           Theme="{StaticResource CmpCellValueStyle}" Foreground="#9370DB"/>
+            </Grid>
+            <Slider x:Name="SliderTriggerIntervalCompanion" Theme="{DynamicResource PinkSlider}"
+                    Minimum="10" Maximum="600" Value="60" Margin="0,4,0,6"/>
+            <Button x:Name="BtnEditTriggersCompanion"
+                    Theme="{StaticResource CmpCellButtonStyle}" HorizontalAlignment="Stretch">
+                <TextBlock Text="{Binding LocEditPhrases}"/>
+            </Button>
+        </StackPanel>
+
+        <Button x:Name="BtnManagePhrases" Theme="{StaticResource CmpCellButtonStyle}" Margin="0,0,0,6">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="{Binding LocManagePhrases}" Foreground="#FFD8D2EA" FontSize="11"/>
+                <TextBlock x:Name="TxtPhraseCount" Text="{Binding LocPhraseCount}"
+                           Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="11" Margin="4,0,0,0"/>
+            </StackPanel>
+        </Button>
+
+        <ComboBox x:Name="CmbPhrasePresets" FontSize="11" Margin="0,0,0,5"
+                  Theme="{DynamicResource DarkComboBoxStyle}"
+                  DisplayMemberBinding="{ReflectionBinding DisplayText}"
+                  SelectedValueBinding="{ReflectionBinding Id}"/>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Theme="{StaticResource CmpCellButtonStyle}"
+                    Margin="0,0,3,0" ToolTip.Tip="{Binding LocTooltipSavePreset}">
+                <TextBlock Text="{Binding LocSave}"/>
+            </Button>
+            <Button Grid.Column="1" Theme="{StaticResource CmpCellButtonStyle}"
+                    Margin="3,0,0,0" ToolTip.Tip="{Binding LocTooltipDeletePreset}">
+                <TextBlock Text="{Binding LocDelete}"/>
+            </Button>
+        </Grid>
+    </StackPanel>
+</UserControl>
