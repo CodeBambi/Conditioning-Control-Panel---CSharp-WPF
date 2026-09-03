@@ -701,6 +701,10 @@ namespace ConditioningControlPanel
                 // menu belongs on ModChanged with the rest of the tube. Idempotent: it writes
                 // headers, foregrounds and enablement, and rebuilds the personality submenu.
                 UpdateQuickMenuState();
+
+                // The bubble fill/text and the portrait mist hold literal colours, so unlike the
+                // rest of the tube they do not follow PinkBrush on their own.
+                ApplyTubeAccent();
             }
             catch (Exception ex)
             {

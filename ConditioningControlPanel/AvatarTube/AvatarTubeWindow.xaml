@@ -147,7 +147,7 @@
                             Panel.ZIndex="20"
                             IsHitTestVisible="False">
                         <TextBlock Text="{loc:Str label_ai_badge}"
-                                   Foreground="White"
+                                   Foreground="{DynamicResource AccentForegroundBrush}"
                                    FontSize="9"
                                    FontWeight="Bold"
                                    HorizontalAlignment="Center"
@@ -230,10 +230,15 @@
                                                     <Style TargetType="Border">
                                                         <Setter Property="HorizontalAlignment" Value="Left"/>
                                                         <Setter Property="Background" Value="#3D2A55"/>
+                                                        <!-- Both rows now inherit their text colour from the row
+                                                             Border; the companion row keeps the white it always had. -->
+                                                        <Setter Property="TextElement.Foreground" Value="White"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsUser}" Value="True">
                                                                 <Setter Property="HorizontalAlignment" Value="Right"/>
-                                                                <Setter Property="Background" Value="#FF69B4"/>
+                                                                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                                                <!-- The row's own text has to follow the accent it now sits on. -->
+                                                                <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentForegroundBrush}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -241,11 +246,10 @@
                                                 <StackPanel>
                                                     <TextBlock Tag="{Binding Text}"
                                                                Loaded="ChatHistoryText_Loaded"
-                                                               Foreground="White"
                                                                FontSize="14"
                                                                TextWrapping="Wrap"/>
                                                     <TextBlock Text="{Binding TimeLabel}"
-                                                               Foreground="#DDDDDD"
+                                                               Opacity="0.75"
                                                                FontSize="10"
                                                                HorizontalAlignment="Right"
                                                                Margin="0,2,0,0"/>
@@ -494,7 +498,10 @@
                             <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
                         </Image.Effect>
                     </Image>
-                    <!-- Pink mist overlay (emotive-portrait mode only): soft drifting pink glow over the avatar -->
+                    <!-- Mist overlay (emotive-portrait mode only): a soft drifting glow over the avatar.
+                         The stops below are a DESIGN-TIME SEED. AvatarTubeWindow.ApplyTubeAccent
+                         rebuilds this brush from the active mod's accent at startup and on every
+                         mod switch, so a non-pink mod does not glow pink. -->
                     <Ellipse x:Name="MistOverlay"
                              IsHitTestVisible="False"
                              Visibility="Collapsed"

@@ -231,6 +231,9 @@ namespace ConditioningControlPanel
                 };
             }
 
+            // Paint the bubble + mist from the active mod's accent before anything can show them.
+            ApplyTubeAccent();
+
             // Initialize context menu state
             UpdateQuickMenuState();
 

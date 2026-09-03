@@ -24,6 +24,9 @@ namespace ConditioningControlPanel.Services;
         // window (App's show-signal handler) AFTER the MainWindow has been closed — MainWindowRef is then
         // a stale, non-null reference — which threw InvalidOperationException. Track closure to no-op.
         private bool _windowClosed;
+        /// <summary>The real, branded tray icon - kept so "Discreet app icon" can be turned back off.</summary>
+        private Icon? _brandIcon;
+        private Icon? _neutralIcon;
 
         public event Action? OnShowRequested;
         public event Action? OnExitRequested;
@@ -88,7 +91,12 @@ namespace ConditioningControlPanel.Services;
             }
 
             // Fallback to system icon if custom icon not found
-            _notifyIcon.Icon = icon ?? SystemIcons.Application;
+            _brandIcon = icon ?? SystemIcons.Application;
+            _notifyIcon.Icon = _brandIcon;
+
+            // "Discreet app icon" (Settings > General): the tray is the other place the app
+            // announces itself, so it follows the same switch as the taskbar entry.
+            ApplyDiscreetSkin(DiscreetIcon.Enabled, DiscreetIcon.Title);
 
             // Create context menu
             var contextMenu = new ContextMenuStrip();
@@ -123,6 +131,34 @@ namespace ConditioningControlPanel.Services;
         catch (Exception ex)
         {
             App.Logger?.Error("Failed to initialize tray icon: {Error}", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Repaints the tray entry for the "Discreet app icon" setting: neutral grey glyph and a
+    /// bland tooltip when on, the real branding when off. Safe to call before or after the
+    /// icon exists, and safe to call repeatedly.
+    /// </summary>
+    public void ApplyDiscreetSkin(bool discreet, string title)
+    {
+        try
+        {
+            if (_notifyIcon == null) return;
+            if (discreet)
+            {
+                _neutralIcon ??= DiscreetIcon.TrayIcon();
+                if (_neutralIcon != null) _notifyIcon.Icon = _neutralIcon;
+            }
+            else if (_brandIcon != null)
+            {
+                _notifyIcon.Icon = _brandIcon;
+            }
+            // NotifyIcon.Text throws above 63 chars; both titles are far shorter, but clamp anyway.
+            _notifyIcon.Text = (title ?? "").Length > 63 ? title!.Substring(0, 63) : title ?? "";
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("TrayIconService.ApplyDiscreetSkin: {E}", ex.Message);
         }
     }
 

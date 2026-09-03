@@ -3,6 +3,7 @@
 
     <!-- Brushes (derived from Colors — use DynamicResource so runtime color changes propagate) -->
     <SolidColorBrush x:Key="PinkBrush"   Color="{DynamicResource PinkColor}"/>
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="{DynamicResource AccentForeground}"/>
     <SolidColorBrush x:Key="DarkPinkBrush" Color="{DynamicResource DarkPink}"/>
     <SolidColorBrush x:Key="PanelBgBrush" Color="{DynamicResource PanelBg}"/>
     <SolidColorBrush x:Key="PanelBgTransparentBrush" Color="{DynamicResource PanelBgTransparent}"/>

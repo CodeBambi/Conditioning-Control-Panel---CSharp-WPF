@@ -2389,6 +2389,19 @@ namespace ConditioningControlPanel.Models
             set { _startMinimized = value; OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// Swaps the taskbar / alt-tab / title-bar identity for a neutral grey icon and a bland
+        /// window title (see <see cref="Services.DiscreetIcon"/>). Off by default: this is a
+        /// privacy convenience, never a default. It only touches the RUNNING window and the tray
+        /// icon - the Start-menu and desktop shortcuts are written by the installer.
+        /// </summary>
+        private bool _discreetAppIcon = false;
+        public bool DiscreetAppIcon
+        {
+            get => _discreetAppIcon;
+            set { _discreetAppIcon = value; OnPropertyChanged(); }
+        }
+
         private bool _autoStartEngine = false;
         public bool AutoStartEngine
         {
