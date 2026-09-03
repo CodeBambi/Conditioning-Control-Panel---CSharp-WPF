@@ -1,79 +1,61 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs (2312 lines).
+// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs (2312 lines).
+// Sorted member by member against the fifteen Core seams; unlike its neighbours the blanket claim
+// survives here, but for a reason the old header did not give and that is worth writing down so
+// nobody re-checks it: THE PROGRAM MODEL ITSELF IS STILL IN THE HEAD.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+//   ProgramDefinition, ProgramDay, ProgramEnrollment   ConditioningControlPanel/Models/Program/
+//   ProgramService, ProgramSessionBuilder, ProgramArt  ConditioningControlPanel/Services/Program/
 //
-// Members dropped (63):
-//   private bool _programsSubscribed
-//   private bool _programsAppHooked
-//   private bool _programsPulseRunning
-//   private void StartProgramsTabPulse(…)
-//   private void StopProgramsTabPulse(…)
-//   private void EnsureProgramsSubscribed(…)
-//   private void EnsureProgramsAppHooks(…)
-//   private void OnProgramTodayChanged(…)
-//   private void OnProgramLapsed(…)
-//   private void OnProgramGraduated(…)
-//   private void MarshalProgramRefresh(…)
-//   internal void ProgramTodayCard_Loaded(…)
-//   private static Brush ProgramThemeBrush(…)
-//   private static Brush ProgramAccentBrush(…)
-//   private static bool ProgramHasPremium
-//   private static Brush ProgramContrastForeground(…)
-//   private static double SrgbToLinear(…)
-//   private static string ProgramRunKey(…)
-//   private static Brush ProgramRailFillBrush(…)
-//   private static Brush ProgramRadialGlowBrush(…)
-//   private static void ApplyProgramArtMask(…)
-//   private static string? ProgramTaskIconPath(…)
-//   private static string? ProgramTaskHowTo(…)
-//   private static readonly(…)
-//   private static Models.SessionSettings? ProgramDaySettings(…)
-//   internal void RefreshProgramsUI(…)
-//   private void RebuildProgramsTab(…)
-//   private void BuildProgramBrowseList(…)
-//   private void BuildProgramRunPanel(…)
-//   private void BuildProgramDayStrip(…)
-//   private void BuildProgramTodayPanel(…)
-//   private void BuildProgramTodayLayers(…)
-//   private void BuildProgramUpNext(…)
-//   private static string FormatProgramClock(…)
-//   internal void UpdateProgramSessionRow(…)
-//   private bool _programsFxHooked
-//   private bool _programSheenActive
-//   private string? _programDayCompletePopped
-//   private readonly HashSet<string> _programTasksSeenIncomplete
-//   private string? _programRunKeySeen
-//   private bool _programsRefreshPending
-//   private void ResetProgramRunPopsIfRunChanged(…)
-//   private void EnsureProgramsFxHooked(…)
-//   private void OnProgramsTabVisibleChanged(…)
-//   private void StartProgramRunEntrance(…)
-//   private static void AnimateProgramPanelIn(…)
-//   private void EnsureProgramSessionSheen(…)
-//   private void StopProgramSessionSheen(…)
-//   private static void PopProgramScale(…)
-//   internal void AnnounceProgramSessionStarted(…)
-//   internal void AnnounceProgramSessionEnded(…)
-//   private void BuildProgramLapsedPanel(…)
-//   private void BuildProgramGraduatedPanel(…)
-//   internal void BtnProgramEnroll_Click(…)
-//   internal void BtnProgramPauseResume_Click(…)
-//   internal void BtnProgramWithdraw_Click(…)
-//   internal void BtnProgramRestart_Click(…)
-//   internal void BtnProgramDismissGraduated_Click(…)
-//   internal void BtnProgramSubmitRitual_Click(…)
-//   internal void BtnStartTodaySession_Click(…)
-//   internal async void StartProgramSession(…)
-//   internal void ProgramTodayCard_Click(…)
-//   internal void RefreshProgramTodayCard(…)
+// Nothing in CCP.Core names any of them. That is a stronger blocker than a missing seam: not one
+// member of this file can be written at all, because there is no type here to write it against.
+// Check with `grep -rl "ProgramEnrollment\|ProgramDefinition" CCP.Core` before assuming otherwise -
+// when that grep starts hitting, most of this file becomes a straight transcription.
+//
+// What that leaves, grouped so the eventual port can be taken in bites:
+//
+//   THE BUILDERS - RebuildProgramsTab, BuildProgramBrowseList, BuildProgramRunPanel,
+//   BuildProgramDayStrip, BuildProgramTodayPanel, BuildProgramTodayLayers, BuildProgramUpNext,
+//   BuildProgramLapsedPanel, BuildProgramGraduatedPanel, RefreshProgramsUI, RefreshProgramTodayCard,
+//   UpdateProgramSessionRow, ProgramTodayCard_Loaded, ProgramTodayCard_Click. Code-built panels over
+//   ProgramService state; they also want the tab's own ControlThemes, which is a second job.
+//
+//   THE COMMANDS - BtnProgramEnroll_Click, BtnProgramPauseResume_Click, BtnProgramWithdraw_Click,
+//   BtnProgramRestart_Click, BtnProgramDismissGraduated_Click, BtnProgramSubmitRitual_Click,
+//   BtnStartTodaySession_Click, StartProgramSession, AnnounceProgramSessionStarted /
+//   AnnounceProgramSessionEnded. ProgramService plus SessionEngine. None of these is a lie-risk -
+//   they simply have no service to command.
+//
+//   THE SUBSCRIPTIONS - EnsureProgramsSubscribed, EnsureProgramsAppHooks, OnProgramTodayChanged,
+//   OnProgramLapsed, OnProgramGraduated, MarshalProgramRefresh, _programsSubscribed,
+//   _programsAppHooked. Events on ProgramService; MarshalProgramRefresh's WPF Dispatcher.Invoke is
+//   Dispatcher.UIThread.Post here.
+//
+//   THE PAINT HELPERS - ProgramThemeBrush, ProgramAccentBrush, ProgramContrastForeground,
+//   SrgbToLinear, ProgramRailFillBrush, ProgramRadialGlowBrush, ApplyProgramArtMask,
+//   ProgramTaskIconPath, ProgramTaskHowTo, ProgramRunKey, FormatProgramClock, ProgramDaySettings,
+//   ProgramHasPremium. Two of these - SrgbToLinear (the sRGB->linear curve behind the WCAG
+//   luminance pick) and FormatProgramClock - are pure and portable TODAY. They are left out because
+//   they are orphans: every caller is a builder above, and a lone contrast helper with nothing to
+//   contrast is padding, not a port. ProgramRailFillBrush and ProgramRadialGlowBrush additionally
+//   call Freeze(), which Avalonia has no equivalent for; ProgramHasPremium is App.Patreon;
+//   ProgramDaySettings is ProgramSessionBuilder.
+//
+//   THE FX - EnsureProgramsFxHooked, OnProgramsTabVisibleChanged, StartProgramRunEntrance,
+//   AnimateProgramPanelIn, EnsureProgramSessionSheen, StopProgramSessionSheen, PopProgramScale,
+//   StartProgramsTabPulse, StopProgramsTabPulse, ResetProgramRunPopsIfRunChanged and their seven
+//   state flags. WPF storyboards; the keyframe-Animation recipe in CLAUDE.md covers the shapes, but
+//   there is nothing on screen to animate until the builders land.
+//
+// Checked and NOT the blocker here: CoreProgression and CoreSession. Programs are their own
+// enrollment ledger - CoreProgression answers XP and level, CoreSession answers the running
+// session, and no member of this file reads either. Do not wire them expecting the tab to fill.
+//
+// No member of this partial is referenced from MainShellWindow.axaml. The rail's Programs button is
+// BtnPrograms_Click, which already ships in MainShellWindow.TabNavigation.cs:205.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // No member of this partial is referenced from MainShellWindow.axaml.
     }
 }

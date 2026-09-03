@@ -1,110 +1,87 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.RemoteControl.cs (1575 lines).
+// PARTIALLY PORTED from ConditioningControlPanel/MainWindow/MainWindow.RemoteControl.cs (1575 lines).
+// Sorted member by member against the fifteen Core seams. The blanket header claimed all 77 were
+// blocked; one is not, and the rest have ONE blocker between them worth naming precisely.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// THE BLOCKER IS A NETWORK CLIENT, NOT A SEAM: App.RemoteControl, which is
+// ConditioningControlPanel/Services/RemoteControlService.cs - the pairing socket, the code and PIN,
+// the controller identity, the command stream and the tier handshake. It is not a Core seam and
+// there is no substitute for it; every emote send, every status line, every QR code and every
+// session-from-remote command goes through it. Nothing here invents a client, and nothing here
+// paints a status from a client that is not there: an "idle" or "connected" line derived from local
+// state alone would be a control lying about who is driving this machine, which is the most
+// consequential state in the app.
 //
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
+// WHAT IS REAL: BtnAvailableSubjects_Click. One ShowTab("availablesubjects"), the same one line as
+// WPF (MainWindow.RemoteControl.cs:491). "availablesubjects" IS a mapped tab on this head
+// (MainShellWindow.TabNavigation.cs:88 -> AvailableSubjectsTab), so the door opens and the panel
+// swaps; that panel's roster is still filled by App.AvailableSubjects, so the click navigates to an
+// empty page rather than to nothing.
 //
-// Members dropped (77):
-//   internal async void ChkRemoteControlEnabled_Changed(…)
-//   private string GetSelectedRemoteTier(…)
-//   private bool ShowRemoteControlWaiver(…)
-//   internal async void CmbRemoteTier_SelectionChanged(…)
-//   internal void BtnCopyRemoteCode_Click(…)
-//   internal void BtnCopyRemoteLink_Click(…)
-//   internal async void BtnStopRemote_Click(…)
-//   internal void ChkStopEffectsOnRemoteDisconnect_Changed(…)
-//   internal async void ChkRemoteShareAvatar_Changed(…)
-//   private Models.EmotePreset? _editingPreset
-//   internal async void BtnEmotePreset_Click(…)
-//   internal async void BtnEmoteCustomSend_Click(…)
-//   internal async void TxtEmoteCustom_KeyDown(…)
-//   private async void BtnEmotePresetBig_Click(…)
-//   private async void BtnEmoteCustomSendBig_Click(…)
-//   private async void TxtEmoteCustomBig_KeyDown(…)
-//   private async Task SendCustomEmoteAsync(…)
-//   internal async Task<bool> SendEmoteAndReportAsync(…)
-//   internal void BtnEmoteEdit_Click(…)
-//   internal void TxtEditEmoteText_TextChanged(…)
-//   internal void BtnEditEmoteSave_Click(…)
-//   internal void BtnEditEmoteCancel_Click(…)
-//   private bool _availableSubjectsBound
-//   internal void BtnAvailableSubjects_Click(…)
-//   internal void BtnBecomeASubject_Click(…)
-//   private void RefreshBecomeASubjectCta(…)
-//   private void EnsureAvailableSubjectsBound(…)
-//   private void OnAvailableSubjectsServicePropertyChanged(…)
-//   internal void AvailableSubjectsScroller_PreviewMouseWheel(…)
-//   private void UpdateAvailableSubjectsEmptyAndError(…)
-//   internal async void BtnConnectSubject_Click(…)
-//   private const int OptInMaxTags
-//   private System.Windows.Controls.CheckBox[] OptInTagCheckBoxes(…)
-//   internal void ChkOptIntoDirectory_Changed(…)
-//   private void PopulateOptInFormFromSavedSettings(…)
-//   internal void TxtOptInStatus_TextChanged(…)
-//   private void UpdateOptInStatusCharCount(…)
-//   internal void ChkOptInTag_Click(…)
-//   private List<string> GetSelectedDirectoryTags(…)
-//   private System.Windows.Threading.DispatcherTimer? _optInFeedbackTimer
-//   private void ShowOptInFeedback(…)
-//   private async Task RunOptInChainAsync(…)
-//   private bool _directoryOptedIn
-//   private void UpdateDirectoryListingStatus(…)
-//   private async Task StopRemoteControl(…)
-//   private void OnRemoteControllerChanged(…)
-//   private void OnRemoteControllerIdleChanged(…)
-//   private void OnRemoteSessionEnded(…)
-//   private void UpdateRemoteStatus(…)
-//   private void ShowRemoteControlOverlay(…)
-//   private void HideRemoteControlOverlay(…)
-//   private void WireRemoteSessionCallbacks(…)
-//   private void StartRemoteSessionInfoTimer(…)
-//   private void UpdateRemoteSessionInfo(…)
-//   private void OnRemoteCommandReceived(…)
-//   private void AppendRemoteCommandLog(…)
-//   private void UpdateRemoteControlUI(…)
-//   private string BuildRemotePairingUrl(…)
-//   private void RefreshRemoteQrCode(…)
-//   private void RefreshTierCardHighlight(…)
-//   internal void TierCard_Click(…)
-//   private void ShowCommandNotification(…)
-//   private void HideCommandNotification(…)
-//   private async void BtnEndRemoteSession_Click(…)
-//   private Models.Session? _remoteStartedSession
-//   internal bool IsSessionRemoteStarted
-//   internal async void StartSessionFromRemote(…)
-//   internal void PauseSessionFromRemote(…)
-//   internal void ResumeSessionFromRemote(…)
-//   internal void StopSessionFromRemote(…)
-//   internal void StopEngineAndSession(…)
-//   internal void TriggerPanicFromRemote(…)
-//   internal void MinimizeToTrayForRemote(…)
-//   public void MinimizeToTrayForChaos(…)
-//   private void NotifyRemoteControllerJoined(…)
-//   internal void RestoreFromTrayForRemote(…)
-//   public void ShowFromTray(…)
+// THE FOUR OTHER HANDLERS MainShellWindow.axaml NAMES STAY EMPTY, deliberately:
+//   BtnEmotePresetBig_Click / BtnEmoteCustomSendBig_Click / TxtEmoteCustomBig_KeyDown all end in
+//     SendEmoteAndReportAsync -> App.RemoteControl.SendEmote. There is nowhere to send to.
+//   BtnEndRemoteSession_Click ends a session on the SUBJECT'S machine. With no session to end it
+//     would be a button that reports having stopped something it never touched.
+//
+// PORTABLE BUT HELD, and each for a stated reason rather than a wait:
+//   BuildRemotePairingUrl - two string interpolations, and one of them is App.RemoteControl.ConnectPin.
+//     A pairing URL built without the PIN is a link that fails to pair; there is no honest half.
+//   GetSelectedRemoteTier / ShowRemoteControlWaiver / RefreshTierCardHighlight / TierCard_Click -
+//     the tier picker reads and writes RemoteControlTabView, which loads with
+//     AvaloniaXamlLoader.Load(this) and is not owned by this layer. Reaching into another view's
+//     name scope to set a tier that no session will use is churn.
+//   UpdateOptInStatusCharCount / GetSelectedDirectoryTags / OptInTagCheckBoxes /
+//     PopulateOptInFormFromSavedSettings / TxtOptInStatus_TextChanged / ChkOptInTag_Click /
+//     ChkOptIntoDirectory_Changed / ShowOptInFeedback / UpdateDirectoryListingStatus / OptInMaxTags.
+//     The directory opt-in form is genuinely settings-shaped and would persist through CoreSettings,
+//     but it PUBLISHES the user to a public subject directory - RunOptInChainAsync is the server
+//     call that makes it real. A form that saves the fields locally and shows "listed" without ever
+//     calling the chain is a consent surface that lies about being public, so the whole form waits
+//     for the chain. OptInTagCheckBoxes is additionally typed System.Windows.Controls.CheckBox[].
+//
+// THE REST, by group, all on App.RemoteControl unless noted:
+//   Enable / disable and tier - ChkRemoteControlEnabled_Changed, CmbRemoteTier_SelectionChanged,
+//     BtnStopRemote_Click, StopRemoteControl, ChkStopEffectsOnRemoteDisconnect_Changed,
+//     ChkRemoteShareAvatar_Changed.
+//   Pairing display - BtnCopyRemoteCode_Click, BtnCopyRemoteLink_Click, RefreshRemoteQrCode
+//     (a QR encoder as well as the code), UpdateRemoteControlUI.
+//   Live session - OnRemoteControllerChanged, OnRemoteControllerIdleChanged, OnRemoteSessionEnded,
+//     UpdateRemoteStatus, WireRemoteSessionCallbacks, StartRemoteSessionInfoTimer,
+//     UpdateRemoteSessionInfo, OnRemoteCommandReceived, AppendRemoteCommandLog,
+//     ShowRemoteControlOverlay, HideRemoteControlOverlay, ShowCommandNotification,
+//     HideCommandNotification, NotifyRemoteControllerJoined.
+//   Emotes - BtnEmotePreset_Click, BtnEmoteCustomSend_Click, TxtEmoteCustom_KeyDown,
+//     SendCustomEmoteAsync, SendEmoteAndReportAsync, BtnEmoteEdit_Click, TxtEditEmoteText_TextChanged,
+//     BtnEditEmoteSave_Click, BtnEditEmoteCancel_Click, _editingPreset. EmotePreset is a Core model;
+//     the sending is not.
+//   Subjects roster - BtnBecomeASubject_Click, RefreshBecomeASubjectCta, EnsureAvailableSubjectsBound,
+//     OnAvailableSubjectsServicePropertyChanged, UpdateAvailableSubjectsEmptyAndError,
+//     BtnConnectSubject_Click, AvailableSubjectsScroller_PreviewMouseWheel (no PreviewMouseWheel in
+//     Avalonia either way).
+//   Remote-driven session control - StartSessionFromRemote, PauseSessionFromRemote,
+//     ResumeSessionFromRemote, StopSessionFromRemote, StopEngineAndSession, TriggerPanicFromRemote,
+//     IsSessionRemoteStarted, _remoteStartedSession. These drive SessionEngine
+//     (ConditioningControlPanel/Services/Session/SessionEngine.cs) as well as the remote client.
+//   Tray - MinimizeToTrayForRemote, MinimizeToTrayForChaos, RestoreFromTrayForRemote, ShowFromTray.
+//     A Win32 notify-icon on WPF; a per-platform reimplementation here, not a port.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.RemoteControl.cs; wired when they move to Core.
-        private void BtnAvailableSubjects_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        /// <summary>The Play door's Available Subjects entry. One ShowTab, as in WPF. The roster
+        /// on that page is still filled by App.AvailableSubjects, so this opens an empty tab.</summary>
+        private void BtnAvailableSubjects_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+            => ShowTab("availablesubjects");
 
-        // ponytail: needs the services in MainWindow.RemoteControl.cs; wired when they move to Core.
+        // The four below reach App.RemoteControl and stay empty on purpose - see the header. They
+        // exist because MainShellWindow.axaml names them and a missing handler is a XAML error.
         private void BtnEmoteCustomSendBig_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
 
-        // ponytail: needs the services in MainWindow.RemoteControl.cs; wired when they move to Core.
         private void BtnEmotePresetBig_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
 
-        // ponytail: needs the services in MainWindow.RemoteControl.cs; wired when they move to Core.
         private void BtnEndRemoteSession_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
 
-        // ponytail: needs the services in MainWindow.RemoteControl.cs; wired when they move to Core.
         private void TxtEmoteCustomBig_KeyDown(object? sender, global::Avalonia.Input.KeyEventArgs e) { }
-
     }
 }

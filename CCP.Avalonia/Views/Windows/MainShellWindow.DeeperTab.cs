@@ -1,74 +1,127 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.DeeperTab.cs (1241 lines).
+// PARTIALLY PORTED from ConditioningControlPanel/MainWindow/MainWindow.DeeperTab.cs (1241 lines).
+// Sorted member by member against the fifteen Core seams; the blanket "wired when the services
+// move to Core" claim was wrong for the tab's own entry path, which is restored below.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// WHAT IS REAL HERE: opening the Deeper tab. BtnDeeper_Click navigates, retires the rail pulse
+// flag (HasSeenDeeperTab, CCP.Core/Models/AppSettings.cs:7929) through CoreSettings, and shows or
+// hides the welcome card from HasSeenDeeperWelcome (:7935). DismissDeeperWelcomeCard writes the
+// other flag and folds the card. NOTHING CALLS DismissDeeperWelcomeCard YET - its three WPF
+// callers (BtnDeeperWelcomeTour / Demo / Dismiss) relay from DeeperTabView.axaml.cs, which this
+// layer does not own; it is internal so that relay needs no Core change when it lands.
 //
-// The handlers named by MainShellWindow.axaml are real (empty) methods, because a
-// missing one is a XAML compile error, not a runtime gap.
+// THE x:NAME HAZARD APPLIES TWICE HERE, and both hops go through FindControl for that reason.
+// This window loads with AvaloniaXamlLoader.Load(this), so "DeeperTab" is reached with Named<T>.
+// DeeperTabView loads the same way (DeeperTabView.axaml.cs:24), so its DeeperWelcomeCard field is
+// permanently null even though the .axaml marks it x:FieldModifier="internal" - that modifier
+// invites exactly the write that would silently do nothing. FindControl on the view reads its own
+// name scope and is the only form that works.
 //
-// Members dropped (53):
-//   internal void BtnDeeper_Click(…)
-//   private void UpdateDeeperWelcomeCardVisibility(…)
-//   private void DismissDeeperWelcomeCard(…)
-//   internal void BtnDeeperWelcomeTour_Click(…)
-//   internal void BtnDeeperWelcomeDemo_Click(…)
-//   internal void BtnDeeperWelcomeDismiss_Click(…)
-//   internal void BtnDeeperTutorial_Click(…)
-//   private void OpenDeeperBundledDemo(…)
-//   private void StartDeeperTabTutorial(…)
-//   internal void ChkEnableDeeper_Changed(…)
-//   private bool _deeperPulseRunning
-//   private void StartDeeperTabPulse(…)
-//   private void StopDeeperTabPulse(…)
-//   internal void BtnDeeperNewEnhancement_Click(…)
-//   internal void BtnDeeperOpenPlayer_Click(…)
-//   private void OnDeeperBrowserBound(…)
-//   private void OnDeeperBrowserUnbound(…)
-//   private bool _browserWebcamStateSubscribed
-//   private Action<WebcamTrackingState>? _onBrowserWebcamStateChanged
-//   private string? _browserWebcamPromptShownForUrl
-//   private void EnsureBrowserWebcamStateSubscribed(…)
-//   private void RefreshBrowserWebcamButton(…)
-//   internal async void BtnWebcamTracking_Click(…)
-//   private static bool BrowserEnhancementNeedsWebcam(…)
-//   private void MaybePromptBrowserWebcamForEnhancement(…)
-//   private bool _mandatoryVideoEnhanceNudgeShown
-//   private async void MaybePromptMandatoryVideoEnhancement(…)
-//   internal void ToggleEnhanceIfPossible_Changed(…)
-//   internal void ChkForceShowBambiCloud_Changed(…)
-//   private void OnBrowserEnhanceMatchChanged(…)
-//   private void OpenDeeperEditor(…)
-//   public void OpenInDeeperPlayer(…)
-//   public void OpenDeeperEditorFromPlayer(…)
-//   public void OpenDeeperEnhancementInPlayer(…)
-//   public void OpenInDeeperEditorForMedia(…)
-//   public void HandlePendingFileOpen(…)
-//   private void OnDeeperLibraryChanged(…)
-//   private void RefreshDeeperLibraryUI(…)
-//   private void OpenDeeperFile(…)
-//   internal void BtnDeeperOpenLibraryFolder_Click(…)
-//   internal void BtnDeeperImport_Click(…)
-//   private static bool IsImportableEnhancementPath(…)
-//   private void ImportEnhancementFiles(…)
-//   private void DeleteDeeperLibraryEntry(…)
-//   private void TriggerCatalogueLookupForNavigation(…)
-//   private async System.Threading.Tasks.Task RunCatalogueLookupAsync(…)
-//   private void ShowCatalogueLookupToast(…)
-//   private void OpenCataloguePickerDialog(…)
-//   private async System.Threading.Tasks.Task DownloadAndOpenCatalogueEntryAsync(…)
-//   private void SwitchToDeeperLibraryTab(…)
-//   private static bool IsCatalogueEligible(…)
-//   private async Task SubmitDeeperLibraryEntryAsync(…)
-//   private void ShowCatalogueSubmissionResultToast(…)
+// NOT BLOCKED, MOVED: ChkEnableDeeper_Changed. The Deeper master switch is now owned by
+// Views/Controls/AppSettings/GeneralSettingsSection.axaml.cs:142, which persists EnableDeeper and
+// guards its own programmatic sets. It is not this partial's job any more; a second copy here
+// would be a second writer for one setting.
+//
+// STILL OUT, and why:
+//   The library, the player and the editor - OpenDeeperFile, OpenInDeeperPlayer,
+//   OpenDeeperEditorFromPlayer, OpenInDeeperEditorForMedia, RefreshDeeperLibraryUI,
+//   OnDeeperLibraryChanged, BtnDeeperImport_Click, ImportEnhancementFiles, DeleteDeeperLibraryEntry,
+//   OpenDeeperBundledDemo, HandlePendingFileOpen. All of them go through App.EnhancementLibrary
+//   (ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs). The Deeper windows on this
+//   head reach a library of their own; the SHELL has no reference to one and there is no seam.
+//   InitializeDeeperHub / ReloadDeeperLibraryFromDisk are stubs in MainShellWindow.DeeperHub.cs,
+//   which this layer does not own, so BtnDeeper_Click leaves that pair out rather than half-scan.
+//   The browser half - OnDeeperBrowserBound/Unbound, RefreshBrowserWebcamButton,
+//   BtnWebcamTracking_Click, MaybePromptBrowserWebcamForEnhancement, OnBrowserEnhanceMatchChanged,
+//   ChkForceShowBambiCloud_Changed, ToggleEnhanceIfPossible_Changed. WebView2 plus WebcamTrackingState.
+//   BtnWebcamTracking_Click is also a REFUSAL and not just a wait: its portable half flips a caption,
+//   its unportable half opens or closes the camera, and the same judgement recorded for the two
+//   status pills in MainShellWindow.LabTab.cs holds - a control that reports tracking with no
+//   camera behind it is worse than one that does nothing.
+//   The tutorial - StartDeeperTabTutorial, BtnDeeperTutorial_Click, BtnDeeperWelcomeTour_Click.
+//   StartTutorial(TutorialType.Deeper) is not on this head.
+//   The rail pulse - StartDeeperTabPulse / StopDeeperTabPulse, a WPF storyboard on BtnDeeper.
+//   The catalogue - TriggerCatalogueLookupForNavigation, RunCatalogueLookupAsync,
+//   OpenCataloguePickerDialog, DownloadAndOpenCatalogueEntryAsync, SubmitDeeperLibraryEntryAsync,
+//   ShowCatalogueLookupToast, ShowCatalogueSubmissionResultToast, IsCatalogueEligible. App.Catalogue
+//   plus App.Notifications, the same pair MainShellWindow.CatalogueSubmissions.cs left out.
+//   IsImportableEnhancementPath is pure and would compile, and is held back with
+//   ImportEnhancementFiles, its only caller.
+//   SwitchToDeeperLibraryTab, MaybePromptMandatoryVideoEnhancement, BtnDeeperOpenPlayer_Click,
+//   BtnDeeperNewEnhancement_Click, BtnDeeperOpenLibraryFolder_Click - all relays into the above.
+
+using System;
+using Avalonia.Controls;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // ponytail: needs the services in MainWindow.DeeperTab.cs; wired when they move to Core.
-        private void BtnDeeper_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        /// <summary>
+        /// The rail's Deeper entry. Navigates, then retires the "you have not opened this yet"
+        /// pulse flag exactly where WPF does - on the first open, not on install - so the rail
+        /// stops nagging even though the pulse animation itself is not on this head.
+        /// </summary>
+        private void BtnDeeper_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            ShowTab("deeper");
 
+            var s = CoreSettings.Current;          // never null; the seam hands over a real instance
+            if (!s.HasSeenDeeperTab)
+            {
+                s.HasSeenDeeperTab = true;
+                CoreSettings.Save();
+            }
+
+            UpdateDeeperWelcomeCardVisibility();
+            // ponytail: WPF also calls InitializeDeeperHub() + ReloadDeeperLibraryFromDisk() here.
+            // Both are stubs in MainShellWindow.DeeperHub.cs (App.EnhancementLibrary), not owned
+            // by this layer - a half-scan that filled the list from nothing would read as an empty
+            // library rather than an unported one.
+        }
+
+        /// <summary>
+        /// Shows the first-run welcome card until it has been dismissed once. Reached through
+        /// FindControl on the view, NOT through its x:FieldModifier="internal" field: DeeperTabView
+        /// loads with AvaloniaXamlLoader.Load(this), so that field is permanently null and a write
+        /// to it would compile, review clean and do nothing forever.
+        ///
+        /// The card's IsVisible ALSO carries {Binding ShowWelcomeCard} (DeeperTabView.axaml:444).
+        /// That binding is one-shot today - ShowWelcomeCard is a get-only `=> true` on a placeholder
+        /// view model with no change notification (DeeperTabView.axaml.cs:172), so it evaluates once
+        /// at load and never pushes again, and this local set wins and stays won. When that view
+        /// model becomes real and starts raising PropertyChanged, this write must move INTO it:
+        /// Avalonia keeps a binding alive under a local value, so the next push would silently undo
+        /// the line below (CLAUDE.md, "Porting a WPF view to Avalonia").
+        /// </summary>
+        private void UpdateDeeperWelcomeCardVisibility()
+        {
+            try
+            {
+                var card = Named<Tabs.DeeperTabView>("DeeperTab")?.FindControl<Border>("DeeperWelcomeCard");
+                if (card is null) return;
+                card.IsVisible = !CoreSettings.Current.HasSeenDeeperWelcome;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("UpdateDeeperWelcomeCardVisibility failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Folds the welcome card and remembers it. Internal because its three callers are the
+        /// tour / demo / dismiss buttons on DeeperTabView, which relay into the shell on WPF and
+        /// are stubs on this head - nothing calls this yet.
+        /// </summary>
+        internal void DismissDeeperWelcomeCard()
+        {
+            var s = CoreSettings.Current;
+            if (!s.HasSeenDeeperWelcome)
+            {
+                s.HasSeenDeeperWelcome = true;
+                CoreSettings.Save();
+            }
+            UpdateDeeperWelcomeCardVisibility();
+        }
     }
 }

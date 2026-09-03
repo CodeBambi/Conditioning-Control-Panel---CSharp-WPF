@@ -1,109 +1,76 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.SessionIO.cs (2212 lines).
+// NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.SessionIO.cs (2212 lines).
+// Sorted member by member against the fifteen Core seams. Nothing here is restored, and the two
+// notes below exist so the next pass does not repeat the checks.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// FIRST, A LEAD THAT DOES NOT APPLY TO THIS HEAD. MainShellWindow.CatalogueSubmissions.cs restored
+// its read half (CatalogueKindSessions, CanonicalCataloguePathKey, GetCatalogueRecord,
+// IsCatalogueAcceptedStatus) and named "the session rack pill" here as one of three surfaces it
+// unblocked. On WPF that pill is four lines inside BuildSessionRackRow
+// (MainWindow.SessionIO.cs:517-522). There is no pill to wire HERE, because there is no row: the
+// whole rack builder is unported, and the badge factory those four lines call,
+// CreateCatalogueStatusBadge, lives in MainShellWindow.PresetIO.cs, which this layer does not own.
+// The lead is correct about the DEPENDENCY and wrong about the work being small. It becomes true
+// the moment BuildSessionRackRow exists.
 //
-// Members dropped (93):
-//   private Services.SessionManager? _sessionManager
-//   private Services.SessionFileService? _sessionFileService
-//   private Services.AssetImportService? _assetImportService
-//   private void InitializeSessionManager(…)
-//   private void OnSessionsReloaded(…)
-//   public bool RegisterExternallySavedSession(…)
-//   private void OnSessionAdded(…)
-//   private void OnSessionRemoved(…)
-//   private const string RackSourceAll
-//   private const string RackSourceBuiltIn
-//   private const string RackSourceYours
-//   private const string RackSourceCatalogue
-//   private string _rackSourceFilter
-//   private string _rackSort
-//   private string _rackSearch
-//   private readonly HashSet<Models.SessionDifficulty> _rackDifficulties
-//   private readonly List<ToggleButton> _rackSourceChips
-//   private readonly List<ToggleButton> _rackDifficultyChips
-//   private bool _rackToolbarBuilt
-//   private bool _rackToolbarSyncing
-//   internal void RepaintSessionRack(…)
-//   private List<Models.Session> EnumerateRackSessions(…)
-//   private bool RackAccepts(…)
-//   private List<Models.Session> SortRackSessions(…)
-//   private static DateTime? RackFileStamp(…)
-//   private Border BuildSessionRackRow(…)
-//   private TextBlock MakeRackMeta(…)
-//   private static(…)
-//   private static void AttachRoundedClip(…)
-//   private void EnsureSessionRackToolbar(…)
-//   private static string RackSourceLabel(…)
-//   private static string RackSourceChipLabel(…)
-//   private static string RackDifficultyLabel(…)
-//   private void UpdateRackToolbarCounts(…)
-//   private void RackSourceChip_Changed(…)
-//   private void RackDifficultyChip_Changed(…)
-//   internal void CmbRackSort_SelectionChanged(…)
-//   internal void TxtRackSearch_TextChanged(…)
-//   private void ClearSessionRackFilters(…)
-//   private void RefreshSessionRackSelection(…)
-//   private bool HasSessionRackRow(…)
-//   private Border MakeRackPill(…)
-//   private Button CreateSessionActionButton(…)
-//   private Button CreateSessionDeleteButton(…)
-//   private Button CreateSessionRowButton(…)
-//   private void SelectSession(…)
-//   private string GenerateSessionTimelineDescription(…)
-//   internal void SessionDropZone_DragEnter(…)
-//   internal void SessionDropZone_DragOver(…)
-//   internal void SessionDropZone_DragLeave(…)
-//   private void Window_DragEnter(…)
-//   private void OpenAvatarChat_Executed(…)
-//   internal void BtnChatShortcut_Click(…)
-//   private void ApplyGlobalChatHotkey(…)
-//   private void BringToForegroundAndOpenChat(…)
-//   public void RefreshChatShortcutLabel(…)
-//   public static readonly RoutedUICommand ToggleCameraCommand
-//   private bool _cameraCommandBound
-//   private void ApplyCameraShortcutTo(…)
-//   private void ApplyGlobalCameraHotkey(…)
-//   private static ModifierKeys ParseModifiers(…)
-//   private static string FormatCameraShortcut(…)
-//   public void RefreshCameraShortcutLabel(…)
-//   internal void BtnCameraShortcut_Click(…)
-//   private void Window_DragOver(…)
-//   private void Window_DragLeave(…)
-//   private async void Window_Drop(…)
-//   private enum DropType
-//   private static readonly HashSet<string> AssetVideoExtensions
-//   private static readonly HashSet<string> AssetImageExtensions
-//   private static readonly HashSet<string> DeeperVideoExtensions
-//   private static readonly HashSet<string> DeeperAudioExtensions
-//   private enum MediaDropChoice
-//   private static bool IsDeeperPlayableMedia(…)
-//   private static DropType DetectDropType(…)
-//   private void UpdateDropOverlay(…)
-//   private void HandleSessionDrop(…)
-//   private async Task HandleAssetDropAsync(…)
-//   private void RefreshImagesList(…)
-//   private void RefreshVideosList(…)
-//   internal void SessionBtn_Edit(…)
-//   internal void SessionBtn_Export(…)
-//   private async void SessionBtn_Share(…)
-//   private void SyncCustomSessionsFromDisk(…)
-//   private void SessionBtn_Delete(…)
-//   private Models.Session? GetSessionById(…)
-//   internal bool RevealSessionInLibrary(…)
-//   internal void SessionDropZone_Drop(…)
-//   private void ShowDropZoneStatus(…)
-//   internal void BtnExportSession_Click(…)
-//   internal void BtnCreateSession_Click(…)
-//   private void SessionContextMenu_Export(…)
-//   private void ExportSessionToFile(…)
+// SECOND, THE REAL BLOCKER: Services.SessionManager
+// (ConditioningControlPanel/Services/Session/SessionManager.cs) and its two companions,
+// SessionFileService (same folder) and AssetImportService. SessionManager owns AllSessions, the
+// reload and add/remove events, DeleteSession's refusal to touch a built-in, and the disk sync;
+// every member below either reads it or repaints something it changed. Models.Session IS in Core,
+// which is why the FILTER half looks portable - see the next paragraph for why it is still out.
+//
+//   The rack - RepaintSessionRack, EnumerateRackSessions, BuildSessionRackRow, MakeRackMeta,
+//   MakeRackPill, AttachRoundedClip, CreateSessionActionButton, CreateSessionDeleteButton,
+//   CreateSessionRowButton, SelectSession, RefreshSessionRackSelection, HasSessionRackRow,
+//   GenerateSessionTimelineDescription, RevealSessionInLibrary. The host panel for these rows
+//   already exists on this head (Views/Tabs/PresetsTabView.axaml:653 - "ONE panel.
+//   RepaintSessionRack clears and refills it"), so this is a real, bounded next layer.
+//
+//   The rack toolbar - EnsureSessionRackToolbar, RackSourceChip_Changed, RackDifficultyChip_Changed,
+//   CmbRackSort_SelectionChanged, TxtRackSearch_TextChanged, ClearSessionRackFilters,
+//   UpdateRackToolbarCounts, RackSourceLabel, RackSourceChipLabel, RackDifficultyLabel, the four
+//   RackSource* constants and the six filter fields.
+//
+//   RackAccepts, SortRackSessions and RackFileStamp are the exception worth calling out: all three
+//   are pure over Models.Session and System.IO and would compile here today. They are held back
+//   because they are the filter engine for rows that do not exist - restoring a sorter with nothing
+//   to sort is padding, and splitting the rack across two layers is how the filters and the rows
+//   drift apart. They come back in the same layer as RepaintSessionRack, which is their only caller.
+//
+//   Session lifecycle - InitializeSessionManager, OnSessionsReloaded, OnSessionAdded,
+//   OnSessionRemoved, RegisterExternallySavedSession, SyncCustomSessionsFromDisk, GetSessionById,
+//   SessionBtn_Edit, SessionBtn_Export, SessionBtn_Delete, SessionBtn_Share,
+//   SessionContextMenu_Export, ExportSessionToFile, BtnExportSession_Click, BtnCreateSession_Click.
+//   SessionBtn_Share also needs the catalogue client (App.Catalogue) and the WRITE half of
+//   MainShellWindow.CatalogueSubmissions.cs, which is out for its head-only SubmissionResult type.
+//
+//   Drag and drop - Window_DragEnter, Window_DragOver, Window_DragLeave, Window_Drop,
+//   SessionDropZone_DragEnter / DragOver / DragLeave / Drop, DetectDropType, UpdateDropOverlay,
+//   HandleSessionDrop, HandleAssetDropAsync, ShowDropZoneStatus, IsDeeperPlayableMedia, DropType,
+//   MediaDropChoice and the four extension sets. The extension sets and DetectDropType are pure;
+//   the drop itself needs AssetImportService, and Avalonia's DragDrop is a different API from WPF's
+//   (DataFormats.FileNames -> DataFormats.Files, IDataObject -> IStorageItem), so this is a rewrite.
+//
+//   The two global hotkeys - ApplyGlobalChatHotkey, ApplyGlobalCameraHotkey, ApplyCameraShortcutTo,
+//   ParseModifiers, FormatCameraShortcut, RefreshChatShortcutLabel, RefreshCameraShortcutLabel,
+//   BtnChatShortcut_Click, BtnCameraShortcut_Click, ToggleCameraCommand, OpenAvatarChat_Executed,
+//   BringToForegroundAndOpenChat, _cameraCommandBound. RoutedUICommand and ModifierKeys are WPF
+//   types, and a DESKTOP-WIDE hotkey is a Win32 RegisterHotKey - the bucket-E problem CLAUDE.md
+//   describes, not a port. ToggleCameraCommand is additionally a camera control: see the refusal
+//   already recorded for the two device pills in MainShellWindow.LabTab.cs.
+//
+//   RefreshImagesList / RefreshVideosList - the assets tab's lists, blocked with the asset tree in
+//   MainShellWindow.Assets.cs.
+//
+// Checked and NOT the blocker: CoreSession. It answers the RUNNING session (start, stop, current
+// state); this file is the session LIBRARY - files on disk, the rack that lists them, import and
+// export. They share the word and nothing else.
+//
+// No member of this partial is referenced from MainShellWindow.axaml.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // No member of this partial is referenced from MainShellWindow.axaml.
     }
 }
