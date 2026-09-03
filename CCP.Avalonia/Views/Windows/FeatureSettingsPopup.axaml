@@ -1,0 +1,71 @@
+<!-- PORTED from ConditioningControlPanel/Windows/FeatureSettingsPopup.xaml.
+     Structure, order, spacing and every colour preserved. Deviations, all forced:
+
+       Image + {StaticResource EmojiToImageSource} -> plain TextBlock (CLAUDE.md trap 3; Avalonia
+                                                      renders colour emoji natively)
+       Button.Template + IsMouseOver trigger       -> the shared DangerButton / ActionButton
+                                                      ControlThemes from Theme/Styles.xaml, the
+                                                      same shape in the app palette (Avalonia has
+                                                      no triggers)
+       ValueChanged= / Click=                      -> wired in the constructor, per convention
+       Slider (WPF implicit style)                 -> Theme="{StaticResource PinkSlider}"
+       ScrollViewer (row-filling by default)       -> VerticalAlignment="Top" + right Padding, see
+                                                      the note on it below
+
+     No {loc:Str} anywhere: the WPF original hardcodes every string in this view, so a key here
+     would be an invented one. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Windows.FeatureSettingsPopup"
+             Width="320" Background="Transparent">
+
+    <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10"
+            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+            Padding="15">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
+                <TextBlock x:Name="TxtIcon" Text="⚡" FontSize="20"
+                           Width="26" Height="26" TextAlignment="Center"
+                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <StackPanel>
+                    <TextBlock x:Name="TxtFeatureName" Text="Feature Name"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TxtEventType" Text="Start Event"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Minute Position -->
+            <Grid Grid.Row="1" Margin="0,0,0,15" ColumnDefinitions="80,*,50">
+                <TextBlock Text="Minute" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center"/>
+                <Slider x:Name="SliderMinute" Grid.Column="1" Theme="{StaticResource PinkSlider}"
+                        Minimum="0" Maximum="120" Value="0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtMinuteValue" Grid.Column="2" Text="0"
+                           Foreground="#E0E0E0" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </Grid>
+
+            <!-- Dynamic Settings.
+                 Padding: Avalonia's scrollbar OVERLAYS the content where WPF's took layout width,
+                 so without it the bar sits on top of the 40px value column and clips the digits.
+                 VerticalAlignment: a Stretch child capped by MaxHeight is CENTRED in its row here,
+                 which floated the settings down the middle of the panel. -->
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="300"
+                          VerticalAlignment="Top" Padding="0,0,8,0">
+                <StackPanel x:Name="SettingsPanel">
+                    <!-- Settings are generated in the code-behind -->
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Buttons -->
+            <Grid Grid.Row="3" Margin="0,15,0,0" ColumnDefinitions="Auto,*,Auto">
+                <Button x:Name="BtnDelete" Content="Delete"
+                        Theme="{StaticResource DangerButton}" Padding="15,8" Cursor="Hand"/>
+                <Button Grid.Column="2" x:Name="BtnDone" Content="Done"
+                        Theme="{StaticResource ActionButton}" Padding="20,8" Cursor="Hand"/>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>
