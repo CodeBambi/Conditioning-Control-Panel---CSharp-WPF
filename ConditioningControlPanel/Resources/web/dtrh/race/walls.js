@@ -20,7 +20,8 @@
  * of room words in the room's colours. A sparse "base" set is always up (diegetic
  * placards); the "fill" set only draws while media.hasUserMedia() is false, via
  * geometry drawRange, so an empty library still gets a dressed wall. 8 meshes, only
- * the rooms in view visible (2..3 draw calls at a time).
+ * the rooms in view visible (2..3 draw calls at a time). The media posters live on
+ * pixel.js's CRISP_LAYER (full resolution); the painted signs stay in the pixel world.
  *
  * createWalls({ scene, layout, media, renderer, camera, rng }) -> { update(d, dt), setRoom(id), dispose }
  * ==========================================================================*/
@@ -30,6 +31,7 @@ import { createWallPosters } from '../engine/wallPosters.js';
 import { RADIUS } from './consts.js';
 import { ROOMS, roomById } from './rooms.js';
 import { pixelTex } from './roomProps.js';
+import { CRISP_LAYER } from './pixel.js';
 
 const BAND_LO = 0.32, BAND_HI = 1.27;   // radians from the ceiling: the upper-wall poster band
 const SIGN_INSET = 0.16;                // signs sit just inside the wall, like the posters
@@ -87,12 +89,20 @@ export function createWalls({ scene, layout, media, renderer, camera, rng }) {
 
   // ---- the posters (engine/wallPosters.js, adapted) --------------------------------------
   const posters = createWallPosters({ scene, layout, media, renderer, camera });
+  // createWallPosters adds its (unnamed) group to the scene first thing; keeping a handle lets the
+  // per-frame walk below read the children in place instead of building getPickables' array
+  const posterGroup = scene.children[scene.children.length - 1];
+  const posterMeshes = posterGroup && posterGroup.isGroup ? posterGroup.children : null;
   const seen = new Map();          // slot -> depth we last aimed it at
   let odometer = 0, lastW = null;  // unwrapped camera depth for the one-way poster logic
   function aimNewSlots() {
-    for (const mesh of posters.getPickables()) {
+    const list = posterMeshes || posters.getPickables();
+    for (let i = 0; i < list.length; i++) {
+      const mesh = list[i];
       const slot = mesh.userData && mesh.userData.slot;
-      if (!slot || seen.get(slot) === slot.depth) continue;
+      if (!slot) continue;
+      if (mesh.layers.mask !== (1 << CRISP_LAYER)) mesh.layers.set(CRISP_LAYER);   // media posters render crisp, full-res
+      if (!slot.active || !mesh.visible || slot.melt || seen.get(slot) === slot.depth) continue;
       seen.set(slot, slot.depth);
       const side = rng() < 0.5 ? -1 : 1;
       slot.angle = side * (BAND_LO + rng() * (BAND_HI - BAND_LO));

@@ -9,7 +9,8 @@
  * wobbles), rain (falls from the ceiling, rests, fizzles). Pops are pass-
  * through against the kart box; a pop plays the DtRH pop/chime in-page
  * (engine/audioBus) and throws a few sparkle shards, the WPF BubbleService way.
- * Sprite textures come from the two locally mapped hosts (never remote media).
+ * Sprite textures come from the two locally mapped hosts (never remote media). Every sprite
+ * (bubbles and shards) sits on pixel.js's CRISP_LAYER: full resolution over the blocky world.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -17,6 +18,7 @@ import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, TREATS
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
 import { makeSfxPlayer } from '../engine/audioBus.js';
 import { getLevel } from '../engine/audioLevels.js';
+import { CRISP_LAYER } from './pixel.js';
 
 export { BUBBLE_KINDS };
 
@@ -55,6 +57,7 @@ function makeDotTex() {
 
 export function createBubbleField({ scene, layout, media, getIntensity, getRoom, getElapsed, onTexture }) {
   void media;   // reserved: flash media is drawn by payloadFx at pop time, never here
+  void onTexture;   // see the loader below: crisp-layer sprites keep their own filters
   const T = layout.totalDepth;
   /** Signed depth from `from` to `d`, folded into (-T/2, T/2] so the start line is nothing special. */
   const relD = (d, from) => { let r = (d - from) % T; if (r > T / 2) r -= T; else if (r <= -T / 2) r += T; return r; };
@@ -77,7 +80,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     loader.load(k.sprite, (tex) => {
       if (disposed) { tex.dispose(); return; }
       tex.colorSpace = THREE.SRGBColorSpace;
-      if (onTexture) { try { onTexture(tex); } catch (e) { /* the look never breaks the field */ } }
+      // onTexture (the pixel look's nearest-filter hook) is accepted for the contract but no longer
+      // applied: the sprites draw on the crisp layer at full resolution and keep their own filters
       texOf[k.id] = tex;
       for (const s of pool) if (s.alive && s.kindId === k.id) { s.mat.map = tex; s.mat.needsUpdate = true; }
     }, undefined, () => { /* keep the dot */ });
@@ -91,7 +95,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   for (let i = 0; i < CAP; i++) {
     const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, opacity: 1 });
     const sprite = new THREE.Sprite(mat);
-    sprite.visible = false;
+    sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
     pool.push({ sprite, mat, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
       x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false });
@@ -100,7 +104,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   for (let i = 0; i < SHARD_CAP; i++) {
     const mat = new THREE.SpriteMaterial({ map: dotTex, transparent: true, depthWrite: false, opacity: 0 });
     const sprite = new THREE.Sprite(mat);
-    sprite.visible = false;
+    sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
     shards.push({ sprite, mat, alive: false, age: 0, life: 0.5, p0: new THREE.Vector3(), r: null, u: null, vr: 0, vu: 0, size: 0.2 });
   }
