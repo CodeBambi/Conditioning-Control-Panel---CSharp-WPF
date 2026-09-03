@@ -25,6 +25,9 @@ namespace ConditioningControlPanel.Avalonia
         {
             AvaloniaXamlLoader.Load(this);
 
+            // Owner is not known until the window is shown, so the Back button decides then.
+            Opened += (_, _) => SyncBackButton();
+
             var runtime = this.FindControl<TextBlock>("TxtRuntime")!;
             var paths = this.FindControl<TextBlock>("TxtPaths")!;
             var engine = this.FindControl<TextBlock>("TxtEngine")!;
@@ -86,6 +89,23 @@ namespace ConditioningControlPanel.Avalonia
                 target.Text = $"BLOCK   category={result.Category}   {result.Note}";
                 target.Foreground = Brush("DangerBrush", "#E53935");
             }
+        }
+
+        /// <summary>
+        /// Closes this window, which returns the user to the shell that opened it. Not a swap:
+        /// the shell was never taken down, so there is nothing to restore.
+        /// </summary>
+        private void BtnBackToShell_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => Close();
+
+        /// <summary>
+        /// The Back button only means something when a shell opened this window. RenderProof also
+        /// hosts single views in a MainWindow, and this window is still reachable as a standalone
+        /// diagnostics run, so hide the button unless there is an owner to go back to.
+        /// </summary>
+        private void SyncBackButton()
+        {
+            var back = this.FindControl<global::Avalonia.Controls.Button>("BtnBackToShell");
+            if (back is not null) back.IsVisible = Owner is not null;
         }
     }
 }

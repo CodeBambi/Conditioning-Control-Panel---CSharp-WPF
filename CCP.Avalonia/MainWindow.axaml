@@ -40,6 +40,17 @@
   <ScrollViewer Padding="20">
     <StackPanel>
 
+      <!-- Back to the shell. This window is opened from Settings as a second window, so the
+           shell is still there behind it and returning is just a close. The button hides itself
+           when there is nothing to go back to - RenderProof hosts views in this window, and a
+           dead control in every one of 186 render proofs would be noise. -->
+      <Button x:Name="BtnBackToShell" HorizontalAlignment="Left" Margin="0,0,0,14"
+              Theme="{StaticResource SecondaryButton}" Cursor="Hand"
+              Click="BtnBackToShell_Click"
+              ToolTip.Tip="Close diagnostics and return to the app">
+        <TextBlock Text="← Back to the app"/>
+      </Button>
+
       <TextBlock Classes="h1" Text="Conditioning Control Panel"/>
       <TextBlock Classes="dim" Margin="0,2,0,16"
                  Text="CCP.Avalonia head — the same CCP.Core engine the Windows app runs, rendering on Linux."/>
