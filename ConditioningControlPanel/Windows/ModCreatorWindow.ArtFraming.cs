@@ -1,4 +1,5 @@
 using System;
+using ConditioningControlPanel.Helpers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -360,7 +361,7 @@ namespace ConditioningControlPanel
             var brush = new ImageBrush(bitmap)
             {
                 Stretch = Stretch.Fill,
-                Viewbox = ModArtFramingRegistry.ToViewbox(framing, sourceAspect, surface.AspectRatio),
+                Viewbox = ModArtFramingRegistry.ToViewbox(framing, sourceAspect, surface.AspectRatio).ToRect(),
             };
 
             var holder = new Grid
@@ -440,7 +441,7 @@ namespace ConditioningControlPanel
 
             void Refresh()
             {
-                brush.Viewbox = ModArtFramingRegistry.ToViewbox(framing, sourceAspect, surface.AspectRatio);
+                brush.Viewbox = ModArtFramingRegistry.ToViewbox(framing, sourceAspect, surface.AspectRatio).ToRect();
                 readout.Text = DescribeFraming(framing);
             }
             Refresh();

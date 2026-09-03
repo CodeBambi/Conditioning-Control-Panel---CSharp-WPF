@@ -2861,7 +2861,7 @@ namespace ConditioningControlPanel
                 }
 
                 brush.Viewbox = ModArtFramingRegistry.ResolveViewbox(
-                    resourcePath, surfaceId, isModSupplied, aspect, framing);
+                    resourcePath, surfaceId, isModSupplied, aspect, framing).ToRect();
             }
             catch (Exception ex)
             {
