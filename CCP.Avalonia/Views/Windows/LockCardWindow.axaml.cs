@@ -36,9 +36,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    built out of hwnds, <c>System.Windows.Forms.Screen</c> and a background thread that
     ///    force-drops a layered window at the Win32 level; none of that maps, and the parts that
     ///    could (screen enumeration via <c>Screens</c>) exist only to serve the parts that cannot.
-    ///  - <b>Services stay in the WPF head</b>: App.Settings (card colours, panic key),
-    ///    App.Speech (voice solve), App.Autonomy (mic hand-off), App.Progression / App.Achievements
-    ///    / App.LockCard (XP, achievements, completion notify), App.PanicHook, App.Logger.
+    ///  - <b>Settings are wired</b>: the five per-user card colours and the panic-key name come
+    ///    from <c>CoreSettings.Current</c>, with the mod pack's accent from <c>CoreMods</c>, so a
+    ///    recoloured card draws correctly here.
+    ///  - <b>Services still in the WPF head</b>: the speech LISTEN loop (CoreSpeech carries
+    ///    capability only, never a RecognizePhraseAsync), App.Autonomy (mic hand-off),
+    ///    App.Progression / App.Achievements / App.LockCard (XP, achievements, completion notify)
+    ///    and App.PanicHook (no global keyboard hook exists on this head at all).
     ///
     /// Placeholder session state is applied in the constructor so the headless render shows a live
     /// card rather than an empty one.
@@ -81,11 +85,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly Border _cardBorder, _inputBorder, _voiceLevelFill,
                                 _progressBar, _progressBarContainer;
         private readonly StackPanel _voicePanel, _completionPanel;
+        private readonly Grid _mainGrid;
 
         public LockCardWindow()
         {
             AvaloniaXamlLoader.Load(this);
 
+            _mainGrid = this.FindControl<Grid>("MainGrid")!;
             _cardBorder = this.FindControl<Border>("CardBorder")!;
             _txtTitle = this.FindControl<TextBlock>("TxtTitle")!;
             _txtPhrase = this.FindControl<TextBlock>("TxtPhrase")!;
@@ -161,12 +167,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _phrase = phrase;
             _requiredRepeats = repeats;
             _strictMode = strictMode;
-            // ponytail: needs App.Speech (IsAvailable) and App.Settings (MicConsentGiven) to decide
-            // whether voice solve is usable; without them a requested voice card would trap the user
-            // behind a mic that never answers, so voice stays off on this head.
+            // The capability half is answerable now (CoreSpeech.IsAvailable, MicConsentGiven) but
+            // the answer would be a lie: CoreSpeech is a capability seam with no listen call, so a
+            // voice card that said yes would trap the user behind a mic that never replies. Voice
+            // stays off until a recognition seam exists, not until settings move.
+            // ponytail: needs a CoreSpeech listen call (RecognizePhraseAsync / LevelChanged /
+            // PartialTranscript) plus App.Autonomy for the mic hand-off.
             _voiceMode = false;
             if (voiceMode)
-                Log.Information("LockCardWindow: voice mode requested but SpeechService is not on this head — falling back to typing");
+                Log.Information("LockCardWindow: voice mode requested but no recognition seam on this head — falling back to typing");
 
             _txtPhrase.Text = phrase;
 
@@ -512,11 +521,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// #875: is there a panic escape from this card RIGHT NOW? On WPF the panic key rides a
         /// <c>WH_KEYBOARD_LL</c> hook that can be absent while the setting says yes, so the answer
         /// was <c>PanicKeyEnabled &amp;&amp; PanicHook.IsInstalled</c>.
-        /// ponytail: needs App.Settings and App.PanicHook. There is no global-hook equivalent in
-        /// this head at all (<c>SetWindowsHookEx</c> has no X11 twin here), so no panic escape can
-        /// be live — and this falls OPEN, exactly as the WPF version does when the hook is gone.
+        /// The settings half is live now (<c>PanicKeyEnabled</c> is in Core); the hook half is not.
+        /// ponytail: needs a panic-hook seam. There is no global-hook equivalent in this head at
+        /// all (<c>SetWindowsHookEx</c> has no X11 twin here), so no panic escape can be live — and
+        /// this falls OPEN, exactly as the WPF version does when the hook is gone. Written as the
+        /// real conjunction so wiring the hook is a one-symbol change.
         /// </summary>
-        private static bool PanicEscapeIsLive => false;
+        private static bool PanicEscapeIsLive => CoreSettings.Current.PanicKeyEnabled && PanicHookIsInstalled;
+
+        /// <summary>ponytail: no global keyboard hook on this head — see <see cref="PanicEscapeIsLive"/>.</summary>
+        private const bool PanicHookIsInstalled = false;
 
         /// <summary>
         /// #875: does Esc close THIS card? Non-strict cards: yes. Strict cards: only while a panic
@@ -533,10 +547,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (_txtEscHint == null) return;
             if (EscClosesCard) SetLocalized(_txtEscHint, "label_press_esc_to_close");
-            // ponytail: needs App.Settings.PanicKey for the key name in the strict variant
-            // (Loc.GetF("label_strict_only_panic_key_closes", panicKey)). Unreachable while
-            // PanicEscapeIsLive is false, kept so the branch does not silently vanish.
-            else _txtEscHint.Text = Loc.GetF("label_strict_only_panic_key_closes", "?");
+            // Unreachable while PanicEscapeIsLive is false, kept — with the real key name now that
+            // settings are in Core — so the branch cannot rot while the hook half is missing.
+            else _txtEscHint.Text = Loc.GetF("label_strict_only_panic_key_closes", CoreSettings.Current.PanicKey);
         }
 
         private void Window_KeyDown(KeyEventArgs e)
@@ -576,18 +589,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // ── Colours ────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// The WPF original repainted the cover, the card, the phrase, the input and the glow from
-        /// five per-user settings (LockCardBackgroundColor / TextColor / InputBackgroundColor /
-        /// InputTextColor / AccentColor), falling back to the mod pack's accent.
-        /// ponytail: needs App.Settings and App.Mods.GetAccentColorHex(); until then the XAML's
-        /// theme colours are the fallbacks the WPF code used anyway, so the card draws correctly —
-        /// it just cannot be recoloured. <see cref="ParseColor"/> is kept because it is the piece
-        /// that will be wired first.
+        /// Repaint the cover, the card, the phrase, the input and the glow from the five per-user
+        /// settings (LockCardBackgroundColor / TextColor / InputBackgroundColor / InputTextColor /
+        /// AccentColor), falling back to the mod pack's accent exactly as WPF does.
+        ///
+        /// <para>WPF named nine SolidColorBrushes in its XAML and mutated <c>.Color</c> on each;
+        /// Avalonia cannot name a brush (AVLN2000), so each is reached through the control that
+        /// owns it and replaced wholesale. Same surfaces, same order, same fallbacks — a setting
+        /// left empty lands on the literal the WPF code used, which is also what the .axaml
+        /// paints, so an unconfigured card looks exactly as it did before this ran.</para>
         /// </summary>
         private void ApplyColors()
         {
-            // ponytail: needs App.Settings (LockCard*Color) + App.Mods (accent), wired when they
-            // move to Core.
+            try
+            {
+                var settings = CoreSettings.Current;
+                var modAccent = ParseColor(CoreMods.AccentColorHex, Color.FromRgb(0xFF, 0x69, 0xB4));
+
+                var bgColor = ParseColor(settings.LockCardBackgroundColor, Color.FromRgb(26, 26, 46));
+                _cardBorder.Background = new SolidColorBrush(bgColor);
+
+                // The cover is a semi-transparent version of the card background.
+                _mainGrid.Background = new SolidColorBrush(Color.FromArgb(230, bgColor.R, bgColor.G, bgColor.B));
+
+                var textColor = ParseColor(settings.LockCardTextColor, modAccent);
+                _txtPhrase.Foreground = new SolidColorBrush(textColor);
+                _txtTitle.Foreground = new SolidColorBrush(textColor);
+
+                _inputBorder.Background = new SolidColorBrush(
+                    ParseColor(settings.LockCardInputBackgroundColor, Color.FromRgb(37, 37, 66)));
+                _txtInput.Foreground = new SolidColorBrush(
+                    ParseColor(settings.LockCardInputTextColor, Colors.White));
+
+                var accentColor = ParseColor(settings.LockCardAccentColor, modAccent);
+                _inputBorder.BorderBrush = new SolidColorBrush(accentColor);
+                _progressBar.Background = new SolidColorBrush(accentColor);
+
+                // The card glow. WPF mutated the DropShadowEffect's Color in place; so does this —
+                // Color is a settable styled property on Avalonia's effect too.
+                if (_cardBorder.Effect is DropShadowEffect glow) glow.Color = accentColor;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("Failed to apply lock card colors: {Error}", ex.Message);
+            }
         }
 
         internal static Color ParseColor(string hex, Color fallback)
