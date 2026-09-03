@@ -1,0 +1,628 @@
+<!-- PORTED from ConditioningControlPanel/AvatarTube/AvatarTubeWindow.xaml.
+     Structure, ordering, margins, ZIndexes and every colour preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None" + AllowsTransparency="True" + Background="Transparent"
+                                      -> SystemDecorations="None" + TransparencyLevelHint="Transparent"
+                                         + Background="Transparent"
+       ShowActivated / ShowInTaskbar   -> kept as-is; together they are the Avalonia twin of the
+                                         WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW that OnLoaded set by
+                                         P/Invoke in the WPF head. No user32 crosses over.
+       ResizeMode="NoResize"           -> CanResize="False"
+       SizeToContent="WidthAndHeight"  -> explicit Width/Height at the design canvas size. Faithful:
+                                         the WPF window flips to SizeToContent.Manual with an
+                                         explicit size after first paint (OnFirstContentRendered),
+                                         precisely to avoid the layered-window CompleteRender hang.
+       Panel.ZIndex                    -> ZIndex
+       Visibility="Collapsed"          -> IsVisible="False"
+       MouseEnter / MouseLeave         -> PointerEntered / PointerExited (wired in code-behind)
+       MouseLeftButtonDown             -> PointerPressed (wired in code-behind)
+       ToolTip="..."                   -> ToolTip.Tip="..."
+       DropShadowEffect ShadowDepth=0  -> OffsetX="0" OffsetY="0"; ShadowDepth="1.5" Direction="315"
+                                          -> OffsetX="1" OffsetY="1" (Avalonia has no polar offset)
+       {DynamicResource PinkColor} etc.
+         inside an Effect / GradientStop
+                                       -> {StaticResource ...}. Neither is in the logical tree, so a
+                                          DynamicResource has no scope to resolve through and the
+                                          shadow silently renders black. Measured on MantraWindow.
+       StartPoint="0,0" EndPoint="1,1" -> "0%,0%" / "100%,100%", and RadialGradientBrush
+       RenderTransformOrigin="0.5,0.5"    Center/GradientOrigin/Radius likewise, and
+                                          RenderTransformOrigin -> "50%,50%". A bare pair is
+                                          ABSOLUTE PIXELS in Avalonia; WPF's was relative.
+       x:Name on a Transform            -> dropped (AVLN2000: Avalonia only name-scopes
+                                           StyledElements). See the ponytail notes below for the
+                                           animations that hung off each one.
+       TinyPinkScrollBar / TinyPinkScrollViewer
+                                       -> dropped. A WPF keyed <Style> keeps the control's default
+                                          template; an Avalonia ControlTheme REPLACES it, so a
+                                          half-ported one draws nothing at all (CLAUDE.md trap 4).
+                                          The default ScrollViewer is used instead.
+                                          ponytail: 6px pink scrollbar is cosmetic; restore with a
+                                          `ScrollBar /template/ Thumb` Style if it is missed.
+       ContextMenu ControlTemplate /
+       MenuItem ControlTemplate /
+       ItemContainerStyle              -> dropped for the same reason; the dark palette is applied
+                                          with property Styles below, which keep the default
+                                          template. A ContextMenu is never in the render frame.
+       ItemsControl DataTrigger IsUser -> Classes.user="{Binding IsUser}" + a Style selector.
+                                          Avalonia has no DataTriggers.
+       Tag="{Binding Text}" +
+       Loaded="ChatHistoryText_Loaded" -> Text="{Binding Text}".
+                                          ponytail: the WPF loader re-rendered each history line as
+                                          Inlines with clickable video links; link detection is lost.
+       Window.CommandBindings          -> dropped. Avalonia has no CommandBindings.
+                                          ponytail: AvatarTubeWindow.OpenChatCommand (the user's
+                                          Ctrl+T chat shortcut) has no host here; needs a KeyBinding
+                                          once ApplyChatShortcutTo moves to Core.
+       gif: xmlns                      -> dropped; the WPF XAML declares it and never uses it.
+       FontFamily="Segoe UI"           -> dropped; the head ships Inter and picks it in App.axaml. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:at="clr-namespace:ConditioningControlPanel.Avalonia.Views.AvatarTube"
+        x:Class="ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow"
+        Title="{loc:Str dialog_avatar_tube}"
+
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        CanResize="False"
+        Width="780" Height="1080"
+        UseLayoutRounding="True">
+
+    <Window.Resources>
+        <!-- Purplish gradient background for speech bubble -->
+        <LinearGradientBrush x:Key="BubbleGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="{StaticResource PatreonDarkPurple}" Offset="0"/>
+            <GradientStop Color="{StaticResource DarkerBg}" Offset="1"/>
+        </LinearGradientBrush>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- ponytail: local copy of AvatarTubeWindow.xaml:ContextMenu.Style / MenuItem Style,
+             reduced to the property setters that survive without a template. Hoist when a second
+             view needs a dark context menu. -->
+        <Style Selector="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource DarkerBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style Selector="ContextMenu MenuItem">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="10,6"/>
+        </Style>
+        <Style Selector="ContextMenu Separator">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Margin" Value="8,4"/>
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+        </Style>
+
+        <!-- Chat-history bubble. Replaces the WPF DataTrigger on ChatMessage.IsUser: the companion's
+             lines sit left on plum, the user's right on pink. -->
+        <Style Selector="Border.chatBubble">
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Background" Value="#3D2A55"/>
+        </Style>
+        <Style Selector="Border.chatBubble.user">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="Background" Value="#FF69B4"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid>
+        <!-- Viewbox scales content uniformly to fit any screen size -->
+        <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
+            <!-- Design canvas at fixed reference size - will be scaled -->
+            <Grid Width="780" Height="1080" ClipToBounds="False">
+            <!-- Tube frame FIRST (behind) - Z-Index 0 implicit.
+                 ponytail: WPF loaded pack://application:,,,/Resources/tube.png. This head ships no
+                 image assets and SetTubeStyle (mod-aware tube art) lives in the Windowing partial,
+                 so the frame is left sourceless and the tube reads as empty in the render. -->
+            <Image x:Name="ImgTubeFrame"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False"/>
+
+            <!-- Speech Bubble - Z-Index 10, positioned next to avatar -->
+            <!-- Dynamic bubble that sizes to content, grows UPWARD, scrolls when exceeding max -->
+            <Border x:Name="SpeechBubble"
+                    ZIndex="10"
+                    IsVisible="False"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Opacity="0.92"
+                    Margin="0,0,125,550"
+                    MinWidth="120" MaxWidth="380"
+                    Background="{StaticResource BubbleGradient}"
+                    CornerRadius="20"
+                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="3"
+                    Padding="15,12">
+
+                <Grid>
+                    <!-- Single-message mode: existing bubble content -->
+                    <ScrollViewer x:Name="SpeechScroller"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  MaxHeight="280">
+
+                        <!-- Speech text with bubbly pink font -->
+                        <TextBlock x:Name="TxtSpeech"
+                                   Text=""
+                                   Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Left"
+                                   Padding="0,0,8,0">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="2" OffsetX="1" OffsetY="1" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </ScrollViewer>
+
+                    <!-- AI-generated content badge (top-left). Visibility is controlled in code-behind
+                         based on whether the current bubble text came from an AI inference vs. a canned
+                         phrase. Required for CCBill AI Content Merchant Addendum visible-labeling. -->
+                    <Border x:Name="AiBadge"
+                            IsVisible="False"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="-6,-6,0,0"
+                            Width="22" Height="14"
+                            CornerRadius="4"
+                            Background="{DynamicResource PinkBrush}"
+                            ZIndex="20"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{loc:Str label_ai_badge}"
+                                   Foreground="White"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Moderation-refusal POLICY badge (same slot as AiBadge). Shown by code-behind
+                         when ModerationGuard blocks an input or output. Mutually exclusive with the
+                         AI badge - they share the corner slot but visibility is managed in one place
+                         (ShowGiggle / ShowModerationRefusalBubble). Amber to distinguish from the pink
+                         AI badge. Part of P1.1 (CCBill substantive moderation). -->
+                    <Border x:Name="PolicyBadge"
+                            IsVisible="False"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="-6,-6,0,0"
+                            Width="44" Height="14"
+                            CornerRadius="4"
+                            Background="#FFC107"
+                            ZIndex="20"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{loc:Str label_policy_badge}"
+                                   Foreground="Black"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Chat history mode: scrollable WhatsApp-style log -->
+                    <Grid x:Name="ChatHistoryView" IsVisible="False">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" Margin="0,0,0,6" LastChildFill="True">
+                            <Button x:Name="BtnCloseChatHistory"
+                                    DockPanel.Dock="Right"
+                                    Width="24" Height="24"
+                                    Padding="0"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource PinkBrush}"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    ToolTip.Tip="{loc:Str tooltip_close_chat_history}">
+                                <!-- A TextBlock, not a string Content: Avalonia parses "_" in Content
+                                     as an access key (CLAUDE.md trap 1). -->
+                                <TextBlock Text="✕"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Button>
+                            <TextBlock Text="{loc:Str label_chat_history_title}"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+
+                        <ScrollViewer x:Name="ChatHistoryScroller"
+                                      Grid.Row="1"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      MaxHeight="420">
+                            <Grid>
+                                <!-- Empty-state hint when no chat history yet -->
+                                <TextBlock x:Name="TxtChatHistoryEmpty"
+                                           Text="{loc:Str label_chat_history_empty}"
+                                           Foreground="#AAAAAA"
+                                           FontSize="14"
+                                           FontStyle="Italic"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,20,0,20"
+                                           IsVisible="False"/>
+
+                                <ItemsControl x:Name="ChatHistoryList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="at:ChatMessage">
+                                            <Border Classes="chatBubble"
+                                                    Classes.user="{Binding IsUser}"
+                                                    CornerRadius="10" Padding="9,6" Margin="2,3" MaxWidth="380">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Text}"
+                                                               Foreground="White"
+                                                               FontSize="14"
+                                                               TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding TimeLabel}"
+                                                               Foreground="#DDDDDD"
+                                                               FontSize="10"
+                                                               HorizontalAlignment="Right"
+                                                               Margin="0,2,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
+            <Border x:Name="InputPanel"
+                    ZIndex="3"
+                    IsVisible="False"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,126,520"
+                    Background="{DynamicResource PanelBgBrush}"
+                    CornerRadius="10"
+                    Padding="10"
+                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="2">
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="TxtUserInput"
+                             Width="180"
+                             Height="30"
+                             FontSize="14"
+                             Background="{DynamicResource DarkerBgBrush}"
+                             Foreground="White"
+                             BorderBrush="{DynamicResource PinkBrush}"
+                             BorderThickness="1"
+                             Padding="5,3"
+                             VerticalContentAlignment="Center"/>
+                    <Button x:Name="BtnSendChat"
+                            Width="50"
+                            Height="30"
+                            Padding="0"
+                            Margin="5,0,0,0"
+                            Background="{DynamicResource PinkBrush}"
+                            Foreground="White"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        <TextBlock Text="{loc:Str btn_send}"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- Avatar/Sprite - Z-Index 1 implicit, with floating animation -->
+            <Border x:Name="AvatarBorder"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="5,100,126,210"
+                    Cursor="Hand"
+                    ClipToBounds="False">
+                <Border.ContextMenu>
+                    <ContextMenu x:Name="AvatarContextMenu">
+                        <MenuItem x:Name="MenuItemTalkToBambi" Header="{loc:Str section_talk_to_companion}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuItemDetach" Header="{loc:Str section_detach}"/>
+                        <MenuItem x:Name="MenuItemAttach" Header="{loc:Str section_attach_to_main_window}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemShrink" Header="{loc:Str section_shrink}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemGrow" Header="{loc:Str section_grow}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemDismiss" Header="{loc:Str section_dismiss}" IsVisible="False"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuItemEngine" Header="{loc:Str section_start_engine}" Foreground="#90EE90"/>
+                        <MenuItem x:Name="MenuItemTriggerMode" Header="{loc:Str section_trigger_mode}"/>
+                        <MenuItem x:Name="MenuItemBambiTakeover" Header="{loc:Str section_takeover}"/>
+                        <MenuItem x:Name="MenuItemPersonality" Header="{loc:Str section_personality}" Foreground="{DynamicResource PinkBrush}"/>
+                        <MenuItem x:Name="MenuItemMute" Header="{loc:Str section_mute_avatar}"/>
+                        <!-- Emote MenuItems replace the 5 items above (Engine, TriggerMode, BambiTakeover,
+                             Personality, Mute) whenever a remote controller is connected. Header strings
+                             and Tag references are populated in AvatarContextMenu_Opened from
+                             App.Settings.Current.RemoteEmotePresets. -->
+                        <MenuItem x:Name="MenuItemEmote1" Header="" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemEmote2" Header="" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemEmote3" Header="" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemEmote4" Header="" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemEmote5" Header="" IsVisible="False"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuItemShowChatHistory" Header="{loc:Str section_show_chat_history}"/>
+                        <MenuItem x:Name="MenuItemMuteWhispers" Header="{loc:Str section_mute_whispers}"/>
+                        <MenuItem x:Name="MenuItemPauseBrowser" Header="{loc:Str section_pause_browser}"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
+                <!-- ponytail: AvatarBounceScale (click-squash), AvatarScale/AvatarRotate/AvatarTranslate
+                     and the B pair (60fps breathing / wobble / bob), MistScale (mist drift) and
+                     AvatarAnimatedTranslate (GIF bob) were all x:Named transforms driven from
+                     AvatarTubeWindow.Avatar.cs. Avalonia only name-scopes StyledElements (AVLN2000),
+                     and every driver lives in a partial this layer does not port, so the identity
+                     transforms are dropped and the avatar renders as a static frame. -->
+                <Grid x:Name="AvatarBounceHost" RenderTransformOrigin="50%,100%">
+                    <!-- Static PNG avatar (default) / emotive-portrait crossfade layer A -->
+                    <Image x:Name="ImgAvatar"
+                           Stretch="Uniform"
+                           MaxHeight="306"
+                           MaxWidth="198"
+                           RenderTransformOrigin="50%,50%">
+                        <Image.Effect>
+                            <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                    <!-- Emotive-portrait crossfade layer B (hidden unless portrait mode is active) -->
+                    <Image x:Name="ImgAvatarB"
+                           Stretch="Uniform"
+                           MaxHeight="306"
+                           MaxWidth="198"
+                           Opacity="0"
+                           IsVisible="False"
+                           RenderTransformOrigin="50%,50%">
+                        <Image.Effect>
+                            <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                    <!-- Pink mist overlay (emotive-portrait mode only): soft drifting pink glow over the avatar -->
+                    <Ellipse x:Name="MistOverlay"
+                             IsHitTestVisible="False"
+                             IsVisible="False"
+                             Opacity="0.12"
+                             RenderTransformOrigin="50%,50%">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush GradientOrigin="50%,45%" Center="50%,45%" RadiusX="60%" RadiusY="72%">
+                                <GradientStop Color="#FFFF8FCF" Offset="0.0"/>
+                                <GradientStop Color="#66FF69B4" Offset="0.45"/>
+                                <GradientStop Color="#00FF69B4" Offset="1.0"/>
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <!-- Animated GIF avatar (for level 20+).
+                         ponytail: WPF drove this through XamlAnimatedGif (gif:AnimationBehavior),
+                         a WPF-only package. Avalonia needs its own GIF decoder; the layer is kept
+                         so the crossfade code has its slot, but nothing animates it. -->
+                    <Image x:Name="ImgAvatarAnimated"
+                           Stretch="Uniform"
+                           MaxHeight="306"
+                           MaxWidth="198"
+                           IsVisible="False"
+                           RenderTransformOrigin="50%,50%">
+                        <Image.Effect>
+                            <!-- BlurRadius 20->10 (2026-07-05): during a crossfade BOTH animated layers
+                                 composite a full-size blur shader every frame; Gaussian cost scales ~radius^2,
+                                 so halving the radius is ~4x cheaper per layer. -->
+                            <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                    <!-- Second animated layer: crossfade target for Circe WebP emotes
+                         (AvatarTubeWindow.CirceEmotes.cs). Mirrors ImgAvatarAnimated. -->
+                    <Image x:Name="ImgAvatarAnimatedB"
+                           Stretch="Uniform"
+                           MaxHeight="306"
+                           MaxWidth="198"
+                           Opacity="0"
+                           IsVisible="False"
+                           RenderTransformOrigin="50%,50%">
+                        <Image.Effect>
+                            <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                    <!-- Possession (Lockdown R4, "glitchportrait"): the corrupted-portrait layer.
+                         A SIBLING of the avatar images inside AvatarBounceHost on purpose - a copy
+                         placed here inherits the exact same layout slot, so a sliced duplicate lines
+                         up with the real portrait pixel for pixel without measuring anything.
+                         Filled and emptied entirely by GlitchPortrait below. -->
+                    <Grid x:Name="PossessionGlitchLayer"
+                          IsHitTestVisible="False"
+                          IsVisible="False"
+                          ClipToBounds="False"/>
+                </Grid>
+            </Border>
+
+            <!-- Possession (Lockdown R4): the warden's note, left in the tube while the companion is
+                 away (Warden.LeaveAsync) and taken down by ReturnAsync. Crimson - the Lockdown THEME
+                 colour, never ember: ember means something is happening RIGHT NOW, and a note is the
+                 opposite of that. Same margin as AvatarBorder so it sits where she was standing. -->
+            <Border x:Name="PossessionNoteCard"
+                    ZIndex="6"
+                    IsVisible="False"
+                    IsHitTestVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Margin="5,100,126,210"
+                    MaxWidth="210"
+                    Padding="16,12"
+                    CornerRadius="10"
+                    Background="#F21A0A0E"
+                    BorderBrush="#DC143C" BorderThickness="1.5"
+                    RenderTransformOrigin="50%,50%">
+                <Border.RenderTransform>
+                    <!-- Unnamed: ShowPossessionNote reaches it through PossessionNoteCard.RenderTransform -->
+                    <RotateTransform Angle="-3"/>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect Color="#DC143C" BlurRadius="18" OffsetX="0" OffsetY="0" Opacity="0.55"/>
+                </Border.Effect>
+                <TextBlock x:Name="TxtPossessionNote"
+                           Foreground="#FFE3E8" FontSize="15" FontWeight="SemiBold"
+                           TextWrapping="Wrap" TextAlignment="Center" LineHeight="20"/>
+            </Border>
+
+            <!-- Takeover countdown bar - thin pink bar under the avatar, drains toward the next
+                 random Takeover action. Shown only while Takeover is running (driven in code-behind).
+                 ponytail: the WPF fill was horizontally scaled by the x:Named TakeoverCountdownScale
+                 (1.0 full -> 0 about to fire) from InitTakeoverCountdownBar, which lives in a partial
+                 this layer does not port. The transform is dropped, so the bar renders full. -->
+            <Border x:Name="TakeoverCountdownBar"
+                    ZIndex="5"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,116,246"
+                    Width="120" Height="9"
+                    CornerRadius="4"
+                    Background="#EE14141C"
+                    BorderBrush="#FFFF1493"
+                    BorderThickness="1"
+                    IsVisible="False"
+                    IsHitTestVisible="False">
+                <Border x:Name="TakeoverCountdownFill"
+                        HorizontalAlignment="Left"
+                        Width="116" Height="5"
+                        CornerRadius="2"
+                        Background="#FFF7A8D8"
+                        RenderTransformOrigin="0%,50%">
+                    <Border.Effect>
+                        <DropShadowEffect Color="{StaticResource PinkColor}" BlurRadius="6" OffsetX="0" OffsetY="0" Opacity="0.6"/>
+                    </Border.Effect>
+                </Border>
+            </Border>
+
+            <!-- THE FUSE's candle (CONTRACT-FUSE-0816 2.2). From twelve hours out, a small flame
+                 stands beside the tube. It says nothing and does nothing; it is company.
+
+                 Decorative-element recipe, same as ImgTubeFrame / MistOverlay / TakeoverCountdownBar:
+                 a sibling of the 780x1080 design grid with an explicit ZIndex and
+                 IsHitTestVisible="False", so AvatarBorder's click, right-click and context menu are
+                 untouched. Collapsed here and shown only by AvatarTubeWindow.DescentFuse.cs, which
+                 does nothing without a cached ceremony timestamp.
+
+                 Two layers: a soft radial halo and the flame body.
+                 ponytail: the flicker animated the halo's opacity and the body's x:Named
+                 FuseCandleFlameScale. Both drivers are in the DescentFuse partial, so the candle is
+                 the STATIC rest frame the WPF original falls back to when ambient loops are off -
+                 which is the same picture, and the intended one. -->
+            <Grid x:Name="FuseCandleHost"
+                  ZIndex="2"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Bottom"
+                  Margin="96,0,0,214"
+                  Width="54" Height="74"
+                  IsVisible="False"
+                  IsHitTestVisible="False">
+                <Ellipse x:Name="FuseCandleHalo" Width="54" Height="54"
+                         VerticalAlignment="Top" Opacity="0.5">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
+                            <GradientStop Offset="0" Color="#90FFC864"/>
+                            <GradientStop Offset="0.55" Color="#30E0B052"/>
+                            <GradientStop Offset="1" Color="#00E0B052"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <!-- The flame body. Teardrop, origin at its base so the flicker's scale reads as a
+                     flame stretching upward rather than a shape growing in place. -->
+                <Path x:Name="FuseCandleFlame" Width="18" Height="30" Stretch="Fill"
+                      HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,10,0,0"
+                      RenderTransformOrigin="50%,100%"
+                      Data="M 9,0 C 15,10 18,16 18,21 C 18,26 14,30 9,30 C 4,30 0,26 0,21 C 0,16 3,10 9,0 Z">
+                    <Path.Fill>
+                        <LinearGradientBrush StartPoint="50%,0%" EndPoint="50%,100%">
+                            <GradientStop Offset="0" Color="#FFFFE9B0"/>
+                            <GradientStop Offset="0.5" Color="#FFE0B052"/>
+                            <GradientStop Offset="1" Color="#FFB4642A"/>
+                        </LinearGradientBrush>
+                    </Path.Fill>
+                </Path>
+                <!-- The stub it burns on. Static, always. -->
+                <Border Width="14" Height="26" CornerRadius="3,3,1,1"
+                        HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Background="#FF2A2440" BorderBrush="#40E0B052" BorderThickness="1"/>
+            </Grid>
+
+            <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything -->
+            <Border x:Name="TitleBox"
+                    ZIndex="4"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,121,180"
+                    Background="#CC1A1A2E"
+                    CornerRadius="12"
+                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="2"
+                    Padding="8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left Arrow (Previous Avatar) - 50% bigger -->
+                    <Border x:Name="BtnPrevAvatar" Grid.Column="0"
+                            Background="Transparent" Cursor="Hand"
+                            IsVisible="False"
+                            VerticalAlignment="Center" Margin="0,0,10,0">
+                        <TextBlock Text="◀" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="{StaticResource PatreonPurple}" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+
+                    <!-- Title and Level -->
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtAvatarTitle"
+                                   Text="{loc:Str label_basic_subject_2}"
+                                   FontSize="16"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource PinkBrush}"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="2" OffsetX="1" OffsetY="1" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                        <TextBlock x:Name="TxtAvatarLevel"
+                                   Text="{loc:Str label_lv_1_2}"
+                                   FontSize="13"
+                                   Foreground="#B0B0B0"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,-2,0,0"/>
+                    </StackPanel>
+
+                    <!-- Right Arrow (Next Avatar) - 50% bigger -->
+                    <Border x:Name="BtnNextAvatar" Grid.Column="2"
+                            Background="Transparent" Cursor="Hand"
+                            IsVisible="False"
+                            VerticalAlignment="Center" Margin="10,0,0,0">
+                        <TextBlock Text="▶" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="{StaticResource PatreonPurple}" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+                </Grid>
+            </Border>
+
+        </Grid>
+        </Viewbox>
+    </Grid>
+</Window>
