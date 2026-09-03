@@ -1,0 +1,217 @@
+<!-- PORTED from ConditioningControlPanel/Windows/AnnouncementPopup.xaml.
+     Structure, ordering, spacing and every resource key preserved so the two diff cleanly.
+     Deviations, all forced:
+
+       WindowStyle="None"              -> SystemDecorations="None"
+       AllowsTransparency="True"       -> TransparencyLevelHint="Transparent"
+       ResizeMode="NoResize"           -> CanResize="False"
+       Visibility="Collapsed"          -> IsVisible="False"
+       Panel.ZIndex                    -> ZIndex
+       ShadowDepth="0"                 -> OffsetX="0" OffsetY="0"  (Avalonia's DropShadowEffect
+                                          takes a vector, not depth+direction)
+       StartPoint/EndPoint "0,0"/"0.3,1" -> "0%,0%"/"30%,100%". Avalonia reads a bare pair as
+                                          ABSOLUTE pixels, so the rail gradient would have run its
+                                          whole ramp inside the first 0.3px and painted solid.
+       RenderTransformOrigin="0.5,0.5" -> dropped; Avalonia's default origin is already the centre
+                                          (and a bare "0.5,0.5" would be read as pixels here too).
+       MouseLeftButtonDown="..."       -> not wired: the WPF handler is an empty no-op by design
+                                          ("don't dismiss on click"), and not wiring it is the
+                                          same behaviour with less code.
+       Two inline <Button.Style>s      -> one keyed ControlTheme, below. They were byte-identical.
+
+     The close button carries a TextBlock child rather than Content: Avalonia parses "_" in a
+     Button's Content as an access key (CLAUDE.md trap 1). The two pill buttons keep Content
+     because code assigns it (actionText / dismissText) - their template's plain ContentPresenter
+     has RecognizesAccessKey false, so an underscore in a caller's label survives. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.AnnouncementPopup"
+        Title="Announcement"
+        Width="440" SizeToContent="Height" MaxHeight="600"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Styles>
+        <!-- ponytail: local copy of AnnouncementPopup.xaml:BtnClose inline <Button.Style>, same
+             shape AchievementPopup uses. Hoist when a third popup needs it. -->
+        <Style Selector="Button.closeGlyph:pointerover">
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Window.Styles>
+
+    <Window.Resources>
+        <!-- ponytail: local copy of AnnouncementPopup.xaml:BtnDownload/BtnDismiss inline
+             <Button.Style> (both were identical), setters verbatim. Same pill FeatureIntroPopup
+             keeps locally; hoist the pair into Theme/Styles.xaml when a third view wants it. -->
+        <ControlTheme x:Key="AnnouncementPillButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}"
+                            CornerRadius="18" Padding="16,6">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+            </Style>
+        </ControlTheme>
+
+        <!-- The matrix skin. In WPF this was built at runtime out of FrameworkElementFactory
+             (ApplyMatrixButtonStyle); Avalonia has no such factory, and a declared ControlTheme
+             the code-behind assigns to Button.Theme is the same thing with none of the plumbing.
+             Colours copied from the code-behind: #00FF41 fill, #39FF14 hover, #00CC33 pressed. -->
+        <ControlTheme x:Key="AnnouncementMatrixPillButton" TargetType="Button">
+            <Setter Property="Background" Value="#00FF41"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}"
+                            CornerRadius="18" Padding="16,6">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="#39FF14"/>
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="#00CC33"/>
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Border x:Name="OuterBorder"
+            Background="#F0151530" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+            Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
+        </Border.Effect>
+
+        <!--
+            Two column shapes share this window.
+
+            Column 0 is the CARD ART RAIL, used only by local callers that hand in an image
+            (the weekly intake nudge). It is hidden by default, and a hidden child in an
+            Auto column measures to zero width - so for every server announcement this Grid is
+            byte-for-byte the single-column layout it has always been. Server announcements keep
+            using the stacked ImageContainer inside the StackPanel instead; do not merge the two.
+        -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Card art rail (local image only) -->
+            <Border x:Name="CardArtPanel" Grid.Column="0" IsVisible="False"
+                    Width="210" CornerRadius="10,0,0,10" ClipToBounds="True">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="30%,100%">
+                        <GradientStop Color="#3C2159" Offset="0"/>
+                        <GradientStop Color="#252542" Offset="0.55"/>
+                        <GradientStop Color="#1A1A2E" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Grid>
+                    <!-- Square (1:1) source, shown whole. Uniform, never UniformToFill: the art is
+                         a card face, and cropping its edges to fill a taller rail would eat the
+                         framing that makes it read as a card. -->
+                    <!-- MaxHeight is a measure guard, not styling: SizeToContent=Height measures
+                         this cell with infinite height, so an unconstrained Uniform Image would
+                         ask for its natural 1024px and shove the window straight to MaxHeight. -->
+                    <Image x:Name="CardArtImage" Stretch="Uniform"
+                           Margin="18" MaxHeight="240"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Image.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="26" OffsetX="0" OffsetY="0" Opacity="0.55"/>
+                        </Image.Effect>
+                    </Image>
+
+                    <!-- Hairline seam so the rail reads as part of the card, not a pasted panel -->
+                    <Rectangle Width="1" HorizontalAlignment="Right" Fill="#55FF69B4"/>
+                </Grid>
+            </Border>
+
+            <!-- Close Button -->
+            <Button x:Name="BtnClose"
+                    Grid.Column="1" Classes="closeGlyph"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="28" Height="28" Margin="0,8,12,0" Padding="0"
+                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                    Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
+                    BorderThickness="0" Cursor="Hand"
+                    ZIndex="1">
+                <TextBlock Text="✕"/>
+            </Button>
+
+            <StackPanel Grid.Column="1" Margin="20" VerticalAlignment="Center">
+                <!-- Optional Image (server announcements: downloaded from image_url) -->
+                <Border x:Name="ImageContainer" IsVisible="False"
+                        CornerRadius="8" ClipToBounds="True" Margin="0,0,0,14"
+                        MaxHeight="200" HorizontalAlignment="Center">
+                    <Image x:Name="AnnouncementImage" Stretch="Uniform"/>
+                </Border>
+
+                <!-- Title -->
+                <TextBlock x:Name="TxtTitle"
+                           Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="20"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,0,0,10"/>
+
+                <!-- Message -->
+                <TextBlock x:Name="TxtMessage"
+                           Foreground="White" FontSize="14"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           LineHeight="22"
+                           Margin="0,0,0,16"/>
+
+                <!--
+                    Button rail. Vertical by default, which is exactly how the two buttons stacked
+                    before this wrapper existed (both are HorizontalAlignment=Center, so a
+                    stretch-wide vertical StackPanel changes nothing). Card layout flips it to
+                    Horizontal in code so the CTA and the dismiss sit side by side under the copy.
+                -->
+                <StackPanel x:Name="ButtonRow">
+                    <!-- Action / Download button (visible when link_url or an onAction is supplied) -->
+                    <Button x:Name="BtnDownload" Content="▶ Download Mod"
+                            Theme="{StaticResource AnnouncementPillButton}"
+                            HorizontalAlignment="Center"
+                            Width="180" Height="38"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="Bold"
+                            IsVisible="False"
+                            Margin="0,0,0,8"/>
+
+                    <!-- Got it Button -->
+                    <Button x:Name="BtnDismiss" Content="Got it!"
+                            Theme="{StaticResource AnnouncementPillButton}"
+                            HorizontalAlignment="Center"
+                            Width="120" Height="36"
+                            Cursor="Hand"
+                            FontSize="14" FontWeight="SemiBold"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
