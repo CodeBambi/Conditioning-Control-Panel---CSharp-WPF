@@ -1,0 +1,141 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/EnhancementsTabView.xaml.
+     Structure, order, spacing and every resource key are preserved so the two can be compared
+     directly. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"        ->  Theme="{StaticResource X}"  (keyed styles are ControlThemes)
+       Visibility="Collapsed"            ->  IsVisible="False"
+       helpers:EmojiTextBlock            ->  TextBlock                   (Avalonia draws COLR/CPAL natively)
+       Image + EmojiToImageSource        ->  TextBlock Text="&#x1F512;"  (same reason; no SharpVectors, no pack:// URI)
+       x:FieldModifier="internal"        ->  dropped; the MainWindow partials that poke these
+                                             fields are not on this head. The x:Names are kept, so
+                                             the seam re-forms with a one-line change per field.
+       StartPoint="0,0" EndPoint="0.9,0.7" -> "0%,0%" / "90%,70%": Avalonia reads bare gradient
+                                             points as ABSOLUTE pixels, so the WPF fractions would
+                                             have drawn a sub-pixel wash (i.e. nothing).
+       PreviewMouseWheel                 ->  PointerWheelChanged, tunneling, in code-behind.
+-->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.EnhancementsTabView"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="800">
+
+    <UserControl.Resources>
+        <!-- Velvet Kit 2 · round 4 — hue identity, LOCAL literals only. Enhancements runs the
+             house pink, so the SOLID hue is taken from {DynamicResource PinkBrush} instead of a
+             literal - mods retint it - and only the alpha'd wash/border, which have no theme
+             siblings, live here. -->
+        <SolidColorBrush x:Key="TabHueBorderBrush" Color="#40FF69B4"/>
+        <LinearGradientBrush x:Key="TabHueWashBrush" StartPoint="0%,0%" EndPoint="90%,70%">
+            <GradientStop Color="#14FF69B4" Offset="0"/>
+            <GradientStop Color="#00000000" Offset="0.55"/>
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
+    <!-- ================================================================
+         NO 72px HERO HERE, ON PURPOSE. Every other round-4 tab opens with one;
+         this tab cannot afford it. The tab's height is a CONSTANT ~620dip that no
+         window resize gives back - and the skill tree already spends ~505 of it
+         (460 canvas + scrollbar + chrome) with vertical scrolling disabled,
+         leaving the secret rail its budgeted ~90. A hero row would squeeze row 0
+         and silently clip the bottom path of the tree. The tree canvas also draws
+         its own 500dip stats header at x=20, so a second header band would
+         duplicate it as well as overflow.
+         ================================================================ -->
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Hidden container for named elements (used programmatically) -->
+        <StackPanel IsVisible="False">
+            <TextBlock x:Name="TxtSkillPoints" Text="0"/>
+            <TextBlock x:Name="TxtXpMultiplier" Text="1.00x"/>
+            <TextBlock x:Name="TxtPinkRushIndicator" Text="{loc:Str label_rush}"/>
+            <TextBlock x:Name="TxtConditioningTime" Text="{loc:Str label_0h_0m}"/>
+            <WrapPanel x:Name="ActiveBonusesList"/>
+            <Border x:Name="ActiveBonusesPanel"/>
+        </StackPanel>
+
+        <!-- The board. Background stays a literal AND stays local: DrawSkillTree overwrites it
+             with the animated gradient on every rebuild and MainWindow.Animations.cs type-tests
+             it, so it must not become a theme brush. -->
+        <Border x:Name="SkillTreeOuterBorder" Background="#151528" CornerRadius="12"
+                BorderBrush="{StaticResource VelvetCardBorderBrush}" BorderThickness="2"
+                Padding="4" Margin="20,3,20,8">
+            <Grid ClipToBounds="True">
+                <!-- The tab's one ambient particle loop, behind the tree. It sits OUTSIDE the
+                     ScrollViewer on purpose: the tree canvas is 3760dip wide, so a dust field
+                     parented to it would size a surface eight screens wide to draw a viewport's
+                     worth of sparks.
+                     ponytail: StartLayers/RegisterTabFx is MainWindow.EnhancementsFx.cs's job
+                     (DustField at 0.55 intensity, parked on tab switch); wired when that moves to
+                     Core. The canvas parks itself when unloaded either way. -->
+                <fx:AmbientFxCanvas x:Name="SkillTreeFx"/>
+
+                <!-- ponytail: local drop of SkillTreeScrollViewerStyle
+                     (Resources/Theme/MainWindow.xaml:1198). That WPF template exists only to strip
+                     the vertical scrollbar out of the ScrollViewer chrome; Avalonia's stock
+                     ScrollViewer with VerticalScrollBarVisibility="Disabled" already draws exactly
+                     that, and a property-only ControlTheme here would blank the control (CLAUDE.md
+                     trap 4). -->
+                <ScrollViewer x:Name="SkillTreeScroller"
+                              HorizontalScrollBarVisibility="Visible"
+                              VerticalScrollBarVisibility="Disabled">
+                    <Canvas x:Name="SkillTreeCanvas" Width="3760" Height="460" HorizontalAlignment="Left">
+                        <!-- Header and skill nodes are drawn programmatically (see code-behind) -->
+                    </Canvas>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- ============================================================ -->
+        <!-- Secret skills rail.                                          -->
+        <!--                                                              -->
+        <!-- The three IsSecret nodes are deliberately kept OFF the tree  -->
+        <!-- canvas: a secret that owns a visible slot between two        -->
+        <!-- ordinary nodes stops being one, and it has no prerequisite   -->
+        <!-- to hang a connection line off. They live here instead, one   -->
+        <!-- card per secret, "???" until its requirement is met.         -->
+        <!--                                                              -->
+        <!-- HEIGHT IS BUDGETED: this row must stay under ~90dip end to   -->
+        <!-- end, which is what sizes the cards and why the section title -->
+        <!-- sits beside them, not above.                                 -->
+        <!-- ============================================================ -->
+        <Border Grid.Row="1" Theme="{StaticResource SettingCardStyle}" Margin="20,0,20,8">
+            <Grid>
+                <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,8" CornerRadius="0,2,2,0"
+                        Background="{DynamicResource PinkBrush}"/>
+                <Grid Margin="16,5,16,6" ColumnDefinitions="Auto,*">
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <TextBlock Text="{loc:Str label_secret_skills}"
+                                   Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="12" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str label_secret_skills_sub}"
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="9" FontStyle="Italic"
+                                   Margin="0,1,0,0"/>
+                    </StackPanel>
+                    <WrapPanel x:Name="SecretSkills" Grid.Column="1"
+                               Orientation="Horizontal" VerticalAlignment="Center"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Login Required Overlay. Still the LAST sibling of the root Grid and still RowSpan=2,
+             so the gate covers the tree AND the secret rail. -->
+        <Border x:Name="EnhancementsLoginOverlay" Grid.RowSpan="2" Background="#E6151528" CornerRadius="12"
+                BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2"
+                Margin="20,3,20,8" IsVisible="False">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
+                <TextBlock Text="&#x1F512;" FontSize="44" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <TextBlock Text="{loc:Str label_log_in_with_discord_or_patreon_to_access_enha}"
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="14" HorizontalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap" MaxWidth="350"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

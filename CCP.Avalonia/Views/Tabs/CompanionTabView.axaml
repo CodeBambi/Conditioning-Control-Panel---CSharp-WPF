@@ -1,0 +1,54 @@
+<!-- PORTED from ConditioningControlPanel/Views/Tabs/CompanionTabView.xaml.
+     Deviations:
+       Visibility="Collapsed"     ->  IsVisible="False"
+       AutomationProperties.AutomationId -> AutomationProperties.AutomationId (same attached
+                                     property, Avalonia.Controls.Automation namespace)
+       x:FieldModifier="internal" ->  dropped; the MainWindow partials that poke these fields are
+                                     not on this head. The x:Names are kept.
+-->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:cmp="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.CompanionTabView"
+             mc:Ignorable="d"
+             d:DesignHeight="900" d:DesignWidth="1240">
+
+    <!-- ================================================================
+         THE COMPANION TAB — "Her Room".
+
+         This file used to be 880 lines of settings sheet. It is now the
+         host for one control: CompanionRoomView, the composed nine-zone
+         page (design doc 04). Everything that used to be declared here
+         either moved into a zone or into one of the Workshop's
+         re-parented cells; nothing was duplicated, so every control on
+         this page exists exactly once.
+
+         The tab keeps three jobs:
+           1. own the room and its runtime viewmodel;
+           2. re-expose, by their original x:Names, the controls the
+              MainWindow partials still write to (see the code-behind);
+           3. tell MainWindow when it becomes visible, which is what
+              drives the tab-transition choreography.
+
+         Jobs 1 and 3 are stubbed on this head — see the code-behind for
+         what they wait on.
+
+         The tab's own header is gone on purpose: Z0 draws it, from the
+         hero's viewmodel, so there is one title and not two.
+         ================================================================ -->
+
+    <Grid>
+        <cmp:CompanionRoomView x:Name="Room"
+                               AutomationProperties.AutomationId="CompanionTabRoom"/>
+
+        <!-- COMPAT SEAM. MainWindow.Presets.cs hangs the AI help popup on this button by name.
+             Its old home was the AI Brain card's header, and that card is superseded by the
+             Engine Room (design §6) — which is deliberately unglamorous and has no room for a
+             help chip. Collapsed, exactly like the other kept-hidden compat elements, so
+             SetHelpContent keeps working and nothing renders. -->
+        <Button x:Name="HelpBtnAiChat"
+                Tag="AiChat" IsVisible="False" IsHitTestVisible="False"/>
+    </Grid>
+</UserControl>
