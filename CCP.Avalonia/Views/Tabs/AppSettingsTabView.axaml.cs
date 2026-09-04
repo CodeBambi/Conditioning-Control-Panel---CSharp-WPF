@@ -44,8 +44,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <c>ScrollChangedEventArgs.VerticalChange</c> -&gt; <c>OffsetDelta.Y</c>,
     /// <c>Dispatcher.BeginInvoke</c> -&gt; <c>Dispatcher.UIThread.Post</c>,
     /// <c>Visibility != Visible</c> -&gt; <c>!IsVisible</c>.
-    /// The WPF <c>App.Logger</c> calls are dropped: the logger is not on this head and the
-    /// catches exist to swallow, not to report.</para>
+    /// The WPF <c>App.Logger</c> calls are dropped because the catches exist to swallow, not to
+    /// report - NOT because there is no logger: Serilog's static <c>Log</c> is this head's
+    /// replacement for <c>App.Logger</c> and every other file here uses it.</para>
     /// </summary>
     public partial class AppSettingsTabView : UserControl
     {

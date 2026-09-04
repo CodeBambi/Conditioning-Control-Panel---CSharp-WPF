@@ -34,13 +34,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// shows a tab by flipping <c>IsVisible</c> and never re-attaches, so the whole seed re-runs on
     /// the IsVisible edge as well as on attach and on a settings-instance swap.</para>
     ///
-    /// <para><b>Dropped:</b> the mod-aware feature art (ModService.ModChanged -&gt; the resolver
-    /// repainting the hero and side takeover.png plates, including the BambiSleep
-    /// "bambi takeover.png" fork). ponytail: the resolver is NOT the blocker - CoreMods raises
-    /// ModChanged and <c>Helpers.ModArt.TryLoad("features/bambi takeover.png")</c> resolves
-    /// against art the csproj already links. The blocker is that both plates are art-less in
-    /// BambiTakeoverTabView.axaml (see its header), so there is no Image to repaint; restore the
-    /// markup and this handler in one change.</para>
+    /// <para><b>Feature art is wired.</b> <see cref="CoreMods.ModChanged"/> is the repaint signal
+    /// and <see cref="Helpers.ModArt.TryLoad"/> the resolver - mod override first, this head's
+    /// linked <c>Assets/features</c> copy second - so the hero strip, the description thumb and the
+    /// side plate all repaint on a mod switch, BambiSleep's "bambi takeover.png" fork included.
+    /// WPF's DecodePixelWidth hints (480 / 800) have no Avalonia equivalent on a brush, so one
+    /// decode feeds all three.</para>
     /// </summary>
     public partial class BambiTakeoverTabView : UserControl
     {
@@ -100,19 +99,59 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ChkMantraChant.IsCheckedChanged += ChkMantraChant_Changed;
 
             SyncFromSettings();
+            ApplyFeatureArt();
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            CoreMods.ModChanged += OnModChanged;
             SyncFromSettings();
+            ApplyFeatureArt();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            CoreMods.ModChanged -= OnModChanged;
             base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>ModChanged can be raised off the UI thread, so the repaint is marshalled.</summary>
+        private void OnModChanged(object? sender, Models.ModPackage mod) =>
+            Dispatcher.UIThread.Post(ApplyFeatureArt);
+
+        /// <summary>
+        /// WPF: MainWindow.xaml.cs:2633 picks the path and BambiTakeoverTabView.xaml.cs:87 repaints
+        /// the two brushes. BambiSleep ships its own takeover art under a different name, so the
+        /// fork is on the ACTIVE MOD ID, not on the resolver.
+        /// </summary>
+        private static string TakeoverArtPath =>
+            string.Equals(CoreMods.ActiveModId, Models.BuiltInMods.BambiSleepId, StringComparison.OrdinalIgnoreCase)
+                ? "features/bambi takeover.png"
+                : "features/takeover.png";
+
+        /// <summary>
+        /// Repaints the hero strip, the description thumb and the side plate. A null resolve is
+        /// left alone deliberately, exactly as the WPF version does: the plate degrades to its
+        /// authored wash + glyph rather than to an empty rectangle.
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            var art = Helpers.ModArt.TryLoad(TakeoverArtPath);
+            if (art == null) return;
+
+            TakeoverHeroArt.Background = new global::Avalonia.Media.ImageBrush(art)
+            {
+                Stretch = global::Avalonia.Media.Stretch.UniformToFill,
+                AlignmentX = global::Avalonia.Media.AlignmentX.Right,
+            };
+            TakeoverSideArt.Background = new global::Avalonia.Media.ImageBrush(art)
+            {
+                Stretch = global::Avalonia.Media.Stretch.UniformToFill,
+            };
+            ImgBambiTakeoverDesc.Source = art;
         }
 
         /// <summary>The shell shows a tab by flipping IsVisible, never by re-attaching. This is the

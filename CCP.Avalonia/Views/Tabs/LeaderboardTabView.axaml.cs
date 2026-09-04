@@ -177,9 +177,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>
         /// Repaints the segmented Monthly/All-Time pill, as UpdateLeaderboardModeButtons does.
-        /// Gold for the active All-Time half is a literal there too. The mod accent (App.Mods
-        /// .GetAccentColorHex) is not on this seam, so the pink comes from the theme resource the
-        /// markup already uses; that is the same colour until a mod repaints it.
+        /// Gold for the active All-Time half is a literal there too.
+        ///
+        /// ponytail: the mod accent IS on the seam - <c>CoreMods.AccentColorHex</c> plus
+        /// <c>CoreMods.TryParseHexColor</c> is what WPF's <c>App.Mods.GetAccentColorHex</c>
+        /// reduces to, and this method just has not been switched over. The theme resource used
+        /// here is the same colour until a mod repaints it, so nothing reads wrong meanwhile; the
+        /// change is two lines plus a <c>CoreMods.ModChanged</c> repaint.
         /// </summary>
         private void UpdateModeButtons()
         {

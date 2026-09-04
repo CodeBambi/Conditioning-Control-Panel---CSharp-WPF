@@ -17,8 +17,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// aurora at 0.55, copied from StartExclusivesMotion - canvas composition, not service logic).
     /// Everything else is a stub or a placeholder.</para>
     ///
-    /// <para>Dropped outright: <c>LoadBackdrop</c> (needs ModResourceResolver and a Resources/ PNG
-    /// this head does not ship), the <c>ModChanged</c> subscription that re-ran it, and
+    /// <para>Dropped: <c>LoadBackdrop</c> and the <c>ModChanged</c> subscription that re-ran it.
+    /// ponytail: the resolver is NOT the blocker - <c>Helpers.ModArt.TryLoad</c> plus
+    /// <c>CoreMods.ModChanged</c> answer it, and the picture exists at
+    /// <c>Assets/exclusives/vault_backdrop.png</c>. Two things are missing and neither is in this
+    /// file: <c>Assets/exclusives/**</c> is not among the <c>AvaloniaResource</c> globs in
+    /// CCP.Avalonia.csproj, so <c>avares://CCP.Avalonia/Resources/exclusives/vault_backdrop.png</c>
+    /// does not resolve; and the markup has no <c>VaultBackdrop</c> Image to paint into - the
+    /// spotlight carries <c>TxtSpotArtGlyph</c> instead. Link the folder, add the Image, then this
+    /// is four lines. Also dropped:
     /// <c>RoundClipOnResize</c> - WPF's ClipToBounds is rectangular, so a rounded host needed clip
     /// geometry tracked against every resize; an Avalonia Border clips its child to its own
     /// CornerRadius, so the helper has no work left. Its two other callers were MainWindow's card
@@ -60,9 +67,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// Paints the spotlight and fills the shelf with sample cards.
         ///
-        /// ponytail: needs ExclusiveFeature.All, DailyFreeService, VaultLivery and FxTheme, all
-        /// pinned to the WPF head (the registry's gate probe reads App.Patreon). Wired when they
-        /// move to Core. The rows are the real registry's first six entries with their real loc
+        /// ponytail: DailyFreeService is NOT a blocker any more - it is in Core
+        /// (CCP.Core/Services/DailyFreeService.cs). What is still head-side is the registry itself,
+        /// ConditioningControlPanel/Models/ExclusiveFeature.cs (its gate probe reads App.Patreon),
+        /// plus ConditioningControlPanel/Features/VaultLivery.cs and
+        /// ConditioningControlPanel/Services/FxTheme.cs. The rows are the real registry's first six entries with their real loc
         /// keys, spread across every branch the card template carries - tier 1, tier 2, untiered,
         /// NEW, BETA, no badge, a locked veil and both entitlement chips - so the render proof
         /// exercises the markup rather than one happy path.
@@ -106,8 +115,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>
         /// WPF: <c>MainWindow.OpenExclusiveSpotlight()</c>, i.e. ShowTab(ExclusiveFeature.All[0].Key).
-        /// ponytail: needs the tab host and the ExclusiveFeature registry, wired when they move to
-        /// Core - so the hero is inert here rather than navigating somewhere wrong.
+        /// ponytail: needs the shell's tab host and
+        /// ConditioningControlPanel/Models/ExclusiveFeature.cs (for All[0].Key) - so the hero is
+        /// inert here rather than navigating somewhere wrong.
         /// </summary>
         private static void OpenSpotlight() { }
     }
@@ -173,8 +183,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// The card's resting rim. WPF takes the untiered one from the active mod's accent
         /// (ExclusiveEdgeDefault) and overwrites a tiered card's with the constant vault livery.
-        /// ponytail: needs FxTheme + VaultLivery for the mod-aware half; the literals here are the
-        /// Bambi accent and the vault gold those two produce by default.
+        /// ponytail: the untiered rim is reachable today - CoreMods.AccentColorHex plus
+        /// CoreMods.TryParseHexColor is what FxTheme's ExclusiveEdgeDefault reduces to. The tiered
+        /// rim still needs ConditioningControlPanel/Features/VaultLivery.cs. Both literals here are
+        /// what those two produce with the default mod, so nothing reads wrong meanwhile.
         /// </summary>
         public IBrush EdgeBrush => Tier > 0 ? Brush("#66FFC94E") : Brush("#4DB478FF");
 

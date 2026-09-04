@@ -8,11 +8,13 @@
        helpers:EmojiTextBlock            -> TextBlock (Avalonia renders colour emoji natively)
        Image + EmojiToImageSource        -> TextBlock with the emoji (CLAUDE.md trap 3)
        Content="..." on a Button         -> a TextBlock child (Avalonia parses "_" as an access key)
-       ImageBrush + BitmapImage pack://  -> dropped (ponytail: Resources/features/audio_whispers.png
-                                            does not ship in CCP.Avalonia; the hero keeps its bare
-                                            surface and the side plate keeps the wash + scrim, the
-                                            same call as LockCardFeatureControl)
-       Border.OpacityMask gradient       -> dropped with the art it masked
+       ImageBrush + BitmapImage pack://  -> the two Borders are NAMED (SheListeningHeroArt,
+                                            SheListeningSideArt) and painted in code-behind through
+                                            Helpers.ModArt.TryLoad("features/audio_whispers.png"),
+                                            which is the mod override first and this head's
+                                            avares:// copy second. DecodePixelWidth has no Avalonia
+                                            equivalent on a brush, so both decode at full size.
+       Border.OpacityMask gradient       -> kept; Avalonia has OpacityMask on Visual
        LinearGradientBrush "0,1"/"0,0"   -> "0%,100%"/"0%,0%" (RelativePoint needs the % form)
        local TabHue* brushes             -> SectionHueStudio{,Border,Wash}Brush from Theme/Brushes.xaml.
                                             Byte-identical colours (#FFFF7E6B / #40FF7E6B / the same
@@ -49,6 +51,19 @@
                 <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,12">
                     <Grid>
+                        <!-- Hero plate. The art is painted in code (SheListeningHeroArt.Background)
+                             so a mod's features/audio_whispers.png outranks the shipped copy; the
+                             OpacityMask is the WPF gradient, which Avalonia supports on any Visual. -->
+                        <Border x:Name="SheListeningHeroArt" CornerRadius="0,16,16,0"
+                                Width="240" HorizontalAlignment="Right" Opacity="0.9">
+                            <Border.OpacityMask>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                    <GradientStop Color="#00000000" Offset="0"/>
+                                    <GradientStop Color="#E6000000" Offset="0.55"/>
+                                </LinearGradientBrush>
+                            </Border.OpacityMask>
+                        </Border>
+
                         <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
                             <TextBlock Text="She's Listening" FontSize="17" FontWeight="Bold"
                                        Foreground="{StaticResource TextLightBrush}"/>
@@ -387,10 +402,13 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- SIDE ART. Plate dropped (see header); the wash and the scrim keep the card's
-                         shape. Pinned top with the authored fixed height - column 0 is far taller
-                         than any plate should be. -->
-                    <Border Grid.Column="1" Margin="12,0,0,0" CornerRadius="14"
+                    <!-- SIDE ART. The plate is the Border's BACKGROUND, not a child Image: a Border
+                         clips its Background to CornerRadius but not its child content, so a child
+                         Image would square off the rounded corners (the WPF file's round-2 lesson).
+                         Painted in code; the wash below stays as the no-art fallback. Pinned top
+                         with the authored fixed height - column 0 is far taller than any plate. -->
+                    <Border x:Name="SheListeningSideArt"
+                            Grid.Column="1" Margin="12,0,0,0" CornerRadius="14"
                             BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                             Background="{StaticResource SectionHueStudioWashBrush}"
                             VerticalAlignment="Top" Height="520">

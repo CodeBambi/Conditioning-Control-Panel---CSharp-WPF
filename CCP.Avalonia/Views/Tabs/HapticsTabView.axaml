@@ -36,12 +36,18 @@
                                             property. Re-add when it moves to Core.
        feat:AdaptiveSideArt.CollapseBelow-> dropped with the side-art column, see below.
 
-     ponytail: the features/vibe.png plates (hero ImageBrush, side-art column, ImgHapticsVibeDesc,
-     ImgVideoHapticSync) are dropped - this head ships no Resources/features PNGs, so all four have
-     nothing to paint, and the mod-art repaint in the WPF code-behind needs ModResourceResolver,
-     which is still in the WPF head. WPF's AdaptiveSideArt.CollapseBelow=1000 collapses that column
-     at the width this head renders at anyway, so the Tier-1 region is a single column here.
-     Re-add as avares:// ImageBrushes when the art moves, and restore the 3*/2* grid with it. -->
+     features/vibe.png plates: the hero (HapticsHeroArt) and the Video-Haptic-Sync thumb
+     (ImgVideoHapticSync) are RESTORED - Assets/features/vibe.png is linked into this head and
+     Helpers.ModArt.TryLoad + CoreMods.ModChanged replace ModResourceResolver. WPF's
+     ImgHapticsVibeDesc is NOT ported and should not be: it is a 0x0 collapsed compat shim that
+     exists only so the shared MainWindow.xaml.cs partial has something to write .Source on.
+
+     ponytail: the Tier-1 SIDE-ART COLUMN is still dropped, and it is markup, not art - it needs the
+     3*/2* ColumnDefinitions restored around the Tier-1 StackPanel below plus the scrim Border
+     (ConditioningControlPanel/Views/Tabs/HapticsTabView.xaml:901). WPF's
+     AdaptiveSideArt.CollapseBelow=1000 collapses that column at the width this head renders at
+     anyway, so nothing is visibly missing at 1100px. -->
+
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -482,6 +488,21 @@
                                 BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2"
                                 Margin="0,0,0,10">
                             <Grid ColumnDefinitions="*,Auto">
+
+                                <!-- Hero plate. Background, not a child Image: a Border clips its
+                                     Background to CornerRadius but never its children. Painted in
+                                     code (HapticsHeroArt) so a mod's features/vibe.png outranks the
+                                     shipped copy. -->
+                                <Border x:Name="HapticsHeroArt" Grid.Column="0" Grid.ColumnSpan="2"
+                                        CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                                        Opacity="0.9">
+                                    <Border.OpacityMask>
+                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                            <GradientStop Color="#00000000" Offset="0"/>
+                                            <GradientStop Color="#E6000000" Offset="0.55"/>
+                                        </LinearGradientBrush>
+                                    </Border.OpacityMask>
+                                </Border>
 
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="18,0,10,0">
                                     <TextBlock Text="{loc:Str tab_haptics}" FontSize="17" FontWeight="Bold"
@@ -1131,8 +1152,14 @@
                                                     <Button x:Name="HelpBtnVideoHapticSync" Grid.Column="1"
                                                             Theme="{StaticResource HelpButtonStyle}" Tag="VideoHapticSync"
                                                             Margin="0,0,10,0" VerticalAlignment="Top"/>
-                                                    <!-- ponytail: ImgVideoHapticSync dropped with the other vibe.png
-                                                         plates; the WPF head repaints it on a mod switch. -->
+                                                    <!-- Source is set in code so a mod's override wins;
+                                                         WPF repaints the same Image on a mod switch. -->
+                                                    <Border Grid.Column="2" CornerRadius="8" ClipToBounds="True"
+                                                            Width="56" Height="56" VerticalAlignment="Top"
+                                                            BorderBrush="{StaticResource TabHueBorderBrush}"
+                                                            BorderThickness="1">
+                                                        <Image x:Name="ImgVideoHapticSync" Stretch="UniformToFill"/>
+                                                    </Border>
                                                 </Grid>
 
                                                 <TextBlock x:Name="TxtAudioSyncDisabledHint" Grid.Row="1"
