@@ -308,8 +308,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // WPF retargeted here when step.TargetWindowTypeName named a different window, and
             // drew a clean centered "next up" card while that window was still opening.
-            // ponytail: needs TutorialService (CurrentSteps / CurrentStepIndex) and the
-            // WindowLoaded:* bus event to know when to retarget; wired when they move to Core.
+            // ponytail: CurrentStepIndex is NOT the blocker - CoreTutorial.CurrentStepIndex is in
+            // Core and StepCounterText below already reads it. What is missing is the STEP LIST
+            // (CoreTutorial exposes CurrentStep only, so "the next step's TargetWindowTypeName"
+            // cannot be looked ahead) and the WindowLoaded:* bus event that says the other window
+            // has opened - ConditioningControlPanel/Services/TutorialEventBus.cs, which has no Core
+            // seam to emit into. Both live with
+            // ConditioningControlPanel/Services/TutorialService.cs.
 
             // A new card: the once-per-step advance latch reopens. WPF does this inside
             // SubscribeAdvanceTrigger, which is the only thing UpdateStep calls after this point

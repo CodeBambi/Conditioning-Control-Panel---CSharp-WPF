@@ -52,8 +52,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// </summary>
     public partial class LockCardWindow : Window
     {
-        // ponytail: needs LockCardService, wired when it moves to Core. Placeholder card so the
-        // render (and any manual run) shows the real layout with real strings.
+        // ponytail: needs ConditioningControlPanel/Services/LockCard/LockCardService.cs, which is
+        // pinned to the head by App.* and the WPF window itself. Placeholder card so the render
+        // (and any manual run) shows the real layout with real strings.
         private const int SampleRepeats = 3;
 
         /// <summary>
@@ -67,6 +68,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Exactly one card owns the keyboard; every other monitor is a read-only mirror
         /// that echoes what the primary types.</summary>
         private bool _isPrimary = true;
+
+        /// <summary>A test card awards no XP and notifies no service - WPF's own gate.</summary>
+        private bool _isTest;
 
         // Per-session config (mutable: the WPF original pooled windows and reconfigured on reuse).
         private string _phrase = "";
@@ -501,11 +505,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var completionTime = (DateTime.Now - _startTime).TotalSeconds;
 
-            // ponytail: needs App.Progression (AddXP, XPSource.LockCard), App.Achievements
-            // (TrackLockCardCompletion) and App.LockCard (NotifyCompleted); wired when they move to
-            // Core. The XP formula and the strict 1.5x multiplier live with them, not with the view.
-            Log.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors",
-                _requiredRepeats, completionTime, _totalErrors);
+            // The XP award, WPF's body verbatim including the !_isTest gate and the strict 1.5x
+            // multiplier. App.Progression is CoreProgression here; the WPF call is already a
+            // null-conditional fire-and-forget, and unseeded (this head today) the seam is the same
+            // no-op, so restoring it cannot mis-award - it only starts working the day a head seeds
+            // progression. XPSource.LockCard crosses as its member NAME: the enum is declared inside
+            // Services/Companion/CompanionService.cs, which cannot move, so CoreProgression takes a
+            // string and the seeding head parses it.
+            if (!_isTest)
+            {
+                var xpAmount = (50 * _requiredRepeats) + 200;
+                if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
+                CoreProgression.AddXP(xpAmount, "LockCard");
+            }
+
+            // ponytail: the other two calls stay stubbed and have no Core seam to reach through.
+            // App.Achievements.TrackLockCardCompletion(completionTime, _totalCharsTyped,
+            //   _totalErrors, _requiredRepeats) - ConditioningControlPanel/Services/Progression/AchievementService.cs
+            // App.LockCard.NotifyCompleted(_phrase, _totalErrors, _requiredRepeats) (!_isTest only)
+            //   - ConditioningControlPanel/Services/LockCard/LockCardService.cs
+            Log.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors{Test}",
+                _requiredRepeats, completionTime, _totalErrors, _isTest ? " (TEST)" : "");
 
             foreach (var window in Fanout())
             {
@@ -862,7 +882,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             try
             {
-                var primary = Build(phrase, repeats, strictMode, voiceMode, isPrimary: true);
+                var primary = Build(phrase, repeats, strictMode, voiceMode, isTest, isPrimary: true);
                 primary.Show();
 
                 // One cover per monitor when the user asked for it. Avalonia has no screen list
@@ -873,7 +893,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     var primaryScreen = all.FirstOrDefault(s => s.IsPrimary) ?? all.FirstOrDefault();
                     foreach (var screen in all.Where(s => s != primaryScreen))
                     {
-                        var mirror = Build(phrase, repeats, strictMode, voiceMode, isPrimary: false);
+                        var mirror = Build(phrase, repeats, strictMode, voiceMode, isTest, isPrimary: false);
                         mirror.Show();
                         // The .axaml opens Maximized, and a maximized X11 window ignores Position.
                         // Un-maximize, place it on the target screen, re-maximize: the WM then
@@ -903,9 +923,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// and before <c>Show()</c> so <see cref="IsAnyOpen"/> is already true for a caller that
         /// polls it the moment <see cref="ShowOnAllMonitors"/> returns.
         /// </summary>
-        private static LockCardWindow Build(string phrase, int repeats, bool strictMode, bool voiceMode, bool isPrimary)
+        private static LockCardWindow Build(string phrase, int repeats, bool strictMode, bool voiceMode, bool isTest, bool isPrimary)
         {
-            var window = new LockCardWindow { _isPrimary = isPrimary };
+            var window = new LockCardWindow { _isPrimary = isPrimary, _isTest = isTest };
             window.Configure(phrase, repeats, strictMode, voiceMode);
             _allWindows.Add(window);
             return window;

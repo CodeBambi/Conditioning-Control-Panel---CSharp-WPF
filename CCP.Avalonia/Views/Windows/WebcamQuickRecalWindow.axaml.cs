@@ -42,8 +42,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Discoverability: this window is the one place every user of Quick Recal provably
             // reaches, so it is where the global chord gets taught. The real line quotes the
             // user's own (rebindable) camera shortcut alongside it.
-            // ponytail: needs MainWindow.QuickRecalHotkeyHint, wired when the hotkey map moves to Core
-            _txtHotkeyHint.Text = "Tip: the same quick recal runs from anywhere with the global quick-recal chord.";
+            // The tip is HIDDEN on this head rather than worded, and the old note named the wrong
+            // blocker. MainWindow.QuickRecalHotkeyHint (MainWindow/MainWindow.xaml.cs:1263) is just
+            // Loc.GetF("webcam_quick_recal_hotkey_hint", QuickRecalHotkeyChord, CameraShortcutChord),
+            // the key is in CCP.Core/Localization/Languages/*.json, and both chords are derivable
+            // here (the quick-recal one is a constant, the camera one reads
+            // CoreSettings.Current.CompanionPrompt.CameraShortcut*). So it is writable today.
+            // What stops it is that BOTH chords are Win32 RegisterHotKey registrations in
+            // ConditioningControlPanel/Services/Input/GlobalHotkeyService.cs, and this head installs no
+            // global hotkey of any kind - "runs from anywhere with Ctrl+Alt+G" would be teaching a
+            // key that does nothing. An empty hint is a gap; a taught dead key is a lie.
+            _txtHotkeyHint.IsVisible = false;
 
             // WPF closed with `DialogResult = _completedOk`, but the error panel is only ever
             // shown on a failure path, so that flag was false every time this button was
@@ -56,8 +65,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             base.OnOpened(e);
 
-            // ponytail: needs WebcamTrackingService (IsRunning / Calibration / OnGazeMove /
-            // SetRuntimeOffset) + CalibrationSoundService. With those back this shows the dot,
+            // ponytail: needs ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs
+            // (IsRunning / Calibration / OnGazeMove / SetRuntimeOffset) plus
+            // ConditioningControlPanel/Services/CalibrationSoundService.cs. Neither is in Core and
+            // no Core seam names a tracker. With those back this shows the dot,
             // samples for 2 s, takes the per-axis median after dropping the saccade onto the
             // dot, and writes (window centre - median) as the runtime offset. Without them
             // there is nothing to sample, so the window just parks in its opening state.

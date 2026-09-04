@@ -20,14 +20,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// folder. That is deliberate rather than lazy - see the note on ShowIfFirstTime.
     ///
     /// PORTED from ConditioningControlPanel/Windows/ProgramsIntroPopup.xaml.cs. Deviations:
-    ///  - <c>ShowIfFirstTime</c> is dropped, not stubbed: every line of it is App.Settings /
-    ///    App.Programs / App.Mods / Dispatcher gating, none of which exists here, and an empty
-    ///    gate that silently never shows the card would be worse than no gate. It comes back with
-    ///    those services.
+    ///  - <c>ShowIfFirstTime</c> is dropped, not stubbed. App.Settings and App.Mods are NOT the
+    ///    blockers any more (CoreSettings / CoreMods answer both), but App.Programs is:
+    ///    ConditioningControlPanel/Services/Program/ProgramService.cs is head-side and the gate is
+    ///    "has a program been started", which nothing here can answer. An empty gate that silently
+    ///    never shows the card would be worse than no gate.
     ///  - <c>ProgramDefinition</c> is in the WPF head, so <see cref="Featured"/> is a local
     ///    stand-in holding exactly the four fields the card dresses itself from.
-    ///  - <c>ProgramArt.Sigil/DayPlate</c> is a head service: the sigil stays hidden and the rail
-    ///    shows its gradient, glow and program title, which is what the WPF fallback plate draws.
+    ///  - <c>ProgramArt.Sigil/DayPlate</c> stays unresolved, blocked on the unlinked
+    ///    <c>Assets/programs</c> art rather than on the resolver - see the note at its call site.
+    ///    The sigil stays hidden and the rail shows its gradient, glow and program title, which is
+    ///    what the WPF fallback plate draws.
     ///  - <c>PreviewKeyDown</c> -&gt; <c>KeyDown</c>; <c>DragMove()</c> -&gt; <c>BeginMoveDrag(e)</c>.
     /// </summary>
     public partial class ProgramsIntroPopup : Window
@@ -84,10 +87,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 for (int i = 1; i <= 4; i++)
                     this.FindControl<TextBlock>("Bullet" + i)!.Foreground = accent;
 
-                // ponytail: needs ProgramArt.Sigil / ProgramArt.DayPlate, wired when they move to
-                // Core. The sigil Rectangle stays hidden (its Fill would be `accent` and its
-                // OpacityMask an ImageBrush over that art); the rail still draws its gradient, glow
-                // and title, which is what the WPF shared-fallback-plate path looks like.
+                // ponytail: the sigil Rectangle stays hidden, and NOT for the reason the old note
+                // gave. Avalonia has OpacityMask on Visual, and Helpers.ModArt.TryLoad is already
+                // this head's ModResourceResolver.ResolveImage - so the mask itself is portable.
+                // Two things actually block it:
+                //   1. Assets/programs (sigil_*.png, plate_default.png) is NOT linked into
+                //      CCP.Avalonia.csproj, so avares://CCP.Avalonia/Resources/programs/... does
+                //      not exist and TryLoad returns null for every one. A csproj this layer does
+                //      not own; see Assets/README.md for the Link= shape.
+                //   2. ProgramArt's key is Slug(program.Id) and DayPlate's is the session
+                //      template's display name - both off ProgramDefinition, which is head-side
+                //      (Featured below carries four display fields, not an Id or a day list).
+                // The rail still draws its gradient, glow and title, which is what the WPF
+                // shared-fallback-plate path looks like.
                 this.FindControl<Rectangle>("ArtGlow")!.Fill = GlowBrush(accent);
 
                 var title = this.FindControl<TextBlock>("TxtArtProgramTitle")!;

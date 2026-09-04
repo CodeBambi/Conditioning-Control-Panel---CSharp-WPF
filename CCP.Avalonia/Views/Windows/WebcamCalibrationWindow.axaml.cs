@@ -41,9 +41,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// FitCerrolazaPolynomial, FitRidge, EvalPolynomial, BuildAxisCorrection, FitAxisTrim,
     /// ~1,300 lines of OpenCvSharp-free maths that still needs <c>WebcamCalibrationData</c> from
     /// the WPF head), the gesture warm-up waiters, <c>RunBubbleTestAsync</c>,
-    /// <c>CalibrationSoundService</c>, <c>App.GazeCursor</c>, <c>App.Settings</c>,
-    /// <c>App.Notifications</c>, <c>App.Logger</c> and the HelpContentService/HelpVideoWindow
-    /// popup.</para>
+    /// <c>CalibrationSoundService</c> (ConditioningControlPanel/Services/CalibrationSoundService.cs)
+    /// and <c>App.GazeCursor</c> (Services/Tracking/GazeDebugCursorService.cs, a WPF window).
+    /// <c>App.Webcam</c> is ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs.
+    /// <b>Three names that used to be on this list are not blockers any more</b> and were removed
+    /// rather than left to mislead: <c>App.Settings</c> is <see cref="CoreSettings"/>,
+    /// <c>App.Logger</c> is Serilog's static <c>Log</c>, and the HelpContentService/HelpVideoWindow
+    /// popup is RESTORED and live (see BtnHelp below - the service is in Core and the window sits
+    /// in this same folder). <c>App.Notifications</c> is the one head service left in that group:
+    /// ConditioningControlPanel/Services/NotificationService.cs.</para>
     ///
     /// Other deviations:
     ///  - WPF's <c>DialogResult</c> becomes <c>Close(bool)</c>, as in TextEditorDialog.
@@ -169,8 +175,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void Window_Loaded(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs App.Webcam (IsRunning gate + OnRawIris / OnHeadPose /
-            // OnTrackingStateChanged subscriptions), wired when the webcam service moves to Core.
+            // ponytail: needs App.Webcam - ConditioningControlPanel/Services/Webcam/
+            // WebcamTrackingService.cs - for the IsRunning gate and the OnRawIris / OnHeadPose /
+            // OnTrackingStateChanged subscriptions. It is head-only by construction (its capture
+            // stack is Windows-side) and no Core seam names a tracker.
             // The WPF original bails to ShowError when tracking is not running; with no service to
             // ask, the intro is shown unconditionally so the view still has a first frame.
 
@@ -191,9 +199,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             IsShowing = false;
             StopRingPulse();
             _verifyCountdownTimer?.Stop();
-            // ponytail: needs App.Webcam / App.GazeCursor to unsubscribe the iris + pose streams
-            // and release the "calibration-verify" and "calibration-bubbletest" cursor keys and the
-            // gaze attractor, wired when those services move to Core.
+            // ponytail: needs WebcamTrackingService / GazeDebugCursorService (paths in the header)
+            // to unsubscribe the iris + pose streams and release the "calibration-verify" and
+            // "calibration-bubbletest" cursor keys and the gaze attractor.
         }
 
         private void Window_KeyDown(object? sender, KeyEventArgs e)

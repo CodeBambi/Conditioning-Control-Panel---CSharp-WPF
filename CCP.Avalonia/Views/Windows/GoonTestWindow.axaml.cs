@@ -42,8 +42,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _btnTearDown = this.FindControl<Button>("BtnTearDown")!;
             _txtStatus = this.FindControl<TextBlock>("TxtStatus")!;
 
-            // ponytail: needs GoonTestPanel (+ GoonGameService/GoonMatchService), wired when they
-            // move to Core. The WPF original built two panels with different sim seeds — 1337 and
+            // ponytail: needs GoonTestPanel from ConditioningControlPanel/GoonTestPanel.cs, which
+            // is a WPF UserControl built entirely in code (System.Windows.Controls, 1,120 lines) -
+            // it is a REDRAW for this head, not a move. The services behind it are head-side too:
+            // ConditioningControlPanel/Services/GoonGame/GoonGameService.cs and .../
+            // GoonMatchService.cs. Core already holds the pure half (GoonContracts, GoonDraft,
+            // GoonMatchTypes, GoonRng, GoonScoring, GoonWire), so the ENGINE is not the blocker -
+            // the transport-owning service and the WPF panel are.
+            // The WPF original built two panels with different sim seeds — 1337 and
             // 8675309 — because two sides posting the SAME round time make every sudden-death
             // round a draw and the ladder never resolves. Keep the two seeds different when this
             // comes back.
@@ -81,8 +87,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnCreateLoopback_Click()
         {
-            // ponytail: needs GoonLoopbackTransport.CreatePair + GoonMatchService, wired when they
-            // move to Core. The profile index maps 1 -> Relay(), 2 -> Instant(), default -> P2P().
+            // ponytail: needs GoonLoopbackTransport.CreatePair from
+            // ConditioningControlPanel/Services/GoonGame/GoonLoopbackTransport.cs plus
+            // GoonMatchService, same directory. Neither is in Core and no Core seam names them.
+            // The profile index maps 1 -> Relay(), 2 -> Instant(), default -> P2P().
             //
             // ORDER MATTERS when this comes back. AdoptLobby BEFORE ConnectAsync: the hello is sent
             // from the transport's connected state change, and a hello that lands while the peer is
@@ -93,15 +101,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnOutage_Click()
         {
-            // ponytail: needs GoonLoopbackPair.SimulateOutage(20000), wired when it moves to Core.
+            // ponytail: needs GoonLoopbackPair.SimulateOutage(20000) from
+            // ConditioningControlPanel/Services/GoonGame/GoonLoopbackTransport.cs.
             // Expect Wobbly at 15 s and Dead/abandon at 60 s once it is back.
             Stub("Simulate 20s Outage");
         }
 
         private void BtnTearDown_Click()
         {
-            // ponytail: needs GoonTestPanel.LeaveAsync + the loopback dispose chain, wired when
-            // they move to Core.
+            // ponytail: needs GoonTestPanel.LeaveAsync (ConditioningControlPanel/GoonTestPanel.cs)
+            // plus the loopback dispose chain in Services/GoonGame/GoonLoopbackTransport.cs.
             Stub("Tear Down Both");
         }
 
