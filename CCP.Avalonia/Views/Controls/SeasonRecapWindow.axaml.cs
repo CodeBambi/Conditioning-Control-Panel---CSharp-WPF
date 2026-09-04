@@ -121,30 +121,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     Child = card,
                 };
 
-                // Off-tree layout pass so the visual has real geometry to render. The card has a
-                // fixed Width but auto Height, so measure against unbounded height.
-                host.Measure(Size.Infinity);
-                host.Arrange(new Rect(host.DesiredSize));
-
-                // Freeze AFTER layout, so the spiral geometry exists, then re-arrange.
-                card.PrepareForStill();
-                host.Measure(Size.Infinity);
-                host.Arrange(new Rect(host.DesiredSize));
-
-                var size = host.DesiredSize;
-                var px = new PixelSize((int)Math.Ceiling(size.Width * ExportScale),
-                                       (int)Math.Ceiling(size.Height * ExportScale));
-                if (px.Width <= 0 || px.Height <= 0)
+                // The stage is NOT optional. Avalonia applies styling on logical-tree attach, so an
+                // unparented control gets no Theme= setters at all and renders as an empty backdrop
+                // - measured with a probe on this branch, not assumed. Parent it, render, detach.
+                var stage = this.FindControl<Panel>("PART_ExportStage")!;
+                stage.Children.Add(host);
+                try
                 {
-                    Log.Warning("SeasonRecap: card measured to nothing, no PNG to write");
-                    return null;
-                }
+                    // Explicit layout pass so the visual has real geometry now, rather than after
+                    // the stage's own deferred pass. The card has a fixed Width but auto Height, so
+                    // measure against unbounded height.
+                    host.Measure(Size.Infinity);
+                    host.Arrange(new Rect(host.DesiredSize));
 
-                using var rtb = new RenderTargetBitmap(px, new Vector(96 * ExportScale, 96 * ExportScale));
-                rtb.Render(host);
-                using var ms = new MemoryStream();
-                rtb.Save(ms);
-                return _png = ms.ToArray();
+                    // Freeze AFTER layout, so the spiral geometry exists, then re-arrange.
+                    card.PrepareForStill();
+                    host.Measure(Size.Infinity);
+                    host.Arrange(new Rect(host.DesiredSize));
+
+                    var size = host.DesiredSize;
+                    var px = new PixelSize((int)Math.Ceiling(size.Width * ExportScale),
+                                           (int)Math.Ceiling(size.Height * ExportScale));
+                    if (px.Width <= 0 || px.Height <= 0)
+                    {
+                        Log.Warning("SeasonRecap: card measured to nothing, no PNG to write");
+                        return null;
+                    }
+
+                    using var rtb = new RenderTargetBitmap(px, new Vector(96 * ExportScale, 96 * ExportScale));
+                    rtb.Render(host);
+                    using var ms = new MemoryStream();
+                    rtb.Save(ms);
+                    return _png = ms.ToArray();
+                }
+                finally
+                {
+                    stage.Children.Remove(host);
+                }
             }
             catch (Exception ex)
             {

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 using Avalonia.Threading;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
@@ -26,15 +29,53 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             Loaded += (_, _) => ApplyShelfLayout(Bounds.Width);
             SizeChanged += (_, e) => { if (e.WidthChanged) ApplyShelfLayout(e.NewSize.Width); };
 
-            // WPF hung this off OnIsVisibleChanged; Avalonia has no such event, so the same
-            // property is read off the generic change notification. Not wired from Loaded: the
-            // zones start their own loops when they are loaded, and parking before then would
-            // stop a clock that has not been started.
-            PropertyChanged += (_, e) =>
+        }
+
+        // =====================================================================================
+        //  effective-visibility watch
+        // =====================================================================================
+
+        private readonly List<IDisposable> _visibilityWatch = new();
+
+        /// <summary>
+        /// WPF hung the clock parking off <c>OnIsVisibleChanged</c>, which reports EFFECTIVE
+        /// visibility. Avalonia's <c>IsVisible</c> is this control's LOCAL flag and stays true
+        /// under a hidden ancestor, and the shell switches tabs by flipping
+        /// <c>CompanionTab.IsVisible</c> two levels up (MainShellWindow.axaml) - so watching our
+        /// own property would never fire on a tab switch, which is the only case that matters.
+        /// <c>IsEffectivelyVisibleChanged</c> is the exact twin and Avalonia 12 keeps it INTERNAL
+        /// (see the same note in Controls/VatGlassCanvas.cs and Controls/TakeoverOrb.cs), so this
+        /// watches the chain by hand: our own flag plus every visual ancestor's, re-reading
+        /// <see cref="Visual.IsEffectivelyVisible"/> on any of them. Rebuilt on attach because the
+        /// chain does not exist before it and can differ after a re-parent.
+        /// </summary>
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+
+            foreach (var v in this.GetSelfAndVisualAncestors())
+                _visibilityWatch.Add(v.GetObservable(IsVisibleProperty).Subscribe(new VisibilityObserver(this)));
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            foreach (var d in _visibilityWatch) d.Dispose();
+            _visibilityWatch.Clear();
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>One subscription per link in the chain, all answering the same question.</summary>
+        private sealed class VisibilityObserver : IObserver<bool>
+        {
+            private readonly CompanionRoomView _owner;
+            public VisibilityObserver(CompanionRoomView owner) => _owner = owner;
+            public void OnCompleted() { }
+            public void OnError(Exception error) { }
+            public void OnNext(bool value)
             {
-                if (e.Property != IsVisibleProperty) return;
-                if (e.NewValue is bool visible && visible) ResumeClocks(); else ParkClocks();
-            };
+                if (_owner.IsEffectivelyVisible) _owner.ResumeClocks();
+                else _owner.ParkClocks();
+            }
         }
 
         // ponytail: ICompanionRoomVm (Hero/Chat/Memory/... zone interfaces + Navigator) lives in the
