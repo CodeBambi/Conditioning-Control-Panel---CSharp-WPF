@@ -45,7 +45,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private async void OnActivityChanged(object? sender, ActivityChangedEventArgs e)
         {
-            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => OnActivityChanged(sender, e))); return; }
+            if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(() => OnActivityChanged(sender, e))); return; }
             // async void: a leaked exception (especially from the post-await
             // continuation) escapes to the dispatcher and kills the whole
             // process. Guard the entire body and bail if the app is tearing
@@ -166,7 +166,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private async void OnStillOnActivity(object? sender, ActivityChangedEventArgs e)
         {
-            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => OnStillOnActivity(sender, e))); return; }
+            if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(() => OnStillOnActivity(sender, e))); return; }
             // async void: guard the whole body so a leaked exception can't kill
             // the process, and bail if the app is tearing down. (#386)
             try
@@ -363,7 +363,7 @@ namespace ConditioningControlPanel
 
         private async void OnVideoEnded(object? sender, EventArgs e)
         {
-            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => OnVideoEnded(sender, e))); return; }
+            if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(() => OnVideoEnded(sender, e))); return; }
             // Z-order after video end: native ownership keeps the attached pair together.
 
             if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)

@@ -32,7 +32,6 @@ namespace ConditioningControlPanel.Views.Deeper
         private BrowserVideoTimeSource? _videoSource;
         private DispatcherTimer? _uiTimer;
         private float[]? _peaks;
-        private bool _isScrubbing;
         private bool _suppressVolumeSync;
         private bool _videoBrowserReady;
         // Exactly one file:// URL we just asked the WebView2 to navigate to from
@@ -883,7 +882,10 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void UiTimer_Tick(object? sender, EventArgs e)
         {
-            if (_isScrubbing) return;
+            // Suspend playhead writes while the user is dragging the mini-timeline scrubber
+            // (Mission3.cs), otherwise the tick fights the drag. _miniScrubbing is the live
+            // flag; the old _isScrubbing was never assigned.
+            if (_miniScrubbing) return;
             // Reparent in progress — touching VideoBrowser now would race with
             // the WebView2 swap and can throw against an unattached browser.
             if (_fsTransitionInFlight) return;
