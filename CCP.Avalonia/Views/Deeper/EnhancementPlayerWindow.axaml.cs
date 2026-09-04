@@ -402,7 +402,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         public void OpenLocalMediaFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
-            if (IsLocalVideoFile(path)) LoadLocalVideo(path);
+            if (DeeperPreview.IsLocalVideoFile(path)) LoadLocalVideo(path);
             else LoadAudio(path);
             TryAutoLoadEnhancement(path);
         }
@@ -467,14 +467,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             => !string.IsNullOrWhiteSpace(path)
                && path.EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase);
 
-        // The canonical check lives in EnhancementResolver so the player and the video bridge agree.
-        private static bool IsLocalVideoFile(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path)) return false;
-            var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-            return ext is ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
-        }
-
         // ====================================================================================
         // File pickers
         // ====================================================================================
@@ -502,7 +494,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 });
                 if (files.Count == 0) return;
                 var path = files[0].TryGetLocalPath() ?? files[0].Path.ToString();
-                if (IsLocalVideoFile(path)) LoadLocalVideo(path);
+                if (DeeperPreview.IsLocalVideoFile(path)) LoadLocalVideo(path);
                 else LoadAudio(path);
                 TryAutoLoadEnhancement(path);
             }
@@ -640,8 +632,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private void BtnCreateNewEnhancement_Click()
         {
             if (string.IsNullOrEmpty(_lastMediaPathForCreateNew)) return;
-            // ponytail: needs EnhancementLibrary.CreateBlank + DeeperEditorWindow, wired when they
-            // move to Core / are ported.
+            // ponytail: DeeperEditorWindow is NOT the blocker - it is ported and beside this file.
+            // EnhancementLibrary.CreateBlank is, and it is still head-only
+            // (ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs): it is what turns a
+            // bare media path into a blank Enhancement with the right MediaType, metadata defaults
+            // and empty lanes, and the editor's ctor takes an Enhancement, not a path. See
+            // JumpToEditorForCurrentEnhancement for the other half of the route.
             Log.Debug("EnhancementPlayer(Avalonia): create-new is a stub for {Path}", _lastMediaPathForCreateNew);
         }
 
@@ -681,7 +677,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
                 // Extension AND rooted-path check before anything reaches the engine. File.Exists
                 // upstream only proves a file is there, not that it is media.
-                if (!IsLocalVideoFile(path) || !System.IO.Path.IsPathRooted(path))
+                if (!DeeperPreview.IsLocalVideoFile(path) || !System.IO.Path.IsPathRooted(path))
                 {
                     Log.Warning("EnhancementPlayer: rejected non-video local MediaSource");
                     _txtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
@@ -701,7 +697,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // Full path, because the engine round-trips the URL through file:// encoding and
                 // hands LocalPath back in a form that only matches after normalisation.
                 var full = System.IO.Path.GetFullPath(path);
-                _videoBrowser.AllowNavigation = u => u.IsFile && PathsEqual(u.LocalPath, full);
+                _videoBrowser.AllowNavigation = u => u.IsFile && DeeperPreview.PathsEqual(u.LocalPath, full);
                 _videoBrowser.Source = new Uri(full);
                 _videoNavigated = true;
             }
@@ -710,13 +706,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 Log.Warning(ex, "EnhancementPlayer: local video load failed");
                 _txtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
             }
-        }
-
-        private static bool PathsEqual(string? a, string b)
-        {
-            if (string.IsNullOrEmpty(a)) return false;
-            try { return string.Equals(System.IO.Path.GetFullPath(a), b, StringComparison.Ordinal); }
-            catch { return false; }
         }
 
         private void LoadVideoUrl(string url)
@@ -758,7 +747,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // because the sites in the original allowlist redirect between the two forms.
                 var pinned = uri.Host;
                 _videoBrowser.AllowNavigation = u =>
-                    u.Scheme == Uri.UriSchemeHttps && HostsMatchIgnoringWww(u.Host, pinned);
+                    u.Scheme == Uri.UriSchemeHttps && DeeperPreview.HostsMatchIgnoringWww(u.Host, pinned);
                 _videoBrowser.Source = uri;
                 _videoNavigated = true;
             }
@@ -767,17 +756,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 Log.Warning(ex, "EnhancementPlayer: video load failed");
                 _txtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
             }
-        }
-
-        /// <summary>Host equality that ignores a leading "www.". Not a domain-suffix match: a
-        /// subdomain is a DIFFERENT host here on purpose, since this pins to one page's host rather
-        /// than admitting a whole domain the way the allowlist did.</summary>
-        private static bool HostsMatchIgnoringWww(string? a, string? b)
-        {
-            static string Strip(string? h) =>
-                (h ?? "").StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? h![4..] : (h ?? "");
-            var (x, y) = (Strip(a), Strip(b));
-            return x.Length > 0 && x.Equals(y, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsRemoteVideoUrl(string? source)
@@ -827,7 +805,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // letting the poll correct it would show ⏸ / LIVE / "Playing" in the meantime, and on
             // a page that never grows a video element it would never be corrected at all.
             var want = !_isPlaying;
-            if (Unquote(await _videoBrowser.InvokeScriptAsync(VideoScript(want ? "play()" : "pause()"))) != "ok")
+            if (DeeperPreview.Unquote(await _videoBrowser.InvokeScriptAsync(
+                    DeeperPreview.Invoke(want ? "l.play();" : "l.pause();"))) != "ok")
                 return;
             _isPlaying = want;
             _txtPlayPauseGlyph.Text = _isPlaying ? "⏸" : "▶";
@@ -838,7 +817,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private void BtnStop_Click()
         {
             if (_isVideoMode && _videoNavigated)
-                _ = _videoBrowser.InvokeScriptAsync(VideoScript("pause(); l.currentTime=0"));
+                _ = _videoBrowser.InvokeScriptAsync(DeeperPreview.Invoke("l.pause(); l.currentTime=0;"));
             _isPlaying = false;
             _currentSec = 0;
             _txtPlayPauseGlyph.Text = "▶";
@@ -848,25 +827,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             UpdateStatusPill();
         }
 
-        /// <summary>
-        /// Addresses the page's largest &lt;video&gt;, which is BrowserVideoTimeSource's rule too:
-        /// a HypnoTube page carries preview thumbnails that are also video elements, and the first
-        /// one in document order is routinely not the one being watched.
-        /// </summary>
-        private static string VideoScript(string tail) =>
-            "(function(){var l=null,a=0;document.querySelectorAll('video').forEach(function(v){"
-            + "var s=(v.clientWidth||0)*(v.clientHeight||0); if(s>=a){a=s;l=v;}});"
-            + "if(!l)return '';l." + tail + ";return 'ok';})()";
-
         private void BtnEyeTracking_Click()
         {
-            // ponytail: needs WebcamTrackingService (start/stop, IsConsentCurrent). Left whole
-            // rather than half-restored ON PURPOSE: the portable half of this button is the label
-            // and the pill, and a button that reads "eye tracking: on" with no camera open — or,
-            // worse, one that reaches a start path around the first-time consent prompt this head
-            // has no MessageBox for — is worse than a button that does nothing. Restore the
-            // consent gate and the camera together or not at all. Keys the WPF prompts use:
-            // deeper_player_eye_tracking_unavailable / _first_time / _confirm_start / _start_failed_fmt.
+            // ponytail: needs WebcamTrackingService (start/stop, IsConsentCurrent), which is
+            // head-only at ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs.
+            // Left whole rather than half-restored ON PURPOSE: the portable half of this button is
+            // the label and the pill, and a button that reads "eye tracking: on" with no camera
+            // open is worse than a button that does nothing. Restore the consent gate and the
+            // camera together or not at all.
+            //
+            // ONE HALF OF THE OLD REASON IS NOW WRONG and is corrected rather than deleted, because
+            // it is the kind of claim that gets copied: "the first-time consent prompt this head
+            // has no MessageBox for". Views/Dialogs/MessageDialog exists and ConfirmAsync is
+            // exactly that prompt. The prompt is not the blocker; the tracker is. Note also that
+            // the gate must be AWAITED - a straight transcription of the WPF prompt flips the
+            // toggle before the answer lands, which turns a consent gate into a no-op.
+            // Keys the WPF prompts use: deeper_player_eye_tracking_unavailable / _first_time /
+            // _confirm_start / _start_failed_fmt.
             Log.Debug("EnhancementPlayer(Avalonia): eye tracking toggle is a stub");
         }
 
@@ -892,14 +869,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private async void BtnPictureInPicture_Click()
         {
             if (!_videoBrowser.HasEngine) return;
-            var result = Unquote(await _videoBrowser.InvokeScriptAsync(
-                "(function(){var l=null,a=0;document.querySelectorAll('video').forEach(function(v){"
-                + "var s=(v.clientWidth||0)*(v.clientHeight||0); if(s>=a){a=s;l=v;}});"
-                + "if(!l)return 'no video on page';"
-                + "try{ if(document.pictureInPictureElement){document.exitPictureInPicture();return 'exit';}"
-                + "if(!document.pictureInPictureEnabled)return 'picture-in-picture not supported by this engine';"
-                + "l.requestPictureInPicture().catch(function(){});return 'enter';}"
-                + "catch(e){return e.name+': '+e.message;}})()"));
+            var result = DeeperPreview.Unquote(await _videoBrowser.InvokeScriptAsync(
+                DeeperPreview.LargestVideo(
+                    "try{ if(document.pictureInPictureElement){document.exitPictureInPicture();return 'exit';}"
+                    + "if(!document.pictureInPictureEnabled)return 'picture-in-picture not supported by this engine';"
+                    + "l.requestPictureInPicture().catch(function(){});return 'enter';}"
+                    + "catch(e){return e.name+': '+e.message;}")));
+            // The shared finder answers "" for a page with no video where this site's own copy
+            // answered 'no video on page'. Mapped back here rather than parameterising the finder
+            // for one caller: the event-log line is what makes a press on a videoless page visible.
+            if (result.Length == 0) result = "no video on page";
             // ponytail: requestPictureInPicture is a promise, so an ASYNC rejection (Chromium's
             // "requires user activation") is swallowed by that .catch and reads as 'enter' here.
             // Reporting it needs WebMessageReceived, which NativeWebView has — a bridge worth
@@ -955,12 +934,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _pollInFlight = true;
             try
             {
-                var raw = await _videoBrowser.InvokeScriptAsync(
-                    "(function(){var l=null,a=0;document.querySelectorAll('video').forEach(function(v){"
-                    + "var s=(v.clientWidth||0)*(v.clientHeight||0); if(s>=a){a=s;l=v;}});"
-                    + "return l?(l.currentTime+'|'+(l.duration||0)+'|'+(l.paused?0:1)):'';})()");
+                var raw = await _videoBrowser.InvokeScriptAsync(DeeperPreview.ReadTime());
 
-                var parts = Unquote(raw).Split('|');
+                var parts = DeeperPreview.Unquote(raw).Split('|');
                 if (parts.Length != 3) return;
                 // A video element answered, so the page is up: "Loading video…" is now false. WPF
                 // hid this on NavigationCompleted; there the pane was Edge's own media viewer, so
@@ -990,13 +966,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             finally { _pollInFlight = false; }
         }
 
-        /// <summary>WebView2 returns a JSON literal (a string comes back quoted); WebKitGTK returns
-        /// the raw value. Strip one layer of quotes so the caller sees the same thing on both.</summary>
-        private static string Unquote(string? s)
-        {
-            if (string.IsNullOrEmpty(s)) return "";
-            return s.Length >= 2 && s[0] == '"' && s[^1] == '"' ? s[1..^1] : s;
-        }
 
         private void UpdateMiniTimelineReadout()
         {
@@ -1185,8 +1154,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _audioFileRow.IsVisible = !isVideo;
             _audioPane.IsVisible = !isVideo;
             _videoPane.IsVisible = isVideo;
-            // The WPF cluster bound its Visibility to VideoPane's; same rule, set here.
-            _browserZoomCluster.IsVisible = isVideo;
+            // The WPF cluster bound its Visibility to VideoPane's. Pinned HIDDEN here, and not
+            // because of the mode: AdjustVideoZoom only logs, since NativeWebView has no zoom
+            // factor and CSS zoom through the script channel is not a substitute. Two enabled
+            // buttons that do nothing is a toolbar lying about what it offers. Put `isVideo` back
+            // the moment zoom is real. Same call and same reason in DeeperEditorWindow.axaml's
+            // PreviewZoomCluster.
+            _browserZoomCluster.IsVisible = false;
             _volumePanel.IsVisible = !isVideo;
             _btnPictureInPicture.IsVisible = isVideo;
         }
@@ -1348,9 +1322,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         {
             var enh = _loadedEnhancement;
             if (enh == null) return;
-            // ponytail: needs DeeperEditorWindow (not ported) and MainWindow.OpenDeeperEditorFromPlayer,
-            // wired when the editor is ported. The WPF path deduped against every open editor
-            // window whose LoadedFilePath matched, then routed through the main window.
+            // ponytail: "DeeperEditorWindow (not ported)" is WRONG and has been for several
+            // layers - it is Views/Deeper/DeeperEditorWindow, beside this file, with a public
+            // (Enhancement, string? filePath) ctor and a LoadedFilePath property, which is both
+            // halves of WPF's dedupe. Two things genuinely stop a straight restore, and neither is
+            // the editor:
+            //   1. The route. WPF went through MainWindow.OpenDeeperEditorFromPlayer ->
+            //      OpenDeeperFile, which RE-READS the file from disk and refreshes the Deeper
+            //      library list when the editor closes. CCP.Avalonia/Views/Windows/MainShellWindow
+            //      has no twin, and it is not a file this layer owns.
+            //   2. Handing the editor this window's own _loadedEnhancement instead would share one
+            //      mutable object between two windows: every edit in the editor would silently
+            //      rewrite the enhancement THIS player is running, with no save and no reload. WPF
+            //      never did that. A restore therefore has to re-read the .ccpenh.json (the same
+            //      EnhancementSerializer + EnhancementValidator pair LoadEnhancementFile uses) and
+            //      pass the fresh instance - the dedupe walk over the lifetime's Windows and
+            //      Activate() is the easy half.
+            // The rule-id argument has nowhere to land in either case: the editor has no
+            // "select this rule on open" entry point on this head.
             Log.Debug("EnhancementPlayer(Avalonia): editor jump is a stub (path {Path}, rule {Rule})",
                 _loadedFilePath, ruleId);
         }
@@ -1619,8 +1608,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // playhead moves and nothing else does.
             if (_isVideoMode && _videoNavigated)
             {
-                _ = _videoBrowser.InvokeScriptAsync(VideoScript(
-                    "currentTime=" + _currentSec.ToString("0.###", CultureInfo.InvariantCulture)));
+                _ = _videoBrowser.InvokeScriptAsync(DeeperPreview.Invoke(
+                    "l.currentTime=" + _currentSec.ToString("0.###", CultureInfo.InvariantCulture) + ";"));
             }
         }
 
