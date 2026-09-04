@@ -101,6 +101,74 @@ namespace ConditioningControlPanel.LinuxSmoke
                       poolMatches, $"{pool.Count} phrases vs BambiSleep's {bambiPool.Count}");
                 Check("the unseeded subliminal pool is deliberately NOT the CCP default's",
                       pool.Count != Models.BuiltInMods.CCPDefault.SubliminalPool!.Count);
+                // The subliminal split (wire/109). The schedule decides here; the flash surface is
+                // the head's, and with nothing seeded a scheduled subliminal must draw nothing
+                // rather than throw. The interval rule is checked with the roll injected, because a
+                // real clock cannot prove arithmetic.
+                Check("CoreSubliminal is not running cold", !CoreSubliminal.IsRunning);
+                Check("the median roll is exactly 60/frequency",
+                      Math.Abs(CoreSubliminal.NextIntervalSeconds(5, 0.5) - 12.0) < 1e-9,
+                      CoreSubliminal.NextIntervalSeconds(5, 0.5).ToString("R"));
+                Check("roll 0 is the -30% edge and roll 1 the +30% edge",
+                      Math.Abs(CoreSubliminal.NextIntervalSeconds(5, 0) - 8.4) < 1e-9 &&
+                      Math.Abs(CoreSubliminal.NextIntervalSeconds(5, 1) - 15.6) < 1e-9);
+                Check("the interval never drops below one second, however fast the rate",
+                      CoreSubliminal.NextIntervalSeconds(600, 0) >= 1.0 &&
+                      CoreSubliminal.NextIntervalSeconds(0, 0) >= 1.0);
+                var runStates = new List<bool>();
+                CoreSubliminal.RunStateChanged = running => runStates.Add(running);
+                CoreSubliminal.Start();
+                Check("Start arms the scheduler with no surface seeded and does not throw",
+                      CoreSubliminal.IsRunning);
+                CoreSubliminal.Stop();
+                Check("Stop disarms it", !CoreSubliminal.IsRunning);
+                Check("both transitions reached the head's run-state hook",
+                      runStates.Count == 2 && runStates[0] && !runStates[1],
+                      string.Join(",", runStates));
+                CoreSubliminal.RunStateChanged = null;
+                // The rest of this block edits the fallback settings, so snapshot them first -
+                // every later check in this runner reads the same instance.
+                var poolWas = CoreSettings.Current.SubliminalPool;
+                var freqWas = CoreSettings.Current.SubliminalFrequency;
+                var enabledWas = CoreSettings.Current.SubliminalEnabled;
+
+                // Every phrase in the fallback pool is off, so there is nothing to show and the
+                // scheduler must say so rather than hand the surface a null.
+                CoreSettings.Current.SubliminalPool = new Dictionary<string, bool> { ["x"] = false };
+                Check("PickPhrase returns null when nothing in the pool is enabled",
+                      CoreSubliminal.PickPhrase() is null);
+                CoreSettings.Current.SubliminalPool = new Dictionary<string, bool> { ["x"] = true };
+                Check("PickPhrase returns the one enabled phrase", CoreSubliminal.PickPhrase() == "x");
+                // Unseeded CoreSession answers false, so the toggle must persist the flag and leave
+                // the scheduler alone - a head with no engine is not running one.
+                CoreSubliminal.SetEnabled(true);
+                Check("SetEnabled writes the flag with no engine running",
+                      CoreSettings.Current.SubliminalEnabled);
+                Check("...and does NOT arm the scheduler behind a stopped engine",
+                      !CoreSubliminal.IsRunning);
+                CoreSubliminal.SetEnabled(false);
+
+                // THE assertion of the layer, and the only one a flag flip cannot fake: the timer
+                // must actually reach ShowProvider. Everything else here proves arithmetic and
+                // state; this proves the loop. 60 per minute arms in 1.0-1.3s, and the tick body
+                // runs in place because no head seeded CoreDispatch - so the wait is what carries
+                // it across, not a dispatcher.
+                CoreSettings.Current.SubliminalFrequency = 60;
+                CoreSettings.Current.SubliminalEnabled = true;
+                using (var shown = new System.Threading.ManualResetEventSlim())
+                {
+                    CoreSubliminal.ShowProvider = _ => shown.Set();
+                    CoreSubliminal.Start();
+                    Check("the scheduler actually fires a show, it does not merely flip a flag",
+                          shown.Wait(TimeSpan.FromSeconds(6)));
+                    CoreSubliminal.Stop();
+                    CoreSubliminal.ShowProvider = null;
+                }
+
+                CoreSettings.Current.SubliminalPool = poolWas;
+                CoreSettings.Current.SubliminalFrequency = freqWas;
+                CoreSettings.Current.SubliminalEnabled = enabledWas;
+
                 var finished = false;
                 CoreAudio.PlayOneShot("/nowhere.mp3", 1f, "smoke", onFinished: () => finished = true);
                 Check("CoreAudio.PlayOneShot fires onFinished at once with no audio", finished);

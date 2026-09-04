@@ -20,7 +20,6 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class SubliminalService : IDisposable
     {
-        private readonly DispatcherTimer _timer;
         private readonly Random _random = new();
 
         // KEEP-ALIVE windows, one per screen: a subliminal "show" swaps the text content and
@@ -66,7 +65,9 @@ namespace ConditioningControlPanel.Services
         // The whisper device itself is owned by AudioService — this is only the stop handle.
         private AudioPlaybackHandle? _audioHandle;
 
-        private bool _isRunning;
+        // One truth for "is the ambient scheduler armed", and it is Core's - SetEnabled can now
+        // start/stop it without passing through this class at all.
+        private bool _isRunning => CoreSubliminal.IsRunning;
         private bool _oneShotActive; // Allow one-shot display when service not running (remote control)
 
         // #1045 - the same generation scheme FlashService uses. A point-fired subliminal carries the
@@ -83,7 +84,7 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private int _subliminalCount;
 
-        public bool IsRunning => _isRunning;
+        public bool IsRunning => CoreSubliminal.IsRunning;
 
         /// <summary>
         /// Fired when a subliminal is displayed
@@ -101,34 +102,44 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning("SubliminalService: could not create {Path} - {Error}", _audioPath, ex.Message);
             }
-
-            _timer = new DispatcherTimer();
-            _timer.Tick += Timer_Tick;
         }
 
         /// <summary>
         /// Start the subliminal service
         /// </summary>
-        public void Start()
-        {
-            if (_isRunning) return;
-            
-            _isRunning = true;
-            ScheduleNext();
-            
-            App.Logger?.Information("SubliminalService started");
-
-            // EMI Desk (MOMENTS 4.B).
-            try { App.EmiDesk?.Fire("subliminalsStarted", null); } catch { }
-        }
+        public void Start() => CoreSubliminal.Start();
 
         /// <summary>
         /// Stop the subliminal service
         /// </summary>
         public void Stop()
         {
-            _isRunning = false;
-            _timer.Stop();
+            // Core disarms the schedule and calls OnRunStateChanged(false) back; the teardown also
+            // runs here directly so a Stop that Core treats as a no-op still clears our surfaces.
+            CoreSubliminal.Stop();
+            TearDownSurfaces();
+        }
+
+        /// <summary>
+        /// Core's run-state hook (seeded in App.xaml.cs). Everything the transition has to do to
+        /// THIS head lives here, because Core's SetEnabled can now flip the schedule without going
+        /// through Start()/Stop() at all - and a toggle that silenced the scheduler while leaving a
+        /// card up and the whisper playing would be a control lying about its own state.
+        /// </summary>
+        internal void OnRunStateChanged(bool running)
+        {
+            if (running)
+            {
+                // EMI Desk (MOMENTS 4.B).
+                try { App.EmiDesk?.Fire("subliminalsStarted", null); } catch { }
+                return;
+            }
+            TearDownSurfaces();
+        }
+
+        /// <summary>Idempotent: take every subliminal surface off screen and stop the whisper.</summary>
+        private void TearDownSurfaces()
+        {
             _visibleOneShotGen = null;
 
             // Blank + hide the keep-alive windows (don't close them — a Stop can land
@@ -156,8 +167,6 @@ namespace ConditioningControlPanel.Services
                 _layer.Clear();
 
             StopAudio();
-
-            App.Logger?.Information("SubliminalService stopped");
         }
 
         /// <summary>
@@ -225,48 +234,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void SetEnabled(bool on)
         {
-            var s = App.Settings?.Current;
-            if (s == null) return;
-
-            if (s.SubliminalEnabled != on)
-                s.SubliminalEnabled = on;
-
-            if (App.IsEngineRunning)
-            {
-                if (on && !_isRunning) Start();
-                else if (!on && _isRunning) Stop();
-            }
-
-            App.Settings?.Save();
-            App.Logger?.Information("Subliminals toggled: {Enabled}", on);
-        }
-
-        private void ScheduleNext()
-        {
-            if (!_isRunning || !App.Settings.Current.SubliminalEnabled) return;
-            
-            // Calculate interval based on frequency (messages per minute)
-            var freq = Math.Max(1, App.Settings.Current.SubliminalFrequency);
-            var baseInterval = 60.0 / freq; // seconds between messages
-            
-            // Add some randomness (±30%)
-            var variance = baseInterval * 0.3;
-            var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            interval = Math.Max(1, interval); // At least 1 second
-            
-            _timer.Interval = TimeSpan.FromSeconds(interval);
-            _timer.Start();
-        }
-
-        private void Timer_Tick(object? sender, EventArgs e)
-        {
-            _timer.Stop();
-
-            if (!_isRunning || !App.Settings.Current.SubliminalEnabled)
-                return;
-
-            FlashSubliminal();
-            ScheduleNext();
+            // Settings write, the IsEngineRunning gate, Start/Stop and the Save are all Core's now
+            // (CCP.Core/CoreSubliminal.cs), so the WPF checkbox, the feature popup and the Avalonia
+            // card share one authority instead of three copies of the same four lines.
+            CoreSubliminal.SetEnabled(on);
         }
 
         /// <summary>
@@ -274,18 +245,20 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void FlashSubliminal()
         {
+            var text = CoreSubliminal.PickPhrase();
+            if (text == null) return;
+            FlashPhrase(text);
+        }
+
+        /// <summary>
+        /// Draw and sound ONE already-chosen phrase. This is what Core's scheduler calls back into
+        /// through <see cref="CoreSubliminal.ShowProvider"/>; the phrase pick and the interval are
+        /// its side of the split, everything below here is the head's.
+        /// </summary>
+        internal void FlashPhrase(string text)
+        {
             if (!_isRunning) _oneShotActive = true; // Allow display from remote control
-            var pool = App.Settings.Current.SubliminalPool;
-            var activeTexts = pool.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
-            
-            if (activeTexts.Count == 0)
-            {
-                App.Logger?.Debug("No active subliminal texts");
-                return;
-            }
-            
-            var text = activeTexts[_random.Next(activeTexts.Count)];
-            
+
             // Check for linked audio
             string? audioPath = FindLinkedAudio(text);
             

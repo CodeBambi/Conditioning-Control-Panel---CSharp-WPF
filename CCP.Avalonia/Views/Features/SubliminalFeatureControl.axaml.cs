@@ -25,7 +25,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// sentinel: the face ships as a WPF <c>pack://</c> Resource and is not packed on this head,
     /// so offering it would name a font nothing can resolve.</para>
     ///
-    /// <para>Still head-side: SubliminalService (the flash loop) and the mod-aware feature art.</para>
+    /// <para>Still head-side: the flash SURFACE (the per-screen click-through window) and the
+    /// mod-aware feature art. The loop itself is not - the enable toggle, the interval and the
+    /// phrase pick are <see cref="CoreSubliminal"/>. Nothing on this head arms that scheduler
+    /// yet; see <see cref="ChkEnable_Changed"/> for exactly what is missing.</para>
     /// </summary>
     public partial class SubliminalFeatureControl : UserControl
     {
@@ -176,28 +179,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         }
 
         /// <summary>
-        /// WPF hands the whole toggle to <c>App.Subliminal.SetEnabled</c>, which is the single
-        /// authority. Its settings half - compare, write, save, log - is restored here verbatim;
-        /// only the idempotent Start/Stop it also does still needs the service.
+        /// The whole toggle, routed through the one authority - <see cref="CoreSubliminal.SetEnabled"/>,
+        /// which is where WPF's <c>SubliminalService.SetEnabled</c> now lives too. It writes the
+        /// flag, and while the engine is running it also arms or disarms the scheduler. The card
+        /// does not repeat any of that: two copies of "compare, write, gate, save" is exactly how
+        /// the heads drift apart.
+        ///
+        /// <para><b>What this actually does on THIS head today: it persists, and it does not arm.</b>
+        /// The scheduler is real and portable, but Core only starts it behind
+        /// <c>CoreSession.IsEngineRunning</c>, and this head seeds no
+        /// <c>IsEngineRunningProvider</c> (see <c>CCP.Avalonia/App.axaml.cs</c>) - so the gate
+        /// answers false and the toggle stops at the save. Two things have to arrive before a
+        /// subliminal appears here: that flag, and a <c>CoreSubliminal.ShowProvider</c> over a
+        /// click-through overlay in <c>CCP.Avalonia/Views/Overlays/</c>. Routing through the one
+        /// authority now is what makes both a seeding line rather than a rewrite.</para>
         /// </summary>
         private void ChkEnable_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            var s = CoreSettings.Current;
-            var on = ChkEnable.IsChecked ?? false;
-            if (s.SubliminalEnabled == on) return;
-            s.SubliminalEnabled = on;
-
-            // SetEnabled's gate, in its original position: between the write and the save.
-            if (CoreSession.IsEngineRunning)
-            {
-                // ponytail: the idempotent Start()/Stop() SetEnabled does here - SubliminalService
-                // (ConditioningControlPanel/Services/Subliminal/SubliminalService.cs), still in the
-                // WPF head. Route this whole handler back through it when it moves.
-            }
-
-            CoreSettings.Save();
-            Log.Information("Subliminals toggled: {Enabled}", on);
+            CoreSubliminal.SetEnabled(ChkEnable.IsChecked ?? false);
         }
 
         private void SliderPerMin_Changed(object? sender, RangeBaseValueChangedEventArgs e)
