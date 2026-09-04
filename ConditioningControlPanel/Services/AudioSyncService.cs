@@ -103,12 +103,12 @@ namespace ConditioningControlPanel.Services
 
             if (!VideoDownloader.IsLikelyVideoUrl(videoUrl))
             {
-                Log.Debug("AudioSyncService: URL doesn't look like a video: {Url}", videoUrl);
+                Log.Debug("AudioSyncService: URL doesn't look like a video: {Host}", Logging.UrlLog.Host(videoUrl));
                 ProcessingCompleted?.Invoke(this, EventArgs.Empty);
                 return;
             }
 
-            Log.Information("AudioSyncService: Video detected, starting processing: {Url}", videoUrl);
+            Log.Information("AudioSyncService: Video detected on {Host}, starting processing", Logging.UrlLog.Host(videoUrl));
 
             try
             {

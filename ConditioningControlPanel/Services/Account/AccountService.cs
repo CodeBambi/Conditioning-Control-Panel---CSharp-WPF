@@ -158,8 +158,10 @@ public static class AccountService
                     App.Discord.CustomDisplayName = lookupResult.DisplayName;
                 }
 
-                App.Logger?.Information("AccountService: Returning user found - {DisplayName} ({UnifiedId})",
-                    lookupResult.DisplayName, lookupResult.UnifiedId);
+                // Unified id only. The display name is the handle the user picked and is the
+                // single most identifying string we hold (logging policy: ids, counts, enums).
+                App.Logger?.Information("AccountService: Returning user found ({UnifiedId})",
+                    lookupResult.UnifiedId);
 
                 // Load profile and start sync
                 await App.ProfileSync?.LoadProfileAsync();
@@ -171,8 +173,8 @@ public static class AccountService
             // Step 4: Check for auto-link opportunity (same email as existing account)
             if (lookupResult.CanAutoLink && !string.IsNullOrEmpty(lookupResult.AutoLinkUnifiedId))
             {
-                App.Logger?.Information("AccountService: Auto-link opportunity found for {Provider} -> {DisplayName}",
-                    provider, lookupResult.AutoLinkDisplayName);
+                App.Logger?.Information("AccountService: Auto-link opportunity found for {Provider} -> {UnifiedId}",
+                    provider, lookupResult.AutoLinkUnifiedId);
 
                 // Auto-link the provider to existing account
                 var linkResult = await LinkProviderAsync(provider, accessToken, lookupResult.AutoLinkUnifiedId);
@@ -365,8 +367,9 @@ public static class AccountService
                     App.Discord.CustomDisplayName = authResponse.User.DisplayName;
                 }
 
-                App.Logger?.Information("AccountService: V2 auth complete - {DisplayName} ({UnifiedId}), OG={IsOg}",
-                    authResponse.User.DisplayName, authResponse.User.UnifiedId, authResponse.User.IsSeason0Og);
+                App.Logger?.Information("AccountService: V2 auth complete ({UnifiedId}), OG={IsOg}, named={HasName}",
+                    authResponse.User.UnifiedId, authResponse.User.IsSeason0Og,
+                    !string.IsNullOrWhiteSpace(authResponse.User.DisplayName));
 
                 // Start profile sync heartbeat
                 App.ProfileSync?.StartHeartbeat();
@@ -488,7 +491,8 @@ public static class AccountService
 
             if (!response.IsSuccessStatusCode)
             {
-                App.Logger?.Warning("AccountService: Lookup failed - {Status}: {Body}", response.StatusCode, json);
+                App.Logger?.Warning("AccountService: Lookup failed - {Status} (body {Bytes} bytes)",
+                    (int)response.StatusCode, json?.Length ?? 0);
                 return null;
             }
 
@@ -683,8 +687,8 @@ public static class AccountService
                         App.Discord.CustomDisplayName = result.DisplayName;
                     }
 
-                    App.Logger?.Information("AccountService: Registered new user {DisplayName} ({UnifiedId})",
-                        result.DisplayName, result.UnifiedId);
+                    App.Logger?.Information("AccountService: Registered new user ({UnifiedId})",
+                        result.UnifiedId);
 
                     nameSet = true;
 
@@ -720,8 +724,8 @@ public static class AccountService
                                 App.Discord.CustomDisplayName = trimmedName;
                             }
 
-                            App.Logger?.Information("AccountService: Claimed account {DisplayName} ({UnifiedId})",
-                                trimmedName, claimResponse.UnifiedId);
+                            App.Logger?.Information("AccountService: Claimed account ({UnifiedId})",
+                                claimResponse.UnifiedId);
 
                             nameSet = true;
 

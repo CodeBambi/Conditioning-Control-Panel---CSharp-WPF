@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
+using ConditioningControlPanel.Services.Logging;
 
 namespace ConditioningControlPanel.Services.Haptics
 {
@@ -73,7 +74,7 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             try
             {
-                App.Logger?.Information("Connecting to Lovense in {Mode} mode at {Url}", _mode, _baseUrl);
+                App.Logger?.Information("Connecting to Lovense in {Mode} mode at {Host}", _mode, UrlLog.Host(_baseUrl));
                 
                 string content;
                 if (_mode == LovenseConnectionMode.Lan)
@@ -90,7 +91,9 @@ namespace ConditioningControlPanel.Services.Haptics
                     content = await response.Content.ReadAsStringAsync();
                 }
 
-                App.Logger?.Information("Lovense response: {Content}", content);
+                // The GetToys body carries the toy nicknames the user typed and the LAN address
+                // of their phone. Shape only.
+                App.Logger?.Information("Lovense GetToys response ({Bytes} bytes)", content?.Length ?? 0);
                 using var doc = JsonDocument.Parse(content);
                 var root = doc.RootElement;
 
@@ -140,7 +143,8 @@ namespace ConditioningControlPanel.Services.Haptics
                     
                 ConnectedDevices.Add(displayName);
                 DeviceDiscovered?.Invoke(this, displayName);
-                App.Logger?.Information("Found toy: {Id} - {Name}", _toyId, displayName);
+                App.Logger?.Information("Found toy: {Id} ({Type}, battery {Battery}%, nicknamed={HasNick})",
+                    _toyId, toyType, battery, !string.IsNullOrEmpty(nickName));
             }
             if (ConnectedDevices.Count > 0) 
             { 
@@ -231,21 +235,21 @@ namespace ConditioningControlPanel.Services.Haptics
                     // Lovense Remote API requires timeSec parameter
                     var sec = Math.Max(1, durationMs / 1000);
                     var cmdJson = $"{{\"command\":\"Function\",\"action\":\"Vibrate:{i}\",\"timeSec\":{sec},\"apiVer\":1}}";
-                    App.Logger?.Information("Lovense sending: {Json}", cmdJson);
+                    App.Logger?.Information("Lovense sending Vibrate:{Level} for {Seconds}s (LAN)", i, sec);
                     var json = new StringContent(cmdJson, Encoding.UTF8, "application/json");
                     var response = await _client.PostAsync($"{_baseUrl}/command", json);
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    App.Logger?.Information("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
+                    App.Logger?.Information("Lovense response: {Status} ({Bytes} bytes)", (int)response.StatusCode, responseContent?.Length ?? 0);
                 }
                 else
                 {
                     // For Lovense Connect (Local mode), use simpler command without timeSec
                     // The device maintains vibration until next command
                     var url = $"{_baseUrl}/command?command=Vibrate&action=Vibrate&intensity={i}&toy={_toyId}";
-                    App.Logger?.Debug("Lovense sending GET: {Url} (level {Level})", url, i);
+                    App.Logger?.Debug("Lovense sending GET Vibrate to {Host} (level {Level})", UrlLog.Host(url), i);
                     var response = await _client.GetAsync(url);
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    App.Logger?.Debug("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
+                    App.Logger?.Debug("Lovense response: {Status} ({Bytes} bytes)", (int)response.StatusCode, responseContent?.Length ?? 0);
                 }
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Vibrate failed"); }
@@ -321,11 +325,11 @@ namespace ConditioningControlPanel.Services.Haptics
                 {
                     // Use standard Vibrate command with longer duration
                     var cmdJson = $"{{\"command\":\"Function\",\"action\":\"Vibrate:{levelToSend}\",\"timeSec\":{durationSec},\"apiVer\":1}}";
-                    App.Logger?.Information("Lovense sending: {Json}", cmdJson);
+                    App.Logger?.Information("Lovense sending Vibrate:{Level} for {Seconds}s (LAN pattern)", levelToSend, durationSec);
                     var json = new StringContent(cmdJson, Encoding.UTF8, "application/json");
                     var response = await _client.PostAsync($"{_baseUrl}/command", json);
                     var responseContent = await response.Content.ReadAsStringAsync();
-                    App.Logger?.Information("Lovense response: {Status} - {Content}", response.StatusCode, responseContent);
+                    App.Logger?.Information("Lovense response: {Status} ({Bytes} bytes)", (int)response.StatusCode, responseContent?.Length ?? 0);
                 }
                 else
                 {

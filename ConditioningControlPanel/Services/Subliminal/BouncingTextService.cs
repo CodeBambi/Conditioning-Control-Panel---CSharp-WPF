@@ -201,8 +201,10 @@ public class BouncingTextService : IDisposable
             if (App.Video.IsPlaying) OnVideoStartedPause(null, EventArgs.Empty);
         }
 
-        App.Logger?.Information("BouncingTextService started - Logos: {Count}, Text: {Text}, ColorMode: {Mode}",
-            _logos.Count, _logos[0].Text, settings.BouncingTextColorMode);
+        // The mantra is the user's own text on their own screen, but it is still content and
+        // logs get shared: count and length only.
+        App.Logger?.Information("BouncingTextService started - Logos: {Count}, TextChars: {Chars}, ColorMode: {Mode}",
+            _logos.Count, (_logos[0].Text ?? "").Length, settings.BouncingTextColorMode);
     }
 
     public void Stop()

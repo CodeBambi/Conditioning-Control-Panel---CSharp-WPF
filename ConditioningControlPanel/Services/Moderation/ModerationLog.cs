@@ -36,11 +36,13 @@ namespace ConditioningControlPanel.Services.Moderation
         public ModerationLog(ModerationSession session)
         {
             _session = session;
-            // App.UserDataPath is %APPDATA%/ConditioningControlPanel by convention.
-            // We cannot reference App here without a circular dependency at startup,
-            // so duplicate the path computation. Matches App.UserDataPath exactly.
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            _logDir = Path.Combine(appData, "ConditioningControlPanel", "logs");
+            // App.UserDataPath is %LOCALAPPDATA%/ConditioningControlPanel (and honours the
+            // CCP_USERDATA_DIR override). This used to hand-roll the path off
+            // SpecialFolder.ApplicationData - Roaming - which is NOT where the app keeps
+            // anything else, so moderation.log landed in a directory nothing reads and the
+            // bug reporter never picked it up. Any pre-existing Roaming file is left where it
+            // is; there is nothing in it worth migrating.
+            _logDir = Path.Combine(App.UserDataPath, "logs");
             _logPath = Path.Combine(_logDir, "moderation.log");
         }
 

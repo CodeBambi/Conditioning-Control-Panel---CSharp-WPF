@@ -2058,8 +2058,8 @@ namespace ConditioningControlPanel
 
                 App.Settings.Current.OfflineMode = true;
                 DisconnectNetworkServices();
-                App.Logger?.Information("Offline mode enabled with username '{Username}'",
-                    App.Settings.Current.OfflineUsername);
+                App.Logger?.Information("Offline mode enabled with a local username ({Chars} chars)",
+                    App.Settings.Current.OfflineUsername?.Length ?? 0);
             }
             else
             {

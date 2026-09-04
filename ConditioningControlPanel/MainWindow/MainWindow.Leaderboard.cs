@@ -922,7 +922,7 @@ namespace ConditioningControlPanel
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "Failed to open Discord profile for user {DiscordId}", discordId);
+                    App.Logger?.Warning(ex, "Failed to open Discord profile for a leaderboard entry");
                 }
             }
         }

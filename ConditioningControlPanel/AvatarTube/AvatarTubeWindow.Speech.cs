@@ -17,6 +17,7 @@ using System.Windows.Navigation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Logging;
 using ConditioningControlPanel.Services.Moderation;
 using XamlAnimatedGif;
 using ConditioningControlPanel.Helpers;
@@ -185,7 +186,8 @@ namespace ConditioningControlPanel
             }
 
             var (nextText, source, nextEmotionLineId, nextMood) = _speechQueue.Dequeue();
-            App.Logger?.Debug("Dequeued speech ({Source}): {Text}", source, nextText);
+            App.Logger?.Debug("Dequeued speech ({Source}, line={LineId}, {Chars} chars)",
+                source, nextEmotionLineId ?? "-", (nextText ?? "").Length);
 
             // Calculate how long since last speech ended (delay based on PREVIOUS speech properties)
             double timeSinceLastSpeech = (DateTime.Now - _lastSpeechEndTime).TotalSeconds;
@@ -242,14 +244,14 @@ namespace ConditioningControlPanel
             // Block if waiting for AI response
             if (_isWaitingForAi)
             {
-                App.Logger?.Debug("Giggle blocked - waiting for AI: {Text}", text);
+                App.Logger?.Debug("Giggle blocked - waiting for AI ({Chars} chars)", (text ?? "").Length);
                 return;
             }
 
             // Block (discard) preset phrases while AI bubble is visible - don't queue them
             if (_isShowingAiBubble)
             {
-                App.Logger?.Debug("Giggle discarded - AI bubble visible: {Text}", text);
+                App.Logger?.Debug("Giggle discarded - AI bubble visible ({Chars} chars)", (text ?? "").Length);
                 return;
             }
 
@@ -265,14 +267,14 @@ namespace ConditioningControlPanel
                 // Double-check AI bubble state on UI thread
                 if (_isShowingAiBubble)
                 {
-                    App.Logger?.Debug("Giggle discarded (UI thread) - AI bubble visible: {Text}", text);
+                    App.Logger?.Debug("Giggle discarded (UI thread) - AI bubble visible ({Chars} chars)", (text ?? "").Length);
                     return;
                 }
 
                 if (_isGiggling)
                 {
                     _speechQueue.Enqueue((text, SpeechSource.Preset, emotionLineId, mood));
-                    App.Logger?.Debug("Queued preset speech: {Text}", text);
+                    App.Logger?.Debug("Queued preset speech (line={LineId}, {Chars} chars)", emotionLineId ?? "-", (text ?? "").Length);
                     return;
                 }
 
@@ -354,7 +356,7 @@ namespace ConditioningControlPanel
                 ShowGiggle(text, playSound: playSound, source: SpeechSource.AI, aiGenerated: aiGenerated,
                     phraseAudioPath: phraseAudioPath, barkVoice: barkVoice, emotionLineId: emotionLineId, mood: mood);
 
-                App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
+                App.Logger?.Debug("Priority speech, queue cleared (line={LineId}, {Chars} chars)", emotionLineId ?? "-", (text ?? "").Length);
             });
         }
 
@@ -603,8 +605,8 @@ namespace ConditioningControlPanel
                 // Reset idle timer when speaking
                 ResetIdleTimer();
 
-                App.Logger?.Debug("Companion says ({Source}, {Chars} chars, {Duration:F1}s): {Text}",
-                    source, (text ?? "").Length, displayDuration, text);
+                App.Logger?.Debug("Companion says ({Source}, {Chars} chars, {Duration:F1}s)",
+                    source, (text ?? "").Length, displayDuration);
             };
 
             _speechLeadInTimer?.Stop();
@@ -1224,7 +1226,8 @@ namespace ConditioningControlPanel
                     };
                     hyperlink.RequestNavigate += SpeechBubbleHyperlink_RequestNavigate;
                     target.Add(hyperlink);
-                    App.Logger?.Information("Auto-linked video: '{Name}' -> {Url}", displayText, url);
+                    App.Logger?.Information("Auto-linked video on {Host} ({Chars} chars of link text)",
+                        UrlLog.Host(url), (displayText ?? "").Length);
                 }
                 catch
                 {
@@ -1271,7 +1274,7 @@ namespace ConditioningControlPanel
                 }
 
                 var url = e.Uri.AbsoluteUri;
-                App.Logger?.Information("Speech bubble link clicked - Raw URI: {Uri}, AbsoluteUri: {Url}", e.Uri, url);
+                App.Logger?.Information("Speech bubble link clicked: {Host}", UrlLog.Host(url));
 
                 // Find MainWindow - it might not be Application.Current.MainWindow if AvatarTube is detached
                 var mainWindow = _parentWindow as MainWindow
@@ -1286,7 +1289,7 @@ namespace ConditioningControlPanel
 
                 if (mainWindow?.NavigateToUrlInBrowser(url, autoPlayFullscreen: true) == true)
                 {
-                    App.Logger?.Information("Speech bubble link routed to embedded browser: {Url}", url);
+                    App.Logger?.Information("Speech bubble link routed to embedded browser: {Host}", UrlLog.Host(url));
                 }
                 else
                 {
@@ -1298,7 +1301,7 @@ namespace ConditioningControlPanel
                     // Fallback: open in external browser (HTTPS only for safety)
                     if (Uri.TryCreate(url, UriKind.Absolute, out var fallbackUri) && fallbackUri.Scheme == "https")
                     {
-                        App.Logger?.Warning("Embedded browser unavailable, opening externally: {Url}", url);
+                        App.Logger?.Warning("Embedded browser unavailable, opening externally: {Host}", UrlLog.Host(url));
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
                     }
                 }
@@ -1814,7 +1817,8 @@ namespace ConditioningControlPanel
                 // (alluring/dreamy/entrancing/teasing), pose count scaled to the line's audio length.
                 PlayEmotionForLine(System.IO.Path.GetFileNameWithoutExtension(filePath), filePath, text);
 
-                App.Logger?.Information("VoiceLine: Displayed '{Text}'", text);
+                App.Logger?.Information("VoiceLine: Displayed {Line} ({Chars} chars)",
+                    System.IO.Path.GetFileNameWithoutExtension(filePath), (text ?? "").Length);
 
                 // Calculate display duration based on text length
                 double baseDuration = 5.0;

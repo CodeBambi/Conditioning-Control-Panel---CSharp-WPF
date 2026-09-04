@@ -738,12 +738,14 @@ namespace ConditioningControlPanel.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Information("Achievement shared to community: {Name} - Response: {Response}", achievement.Name, responseText);
+                    App.Logger?.Information("Achievement shared to community: {Achievement} ({Status}, {Bytes} bytes)",
+                        achievement.Id, (int)response.StatusCode, responseText?.Length ?? 0);
                     return true;
                 }
                 else
                 {
-                    App.Logger?.Warning("Achievement share failed: {Status} - {Response}", response.StatusCode, responseText);
+                    App.Logger?.Warning("Achievement share failed: {Status} (body {Bytes} bytes)",
+                        (int)response.StatusCode, responseText?.Length ?? 0);
                     return false;
                 }
             }
@@ -802,12 +804,14 @@ namespace ConditioningControlPanel.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Information("Level up shared to community: Level {Level} - Response: {Response}", level, responseText);
+                    App.Logger?.Information("Level up shared to community: Level {Level} ({Status}, {Bytes} bytes)",
+                        level, (int)response.StatusCode, responseText?.Length ?? 0);
                     return true;
                 }
                 else
                 {
-                    App.Logger?.Warning("Level up share failed: {Status} - {Response}", response.StatusCode, responseText);
+                    App.Logger?.Warning("Level up share failed: {Status} (body {Bytes} bytes)",
+                        (int)response.StatusCode, responseText?.Length ?? 0);
                     return false;
                 }
             }
@@ -855,7 +859,7 @@ namespace ConditioningControlPanel.Services
                 _tokenStorage.StoreCachedState(cachedState);
             }
 
-            App.Logger?.Information("Custom display name set to: {DisplayName} (claimed: {Claimed})", CustomDisplayName, claimExisting);
+            App.Logger?.Information("Custom display name set ({Chars} chars, claimed: {Claimed})", CustomDisplayName?.Length ?? 0, claimExisting);
             return (true, null, false);
         }
 
@@ -982,7 +986,7 @@ namespace ConditioningControlPanel.Services
                             cachedState.CustomDisplayName = CustomDisplayName;
                             _tokenStorage.StoreCachedState(cachedState);
                         }
-                        App.Logger?.Information("Loaded display name from server: {Name}", CustomDisplayName);
+                        App.Logger?.Information("Loaded display name from server ({Chars} chars)", CustomDisplayName?.Length ?? 0);
                         return;
                     }
                 }
@@ -998,7 +1002,7 @@ namespace ConditioningControlPanel.Services
                         cachedState.CustomDisplayName = CustomDisplayName;
                         _tokenStorage.StoreCachedState(cachedState);
                     }
-                    App.Logger?.Information("Adopted display name from Patreon: {Name}", CustomDisplayName);
+                    App.Logger?.Information("Adopted display name from Patreon ({Chars} chars)", CustomDisplayName?.Length ?? 0);
                 }
             }
             catch (Exception ex)

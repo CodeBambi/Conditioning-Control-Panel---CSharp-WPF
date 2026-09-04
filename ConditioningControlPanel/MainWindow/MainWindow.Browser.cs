@@ -18,6 +18,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ConditioningControlPanel.Services.Logging;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using NAudio.Wave;
 using ConditioningControlPanel.Localization;
@@ -136,8 +137,8 @@ namespace ConditioningControlPanel
                         var hapticsConnected = App.Haptics?.IsConnected == true;
                         var isHypnotube = url.Contains("hypnotube", StringComparison.OrdinalIgnoreCase);
 
-                        App.Logger?.Information("AudioSync check: Enabled={Enabled}, HapticsConnected={Connected}, IsHypnotube={IsHT}, URL={Url}",
-                            audioSyncEnabled, hapticsConnected, isHypnotube, url);
+                        App.Logger?.Information("AudioSync check: Enabled={Enabled}, HapticsConnected={Connected}, IsHypnotube={IsHT}, Host={Host}",
+                            audioSyncEnabled, hapticsConnected, isHypnotube, UrlLog.Host(url));
 
                         if (audioSyncEnabled && hapticsConnected && isHypnotube)
                         {
@@ -449,7 +450,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            App.Logger?.Warning("Browser never finished initializing - opening externally: {Url}", url);
+            App.Logger?.Warning("Browser never finished initializing - opening externally: {Host}", UrlLog.Host(url));
             OpenUrlExternallyAfterBrowserFailure(url);
         }
 
@@ -462,12 +463,12 @@ namespace ConditioningControlPanel
             try
             {
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return;
-                App.Logger?.Warning("Embedded browser init failed, opening externally: {Url}", url);
+                App.Logger?.Warning("Embedded browser init failed, opening externally: {Host}", UrlLog.Host(url));
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to open URL externally: {Url}", url);
+                App.Logger?.Warning(ex, "Failed to open URL externally: {Host}", UrlLog.Host(url));
             }
         }
 
@@ -630,7 +631,7 @@ namespace ConditioningControlPanel
             // Block navigation in offline mode.
             if (App.Settings?.Current?.OfflineMode == true)
             {
-                App.Logger?.Debug("Browser navigation blocked in offline mode: {Url}", url);
+                App.Logger?.Debug("Browser navigation blocked in offline mode: {Host}", UrlLog.Host(url));
                 if (userInitiated) NotifyBrowserBlockedOffline();
                 return false;
             }
@@ -656,8 +657,8 @@ namespace ConditioningControlPanel
                 }
                 if (_browserInitialized)
                 {
-                    App.Logger?.Warning("Browser flagged ready but is not usable (service init={Init}, core={HasCore}) - re-initializing for {Url}",
-                        _browser?.IsInitialized == true, _browser?.WebView?.CoreWebView2 != null, url);
+                    App.Logger?.Warning("Browser flagged ready but is not usable (service init={Init}, core={HasCore}) - re-initializing for {Host}",
+                        _browser?.IsInitialized == true, _browser?.WebView?.CoreWebView2 != null, UrlLog.Host(url));
                     _browserInitialized = false; // let InitializeBrowserAsync tear down and rebuild
                 }
                 _ = InitAndNavigateAsync(url, autoPlayFullscreen);
@@ -666,7 +667,7 @@ namespace ConditioningControlPanel
 
             if (_browser == null)
             {
-                App.Logger?.Warning("Browser not available for navigation: {Url}", url);
+                App.Logger?.Warning("Browser not available for navigation: {Host}", UrlLog.Host(url));
                 return false;
             }
 
@@ -724,7 +725,7 @@ namespace ConditioningControlPanel
                 }
                 else if (autoPlayFullscreen)
                 {
-                    App.Logger?.Warning("Auto-play/fullscreen requested but CoreWebView2 is null - takeover skipped: {Url}", url);
+                    App.Logger?.Warning("Auto-play/fullscreen requested but CoreWebView2 is null - takeover skipped: {Host}", UrlLog.Host(url));
                 }
 
                 // Navigate. A dropped Navigate must surface as failure: reporting success here is
@@ -735,18 +736,18 @@ namespace ConditioningControlPanel
                     if (navCompletedHandler != null && _browser.WebView?.CoreWebView2 != null)
                         _browser.WebView.CoreWebView2.NavigationCompleted -= navCompletedHandler;
 
-                    App.Logger?.Warning("Speech link navigation dropped by browser service: {Url}", url);
+                    App.Logger?.Warning("Speech link navigation dropped by browser service: {Host}", UrlLog.Host(url));
                     return false;
                 }
 
-                App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, AutoPlay: {AutoPlay})",
-                    url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
+                App.Logger?.Information("Speech link navigated to {Host} (Site: {Site}, AutoPlay: {AutoPlay})",
+                    UrlLog.Host(url), lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
 
                 return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Browser navigation failed for URL: {Url}", url);
+                App.Logger?.Error(ex, "Browser navigation failed for host: {Host}", UrlLog.Host(url));
                 return false;
             }
         }
@@ -983,11 +984,12 @@ namespace ConditioningControlPanel
                 // Log audio sync messages at Information level for debugging
                 if (message.Contains("audioSync"))
                 {
-                    App.Logger?.Information("AudioSync message received: {Message}", message);
+                    // Page messages carry the page title and video URL. Shape only.
+                    App.Logger?.Information("AudioSync message received ({Bytes} bytes)", message?.Length ?? 0);
                 }
                 else
                 {
-                    App.Logger?.Debug("Browser web message received: {Message}", message);
+                    App.Logger?.Debug("Browser web message received ({Bytes} bytes)", message?.Length ?? 0);
                 }
 
                 // Force-exit our WPF "forced fullscreen" surface — sent by the
@@ -1120,7 +1122,7 @@ namespace ConditioningControlPanel
                 if (urlMatch.Success)
                 {
                     var videoUrl = urlMatch.Groups[1].Value;
-                    App.Logger?.Information("AudioSync: Starting processing for video URL: {Url}", videoUrl);
+                    App.Logger?.Information("AudioSync: Starting processing for video on {Host}", UrlLog.Host(videoUrl));
 
                     // Wire up progress events
                     void OnProgress(object? sender, Services.Audio.ChunkProgressEventArgs e)
@@ -1593,7 +1595,7 @@ namespace ConditioningControlPanel
                         UseShellExecute = false
                     };
                     System.Diagnostics.Process.Start(startInfo);
-                    App.Logger?.Information("Opened Discord profile for user: {DiscordId}", discordId);
+                    App.Logger?.Information("Opened Discord profile for a leaderboard entry");
                 }
                 catch (Exception ex)
                 {
@@ -2413,7 +2415,7 @@ namespace ConditioningControlPanel
                             }
                             catch (Exception ex)
                             {
-                                App.Logger?.Warning(ex, "Failed to load profile avatar from {Url}", avatarUrl);
+                                App.Logger?.Warning(ex, "Failed to load profile avatar from {Host}", UrlLog.Host(avatarUrl));
                                 DiscordTab.ProfileViewerAvatar.ImageSource = null;
                                 SetProfilePictureLoad(ProfilePictureLoad.None);
                             }
@@ -3123,7 +3125,7 @@ namespace ConditioningControlPanel
                 var isBambiCloud = SettingsTab.RbBambiCloud?.IsChecked == true;
                 var url = isBambiCloud ? "https://bambicloud.com/" : "https://hypnotube.com/";
                 _browser.Navigate(url);
-                App.Logger?.Information("Browser navigated to current site home: {Url}", url);
+                App.Logger?.Information("Browser navigated to current site home: {Host}", UrlLog.Host(url));
             }
             catch (Exception ex)
             {
