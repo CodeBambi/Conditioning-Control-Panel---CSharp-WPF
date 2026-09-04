@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -642,7 +643,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// bottom right on the main window's monitor.
         /// </summary>
         // ponytail: needs EmiState (Services/EmiDesk/EmiState.cs) for the saved rect and the
-        // monitor name, which is not in Core. Until it is she is parked by default on every summon,
+        // monitor name. It is NOT in Core and it is NOT pure, but it is two seam swaps away and
+        // nothing else: App.UserDataPath -> CorePaths on line 231, and the 500 ms debounce's
+        // Application.Current.Dispatcher / DispatcherTimer -> CoreDispatch. Every other line of its
+        // 680 is Newtonsoft on a POCO. Until that lands she is parked by default on every summon,
         // which is what a first run does anyway. The WIDTH half of the WPF body is ported: it lives
         // in the setting, not in EmiState, and re-reading it here is what puts a change made while
         // she was away - the shrink offer, the settings slider - on her the next time she comes out.
@@ -670,16 +674,55 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                                       (int)Math.Round(bodyTopPx - OverlayPad * s));
         }
 
-        /// <summary>Bottom right of the monitor she is on, with a comfortable margin.</summary>
-        // ponytail: WPF picked the monitor from App.MainWindowRef's HWND. No App shell on this head
-        // yet, so it is her own screen, then the primary.
+        /// <summary>
+        /// The window the app is showing right now, or null. WPF read the monitor off
+        /// <c>App.MainWindowRef</c>'s HWND; the desktop lifetime's <see cref="Window"/> is the same
+        /// thing on this head, and asking the lifetime rather than naming a shell type keeps this
+        /// true whichever window the app has up (the shell, the first-run wizard, none at all).
+        ///
+        /// <para>Null on the headless <c>--render-view</c> path, which has no desktop lifetime -
+        /// that is the branch the render exercises, and it falls through to her own screen.</para>
+        /// </summary>
+        private static Window? AppMainWindow
+        {
+            get
+            {
+                try
+                {
+                    return (Application.Current?.ApplicationLifetime
+                        as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "[EmiDesk] main-window lookup failed");
+                    return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Bottom right of the monitor THE APP is on, with a comfortable margin - which is what the
+        /// name says and what WPF did. She has no meaningful position of her own on a first summon,
+        /// so parking her on her own screen put her on the primary monitor while the app sat on the
+        /// second one, and the reader had to go find her.
+        /// </summary>
         public void ParkBottomRightOfMain()
         {
             try
             {
                 var screens = Screens;
                 if (screens is null || screens.ScreenCount == 0) return;
-                var work = (screens.ScreenFromWindow(this) ?? screens.Primary)?.WorkingArea;
+                Screen? on = null;
+                var main = AppMainWindow;
+                // Its own try: a window that has not been shown yet has no platform impl to ask,
+                // and "the app has not got a monitor yet" is her own screen's cue, not an error.
+                if (main is not null)
+                {
+                    try { on = screens.ScreenFromWindow(main); }
+                    catch (Exception ex) { Log.Debug(ex, "[EmiDesk] main-window screen probe failed"); }
+                }
+
+                var work = (on ?? screens.ScreenFromWindow(this) ?? screens.Primary)?.WorkingArea;
                 if (work is null) return;
                 var wa = work.Value;
 
@@ -722,8 +765,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
         /// <summary>Persist where she is and how big, in physical pixels plus the monitor's name.</summary>
-        // ponytail: needs EmiState (Services/EmiDesk/EmiState.cs), which is not in Core. The
-        // geometry it would persist is BodyScreenRect plus Screens.ScreenFromPoint(...).DisplayName.
+        // ponytail: needs EmiState (Services/EmiDesk/EmiState.cs) - see RestorePlacement above for
+        // the exact two seam swaps that move it. The geometry it would persist is BodyScreenRect
+        // plus Screens.ScreenFromPoint(...).DisplayName.
         public void SavePlacement()
         {
         }
@@ -845,7 +889,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>True when something is on screen that an idle beat must not interrupt.</summary>
         private bool Busy()
         {
-            if (_transiting || InputLocked) return true;
+            // ChainLive is the WPF gate's `_player.IsLive` and is constant false on this head. It is
+            // in the expression anyway: this is the one place that decides whether an idle beat may
+            // interrupt her, and a gate that has to be REMEMBERED when the chain player lands is a
+            // gate that will be forgotten.
+            if (_transiting || ChainLive || InputLocked) return true;
             bool glass = false;
             try { OnGlassLiveQuery(ref glass); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] glass-live seam threw"); }
@@ -857,6 +905,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // SwayCentreMinMs / SwayCentreMaxMs (Services/EmiDesk/), neither in Core. The two timers
         // themselves port straight across once those numbers do - the blink clock re-rolls its
         // jitter every tick so the cadence is 5200 +/- 600 ms and never a metronome.
+        //
+        // AUDITED 2026-09-04 rather than repeated, because "neither in Core" said nothing about how
+        // far away either one is, and they are close. EmiAlive.cs is 428 lines whose ONLY using is
+        // System, and its whole head coupling is two signatures - GazeTarget and WithinApproach
+        // take System.Windows.Point / Rect - so it is one Core geometry type away, the same single
+        // blocker EmiRingLayout has. EmiChains.cs is 654 lines whose only head type is the
+        // DispatcherTimer inside Player (its file probing is AppContext.BaseDirectory, which Core
+        // already uses in EmiProps), so it is ONE seam swap: a System.Threading.Timer ticking
+        // through CoreDispatch.Post. Neither is a re-derivation candidate - inlining these numbers
+        // here would be a second copy of a table EmiAlive's own header forbids retuning outside the
+        // plan, and it would still drive a PlayChain that no-ops and a SetPose with no art to swap.
         public void RestartIdleBeats()
         {
         }
@@ -2489,7 +2548,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs EmiSfx (Services/EmiDesk/EmiSfx.cs) - the pat sound.</summary>
         private void PlayPatSfx() { }
 
-        /// <summary>ponytail: needs App.EmiDesk.Dismiss() - the hover x sends her away.</summary>
+        /// <summary>
+        /// ponytail: needs App.EmiDesk.Dismiss() - the hover x sends her away.
+        ///
+        /// <para>REFUSED as a view-local port, and the reason is written here so the next pass does
+        /// not re-open it. <c>RunDismiss</c> IS on this head (the FX region above), so the outro
+        /// itself could run from here - but that is the SMALLEST half of what the x does.
+        /// <c>EmiDeskService.Dismiss</c> also bumps <c>_summonGen</c> so a summon parked in a
+        /// nested pump cannot put her straight back, reconciles <c>IsOut</c> and raises
+        /// <c>OutChanged</c>, cancels the summon moment and the empty-library beat, stops the
+        /// nudges, and fires <c>dismissed</c> with the minutes she was out. A view-local dismissal
+        /// would take her off the screen while every one of those still believed she was on it -
+        /// a second, divergent copy of a service-owned behaviour, and the flag desync that
+        /// service's own code logs a warning about. It lands with EmiDeskService and nowhere
+        /// else.</para>
+        /// </summary>
         private void Dismiss() { }
 
         /// <summary>ponytail: needs App.EmiDesk.ResetOnboarding() - the QA gesture replay.</summary>

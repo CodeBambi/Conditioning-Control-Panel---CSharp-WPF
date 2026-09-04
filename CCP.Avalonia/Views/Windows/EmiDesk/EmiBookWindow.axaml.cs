@@ -589,10 +589,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         /// <summary>
         /// ponytail: needs EmiBookDemos / EmiDemoPainter / EmiPixelCanvas (WPF head,
-        /// Services/EmiDesk/), wired when they move to Core. The original owns ONE 30 fps
-        /// DispatcherTimer driving whichever painter the current card holds; with no painter on
-        /// this head there is nothing for a clock to drive, so the stage gets the one placeholder
-        /// still frame <see cref="PaintStill"/> draws and no timer is created at all.
+        /// Services/EmiDesk/), wired when they move to Core.
+        ///
+        /// <para>AUDITED 2026-09-04, and the blocker is THREE MEMBERS, not seven files.
+        /// EmiBookDemos.cs and its six partials (1,879 lines) name no head type at all, and
+        /// EmiPixelCanvas is a <c>uint[]</c> buffer with Clear / Px / Rect / RectA / Line and the
+        /// 200-line EmiPix helper on top of it - all pure. Its whole head coupling is the
+        /// <c>WriteableBitmap</c> field, the <c>Source</c> property and <c>Commit()</c>'s
+        /// <c>WritePixels(Int32Rect ...)</c>. Leave the buffer in Core and let each head wrap it in
+        /// its own bitmap - this window already builds an Avalonia WriteableBitmap and blows it up
+        /// in <see cref="PaintStill"/>, so the wrapper is written.</para>
+        ///
+        /// <para>The original owns ONE 30 fps DispatcherTimer driving whichever painter the current
+        /// card holds; with no painter on this head there is nothing for a clock to drive, so the
+        /// stage gets the one placeholder still frame <see cref="PaintStill"/> draws and no timer
+        /// is created at all.</para>
         /// </summary>
         private void StartClock()
         {
@@ -929,7 +940,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     ToolTip.SetTip(chip, card.Title);
 
                     // ponytail: needs EmiBookGlyphs.For (WPF head; 16-cell glyphs blown up 2x with
-                    // nearest neighbour), wired when it moves to Core. With no glyph the original's
+                    // nearest neighbour). AUDITED 2026-09-04: that file does NOT move whole and
+                    // should not be asked to. Its 26 painters and the Disc / PlayHead / DownHead
+                    // primitives are pure and belong in Core beside the deck; For() and Build()
+                    // return System.Windows.Media.ImageSource and are the head's half by nature -
+                    // so this splits the same way EmiPixelCanvas does (see StartClock above), and
+                    // the two are one job. With no glyph the original's
                     // OWN fallback runs - a card with no glyph still gets a chip, because skipping
                     // it would silently drop a page out of the only navigation that names its
                     // destinations.
@@ -993,7 +1009,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <para>ponytail: the OWNER is here now, so this is one member away. What is missing is
         /// <c>EmiDeskWindow.SpeakLine</c> and the <c>LineDraw</c> record, and those are blocked on
         /// <c>EmiLineEngine</c> + <c>EmiChains.Player</c>
-        /// (ConditioningControlPanel/Services/EmiDesk/): the widget's <c>Say</c> and
+        /// (ConditioningControlPanel/Services/EmiDesk/). Of those two, AUDITED 2026-09-04, only
+        /// EmiChains is close: its whole head coupling is Player's DispatcherTimer, one seam swap.
+        /// EmiLineEngine reads App.Settings and calls App.EmiDesk.AskSituationOk(), which its own
+        /// header says do not exist without the shell - so the margin line is behind the shell, not
+        /// behind a move. Meanwhile the widget's <c>Say</c> and
         /// <c>PlayChain</c> are still no-ops on this head, so a line handed over would be swallowed
         /// rather than spoken. Priority 2, keyed "book.margin.&lt;id&gt;", face from the card - all
         /// of that is data this stub already carries, so only the delivery is missing.</para>
@@ -1208,6 +1228,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// ponytail: needs EmiBookCards and the six EmiBookDeck.* partials (WPF head,
         /// Services/EmiDesk/), wired when they move to Core - they are pure data and pure
         /// localization, so nothing but the move is in the way.
+        ///
+        /// <para>RE-AUDITED 2026-09-04 with the comments stripped, because a name-scan of those
+        /// seven files hits App.GetAllScreensCached, MainWindow.Lab.cs and LockdownService: every
+        /// one of those is PROSE inside the card copy's own citations. Strip <c>//</c> and
+        /// <c>///</c> lines and the head-name count over all 1,165 lines is ZERO; the only call
+        /// they make is Localization.Loc.Get, which is already in Core. Confirmed PURE - a git mv,
+        /// and still the largest single win left in the book.</para>
         ///
         /// <para>Six of the shipped cards, copied verbatim including their real key stems, so every
         /// string on screen is the shipped English or the reader's own language rather than a
