@@ -368,6 +368,87 @@ namespace ConditioningControlPanel
                     case CoreSecrets.AuthToken: Services.SecureAuthTokenStore.Store(value); break;
                 }
             };
+            SeedTutorialSeam();
+        }
+
+        /// <summary>
+        /// The tutorial seam (CCP.Core/CoreTutorial.cs). <see cref="Tutorial"/> is built far later,
+        /// in OnStartup, so every provider reads it lazily - unseeded and pre-startup both answer
+        /// "no tour", which is the truth.
+        ///
+        /// <para><b>Start goes through MainWindow, not through the service.</b>
+        /// <c>Tutorial.Start(type)</c> alone would set IsActive, fire TutorialStarted and advance a
+        /// step list with NO overlay on screen, no tab callbacks configured and no narrator
+        /// attached - a tour that is running and invisible. <c>MainWindow.StartTutorial</c> is the
+        /// entry point that does all four (Settings.cs:538), and it is also idempotent: a second
+        /// call while an overlay is up returns without touching the service.</para>
+        ///
+        /// <para>The step projection is a fresh snapshot per read by design - see
+        /// <c>CoreTutorial.Step</c>. The follow-up actions are pre-bound to their own step, so a
+        /// Core-side card can invoke them without ever naming <c>TutorialStep</c>.</para>
+        /// </summary>
+        private static void SeedTutorialSeam()
+        {
+            CoreTutorial.IsActiveProvider = () => Tutorial?.IsActive == true;
+            CoreTutorial.CurrentStepProvider = () => ProjectTutorialStep(Tutorial?.CurrentStep);
+            CoreTutorial.CurrentStepIndexProvider = () => Tutorial?.CurrentStepIndex ?? 0;
+            CoreTutorial.TotalStepsProvider = () => Tutorial?.TotalSteps ?? 0;
+            CoreTutorial.NextAction = () => Tutorial?.Next();
+            CoreTutorial.PreviousAction = () => Tutorial?.Previous();
+            CoreTutorial.SkipAction = () => Tutorial?.Skip();
+            CoreTutorial.StartAction = name =>
+            {
+                if (!Enum.TryParse<TutorialType>(name, ignoreCase: true, out var type))
+                {
+                    Logger?.Warning("CoreTutorial.Start: no tour named {Tour}", name);
+                    return;
+                }
+                (Current?.MainWindow as MainWindow)?.StartTutorial(type);
+            };
+        }
+
+        /// <summary>The head's step -> the seam's snapshot. Null in, null out.</summary>
+        private static CoreTutorial.Step? ProjectTutorialStep(Models.TutorialStep? s)
+        {
+            if (s == null) return null;
+            return new CoreTutorial.Step
+            {
+                Id = s.Id,
+                Title = s.Title,
+                Description = s.Description,
+                Icon = s.Icon,
+                TargetElementName = s.TargetElementName,
+                TargetWindowTypeName = s.TargetWindowTypeName,
+                // Named, not cast: the two enums happen to agree ordinal for ordinal today, and a
+                // cast would keep compiling - and start placing cards on the wrong side - the day
+                // one of them gains a value in the middle.
+                TextPosition = s.TextPosition switch
+                {
+                    Models.TutorialStepPosition.Top    => CoreTutorial.StepPosition.Top,
+                    Models.TutorialStepPosition.Left   => CoreTutorial.StepPosition.Left,
+                    Models.TutorialStepPosition.Right  => CoreTutorial.StepPosition.Right,
+                    Models.TutorialStepPosition.Center => CoreTutorial.StepPosition.Center,
+                    _ => CoreTutorial.StepPosition.Bottom,
+                },
+                Advance = s.AdvanceTrigger switch
+                {
+                    Models.TutorialAdvanceTrigger.OnButtonClick     => CoreTutorial.AdvanceTrigger.OnButtonClick,
+                    Models.TutorialAdvanceTrigger.OnTextEquals      => CoreTutorial.AdvanceTrigger.OnTextEquals,
+                    Models.TutorialAdvanceTrigger.OnSelectionEquals => CoreTutorial.AdvanceTrigger.OnSelectionEquals,
+                    Models.TutorialAdvanceTrigger.OnSliderAtLeast   => CoreTutorial.AdvanceTrigger.OnSliderAtLeast,
+                    Models.TutorialAdvanceTrigger.OnEvent           => CoreTutorial.AdvanceTrigger.OnEvent,
+                    _ => CoreTutorial.AdvanceTrigger.Manual,
+                },
+                AllowManualSkip = s.AllowManualSkip,
+                IsFollowUpCard = s.IsFollowUpCard,
+                BlockBackgroundClicks = s.BlockBackgroundClicks,
+                FollowUp1Text = s.FollowUpButton1Text,
+                FollowUp2Text = s.FollowUpButton2Text,
+                FollowUp3Text = s.FollowUpButton3Text,
+                FollowUp1 = s.FollowUpAction1 == null ? null : () => s.FollowUpAction1(s),
+                FollowUp2 = s.FollowUpAction2 == null ? null : () => s.FollowUpAction2(s),
+                FollowUp3 = s.FollowUpAction3 == null ? null : () => s.FollowUpAction3(s),
+            };
         }
 
         #region Remote media handoff (Phase 1.5)
@@ -2114,6 +2195,23 @@ namespace ConditioningControlPanel
             ProgramRewards = new Services.Program.ProgramRewardService();
             SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
+            // Forward the tour's two outward events onto the seam so a Core-side overlay subscribes
+            // once, to Core, on every head. Synchronously and on the same thread the service raised
+            // on: the overlay must have the new spotlight in place before the user's next click.
+            // Both lambdas swallow - TutorialService invokes StepChanged unguarded, so a throwing
+            // Core subscriber would otherwise take a WPF tour down mid-step.
+            Tutorial.StepChanged += (s, step) =>
+            {
+                try { CoreTutorial.RaiseStepChanged(s, ProjectTutorialStep(step)!); }
+                catch { /* a tour never blocks on UI quirks */ }
+            };
+            // TutorialFinished, not TutorialCompleted: the pair fire together, and only this one
+            // carries whether the tour was walked to the end or abandoned.
+            Tutorial.TutorialFinished += (s, e) =>
+            {
+                try { CoreTutorial.RaiseFinished(s, e.Completed); }
+                catch { /* see above */ }
+            };
 
             // Award daily streak bonus now that SkillTree is available
             // (AchievementService runs UpdateDailyStreak in its constructor before SkillTree exists)
