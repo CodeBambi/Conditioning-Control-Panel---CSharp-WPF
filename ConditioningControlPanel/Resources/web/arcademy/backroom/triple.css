@@ -1,0 +1,202 @@
+/* ============================================================================
+ * backroom/triple.css - TRIPLE TRIGGER, the cabinet with your own words in it.
+ *
+ * Lazy-linked by backroom/triple.js on mount, the same way backroom.css is
+ * linked by the floor. Every colour is a var() off the room's own tokens with
+ * a shell token behind it, so the cabinet paints correctly on the felt AND on
+ * a bare fixture bench with no .bk-room around it.
+ *
+ * TYPE: --disp for the reel words, --mono for numbers and the odds sheet. No
+ * serif anywhere (house camera law), no font host (trap 2).
+ *
+ * THE CELL HEIGHT IS A CUSTOM PROPERTY AND THAT IS LOAD-BEARING. The module
+ * parks a reel by writing `translateY(calc(var(--bk-tt-cell) * -n))`, so it
+ * never measures a pixel and never has to know what the diet did to the
+ * layout. Change the height here and the reels still land on the payline.
+ *
+ * MOTION: the roll is a JS transform loop, gated in the module, because the
+ * global freeze at the bottom of styles.css cannot reach a rAF (trap 92). What
+ * this sheet owns is the LOOK of the window, and the still-mode crossfade is
+ * an opacity CLASS the module times rather than a transition the freeze would
+ * flatten (the same trick kit/loomwheel.js lands its wheel with).
+ * ==========================================================================*/
+
+.bk-tt {
+  --bk-tt-cell: 54px;
+  --bk-tt-gold: var(--bk-brass, var(--gold));
+  --bk-tt-neon: var(--bk-neon, var(--pink));
+  --bk-tt-glass: color-mix(in srgb, var(--panel, #252542), black 42%);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: var(--body);
+  color: var(--ink);
+}
+
+/* ---------------------------------- head --------------------------------- */
+.bk-tt-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bk-tt-title {
+  margin: 0; font-family: var(--disp); font-size: 17px; letter-spacing: .11em;
+  font-weight: 400; color: var(--bk-tt-gold);
+}
+.bk-tt-sub { font-size: 12px; color: var(--ink-faint); }
+.bk-tt-spacer { flex: 1 1 auto; }
+.bk-tt-back {
+  border: 1px solid color-mix(in srgb, var(--bk-tt-gold), transparent 58%);
+  background: transparent; color: var(--ink-dim); cursor: pointer;
+  border-radius: var(--radius, 8px); padding: 6px 12px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+}
+.bk-tt-back:hover { color: var(--ink); border-color: var(--bk-tt-gold); }
+
+/* The cabinet on the left, the odds sheet on the right. One column the moment
+ * the room is narrower than a laptop, because the sheet is reading matter and
+ * reading matter under the machine beats reading matter squeezed beside it. */
+.bk-tt-stage { display: grid; grid-template-columns: minmax(0, 1fr) 262px; gap: 14px; align-items: start; }
+@media (max-width: 760px) { .bk-tt-stage { grid-template-columns: minmax(0, 1fr); } }
+
+/* -------------------------------- the cabinet ---------------------------- */
+.bk-tt-cab {
+  position: relative;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px; border-radius: var(--radius, 8px);
+  border: 3px solid color-mix(in srgb, var(--bk-tt-neon), black 42%);
+  background: var(--bk-plate, var(--panel, #252542));
+  box-shadow: inset 0 0 34px #000a;
+}
+
+/* THE WINDOW. Three cells tall with the payline in the middle, and the strips
+ * clipped to it: the reel is a column of words the machine drags past a slot,
+ * which is the one bit of a slot machine that has to look right. */
+.bk-tt-window { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bk-tt-reel {
+  position: relative; overflow: hidden;
+  height: calc(var(--bk-tt-cell) * 3);
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--bk-tt-gold), transparent 68%);
+  background: var(--bk-tt-glass);
+}
+/* The glass: dark at the top and the bottom so the words that are not on the
+ * payline read as being behind something. */
+.bk-tt-reel::before {
+  content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(180deg, #000c, transparent 30%, transparent 70%, #000c);
+}
+/* The payline itself, two brass rules across the middle cell. */
+.bk-tt-reel::after {
+  content: ''; position: absolute; z-index: 3; pointer-events: none;
+  left: 0; right: 0; top: var(--bk-tt-cell); height: var(--bk-tt-cell);
+  border-top: 2px solid var(--bk-tt-gold); border-bottom: 2px solid var(--bk-tt-gold);
+  box-shadow: inset 0 0 16px color-mix(in srgb, var(--bk-tt-gold), transparent 66%);
+}
+.bk-tt-strip { will-change: transform; }
+.bk-tt-cell {
+  height: var(--bk-tt-cell); display: flex; align-items: center; justify-content: center;
+  font-family: var(--disp); font-size: 15px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink); text-align: center; padding: 0 4px; overflow: hidden;
+}
+.bk-tt-cell.bk-tt-glyph { color: var(--bk-tt-neon); font-size: 22px; letter-spacing: 0; opacity: .8; }
+
+/* Rolling. It is an OPACITY, not a blur: a `filter` on an element that is
+ * transformed every frame repaints the whole layer every frame, which is the
+ * cost trap 36 is about, and a phone pays it first. Opacity composites for
+ * free and reads the same at speed. Still mode never gets here at all, because
+ * the module does not start the loop and never adds this class. */
+.bk-tt-reel.bk-tt-rolling .bk-tt-strip { opacity: .78; }
+/* The landing nudge. A hair of overshoot so a reel reads as having stopped
+ * rather than as having been switched. */
+.bk-tt-reel.bk-tt-land { animation: bk-tt-land .18s ease-out 1; }
+@keyframes bk-tt-land { 0% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
+/* Still mode's crossfade. An opacity CLASS the module times, never a
+ * transition: the global freeze would flatten a transition and the words would
+ * simply snap, which is the one thing still mode was asking us not to do. */
+.bk-tt-reel.bk-tt-fade .bk-tt-strip { opacity: .22; }
+
+/* A win lights the window. The royal lights it harder and holds it. */
+.bk-tt-window.bk-tt-hit .bk-tt-reel { border-color: var(--bk-tt-gold); }
+.bk-tt-window.bk-tt-royal .bk-tt-reel {
+  border-color: var(--bk-tt-gold);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--bk-tt-gold), transparent 52%);
+}
+
+/* --------------------------------- the holds ----------------------------- */
+.bk-tt-holds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bk-tt-hold-btn {
+  border: 1px solid var(--line, #3a3a5c); background: transparent; color: var(--ink-dim);
+  border-radius: 6px; padding: 6px 4px; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+}
+.bk-tt-hold-btn[aria-pressed="true"] {
+  border-color: var(--bk-tt-gold); color: var(--bk-tt-gold);
+  background: color-mix(in srgb, var(--bk-tt-gold), transparent 88%);
+}
+.bk-tt-hold-btn[disabled] { opacity: .4; cursor: default; }
+
+/* --------------------------------- the price ----------------------------- */
+.bk-tt-price { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
+               font-size: 12px; color: var(--ink-dim); }
+.bk-tt-price b { font-family: var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.bk-tt-note { font-size: 11px; color: var(--ink-faint); }
+
+/* --------------------------------- the lever ----------------------------- */
+.bk-tt-pull {
+  align-self: flex-start;
+  border: 1px solid var(--bk-tt-gold); border-radius: 999px;
+  background: color-mix(in srgb, var(--bk-tt-neon), transparent 82%);
+  color: var(--ink); cursor: pointer; padding: 10px 22px;
+  font-family: var(--disp); font-size: 14px; letter-spacing: .14em; text-transform: uppercase;
+}
+.bk-tt-pull[disabled] { opacity: .45; cursor: default; }
+.bk-tt-pull:focus-visible, .bk-tt-hold-btn:focus-visible, .bk-tt-back:focus-visible {
+  outline: 2px solid var(--bk-tt-gold); outline-offset: 2px;
+}
+
+/* --------------------------------- what she said ------------------------- */
+.bk-tt-say { font-size: 12px; color: var(--ink-dim); min-height: 2.4em; }
+.bk-tt-say.bk-warm { color: var(--gold); }
+.bk-tt-say .bk-dealer { margin-top: 4px; color: var(--bk-neon-2, var(--lav)); }
+/* The scramble line is the machine reading a sentence you have never heard
+ * before, so it gets the display face and a little room around it. */
+.bk-tt-say .bk-tt-read {
+  display: block; margin-top: 5px;
+  font-family: var(--disp); font-size: 15px; letter-spacing: .08em;
+  color: var(--bk-tt-neon);
+}
+
+/* -------------------------------- the odds sheet ------------------------- */
+.bk-tt-odds {
+  padding: 10px 12px; border-radius: var(--radius, 8px);
+  border: 1px solid color-mix(in srgb, var(--bk-tt-gold), transparent 66%);
+  background: color-mix(in srgb, var(--panel, #252542), transparent 22%);
+}
+.bk-tt-odds h4 {
+  margin: 0 0 8px; font-family: var(--disp); font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; font-weight: 400; color: var(--bk-tt-gold);
+}
+.bk-tt-odds table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+.bk-tt-odds th, .bk-tt-odds td { padding: 3px 2px; text-align: right; color: var(--ink-dim);
+  /* A price that wraps onto two lines reads as two prices. The sheet is the
+   * one thing in this room that has to be unmistakable, so it never wraps. */
+  white-space: nowrap; }
+.bk-tt-odds th { color: var(--ink-faint); font-weight: 400; letter-spacing: .08em; }
+.bk-tt-odds th:first-child, .bk-tt-odds td:first-child { text-align: left; }
+.bk-tt-odds tbody tr.bk-tt-now td { color: var(--ink); background: color-mix(in srgb, var(--bk-tt-gold), transparent 90%); }
+.bk-tt-odds p { margin: 8px 0 0; font-size: 11px; color: var(--ink-faint); }
+
+/* ----------------------------------------------------------------------------
+ * THE PHONE DIET. Shorter cells, no smear, no glow. The three reels stay three
+ * reels: a slot machine that reflows into a column is not a slot machine.
+ * -------------------------------------------------------------------------- */
+html.arc-mobile .bk-tt, html.ae-lite .bk-tt { --bk-tt-cell: 40px; }
+html.arc-mobile .bk-tt-cell, html.ae-lite .bk-tt-cell { font-size: 12px; letter-spacing: .04em; }
+html.arc-mobile .bk-tt-reel.bk-tt-rolling .bk-tt-strip,
+html.ae-lite .bk-tt-reel.bk-tt-rolling .bk-tt-strip { opacity: 1; }
+html.arc-mobile .bk-tt-window.bk-tt-royal .bk-tt-reel,
+html.ae-lite .bk-tt-window.bk-tt-royal .bk-tt-reel { box-shadow: none; }
+html.arc-mobile .bk-tt-cab, html.ae-lite .bk-tt-cab { box-shadow: none; padding: 9px; }
+html.arc-mobile .bk-tt-sub, html.ae-lite .bk-tt-sub { display: none; }
+
+/* Still mode: the landing nudge is decoration and the freeze already stops it.
+ * Saying so here keeps the frozen state at rest rather than at frame one. */
+html.arc-reduced .bk-tt-reel.bk-tt-land { animation: none; }

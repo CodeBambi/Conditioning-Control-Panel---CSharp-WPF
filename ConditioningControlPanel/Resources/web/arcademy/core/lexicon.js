@@ -79,6 +79,17 @@ export const DEFAULT_LEXICON = Object.freeze({
   replay_board: 'Flip the board again',
   share: 'Copy share card',
   shared: 'Copied to clipboard',
+
+  /* the SLIP (shell/sharecard.js): the night drawn as a paper report card.
+   * The image itself is deliberately unskinnable - its header and its class
+   * names are the neutral English ones, so a paste never names your mod - but
+   * the BUTTONS around it are ordinary chrome and a mod may re-voice them. */
+  share_image: 'Share report card',
+  share_add_name: 'Add my name',
+  share_saved: 'Report card saved',
+  share_copied: 'Report card copied',
+  share_shared: 'Report card shared',
+  share_unavailable: 'Sharing is not available here',
   done: 'Done',
   xp: 'XP',
   streak: 'Streak',
@@ -761,6 +772,34 @@ export const DEFAULT_LEXICON = Object.freeze({
   locker_signpost_go: 'Open The Locker',
   locker_unlock_hint: '{tok}2 at the counter',
   locker_open: 'Open Locker',
+
+  /* ------------------------------------------------------------------------
+   * THE BACK ROOM (the casino wing, W1: the door and the chips).
+   *
+   * The fifth window in the service alley, and the only one that is not a
+   * counter. The voice drops a register again: the shop is warm, the locker is
+   * private, and this one is CALM - a house does not need to raise its voice.
+   * Every row is a NeutralLexicon candidate under the 96-character mod cap
+   * (trap 26), and the same rows are mirrored in the C# host or a host that
+   * ships without them falls back to English in silence (trap 123).
+   *
+   * The CHIP itself is a third currency and it sits with the other two: the
+   * counter reads `wallet.c` off the same echo the tickets and tokens ride.
+   * Chip PRICES and prize names are the host's, never this file's.
+   * ---------------------------------------------------------------------- */
+  campus_room_backroom: 'The Back Room',
+  campus_desc_backroom: 'Cash only. Chips only. The house always has time for you.',
+  backroom_sign: 'Back Room',
+  campus_backroom_status: 'Always open',
+  /* The dust sheet: the door is painted on the plan whether or not the room
+   * behind it has been built, because a landmark that comes and goes is a menu
+   * item. This is what it says on a host that has no room to open. */
+  backroom_dust: 'Not open yet.',
+  backroom_dust_line: 'Sheets over the tables and the lights off at the wall. Another night.',
+  /* the third shelf at the Prize Counter */
+  wallet_chips: 'Chips',
+  prize_shelf_chips: 'The Back Room shelf',
+  prize_shelf_chips_hint: 'Chips only. What you carried out of the Back Room buys these.',
 
   /* ------------------------------------------------------------------------
    * THE PUBLIC ADDRESS SYSTEM (Counter Stock `pa_pack`, captions 2026-08-28).

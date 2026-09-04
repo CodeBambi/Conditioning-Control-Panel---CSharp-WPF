@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json;
@@ -594,6 +595,12 @@ internal static class ArcademyHostService
             case "prize-buy":
                 OnPrizeBuy(o);
                 break;
+            case "casino-request":
+                OnCasinoRequest(o);
+                break;
+            case "triggers-request":
+                OnTriggersRequest();
+                break;
             case "class-left":
                 // The closing bracket for `class-started`. Leaving a class with Esc ends no class,
                 // so without this the mid-class heartbeat limit (12s vs 20s) stayed armed for the
@@ -621,6 +628,11 @@ internal static class ArcademyHostService
                 // discordLinked is false - a linked account moves the rung with an ordinary
                 // set-setting instead (contract trap 1).
                 OnLinkDiscord();
+                break;
+            case "share-image":
+                // The report card's PNG, on its way to the Windows clipboard. Fire-and-forget
+                // from the page's side; exactly one reply always comes back.
+                OnShareImage((string?)o["png"]);
                 break;
             case "annex-stats":
                 // The registry link downstairs. Fire-and-forget: exactly one reply comes back,
@@ -1808,6 +1820,10 @@ internal static class ArcademyHostService
         // they never sound like a scolding and never mention a network.
         ["prize_offline"] = "The counter cannot reach the bank right now. Nothing was charged.",
         ["prize_busy"] = "Somebody is already at the drawer. Give it a second and ask again.",
+        // The tier gate, told apart from the wire being down: the bank DID answer, and the
+        // answer was that this account cannot bank here yet. Without this row the refusal
+        // wore the offline line (prizecounter.js SAY.tier).
+        ["prize_tier"] = "The bank does not serve this account yet. Nothing was charged.",
         ["prize_quiet"] = "The counter went quiet on that one. Try again in a moment.",
         ["prize_empty"] = "Shelf is bare tonight. Come back when the truck has been.",
         // THE ALMOST and THE CHARGE-HOLD (shell/prizecounter.js, wave 0828). `prize_short` is a
@@ -1888,6 +1904,38 @@ internal static class ArcademyHostService
         ["prize_emi_varsity_blurb"] = "She found it in lost and found and it fits perfectly. Every one of her poses, re-dressed.",
         ["prize_tube_midnight"] = "TUBE GLASS: MIDNIGHT",
         ["prize_tube_midnight_blurb"] = "A darker glass for the tube back home. It ships to the whole app, not just the school.",
+        // THE BACK ROOM SHELF (2026-09-04). Thirteen chip rows, waves 3 and 4, and every one of
+        // them is carried here the night the row lands rather than the night it goes on sale, for
+        // the same reason the restock's were: a lexicon row costs nothing until something asks for
+        // it, and shipping the wing should be one const bump and not a second trip through nine
+        // language files. The blurbs are the catalog's own words, trimmed to the 96-char bar the
+        // counter card reads comfortably.
+        ["prize_bk_scratcher"] = "SCRATCH CARD",
+        ["prize_bk_scratcher_blurb"] = "A fresh card off the pad. Scratch it at the machine and see what the row says.",
+        ["prize_bk_insurance"] = "INSURANCE CHIP",
+        ["prize_bk_insurance_blurb"] = "Lay it on the rail. The next small hand you lose gets handed straight back.",
+        ["prize_bk_visor"] = "DEALER'S VISOR",
+        ["prize_bk_visor_blurb"] = "Green celluloid, low over the eyes. She deals like she means it in that thing.",
+        ["prize_bk_felt_teal"] = "TEAL NIGHT FELT",
+        ["prize_bk_felt_teal_blurb"] = "New felt on every table down here. Deep teal, the kind that keeps a room quiet.",
+        ["prize_bk_frame_highroller"] = "HIGH ROLLER FRAME",
+        ["prize_bk_frame_highroller_blurb"] = "A heavy gold edge around your ID photo. The desk pretends not to notice you.",
+        ["prize_bk_your_word"] = "YOUR WORD ON THE WHEEL",
+        ["prize_bk_your_word_blurb"] = "The WORD wedge on the Spiral stops being ours and starts being one of yours.",
+        ["prize_bk_house_favorite"] = "HOUSE FAVORITE",
+        ["prize_bk_house_favorite_blurb"] = "Not for sale at any price. The house gives it the first time you go royal.",
+        ["prize_bk_double_payday"] = "DOUBLE PAYDAY",
+        ["prize_bk_double_payday_blurb"] = "Hand it over before you stake and the desk marks the card. One play pays twice.",
+        ["prize_bk_boon"] = "HOUSE BOON",
+        ["prize_bk_boon_blurb"] = "The house owes you a favor. Spend it and the night leans your way for a hand.",
+        ["prize_bk_pitboss"] = "PIT BOSS",
+        ["prize_bk_pitboss_blurb"] = "Somebody stands behind your table all night and keeps the count for you.",
+        ["prize_bk_mantra"] = "THE HOUSE MANTRA",
+        ["prize_bk_mantra_blurb"] = "The room learns a line of yours and says it back between hands. Softly.",
+        ["prize_bk_dealers_cut"] = "DEALER'S CUT",
+        ["prize_bk_dealers_cut_blurb"] = "A standing share of the rake. Every play drops a little back in your pocket.",
+        ["prize_bk_vault_key"] = "THE VAULT KEY",
+        ["prize_bk_vault_key_blurb"] = "The door behind the cage. Nobody at the desk will say what is on the far side.",
         // ---- the Extra Credit lever ----------------------------------------------------
         // shell/lever.js owns the words on BOTH class-start surfaces (the door card and the
         // painted room's apron), so every rung is one key and one locked line, no more.
@@ -1942,6 +1990,14 @@ internal static class ArcademyHostService
         ["replay_board"] = "Flip the board again",
         ["share"] = "Copy share card",
         ["shared"] = "Copied to clipboard",
+        // The SLIP (shell/sharecard.js). The drawn card is unskinnable on purpose - a
+        // paste must never name the player's mod - but its chrome is ordinary chrome.
+        ["share_image"] = "Share report card",
+        ["share_add_name"] = "Add my name",
+        ["share_saved"] = "Report card saved",
+        ["share_copied"] = "Report card copied",
+        ["share_shared"] = "Report card shared",
+        ["share_unavailable"] = "Sharing is not available here",
         ["done"] = "Done",
         ["retake"] = "Retake",
         ["xp"] = "XP",
@@ -3302,6 +3358,291 @@ internal static class ArcademyHostService
         ["locker_signpost_go"] = "Open The Locker",
         ["locker_unlock_hint"] = "{tok}2 at the counter",
         ["locker_open"] = "Open Locker",
+        // ---- THE BACK ROOM (casino wing W1: the door and the chips) ------------------
+        // The fifth window in the service alley. The desktop host ships these so a page
+        // running against it says the same words the web build does: a key the host does
+        // not carry falls back to English in silence and nobody ever sees the gap.
+        // Every value is under the 96-character mod-skin cap and none of them prices
+        // anything - chip costs ride the catalog, like every other row on that shelf.
+        ["campus_room_backroom"] = "The Back Room",
+        ["campus_desc_backroom"] = "Cash only. Chips only. The house always has time for you.",
+        ["backroom_sign"] = "Back Room",
+        ["campus_backroom_status"] = "Always open",
+        ["backroom_dust"] = "Not open yet.",
+        ["backroom_dust_line"] = "Sheets over the tables and the lights off at the wall. Another night.",
+        ["wallet_chips"] = "Chips",
+        ["prize_shelf_chips"] = "The Back Room shelf",
+        ["prize_shelf_chips_hint"] = "Chips only. What you carried out of the Back Room buys these.",
+        // ---- THE BACK ROOM, the floor and the cage (K1) ------------------------------
+        // Every row the vendored page reads, mirrored so a page hosted by the desktop says
+        // the same words the web build does, and so a mod can re-voice the whole wing from
+        // one file. A key the host does not carry falls back to the English in the page and
+        // nobody sees the gap, which is exactly why a missing row is easy to miss: keep this
+        // block generated off backroom/*.js rather than retyped. Values stay inside
+        // MergeModTable's 96-char cap (trap 26). Nothing here prices anything: chip costs
+        // ride the catalog like every other row on that shelf.
+        ["bk_title"] = "The Back Room",
+        ["bk_sub"] = "Cash only. Chips only.",
+        ["bk_exit"] = "step out",
+        ["bk_back"] = "back to the floor",
+        ["bk_chips"] = "chips",
+        ["bk_sparkle"] = "sparkle",
+        ["bk_pot"] = "the pot",
+        ["bk_pot_sub"] = "a quarter of every rake. one royal takes the lot.",
+        ["bk_pot_unknown"] = "counting",
+        ["bk_cage"] = "The Cage",
+        ["bk_cage_rate"] = "1 sparkle buys 100 chips. one way, never back.",
+        ["bk_cage_hand"] = "sparkle on hand",
+        ["bk_cage_get"] = "chips you get",
+        ["bk_cage_go"] = "change it",
+        ["bk_cage_custom"] = "or name an amount",
+        ["bk_cage_custom_lbl"] = "a custom amount of sparkle, up to 500",
+        ["bk_cage_dark"] = "Cash only. Come back when the line is up.",
+        ["bk_cage_working"] = "Counting it out.",
+        ["bk_cage_done"] = "That is {0} chips. Try not to spend it all at one cabinet.",
+        ["bk_cage_poor"] = "Not quite enough sparkle for that one. The floor keeps.",
+        ["bk_cage_offline"] = "The line to the counter is down. Your sparkle is safe where it is.",
+        ["bk_cage_bad"] = "The cage takes one to five hundred at a time. Typo guard, nothing more.",
+        ["bk_cage_busy"] = "The cashier is with someone. Give her a moment.",
+        ["bk_cage_locked"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["bk_cage_reset"] = "Your skills are mid reset. The cage waits for that to settle.",
+        ["bk_cage_refused"] = "The cage would not take that one. Nothing moved.",
+        ["bk_cage_tree"] = "The same {0} sparkle goes toward {1} on the tree, {2} short of it.",
+        ["bk_cage_tree_buy"] = "The same {0} sparkle buys {1} on the tree outright.",
+        ["bk_cage_tree_done"] = "The tree is finished. There is nothing up there left to buy.",
+        ["bk_cab_twentyone"] = "Twenty-One",
+        ["bk_cab_triple"] = "Triple Trigger",
+        ["bk_cab_spiral"] = "The Spiral",
+        ["bk_cab_scratcher"] = "The Scratcher",
+        ["bk_cab_wheel"] = "The Prize Wheel",
+        ["bk_sub_twentyone"] = "the dealer stands on all seventeens.",
+        ["bk_sub_triple"] = "three reels, and they are your own words.",
+        ["bk_sub_spiral"] = "twenty-four wedges. one of them is a drop.",
+        ["bk_sub_scratcher"] = "three in a row pays. one card a day is free.",
+        ["bk_sub_wheel"] = "the big one. seven wedges, two of them worth waiting for.",
+        ["bk_cab_stake"] = "{0} chips a go",
+        ["bk_cab_free"] = "one free card today",
+        ["bk_sheet"] = "Not open yet.",
+        ["bk_sheet_sub"] = "Still under a sheet. The house is building it.",
+        ["bk_floor_aria"] = "the cabinets",
+        // The dealer (backroom/kit/voice.js). LOSSES GET SYMPATHY is a house law, so every
+        // loss line here is warm and the drop is a beat, never a taunt. Re-voice freely.
+        ["bk_say_deal_1"] = "Chips down. Let us see what the night thinks of you.",
+        ["bk_say_deal_2"] = "Good. Hands where I can see them, eyes where I put them.",
+        ["bk_say_deal_3"] = "Here we go, sweetheart.",
+        ["bk_say_deal_4"] = "One more. You always did say one more.",
+        ["bk_say_deal_5"] = "Settle in. This part is my favourite.",
+        ["bk_say_win_1"] = "There it is. Well played.",
+        ["bk_say_win_2"] = "The house nods and pays. Rare thing, that.",
+        ["bk_say_win_3"] = "Look at you. Colour me impressed.",
+        ["bk_say_win_4"] = "Yours. Take it before I change my mind.",
+        ["bk_say_win_5"] = "Nice. Very nice.",
+        ["bk_say_loss_1"] = "Not that one. Shake it off, love.",
+        ["bk_say_loss_2"] = "The floor keeps that one. Happens to everybody here.",
+        ["bk_say_loss_3"] = "Ah. So close it almost counts, which it does not.",
+        ["bk_say_loss_4"] = "Gone. You are still the best thing in this room.",
+        ["bk_say_loss_5"] = "That is the game. No shame in it.",
+        ["bk_say_loss_6"] = "The house takes it. I would rather it had not.",
+        ["bk_say_big_1"] = "Oh, that is a NUMBER. Say it out loud for me.",
+        ["bk_say_big_2"] = "The whole room just looked over. Let them look.",
+        ["bk_say_big_3"] = "That is the good stuff. Breathe, then count it.",
+        ["bk_say_big_4"] = "Well now. Somebody is having a night.",
+        ["bk_say_big_5"] = "I felt that one land. Beautiful.",
+        ["bk_say_drop_1"] = "Ah. The room wants you for a second.",
+        ["bk_say_drop_2"] = "Lights down, pet. This bit is not about the chips.",
+        ["bk_say_drop_3"] = "There. Sink for me.",
+        ["bk_say_drop_4"] = "The spiral called your name. It does that.",
+        ["bk_say_drop_5"] = "Eyes here. Just here. Good.",
+        ["bk_say_royal_1"] = "The pot. The whole pot. I have never seen it go.",
+        ["bk_say_royal_2"] = "That is a royal. Sit down before you fall down.",
+        ["bk_say_royal_3"] = "Every light in the room is on you. Earned.",
+        ["bk_say_royal_4"] = "They will talk about this hand for a while.",
+        ["bk_say_cage_1"] = "Sparkle in, chips out. One way only, you know the rule.",
+        ["bk_say_cage_2"] = "Counting it out for you now.",
+        ["bk_say_cage_3"] = "There. Try to make it last past the first cabinet.",
+        ["bk_say_cage_4"] = "Careful with that. It spends faster than it earns.",
+        ["bk_say_cage_5"] = "Spend it slowly. Or do not. I am not your mother.",
+        // The neutral reel words (backroom/kit/triggers.js), used only when the host has no
+        // CustomTriggers to hand over. A desktop host answers with the player's own.
+        ["bk_tr_1"] = "soft and slow",
+        ["bk_tr_2"] = "eyes on me",
+        ["bk_tr_3"] = "let it go",
+        ["bk_tr_4"] = "sink a little",
+        ["bk_tr_5"] = "good, stay there",
+        ["bk_tr_6"] = "warm and quiet",
+        // ---- THE SPIRAL, the wheel with twenty-four wedges (M3) ----------------------
+        // bk_sp_odds_drop is the published truth and it is checked against the server: a
+        // NUMBER bet naming the drop pays 20 to 1, colour and word bets lose to it. The
+        // wedge shows what pays, which is INPUT HONESTY.
+        ["bk_sp_title"] = "The Spiral",
+        ["bk_sp_sub"] = "eleven pink, eleven violet, one word, one drop.",
+        ["bk_sp_bets"] = "the board",
+        ["bk_sp_pink"] = "PINK",
+        ["bk_sp_violet"] = "VIOLET",
+        ["bk_sp_word"] = "THE WORD",
+        ["bk_sp_number"] = "A NUMBER",
+        ["bk_sp_word_none"] = "the word",
+        ["bk_sp_drop_wedge"] = "DROP",
+        ["bk_sp_odds_even"] = "{0} wedges in 24. pays {1} to 1.",
+        ["bk_sp_odds_one"] = "1 wedge in 24. pays {0} to 1.",
+        ["bk_sp_odds_drop"] = "One wedge in twenty-four is the drop. It takes colour and word bets. Only a number on it pays.",
+        ["bk_sp_grid_lbl"] = "the twenty-four wedges",
+        ["bk_sp_grid_one"] = "wedge {0}",
+        ["bk_sp_stake"] = "stake",
+        ["bk_sp_stake_lbl"] = "chips a spin",
+        ["bk_sp_spin"] = "SPIN",
+        ["bk_sp_ready"] = "Pick a colour, the word, or a wedge. Then spin.",
+        ["bk_sp_working"] = "Chips are down.",
+        ["bk_sp_up"] = "The wheel is up.",
+        ["bk_sp_need_bet"] = "Name a bet first. The wheel will not guess for you.",
+        ["bk_sp_need_wedge"] = "Pick which wedge, then spin.",
+        ["bk_sp_won"] = "Wedge {0}. {1} chips back.",
+        ["bk_sp_lost"] = "Wedge {0}. The floor keeps this one.",
+        ["bk_sp_word_hit"] = "Your word came up on wedge {0}. {1} chips.",
+        ["bk_sp_drop_hit"] = "Wedge {0}. The drop. Lights down a moment.",
+        ["bk_sp_insured"] = "The insurance chip covered that one. Nothing lost.",
+        ["bk_sp_poor"] = "Not enough chips for that stake. The cage is out on the floor.",
+        ["bk_sp_bad_stake"] = "The wheel does not take that stake tonight.",
+        ["bk_sp_bad_bet"] = "The wheel would not take that bet. Nothing moved.",
+        ["bk_sp_busy"] = "The wheel is still settling for somebody. One moment.",
+        ["bk_sp_offline"] = "The line to the pit is down. Your chips are where you left them.",
+        ["bk_sp_locked"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["bk_sp_refused"] = "The wheel would not take that one. Nothing moved.",
+        ["bk_sp_dark"] = "The wheel is covered. Come back when the line is up.",
+        // ---- TWENTY-ONE (M1) ----------------------------------------------------------
+        // The four suits are the four spirals, not the four card suits, which is why they
+        // are lexicon rows and not glyphs.
+        ["bk_t1_title"] = "Twenty-One",
+        ["bk_t1_sub"] = "twenty-one is all the way down. over it is too deep.",
+        ["bk_t1_dealer"] = "dealer",
+        ["bk_t1_you"] = "you",
+        ["bk_t1_shows"] = "shows",
+        ["bk_t1_deal"] = "deal, {0} chips",
+        ["bk_t1_hit"] = "deeper",
+        ["bk_t1_stand"] = "hold",
+        ["bk_t1_double"] = "double down",
+        ["bk_t1_back"] = "back to the floor",
+        ["bk_t1_odds"] = "Blackjack pays {0}. Dealer holds on {1}.",
+        ["bk_t1_pays"] = "3 to 2",
+        ["bk_t1_soft"] = "soft {0}",
+        ["bk_t1_hole"] = "face down",
+        ["bk_t1_card"] = "{0} of {1}",
+        ["bk_t1_suit_0"] = "coils",
+        ["bk_t1_suit_1"] = "curls",
+        ["bk_t1_suit_2"] = "deeps",
+        ["bk_t1_suit_3"] = "eyes",
+        ["bk_t1_idle"] = "Chips down whenever you are ready.",
+        ["bk_t1_working"] = "The shoe is moving.",
+        ["bk_t1_playing"] = "Your move.",
+        ["bk_t1_bust"] = "Too deep. That one is gone.",
+        ["bk_t1_won"] = "Yours. {0} chips.",
+        ["bk_t1_lost"] = "The floor keeps that one.",
+        ["bk_t1_push"] = "A push. Your stake comes home untouched.",
+        ["bk_t1_blackjack"] = "Twenty-one on the deal. {0} chips.",
+        ["bk_t1_insured"] = "Insurance covered that one. Nothing lost.",
+        ["bk_t1_poor"] = "Not enough chips for a hand. The cage is right outside.",
+        ["bk_t1_open"] = "There is a hand on the felt already. Play it out.",
+        ["bk_t1_nohand"] = "Nothing on the felt yet. Chips down first.",
+        ["bk_t1_bad"] = "The table would not take that one. Nothing moved.",
+        ["bk_t1_busy"] = "One at a time, love. She is still dealing.",
+        ["bk_t1_offline"] = "The line to the table is down. Nothing was staked.",
+        ["bk_t1_locked"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["bk_t1_dark"] = "The table is closed. Come back when the line is up.",
+        ["bk_t1_aria_you"] = "your hand",
+        ["bk_t1_aria_dlr"] = "the dealer hand",
+        // ---- TRIPLE TRIGGER (M2) ------------------------------------------------------
+        // The reels carry the player's own trigger words on the desktop. The odds rows are
+        // slotted from the status frame, never hardcoded page-side.
+        ["bk_tt_title"] = "Triple Trigger",
+        ["bk_tt_sub"] = "reel one, reel two, reel three. your words, in your order.",
+        ["bk_tt_window"] = "the three reels",
+        ["bk_tt_reel_aria"] = "reel {0}",
+        ["bk_tt_hold"] = "hold",
+        ["bk_tt_hold_aria"] = "hold reel {0} where it is",
+        ["bk_tt_pull"] = "hold to pull",
+        ["bk_tt_pull_tap"] = "pull",
+        ["bk_tt_price"] = "{0} chips a pull, {1} more a hold.",
+        ["bk_tt_stake"] = "this pull: {0} chips",
+        ["bk_tt_hold_wait"] = "Nothing to hold yet. Pull once and the reels will remember.",
+        ["bk_tt_glyph_note"] = "A spiral is a blank. It pays nothing and it is never worth holding.",
+        ["bk_tt_odds"] = "What it pays",
+        ["bk_tt_col_holds"] = "holds",
+        ["bk_tt_col_royal"] = "royal",
+        ["bk_tt_col_scr"] = "scramble",
+        ["bk_tt_col_pair"] = "pair",
+        ["bk_tt_pay_royal"] = "ROYAL is one trigger across all three reels. {0}x and the pot.",
+        ["bk_tt_pay_scr"] = "SCRAMBLE is three different triggers and no blanks. {0}x.",
+        ["bk_tt_pay_pair"] = "PAIR is two reels on the same trigger. {0}x.",
+        ["bk_tt_pay_base"] = "Every multiplier is on the {0} chip base. Holds are never multiplied.",
+        ["bk_tt_odds_cell"] = "1 in {0}",
+        ["bk_tt_rolling"] = "Reels are turning.",
+        ["bk_tt_royal"] = "ROYAL. {0}.",
+        ["bk_tt_royal_pot"] = "And the pot came with it. {0} chips.",
+        ["bk_tt_scramble"] = "I like that one.",
+        ["bk_tt_pair"] = "Two of a kind. {0} chips back.",
+        ["bk_tt_none"] = "Nothing on the line that time.",
+        ["bk_tt_paid"] = "Paid {0} chips.",
+        ["bk_tt_insured"] = "Your insurance chip caught that one. Nothing lost.",
+        ["bk_tt_stuck"] = "The reels came down on their own. Nothing was staked.",
+        ["bk_tt_poor"] = "Not enough chips for that pull. The cage is out on the floor.",
+        ["bk_tt_bad_stake"] = "The machine would not take that stake. Nothing moved.",
+        ["bk_tt_bad_input"] = "The machine lost the thread of that one. Pull it again.",
+        ["bk_tt_busy"] = "Still settling the last one. Give it a breath.",
+        ["bk_tt_offline"] = "The line to the floor is down. Nothing was staked.",
+        ["bk_tt_locked"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["bk_tt_refused"] = "The machine would not take that pull. Nothing moved.",
+        ["bk_tt_dark"] = "The reels are unplugged. Come back when the line is up.",
+        // ---- THE SCRATCHER (M4) -------------------------------------------------------
+        // One free card a LOCAL day, then 50 chips. The prize is a row of three.
+        ["bk_sc_title"] = "The Scratcher",
+        ["bk_sc_lede"] = "Three in a row pays. Rub anywhere.",
+        ["bk_sc_buy_free"] = "FREE today",
+        ["bk_sc_buy"] = "{0} chips",
+        ["bk_sc_dealing"] = "Printing one.",
+        ["bk_sc_rub"] = "Rub the foil.",
+        ["bk_sc_tap"] = "tap to reveal",
+        ["bk_sc_pct"] = "{0}% scratched",
+        ["bk_sc_free_note"] = "On the house. One a day, every day.",
+        ["bk_sc_win"] = "Three in a row. {0} chips.",
+        ["bk_sc_none"] = "No row on that one. The foil was pretty though.",
+        ["bk_sc_odds"] = "what a card can pay",
+        ["bk_sc_odds_row"] = "{0} chips, one card in {1}",
+        ["bk_sc_odds_rest"] = "anything else pays nothing. that is most cards.",
+        ["bk_sc_poor"] = "Not enough chips for a card. The cage is just there.",
+        ["bk_sc_offline"] = "The line to the counter is down. Nothing was charged.",
+        ["bk_sc_busy"] = "The cashier is with someone. Give her a moment.",
+        ["bk_sc_locked"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["bk_sc_refused"] = "The counter would not print that one. Nothing moved.",
+        // ---- THE PRIZE WHEEL (M4) -----------------------------------------------------
+        // Seven wedges, honest widths: the face is drawn from the same weights the counter
+        // publishes, so a wedge that looks like a third of the wheel is a third of it.
+        ["bk_pw_title"] = "The Prize Wheel",
+        ["bk_pw_lede"] = "Seven wedges. The widths are the odds, so count the ticks.",
+        ["bk_pw_spin"] = "SPIN {0} chips",
+        ["bk_pw_spinning"] = "Spinning.",
+        ["bk_pw_ready"] = "Five hundred chips a spin.",
+        ["bk_pw_w_250"] = "250 chips",
+        ["bk_pw_w_500"] = "500 chips",
+        ["bk_pw_w_card"] = "Scratch card",
+        ["bk_pw_w_ins"] = "Insurance",
+        ["bk_pw_w_1000"] = "1,000 chips",
+        ["bk_pw_w_late"] = "Late Slip",
+        ["bk_pw_w_visor"] = "Dealer's Visor",
+        ["bk_pw_chips"] = "{0} chips.",
+        ["bk_pw_it_card"] = "A scratch card.",
+        ["bk_pw_it_ins"] = "An insurance chip.",
+        ["bk_pw_it_late"] = "A late slip.",
+        ["bk_pw_it_visor"] = "A Dealer's Visor.",
+        ["bk_pw_counter"] = "It is waiting at the Prize Counter.",
+        ["bk_pw_full"] = "Your shelf is full, so the house paid {0} instead.",
+        ["bk_pw_odds"] = "the wheel, wedge by wedge",
+        ["bk_pw_odds_row"] = "{0}, {1} spins in 100",
+        ["bk_pw_ticks"] = "every gold tick on the rim is two spins in a hundred.",
+        ["bk_pw_poor"] = "Not enough chips for a spin. The cage is just there.",
+        ["bk_pw_offline"] = "The line to the counter is down. Nothing was charged.",
+        ["bk_pw_busy"] = "The wheel is still settling for someone else.",
+        ["bk_pw_locked"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["bk_pw_refused"] = "The house would not take that spin. Nothing moved.",
         // ---- EMI's stuck-hints (Daily Trigger, 2026-08-30) ----------------------------
         // The owner amended the "no mid-class mascot speech" law (arcademy/CLAUDE.md traps
         // 90 and 97) for one narrow channel: when the board says the player is beaten, EMI
@@ -4199,6 +4540,183 @@ internal static class ArcademyHostService
         }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostWalletResult: {E}", ex.Message); }
     }
+
+    // ============================ the back room ============================
+
+    /// <summary>
+    /// <c>casino-request {reqId, op, body, localDay}</c> -> the Back Room, and exactly one
+    /// <c>casino-result</c> back. The page never fetches the proxy itself, so every stake, every
+    /// cage press and every status poll comes through here on the same token door the counter uses.
+    ///
+    /// <para>THE REPLY IS UNCONDITIONAL, refusals included. The floor settles nothing optimistically
+    /// past the frame the server corrects, so a swallowed answer would leave a cabinet holding a
+    /// spinner it could never put down. An unknown op and a shut door both answer <c>offline</c>,
+    /// which is the one word the room already has a line for.</para>
+    /// </summary>
+    private static void OnCasinoRequest(JObject o)
+    {
+        var reqId = ReadString(o, "reqId") ?? "";
+        try
+        {
+            var op = (ReadString(o, "op") ?? "").Trim();
+            if (op is not ("status" or "cage" or "play"))
+            {
+                App.Logger?.Debug("ArcademyHost: casino op '{Op}' is not one of ours", op);
+                PostCasinoResult(reqId, false, 0, Offline());
+                return;
+            }
+
+            // THE BACK ROOM IS AN ACCOUNT ROOM. Chips live on the server the way tickets do, and
+            // there is no local casino to fall back on: with no identity the floor stays dark
+            // rather than dealing a hand nothing could ever settle.
+            if (!ArcademyWalletSyncService.DoorOpen)
+            {
+                PostCasinoResult(reqId, false, 0, Offline());
+                return;
+            }
+
+            var body = o["body"] as JObject ?? new JObject();
+            var localDay = ReadString(o, "localDay") ?? "";
+            int epoch = Volatile.Read(ref _generation);
+            ArcademyWalletSyncService.Casino(op, body, localDay,
+                outcome => SettleCasino(epoch, reqId, op, outcome));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyHost.OnCasinoRequest: {E}", ex.Message);
+            PostCasinoResult(reqId, false, 0, Offline());
+        }
+    }
+
+    /// <summary>The Back Room answered (or did not). Same dispatcher-and-generation hop
+    /// <see cref="SettleBuy"/> takes, and the same rule about a reply that outlived its window.</summary>
+    private static void SettleCasino(int epoch, string reqId, string op,
+        ArcademyWalletSyncService.CasinoOutcome outcome)
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (Volatile.Read(ref _generation) != epoch) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                    if (!outcome.Answered)
+                    {
+                        PostCasinoResult(reqId, false, 0, Offline());
+                        return;
+                    }
+
+                    // A game refusal is a 200 carrying `ok:false` and rides back verbatim; so does
+                    // the tier wall's 403 body, which the room turns into its own sentence. Only a
+                    // 2xx that actually says `ok:true` is allowed to move a number on this desk.
+                    var body = outcome.Body ?? new JObject();
+                    bool ok = outcome.Status is >= 200 and < 300 && (bool?)body["ok"] == true;
+                    if (ok) AdoptCasinoAnswer(op, body);
+                    PostCasinoResult(reqId, ok, outcome.Status, body);
+                }
+                catch (Exception ex) { App.Logger?.Warning("ArcademyHost.SettleCasino: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.SettleCasino dispatch: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// Take what the server just moved. Two different numbers live in two different places and both
+    /// have to land here or the desk goes on showing the old one.
+    ///
+    /// <para>SPARKLE IS ADOPTED, NEVER SUBTRACTED. The cage debits <c>skill_points</c> inside the
+    /// same lock the skill tree buys under, so this reads the answer exactly the way
+    /// <c>PurchaseSkillAsync</c> reads <c>result.SkillPoints</c>. Subtracting locally instead would
+    /// be undone the moment any sync merged a higher number back over it.</para>
+    ///
+    /// <para>CHIPS go into the wallet cache so the Prize Counter, the balance chip and the cage sign
+    /// all repaint from one meta push, exactly like a purchase.</para>
+    /// </summary>
+    private static void AdoptCasinoAnswer(string op, JObject body)
+    {
+        try
+        {
+            if (string.Equals(op, "cage", StringComparison.Ordinal))
+            {
+                var settings = App.Settings?.Current;
+                int sparkle = ReadInt(body, "sparkle", -1);
+                if (settings != null && sparkle >= 0 && settings.SkillPoints != sparkle)
+                {
+                    settings.SkillPoints = sparkle;
+                    App.Settings?.Save();
+                }
+
+                // The cage answers in CHIPS credited, and the prestige counter counts SPARKLE spent,
+                // so the rate is the one honest way across. Integer division is exact here: the
+                // server only ever credits whole Sparkle at 100 chips each.
+                int credited = ReadInt(body, "credited", 0);
+                if (credited >= ArcademyEconomy.ChipsPerSparkle)
+                    App.Achievements?.TrackSkillPointsSpent(credited / ArcademyEconomy.ChipsPerSparkle);
+            }
+
+            if (_meta == null) return;
+            // -1 is "the answer did not carry this one": a cage press moves the balance and never
+            // the lifetime-won total, so the two are written independently.
+            int chips = ReadInt(body, "chips", -1);
+            int earned = ReadInt(body, "earnedC", -1);
+            if (chips < 0 && earned < 0) return;
+            _meta.NoteChips(chips >= 0 ? chips : null, earned >= 0 ? earned : null);
+            _host?.Post(_meta.SnapshotMessage());
+        }
+        catch (Exception ex) { App.Logger?.Warning("ArcademyHost.AdoptCasinoAnswer: {E}", ex.Message); }
+    }
+
+    /// <summary>The <c>casino-result</c> frame. <c>body</c> is the server's own JSON whenever there
+    /// was one, so the room reads its refusals off the same words the server used.</summary>
+    private static void PostCasinoResult(string reqId, bool ok, int status, JObject body)
+    {
+        try { _host?.Post(new { type = "casino-result", reqId, ok, status, body }); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostCasinoResult: {E}", ex.Message); }
+    }
+
+    /// <summary>Nobody answered. One shape, one word, so the floor has a single thing to match on.</summary>
+    private static JObject Offline() => new() { ["reason"] = "offline" };
+
+    /// <summary>
+    /// <c>triggers-request</c> -> <c>triggers-result {triggers}</c>: this player's own trigger
+    /// phrases, so the reels and the Spiral's WORD wedge land on words that mean something to them
+    /// rather than a stock list. RAW text, trimmed and bounded and nothing else: a host that filtered
+    /// here would quietly change what the wheel promised.
+    ///
+    /// <para>A page with no trigger store gets an empty list and falls back to its authored one, so
+    /// an empty answer is a normal answer and never a failure.</para>
+    /// </summary>
+    private static void OnTriggersRequest()
+    {
+        var triggers = new JArray();
+        try
+        {
+            var list = App.Settings?.Current?.CustomTriggers;
+            if (list != null)
+            {
+                foreach (var raw in list)
+                {
+                    var t = (raw ?? "").Trim();
+                    if (t.Length == 0) continue;
+                    if (t.Length > MaxTriggerChars) t = t[..MaxTriggerChars];
+                    triggers.Add(t);
+                    if (triggers.Count >= MaxTriggers) break;
+                }
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnTriggersRequest read: {E}", ex.Message); }
+
+        try { _host?.Post(new { type = "triggers-result", triggers }); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnTriggersRequest post: {E}", ex.Message); }
+    }
+
+    /// <summary>How much of a trigger list crosses the seam. Enough for any real list, small enough
+    /// that a settings file somebody pasted a novel into cannot wedge a reel.</summary>
+    private const int MaxTriggers = 64;
+    private const int MaxTriggerChars = 64;
 
     // ============================ enrollment-done: the first-run punches ============================
 
@@ -5482,6 +6000,92 @@ internal static class ArcademyHostService
             });
         }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostAnnexStats: {E}", ex.Message); }
+    }
+
+    /// <summary>Biggest base64 payload the share card may push over the bridge: about 4.4 MB of
+    /// text, which is roughly 3.3 MB of PNG. The page caps itself well under this; the wall is
+    /// here because a page is a page and the bridge is not a file transfer.</summary>
+    private const int MaxShareImageChars = 4_400_000;
+
+    /// <summary>THE SHARE CARD'S LAST RUNG BEFORE THE FLOOR.
+    ///
+    /// WebView2 gives the page no async clipboard image write worth the name, so the page draws
+    /// the report card, hands the finished PNG over as base64, and C# puts it on the Windows
+    /// clipboard itself. Exactly ONE reply always goes back - <c>ok</c> true or false - because a
+    /// missing reply leaves a button spinning until its own deadline, and a share that quietly did
+    /// not happen is the worst outcome the whole feature has.
+    ///
+    /// The decode and the clipboard write both happen on the UI thread: WPF's clipboard is STA and
+    /// a BitmapImage handed across threads unfrozen is a crash waiting for a slow night.</summary>
+    private static void OnShareImage(string? png)
+    {
+        try
+        {
+            var epoch = Volatile.Read(ref _generation);
+            var win = _host?.Window;
+            if (win == null) return;
+            win.Dispatcher.BeginInvoke(() =>
+            {
+                var ok = false;
+                try
+                {
+                    if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                    ok = PutPngOnClipboard(png);
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.share-image: {E}", ex.Message); }
+                try { _host?.Post(new { type = "share-image-result", ok }); }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.share-image reply: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnShareImage: {E}", ex.Message); }
+    }
+
+    /// <summary>Decode a base64 PNG and put it on the clipboard. UI thread only. Never throws:
+    /// every refusal - junk base64, something that is not a PNG, a clipboard another process is
+    /// holding open - is a plain false, and the page falls to its download rung.</summary>
+    private static bool PutPngOnClipboard(string? png)
+    {
+        if (string.IsNullOrEmpty(png) || png!.Length > MaxShareImageChars) return false;
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(png); }
+        catch (FormatException) { return false; }
+
+        // The PNG signature, checked before anything is asked to decode it. The page is our own
+        // and the bytes are still validated: a share card is never anything but a share card.
+        if (bytes.Length < 8 || bytes[0] != 0x89 || bytes[1] != 0x50 || bytes[2] != 0x4E || bytes[3] != 0x47)
+            return false;
+
+        BitmapImage img;
+        try
+        {
+            using var ms = new MemoryStream(bytes, writable: false);
+            img = new BitmapImage();
+            img.BeginInit();
+            img.CacheOption = BitmapCacheOption.OnLoad;   // the stream is gone the moment we leave
+            img.StreamSource = ms;
+            img.EndInit();
+            img.Freeze();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost: share image would not decode: {E}", ex.Message);
+            return false;
+        }
+
+        // CLIPBRD_E_CANT_OPEN: another process is holding the clipboard for a moment. One retry is
+        // what every other app on this machine does, and it is nearly always enough.
+        for (var attempt = 0; attempt < 2; attempt += 1)
+        {
+            try { Clipboard.SetImage(img); return true; }
+            catch (System.Runtime.InteropServices.COMException) { Thread.Sleep(60); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ArcademyHost: clipboard refused the share image: {E}", ex.Message);
+                return false;
+            }
+        }
+        return false;
     }
 
     /// <summary>True when remote media may appear anywhere in the app. Copied verbatim from

@@ -8,18 +8,34 @@
  *
  * SHARE, v1 (DECISIONS #6, SYNTHESIS #5): exactly one renderer, and exactly one
  * payload shape reaches it - Daily Trigger's spoiler-free emoji grid, copied to
- * the clipboard as TEXT. No canvas, no image export, no URL. Every other game's
- * `share` payload is IGNORED with one log line (once per session, not once per
- * class - a shell that logs 60 times a day is a shell nobody reads).
+ * the clipboard as TEXT. Every other game's `share` payload is IGNORED with one
+ * log line (once per session, not once per class - a shell that logs 60 times a
+ * day is a shell nobody reads).
+ *
+ * SHARE v2, THE SLIP (community ask, 2026-09-02 - "grades posted somewhere,
+ * maybe in image format"): a SECOND delivery of the SAME night, beside the text
+ * one and never in place of it. The whole report - the day's classes with their
+ * grades, the attendance meter, the seal when it was earned - drawn onto a
+ * canvas as a paper slip by `shell/sharecard.js` and handed over as a PNG. v1's
+ * text share is untouched down to the byte: `SHARE_ALLOWED` and
+ * `buildShareText` emit exactly what they always emitted, because two players
+ * comparing grids across a year of pastes is a contract.
  *
  * The share header is deliberately MOD-ANONYMOUS: the literal string "The
  * Arcademy", not t('arcademy'). A skinned header would out the player's mod in a
- * Discord paste, which is the one thing a share card must never do.
+ * Discord paste, which is the one thing a share card must never do. The IMAGE
+ * obeys the same law twice over - the crest is the school's own art, and every
+ * class on it is lettered from sharecard.js's neutral table rather than from a
+ * `game_<key>` row. It is also ANONYMOUS BY DEFAULT: your name and student
+ * number reach the slip only when you have ticked the box beside the button,
+ * and that tick is remembered in the meta bag so it sticks.
  * ==========================================================================*/
 
 import { t, gradeLabel, tierLabel } from '../core/lexicon.js';
 import { gradeKey } from '../core/grades.js';
 import { exitBar, sign as signExit, campusPillRow } from './exits.js';
+import { canRenderCard, renderShareCard } from './sharepaint.js';
+import { deliverShareCard, DELIVERED } from './sharedeliver.js';
 
 /** Mod-anonymous, name-only, no URL. Do not "improve" this. */
 export const SHARE_HEADER = 'The Arcademy';
@@ -27,6 +43,8 @@ export const SHARE_HEADER = 'The Arcademy';
 export const SHARE_ALLOWED = Object.freeze(['daily_trigger']);
 /** Mod-anonymous display names for share text only (never for the UI). */
 const SHARE_NAMES = Object.freeze({ daily_trigger: 'Daily Trigger' });
+/** The meta key the "add my name" tick lives under. Page-owned. */
+export const SHARE_NAME_KEY = 'shareNamed';
 
 let ignoredShareLogged = false;
 
@@ -134,6 +152,94 @@ async function copyText(text) {
 }
 
 /* ----------------------------------------------------------------------------
+ * SHARE IMAGE - THE SLIP
+ * -------------------------------------------------------------------------- */
+
+/** Reduced motion, either signal - the shell's own class or the OS preference. */
+function reducedMotion() {
+  try {
+    const root = (typeof document !== 'undefined') && document.documentElement;
+    if (root && root.classList && typeof root.classList.contains === 'function'
+      && root.classList.contains('arc-reduced')) return true;
+  } catch (e) { /* noop */ }
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      const m = window.matchMedia('(prefers-reduced-motion: reduce)');
+      if (m && m.matches) return true;
+    }
+  } catch (e) { /* noop */ }
+  return false;
+}
+
+/** The file name the slip is saved under. Mod-anonymous, like everything else. */
+export function shareFileName(dateLabel) {
+  const d = String(dateLabel || '').replace(/[^0-9A-Za-z-]/g, '') || 'today';
+  return 'arcademy-report-' + d + '.png';
+}
+
+/**
+ * DELIVERY, RUNG 1: hand the player the file.
+ *
+ * A `blob:` url on an `<a download>`, clicked once and revoked. This is the
+ * LAST fallback in the finished ladder and the only one in this wave, and it is
+ * also the one that a host can refuse outright: the Discord Activity iframe
+ * sandbox drops navigations it did not initiate, so the click can be a silent
+ * no-op. There is no event for that refusal, which is why the ladder above this
+ * one exists at all - and why a host that has NEITHER is told so out loud
+ * rather than left looking like it worked.
+ *
+ * @returns {boolean} whether the browser accepted the attempt
+ */
+export function deliverDownload(blob, fileName) {
+  let url = null;
+  try {
+    if (!blob || typeof document === 'undefined') return false;
+    const U = (typeof URL !== 'undefined') ? URL : null;
+    if (!U || typeof U.createObjectURL !== 'function') return false;
+    const a = document.createElement('a');
+    /* `download` on an anchor is the feature test AND the verb: a host that
+     * does not implement it simply never has the property. */
+    if (!('download' in a)) return false;
+    url = U.createObjectURL(blob);
+    a.href = url;
+    a.download = String(fileName || 'report.png');
+    a.rel = 'noopener';
+    a.style.position = 'fixed';
+    a.style.opacity = '0';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return true;
+  } catch (e) {
+    return false;
+  } finally {
+    /* revoked on the next turn - revoking inside the same tick has raced the
+     * download in every browser this school runs on */
+    if (url && typeof setTimeout === 'function') {
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e2) { /* noop */ } }, 4000);
+    }
+  }
+}
+
+/**
+ * THE PRINT BEAT. Pressing Share is a committed action, so the button does not
+ * simply go grey - a slip of paper slides out from under it while the canvas
+ * draws, and one `paper` cue rides the same frame (Law X: sound and sight land
+ * together). Under reduced motion the slip is still MINTED and still says the
+ * same thing, it just fades in place, which is the House Book's own
+ * "<=120ms opacity change" collapse rather than a beat that vanishes.
+ */
+function printBeat(host, reduced) {
+  try {
+    if (!host || typeof document === 'undefined') return () => {};
+    const slip = el('span', 'arc-shareslip' + (reduced ? ' still' : ''));
+    slip.setAttribute('aria-hidden', 'true');
+    host.appendChild(slip);
+    return () => { try { slip.remove(); } catch (e) { /* noop */ } };
+  } catch (e) { return () => {}; }
+}
+
+/* ----------------------------------------------------------------------------
  * THE CARD
  * -------------------------------------------------------------------------- */
 /**
@@ -156,14 +262,45 @@ async function copyText(text) {
  *                                 counter to walk to - the shell owns the
  *                                 catalog, the shutter and the walk, and this
  *                                 is one callback out.
+ * @param {Function=} o.identity   () -> {name, number} - who the player is, for
+ *                                 the ONE case they asked to be named on the
+ *                                 slip. Absent, or answering null, and the
+ *                                 "add my name" tick is not even drawn: a
+ *                                 checkbox that cannot do anything is worse
+ *                                 than no checkbox.
+ * @param {Object=} o.shareNamed   {get(), set(v)} over the page-owned meta key
+ *                                 SHARE_NAME_KEY. Absent = the tick still
+ *                                 works for this sitting and forgets after it,
+ *                                 which is the honest degradation for a
+ *                                 preference with nowhere to live.
  */
-export function createReportCard({ ceremonies, seep, toast, log, onCounter } = {}) {
+export function createReportCard({
+  ceremonies, seep, toast, log, onCounter, identity, shareNamed, shareToHost,
+} = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const shout = typeof toast === 'function' ? toast : () => {};
   /* THE ONE DOOR THIS CARD OFFERS BESIDES 'done'. Captured once, asked at
    * render: a card built without it is not a card with a dead button on it,
    * it is the card that has no button at all (see the chip below). */
   const toCounter = typeof onCounter === 'function' ? onCounter : null;
+  /* WHO YOU ARE, AND WHETHER YOU SAID SO. Both are captured once and asked at
+   * render, the same discipline `onCounter` above set. Neither is ever read
+   * unless the player has ticked the box - `readIdentity()` is not called on
+   * the anonymous path at all, so a card that nobody named never so much as
+   * looks up a display name. */
+  const readIdentity = typeof identity === 'function' ? identity : null;
+  const namedGet = (shareNamed && typeof shareNamed.get === 'function') ? shareNamed.get : null;
+  const namedSet = (shareNamed && typeof shareNamed.set === 'function') ? shareNamed.set : null;
+  /* The desktop app's clipboard, reached the only way the page is allowed to
+   * reach anything: a round trip the SHELL owns. A web build hands in nothing
+   * and that rung of the ladder simply is not there. */
+  const toHost = typeof shareToHost === 'function' ? shareToHost : null;
+  let namedLocal = false;    // the sitting's answer when there is nowhere to save one
+  const isNamed = () => (namedGet ? namedGet() === true : namedLocal);
+  const setNamed = (v) => {
+    namedLocal = !!v;
+    if (namedSet) { try { namedSet(!!v); } catch (e) { say('share name pref failed to save'); } }
+  };
   // The report is a fullscreen beat now (shell marks <html> arc-report-on):
   // the stage is the night ground under a desk lamp, and everything the card
   // used to box sits on one graded PAPER laid on it. Same DOM order, same
@@ -520,6 +657,92 @@ export function createReportCard({ ceremonies, seep, toast, log, onCounter } = {
         box.appendChild(el('pre', 'arc-sharepreview', text));
         put(box);
       }
+    }
+
+    /* --- THE SLIP: the same night, as a picture ---------------------------
+     * Offered on EVERY night, not only a Daily Trigger one - the text grid is
+     * one game's spoiler-free puzzle and this is the whole report card, so the
+     * two answer different asks. Drawn only where a canvas exists: the headless
+     * DOM double the suites drive answers `canRenderCard()` false and this
+     * whole block is skipped, which is why the suites can still build a report.
+     */
+    if (canRenderCard()) {
+      const imgBox = el('div', 'arc-sharebox arc-shareimg');
+      const shareBtn = el('button', 'btn', t('share_image', 'Share report card'));
+      shareBtn.type = 'button';
+      imgBox.appendChild(shareBtn);
+
+      /* THE TICK. Anonymous is the default and the default is not a nag: the
+       * box is drawn unticked, it is remembered once ticked, and it is not
+       * drawn at all when there is no identity to print. */
+      let nameBox = null;
+      if (readIdentity) {
+        const lbl = el('label', 'arc-sharename');
+        nameBox = el('input');
+        try {
+          nameBox.type = 'checkbox';
+          nameBox.checked = isNamed();
+        } catch (e) { /* the node double carries neither */ }
+        if (typeof nameBox.addEventListener === 'function') {
+          nameBox.addEventListener('change', () => { setNamed(nameBox.checked === true); });
+        }
+        lbl.appendChild(nameBox);
+        lbl.appendChild(el('span', null, t('share_add_name', 'Add my name')));
+        imgBox.appendChild(lbl);
+      }
+
+      let busy = false;
+      shareBtn.addEventListener('click', () => {
+        if (busy) return;
+        busy = true;
+        setBusy(shareBtn, true);
+        const reduced = reducedMotion();
+        const endBeat = printBeat(imgBox, reduced);
+        sfx('paper', 0.4);
+        const dateLabel = s.dateLabel || (s.timetable && s.timetable.dateSeed) || '';
+        const ident = (nameBox && nameBox.checked === true && readIdentity)
+          ? (() => { try { return readIdentity(); } catch (e) { return null; } })()
+          : null;
+        renderShareCard({
+          dateLabel,
+          classes: classes.map((c) => ({
+            gameKey: c.gameKey,
+            grade: results[c.gameKey] ? results[c.gameKey].grade : null,
+          })),
+          streak: streak.count | 0,
+          perfect: !!s.perfect,
+          identity: ident,
+        }).then((out) => {
+          if (!out || !out.blob) {
+            shout(t('share_unavailable', 'Sharing is not available here'));
+            say('share image: the canvas would not export');
+            return null;
+          }
+          return deliverShareCard(out.blob, shareFileName(dateLabel), {
+            toHost, download: deliverDownload,
+          }).then((how) => {
+            if (how === DELIVERED.SHARED) { shout(t('share_shared', 'Report card shared')); return; }
+            if (how === DELIVERED.COPIED) { shout(t('share_copied', 'Report card copied')); return; }
+            if (how === DELIVERED.SAVED) { shout(t('share_saved', 'Report card saved')); return; }
+            /* EVERY RUNG REFUSED. Say so. The Activity iframe can take the
+             * download without taking it, and a beat that looks like it
+             * worked is the one outcome worse than not sharing. */
+            shout(t('share_unavailable', 'Sharing is not available here'));
+            say('share image: no delivery this host will accept');
+          });
+        }).catch((e) => {
+          shout(t('share_unavailable', 'Sharing is not available here'));
+          say('share image threw: ' + ((e && e.message) || e));
+        }).then(() => {
+          /* ONE owner for the latch, on every path. The ladder is two awaits
+           * deep now and a beat left running because a rung threw is a button
+           * nobody can press again tonight. */
+          endBeat();
+          setBusy(shareBtn, false);
+          busy = false;
+        });
+      });
+      put(imgBox);
     }
 
     /* --- out ---

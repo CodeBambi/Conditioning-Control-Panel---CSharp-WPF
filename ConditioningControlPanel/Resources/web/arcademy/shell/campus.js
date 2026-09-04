@@ -741,6 +741,27 @@ export const FACILITIES = Object.freeze({
   locker: Object.freeze({
     rect: [1260, 668, 108, 84], side: 'w', door: 710, stop: [1250, 710], rm: '004',
   }),
+  /* THE BACK ROOM (the casino wing, 2026-09-04). FIFTH WINDOW IN THE ALLEY,
+   * and it is the only one that is not a counter. Last door before the alley
+   * runs out of school: you walk past what you can buy and past what you
+   * already own, and then there is one more door. Same width, same west door,
+   * same three-step walk down the alley the other four take.
+   *
+   * TWELVE UNITS DOWN AND SIXTY-FOUR DEEP, not the ninety-six-by-eighty-four
+   * the pairs above it keep, and that is a MEASUREMENT rather than a taste:
+   * the plan's bottom band is where `.campus-hint` sits on a desktop (bottom
+   * 14px, the school's one line of instruction), and a fifth full-height
+   * window would have put this room's dressing under that sentence. The rig
+   * caught the last two pixels of a 72-deep window under the hint at 1366x768,
+   * so the window came in to 64 and the room now ends at plan y 828: eleven
+   * clear pixels at 1600x900 and just under five at 1366x768.
+   *
+   * FURNITURE, NEVER A CLASS. No ROOMS row, no registry, no timetable, nothing
+   * in campusState - the plan paints a door and the shell decides what is
+   * behind it. */
+  backroom: Object.freeze({
+    rect: [1260, 764, 108, 64], side: 'w', door: 796, stop: [1250, 796], rm: '005',
+  }),
 });
 
 /** ROOMS first, the two counters second. Pure; undefined for anything else. */
@@ -2168,6 +2189,60 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     facPut(lockerG, svg('line', { x1: x + 4, y1: 744, x2: x + 14, y2: 744 }, 'campus-furn'));
   });
   stag(lockerG, 900);
+
+  /* THE BACK ROOM. RM 005, FIFTH WINDOW IN THE ALLEY, AND IT IS ALWAYS THERE.
+   *
+   * Drawn on every host, exactly like the Prize Counter and for the counter's
+   * own reason: a landmark that comes and goes is not a landmark, it is a menu
+   * item. What CHANGES is whether the door opens. A shell that can open it
+   * hands `on.backroom` and the door walks; a shell that cannot (an older page,
+   * a host with the wing switched off) gets the dust sheet below, which is the
+   * sealed card every other shut door on this campus already raises.
+   *
+   * Drawn through the SAME facility() helper as the other four, with the
+   * alley's grammar (compact plate, west door, neon over the name) carried down
+   * to the short window's offsets. Nothing in the helper is touched for it.
+   */
+  function backroomDustCard() {
+    openFacilityCard({
+      name: t('campus_room_backroom', 'The Back Room'),
+      status: t('backroom_dust', 'Not open yet.'),
+      desc: t('backroom_dust_line',
+        'Sheets over the tables and the lights off at the wall. Another night.'),
+      sealed: true,
+    });
+  }
+  const backroomG = facility({
+    rect: FACILITIES.backroom.rect, door: FACILITIES.backroom.door,
+    side: FACILITIES.backroom.side, compact: true,
+    neonY: 768, nameY: 796, furnBox: [1276, 815, 76, 11],
+    sign: t('backroom_sign', 'Back Room'),
+    name: t('campus_room_backroom', 'The Back Room'),
+    rm: FACILITIES.backroom.rm,
+    onClick: () => {
+      if (handlers.backroom) { handlers.backroom(); return; }
+      backroomDustCard();
+    },
+    tip: () => ({
+      name: t('campus_room_backroom', 'The Back Room'),
+      status: t('campus_backroom_status', 'Always open'),
+      desc: t('campus_desc_backroom',
+        'Cash only. Chips only. The house always has time for you.'),
+    }),
+  });
+  backroomG.setAttribute('class', 'campus-room facility backroom');
+  /* THE CHIP RACK behind the glass - the parcels and the locker doors' opposite
+   * number one window down. Three chips on the rail instead of three boxes, so
+   * the shapes say what is played in there without a word on the plate.
+   *
+   * SMALLER DISCS AND A HIGHER RAIL than the drawers next door, because this
+   * window is twenty units shorter and the rig measured the old rack climbing
+   * into the RM plate. The rail keeps the drawers' four units of floor under
+   * it, so the shelf still reads as a shelf and not as the wall. */
+  [1288, 1304, 1320].forEach((x) => facPut(backroomG,
+    svg('circle', { cx: x, cy: 820.5, r: 2.8 }, 'campus-furnf')));
+  facPut(backroomG, svg('line', { x1: 1280, y1: 824, x2: 1348, y2: 824 }, 'campus-furn'));
+  stag(backroomG, 940);
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
@@ -3600,8 +3675,18 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       if (key === 'records') return recordsG;
       if (key === 'registrar') return regG;
       if (key === 'annex') return annexG;
+      if (key === 'backroom') return backroomG;
       return null;
     },
+    /**
+     * THE DUST SHEET, raised from outside. The Back Room's module is loaded on
+     * the click and only the SHELL can know that the load failed, but the card
+     * that says so belongs to the plan: every other shut door on this campus is
+     * refused with this exact card, and a second refusal surface would be a
+     * second voice. Safe to call at any time - it is the sealed card and
+     * nothing else.
+     */
+    backroomDust: backroomDustCard,
     /**
      * A viewBox point -> page coordinates, for a FLIP that has to start at a
      * place on the plan (ORIENTATION.md §3.4's handover). Fully guarded: the

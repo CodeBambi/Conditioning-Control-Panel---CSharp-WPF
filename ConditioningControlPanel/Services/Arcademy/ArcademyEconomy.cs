@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Services.Arcademy;
 /// for the same reason the streak does: a stale or edited page must never be able to mint currency.
 /// Shape (all fields ensured by <see cref="EnsureShape"/>):</para>
 /// <code>
-/// { "t":0, "k":0, "earnedT":0, "earnedK":0,
+/// { "t":0, "k":0, "c":0, "earnedT":0, "earnedK":0, "earnedC":0,
 ///   "tokenDays":["yyyy-MM-dd"],
 ///   "payDays":{ "yyyy-MM-dd": { "&lt;gameKey&gt;": 2 } },
 ///   "inv":{ "late_slip": { "n":2, "at":"yyyy-MM-dd" } },
@@ -236,6 +236,16 @@ internal static class ArcademyEconomy
     public const string CurTickets = "t";
     public const string CurTokens = "k";
 
+    /// <summary>CHIPS, the Back Room's third purse. Bought one way at the cage with Sparkle Points
+    /// and spendable only on the Back Room shelf: chips never cash out and nothing else ever mints
+    /// them, so the school's two earned currencies keep their meaning.</summary>
+    public const string CurChips = "c";
+
+    /// <summary>The cage's one and only rate. One number, here, because the page prints it, the
+    /// counter quotes it and the server debits by it, and a rate that disagrees across those three
+    /// is a player watching Sparkle vanish into the wrong pile.</summary>
+    public const int ChipsPerSparkle = 100;
+
     public const string SkuLateSlip = "late_slip";
 
     /// <summary>How many Tardy Slips the desk will hold — and therefore the longest absence one
@@ -392,6 +402,96 @@ internal static class ArcademyEconomy
             "prize_tube_midnight_blurb",
             "A darker glass for the tube back home. It ships to the whole app, not just the school.",
             Wave: 3),
+
+        // ============================ THE BACK ROOM (2026-09-04) ============================
+        // Thirteen rows that spend CHIPS, not tickets and not tokens. Chips are bought one way at
+        // the cage with Sparkle and they never cash out, so this is the ONLY shelf they buy from
+        // and everything on it is dressing: two consumables the machines hand back, three looks,
+        // one door onto the Spiral's word wedge, and a title nobody can buy.
+        //
+        // WHY THEY LIVE HERE AND NOT IN A SECOND TABLE. The counter is one counter. The Back Room
+        // sells through the SAME prize-buy path the shelf already has, so a chip row that drifted
+        // out of this list is a row the host could not price, and that is the one bug down here
+        // that would cost a player money.
+        //
+        // NOTHING ON SAFETY IS FOR SALE HERE EITHER, and nothing on this shelf buys a better
+        // outcome at a table: the published odds are the real odds and no row moves them.
+        //
+        // WAVE 3 - built and priced, and NOT on the wire (CurrentWave is still 2). The bump is a
+        // separate one-line PR, because it also releases the three wave-3 rows above.
+        new("bk_scratcher", CurChips, 50, "consumable",
+            "prize_bk_scratcher", "SCRATCH CARD",
+            "prize_bk_scratcher_blurb",
+            "A fresh card off the pad. Scratch it at the machine and see what the row says.",
+            StackMax: 20, Wave: 3),
+        new("bk_insurance", CurChips, 100, "consumable",
+            "prize_bk_insurance", "INSURANCE CHIP",
+            "prize_bk_insurance_blurb",
+            "Lay it on the rail. The next small hand you lose gets handed straight back to you.",
+            StackMax: 5, Wave: 3),
+        new("bk_visor", CurChips, 3000, "cosmetic",
+            "prize_bk_visor", "DEALER'S VISOR",
+            "prize_bk_visor_blurb",
+            "Green celluloid, low over the eyes. She wears it at the table and deals like she means it.",
+            Wave: 3),
+        new("bk_felt_teal", CurChips, 6000, "cosmetic",
+            "prize_bk_felt_teal", "TEAL NIGHT FELT",
+            "prize_bk_felt_teal_blurb",
+            "New felt on every table down here. Deep teal, the kind that keeps a room quiet.",
+            Wave: 3),
+        new("bk_frame_highroller", CurChips, 10000, "cosmetic",
+            "prize_bk_frame_highroller", "HIGH ROLLER FRAME",
+            "prize_bk_frame_highroller_blurb",
+            "A heavy gold edge around your ID photo. The desk pretends not to notice you now.",
+            Wave: 3),
+        new("bk_your_word", CurChips, 30000, "unlock",
+            "prize_bk_your_word", "YOUR WORD ON THE WHEEL",
+            "prize_bk_your_word_blurb",
+            "The WORD wedge on the Spiral stops being ours and starts being one of yours.",
+            Wave: 3),
+        // THE ONE ROW WITH NO PRICE. Cost 0 and Locked together, which is how the case says
+        // "won, never sold": the buy path refuses it `locked` at any balance, and the house hands
+        // it over the first time the reels come up royal. Free would otherwise mean free.
+        new("bk_house_favorite", CurChips, 0, "cosmetic",
+            "prize_bk_house_favorite", "HOUSE FAVORITE",
+            "prize_bk_house_favorite_blurb",
+            "Not for sale at any price. The house gives it the first time your reels go royal.",
+            Locked: true, Wave: 3),
+
+        // WAVE 4 - on the shelf list, on NO wire, and nothing behind them is built yet. They are
+        // here so the ladder above the first six prices is visible to whoever balances the cage
+        // next, and so a later PR adds an EFFECT rather than a row. The two stack sizes are the
+        // desk's own guess and the only numbers on these six the contract does not pin.
+        new("bk_double_payday", CurChips, 1000, "consumable",
+            "prize_bk_double_payday", "DOUBLE PAYDAY",
+            "prize_bk_double_payday_blurb",
+            "Hand it over before you stake and the desk marks the card. One play pays twice.",
+            StackMax: 5, Wave: 4),
+        new("bk_boon", CurChips, 4000, "consumable",
+            "prize_bk_boon", "HOUSE BOON",
+            "prize_bk_boon_blurb",
+            "The house owes you a favor. Spend it and the night leans your way for one hand.",
+            StackMax: 3, Wave: 4),
+        new("bk_pitboss", CurChips, 15000, "unlock",
+            "prize_bk_pitboss", "PIT BOSS",
+            "prize_bk_pitboss_blurb",
+            "Somebody stands behind your table all night and keeps the count for you.",
+            Wave: 4),
+        new("bk_mantra", CurChips, 20000, "unlock",
+            "prize_bk_mantra", "THE HOUSE MANTRA",
+            "prize_bk_mantra_blurb",
+            "The room learns a line of yours and says it back between hands. Softly, all night.",
+            Wave: 4),
+        new("bk_dealers_cut", CurChips, 50000, "unlock",
+            "prize_bk_dealers_cut", "DEALER'S CUT",
+            "prize_bk_dealers_cut_blurb",
+            "A standing share of the rake. Every play drops a little back in your pocket.",
+            Wave: 4),
+        new("bk_vault_key", CurChips, 250000, "unlock",
+            "prize_bk_vault_key", "THE VAULT KEY",
+            "prize_bk_vault_key_blurb",
+            "The door behind the cage. Nobody at the desk will say what is on the far side of it.",
+            Wave: 4),
     };
 
     public static CatalogItem? Find(string? sku) =>
@@ -420,8 +520,13 @@ internal static class ArcademyEconomy
         var wallet = w ?? new JObject();
         EnsureInt(wallet, "t");
         EnsureInt(wallet, "k");
+        // The Back Room's purse rides the same bag as the other two so one adopt carries the lot.
+        // A build that has never heard of chips still round-trips them: the field is ensured here
+        // and nothing local ever mints it, so an older desk cannot zero what the server holds.
+        EnsureInt(wallet, "c");
         EnsureInt(wallet, "earnedT");
         EnsureInt(wallet, "earnedK");
+        EnsureInt(wallet, "earnedC");
         if (wallet["tokenDays"] is not JArray) wallet["tokenDays"] = new JArray();
         if (wallet["payDays"] is not JObject) wallet["payDays"] = new JObject();
         if (wallet["inv"] is not JObject) wallet["inv"] = new JObject();
@@ -590,7 +695,12 @@ internal static class ArcademyEconomy
         }
         else if (held > 0) return new BuyResult(false, "owned", item);
 
-        var purse = item.Cur == CurTokens ? "k" : "t";
+        // THREE PURSES NOW, and the row picks its own. Anything unrecognised falls to tickets,
+        // which is the cheapest purse and therefore the one a mangled row can do least harm in.
+        // `c` is not ensured by EnsureShape yet (the cage PR owns the wallet shape), and it does
+        // not need to be tonight: a missing field reads 0, so a chip row would be refused `poor`
+        // rather than paid for out of thin air, and no chip row is on the wire at wave 2 anyway.
+        var purse = item.Cur switch { CurTokens => "k", CurChips => "c", _ => "t" };
         var have = (int?)wallet[purse] ?? 0;
         if (have < item.Cost) return new BuyResult(false, "poor", item);
 
@@ -660,7 +770,16 @@ internal static class ArcademyEconomy
     public static JObject BalanceJson(JObject w)
     {
         var wallet = EnsureShape(w);
-        return new JObject { ["t"] = (int?)wallet["t"] ?? 0, ["k"] = (int?)wallet["k"] ?? 0 };
+        return new JObject
+        {
+            ["t"] = (int?)wallet["t"] ?? 0,
+            ["k"] = (int?)wallet["k"] ?? 0,
+            // Chips carry their lifetime total on the same frame because the Back Room's floor
+            // shows both at once (balance on the chip, "won so far" on the cage sign) and a second
+            // round trip for the second number would repaint the room a beat late.
+            ["c"] = (int?)wallet["c"] ?? 0,
+            ["earnedC"] = (int?)wallet["earnedC"] ?? 0,
+        };
     }
 
     // ============================ dates ============================

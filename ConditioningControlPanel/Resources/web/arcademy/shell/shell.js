@@ -99,7 +99,7 @@ import { installPaCaption } from './pacaption.js';
  * the `music` bus through the same door the beds use. The shell tells it where
  * the player is (campus, records, a class) and clearScreen tells it they left. */
 import { createOst } from './ost.js';
-import { createIdSpotlight, idReducedMotion } from './idcard.js';
+import { createIdSpotlight, idReducedMotion, studentNumber } from './idcard.js';
 import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
@@ -182,13 +182,24 @@ function docEvent(name, detail) {
  * booth now (the Records Office's arrangement, one alley over), so `prizes` is
  * not a screen this router can ever be on. A depth for a screen that cannot
  * exist is a line that reads as a route somebody could still take. */
-const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizebooth: 1, locker: 1, annex: 2, report: 2, settings: 3, class: 4 });
+const SCREEN_DEPTH = Object.freeze({ board: 0, room: 1, records: 1, prizebooth: 1, locker: 1, backroom: 1, annex: 2, report: 2, settings: 3, class: 4 });
 
 /** Walk targets EMI never remarks on arriving at. The three office doors are
  *  voice.js's geofence read from the other end: she is silent on the Records
  *  side of them anyway, so a `campus.walkArrived` there would be a line spent
  *  on the last step before she is switched off (heartbeat wave, 2026-08-25). */
 const SILENT_WALK_TARGETS = new Set(['records', 'registrar', 'annex']);
+
+/* THE BACK ROOM'S WIRE, AND EXACTLY THIS MUCH OF IT (BACKROOM-CONTRACT §3).
+ * The wing is a page like any other page in this bundle and it is under the
+ * annex's law: it imports no bridge, so it cannot post a frame the shell has
+ * not agreed to carry. These two lists ARE the agreement. A room that asks for
+ * anything else is not refused quietly - it is logged and dropped, because the
+ * only reason a room would ask is that somebody has widened its contract
+ * without widening this line, and that should be visible in the console rather
+ * than at a bank balance. */
+const BACKROOM_SENDS = Object.freeze(['casino-request', 'triggers-request']);
+const BACKROOM_HEARS = Object.freeze(['casino-result', 'triggers-result']);
 
 /* ----------------------------------------------------------------------------
  * DECK V - THE RAKE (house-rules.txt). Built ONCE here so all ten classes wear
@@ -1017,8 +1028,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   /** THE ROOM SCENE (shell/room.js). Built fresh per visit, destroyed on every
    *  path out via clearScreen - the annex's lifecycle without the bracket. */
   let roomPage = null;
+  /** THE BACK ROOM (backroom/index.js, loaded on the click and never before).
+   *  The one page in this bundle the shell does not import at the top: the wing
+   *  is a whole floor of tables and it may not cost a boot on a phone that is
+   *  never going to open the door. `backRoomMod` is the module once it has
+   *  landed, so a second visit is a call and not a second fetch. */
+  let backRoomPage = null;
+  let backRoomMod = null;
   /** The one in-flight annex stats request ({promise, resolve, timer}|null). */
   let annexStatsWait = null;
+  let shareImageWait = null;
   /* THE PUNCH-CARD CEREMONY. `punchStage` is the live overlay; `punchArm` is
    * what the shell is WAITING for while the host answers `class-ended`.
    * Both are null the rest of the time. */
@@ -1294,6 +1313,24 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   } : null;
   reportCard = createReportCard({
     ceremonies, seep, toast: shout, log: say, onCounter: counterFromReport,
+    /* THE SLIP's two seams. `identity` is only ever CALLED when the player has
+     * ticked the box - the card is anonymous by default and the report card
+     * never reads a name it was not asked for - and `shareNamed` is where that
+     * tick lives. It is a page-owned meta key (it is not in HOST_OWNED_KEYS),
+     * so store.set write-throughs are legal and the tick survives the night. */
+    identity: () => {
+      const p = idProfile();
+      const num = studentNumber(p.selfId, p.enrolled, p.name);
+      return { name: p.name, number: num && num.no };
+    },
+    shareNamed: {
+      get: () => store.get('shareNamed', false) === true,
+      set: (v) => store.set('shareNamed', v === true),
+    },
+    /* The app only. On the web `src.mediaControls` is true and there is no
+     * host behind the bridge to ask, so that rung of the ladder is absent
+     * rather than present-and-broken. */
+    shareToHost: src.mediaControls === true ? null : shareImageToHost,
   });
 
   /* ---------------------- helpers --------------------------------------- */
@@ -1575,6 +1612,23 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       const lr = lockerRoom;
       lockerRoom = null;
       try { lr.destroy(); } catch (e) { /* noop */ }
+    }
+    /* AND THE BACK ROOM, which is torn down here for every reason the four
+     * rooms above it are AND one nobody else on this floor has: it is the only
+     * page holding a live subscription to the host. A handler left on
+     * `casino-result` would paint a cage that has been thrown away, and worse,
+     * would keep doing it for the rest of the night. The room's own destroy()
+     * drops the ones it took out; the sweep after it is the safety net, because
+     * a page that forgets one must not be able to leak it into the next screen. */
+    if (backRoomPage) {
+      const br = backRoomPage;
+      backRoomPage = null;
+      try { br.destroy(); } catch (e) { /* noop */ }
+    }
+    if (backRoomOffs.length) {
+      const offs = backRoomOffs;
+      backRoomOffs = [];
+      offs.forEach((off) => { try { off(); } catch (e) { /* noop */ } });
     }
     extrasBox = null;
     /* THE ROTATE GATE BELONGS TO A SCREEN, NOT TO THE PAGE. Every screen change
@@ -2203,6 +2257,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
            * the right way round. Never shuttered - nothing is sold in there, so
            * there is no closing time to keep and no sealed card to raise. */
           locker: () => walkThen('locker', () => showLockerScreen()),
+          /* THE BACK ROOM'S DOOR, the last one in the alley and the only one
+           * whose room is fetched rather than imported. It walks like every
+           * other door here; what happens at the end of the walk depends on
+           * whether the module is on this host at all (see showBackRoom). */
+          backroom: () => walkThen('backroom', () => showBackRoom()),
           /* THE PURSE IN THE CHROME. The wallet chip is the shortcut half of
            * the same split the gear and the Front Office door already run: no
            * walk, no antechamber, straight to the shelf - because the chip is a
@@ -2904,6 +2963,14 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       const tt = Number(f.wallet.t); const kk = Number(f.wallet.k);
       if (Number.isFinite(tt)) { next.t = tt; moved = true; }
       if (Number.isFinite(kk)) { next.k = kk; moved = true; }
+      /* CHIPS RIDE THE SAME ECHO (the Back Room, W1). `c` is what is on the
+       * player and `earnedC` is what they have ever won, and both are the
+       * HOST's numbers on the host's frame - the page banks neither. A host
+       * that has never heard of the wing sends neither field and this reads
+       * exactly as it read before the wing existed. */
+      const cc = Number(f.wallet.c); const ec = Number(f.wallet.earnedC);
+      if (Number.isFinite(cc)) { next.c = cc; moved = true; }
+      if (Number.isFinite(ec)) { next.earnedC = ec; moved = true; }
     }
     if (f.inv && typeof f.inv === 'object') { next.inv = f.inv; moved = true; }
     if (f.unlocks && typeof f.unlocks === 'object') { next.unlocks = f.unlocks; moved = true; }
@@ -2922,11 +2989,16 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return walletEcho ? Object.assign({}, base, walletEcho) : base;
   }
 
-  /** {t, k}: what is on the player right now. */
+  /** {t, k, c}: what is on the player right now. A purse that has never held a
+   *  chip reads zero, which is the same nothing an empty ticket purse reads. */
   function walletBalance() {
     const w = walletBag();
-    const tt = Number(w.t); const kk = Number(w.k);
-    return { t: Number.isFinite(tt) && tt > 0 ? tt : 0, k: Number.isFinite(kk) && kk > 0 ? kk : 0 };
+    const tt = Number(w.t); const kk = Number(w.k); const cc = Number(w.c);
+    return {
+      t: Number.isFinite(tt) && tt > 0 ? tt : 0,
+      k: Number.isFinite(kk) && kk > 0 ? kk : 0,
+      c: Number.isFinite(cc) && cc > 0 ? cc : 0,
+    };
   }
 
   function walletInv() {
@@ -3833,6 +3905,161 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     docEvent('arcademy-locker-opened', { from: from === 'prizebooth' ? 'counter' : from });
   }
 
+  /* ========================= THE BACK ROOM =============================
+   * BACKROOM-CONTRACT §4. The fifth window in the alley, and the one room in
+   * this bundle the shell does not import at the top of the file.
+   *
+   * WHY IT IS A DYNAMIC IMPORT. Every other screen here is a page that most
+   * players open on most nights. The casino wing is a floor of tables, a cage
+   * and a cabinet, and a player who never opens that door should not pay for
+   * any of it on a phone that is already the slowest thing in the room. So the
+   * module is fetched on the CLICK, cached once it lands, and a host that does
+   * not ship the directory at all simply never resolves it - which is not an
+   * error, it is a school with one door still boarded up.
+   *
+   * AND THE SCREEN DOES NOT MOVE UNTIL IT LANDS. showBackRoom is called at the
+   * end of the walk with the campus still standing, and it stays standing while
+   * the import is in the air: a failure raises the plan's own dust sheet over a
+   * quad that never went anywhere, so there is nothing to "return" to and no
+   * empty screen for a player to be stranded on.
+   *
+   * THE CTX (documented here because the module is not in this repo yet):
+   *   t(key, fallback)      the lexicon, already merged with the mod skin
+   *   lite / reduced        the phone's cut-down flag, the motion setting
+   *   log(line)             the shell's console channel
+   *   subject               init.subject, read-only
+   *   localDay              'yyyy-mm-dd', the LOCAL day the cage counts by
+   *   gameName(key)         a class's display name
+   *   balance()             {t, k, c} - the purse, host-owned
+   *   earnedC()             lifetime chips won, host-owned
+   *   state() / save(patch) one page-owned blob in the meta store
+   *   send(msg)             casino-request / triggers-request, and nothing else
+   *   listen(type, fn)      casino-result / triggers-result; returns unsubscribe
+   *   onExit()              the way out, and the way out is the quad
+   * ==================================================================== */
+
+  /** Every live `listen` the room took out, so a room that forgets to drop one
+   *  cannot leave a handler painting into a page that has been torn down. */
+  let backRoomOffs = [];
+
+  /** The module, fetched once. A FAILURE IS NOT CACHED - a fetch that lost the
+   *  network is worth trying again the next time somebody tries the door. */
+  function loadBackRoom() {
+    if (backRoomMod) return Promise.resolve(backRoomMod);
+    return import('../backroom/index.js').then((mod) => {
+      backRoomMod = mod;
+      return mod;
+    });
+  }
+
+  /** The dust sheet, and it is the PLAN's card - every other shut door on this
+   *  campus is refused with that same card, and a second refusal surface here
+   *  would be the school speaking in two voices about one locked room. */
+  function refuseBackRoom(why) {
+    say('the Back Room did not open: ' + why);
+    if (campus && typeof campus.backroomDust === 'function') {
+      try { campus.backroomDust(); return; } catch (e) { /* fall through to a line */ }
+    }
+    try {
+      shout(t('backroom_dust_line',
+        'Sheets over the tables and the lights off at the wall. Another night.'));
+    } catch (e) { /* a toast may never hold a door */ }
+  }
+
+  /** NARROW CAPS, THE ANNEX'S LAW, plus the two wire verbs the contract adds. */
+  function backRoomCaps() {
+    return {
+      t,
+      lite: shellLite(),
+      reduced: reducedMotion,
+      log: say,
+      subject: src.subject || {},
+      localDay: localDate,
+      gameName,
+      balance: () => walletBalance(),
+      /* LIFETIME CHIPS, off the same echo the balance rides. It is a READ of
+       * what the host banked and never a count this page keeps. */
+      earnedC: () => {
+        const n = Number(walletBag().earnedC);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      },
+      // ONE page-owned blob, not N keys (the meta-store headroom law).
+      state: () => store.get('backroom') || {},
+      save: (patch) => {
+        try { store.merge('backroom', patch); }
+        catch (e) { say('backroom merge failed: ' + ((e && e.message) || e)); }
+      },
+      /* THE WIRE. Two verbs, two whitelists, and the room never sees `bridge`. */
+      send: (msg) => {
+        const type = String((msg && msg.type) || '');
+        if (BACKROOM_SENDS.indexOf(type) < 0) {
+          say('backroom send refused: ' + (type || '(no type)'));
+          return false;
+        }
+        try { bridge.send(msg); return true; }
+        catch (e) { say('backroom send failed: ' + ((e && e.message) || e)); return false; }
+      },
+      listen: (type, fn) => {
+        const key = String(type || '');
+        if (BACKROOM_HEARS.indexOf(key) < 0 || typeof fn !== 'function') {
+          say('backroom listen refused: ' + (key || '(no type)'));
+          return () => {};
+        }
+        let off = () => {};
+        try { off = bridge.on(key, fn) || (() => {}); }
+        catch (e) { say('backroom listen failed: ' + ((e && e.message) || e)); return () => {}; }
+        backRoomOffs.push(off);
+        return () => {
+          const i = backRoomOffs.indexOf(off);
+          if (i >= 0) backRoomOffs.splice(i, 1);
+          try { off(); } catch (e) { /* noop */ }
+        };
+      },
+      onExit: () => showBoard(),
+    };
+  }
+
+  function showBackRoom() {
+    /* THE QUAD STAYS UP while the module is in the air. See the header. */
+    loadBackRoom().then((mod) => {
+      if (destroyed) return;
+      /* The player walked out while the fetch was running (Esc, a toast's Back,
+       * a suspend). A room minted into a screen that has moved on is exactly
+       * the class-into-a-dead-screen bug the walk funnel is written to avoid. */
+      if (screen !== 'board') return;
+      if (!mod || typeof mod.openBackRoom !== 'function') {
+        refuseBackRoom('the module has no openBackRoom');
+        return;
+      }
+      screen = 'backroom';
+      dismissEndCard();
+      dismissPunchStage();
+      dismissAnnexStage();
+      clearScreen();
+      renderTopbar();
+      let page = null;
+      try { page = mod.openBackRoom(backRoomCaps()); }
+      catch (e) { page = null; say('the Back Room threw on open: ' + ((e && e.message) || e)); }
+      if (!page || !page.root) {
+        /* It refused to build AFTER the quad came down, which is the one path
+         * that can strand somebody. The board is the honest place to put them
+         * back, and the dust sheet is raised on the campus that comes with it. */
+        backRoomPage = null;
+        showBoard();
+        refuseBackRoom('the room would not mount');
+        return;
+      }
+      backRoomPage = page;
+      if (dom && dom.screen) dom.screen.appendChild(page.root);
+      setStage('arc-report-on');
+      if (typeof page.fit === 'function') page.fit();
+      docEvent('arcademy-backroom-opened', {});
+    }).catch((e) => {
+      if (destroyed) return;
+      refuseBackRoom('module load failed: ' + ((e && e.message) || e));
+    });
+  }
+
   /* IS THE BOOT SPLASH STILL THE THING ON SCREEN? `#arc-toast` is z 60 and
    * `.arc-loader` is z 70, so a toast fired during construction is a toast
    * nobody ever sees - it expires (2.2s) under a splash whose own floor is
@@ -4230,6 +4457,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       clearTimeout(w.timer);
       annexStatsWait = null;
       return Promise.resolve(null);
+    }
+    return w.promise;
+  }
+
+  /* THE SHARE CARD'S LAST RUNG BEFORE THE FLOOR. WebView2 has no async
+   * clipboard image write the page can use, so the desktop app carries the PNG
+   * over the bridge and C# puts it on the Windows clipboard itself. Same shape
+   * as the registry link above: one request in flight, a deadline, and every
+   * failure resolves FALSE rather than hanging a button forever. A web build
+   * never gets here - reportcard.js is handed this only on the app. */
+  function shareImageToHost(png) {
+    if (typeof png !== 'string' || !png) return Promise.resolve(false);
+    if (shareImageWait) return Promise.resolve(false);
+    const w = {};
+    w.promise = new Promise((resolve) => {
+      w.resolve = resolve;
+      w.timer = setTimeout(() => { shareImageWait = null; resolve(false); }, 8000);
+    });
+    shareImageWait = w;
+    try { bridge.send({ type: 'share-image', png }); }
+    catch (e) {
+      clearTimeout(w.timer);
+      shareImageWait = null;
+      return Promise.resolve(false);
     }
     return w.promise;
   }
@@ -6538,6 +6789,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       w.resolve(m && m.body && typeof m.body === 'object' ? m.body : null);
     },
 
+    /** {type:'share-image-result'} - the host either put the PNG on the
+     *  Windows clipboard or it did not. Resolves the one pending request;
+     *  an unsolicited frame is dropped on the floor. */
+    onShareImageResult(m) {
+      const w = shareImageWait;
+      if (!w) return;
+      shareImageWait = null;
+      try { clearTimeout(w.timer); } catch (e) { /* noop */ }
+      w.resolve(!!(m && m.ok));
+    },
+
     /** {type:'setting'} post-clamp echo. THE only path that moves a setting. */
     onSetting(m) {
       if (!m || typeof m.key !== 'string') return;
@@ -6948,6 +7210,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         try { if (lockerRoom.escapeStep()) return true; } catch (e) { /* noop */ }
       }
       if (screen === 'locker') { showBoard(); return true; }
+      /* THE BACK ROOM FOLDS INWARD-OUT like everything else on this floor: the
+       * room's own rungs first (a table it has dealt, a cage it has opened),
+       * then FALSE, and the rung below walks out to the quad. A wing that is
+       * not on this host has no rung at all - the door never opened, so `screen`
+       * never moved and this line is never reached. */
+      if (screen === 'backroom' && backRoomPage) {
+        try {
+          if (typeof backRoomPage.escapeStep === 'function' && backRoomPage.escapeStep()) return true;
+        } catch (e) { /* noop */ }
+      }
+      if (screen === 'backroom') { showBoard(); return true; }
       // THE ANNEX folds inward-out (trap 48's shape, one ladder both sides of
       // the seam): the lab's own rungs first - paper down, OS window shut,
       // laptop closed, close-up stepped back - then the stairs walk home to

@@ -42,6 +42,15 @@ function unraf(h) {
   try { clearTimeout(h); } catch { /* noop */ }
 }
 
+/** ONE CLOCK for every loop in this file. The stamp requestAnimationFrame
+ *  hands its callback is NOT always on the same origin as performance.now (a
+ *  headless probe on a virtual-time budget is the case that caught this), so
+ *  a loop that starts on one and measures with the other lands `t` outside
+ *  0..1. Read it here, at both ends, in countUp and in bank alike. */
+function clock() {
+  return ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
+}
+
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
 /**
@@ -60,12 +69,9 @@ export function countUp(node, from, to, opts) {
   const start = Math.round(Number(from) || 0);
   if (start === end) { write(end); return () => {}; }
   const ms = Number(o.ms);
-  /* ONE CLOCK, READ THE SAME WAY AT BOTH ENDS. The stamp requestAnimationFrame
-   * hands its callback is NOT always on the same origin as performance.now (a
-   * headless probe on a virtual-time budget is the case that caught this), and
-   * mixing the two made `t` land outside 0..1 - which painted a MINUS BALANCE
-   * for a frame. A balance may never read wrong, not even for one frame. */
-  const clock = () => ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now());
+  /* ONE CLOCK, READ THE SAME WAY AT BOTH ENDS (see clock() above): mixing the
+   * rAF stamp with performance.now made `t` land outside 0..1, which painted a
+   * MINUS BALANCE for a frame. A balance may never read wrong, not even once. */
   const t0 = clock();
   let handle = null;
   let belt = null;
@@ -227,7 +233,11 @@ export function bank(from, to, opts) {
       layer.appendChild(d);
       nodes.push(d);
     }
-    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    /* THE SAME CLOCK countUp READS, and the same second, slower hand. Starting
+     * on performance.now and then measuring with the rAF stamp is the bug one
+     * function up: the discs either teleported or never landed. */
+    const t0 = clock();
+    let frames = 0;
     const done = () => {
       if (killed) return;
       killed = true;
@@ -235,9 +245,10 @@ export function bank(from, to, opts) {
       try { layer.remove ? layer.remove() : layer.parentNode && layer.parentNode.removeChild(layer); } catch { /* noop */ }
       resolve();
     };
-    const step = (now) => {
+    const step = () => {
       if (killed) return;
-      const el0 = (now || Date.now()) - t0;
+      frames += 1;
+      const el0 = Math.max(clock() - t0, frames * 16);
       landed = 0;
       for (const d of nodes) {
         const t = Math.max(0, Math.min(1, (el0 - d.__delay) / ms));

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twenty-One - table fixture</title>
+<!-- The REAL twentyone.js under a STUBBED kit. No shell, no floor, no bridge,
+     no server and not a chip that exists anywhere. The stub is the point: the
+     table's whole job is to render frames somebody else resolved, so the way
+     to test it is to hand it frames and read what it drew.
+
+     ?script=  which canned hand the pretend dealer is holding:
+                 deal      one deal, the felt goes live
+                 bust      deal then DEEPER into twenty-four
+                 win       deal then HOLD, the dealer breaks
+                 push      deal then HOLD, both on nineteen
+                 bj        twenty-one on the deal, pays 3 to 2
+                 double    deal then DOUBLE DOWN, one card and stand
+                 poor      the table refuses for want of chips
+                 offline   the line is down, nothing was staked
+                 resume    an open hand is already on the felt at mount
+     ?slow=1   the dealer takes 1200ms, so the LOCK can be watched
+     ?dark=1   no line at all: kit.api.wired() is false
+     ?reduced=1 arms html.arc-reduced, the global still mode
+     ?lite=1   arms html.ae-lite + html.arc-mobile, the phone diet
+     ?w=390    caps the column at 390 CSS pixels and drops the bench padding.
+               Headless Chrome will not open a window narrower than about 504
+               on Windows, so a phone WIDTH has to be a container, not a
+               viewport. Nothing in the table reads vw or a media query, so a
+               capped column is the same layout a phone gets.
+     ?auto=    the unattended driver: deal|bust|win|push|bj|double|poor|
+               offline|resume|lock|unmount|open|floor
+               (floor drives the REAL backroom/index.js instead of the stub)
+     Every driver writes AUTO lines into #log, which is what the headless probe
+     reads back out of the dumped DOM. No framework, no runner in the page: the
+     fixture IS the harness, so it can never drift from it. -->
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="./backroom.css">
+<style>
+  body { margin: 0; padding: 16px 14px 60px; background: var(--ground); color: var(--ink); font-family: var(--body); }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  header.fx { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+              border-bottom: 3px solid var(--pink); padding-bottom: 8px; margin-bottom: 14px; }
+  header.fx h1 { font-family: var(--disp); font-size: 20px; margin: 0; letter-spacing: .08em; }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--ink-dim); }
+  #log { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); white-space: pre-wrap;
+         margin-top: 12px; max-height: 200px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="fx">
+    <h1>TWENTY-ONE</h1>
+    <span class="eyebrow">backroom/twentyone.js &middot; table fixture</span>
+  </header>
+  <!-- .bk-room is where backroom.css declares the room's tokens, and a machine
+       is always mounted inside one. The bench wears it for the same reason. -->
+  <div class="bk-room"><div id="stage" class="bk-stage"></div></div>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import twentyone from './twentyone.js';
+import { fmtChips, balanceChip, chipStack, bank } from './kit/chips.js';
+
+const q = new URLSearchParams(location.search);
+const logEl = document.getElementById('log');
+const log = (m) => { logEl.textContent += m + '\n'; };
+window.addEventListener('error', (e) => log('THREW ' + (e.message || e)));
+
+if (q.has('reduced')) document.documentElement.classList.add('arc-reduced');
+if (q.has('lite')) document.documentElement.classList.add('ae-lite', 'arc-mobile');
+if (q.has('w')) {
+  document.body.style.padding = '0';
+  const w = document.querySelector('.wrap');
+  w.style.maxWidth = Math.max(240, Number(q.get('w')) || 390) + 'px';
+  w.style.margin = '0';
+}
+
+/* ------------------------------------------------------------------------
+ * THE CANNED DEALER. One plan per script, an answer per verb. Nothing here
+ * decides anything: these are frames a server already resolved, written down.
+ * ---------------------------------------------------------------------- */
+const C = (r, s) => ({ r, s });
+const purse = { chips: 2000 };
+
+/** `delta` is what the frame does to the balance (the stake has already left);
+ *  `payout` is what the table paid, which is the number the felt prints. */
+function frame(result, delta, payout, extra) {
+  purse.chips += (delta || 0);
+  return Object.assign({
+    machine: 'twentyone', chips: purse.chips, earnedC: 0, pot: 41800,
+    stake: 25, payout: payout || 0, result,
+  }, extra || {});
+}
+const ok = (body) => ({ ok: true, status: 200, body });
+const no = (reason, status) => ({ ok: false, status: status == null ? 200 : status, body: { reason } });
+
+const OPEN = { player: [C('K', 0), C('5', 3)], dealer: [C('6', 1)], dealerHidden: true, status: 'playing', canDouble: true };
+
+const PLANS = {
+  deal:   { deal: () => ok(frame(OPEN, -25, 0)) },
+  bust:   { deal: () => ok(frame(OPEN, -25, 0)),
+            hit: () => ok(frame({ player: [C('K', 0), C('5', 3), C('9', 2)], dealer: [C('6', 1), C('T', 0)],
+                                  dealerHidden: false, status: 'lost', canDouble: false }, 0, 0)) },
+  win:    { deal: () => ok(frame(OPEN, -25, 0)),
+            stand: () => ok(frame({ player: [C('K', 0), C('5', 3)], dealer: [C('6', 1), C('T', 0), C('8', 2)],
+                                    dealerHidden: false, status: 'won', canDouble: false }, 50, 50)) },
+  push:   { deal: () => ok(frame(OPEN, -25, 0)),
+            stand: () => ok(frame({ player: [C('K', 0), C('9', 3)], dealer: [C('9', 1), C('T', 0)],
+                                    dealerHidden: false, status: 'push', canDouble: false }, 25, 25)) },
+  bj:     { deal: () => ok(frame({ player: [C('A', 3), C('K', 0)], dealer: [C('6', 1), C('7', 2)],
+                                   dealerHidden: false, status: 'blackjack', canDouble: false }, 37, 62)) },
+  double: { deal: () => ok(frame(OPEN, -25, 0)),
+            double: () => ok(frame({ player: [C('K', 0), C('5', 3), C('6', 1)], dealer: [C('6', 1), C('T', 0), C('9', 2)],
+                                     dealerHidden: false, status: 'won', canDouble: false }, 75, 100)) },
+  poor:   { deal: () => no('insufficient_chips') },
+  offline:{ deal: () => no('offline', 0) },
+  resume: {},
+};
+
+const script = q.get('script') || q.get('auto') || 'deal';
+const plan = PLANS[script] || PLANS.deal;
+const delay = q.has('slow') ? 1200 : 90;
+const wired = !q.has('dark');
+const wait = (v) => new Promise((r) => setTimeout(() => r(v), delay));
+
+const snap = {
+  chips: purse.chips, earnedC: 0, sparkle: 27, rate: 100, pot: 41800,
+  hand: script === 'resume' ? { player: [C('A', 0), C('7', 2)], dealer: [C('9', 1)], dealerHidden: true, status: 'playing', canDouble: true } : null,
+  config: { stakes: { twentyone: 25 }, paytables: { twentyone: { blackjack: '3:2', stand: 17 } } },
+};
+
+/* ------------------------------------------------------------------------
+ * THE STUBBED KIT. The same surface backroom/index.js hands a machine, with
+ * the money replaced by a counter and the seam replaced by the table above.
+ * ---------------------------------------------------------------------- */
+const bal = balanceChip({ label: 'chips', value: purse.chips });
+const kit = {
+  api: {
+    wired: () => wired,
+    status: () => wait(wired ? ok(snap) : { ok: false, status: 0, body: { reason: 'offline' } }),
+    play(machine, stake, input) {
+      log('PLAY ' + JSON.stringify({ machine, stake, action: input && input.action }));
+      const fn = plan[(input && input.action) || ''];
+      return wait(fn ? fn() : no('invalid_input'));
+    },
+  },
+  t: (key) => key,             // the floor's bkT answers a bk_t1_ key with the key
+  voice: { line: (b) => 'she says something ' + b + '.' },
+  reduced: q.has('reduced'),
+  lite: q.has('lite'),
+  log,
+  sfx: (name, level) => log('SFX ' + name + ' ' + level),
+  fmtChips, balanceChip, chipStack, bank,
+  status: () => snap,
+  config: () => snap.config,
+  settle: (body, from) => {
+    if (!body || body.chips == null) return;
+    bal.set(body.chips);
+    log('SETTLE chips=' + body.chips + ' bank=' + (from ? 'yes' : 'no'));
+  },
+  refresh: () => Promise.resolve({ ok: true }),
+  toFloor: () => log('TOFLOOR'),
+  balanceEl: () => bal.el,
+};
+
+const stage = document.getElementById('stage');
+
+/* ?auto=floor is the one drive that does NOT use the stub: it opens the REAL
+ * floor with no line to a counter at all and presses the cabinet, because
+ * "backroom/index.js can mount this module and fold it again" is the single
+ * assertion neither file can make on its own. */
+if (q.get('auto') === 'floor') {
+  const mod = await import('./index.js');
+  const room = mod.openBackRoom({ log, t: (key, fb) => fb || key });
+  document.querySelector('.bk-room').appendChild(room.root);
+  setTimeout(() => {
+    const cab = room.root.querySelector('.bk-cab');
+    log('AUTO cabSheet=' + cab.classList.contains('bk-sheet') + ' name=' + cab.textContent.slice(0, 10));
+    cab.click();
+    setTimeout(() => {
+      log('AUTO mounted=' + (room.root.querySelector('.bk21') ? 'yes' : 'no'));
+      log('AUTO folded=' + room.escapeStep());
+      log('AUTO gone=' + (room.root.querySelector('.bk21') ? 'no' : 'yes'));
+      log('AUTO done');
+    }, 600);
+  }, 900);
+} else {
+  twentyone.mount(stage, kit, { log, exits: null });
+}
+
+/* ------------------------------------------------------------------------
+ * THE UNATTENDED DRIVER. It presses the same buttons a player does and then
+ * writes down what it saw. Nothing reaches inside the module.
+ * ---------------------------------------------------------------------- */
+const btn = (act) => stage.querySelector('.bk21-btn[data-act="' + act + '"]');
+const felt = () => stage.querySelector('.bk21-say').textContent;
+const count = (side) => stage.querySelector('.bk21-row-' + side + ' .bk21-count').textContent;
+const cards = (side) => stage.querySelectorAll('.bk21-row-' + side + ' .bk21-card').length;
+const backs = () => stage.querySelectorAll('.bk21-card.bk21-back').length;
+
+function report(tag) {
+  log(tag + ' you=' + count('player') + ' dealer=' + count('dealer'));
+  log(tag + ' cards=' + cards('player') + '/' + cards('dealer') + ' backs=' + backs());
+  log(tag + ' say=' + felt());
+}
+
+const auto = q.get('auto');
+const press = (act, then) => { const b = btn(act); log('PRESS ' + act + ' hidden=' + b.hidden + ' disabled=' + b.disabled); b.click(); setTimeout(then, delay + 260); };
+
+if (auto === 'open') {
+  setTimeout(() => {
+    log('AUTO odds=' + stage.querySelector('.bk21-odds').textContent);
+    log('AUTO dealLabel=' + btn('deal').textContent);
+    log('AUTO dark=' + (stage.querySelector('.bk21').classList.contains('bk21-dark') ? 'yes' : 'no'));
+    // THE PHONE GATE, measured rather than eyeballed: a room whose scrollWidth
+    // is wider than its client width has a sideways scrollbar on a phone, and
+    // CLAUDE.md treats that as a bug rather than as a taste.
+    const room = document.querySelector('.bk-room');
+    log('AUTO room=' + room.clientWidth
+      + ' overflow=' + Math.max(0, room.scrollWidth - room.clientWidth));
+    report('AUTO');
+    log('AUTO done');
+  }, delay + 400);
+} else if (auto === 'resume') {
+  setTimeout(() => {
+    report('AUTO');
+    log('AUTO hitShown=' + !btn('hit').hidden + ' dealShown=' + !btn('deal').hidden);
+    log('AUTO done');
+  }, delay + 400);
+} else if (auto === 'lock') {
+  setTimeout(() => {
+    btn('deal').click();
+    // Mid flight: every verb is dead and the felt says the shoe is moving.
+    setTimeout(() => {
+      log('AUTO lockedDeal=' + btn('deal').disabled + ' lockedHit=' + btn('hit').disabled
+        + ' lockedStand=' + btn('stand').disabled);
+      log('AUTO midSay=' + felt());
+      // A SECOND PRESS MID FLIGHT MUST NOT STAKE AGAIN.
+      btn('deal').click();
+    }, 200);
+    setTimeout(() => { log('AUTO plays=' + (logEl.textContent.match(/PLAY /g) || []).length); log('AUTO done'); }, delay + 700);
+  }, delay + 400);
+} else if (auto === 'unmount') {
+  setTimeout(() => {
+    press('deal', () => {
+      report('AUTO');
+      // LEAVING MID HAND. The server stands the hand; the page just stops.
+      twentyone.unmount();
+      twentyone.unmount();                       // twice, from any road
+      log('AUTO attached=' + (stage.querySelector('.bk21') ? 'yes' : 'no'));
+      log('AUTO done');
+    });
+  }, delay + 400);
+} else if (auto && auto !== 'floor') {
+  const second = { bust: 'hit', win: 'stand', push: 'stand', double: 'double' }[auto];
+  setTimeout(() => {
+    press('deal', () => {
+      report('AUTO deal');
+      if (!second) { log('AUTO done'); return; }
+      press(second, () => { report('AUTO ' + second); log('AUTO done'); });
+    });
+  }, delay + 400);
+}
+</script>
+</body>
+</html>

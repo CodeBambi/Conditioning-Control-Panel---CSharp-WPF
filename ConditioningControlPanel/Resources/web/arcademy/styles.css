@@ -362,6 +362,43 @@ kbd {
   padding:10px 12px; color:var(--ink-dim); overflow-x:auto; max-width:100%;
 }
 
+/* ---- the SLIP (shell/sharecard.js): the night drawn as a paper report card ----
+   The row is its own line under the text share, because the two are different
+   verbs and a player should never mash the wrong one. `position:relative` is
+   load-bearing: the print beat's paper is absolutely placed against this box. */
+.arc-shareimg { position:relative; margin-top:10px; }
+.arc-sharename {
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:13px; color:var(--ink-dim); cursor:pointer; user-select:none;
+}
+.arc-sharename input { accent-color:var(--pink); width:15px; height:15px; cursor:pointer; }
+.arc-sharename:hover { color:var(--ink); }
+
+/* THE PRINT BEAT. A slip slides out from under the button while the canvas
+   draws. It is decoration only - aria-hidden, no text, and the toast is what
+   actually reports the outcome. */
+.arc-shareslip {
+  position:absolute; left:10px; top:calc(100% - 6px);
+  width:64px; height:84px; pointer-events:none; z-index:1;
+  border-radius:2px 2px 4px 4px;
+  background:linear-gradient(180deg, #F2EBDD 0%, #E4DAC6 100%);
+  box-shadow:0 6px 16px rgba(0,0,0,.35);
+  transform-origin:50% 0%;
+  animation:arc-shareprint 900ms cubic-bezier(.25,.9,.3,1) infinite;
+}
+@keyframes arc-shareprint {
+  0%   { transform:translateY(-84px) scaleY(.2); opacity:0; }
+  45%  { transform:translateY(0) scaleY(1); opacity:1; }
+  100% { transform:translateY(0) scaleY(1); opacity:.55; }
+}
+/* Law VI, the reduced-motion collapse: the paper is still minted and still
+   says the same thing, it just arrives instead of sliding. */
+.arc-shareslip.still { animation:arc-sharefade 120ms linear both; }
+@keyframes arc-sharefade { from { opacity:0; } to { opacity:.85; } }
+@media (prefers-reduced-motion: reduce) {
+  .arc-shareslip { animation:arc-sharefade 120ms linear both; }
+}
+
 /* ---- the fullscreen report beat (shell marks <html> arc-report-on) ----
    The stage is the night ground under a desk lamp; the report itself is a
    graded PAPER laid on it. Base .reportcard/.rcell/.grade rules above still
@@ -587,6 +624,31 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   background:radial-gradient(circle at 34% 30%,
     color-mix(in srgb, var(--gold), white 34%), var(--gold) 58%,
     color-mix(in srgb, var(--gold), black 34%));
+  box-shadow:inset 0 -1px 2px rgba(0,0,0,.45);
+}
+
+/* THE CHIP is the Back Room's money and it is a struck disc with an inset ring
+   and a bite of edge spots, which is what a casino chip is and what nothing
+   else in this school looks like. DRAWN, like the stub and the coin beside it:
+   a third glyph would have been a third font to fetch, and this page fetches
+   none (trap 2).
+
+   LAVENDER, NOT GREEN. Every colour in this school comes out of the token plan
+   at the top of this file and there is no green in it - the one brand colour
+   that ever appears here is the ID card's 6px Discord LED. So the chip takes
+   the school's SECONDARY, which reads cool against the shelf's pink and the
+   case's gold and says "after hours" without a new hue in the palette. */
+.arc-chipmark {
+  flex:none; display:inline-block; width:16px; height:16px;
+  border-radius:50%; font-style:normal;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 4.4px,
+      color-mix(in srgb, var(--lav), white 22%) 4.5px 5.6px, transparent 5.7px),
+    conic-gradient(from 20deg,
+      var(--lav) 0 12%, color-mix(in srgb, var(--lav), black 34%) 12% 25%,
+      var(--lav) 25% 37%, color-mix(in srgb, var(--lav), black 34%) 37% 50%,
+      var(--lav) 50% 62%, color-mix(in srgb, var(--lav), black 34%) 62% 75%,
+      var(--lav) 75% 87%, color-mix(in srgb, var(--lav), black 34%) 87% 100%);
   box-shadow:inset 0 -1px 2px rgba(0,0,0,.45);
 }
 
