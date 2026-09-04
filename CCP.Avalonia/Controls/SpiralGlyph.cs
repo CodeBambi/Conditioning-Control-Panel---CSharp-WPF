@@ -41,14 +41,20 @@ namespace ConditioningControlPanel.Avalonia.Controls
     ///
     /// <para><b>Deviations from the WPF original:</b></para>
     /// <list type="bullet">
-    ///   <item>ponytail: needs <c>MotionFx.AllowAmbientLoops</c> (the reduced-motion gate, still in
-    ///     the WPF head), so <see cref="RefreshMotion"/> currently only asks whether the glyph is
-    ///     loaded and visible and the breath always runs. Restore the gate when MotionFx moves to
-    ///     Core — the call site is already there, and the hosts already call this method.</item>
-    ///   <item>ponytail: <c>SpiralRailHost.StageNumeral</c> is a WPF-head control's static, so the
-    ///     numeral table is copied into <see cref="StageNumeral"/> verbatim. Delete the copy and
-    ///     call the shared one when the rail host lands on this head or in Core — the two must not
-    ///     drift apart.</item>
+    ///   <item>The reduced-motion gate IS wired: <see cref="RefreshMotion"/> asks
+    ///     <c>AmbientFxCanvas.Env.AllowAmbientLoops</c>, this head's copy of
+    ///     <c>MotionFx</c>/<c>PerformanceProfile</c> over the real <c>CoreSettings.Current</c>.
+    ///     ponytail: the only missing half is WPF's cap of MotionLevel to Reduced on the OS
+    ///     animation flag, which Avalonia does not expose and which can only ever REMOVE motion
+    ///     (recorded on <c>Env.Level</c>). The gate is read at Loaded / IsVisible / an explicit
+    ///     <see cref="RefreshMotion"/>, never polled — a live MotionLevel change reaches a glyph
+    ///     that re-shows, and the hosts must call this method the way WPF re-armed from
+    ///     MainWindow.UiUpdates.CmbMotionLevel_SelectionChanged.</item>
+    ///   <item>ponytail: <c>SpiralRailHost.StageNumeral</c> lives in
+    ///     <c>ConditioningControlPanel/Controls/SpiralRailHost.cs</c>, a <c>System.Windows</c>
+    ///     Control, so the numeral table is copied into <see cref="StageNumeral"/> verbatim. The
+    ///     table is pure and belongs in Core; delete the copy and call the shared one when it
+    ///     lands there — the two must not drift apart.</item>
     ///   <item>WPF <c>Timeline.SetDesiredFrameRate(24)</c> has no Avalonia twin; the breath runs at
     ///     the compositor's rate.</item>
     /// </list>
@@ -105,7 +111,10 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
             _breath = new ScaleTransform(1, 1);
             RenderTransformOrigin = RelativePoint.Center;
-            RenderTransform = _breath;
+            // A GROUP even for one child: TransformAnimator resolves the transform by walking a
+            // TransformGroup's Children for the type owning the animated property, which is the
+            // shape TierBadge proved against Avalonia 12.1.1. See RefreshMotion.
+            RenderTransform = new TransformGroup { Children = { _breath } };
 
             _arm = new Path
             {
@@ -190,8 +199,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// A 40px circle has room for a glyph and not for "Crush Depth", so the stage rides as a
         /// numeral and the name rides a tooltip on the surfaces with room for one. n = 0 is the
         /// real pre-begin rung and reads as a dot.
-        /// ponytail: verbatim copy of <c>SpiralRailHost.StageNumeral</c> (WPF head); call the
-        /// shared one when the rail host reaches this head or Core.
+        /// ponytail: verbatim copy of <c>SpiralRailHost.StageNumeral</c>
+        /// (<c>ConditioningControlPanel/Controls/SpiralRailHost.cs</c>, a WPF Control); the table
+        /// is pure and belongs in Core. Call the shared one once it lands there.
         /// </summary>
         internal static string StageNumeral(int n) => n switch
         {
@@ -303,8 +313,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             try
             {
-                // ponytail: needs MotionFx.AllowAmbientLoops, wired when it moves to Core
-                bool wanted = IsVisible && IsLoaded;
+                bool wanted = IsVisible && IsLoaded && AmbientFxCanvas.Env.AllowAmbientLoops;
                 if (!wanted) { StopBreath(); return; }
                 if (_breathing) return;
                 _breathing = true;
@@ -338,7 +347,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
                         },
                     },
                 };
-                _ = breathe.RunAsync(_breath, _breathClock.Token);
+                // The GLYPH, not _breath. Avalonia's TransformAnimator is handed the host Visual
+                // and resolves the transform itself, walking that visual's RenderTransform for the
+                // child whose type matches the animated property's owner. Handed the transform it
+                // casts straight to Visual and throws InvalidCastException - into the catch below,
+                // which is how this control shipped with a breath that never once ran. TierBadge
+                // carries the same note against the same Avalonia 12.1.1 behaviour.
+                _ = breathe.RunAsync(this, _breathClock.Token);
             }
             catch (Exception ex) { Log.Debug("[Spiral] glyph motion: {E}", ex.Message); }
         }

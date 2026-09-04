@@ -7,6 +7,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Styling;
 using Serilog;
 
@@ -34,16 +36,19 @@ namespace ConditioningControlPanel.Avalonia.Controls
     ///
     /// <para><b>Deviations from the WPF original</b>, all of them forced by what this head has:</para>
     /// <list type="bullet">
-    ///   <item>ponytail: the three sign PNGs (<c>tier_badge_t1/t2.png</c>, <c>free_today_stamp.png</c>)
-    ///     are <c>pack://</c> resources of the WPF head and this head ships no <c>Resources/</c>
-    ///     art, so each sign is drawn as a vector stand-in - a rounded plate in the tier's livery
-    ///     carrying the words the PNG bakes in, at the PNG's own aspect (2.045 / 2.344 / 1.991).
-    ///     Swap the two plates for an <c>Image</c> on an <c>avares://</c> bitmap when the art
-    ///     moves; every other number here already matches the original.</item>
-    ///   <item>ponytail: needs <c>MotionFx</c> (the reduced-motion gate) and <c>PerformanceProfile</c>
-    ///     (AllowGlow / MaxGlowBlurRadius), both still in the WPF head, so this badge always hums
-    ///     and always wears its glow. Restore the gates in <see cref="AmbientAllowed"/> and
-    ///     <see cref="GlowAllowed"/> when they move to Core - the call sites are already there.</item>
+    ///   <item>The three sign PNGs DO ship on this head - <c>CCP.Avalonia.csproj</c> links
+    ///     <c>..\Assets\features\*.png</c> to <c>avares://CCP.Avalonia/Resources/features/</c> -
+    ///     so the badge draws the real art, loaded once for the app the way the WPF original loads
+    ///     its <c>pack://</c> copy. Direct, NOT through <c>Helpers.ModArt</c>: tier livery is
+    ///     commerce chrome and the WPF badge deliberately does not route it through
+    ///     <c>ModResourceResolver</c>, so a mod cannot restyle an entitlement badge. The vector
+    ///     stand-in stays behind it as the missing-art fallback (WPF collapses the badge instead;
+    ///     keeping the plate is strictly the gentler failure and the code was already here).</item>
+    ///   <item>The reduced-motion and glow gates are wired: <see cref="AmbientAllowed"/> and
+    ///     <see cref="GlowAllowed"/> ask <c>AmbientFxCanvas.Env</c>, this head's copy of
+    ///     <c>MotionFx</c>/<c>PerformanceProfile</c> over the real <c>CoreSettings.Current</c>.
+    ///     ponytail: the one half still missing is WPF's cap of MotionLevel to Reduced on the OS
+    ///     animation flag, which Avalonia does not expose and which can only ever REMOVE motion.</item>
     ///   <item>WPF <c>Timeline.SetDesiredFrameRate(24)</c> has no Avalonia twin; the ambient clocks
     ///     run at the compositor's rate.</item>
     /// </list>
@@ -93,17 +98,22 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// behind" - recognisable, but plainly overruled.</summary>
         private const double DimmedTierOpacity = 0.35;
 
-        /// <summary>The blur the WPF badge lands on when PerformanceProfile is unavailable.</summary>
+        /// <summary>The blur the WPF badge lands on when PerformanceProfile throws.</summary>
         private const double GlowBlur = 18;
 
-        /// <summary>Aspect ratios of the three sign PNGs, so the vector plates match their boxes.</summary>
+        /// <summary>Aspect ratios of the three sign PNGs, used only when the art fails to load and
+        /// the vector plates stand in for it. With the art present the bitmap's own aspect wins.</summary>
         private const double AspectT1 = 2.045;
         private const double AspectT2 = 2.344;
         private const double AspectStamp = 1.991;
 
-        /// <summary>The sign plates, standing in for the PNGs (see the class remarks).</summary>
+        /// <summary>The sign plates. Each hosts the real PNG when it loads and the vector
+        /// stand-in when it does not (see the class remarks); the Border stays either way,
+        /// because it is what carries the transforms, the glow and the layout box.</summary>
         private readonly Border _tierSign;
         private readonly Border _stampSign;
+        private readonly Image _tierImage;
+        private readonly Image _stampImage;
         private readonly TextBlock _tierWords;
         private readonly TextBlock _stampWords;
         private readonly Ellipse _glintA;
@@ -150,6 +160,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
             // state a badge declared in XAML and painted later (the vault spotlight, the dashboard
             // reveal face) sits in until its first refresh.
             IsVisible = false;
+
+            _tierImage = BuildSignImage();
+            _stampImage = BuildSignImage();
 
             _tierWords = new TextBlock
             {
@@ -254,8 +267,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         }
 
         /// <summary>
-        /// Test seam: forces the motion decision instead of asking <c>MotionFx</c>, which in a test
-        /// host answers from a null <c>App.Settings</c> and would always say Full. Null (the
+        /// Test seam: forces the motion decision instead of asking the live settings. Null (the
         /// default) means "ask the app", which is what ships.
         /// </summary>
         internal bool? MotionOverride { get; set; }
@@ -269,18 +281,28 @@ namespace ConditioningControlPanel.Avalonia.Controls
         internal Border StampSign => _stampSign;
         internal double TierTilt => Tier >= 2 ? TiltT2 : TiltT1;
 
-        private bool AmbientAllowed
+        /// <summary>
+        /// MotionFx.AllowAmbientLoops, through this head's copy of it
+        /// (<see cref="AmbientFxCanvas.Env"/> over the real <c>CoreSettings.Current</c>).
+        /// Read at Loaded / a state change / IsVisible, never polled: a live MotionLevel change
+        /// reaches a badge that re-shows, and a host wanting more must call
+        /// <see cref="StartMotion"/> the way WPF re-armed from
+        /// MainWindow.UiUpdates.CmbMotionLevel_SelectionChanged.
+        /// </summary>
+        private bool AmbientAllowed => MotionOverride ?? AmbientFxCanvas.Env.AllowAmbientLoops;
+
+        /// <summary>PerformanceProfile.AllowGlow at the live tier, through the same copy.</summary>
+        private static bool GlowAllowed => AmbientFxCanvas.Env.AllowGlow(AmbientFxCanvas.Env.CurrentTier);
+
+        /// <summary>The WPF badge's blur: the tier's ceiling, itself capped at 22.</summary>
+        private static double GlowBlurRadius
         {
             get
             {
-                if (MotionOverride is bool forced) return forced;
-                // ponytail: needs MotionFx.AllowAmbientLoops, wired when it moves to Core
-                return true;
+                try { return Math.Min(22, AmbientFxCanvas.Env.MaxGlowBlurRadius(AmbientFxCanvas.Env.CurrentTier)); }
+                catch { return GlowBlur; }
             }
         }
-
-        // ponytail: needs PerformanceProfile.AllowGlow, wired when it moves to Core
-        private static bool GlowAllowed => true;
 
         // =====================================================================================
         //  state
@@ -348,7 +370,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                     _tierSign.Effect = new DropShadowEffect
                     {
                         Color = tier >= 2 ? GlowT2 : GlowT1,
-                        BlurRadius = GlowBlur,
+                        BlurRadius = GlowBlurRadius,
                         OffsetX = 0,
                         OffsetY = 0,
                         Opacity = 1.0,
@@ -374,14 +396,26 @@ namespace ConditioningControlPanel.Avalonia.Controls
         }
 
         /// <summary>
-        /// The livery the PNG bakes in: plate, rim, ink and the words.
-        /// ponytail: the whole method collapses to <c>_tierImage.Source = &lt;avares bitmap&gt;</c>
-        /// when the art ships on this head.
+        /// The sign itself: the tier's PNG, or the vector plate that stands in for a PNG that
+        /// would not load - plate, rim, ink and the words the art bakes in.
         /// </summary>
         private void PaintSign(int tier)
         {
+            if (TierArt(tier) is { } art)
+            {
+                _tierImage.Source = art;
+                // The art carries its own rim and ground; a Border rim around it would frame the
+                // sign in a rectangle the PNG does not have.
+                _tierSign.Child = _tierImage;
+                _tierSign.Background = null;
+                _tierSign.BorderThickness = default;
+                return;
+            }
+
             bool prime = tier >= 2;
             var ink = prime ? GlowT2 : GlowT1;
+            _tierSign.Child = _tierWords;
+            _tierSign.BorderThickness = new Thickness(2);
             _tierSign.BorderBrush = new SolidColorBrush(ink);
             _tierSign.Background = new SolidColorBrush(Color.FromArgb(0xE6, 0x0D, 0x0B, 0x14));
             _tierWords.Foreground = new SolidColorBrush(ink);
@@ -402,7 +436,25 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 return;
             }
 
-            _stampRotate.Angle = StampBakedTilt + (tier >= 2 ? StampExtraTiltT2 : StampExtraTiltT1);
+            // The PNG is already pre-tilted ~8 degrees, so with the real art the code adds only the
+            // token counter-lean, exactly as the WPF badge does. The vector plate has no baked
+            // lean, so it carries those 8 degrees itself.
+            var stampArt = StampArt();
+            if (stampArt != null)
+            {
+                _stampImage.Source = stampArt;
+                _stampSign.Child = _stampImage;
+                _stampSign.Background = null;
+                _stampSign.BorderThickness = default;
+            }
+            else
+            {
+                _stampSign.Child = _stampWords;
+                _stampSign.BorderThickness = new Thickness(3);
+            }
+
+            _stampRotate.Angle = (stampArt != null ? 0 : StampBakedTilt)
+                                 + (tier >= 2 ? StampExtraTiltT2 : StampExtraTiltT1);
             _stampSign.IsVisible = true;
 
             // The thunk fires on the state CHANGE only. A repaint (mod switch, entitlement
@@ -419,8 +471,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             try
             {
-                // ponytail: needs MotionFx.AllowTransitions, wired when it moves to Core
-                bool allow = MotionOverride ?? true;
+                bool allow = MotionOverride ?? AmbientFxCanvas.Env.AllowTransitions;
 
                 _thunk?.Cancel();
                 _thunk = null;
@@ -703,16 +754,17 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         private void ApplyWidth(double width)
         {
-            // WPF gets the height from Stretch=Uniform on the bitmap; a vector plate has to be
-            // told, so each sign keeps its PNG's aspect (see the class remarks).
+            // WPF gets the height from Stretch=Uniform on the bitmap; a Border has to be told, so
+            // each sign is boxed at its art's own aspect - and at the measured constant when the
+            // art is missing and the vector plate is standing in.
             _tierSign.Width = width;
-            _tierSign.Height = width / (Tier >= 2 ? AspectT2 : AspectT1);
+            _tierSign.Height = width / Aspect(TierArt(Tier), Tier >= 2 ? AspectT2 : AspectT1);
             _tierWords.FontSize = Math.Max(7, Math.Round(width * 0.125));
 
             // The stamp is deliberately a touch bigger than what it covers, and lands down-left of
             // it, so it reads as a second pass with a real rubber stamp rather than a swapped layer.
             _stampSign.Width = width * 1.06;
-            _stampSign.Height = width * 1.06 / AspectStamp;
+            _stampSign.Height = width * 1.06 / Aspect(StampArt(), AspectStamp);
             _stampSign.Margin = new Thickness(0, width * 0.09, width * 0.10, 0);
             _stampWords.FontSize = Math.Max(7, Math.Round(width * 0.15));
 
@@ -722,6 +774,74 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _glintB.Width = _glintB.Height = dot * 0.8;
             _glintA.Margin = new Thickness(0, width * 0.10, width * 0.12, 0);
             _glintB.Margin = new Thickness(0, width * 0.30, width * 0.72, 0);
+        }
+
+        /// <summary>The bitmap's own aspect, or the measured constant when there is no bitmap.</summary>
+        private static double Aspect(Bitmap? art, double fallback)
+        {
+            var size = art?.Size ?? default;
+            return size.Width > 0 && size.Height > 0 ? size.Width / size.Height : fallback;
+        }
+
+        private static Image BuildSignImage() => new()
+        {
+            Stretch = Stretch.Uniform,
+            IsHitTestVisible = false,
+        };
+
+        // =====================================================================================
+        //  art - loaded once for the whole app, exactly as the WPF badge loads its pack:// copy
+        // =====================================================================================
+
+        private static Bitmap? _artT1, _artT2, _artStamp;
+        private static bool _artT1Tried, _artT2Tried, _artStampTried;
+
+        private static Bitmap? TierArt(int tier)
+        {
+            if (tier >= 2)
+            {
+                if (!_artT2Tried) { _artT2Tried = true; _artT2 = Load("tier_badge_t2.png"); }
+                return _artT2;
+            }
+            if (!_artT1Tried) { _artT1Tried = true; _artT1 = Load("tier_badge_t1.png"); }
+            return _artT1;
+        }
+
+        private static Bitmap? StampArt()
+        {
+            if (!_artStampTried) { _artStampTried = true; _artStamp = Load("free_today_stamp.png"); }
+            return _artStamp;
+        }
+
+        /// <summary>
+        /// Loads a badge PNG once and shares it with every badge in the app. Never throws: art
+        /// that will not load costs the card nothing but the sign's photograph, and the vector
+        /// plate takes over (see <see cref="PaintSign"/>).
+        ///
+        /// <para>Deliberately NOT <c>Helpers.ModArt.TryLoad</c>: that helper probes the active
+        /// mod's override first, and tier livery is commerce chrome that stays constant across
+        /// mods - the WPF badge reaches straight past ModResourceResolver for the same reason.</para>
+        ///
+        /// <para>ponytail: the fields are plain statics, written from the UI thread on the first
+        /// badge to ask. Every caller is a measure or an apply pass, so there is no second writer;
+        /// make them Lazy if a background loader ever wants one.</para>
+        /// </summary>
+        private static Bitmap? Load(string file)
+        {
+            try
+            {
+                var uri = new Uri("avares://CCP.Avalonia/Resources/features/" + file);
+                if (!AssetLoader.Exists(uri)) return null;
+                using var stream = AssetLoader.Open(uri);
+                // Never drawn wider than MaxBadgeWidth, and the stamp at 1.06x of it; decode to
+                // twice that so it stays crisp on a 200% display without carrying a 900px bitmap.
+                return Bitmap.DecodeToWidth(stream, 420);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("TierBadge art missing: {File} ({E})", file, ex.Message);
+                return null;
+            }
         }
 
         private static Ellipse BuildGlint() => new()
