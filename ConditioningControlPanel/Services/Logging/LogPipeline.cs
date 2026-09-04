@@ -23,6 +23,7 @@ namespace ConditioningControlPanel.Services.Logging
         public const long FileSizeLimitBytes = 8L * 1024 * 1024;
 
         private static Logger? _logger;
+        private static ThrottlingSink? _throttle;
 
         /// <summary>
         /// True when this run was asked for Debug on disk: <c>--verbose</c> on the command line or
@@ -63,16 +64,16 @@ namespace ConditioningControlPanel.Services.Logging
 
             LevelSwitch.MinimumLevel = verbose ? LogEventLevel.Debug : LogEventLevel.Information;
 
-            var config = new LoggerConfiguration()
-                .MinimumLevel.ControlledBy(LevelSwitch)
-                // Order matters: the category is derived from the template, which redaction never
-                // touches, but the formatter needs BOTH properties present when it renders.
-                .Enrich.With(new CategoryEnricher())
-                .Enrich.With(new RedactingEnricher())
+            // The file sink is built as its own logger so it can be WRAPPED. Serilog's Logger is an
+            // ILogEventSink, which is the only way to put the throttle between the pipeline and the
+            // file without reimplementing the rolling file sink. Its own floor is Verbose because
+            // the level decision belongs to the outer pipeline; filtering twice would mean two
+            // places to get it wrong.
+            var fileSink = new LoggerConfiguration()
+                .MinimumLevel.Verbose()
                 .WriteTo.File(
                     new CcpLineFormatter(),
                     Path.Combine(logsDir, "app-.log"),
-                    restrictedToMinimumLevel: verbose ? LogEventLevel.Debug : LogEventLevel.Information,
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 7,
                     // A size cap as well as the daily roll: a render-loop exception writes the same
@@ -82,7 +83,23 @@ namespace ConditioningControlPanel.Services.Logging
                     rollOnFileSizeLimit: true,
                     // Force a disk flush each second so the LAST lines survive a hard process death
                     // (a native OOM kills the process with no managed unwind - see chaos OOM telemetry).
-                    flushToDiskInterval: TimeSpan.FromSeconds(1));
+                    flushToDiskInterval: TimeSpan.FromSeconds(1))
+                .CreateLogger();
+
+            var throttled = new ThrottlingSink(fileSink);
+            var previousThrottle = _throttle;
+            _throttle = throttled;
+
+            var config = new LoggerConfiguration()
+                .MinimumLevel.ControlledBy(LevelSwitch)
+                // Order matters: the category is derived from the template, which redaction never
+                // touches, but the formatter needs BOTH properties present when it renders.
+                .Enrich.With(new CategoryEnricher())
+                .Enrich.With(new RedactingEnricher())
+                .WriteTo.Sink(throttled,
+                    restrictedToMinimumLevel: verbose ? LogEventLevel.Debug : LogEventLevel.Information);
+
+            try { previousThrottle?.Dispose(); } catch { /* swallow: replacing a sink must not throw */ }
 
             var built = config.CreateLogger();
             var previous = _logger;
@@ -96,7 +113,11 @@ namespace ConditioningControlPanel.Services.Logging
         {
             try { Log.CloseAndFlush(); } catch { /* swallow: shutdown is best effort */ }
             try { _logger?.Dispose(); } catch { /* swallow */ }
+            // Disposing the throttle flushes whatever the last minute suppressed and then closes
+            // the file sink underneath it.
+            try { _throttle?.Dispose(); } catch { /* swallow */ }
             _logger = null;
+            _throttle = null;
         }
     }
 }
