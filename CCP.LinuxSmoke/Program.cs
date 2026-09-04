@@ -699,6 +699,10 @@ namespace ConditioningControlPanel.LinuxSmoke
             Check("the displayed frequency keeps its own, higher cap of 30",
                   MindWipeSchedule.SessionFrequency(3, TimeSpan.FromHours(4)) == 30 &&
                   MindWipeSchedule.SessionFrequency(3, TimeSpan.FromMinutes(10)) == 5);
+            // A clock that steps backwards (DST fall-back mid-session) goes quiet rather than
+            // falling back to the base rate - unfloored, exactly as the Windows service is.
+            Check("a backwards clock de-escalates rather than holding the base rate",
+                  MindWipeSchedule.SessionProbability(3, TimeSpan.FromMinutes(-60)) < 0);
 
             // Clip discovery, against the sandboxed user-data tree.
             Check("the advertised clip folder sits under the effective assets folder",

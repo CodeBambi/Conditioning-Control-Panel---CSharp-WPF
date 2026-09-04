@@ -61,7 +61,10 @@ namespace ConditioningControlPanel.Services
 
         private static int SessionPlaysPerBlock(int baseFrequency, TimeSpan elapsed, int cap)
         {
-            var blocks = (int)(Math.Max(0, elapsed.TotalMinutes) / 5);
+            // No floor on the elapsed time, deliberately: the Windows service has none, and a
+            // clock that steps backwards (DST fall-back mid-session) must go quiet here exactly as
+            // it always has rather than quietly keeping the base rate.
+            var blocks = (int)(elapsed.TotalMinutes / 5);
             return Math.Min(baseFrequency + blocks, cap);
         }
 
