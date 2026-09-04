@@ -116,8 +116,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             TxtIdleIntervalCompanion.Text = $"{value}s";
             CoreSettings.Current.IdleGiggleIntervalSeconds = value;
             CoreSettings.Save();
-            // ponytail: WPF also restarts the tube's idle timer (AvatarTubeWindow.RestartIdleTimer,
-            // ConditioningControlPanel/Views/Windows/), a Win32 layered window not on this head.
+            // ponytail: WPF also restarts the tube's idle timer. This head's tube IS ported
+            // (CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs) but has no idle-giggle
+            // timer to restart - its ctor deliberately starts none of WPF's four loops, because
+            // each calls into a Reactions/Speech partial that has not been ported. The new
+            // interval is on CoreSettings either way, so it applies whenever that loop lands.
         }
 
         private void SliderBubbleDuration_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
@@ -137,8 +140,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             // part of the prescribed dose and is locked while one runs.
             CoreSettings.Current.SubAudioMuted = ChkMuteWhispersCompanion.IsChecked == true;
             CoreSettings.Save();
-            // ponytail: WPF also refreshes the tube's quick menu (AvatarTubeWindow.UpdateQuickMenuState,
-            // ConditioningControlPanel/Views/Windows/), a Win32 layered window not on this head.
+            // ponytail: WPF also refreshes the tube's quick menu. AvatarTubeWindow.UpdateQuickMenuState
+            // exists on this head and is private AND deliberately inert - it needs App.Engine and
+            // App.Companion for the item titles, which have no seam, so retitling from settings
+            // alone would print a menu that disagrees with the engine. Calling it would change
+            // nothing; it is not called for that reason, not because the tube is missing.
         }
 
         // #846: mute only the spoken voicelines - the bubble, its text and the giggle cues stay.
@@ -154,8 +160,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             if (_isLoading) return;
             CoreSettings.Current.TubeMidnightGlass = ChkTubeMidnightGlass.IsChecked == true;
             CoreSettings.Save();
-            // ponytail: WPF repaints the glass now (AvatarTubeWindow.RefreshTubeGlass,
-            // ConditioningControlPanel/Views/Windows/), a Win32 layered window not on this head.
+            // Repaint the open tube's glass now, as WPF does. Live is null on a headless render
+            // and before the shell builds a tube, which is exactly "nothing to refresh".
+            AvatarTube.AvatarTubeWindow.Live?.RefreshTubeGlass();
         }
     }
 }

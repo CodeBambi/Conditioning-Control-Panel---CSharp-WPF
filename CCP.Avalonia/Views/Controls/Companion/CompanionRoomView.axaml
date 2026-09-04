@@ -8,11 +8,11 @@
                                          viewmodel, exactly as it does when rendered alone.
        x:Name on ColumnDefinition    ->  dropped (not a StyledElement); the code-behind indexes
                                          Shelf.ColumnDefinitions instead.
-       CompanionHeroCard, ChatThresholdView, AwarenessPrivacyView, AiPermissionsGrid
-                                     ->  NOT PORTED YET. Each sits as a labelled placeholder card
-                                         carrying the zone's x:Name, so the shelf, the navigator
-                                         and the deep links keep their real targets and the swap
-                                         is one element each. -->
+       every zone                    ->  ported and composed here. The four that were placeholder
+                                         cards (CompanionHeroCard, ChatThresholdView,
+                                         AwarenessPrivacyView, AiPermissionsGrid) are the real
+                                         controls now; the x:Names are unchanged, so the shelf,
+                                         the navigator and the deep links kept their targets. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.CompanionRoomView"
@@ -95,11 +95,10 @@
                 <StackPanel MaxWidth="1460" HorizontalAlignment="Stretch">
 
                     <!-- ========== Z0 + Z1 ==========
-                         ponytail: CompanionHeroCard placeholder, swap for the port when it lands -->
-                    <Border x:Name="HeroZone" Theme="{StaticResource CmpCardStyle}" Margin="0,0,0,16"
-                            AutomationProperties.AutomationId="CompanionRoomHero">
-                        <TextBlock Text="Z0+Z1 · CompanionHeroCard (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
-                    </Border>
+                         WPF binds DataContext="{Binding Hero}"; this head's zones seed themselves
+                         from CoreSettings, so there is no ICompanionRoomVm to bind against. -->
+                    <local:CompanionHeroCard x:Name="HeroZone" Margin="0,0,0,16"
+                                             AutomationProperties.AutomationId="CompanionRoomHero"/>
 
                     <!-- ========== 3. the shelf ==========
                          Three columns: left 3*, a 16px gutter, right 2*. The gutter is a column
@@ -110,11 +109,8 @@
                     <Grid x:Name="Shelf" ColumnDefinitions="3*,16,2*" RowDefinitions="Auto,Auto">
 
                         <StackPanel x:Name="ShelfLeft" Grid.Row="0" Grid.Column="0">
-                            <!-- ponytail: ChatThresholdView placeholder, swap for the port when it lands -->
-                            <Border x:Name="ChatZone" Theme="{StaticResource CmpCardStyle}" Margin="{StaticResource CmpCardMargin}"
-                                    AutomationProperties.AutomationId="CompanionRoomChat">
-                                <TextBlock Text="Z2 · ChatThresholdView (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
-                            </Border>
+                            <local:ChatThresholdView x:Name="ChatZone"
+                                                     AutomationProperties.AutomationId="CompanionRoomChat"/>
                             <local:MemoryDiaryView x:Name="MemoryZone"
                                                    AutomationProperties.AutomationId="CompanionRoomMemory"/>
                         </StackPanel>
@@ -123,13 +119,9 @@
                             <local:MakeHerYoursView x:Name="PersonalityZone"
                                                     AutomationProperties.AutomationId="CompanionRoomPersonality"/>
                             <!-- Focusable so the hero's awareness pill has somewhere to put the
-                                 keyboard when it deep-links here; the card itself takes no input.
-                                 ponytail: AwarenessPrivacyView placeholder, swap for the port when it lands -->
-                            <Border x:Name="AwarenessZone" Focusable="True" Theme="{StaticResource CmpCardStyle}"
-                                    Margin="{StaticResource CmpCardMargin}"
-                                    AutomationProperties.AutomationId="CompanionRoomAwareness">
-                                <TextBlock Text="Z5 · AwarenessPrivacyView (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
-                            </Border>
+                                 keyboard when it deep-links here; the card itself takes no input. -->
+                            <local:AwarenessPrivacyView x:Name="AwarenessZone" Focusable="True"
+                                                        AutomationProperties.AutomationId="CompanionRoomAwareness"/>
                             <local:AttentionGaugeView x:Name="AttentionZone"
                                                       AutomationProperties.AutomationId="CompanionRoomAttention"/>
                         </StackPanel>
@@ -145,11 +137,10 @@
                          The AI-effects permissions grid. It sits HERE, between the provider
                          plumbing it depends on and the Workshop, because "may she fire a flash"
                          is meaningless until "which brain is she running on" is answered.
-                         ponytail: AiPermissionsGrid placeholder, swap for the port when it lands -->
-                    <Border x:Name="PermissionsZone" Theme="{StaticResource CmpCardStyle}" Margin="0,16,0,0"
-                            AutomationProperties.AutomationId="CompanionRoomPermissions">
-                        <TextBlock Text="Z7b · AiPermissionsGrid (not ported yet)" Theme="{StaticResource CmpFaintTextStyle}"/>
-                    </Border>
+
+                         Motion budget: zero. Nothing here for ParkClocks to reach. -->
+                    <local:AiPermissionsGrid x:Name="PermissionsZone"
+                                             AutomationProperties.AutomationId="CompanionRoomPermissions"/>
 
                     <local:WorkshopAccordion x:Name="WorkshopZone"
                                              AutomationProperties.AutomationId="CompanionRoomWorkshop"/>

@@ -44,6 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnHotkey.AddHandler(KeyDownEvent, OnHotkeyPreviewKeyDown, RoutingStrategies.Tunnel);
             BtnHotkey.LostFocus += (_, _) => CancelCapture();
 
+            WireRingPicker();
             SyncFromSettings();
         }
 
@@ -231,9 +232,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
         }
 
-        // ponytail: needs EmiRingPicker.ResetPins / HintText / CanReset / StateChanged
-        // (ConditioningControlPanel/Views/Controls/EmiRingPicker.xaml.cs, bucket B), not yet ported;
-        // the .axaml still holds a bare WrapPanel placeholder in its place.
-        private void BtnRingReset_Click(object? sender, RoutedEventArgs e) { }
+        // ------------------------------------------------------------------ her ring
+
+        /// <summary>
+        /// The wall is <see cref="EmiRingPicker"/>, shared verbatim with her options panel. This
+        /// section owns only the count line and the reset button, so they can sit in the row above
+        /// in the section's own hue; both follow the picker's <c>StateChanged</c>.
+        ///
+        /// <para>The pin logic deliberately does NOT live here. There is one pin store, and the
+        /// surest way to end up with two was to write the picker twice.</para>
+        /// </summary>
+        private void WireRingPicker()
+        {
+            // The picker counts in its own ctor, before this line runs, so seed the row once here
+            // rather than waiting for a pin to move.
+            RingPicker.StateChanged += (_, _) => RefreshRingRow();
+            RefreshRingRow();
+        }
+
+        private void RefreshRingRow()
+        {
+            try
+            {
+                // Guarded exactly as WPF is: a blank count line would wipe the static hint.
+                TxtRingHint.Text = string.IsNullOrEmpty(RingPicker.HintText)
+                    ? Loc.Get("set2_emi_desk_ring_hint")
+                    : RingPicker.HintText;
+                BtnRingReset.IsEnabled = RingPicker.CanReset;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] ring row refresh failed");
+            }
+        }
+
+        /// <summary>"Let her choose": the picker drops every pin through the suggester.</summary>
+        private void BtnRingReset_Click(object? sender, RoutedEventArgs e)
+        {
+            try { RingPicker.ResetPins(); }
+            catch (Exception ex) { Log.Warning(ex, "[EmiDesk] ring reset failed"); }
+        }
     }
 }

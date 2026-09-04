@@ -8,10 +8,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// "Her Room" — the composed Companion tab. See the XAML header for the zone map.
     ///
     /// <para>PORTED from ConditioningControlPanel/Views/Controls/Companion/CompanionRoomView.xaml.cs.
-    /// Of the three page-level behaviours the WPF view owns, two cross: the navigator and the
-    /// shelf collapse. The third, clock parking, and the compat-seam passthroughs
-    /// (TxtDetachStatusCompanion, the sixteen AiPermissionsGrid names, ...) reach into zones
-    /// that are not on this head yet — see the stub comments below.</para>
+    /// All three page-level behaviours the WPF view owns now cross: the navigator, the shelf
+    /// collapse and the clock parking. What is still missing is the viewmodel half - ICompanionRoomVm
+    /// and its eight zone interfaces are in the WPF head, so ViewModel/Claim and the compat-seam
+    /// passthroughs (TxtDetachStatusCompanion, the sixteen AiPermissionsGrid names, ...) have no
+    /// source to read; every zone seeds itself from CoreSettings instead.</para>
     /// </summary>
     public partial class CompanionRoomView : UserControl, ICompanionRoomNavigator
     {
@@ -24,19 +25,66 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // A one-time Bounds read at Loaded — a value, not a binding. SizeChanged owns it from here.
             Loaded += (_, _) => ApplyShelfLayout(Bounds.Width);
             SizeChanged += (_, e) => { if (e.WidthChanged) ApplyShelfLayout(e.NewSize.Width); };
+
+            // WPF hung this off OnIsVisibleChanged; Avalonia has no such event, so the same
+            // property is read off the generic change notification. Not wired from Loaded: the
+            // zones start their own loops when they are loaded, and parking before then would
+            // stop a clock that has not been started.
+            PropertyChanged += (_, e) =>
+            {
+                if (e.Property != IsVisibleProperty) return;
+                if (e.NewValue is bool visible && visible) ResumeClocks(); else ParkClocks();
+            };
         }
 
         // ponytail: ICompanionRoomVm (Hero/Chat/Memory/... zone interfaces + Navigator) lives in the
         // WPF head; each ported zone seeds its own viewmodel. ViewModel/Claim return when it moves.
-
-        // ponytail: ParkClocks/ResumeClocks on IsVisible need CompanionHeroCard, AwarenessPrivacyView
-        // and ChatThresholdView; wired when those zones port.
 
         /// <summary>
         /// True while the shelf is one column. Exposed for the tests and the preview harness — the
         /// collapse is the only piece of layout on this page that a screenshot cannot prove.
         /// </summary>
         internal bool IsShelfStacked => _isShelfStacked;
+
+        // =====================================================================================
+        //  clock parking
+        // =====================================================================================
+
+        /// <summary>
+        /// The tab is switched by visibility in this app, not by unloading, so the zones' own
+        /// Unloaded handlers never fire when the user moves to another tab. Without this the
+        /// portrait keeps breathing and the wire cursor keeps blinking behind whatever the user is
+        /// actually looking at.
+        /// </summary>
+        private void ResumeClocks()
+        {
+            try
+            {
+                HeroZone.RefreshAmbientState();
+                // The zone re-reads its own state rather than being told what to do: it may well
+                // have changed while the tab was hidden, and a resume that restored the state at
+                // park time would be a lie.
+                AwarenessZone.SyncCursorBlink();
+                // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
+                // ChatThresholdView has no thinking clock to sync - WPF's dots are three
+                // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port
+                // draws the dots static. Add the call when that animation exists here.
+            }
+            catch (InvalidOperationException)
+            {
+                // Decorative animation may never be the reason a tab fails to show.
+            }
+        }
+
+        private void ParkClocks()
+        {
+            try
+            {
+                HeroZone.StopAmbientLoop();
+                AwarenessZone.StopCursorBlink();
+            }
+            catch (InvalidOperationException) { /* already torn down */ }
+        }
 
         // =====================================================================================
         //  the shelf's one-column collapse

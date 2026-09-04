@@ -7,17 +7,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// <summary>
     /// The Profile tab's "Privacy &amp; Sharing" body, ported from the WPF head.
     ///
-    /// NOTHING HERE IS WIRED, deliberately. Every one of the WPF panel's twelve handlers is a
-    /// one-line forward to the identically-named <c>MainWindow</c> method
-    /// (<c>Host?.ChkShareAchievements_Changed(sender, e)</c>, ...), and that MainWindow is a
-    /// <c>System.Windows.Window</c> living in the WPF head - it cannot be reached from here, and
-    /// the Avalonia head has no equivalent host yet. A stub would silently pretend the settings
-    /// were being saved, which on a PRIVACY panel is the worst possible failure mode: the user
-    /// flips "share my real avatar" off, sees the knob move, and nothing is written.
+    /// NOTHING HERE IS WIRED, and the refusal STANDS - but not for the reason first written. The
+    /// original note blamed MainWindow being a <c>System.Windows.Window</c>; that is stale. Every
+    /// flag these twelve toggles write (DiscordShareAchievements, PublicShareRealAvatar,
+    /// GoonShareAvatar, GoonShareDiscordDm, GoonRichPresence, ...) is on <c>CoreSettings.Current</c>
+    /// today, so the SETTINGS half is trivially reachable.
     ///
-    /// So the toggles render and animate but persist nothing. Wiring them needs the settings
-    /// surface that MainWindow provides today; that is a separate change from proving the view
-    /// draws. The x:Names are preserved, so each handler is a one-liner once a host exists.
+    /// ponytail: what actually blocks it is that the settings half is not the whole handler, and on
+    /// a consent surface the missing half is the one that matters. Read
+    /// ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs:855-925 and
+    /// MainWindow.AccountShell.cs:279-300:
+    ///  - <c>ChkPublicShareRealAvatar</c>, <c>ChkGoonShareAvatar</c> and <c>ChkGoonShareDiscordDm</c>
+    ///    each PUSH to the server on change (<c>App.ProfileSync.SyncProfileAsync</c>), precisely so a
+    ///    REVOKE lands before the next duel instead of waiting for a scheduled sync. Writing the
+    ///    local flag alone gives a knob that reads "not shared" over an avatar the server still
+    ///    holds - a consent gate degraded into a label.
+    ///  - <c>ChkDiscordRichPresence</c> refuses to arm at all unless
+    ///    <c>Current.HasLinkedDiscord</c>, and snaps itself back when it does. That gate is a
+    ///    settings read and IS portable; it is listed here only so the next pass wires it with the
+    ///    push, not without.
+    ///  - <c>ChkShowLevelInPresence</c> and <c>ChkAllowDiscordDm</c> also drive
+    ///    <c>App.DiscordRpc</c>, which has no seam here.
+    /// The unblocking symbol is a profile-sync seam in CCP.Core (an equivalent of
+    /// ConditioningControlPanel/Services/Profile/ProfileSyncService.cs), not a host. Until then the
+    /// toggles render and animate and persist nothing, which is visibly inert rather than quietly
+    /// wrong. The x:Names are preserved, so each handler is a few lines once that seam exists.
+    ///
+    /// NOTE the x:Name hazard if you wire this: the ctor uses <c>AvaloniaXamlLoader.Load</c>, so the
+    /// generated fields are null. Switch to <c>InitializeComponent()</c> or use <c>FindControl</c>.
     /// </summary>
     public partial class ProfilePrivacyPanel : UserControl
     {

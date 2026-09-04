@@ -50,7 +50,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         public void Refresh(bool isOut, bool avatarMuted = false)
         {
             if (isOut) StopKnock();
-            // ponytail: needs EmiDeskService for the live face binding; the stub face rests.
+            // ponytail: the live face needs ConditioningControlPanel/Services/EmiDesk/EmiDeskService.cs
+            // (its EmiChannels face feed); the stub face rests. The muted pill below is real - the
+            // host passes the fact in rather than this chip reading a setting.
             _txtMuted.IsVisible = avatarMuted;
         }
 
@@ -58,7 +60,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         {
             e.Handled = true;
             StopKnock();
-            // ponytail: needs EmiDeskService.Toggle(), wired when it moves to Core
+            // ponytail: needs EmiDeskService.Toggle (ConditioningControlPanel/Services/EmiDesk/
+            // EmiDeskService.cs). Not blocked on the WINDOW - CCP.Avalonia/Views/Windows/EmiDesk/
+            // EmiDeskWindow is ported - but on the service that owns whether she is out, the
+            // summon gate and the dismiss. Showing the window from here would give her a second
+            // owner, which is the trap this port keeps hitting.
             Log.Debug("[EmiDesk] dock chip clicked with no service");
         }
 

@@ -62,6 +62,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             WatchTurns(ViewModel?.Turns);
             ScrollThreadToEnd();
             PlayDormantShimmer();
+
+            // The provider-Off state's one link jumps to the Engine Room, which only the page that
+            // hosts this zone can do. Found on Loaded rather than in the ctor because the parent
+            // chain does not exist yet there; left null when the zone is rendered alone, which
+            // leaves the link disabled rather than silently dead.
+            if (ViewModel is { OpenEngineRoom: null } vm &&
+                this.FindAncestorOfType<CompanionRoomView>() is ICompanionRoomNavigator nav)
+            {
+                vm.OpenEngineRoom = nav.RevealEngineRoom;
+            }
         }
 
         /// <summary>Follows a live thread whose collection mutates in place.</summary>
@@ -144,6 +154,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public enum ZoneState { Live, Dormant, Locked, Empty, Disabled }
 
         private readonly Relay _send;
+        private readonly Relay _engineRoom;
         private string _draft = string.Empty;
         private bool _isThinking;
 
@@ -152,10 +163,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // WPF's CommandManager.RequerySuggested re-polled CanExecute for free; Avalonia only
             // re-polls on CanExecuteChanged, so Draft and IsThinking raise it by hand.
             SendCommand = _send = new Relay(Send, () => CanSend && !IsThinking && !string.IsNullOrWhiteSpace(Draft));
-            OpenFullChatCommand = new Relay(() => { });     // ponytail: needs the tube chat, wired when it is ported
-            HistoryCommand = new Relay(() => { });          // ponytail: needs the transcript viewer, wired when it is ported
-            UnlockCommand = new Relay(() => { });           // ponytail: needs the Patreon tab, wired when it is ported
-            OpenEngineRoomCommand = new Relay(() => { });   // ponytail: needs the room's RevealEngineRoom, wired when the page is composed
+            // ponytail: OpenFullChat needs the tube's chat pane (AvatarTubeWindow has no chat
+            // surface on this head yet); History needs the transcript viewer; Unlock needs the
+            // Patreon tab. None of the three has a target here, and all three are Relays whose
+            // CanExecute is constant so the buttons at least do not pretend to be armed.
+            OpenFullChatCommand = new Relay(() => { }, () => false);
+            HistoryCommand = new Relay(() => { }, () => false);
+            UnlockCommand = new Relay(() => { }, () => false);
+            // The page IS composed now, so this one has a real target - see OpenEngineRoom.
+            OpenEngineRoomCommand = _engineRoom = new Relay(() => _openEngineRoom?.Invoke(),
+                                                           () => _openEngineRoom != null);
+        }
+
+        private Action? _openEngineRoom;
+
+        /// <summary>
+        /// What "open the Engine Room" does. Set by the view once it can see the page that hosts it
+        /// (<see cref="ICompanionRoomNavigator"/>); null when the zone is rendered alone, which
+        /// leaves the link correctly disabled instead of dead. Avalonia never re-polls CanExecute,
+        /// so the setter raises it.
+        /// </summary>
+        public Action? OpenEngineRoom
+        {
+            get => _openEngineRoom;
+            set { _openEngineRoom = value; _engineRoom.RaiseCanExecuteChanged(); }
         }
 
         public ZoneState State { get; init; } = ZoneState.Live;

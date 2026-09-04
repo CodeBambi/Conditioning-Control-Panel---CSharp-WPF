@@ -9,9 +9,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// Z1 bottom band — the relationship constellation. See the XAML header for the visual spec.
     ///
     /// <para>The WPF code-behind only fires the band's one-shot intro (node twinkle when live,
-    /// shimmer sweep when dormant) from two keyed Storyboards. Those are not ported
-    /// (CompanionTheme.axaml section 17), so neither is <c>PlayIntro</c>; the band is static
-    /// here and the host that replays the intro on stage-up does not exist on this head yet.</para>
+    /// shimmer sweep when dormant) from two keyed Storyboards. ponytail: those are not ported
+    /// (CompanionTheme.axaml section 17 carries no twin), so neither is <c>PlayIntro</c> and the
+    /// band is static. The HOST is no longer the blocker - CompanionHeroCard composes this band
+    /// and CompanionRoomView composes the card - only the animation is. Avalonia throws on
+    /// Animation.RunAsync against a code-held Transform, so the port is the shared ~16ms
+    /// DispatcherTimer tween ChaosHudWindow uses, not a Storyboard translation.</para>
     /// </summary>
     public partial class RelationshipConstellation : UserControl
     {

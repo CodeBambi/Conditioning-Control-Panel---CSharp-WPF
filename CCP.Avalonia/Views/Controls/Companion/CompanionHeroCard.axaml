@@ -17,7 +17,8 @@
        x:Name on ScaleTransform/ImageBrush -> dropped (illegal on non-controls); the breathe is a
                                            Style.Animations block toggled by class, see below
        Grid.Clip EllipseGeometry       ->  Rect form (Center/RadiusX is WPF-only)
-       local:RelationshipConstellation ->  not ported yet; a band-brush placeholder (ponytail below)
+       local:RelationshipConstellation ->  ported, and composed here. WPF's DataContext binding is
+                                           dropped: the band seeds its own viewmodel.
        d:DataContext mock              ->  dropped; the view seeds CompanionHeroCardViewModel itself -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -584,12 +585,10 @@
                     </Grid>
 
                     <!-- ========== constellation band ========== -->
-                    <!-- ponytail: RelationshipConstellation is not ported yet (its own unit); this is
-                         the band wash at the WPF control's height so the card keeps its shape.
-                         Replace with <local:RelationshipConstellation DataContext="{Binding Constellation}"/>
-                         when it lands. -->
-                    <Border Grid.Row="1" x:Name="ConstellationBand" Height="56"
-                            Background="{StaticResource CmpConstellationBandBrush}"/>
+                    <!-- WPF binds DataContext="{Binding Constellation}"; the band seeds itself
+                         from RelationshipConstellationViewModel.Live() in its own ctor here,
+                         because this head has no ICompanionRoomVm to hand it one. -->
+                    <local:RelationshipConstellation Grid.Row="1" x:Name="ConstellationBand"/>
                 </Grid>
             </Grid>
         </Border>
