@@ -77,6 +77,9 @@ function ensureSheet(id, rel, log) {
  *  because the CSS freeze at the bottom of styles.css cannot reach JS. */
 function stillMode(ctx) {
   try { if (ctx && ctx.motion && ctx.motion.reducedMotion) return true; } catch (e) { /* noop */ }
+  // The shell hands the scene `reduced` rather than a motion object (shell.js
+  // backRoomCaps), so read that spelling too and do not wait for the class.
+  try { if (ctx && ctx.reduced === true) return true; } catch (e) { /* noop */ }
   try {
     if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
   } catch (e) { /* noop */ }
