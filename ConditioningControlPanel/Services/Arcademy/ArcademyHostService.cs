@@ -594,6 +594,12 @@ internal static class ArcademyHostService
             case "prize-buy":
                 OnPrizeBuy(o);
                 break;
+            case "casino-request":
+                OnCasinoRequest(o);
+                break;
+            case "triggers-request":
+                OnTriggersRequest();
+                break;
             case "class-left":
                 // The closing bracket for `class-started`. Leaving a class with Esc ends no class,
                 // so without this the mid-class heartbeat limit (12s vs 20s) stayed armed for the
@@ -4199,6 +4205,183 @@ internal static class ArcademyHostService
         }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostWalletResult: {E}", ex.Message); }
     }
+
+    // ============================ the back room ============================
+
+    /// <summary>
+    /// <c>casino-request {reqId, op, body, localDay}</c> -> the Back Room, and exactly one
+    /// <c>casino-result</c> back. The page never fetches the proxy itself, so every stake, every
+    /// cage press and every status poll comes through here on the same token door the counter uses.
+    ///
+    /// <para>THE REPLY IS UNCONDITIONAL, refusals included. The floor settles nothing optimistically
+    /// past the frame the server corrects, so a swallowed answer would leave a cabinet holding a
+    /// spinner it could never put down. An unknown op and a shut door both answer <c>offline</c>,
+    /// which is the one word the room already has a line for.</para>
+    /// </summary>
+    private static void OnCasinoRequest(JObject o)
+    {
+        var reqId = ReadString(o, "reqId") ?? "";
+        try
+        {
+            var op = (ReadString(o, "op") ?? "").Trim();
+            if (op is not ("status" or "cage" or "play"))
+            {
+                App.Logger?.Debug("ArcademyHost: casino op '{Op}' is not one of ours", op);
+                PostCasinoResult(reqId, false, 0, Offline());
+                return;
+            }
+
+            // THE BACK ROOM IS AN ACCOUNT ROOM. Chips live on the server the way tickets do, and
+            // there is no local casino to fall back on: with no identity the floor stays dark
+            // rather than dealing a hand nothing could ever settle.
+            if (!ArcademyWalletSyncService.DoorOpen)
+            {
+                PostCasinoResult(reqId, false, 0, Offline());
+                return;
+            }
+
+            var body = o["body"] as JObject ?? new JObject();
+            var localDay = ReadString(o, "localDay") ?? "";
+            int epoch = Volatile.Read(ref _generation);
+            ArcademyWalletSyncService.Casino(op, body, localDay,
+                outcome => SettleCasino(epoch, reqId, op, outcome));
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("ArcademyHost.OnCasinoRequest: {E}", ex.Message);
+            PostCasinoResult(reqId, false, 0, Offline());
+        }
+    }
+
+    /// <summary>The Back Room answered (or did not). Same dispatcher-and-generation hop
+    /// <see cref="SettleBuy"/> takes, and the same rule about a reply that outlived its window.</summary>
+    private static void SettleCasino(int epoch, string reqId, string op,
+        ArcademyWalletSyncService.CasinoOutcome outcome)
+    {
+        try
+        {
+            var disp = Application.Current?.Dispatcher;
+            if (disp == null || disp.HasShutdownStarted) return;
+            if (Volatile.Read(ref _generation) != epoch) return;
+            disp.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                    if (!outcome.Answered)
+                    {
+                        PostCasinoResult(reqId, false, 0, Offline());
+                        return;
+                    }
+
+                    // A game refusal is a 200 carrying `ok:false` and rides back verbatim; so does
+                    // the tier wall's 403 body, which the room turns into its own sentence. Only a
+                    // 2xx that actually says `ok:true` is allowed to move a number on this desk.
+                    var body = outcome.Body ?? new JObject();
+                    bool ok = outcome.Status is >= 200 and < 300 && (bool?)body["ok"] == true;
+                    if (ok) AdoptCasinoAnswer(op, body);
+                    PostCasinoResult(reqId, ok, outcome.Status, body);
+                }
+                catch (Exception ex) { App.Logger?.Warning("ArcademyHost.SettleCasino: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.SettleCasino dispatch: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// Take what the server just moved. Two different numbers live in two different places and both
+    /// have to land here or the desk goes on showing the old one.
+    ///
+    /// <para>SPARKLE IS ADOPTED, NEVER SUBTRACTED. The cage debits <c>skill_points</c> inside the
+    /// same lock the skill tree buys under, so this reads the answer exactly the way
+    /// <c>PurchaseSkillAsync</c> reads <c>result.SkillPoints</c>. Subtracting locally instead would
+    /// be undone the moment any sync merged a higher number back over it.</para>
+    ///
+    /// <para>CHIPS go into the wallet cache so the Prize Counter, the balance chip and the cage sign
+    /// all repaint from one meta push, exactly like a purchase.</para>
+    /// </summary>
+    private static void AdoptCasinoAnswer(string op, JObject body)
+    {
+        try
+        {
+            if (string.Equals(op, "cage", StringComparison.Ordinal))
+            {
+                var settings = App.Settings?.Current;
+                int sparkle = ReadInt(body, "sparkle", -1);
+                if (settings != null && sparkle >= 0 && settings.SkillPoints != sparkle)
+                {
+                    settings.SkillPoints = sparkle;
+                    App.Settings?.Save();
+                }
+
+                // The cage answers in CHIPS credited, and the prestige counter counts SPARKLE spent,
+                // so the rate is the one honest way across. Integer division is exact here: the
+                // server only ever credits whole Sparkle at 100 chips each.
+                int credited = ReadInt(body, "credited", 0);
+                if (credited >= ArcademyEconomy.ChipsPerSparkle)
+                    App.Achievements?.TrackSkillPointsSpent(credited / ArcademyEconomy.ChipsPerSparkle);
+            }
+
+            if (_meta == null) return;
+            // -1 is "the answer did not carry this one": a cage press moves the balance and never
+            // the lifetime-won total, so the two are written independently.
+            int chips = ReadInt(body, "chips", -1);
+            int earned = ReadInt(body, "earnedC", -1);
+            if (chips < 0 && earned < 0) return;
+            _meta.NoteChips(chips >= 0 ? chips : null, earned >= 0 ? earned : null);
+            _host?.Post(_meta.SnapshotMessage());
+        }
+        catch (Exception ex) { App.Logger?.Warning("ArcademyHost.AdoptCasinoAnswer: {E}", ex.Message); }
+    }
+
+    /// <summary>The <c>casino-result</c> frame. <c>body</c> is the server's own JSON whenever there
+    /// was one, so the room reads its refusals off the same words the server used.</summary>
+    private static void PostCasinoResult(string reqId, bool ok, int status, JObject body)
+    {
+        try { _host?.Post(new { type = "casino-result", reqId, ok, status, body }); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostCasinoResult: {E}", ex.Message); }
+    }
+
+    /// <summary>Nobody answered. One shape, one word, so the floor has a single thing to match on.</summary>
+    private static JObject Offline() => new() { ["reason"] = "offline" };
+
+    /// <summary>
+    /// <c>triggers-request</c> -> <c>triggers-result {triggers}</c>: this player's own trigger
+    /// phrases, so the reels and the Spiral's WORD wedge land on words that mean something to them
+    /// rather than a stock list. RAW text, trimmed and bounded and nothing else: a host that filtered
+    /// here would quietly change what the wheel promised.
+    ///
+    /// <para>A page with no trigger store gets an empty list and falls back to its authored one, so
+    /// an empty answer is a normal answer and never a failure.</para>
+    /// </summary>
+    private static void OnTriggersRequest()
+    {
+        var triggers = new JArray();
+        try
+        {
+            var list = App.Settings?.Current?.CustomTriggers;
+            if (list != null)
+            {
+                foreach (var raw in list)
+                {
+                    var t = (raw ?? "").Trim();
+                    if (t.Length == 0) continue;
+                    if (t.Length > MaxTriggerChars) t = t[..MaxTriggerChars];
+                    triggers.Add(t);
+                    if (triggers.Count >= MaxTriggers) break;
+                }
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnTriggersRequest read: {E}", ex.Message); }
+
+        try { _host?.Post(new { type = "triggers-result", triggers }); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnTriggersRequest post: {E}", ex.Message); }
+    }
+
+    /// <summary>How much of a trigger list crosses the seam. Enough for any real list, small enough
+    /// that a settings file somebody pasted a novel into cannot wedge a reel.</summary>
+    private const int MaxTriggers = 64;
+    private const int MaxTriggerChars = 64;
 
     // ============================ enrollment-done: the first-run punches ============================
 
