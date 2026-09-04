@@ -1160,6 +1160,24 @@ namespace ConditioningControlPanel.Avalonia.Controls
             /// <summary>MotionFx.AllowParticles.</summary>
             public static bool AllowParticles => AllowAmbientLoops && MaxAmbientParticles(CurrentTier) > 0;
 
+            /// <summary>
+            /// MotionFx.AllowTransitions. Interaction motion - hover, press, entrances, a stamp
+            /// landing - is 80-400ms and runs at every level except Off, which is a different
+            /// question from <see cref="AllowAmbientLoops"/> and must not be answered with it.
+            /// </summary>
+            public static bool AllowTransitions => Level != MotionLevel.Off;
+
+            /// <summary>PerformanceProfile.AllowGlow, verbatim.</summary>
+            public static bool AllowGlow(PerformanceTier tier) => tier != PerformanceTier.Performance;
+
+            /// <summary>PerformanceProfile.MaxGlowBlurRadius, verbatim. Only consulted when
+            /// <see cref="AllowGlow"/> already said yes, hence no Performance arm.</summary>
+            public static double MaxGlowBlurRadius(PerformanceTier tier) => tier switch
+            {
+                PerformanceTier.Balanced => 18,
+                _ => 24,
+            };
+
             // FxTheme's colours are read, not computed: it writes four Color keys into the app
             // resources from the mod palette and every consumer reads them back. Theme/Colors.xaml
             // already carries the keys, so this is that same read path - and nothing on this head

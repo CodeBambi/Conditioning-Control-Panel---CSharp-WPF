@@ -20,13 +20,30 @@ namespace ConditioningControlPanel.Avalonia.Helpers
     /// caller must treat as the WPF null path (draw the glyph, collapse the plate) rather than as
     /// a failure.</para>
     ///
-    /// <para>ponytail: <c>TubeFitDialog</c>, <c>AvatarTubeWindow</c> and <c>ModCreatorWindow</c>
-    /// still carry private copies of this two-step; fold them in when a layer owns those files.
-    /// No decode cache yet - WPF's resolver keys one on (event skin, mod id, path), and every
-    /// caller here loads a handful of small PNGs once, so add one when a caller loads per-frame.
-    /// The event-skin tier of the WPF chain is missing too, and that half is Core's:
-    /// <see cref="CoreModArt"/> has no event-skin provider yet, so an event cannot outrank a mod
-    /// on this head.</para>
+    /// <para><b>Three private copies are still out there, and all three are BYTE-FOR-BYTE this
+    /// method</b> - same order, same catches, same log shape - so folding each one in is a delete
+    /// plus a call-site rename, not a port:</para>
+    /// <list type="bullet">
+    ///   <item><c>TubeFitDialog.TryLoadImage</c> (CCP.Avalonia/Views/Dialogs/TubeFitDialog.axaml.cs)</item>
+    ///   <item><c>AvatarTubeWindow.TryLoadImage</c> (CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs)</item>
+    ///   <item><c>ModCreatorWindow.TryLoadSlotHint</c> (CCP.Avalonia/Views/Windows/ModCreatorWindow.axaml.cs)</item>
+    /// </list>
+    /// <para>Six <c>Views/Features/*FeatureControl.axaml.cs</c> notes and
+    /// <c>EmiRingWindow.LoadThumb</c> still point a future wirer at
+    /// "TubeFitDialog.TryLoadImage is the decode pattern"; THIS is the answer they should name.
+    /// None of those files is reachable from Helpers/, so the layer that owns them makes the swap.</para>
+    ///
+    /// <para>ponytail: no decode cache, and that is a decision rather than a gap. WPF's resolver
+    /// keys one on (event skin, mod id, path) because it serves per-frame art; every caller here
+    /// loads a handful of small PNGs once at build-time of a view. Add one the first time a caller
+    /// loads inside a render or a tick. <c>Controls/TierBadge</c> keeps its own three-bitmap cache
+    /// and does NOT come through here on purpose - tier livery is commerce chrome that a mod must
+    /// not be able to restyle, which is why the WPF badge also reaches past ModResourceResolver.</para>
+    ///
+    /// <para>ponytail: the event-skin tier of the WPF chain is missing, and that half is Core's -
+    /// <see cref="CoreModArt"/> has no event-skin provider, so an event cannot outrank a mod on
+    /// this head. Needs a provider on CCP.Core/Services/CoreModArt.cs before anything here can
+    /// use it.</para>
     /// </summary>
     internal static class ModArt
     {

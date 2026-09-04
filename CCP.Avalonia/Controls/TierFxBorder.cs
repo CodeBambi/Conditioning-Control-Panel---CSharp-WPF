@@ -244,11 +244,23 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         /// <summary>
         /// The reduced-motion gate, asked in one place and answered in one place. The WPF head
-        /// reads <c>MotionFx.AllowAmbientLoops</c> - the user's MotionLevel capped by the OS
-        /// animation flag, AND a performance tier that permits ambient motion.
-        /// ponytail: needs MotionFx/PerformanceProfile, wired when they move to Core.
+        /// reads <c>MotionFx.AllowAmbientLoops</c> - the user's MotionLevel AND a performance tier
+        /// that permits ambient motion - and this is that same decision:
+        /// <see cref="AmbientFxCanvas.Env"/> is the head's copy of MotionFx/PerformanceProfile,
+        /// reading the real <c>MotionLevel</c> and <c>PerformanceMode</c> off
+        /// <c>CoreSettings.Current</c>.
+        ///
+        /// <para>ponytail: the ONE half still missing is WPF's cap of MotionLevel to Reduced when
+        /// the OS animation flag is off - Avalonia exposes no cross-platform twin, and that cap can
+        /// only ever remove motion (recorded on <c>Env.Level</c>). Nothing else here is blocked.</para>
+        ///
+        /// <para>Read at Start/Resume and on the way back into visibility, never polled: no host on
+        /// this head re-calls <see cref="Resume"/> when the user changes MotionLevel, so a live
+        /// change reaches a card that re-shows rather than one already on screen. WPF had the same
+        /// shape and re-armed from MainWindow.UiUpdates.CmbMotionLevel_SelectionChanged; a twin of
+        /// that choke point is what closes the gap.</para>
         /// </summary>
-        internal static bool AmbientAllowed => true;
+        internal static bool AmbientAllowed => AmbientFxCanvas.Env.AllowAmbientLoops;
     }
 
     /// <summary>
