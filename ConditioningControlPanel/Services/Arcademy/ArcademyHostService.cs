@@ -1888,6 +1888,38 @@ internal static class ArcademyHostService
         ["prize_emi_varsity_blurb"] = "She found it in lost and found and it fits perfectly. Every one of her poses, re-dressed.",
         ["prize_tube_midnight"] = "TUBE GLASS: MIDNIGHT",
         ["prize_tube_midnight_blurb"] = "A darker glass for the tube back home. It ships to the whole app, not just the school.",
+        // THE BACK ROOM SHELF (2026-09-04). Thirteen chip rows, waves 3 and 4, and every one of
+        // them is carried here the night the row lands rather than the night it goes on sale, for
+        // the same reason the restock's were: a lexicon row costs nothing until something asks for
+        // it, and shipping the wing should be one const bump and not a second trip through nine
+        // language files. The blurbs are the catalog's own words, trimmed to the 96-char bar the
+        // counter card reads comfortably.
+        ["prize_bk_scratcher"] = "SCRATCH CARD",
+        ["prize_bk_scratcher_blurb"] = "A fresh card off the pad. Scratch it at the machine and see what the row says.",
+        ["prize_bk_insurance"] = "INSURANCE CHIP",
+        ["prize_bk_insurance_blurb"] = "Lay it on the rail. The next small hand you lose gets handed straight back.",
+        ["prize_bk_visor"] = "DEALER'S VISOR",
+        ["prize_bk_visor_blurb"] = "Green celluloid, low over the eyes. She deals like she means it in that thing.",
+        ["prize_bk_felt_teal"] = "TEAL NIGHT FELT",
+        ["prize_bk_felt_teal_blurb"] = "New felt on every table down here. Deep teal, the kind that keeps a room quiet.",
+        ["prize_bk_frame_highroller"] = "HIGH ROLLER FRAME",
+        ["prize_bk_frame_highroller_blurb"] = "A heavy gold edge around your ID photo. The desk pretends not to notice you.",
+        ["prize_bk_your_word"] = "YOUR WORD ON THE WHEEL",
+        ["prize_bk_your_word_blurb"] = "The WORD wedge on the Spiral stops being ours and starts being one of yours.",
+        ["prize_bk_house_favorite"] = "HOUSE FAVORITE",
+        ["prize_bk_house_favorite_blurb"] = "Not for sale at any price. The house gives it the first time you go royal.",
+        ["prize_bk_double_payday"] = "DOUBLE PAYDAY",
+        ["prize_bk_double_payday_blurb"] = "Hand it over before you stake and the desk marks the card. One play pays twice.",
+        ["prize_bk_boon"] = "HOUSE BOON",
+        ["prize_bk_boon_blurb"] = "The house owes you a favor. Spend it and the night leans your way for a hand.",
+        ["prize_bk_pitboss"] = "PIT BOSS",
+        ["prize_bk_pitboss_blurb"] = "Somebody stands behind your table all night and keeps the count for you.",
+        ["prize_bk_mantra"] = "THE HOUSE MANTRA",
+        ["prize_bk_mantra_blurb"] = "The room learns a line of yours and says it back between hands. Softly.",
+        ["prize_bk_dealers_cut"] = "DEALER'S CUT",
+        ["prize_bk_dealers_cut_blurb"] = "A standing share of the rake. Every play drops a little back in your pocket.",
+        ["prize_bk_vault_key"] = "THE VAULT KEY",
+        ["prize_bk_vault_key_blurb"] = "The door behind the cage. Nobody at the desk will say what is on the far side.",
         // ---- the Extra Credit lever ----------------------------------------------------
         // shell/lever.js owns the words on BOTH class-start surfaces (the door card and the
         // painted room's apron), so every rung is one key and one locked line, no more.
