@@ -153,9 +153,9 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Information("AudioService: using WaveOut device #{Num} as fallback", i);
                     return w;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // try next
+                    Diag.Swallowed(ex, "try the next WaveOut device");
                 }
             }
 
@@ -223,7 +223,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (string.Equals(player.OutputDevice, deviceId, StringComparison.Ordinal)) return true;
                 }
-                catch { /* OutputDevice is advisory — fall through and apply as usual */ }
+                catch (Exception ex) { Diag.Swallowed(ex, "OutputDevice is advisory, apply as usual"); }
 
                 bool deviceFound = false;
                 int enumerated = 0;
@@ -286,12 +286,12 @@ namespace ConditioningControlPanel.Services
 
             string wanted = "(system default)", resolved = "(unavailable)";
             string outputs = "?", track = "?", vol = "?", mute = "?";
-            try { var id = App.Settings?.Current?.AudioOutputDeviceId; if (!string.IsNullOrEmpty(id)) wanted = id; } catch { }
-            try { resolved = player.OutputDevice ?? "(none)"; } catch { }
-            try { outputs = (player.AudioOutputDeviceEnum?.Count() ?? 0).ToString(); } catch { }
-            try { track = player.AudioTrack + "/" + player.AudioTrackCount; } catch { }
-            try { vol = player.Volume.ToString(); } catch { }
-            try { mute = player.Mute.ToString(); } catch { }
+            try { var id = App.Settings?.Current?.AudioOutputDeviceId; if (!string.IsNullOrEmpty(id)) wanted = id; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { resolved = player.OutputDevice ?? "(none)"; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { outputs = (player.AudioOutputDeviceEnum?.Count() ?? 0).ToString(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { track = player.AudioTrack + "/" + player.AudioTrackCount; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { vol = player.Volume.ToString(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { mute = player.Mute.ToString(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             return $"wanted={wanted} resolved={resolved} outputs={outputs} track={track} vol={vol} mute={mute}";
         }
@@ -373,7 +373,7 @@ namespace ConditioningControlPanel.Services
                         return i;
                     }
                 }
-                catch { /* skip unreadable device */ }
+                catch (Exception ex) { Diag.Swallowed(ex, "skip unreadable device"); }
             }
 
             App.Logger?.Warning("AudioService: chosen output device '{Friendly}' has no matching WaveOut driver — using default", friendly);
@@ -425,7 +425,7 @@ namespace ConditioningControlPanel.Services
                     var def = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
                     defaultId = def?.ID ?? "";
                 }
-                catch { /* default may be unset */ }
+                catch (Exception ex) { Diag.Swallowed(ex, "the default endpoint may be unset"); }
 
                 var endpoints = _deviceEnumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
                 for (int i = 0; i < endpoints.Count; i++)
@@ -440,7 +440,7 @@ namespace ConditioningControlPanel.Services
                             IsDefault = !string.IsNullOrEmpty(defaultId) && dev.ID == defaultId
                         });
                     }
-                    catch { /* skip */ }
+                    catch (Exception ex) { Diag.Swallowed(ex, "skip unreadable endpoint"); }
                 }
             }
             catch (Exception ex)
@@ -725,7 +725,7 @@ namespace ConditioningControlPanel.Services
                                 restoredCount++;
                             }
                         }
-                        catch { /* Session may have ended */ }
+                        catch (Exception ex) { Diag.Swallowed(ex, "the session may have ended"); }
                     }
 
                     App.Logger?.Information("Restored {Count} audio sessions from crash recovery", restoredCount);
@@ -738,7 +738,7 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning("Failed to recover ducking state: {Error}", ex.Message);
                 // Try to delete the file anyway to avoid repeated failures
-                try { File.Delete(DuckingRecoveryFile); } catch { }
+                try { File.Delete(DuckingRecoveryFile); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
 
@@ -943,7 +943,7 @@ namespace ConditioningControlPanel.Services
             // Our layered-audio mixer is in-process, so the session-based ducker (which skips our
             // own PID) can't touch it — duck it cooperatively instead. (#659) In-process gain
             // change, no COM, so it stays inline and our own layers dip on the same frame.
-            try { App.LayeredAudio?.ApplyDuck(amount); } catch { }
+            try { App.LayeredAudio?.ApplyDuck(amount); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             EnqueueDuckWork("duck", () => ApplyDuckSweep(amount, strength), trace: true);
         }
@@ -1064,7 +1064,7 @@ namespace ConditioningControlPanel.Services
                         if (name.Contains("msedgewebview2") || name.Contains("webview2"))
                             newPids.Add(proc.Id);
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                     finally { proc.Dispose(); }
                 }
                 lock (_lockObj)
@@ -1120,7 +1120,7 @@ namespace ConditioningControlPanel.Services
                 restore = true;
             }
 
-            try { App.LayeredAudio?.ReleaseDuck(); } catch { } // restore layered-audio gain (#659)
+            try { App.LayeredAudio?.ReleaseDuck(); } catch (Exception ex) { Diag.Swallowed(ex); } // restore layered-audio gain (#659)
 
             if (restore) EnqueueDuckWork("unduck", RestoreDuckedVolumes, trace: true);
         }
@@ -1198,7 +1198,7 @@ namespace ConditioningControlPanel.Services
                             }
                         }
                     }
-                    catch { /* session may have ended between checks */ }
+                    catch (Exception ex) { Diag.Swallowed(ex, "the session may have ended between checks"); }
                 }
             }
             catch (Exception ex)
@@ -1292,7 +1292,7 @@ namespace ConditioningControlPanel.Services
                 restore = true;
             }
 
-            try { App.LayeredAudio?.ReleaseDuck(); } catch { }
+            try { App.LayeredAudio?.ReleaseDuck(); } catch (Exception ex) { Diag.Swallowed(ex); }
             if (restore) EnqueueDuckWork("watchdog-restore", RestoreDuckedVolumes, trace: true);
         }
 
@@ -1359,7 +1359,7 @@ namespace ConditioningControlPanel.Services
                         scope.Own(sessions);
                         for (int i = 0; i < sessions.Count; i++)
                         {
-                            try { scope.Sessions.Add(sessions[i]); } catch { /* session ended mid-enumeration */ }
+                            try { scope.Sessions.Add(sessions[i]); } catch (Exception ex) { Diag.Swallowed(ex, "the session ended mid-enumeration"); }
                         }
                     }
                     catch (Exception ex)
@@ -1413,7 +1413,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (o is IDisposable d)
                 {
-                    try { d.Dispose(); } catch { /* already released / endpoint vanished */ }
+                    try { d.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex, "already released or the endpoint vanished"); }
                 }
             }
         }
@@ -1491,7 +1491,7 @@ namespace ConditioningControlPanel.Services
                         newlyDucked++;
                         duckedNames.Add($"{name}:{processId}");
                     }
-                    catch { /* session may have ended */ }
+                    catch (Exception ex) { Diag.Swallowed(ex, "the session may have ended"); }
                 }
             }
 
@@ -1575,7 +1575,7 @@ namespace ConditioningControlPanel.Services
                         if (!string.IsNullOrEmpty(name) && !nameToPid.ContainsKey(name))
                             nameToPid[name] = pid;
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
                 foreach (var kv in pending)
@@ -1591,7 +1591,7 @@ namespace ConditioningControlPanel.Services
                         {
                             if ((int)sessions[i].GetProcessID == storedPid) { targetPid = storedPid; break; }
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
 
                     // Fallback: process-name match (handles app-restart with new PID)
@@ -1615,7 +1615,7 @@ namespace ConditioningControlPanel.Services
                                 break;
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
                 }
             }
@@ -1712,12 +1712,12 @@ namespace ConditioningControlPanel.Services
             {
                 foreach (var item in _duckWork.GetConsumingEnumerable())
                 {
-                    try { item(); } catch { }
+                    try { item(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             }
-            catch { /* collection completed / disposed */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "collection completed or disposed"); }
 
-            try { _sweepEnumerator?.Dispose(); } catch { }
+            try { _sweepEnumerator?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _sweepEnumerator = null;
         }
 
@@ -1763,7 +1763,7 @@ namespace ConditioningControlPanel.Services
             _duckWatchdog?.Dispose();
             _duckRescanTimer?.Dispose();
             _restoreRetryTimer?.Dispose();
-            try { _duckWork.CompleteAdding(); } catch { }
+            try { _duckWork.CompleteAdding(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Only release the enumerators once we know no sweep is mid-COM-call on one. Yanking
             // them out from under a wedged worker turns a clean exit into a native crash; process

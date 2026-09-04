@@ -1336,7 +1336,7 @@ namespace ConditioningControlPanel.Services
                     if (Volatile.Read(ref _openGeneration) != generation)
                     {
                         // The caller has moved on — don't hand over something nobody will dispose.
-                        try { cap.Dispose(); } catch { }
+                        try { cap.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         return false;
                     }
                     opened = cap;
@@ -1355,7 +1355,7 @@ namespace ConditioningControlPanel.Services
                     stray = opened;
                     opened = null;
                 }
-                if (stray != null) { try { stray.Dispose(); } catch { } }
+                if (stray != null) { try { stray.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); } }
 
                 App.Logger?.Warning(
                     "WebcamTrackingService: camera open timed out after {Seconds}s — driver may be hung or the device is held exclusively by another app",
@@ -1636,7 +1636,7 @@ namespace ConditioningControlPanel.Services
                     _nativeRuntimeMissing = true;
                 }
                 App.Logger?.Warning(ex, "WebcamTrackingService: TryOpenWithBackend({Api}) threw for index {Index}", label, deviceIndex);
-                try { cap?.Dispose(); } catch { }
+                try { cap?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 return null;
             }
         }
@@ -1685,25 +1685,25 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Warning(ex, "WebcamTrackingService: failed to load detection models");
                 }
-                try { face?.Dispose(); } catch { }
-                try { mesh?.Dispose(); } catch { }
-                try { iris?.Dispose(); } catch { }
+                try { face?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { mesh?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { iris?.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 return false;
             }
         }
 
         private void ReleaseCapture()
         {
-            try { _capture?.Release(); } catch { }
-            try { _capture?.Dispose(); } catch { }
+            try { _capture?.Release(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _capture?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _capture = null;
         }
 
         private void ReleaseModels()
         {
-            try { _faceDetector?.Dispose(); } catch { }
-            try { _faceMesh?.Dispose(); } catch { }
-            try { _irisDetector?.Dispose(); } catch { }
+            try { _faceDetector?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _faceMesh?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _irisDetector?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _faceDetector = null;
             _faceMesh = null;
             _irisDetector = null;
@@ -3591,9 +3591,9 @@ namespace ConditioningControlPanel.Services
 
             public void Dispose()
             {
-                try { _session.Dispose(); } catch { }
-                try { _resizeBuffer?.Dispose(); } catch { }
-                try { _paddedBuffer?.Dispose(); } catch { }
+                try { _session.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _resizeBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _paddedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _resizeBuffer = null;
                 _paddedBuffer = null;
             }
@@ -3741,9 +3741,9 @@ namespace ConditioningControlPanel.Services
 
             public void Dispose()
             {
-                try { _session.Dispose(); } catch { }
-                try { _croppedBuffer?.Dispose(); } catch { }
-                try { _resizedBuffer?.Dispose(); } catch { }
+                try { _session.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _croppedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _resizedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _croppedBuffer = null;
                 _resizedBuffer = null;
             }
@@ -4107,10 +4107,10 @@ namespace ConditioningControlPanel.Services
 
             public void Dispose()
             {
-                try { _session.Dispose(); } catch { }
-                try { _croppedBuffer?.Dispose(); } catch { }
-                try { _resizedBuffer?.Dispose(); } catch { }
-                try { _flippedBuffer?.Dispose(); } catch { }
+                try { _session.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _croppedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _resizedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _flippedBuffer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _croppedBuffer = null;
                 _resizedBuffer = null;
                 _flippedBuffer = null;
