@@ -53,6 +53,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             ConsentAndReports();
             Roadmap();
             LockCard();
+            MindWipe();
 
             Console.WriteLine();
             if (_failures == 0)
@@ -654,6 +655,72 @@ namespace ConditioningControlPanel.LinuxSmoke
         {
             try { action(); return true; }
             catch { return false; }
+        /// Mind wipe's portable half (wire/107): the schedule decides here, the playback does not.
+        /// A headless render cannot exercise either, so the arithmetic is asserted directly and
+        /// the seam is asserted for the answer it gives when no head is playing anything - which
+        /// is this head's real state.
+        /// </summary>
+        private static void MindWipe()
+        {
+            Console.WriteLine("\nMind wipe schedule");
+
+            // Unseeded seam: silent, and honest about it. IsLooping false is the one that gates -
+            // the card only restarts a loop it is told is running.
+            CoreMindWipe.TriggerOnce();
+            CoreMindWipe.StartLoop(1.0);
+            CoreMindWipe.StopLoop();
+            CoreMindWipe.UpdateSettings(60, 0.5);
+            CoreMindWipe.ReloadClips();
+            Check("CoreMindWipe is a silent no-op with no playback seeded",
+                  !CoreMindWipe.IsLooping && CoreMindWipe.ClipCount == 0);
+            CoreMindWipe.IsLoopingProvider = () => throw new InvalidOperationException("smoke");
+            Check("a throwing loop provider reads as not looping", !CoreMindWipe.IsLooping);
+            // ...and the seam must actually be consulted, or "false" would only prove a hardcode.
+            CoreMindWipe.IsLoopingProvider = () => true;
+            Check("a seeded loop provider is what answers", CoreMindWipe.IsLooping);
+            CoreMindWipe.IsLoopingProvider = null;
+
+            Check("the tick interval is ten seconds", MindWipeSchedule.TickInterval == TimeSpan.FromSeconds(10));
+            Check("180/hour is a coin flip per tick", Math.Abs(MindWipeSchedule.Probability(180) - 0.5) < 1e-9,
+                  MindWipeSchedule.Probability(180).ToString("R"));
+            Check("6/hour - the default - fires about once per 60 ticks",
+                  Math.Abs(MindWipeSchedule.Probability(6) - 6 / 360.0) < 1e-9);
+            Check("the slider range clamps both ends",
+                  MindWipeSchedule.ClampFrequency(0) == 1 && MindWipeSchedule.ClampFrequency(999) == 180 &&
+                  MindWipeSchedule.ClampVolume(-1) == 0 && MindWipeSchedule.ClampVolume(9) == 1);
+
+            // Session escalation: one extra play per five-minute block, from two different caps.
+            Check("a fresh session runs at its base multiplier",
+                  Math.Abs(MindWipeSchedule.SessionProbability(3, TimeSpan.Zero) - 0.1) < 1e-9);
+            Check("session mode escalates one play per five-minute block",
+                  Math.Abs(MindWipeSchedule.SessionProbability(3, TimeSpan.FromMinutes(10)) - 5 / 30.0) < 1e-9);
+            Check("the probability caps at 15 plays per block",
+                  Math.Abs(MindWipeSchedule.SessionProbability(3, TimeSpan.FromHours(4)) - 0.5) < 1e-9);
+            Check("the displayed frequency keeps its own, higher cap of 30",
+                  MindWipeSchedule.SessionFrequency(3, TimeSpan.FromHours(4)) == 30 &&
+                  MindWipeSchedule.SessionFrequency(3, TimeSpan.FromMinutes(10)) == 5);
+
+            // Clip discovery, against the sandboxed user-data tree.
+            Check("the advertised clip folder sits under the effective assets folder",
+                  MindWipeSchedule.AudioFolder.StartsWith(CorePaths.EffectiveAssets, StringComparison.Ordinal),
+                  MindWipeSchedule.AudioFolder);
+            Check("discovery creates the folder it advertises",
+                  MindWipeSchedule.DiscoverClips(null) is not null && Directory.Exists(MindWipeSchedule.AudioFolder));
+
+            var clip = Path.Combine(MindWipeSchedule.AudioFolder, "smoke-clip.mp3");
+            File.WriteAllText(clip, "not really audio");
+            File.WriteAllText(Path.Combine(MindWipeSchedule.AudioFolder, "readme.txt"), "ignore me");
+            var found = MindWipeSchedule.DiscoverClips(null);
+            Check("an .mp3 in the advertised folder is a candidate and a .txt is not",
+                  found.Length == 1 && found[0] == clip, string.Join(", ", found));
+
+            var custom = Path.Combine(CorePaths.UserData, "custom-wipe.wav");
+            File.WriteAllText(custom, "not really audio");
+            var picked = MindWipeSchedule.DiscoverClips(custom);
+            Check("a custom clip that exists wins over the folders",
+                  picked.Length == 1 && picked[0] == custom);
+            Check("a custom path that does not exist falls back to the folders, not to nothing",
+                  MindWipeSchedule.DiscoverClips(Path.Combine(CorePaths.UserData, "gone.wav")).Length == 1);
         }
 
         /// <summary>Pure math must not drift with locale or floating-point defaults.</summary>
