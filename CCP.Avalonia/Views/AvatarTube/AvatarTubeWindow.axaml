@@ -51,9 +51,10 @@
                                           ponytail: the WPF loader re-rendered each history line as
                                           Inlines with clickable video links; link detection is lost.
        Window.CommandBindings          -> dropped. Avalonia has no CommandBindings.
-                                          ponytail: AvatarTubeWindow.OpenChatCommand (the user's
-                                          Ctrl+T chat shortcut) has no host here; needs a KeyBinding
-                                          once ApplyChatShortcutTo moves to Core.
+                                          The user's chat shortcut is NOT lost with them:
+                                          ApplyChatShortcutTo (code-behind) builds the KeyBinding
+                                          from CompanionPrompt.ChatShortcutKey and this window runs
+                                          it from Loaded. Nothing to restore here.
        gif: xmlns                      -> dropped; the WPF XAML declares it and never uses it.
        FontFamily="Segoe UI"           -> dropped; the head ships Inter and picks it in App.axaml. -->
 <Window xmlns="https://github.com/avaloniaui"
@@ -118,10 +119,10 @@
         <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
             <!-- Design canvas at fixed reference size - will be scaled -->
             <Grid Width="780" Height="1080" ClipToBounds="False">
-            <!-- Tube frame FIRST (behind) - Z-Index 0 implicit.
-                 ponytail: WPF loaded pack://application:,,,/Resources/tube.png. This head ships no
-                 image assets and SetTubeStyle (mod-aware tube art) lives in the Windowing partial,
-                 so the frame is left sourceless and the tube reads as empty in the render. -->
+            <!-- Tube frame FIRST (behind) - Z-Index 0 implicit. Sourceless in markup ON PURPOSE:
+                 WPF's pack:// URI becomes a mod-aware lookup, so SetTubeStyle (code-behind) points
+                 this at the active mod's tube.png / tube2.png and falls back to this head's own
+                 avares:// copy. Setting a Source here would win over a mod's chamber art. -->
             <Image x:Name="ImgTubeFrame"
                    Stretch="Uniform"
                    HorizontalAlignment="Center"
@@ -348,9 +349,11 @@
                         <MenuItem x:Name="MenuItemPersonality" Header="{loc:Str section_personality}" Foreground="{DynamicResource PinkBrush}"/>
                         <MenuItem x:Name="MenuItemMute" Header="{loc:Str section_mute_avatar}"/>
                         <!-- Emote MenuItems replace the 5 items above (Engine, TriggerMode, BambiTakeover,
-                             Personality, Mute) whenever a remote controller is connected. Header strings
-                             and Tag references are populated in AvatarContextMenu_Opened from
-                             App.Settings.Current.RemoteEmotePresets. -->
+                             Personality, Mute) whenever a remote controller is connected. On WPF their
+                             headers are filled in AvatarContextMenu_Opened from RemoteEmotePresets.
+                             They stay IsVisible="False" on this head: the presets are in Core, but the
+                             swap is driven by App.RemoteControl.ControllerConnected and each item sends
+                             through MainWindow.SendEmoteAndReportAsync, both head-side. -->
                         <MenuItem x:Name="MenuItemEmote1" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote2" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote3" Header="" IsVisible="False"/>

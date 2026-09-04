@@ -14,8 +14,8 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
@@ -92,7 +92,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// attach/detach/scale/position/fullscreen windowing (Windowing.cs) stay in the WPF head.
     /// The whole <c>App.*</c> service-subscription block (Video, BubbleCount, Flash, Subliminal,
     /// Bubbles, Achievements, Progression, Companion, WindowAwareness, MindWipe, BrainDrain,
-    /// ModerationCounter, Mods) is still one stub: none of those services are in Core.</para>
+    /// ModerationCounter, Mods) is still one stub. Twelve of those have no seam at all; the two
+    /// that do are no help to it - <c>CoreMods</c> raises ModChanged but not the avatar events
+    /// these handlers wanted, and <c>CoreProgression</c> is write-only (AddXP, no level event).</para>
     ///
     /// <para><b>The tube does not track a face.</b> Nothing here reads a camera. The webcam face
     /// tracker that drives the avatar's gaze on the WPF head is a device, so it stays in a head;
@@ -221,6 +223,13 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _speechBubble.PointerEntered += (_, _) => _isMouseOverSpeechBubble = true;
             _speechBubble.PointerExited += (_, _) => _isMouseOverSpeechBubble = false;
             this.FindControl<Button>("BtnCloseChatHistory")!.Click += (_, _) => HideChatHistory();
+            // The quick menu's own way into the log - WPF's MenuItemShowChatHistory_Click. Looked up
+            // without the null-forgiving `!` because this is the first CHILD of the ContextMenu the
+            // ctor reaches, and a name-scope miss inside a menu would throw here and drop the whole
+            // window out of --render-all rather than lose one menu item.
+            var showLog = this.FindControl<MenuItem>("MenuItemShowChatHistory");
+            if (showLog != null) showLog.Click += (_, _) => ShowChatHistory();
+            else Log.Warning("AvatarTubeWindow: MenuItemShowChatHistory not found; chat log unreachable from the menu");
             _btnSendChat.Click += (_, _) => SendChat();
             _txtUserInput.KeyDown += (_, e) => { if (e.Key == Key.Enter) SendChat(); };
 
@@ -229,8 +238,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             this.FindControl<Border>("BtnNextAvatar")!.PointerPressed += (_, _) => SelectAvatarSet(+1);
             this.FindControl<ContextMenu>("AvatarContextMenu")!.Opened += (_, _) => UpdateQuickMenuState();
 
-            // Setup pose switching timer (only for static avatars). Created, never started: the
-            // poses it would cycle load in AvatarTubeWindow.Avatar.cs.
+            // Pose switching for static avatars. ApplyAvatarSet below starts it only when more than
+            // one pose actually loaded - a set that ships one PNG has nothing to rotate between.
             _poseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
             _poseTimer.Tick += (_, _) => AdvancePose();
 
@@ -245,14 +254,18 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             LocalizationManager.Instance.LanguageChanged += OnTubeLanguageChanged;
 
             // ponytail: still needs AvatarTubeWindow.Avatar.cs for the ANIMATED avatar (level 20+
-            // GIF sets, which need an Avalonia GIF decoder) and the emotive-portrait crossfade, and
-            // App.Mods.IsAvatarSetSupported / GetCustomAvatarSets for the set ARROWS - see
+            // GIF sets, which need an Avalonia GIF decoder) and the emotive-portrait crossfade. The
+            // set ARROWS are blocked on the companion coupling, NOT on the set list - see
             // SelectAvatarSet. The static four-pose path below is the one every set-1 user is on.
 
-            // ponytail: needs the ~14 App.* services the WPF constructor subscribed to (Video,
-            // BubbleCount, Flash, Subliminal, Bubbles, Achievements, Progression, Companion,
-            // WindowAwareness, MindWipe, BrainDrain, ModerationCounter, Mods, MainWindow.EngineStopped),
-            // wired when they move to Core. Their handlers all live in the Reactions/Speech partials.
+            // ponytail: the ~14 App.* services the WPF constructor subscribed to (Video, BubbleCount,
+            // Flash, Subliminal, Bubbles, Achievements, Progression, Companion, WindowAwareness,
+            // MindWipe, BrainDrain, ModerationCounter, Mods, MainWindow.EngineStopped). Two of those
+            // names DO have seams and still do not help: CoreMods raises ModChanged but none of the
+            // avatar-set handlers hang off it, and CoreProgression is write-only (AddXP, no level
+            // event), so the caption cannot re-read itself when she levels. The other twelve are
+            // head-side services in ConditioningControlPanel/Services/ with no seam at all, and
+            // their handlers live in the Reactions/Speech partials that did not port.
 
             // ponytail: the WPF ctor also started four timers here - a 2s greeting, the idle-giggle,
             // the trigger and the random-bubble loops. Deliberately NOT started: every one of them
@@ -363,6 +376,13 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// (the only part of that partial the XAML's own controls need).</summary>
         public void ShowChatHistory()
         {
+            // The log TAKES OVER the bubble, so the running line's auto-hide has to be cancelled
+            // first: that Tick sets IsVisible = false unconditionally and would close the log under
+            // the user a few seconds after they opened it. WPF's EnterChatHistoryMode kills the
+            // same two timers for the same reason.
+            _speechTimer?.Stop();
+            _isGiggling = false;
+
             _isShowingChatHistory = true;
 
             // Show empty-state hint when there are no captured messages yet.
@@ -374,11 +394,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // Hide the per-message AI badge when showing the chat history list (mixed AI + user lines).
             _aiBadge.IsVisible = false;
 
-            // Enlarge bubble for the chat history layout.
-            // ponytail: WPF followed this with ApplySpeechBubblePlacement(), which recomputes the
-            // margin from MaxWidth so a 600px bubble does not hang off the canvas. That method is in
-            // AvatarTubeWindow.Windowing.cs, so the bubble keeps its XAML margin here.
+            // Enlarge the bubble for the chat-history layout and RE-PLACE it: the attached margin
+            // is derived from MaxWidth (a 600px bubble gives the seam up rather than hang off the
+            // canvas), so widening without recomputing lands the panel clipped. The old note here
+            // blamed Windowing.cs; ApplySpeechBubblePlacement came across with RefreshTubeLayout.
             _speechBubble.MaxWidth = 600;
+            ApplySpeechBubblePlacement();
             _speechBubble.IsVisible = true;
 
             // Auto-scroll to most recent message.
@@ -443,8 +464,14 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var remaining = _cooldownEndsAt.Value - DateTime.UtcNow;
             if (remaining.TotalSeconds <= 0)
             {
-                // ponytail: needs App.ModerationCounter - WPF probed GetState() here so the counter
-                // itself raised CooldownEnded. Without it, end the cooldown locally.
+                // ponytail: the CLASS is not the blocker - ModerationCounter and its
+                // CooldownStarted / CooldownEnded events are in
+                // CCP.Core/Services/Moderation/ModerationCounter.cs already. What is missing is the
+                // app's SINGLE instance (App.ModerationCounter, built in App.xaml.cs) and a seam
+                // for it: a second instance here would keep a second sliding window and split the
+                // persisted moderation-counter.json, letting a cooldown be dodged by opening the
+                // tube - which is exactly why CoreModerationLog exists rather than a `new`. So the
+                // cooldown is ended locally instead of by probing GetState().
                 OnCooldownEnded();
                 return;
             }
@@ -954,36 +981,13 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         }
 
         /// <summary>
-        /// The mod's override first (<see cref="CoreModArt"/>), then this head's own shipped copy
-        /// under <c>avares://</c>. Null when neither exists, which every caller treats as "draw
-        /// nothing here" rather than as a failure. Never throws: a mod's broken PNG degrades to the
-        /// built-in, and a missing built-in degrades to an empty slot.
-        /// <para>ponytail: the same two-step as TubeFitDialog.TryLoadImage. Second copy, so this is
-        /// the point where it earns a head-wide helper - it wants a file of its own, and this layer
-        /// owns one file.</para>
+        /// The mod's override first, then this head's own shipped copy under <c>avares://</c>, else
+        /// null - which every caller treats as "draw nothing here" rather than as a failure.
+        /// <para>This WAS a private copy of that two-step; <c>Helpers/ModArt.TryLoad</c> is the
+        /// head-wide one and is byte-for-byte the same chain, so the copy is deleted rather than
+        /// kept in sync. TubeFitDialog and ModCreatorWindow still carry theirs.</para>
         /// </summary>
-        private static Bitmap? TryLoadImage(string resourceName)
-        {
-            var overridePath = CoreModArt.OverridePath(resourceName);
-            if (overridePath != null)
-            {
-                try { if (File.Exists(overridePath)) return new Bitmap(overridePath); }
-                catch (Exception ex) { Log.Warning(ex, "[Tube] mod override {Path} would not load", overridePath); }
-            }
-
-            try
-            {
-                var uri = new Uri($"avares://CCP.Avalonia/Resources/{resourceName}");
-                if (!AssetLoader.Exists(uri)) return null;
-                using var stream = AssetLoader.Open(uri);
-                return new Bitmap(stream);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "[Tube] built-in {Name} would not load", resourceName);
-                return null;
-            }
-        }
+        private static Bitmap? TryLoadImage(string resourceName) => ModArt.TryLoad(resourceName);
 
         /// <summary>
         /// Per-set framing: sets 2+ read 12% bigger and 10px right, and Locked's set 1 ("The Lure")
@@ -1395,8 +1399,11 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             var point = e.GetCurrentPoint(this);
             if (point.Properties.IsRightButtonPressed) return; // Avalonia opens the ContextMenu itself
-            // ponytail: needs AvatarTubeWindow.Avatar.cs (BounceAvatar) and Reactions.cs
-            // (ImgAvatar_MouseLeftButtonDown -> click bark + pose change), wired when they move to Core.
+            // ponytail: needs ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Avatar.cs
+            // (BounceAvatar - the click squash, which on this head would be a hand-stepped tween on
+            // AvatarBounceHost's RenderTransform, not an Animation) and .Reactions.cs
+            // (ImgAvatar_MouseLeftButtonDown - the click bark, which needs BarkService). Neither
+            // partial is a Core move: both reach App.* services throughout.
         }
 
         /// <summary>Send whatever is in the input box to the companion.</summary>
@@ -1406,9 +1413,14 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (string.IsNullOrWhiteSpace(input)) return;
             AddToChatHistory(input, isUser: true);
             _txtUserInput.Text = string.Empty;
-            // ponytail: needs AvatarTubeWindow.ChatInput.cs (moderation guard, AI inference,
-            // typewriter reply, TTS) and App.ModerationCounter, wired when they move to Core. The
-            // user's line still lands in the log so the view is honest about what it did.
+            // ponytail: needs ConditioningControlPanel/AvatarTube/AvatarTubeWindow.ChatInput.cs
+            // (the moderation guard, the AI request, the typewriter reply and TTS) plus
+            // the app's single App.ModerationCounter instance for the cooldown CooldownTick above
+            // paints - the counter CLASS is in Core, the instance and its seam are not; see that
+            // method. Nothing is INFERRED here, so nothing leaves the process and there is no
+            // request for the guard to refuse; the user's line lands in the local log and that is
+            // the whole of what this does. CoreModerationLog is the seam for the RECORD half when
+            // there is a request to record - it is not the counter, and cannot gate one.
         }
 
         /// <summary>Step through the unlocked avatar sets with the title-box arrows.</summary>
@@ -1434,12 +1446,31 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <summary>Refresh the context menu's checkmarks and the remote-emote item swap.</summary>
         private void UpdateQuickMenuState()
         {
-            // ponytail: the settings half is NOT the blocker - RemoteEmotePresets is on
-            // CoreSettings.Current today. What is missing is the live state the menu titles read:
-            // App.Engine (running / paused) and App.Companion (her name and mood), neither of
-            // which has a seam, plus AvatarTubeWindow.Reactions.cs's AvatarContextMenu_Opened,
-            // which retitles every item on each open. Retitling from settings alone would print a
-            // menu that disagrees with what the engine is actually doing, so it stays inert.
+            // Deliberately inert, and the reason is NOT the one an earlier note gave. Settings and
+            // two seams would in fact answer several of WPF's labels today - CoreSession.IsEngineRunning
+            // for the Engine item (WPF proxies it off App.Flash.IsRunning), CoreAi.IsAvailable for the
+            // "talk to" item, TriggerModeEnabled / AutonomyModeEnabled / AvatarMuted / SubAudioMuted
+            // for the rest, and RemoteEmotePresets for the emote swap.
+            //
+            // What is missing is the OTHER half: not one of these MenuItems has a Click handler on
+            // this head, because every action behind them - MainWindow's engine start/stop, the
+            // Takeover gate, the personality submenu, the browser pause, App.RemoteControl's emote
+            // send - is head-side. Retitling an item to "STOP ENGINE" in red while clicking it does
+            // nothing is strictly worse than the static label it carries now: the menu would report
+            // live state it cannot act on. Restore the labels WITH their handlers, not before.
+            //
+            // ponytail: needs MainWindow.StartEngine / StopEngine with ChatInput.cs's #479 guards
+            // (IsEngineStopLocked plus App.Lockdown.NotifyEscapeAttempt - the tube's Stop is the
+            // same escape as main's and must count the same), App.Patreon.HasPremiumAccess,
+            // App.RemoteControl.ControllerConnected, and ChatInput.cs's PopulatePersonalityMenu.
+            //
+            // The Mute item is the one that LOOKS free - IsMuted already reads
+            // CoreSettings.Current.AvatarMuted and GigglePriority honours it, so a two-line flip
+            // would work. It is left out anyway: WPF's MenuItemMute_Click ends with
+            // MainWindow.SyncQuickControlsUI, and the companion room's own mute switch
+            // (MainShellWindow.CompanionRoom.cs SetAvatarMuted) reads the setting once at load. A
+            // flip here would leave that switch showing the opposite of the truth until the shell
+            // is rebuilt, which is a control lying about state in a file this layer does not own.
         }
     }
 }
