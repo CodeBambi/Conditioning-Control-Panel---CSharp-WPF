@@ -50,11 +50,26 @@ namespace ConditioningControlPanel.Services
         internal const int MaxDiagScanLines = 2000;
         internal const int MaxDiagMatches = 40;      // most-recent matches kept
         internal const int MaxDiagSectionChars = 16_000; // GitHub issue-body budget guard
-        // Grep-friendly markers written to the rolling app log. [RES]/[WATCHDOG] come from
+        // Grep-friendly markers written to the session log. [RES]/[WATCHDOG] come from
         // UiHangWatchdog and are the ones that actually appear today; the video markers are
         // kept defensively (VideoDiag writes its own file, already appended in full above).
+        //
+        // TWO spellings each, because the session-file format lifts "[RES]" out of the message text
+        // and renders it as the padded category column ("[Res          ] user=..."). An exact
+        // "[RES]" match would quietly stop finding anything the day that format shipped, and a
+        // returning user still has old app-*.log files in the old spelling, so both are listed.
+        // The trailing space on the column forms is load-bearing: "[Res" alone would also match
+        // "[Reset", which 20 unrelated call sites write.
+        // Video stays old-spelling-only on purpose: as a CATEGORY, "Video" is every VideoService
+        // line, which would crowd the 40 retained matches out with routine playback chatter - and
+        // the video trace is appended in full from its own file anyway.
         internal static readonly string[] DiagMarkers =
-            { "[RES]", "[WATCHDOG]", "[BLUR]", "[VIDEO]", "[VideoDiag]" };
+        {
+            "[RES]", "[Res ",
+            "[WATCHDOG]", "[Watchdog ",
+            "[BLUR]", "[Blur ",
+            "[VIDEO]", "[VideoDiag]"
+        };
 
         // #769: how many report numbers we remember in AppSettings.RecentBugReports.
         // Newest last; the oldest are trimmed on insert.
@@ -721,22 +736,50 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Read the last N lines of today's rolling Serilog file.
-        /// Serilog rolls daily with name `app-YYYYMMDD.log` (RollingInterval.Day).
+        /// The log file this report should carry: THIS session's file if the pipeline has one,
+        /// otherwise the newest on disk (a returning user's old daily <c>app-*.log</c> included).
+        /// Returns null when there is nothing to read.
+        ///
+        /// <para>Preferring the live session file matters for exactly the reports that need it
+        /// most: a user who had to relaunch after a freeze is now filing from a NEW session, and
+        /// "newest file" would hand them the startup chatter of the relaunch. The frozen session's
+        /// file is still on disk under its own name, and the flight-recorder dump above carries the
+        /// failure itself.</para>
+        /// </summary>
+        internal static string? PickLogFile(string logDir)
+        {
+            try
+            {
+                if (!Directory.Exists(logDir)) return null;
+
+                var current = Services.Logging.LogPipeline.SessionFilePath;
+                if (!string.IsNullOrEmpty(current) && File.Exists(current)) return current;
+
+                var files = Directory.GetFiles(logDir, "session-*.log");
+                if (files.Length == 0) files = Directory.GetFiles(logDir, "app-*.log");
+                if (files.Length == 0) return null;
+                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+                return files[^1];
+            }
+            catch
+            {
+                return null; // swallow: no log is survivable, a throw from the reporter is not
+            }
+        }
+
+        /// <summary>
+        /// Read the last N lines of this session's log file (see <see cref="PickLogFile"/>).
         /// </summary>
         private static string TryReadRecentAppLog(int maxLines)
         {
             try
             {
                 var logDir = Path.Combine(App.UserDataPath, "logs");
-                if (!Directory.Exists(logDir)) return string.Empty;
-                var files = Directory.GetFiles(logDir, "app-*.log");
-                if (files.Length == 0) return string.Empty;
-                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-                var latest = files[^1];
+                var latest = PickLogFile(logDir);
+                if (latest == null) return string.Empty;
 
-                // Tail-read: read the whole file then take the last maxLines lines.
-                // Serilog logs are bounded to 7 days × ~1 log/event, typically small.
+                // Tail-read: read the whole file then take the last maxLines lines. A session
+                // file is one run and capped at 8 MB, so this stays small.
                 using var fs = new FileStream(latest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 using var sr = new StreamReader(fs, Encoding.UTF8);
                 var allLines = new List<string>();

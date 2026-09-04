@@ -20,14 +20,42 @@ namespace ConditioningControlPanel.Services.Logging
         /// </summary>
         public static readonly LoggingLevelSwitch LevelSwitch = new(LogEventLevel.Debug);
 
-        /// <summary>Identifies this run in diag dumps (and, from the session-files PR, the header).</summary>
+        /// <summary>Identifies this run: names its log file, its diag dumps and its header.</summary>
         public static string SessionId { get; } = DateTime.Now.ToString("yyyyMMdd-HHmmss");
 
-        /// <summary>8 MB. The daily roll alone let one bad loop write an unbounded file.</summary>
+        /// <summary>8 MB. Without a size cap one bad loop writes an unbounded file.</summary>
         public const long FileSizeLimitBytes = 8L * 1024 * 1024;
+
+        /// <summary>This run's log file, or null before the pipeline is built.</summary>
+        public static string? SessionFilePath { get; private set; }
 
         private static Logger? _logger;
         private static ThrottlingSink? _throttle;
+        private static CountingSink? _counters;
+        private static string? _logsDir;
+        private static bool _footerHooked;
+        private static bool _footerWritten;
+        private static readonly object FooterGate = new();
+
+        /// <summary>
+        /// Where the header's <c>lang=</c> and <c>mod=</c> come from. A seam because the logger is
+        /// built long before settings are loaded (see <see cref="LogAppReady"/>), and because tests
+        /// must not need an App.
+        /// </summary>
+        internal static Func<(string Language, string ModId)> EnvironmentProvider { get; set; } = DefaultEnvironment;
+
+        private static (string, string) DefaultEnvironment()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                return (s?.Language ?? "?", s?.ActiveModId ?? "?");
+            }
+            catch
+            {
+                return ("?", "?"); // swallow: never let a settings read cost us the log
+            }
+        }
 
         /// <summary>
         /// True when this run was asked for Debug on disk: <c>--verbose</c> on the command line or
@@ -71,6 +99,13 @@ namespace ConditioningControlPanel.Services.Logging
             var recorder = new FlightRecorderSink(logsDir, SessionId);
             FlightRecorderSink.Instance = recorder;
 
+            _logsDir = logsDir;
+            var (lang, mod) = SafeEnvironment();
+            // Retention and the header run BEFORE the sink opens the file: the sweep must not
+            // consider the file we are about to write, and the header must be its first line.
+            var sessionPath = SessionLog.Prepare(logsDir, SessionId, SafeVersion(), lang, mod);
+            SessionFilePath = sessionPath;
+
             // The file sink is built as its own logger so it can be WRAPPED. Serilog's Logger is an
             // ILogEventSink, which is the only way to put the throttle between the pipeline and the
             // file without reimplementing the rolling file sink. Its own floor is Verbose because
@@ -80,12 +115,13 @@ namespace ConditioningControlPanel.Services.Logging
                 .MinimumLevel.Verbose()
                 .WriteTo.File(
                     new CcpLineFormatter(),
-                    Path.Combine(logsDir, "app-.log"),
-                    rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 7,
-                    // A size cap as well as the daily roll: a render-loop exception writes the same
-                    // line thousands of times a minute, and "one file per day" is no cap at all
-                    // when the day has a storm in it.
+                    sessionPath,
+                    // One file per RUN, not per day. The daily file mixed the session that broke
+                    // with the relaunch the user needed in order to report it; a session file is
+                    // the same object as "the thing that went wrong", so it can be attached whole.
+                    rollingInterval: RollingInterval.Infinite,
+                    // The size cap stays: a render-loop exception writes the same line thousands of
+                    // times a minute, and one run is no cap at all when the run has a storm in it.
                     fileSizeLimitBytes: FileSizeLimitBytes,
                     rollOnFileSizeLimit: true,
                     // Force a disk flush each second so the LAST lines survive a hard process death
@@ -97,6 +133,9 @@ namespace ConditioningControlPanel.Services.Logging
             var previousThrottle = _throttle;
             _throttle = throttled;
 
+            var counters = new CountingSink();
+            _counters = counters;
+
             var config = new LoggerConfiguration()
                 .MinimumLevel.ControlledBy(LevelSwitch)
                 // Order matters: the category is derived from the template, which redaction never
@@ -106,6 +145,7 @@ namespace ConditioningControlPanel.Services.Logging
                 // Debug reaches the ring and nothing else. The file keeps its Information floor
                 // unless this run asked for verbose, so enabling Debug costs disk nothing.
                 .WriteTo.Sink(recorder)
+                .WriteTo.Sink(counters, restrictedToMinimumLevel: LogEventLevel.Warning)
                 .WriteTo.Sink(throttled,
                     restrictedToMinimumLevel: verbose ? LogEventLevel.Debug : LogEventLevel.Information);
 
@@ -115,7 +155,89 @@ namespace ConditioningControlPanel.Services.Logging
             var previous = _logger;
             _logger = built;
             try { previous?.Dispose(); } catch { /* swallow: replacing a logger must not throw */ }
+
+            HookFooter();
             return built;
+        }
+
+        /// <summary>
+        /// The footer is written from ProcessExit rather than App.OnExit: OnExit does not run when
+        /// the app is closed by a taskbar kill or a restart-for-update, and those sessions are
+        /// precisely the ones whose end we want recorded.
+        /// </summary>
+        private static void HookFooter()
+        {
+            if (_footerHooked) return;
+            _footerHooked = true;
+            try { AppDomain.CurrentDomain.ProcessExit += (_, _) => WriteSessionFooter(); }
+            catch { /* swallow: no footer is survivable, a throw here is not */ }
+        }
+
+        /// <summary>
+        /// Close the sinks and write the last line. Idempotent - whichever of ProcessExit and
+        /// App.OnExit gets there first wins, and the second is a no-op.
+        /// </summary>
+        public static void WriteSessionFooter()
+        {
+            lock (FooterGate)
+            {
+                if (_footerWritten) return;
+                _footerWritten = true;
+            }
+
+            int warn = _counters?.Warnings ?? 0;
+            int err = _counters?.Errors ?? 0;
+            int suppressed = _throttle?.TotalSuppressed ?? 0;
+            var dir = _logsDir;
+
+            // Sinks first: the file sink holds the handle, and the throttle's flush can still add
+            // suppression summaries that belong above the footer.
+            Shutdown();
+
+            if (!string.IsNullOrEmpty(dir))
+                SessionLog.WriteFooter(dir!, SessionId, Uptime(), warn, err, suppressed);
+        }
+
+        /// <summary>
+        /// "App ready in N ms", from process start to the first idle dispatcher frame - the moment
+        /// the window is actually usable. Startup regressions have shipped unnoticed because
+        /// nothing in the log ever said how long startup took.
+        /// </summary>
+        public static void LogAppReady()
+        {
+            try
+            {
+                var (lang, mod) = SafeEnvironment();
+                Log.Information("App ready in {Ms} ms | lang={Lang} mod={Mod}",
+                    (long)Uptime().TotalMilliseconds, lang, mod);
+            }
+            catch { /* swallow: a timing line is not worth a startup crash */ }
+        }
+
+        private static TimeSpan Uptime()
+        {
+            try
+            {
+                using var p = System.Diagnostics.Process.GetCurrentProcess();
+                var up = DateTime.Now - p.StartTime;
+                return up > TimeSpan.Zero ? up : TimeSpan.Zero;
+            }
+            catch
+            {
+                return TimeSpan.Zero; // swallow: a missing uptime prints 0:00:00
+            }
+        }
+
+        private static (string, string) SafeEnvironment()
+        {
+            try { return EnvironmentProvider(); }
+            catch { return ("?", "?"); /* swallow */ }
+        }
+
+        private static string SafeVersion()
+        {
+            try { return UpdateService.AppVersion ?? "?"; }
+            catch { return "?"; /* swallow */ }
         }
 
         /// <summary>Flush and release the file handle. Idempotent.</summary>
