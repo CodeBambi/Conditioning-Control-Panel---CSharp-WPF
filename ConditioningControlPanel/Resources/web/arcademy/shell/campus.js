@@ -998,7 +998,7 @@ function idCrestGlyph() {
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
   dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex,
-  account, economy, idFrame } = {}) {
+  capsule, account, economy, idFrame } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   /* THE ACCOUNT CHIP (shell/accountchip.js): a host slot in the top-right
@@ -2236,6 +2236,44 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
       'The notice board carries announcements. The trophy case waits for your diplomas.'),
   }));
   orient.appendChild(stag(hallG, 860));
+
+  /* ------------------------- THE TROPHY CASE ------------------------------
+   * A DOOR NOW (community ask, Sept 2). It had been drawn furniture since the
+   * day the hall was, and the entrance hall's own hit area swallowed every
+   * press that landed on it - so this group is APPENDED AFTER that hit area,
+   * and the case takes the click while the hall keeps the rest of the room.
+   *
+   * The bag is the `annex` / `post` contract: the campus draws, the shell
+   * keeps every byte of state and mints the overlay. A host that hands no bag
+   * (an older shell, the headless suites) gets the decoration exactly as it
+   * was - no group, no cursor, no tooltip promising a case that cannot open.
+   * The blueprint fallback needs nothing extra: the case is drawn geometry,
+   * never an `<image>`, so `data-art="off"` leaves this door where it is.
+   * -------------------------------------------------------------------- */
+  if (capsule && typeof capsule.open === 'function') {
+    const caseSealed = () => {
+      try { return typeof capsule.sealed === 'function' ? !!capsule.sealed() : false; }
+      catch (e) { return false; }
+    };
+    const caseG = svg('g', null, 'campus-room facility trophy');
+    /* Generous around the 12-wide case and its rotated sign: 52x172 is a thumb
+     * on a phone, and clears the board (x<=634) and the desk (x<=526). */
+    caseG.appendChild(svg('rect',
+      { x: 630, y: 538, width: 52, height: 172, fill: 'transparent', stroke: 'none' }, 'campus-hit'));
+    caseG.addEventListener('click', () => {
+      /* The glass slides; a sealed case only thumps. capsule.js plays the
+       * overlay's own beat - this is the press, and a press is a door. */
+      sfx('door', 0.3, { pitch: caseSealed() ? 0.86 : 1.1 });
+      try { capsule.open(); } catch (e) { say('trophy case threw: ' + ((e && e.message) || e)); }
+    });
+    attachTip(caseG, () => ({
+      name: t('campus_trophy_case', 'Trophy Case'),
+      status: caseSealed() ? t('campus_sealed', 'Sealed') : t('capsule_on_view', 'On view'),
+      desc: t('campus_desc_trophy',
+        'One exhibit under glass. The school keeps its own first night in here.'),
+    }));
+    orient.appendChild(stag(caseG, 880));
+  }
 
   /* corridor <-> entrance opening + main gate */
   /* THE OPENING NOW RUNS TO THE ALLEY'S FAR JAMB. It used to stop at 738 and

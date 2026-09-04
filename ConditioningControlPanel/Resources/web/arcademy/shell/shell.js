@@ -124,6 +124,9 @@ import { initMail, triggerHolds } from './mail.js';
 import { openMailbox, closeMailbox, isMailboxOpen } from './mailbox.js';
 import { initCorkboard, openCorkboard, currentCorkboard } from './corkboard.js';
 import { initBugle, openBugle, currentBugle } from './bugle.js';
+/* THE TIME CAPSULE: the trophy case in the entrance hall. An overlay, never a
+ * screen - the campus offers the press, the shell mints the case. */
+import { openCapsule, currentCapsule, capsuleDoor, CAPSULE_NIGHTS } from './capsule.js';
 import { loadFaceGeometry, ENROLL_PUNCHES } from './punchcard.js';
 /* EMI, the mascot. Two of B's own modules: `mountEmi` builds the floating widget
  * (which dynamic-imports agent A's renderer optionally, so a broken face costs
@@ -1241,6 +1244,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           try { if (isMailboxOpen()) return true; } catch (e) { /* noop */ }
           try { const c = currentCorkboard(); if (c && !c.closed) return true; } catch (e) { /* noop */ }
           try { const b = currentBugle(); if (b && !b.closed) return true; } catch (e) { /* noop */ }
+          try { const cp = currentCapsule(); if (cp && !cp.closed) return true; } catch (e) { /* noop */ }
           /* A door card is a modal over the plan; a slip behind it is a slip
            * nobody sees. `seepSeam().cardIsOpen()` is a READ - `closeCard()`
            * would have closed it. */
@@ -1766,6 +1770,53 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     };
   }
 
+  /* ------------------------- THE TIME CAPSULE ---------------------------
+   * THE DOOR IS MONOTONIC: the case opens at a streak of CAPSULE_NIGHTS and
+   * never closes again. `streak` is HOST-OWNED and is a CURRENT count, so it
+   * cannot answer "has this player EVER reached thirty" - the high-water mark
+   * is banked here in ONE page-owned meta blob, `capsule = {opened, best}`.
+   *
+   * A PAGE KEY AND NOT A SYNCED ONE, by necessity: the synced-state whitelist
+   * lives in the web shim, which is not in this repo, and no synced field
+   * means "best streak ever" - `perfectAttendance` counts perfect NIGHTS, a
+   * different rule that would open the case for a player who never held a
+   * streak. So the mark rides ArcademyMetaStore on the desktop (new top-level
+   * keys are accepted; only host-owned ones are refused) and localStorage on
+   * the web, and the worst case is a player who crosses thirty on one device
+   * seeing the parcel on another until their streak is read there once.
+   *
+   * The ARITHMETIC is capsule.js's pure `capsuleDoor`; bankCapsule is only the
+   * read and the conditional write, run on every campus mount - the one moment
+   * a night's streak is certainly known.
+   * ------------------------------------------------------------------- */
+  function bankCapsule() {
+    try {
+      const d = capsuleDoor(store.get('capsule'), store.streak().count | 0, CAPSULE_NIGHTS);
+      if (d.changed) store.set('capsule', { opened: d.opened, best: d.best });
+      return d;
+    } catch (e) {
+      say('capsule bank failed: ' + ((e && e.message) || e));
+      return { opened: false, best: 0, changed: false };
+    }
+  }
+
+  /** Nights on the tag: what the case has seen, against what it asks for. */
+  function capsuleNights() { return { have: bankCapsule().best, need: CAPSULE_NIGHTS }; }
+
+  function capsuleSealed() { return !bankCapsule().opened; }
+
+  /** Open the case. One at a time, the post overlays' own re-entry guard. */
+  function openCapsuleOverlay() {
+    const up = currentCapsule();
+    if (up && !up.closed) return;
+    const n = capsuleNights();
+    openCapsule({
+      t, sealed: capsuleSealed(), have: n.have, need: n.need,
+      reducedMotion, onClose: refreshCampusPost, log: say,
+    });
+    fireMoment('campus.trophyOpened', { inClass: false });      // EMI SEAM
+  }
+
   /** Descriptor detail the campus door card shows (family, budget, tier). */
   function campusDescriptors() {
     return timetable.classes.map((c) => ({
@@ -2019,6 +2070,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
      * school: the catch below renders the plain panel the shell shipped with
      * (full chip rows, same buttons), which is also what the headless suites
      * drive when the stage cannot build. */
+    /* THE CAPSULE'S HIGH-WATER MARK, banked before the plan is drawn: the
+     * case about to be drawn reads the latch a line later. */
+    bankCapsule();
     try {
       campus = createCampus({
         state: buildCampusState(),
@@ -2069,6 +2123,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         annex: (annexPeek || (store.get('annexRevealSeen') && (store.get('annex') || {}).visited))
           ? { open: () => walkThen('annex', () => showAnnex()) }
           : null,
+        /* THE TROPHY CASE. Same bag contract as `post` and `annex`: the campus
+         * draws the door and the tooltip, the shell keeps the state and mints
+         * the overlay. Handed unconditionally - the case is always pressable,
+         * and what is BEHIND the glass is the thing that changes. */
+        capsule: { open: openCapsuleOverlay, sealed: capsuleSealed },
         /* THE ECONOMY, handed down rather than read. campus.js is under the
          * header law (it imports no store and no bridge), so the wallet chip in
          * its top-right cluster and the Extra Credit lever on its door card
@@ -6715,6 +6774,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       }
       {
         const up = currentBugle();
+        if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
+      }
+      /* THE TROPHY CASE is the fourth of that set and takes the same rung: a
+       * campus-chrome overlay at z 38, opened one press ago, and it binds no
+       * key of its own (trap 29 - the ladder owns Escape). */
+      {
+        const up = currentCapsule();
         if (up && !up.closed) { try { up.close(); } catch (e) { /* noop */ } return true; }
       }
       if (active && active.confirmEl) { dismissConfirm(); return true; }

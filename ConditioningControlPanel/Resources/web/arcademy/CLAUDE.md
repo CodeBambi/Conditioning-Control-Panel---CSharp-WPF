@@ -385,6 +385,14 @@ shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
                      over the black for free. Fires on the tenth hole of the
                      LAST card and sets `annexRevealSeen` - the only gate the
                      ajar panel on the records wall reads
+shell/capsule.js THE TIME CAPSULE: the trophy case exhibit in the entrance hall
+                 - one framed screenshot of the February 2026 dashboard under a
+                 brass plaque. An OVERLAY, never a screen (traps 48/50), z 38
+                 with the corkboard and the Bugle. Owns no store, bridge or
+                 clock: `capsuleDoor()` (pure, exported) is the whole unlock
+                 rule - a high-water mark that only rises, so thirty nights
+                 once opens the case forever. Sealed it draws a parcel and the
+                 count, and ships no art, so it cannot 404
 shell/prizecounter.js THE PRIZE COUNTER (economy wave): the two-currency shop, a
                    SCREEN at depth 1 beside records - tickets (`t`, the nightly
                    wage) on a timber shelf, tokens (`k`, one a day at best) in a
