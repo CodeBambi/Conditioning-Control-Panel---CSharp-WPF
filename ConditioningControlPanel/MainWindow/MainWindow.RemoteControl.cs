@@ -1007,8 +1007,11 @@ namespace ConditioningControlPanel
                 sessionText += $"  PIN: {overlayPin}";
             TxtOverlaySessionCode.Text = sessionText;
 
-            // Hide browser to avoid WebView2 airspace issue (renders on top of WPF overlays)
-            SettingsTab.BrowserContainer.Visibility = System.Windows.Visibility.Hidden;
+            // Hide browser to avoid WebView2 airspace issue (renders on top of WPF overlays).
+            // NOT while the controller's own video is playing in it - see
+            // RevealBrowserForRemoteVideo. A reconnect mid-video must not blindfold it again.
+            if (!_remoteOverlayBrowserRevealed)
+                SettingsTab.BrowserContainer.Visibility = System.Windows.Visibility.Hidden;
             RemoteControlOverlay.Visibility = System.Windows.Visibility.Visible;
 
             var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
@@ -1027,10 +1030,56 @@ namespace ConditioningControlPanel
                 RemoteControlOverlay.Visibility = System.Windows.Visibility.Collapsed;
                 // Restore browser visibility now that overlay is gone
                 SettingsTab.BrowserContainer.Visibility = System.Windows.Visibility.Visible;
+                _remoteOverlayBrowserRevealed = false;
             };
             RemoteControlOverlay.BeginAnimation(OpacityProperty, fadeOut);
             _remoteNotificationTimer?.Stop();
             _remoteSessionInfoTimer?.Stop();
+        }
+
+        // True while a controller-started browser video has lifted the overlay's browser
+        // blindfold. ShowRemoteControlOverlay must not re-apply the blindfold underneath it, and
+        // HideRemoteControlOverlay clears it along with the rest of the overlay state.
+        private bool _remoteOverlayBrowserRevealed;
+
+        /// <summary>
+        /// ccp-bugs#1138. <see cref="ShowRemoteControlOverlay"/> hides
+        /// <c>SettingsTab.BrowserContainer</c> for the WHOLE time a controller is connected, because
+        /// WebView2 airspace would otherwise paint over the WPF overlay. That is right for the idle
+        /// case and exactly wrong for the one command that deliberately puts a video in that
+        /// browser: <c>play_hypnotube</c> navigated into a container nobody could see, and the page
+        /// only became visible when the controller disconnected and
+        /// <see cref="HideRemoteControlOverlay"/> put the container back, which is precisely the
+        /// "it opened after they disconnected" the report describes. Lift the blindfold while a
+        /// remote video is up, put it back when it stops.
+        ///
+        /// <para>Losing the airspace fight is the POINT here: the controller's video belongs on top
+        /// of the "someone else is controlling your app" card, not behind it.</para>
+        /// </summary>
+        internal void RevealBrowserForRemoteVideo(bool reveal)
+        {
+            try
+            {
+                if (_remoteOverlayBrowserRevealed == reveal) return;
+                _remoteOverlayBrowserRevealed = reveal;
+
+                if (reveal)
+                {
+                    SettingsTab.BrowserContainer.Visibility = System.Windows.Visibility.Visible;
+                    App.Logger?.Information(
+                        "[RemoteControl] Browser un-hidden for a controller video (the remote overlay stays behind the WebView)");
+                }
+                else if (RemoteControlOverlay.Visibility == System.Windows.Visibility.Visible)
+                {
+                    // Controller still connected: the overlay needs its airspace back so the
+                    // session code is legible again.
+                    SettingsTab.BrowserContainer.Visibility = System.Windows.Visibility.Hidden;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RevealBrowserForRemoteVideo failed: {Error}", ex.Message);
+            }
         }
 
         private void WireRemoteSessionCallbacks()
