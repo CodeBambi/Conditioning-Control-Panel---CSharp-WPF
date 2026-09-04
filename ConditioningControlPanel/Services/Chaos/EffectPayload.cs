@@ -176,9 +176,26 @@ public sealed class VideoPayload : EffectPayload
             // the full mandatory video start midway (#456/#458).
             if (!Ambient)
                 App.Video?.ArmRandomSegment(SEGMENT_SEC);
-            App.Video?.TriggerVideo(silentIfEmpty: true);
+
+            if (App.Video == null)
+            {
+                // Was a silent null-conditional: the pop simply evaporated (#1135).
+                App.Logger?.Information("VideoPayload: nothing to fire - the video service is not available");
+                return;
+            }
+
+            // userEarned: a human popped this bubble on purpose. It is the one thing that separates
+            // this call from the background scheduler, and the guards inside TriggerVideo that exist
+            // to keep the SCHEDULER out of the user's way read it so they no longer eat a video the
+            // user asked for (#1135).
+            App.Video.TriggerVideo(silentIfEmpty: true, userEarned: true);
         }
-        catch (Exception ex) { App.Logger?.Debug("VideoPayload: {E}", ex.Message); }
+        catch (Exception ex)
+        {
+            // Information, not Debug: a Debug line is below the default log level, so this was the
+            // second place a popped video bubble could fail leaving nothing behind at all (#1135).
+            App.Logger?.Information(ex, "VideoPayload: firing the video failed - the pop produced nothing");
+        }
     }
 }
 

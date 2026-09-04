@@ -196,6 +196,20 @@ namespace ConditioningControlPanel.Services
         // teardown path.
         private volatile bool _playbackStarted;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
+
+        /// <summary>When the in-flight trigger claimed <see cref="_triggerInProgress"/>. Read only by
+        /// the stale-trigger escape in TriggerVideo (#1135) - a flag with no timestamp cannot tell
+        /// "a trigger is genuinely mid-flight" from "a trigger died on the way to PlayVideo and
+        /// latched the guard shut".</summary>
+        private DateTime _triggerStartedUtc = DateTime.MinValue;
+
+        /// <summary>How long a trigger may sit between claiming <see cref="_triggerInProgress"/> and
+        /// reaching PlayVideo before the next trigger declares it dead and takes over. Generously
+        /// past the real path (an off-thread clip selection, which for a content-pack clip decrypts
+        /// the whole file, plus the 800ms freeze delay) and far short of the InteractionQueue's
+        /// 5-minute stuck detector, which is what used to be the only way out.</summary>
+        internal static readonly TimeSpan TriggerStallCeiling = TimeSpan.FromSeconds(45);
+
         private bool _strictActive;
         // True across the strict retry GAP: from the moment a strict run's attention check fails
         // until the replacement video is actually on screen. ShowMessage deliberately clears
@@ -1700,7 +1714,7 @@ namespace ConditioningControlPanel.Services
         private DateTime _cascadeDeferDeadlineUtc = DateTime.MinValue;
 
         /// <summary>#871: hold a trigger the gif-cascade guard refused and replay it once the rain stops.</summary>
-        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride)
+        private void DeferTriggerPastCascade(bool silentIfEmpty, bool? strictOverride, bool userEarned = false)
         {
             if (_cascadeDeferPending)
             {
@@ -1734,14 +1748,20 @@ namespace ConditioningControlPanel.Services
                     // thing that justified it — the engine stopped, the user turned mandatory
                     // videos off — and replaying then pops a fullscreen video out of a feature
                     // that is switched off. Same guard the scheduler uses (see ScheduleNext).
-                    if (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true)
+                    //
+                    // #1135: NOT for a user-earned trigger. Trigger bubbles are their own dashboard
+                    // feature and have never required the mandatory-video scheduler - the direct
+                    // path above has no such gate - so a popped video bubble was fine until a
+                    // cascade happened to be falling, at which point this line quietly binned it
+                    // for a setting that never applied to it.
+                    if (!userEarned && (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true))
                     {
                         App.Logger?.Information("VideoService: cascade replay abandoned - mandatory videos no longer running");
                         _cascadeDeferDeadlineUtc = DateTime.MinValue;
                         return;
                     }
 
-                    TriggerVideo(silentIfEmpty, strictOverride);
+                    TriggerVideo(silentIfEmpty, strictOverride, userEarned);
 
                     // TriggerVideo may have parked itself again (a new cascade). Only release the
                     // ceiling when the chain really ended, so the re-defer above inherits it.
@@ -1782,7 +1802,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>#1073: hold a trigger the For You guard refused and replay it once the feed leaves
         /// the screen (closed, or ghosted away).</summary>
-        private void DeferTriggerPastFeed(bool silentIfEmpty, bool? strictOverride)
+        private void DeferTriggerPastFeed(bool silentIfEmpty, bool? strictOverride, bool userEarned = false)
         {
             if (_feedDeferPending)
             {
@@ -1814,15 +1834,16 @@ namespace ConditioningControlPanel.Services
                     // Re-assert the preconditions at FIRE time. The defer can easily outlive the thing
                     // that justified it — the engine stopped, the user turned mandatory videos off —
                     // and replaying then pops a fullscreen video out of a feature that is switched off.
-                    // Same guard the cascade replay and the scheduler use.
-                    if (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true)
+                    // Same guard the cascade replay and the scheduler use - and, like there, NOT for a
+                    // user-earned trigger, which never depended on the mandatory-video scheduler (#1135).
+                    if (!userEarned && (!_isRunning || App.Settings?.Current?.MandatoryVideosEnabled != true))
                     {
                         App.Logger?.Information("VideoService: For You replay abandoned - mandatory videos no longer running");
                         _feedDeferDeadlineUtc = DateTime.MinValue;
                         return;
                     }
 
-                    TriggerVideo(silentIfEmpty, strictOverride);
+                    TriggerVideo(silentIfEmpty, strictOverride, userEarned);
 
                     // TriggerVideo may have parked itself again (the feed came back, or a cascade
                     // started). Only release the ceiling when the chain really ended, so a re-defer
@@ -1896,6 +1917,32 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Information("VideoService: deferring mandatory video until the For You feed leaves the screen");
         }
 
+        /// <summary>What a fresh TriggerVideo call should do about the in-progress guard.</summary>
+        internal enum TriggerGuardDecision
+        {
+            /// <summary>Nothing in flight - claim the guard and go.</summary>
+            Proceed,
+            /// <summary>A trigger really is mid-flight; this one is a genuine overlap and is dropped.</summary>
+            Skip,
+            /// <summary>The in-flight trigger is older than anything real can be: it died on the way
+            /// to PlayVideo and latched the guard. Clear it and let this trigger through.</summary>
+            ClearStaleAndProceed
+        }
+
+        /// <summary>
+        /// Pure decision for the <see cref="_triggerInProgress"/> guard, extracted so the escape
+        /// hatch is unit-testable without LibVLC (the seam pattern EvaluateGraceRequest already uses).
+        /// The escape exists because the guard could latch forever and silently eat every later
+        /// video: the #1135 "video bubbles do nothing" report.
+        /// </summary>
+        internal static TriggerGuardDecision EvaluateTriggerGuard(bool triggerInProgress, TimeSpan sinceTriggerStarted)
+        {
+            if (!triggerInProgress) return TriggerGuardDecision.Proceed;
+            return sinceTriggerStarted < TriggerStallCeiling
+                ? TriggerGuardDecision.Skip
+                : TriggerGuardDecision.ClearStaleAndProceed;
+        }
+
         /// <param name="silentIfEmpty">
         /// When true, an empty videos folder is logged and ignored instead of popping the
         /// "no videos found" dialog. Used for the auto-played startup video (#333) so a user
@@ -1908,15 +1955,50 @@ namespace ConditioningControlPanel.Services
         /// its videos follow the global setting like every other one (the TakeoverVideosStrict
         /// override is retired - see AppSettings.TakeoverVideosStrict and AutonomyService).
         /// </param>
-        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null)
+        /// <param name="userEarned">
+        /// True when a human action asked for THIS video right now - today that means a popped
+        /// video bubble (VideoPayload), as opposed to the background scheduler. Two guards read it,
+        /// and both for the same reason: a bubble the user popped is explicit consent, so it must
+        /// not be stood down for a feature the user is not using, nor abandoned mid-defer because
+        /// the unrelated mandatory-video SCHEDULER happens to be off. See the For You guard below
+        /// and the replay re-asserts in DeferTriggerPastFeed / DeferTriggerPastCascade.
+        /// </param>
+        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null, bool userEarned = false)
         {
-            App.Logger?.Information("VideoService: TriggerVideo called");
+            App.Logger?.Information("VideoService: TriggerVideo called (userEarned={UserEarned})", userEarned);
 
-            // Prevent overlapping triggers (e.g. during 800ms freeze delay)
-            if (_triggerInProgress)
+            // Prevent overlapping triggers (e.g. during 800ms freeze delay).
+            //
+            // #1135: this flag used to be able to LATCH. It is set here and cleared at the top of
+            // PlayVideo, and the only thing carrying the trigger from here to there was a bounded
+            // DispatcherHelper.RunOnUISync - which ABANDONS its queued work after 5 seconds and
+            // returns normally (a Warning, no exception). Five seconds of UI-thread time is not
+            // exotic in this app: CloseAll alone documents blocking the dispatcher for up to ~4.9s.
+            // When that happened PlayVideo never ran, nothing cleared the flag, and EVERY later
+            // trigger - every video bubble the user popped - was dropped right here until the
+            // InteractionQueue's 5-minute stuck detector force-cleaned. That is the reported
+            // "video bubbles do nothing most of the time", with no error anywhere.
+            //
+            // The RunOnUISync is gone (see ContinueTriggerVideo), and this guard no longer trusts
+            // the flag indefinitely: a trigger that has not reached PlayVideo within
+            // TriggerStallCeiling is declared dead and this one takes over.
+            var triggerAge = DateTime.UtcNow - _triggerStartedUtc;
+            switch (EvaluateTriggerGuard(_triggerInProgress, triggerAge))
             {
-                App.Logger?.Information("VideoService: TriggerVideo skipped - trigger already in progress");
-                return;
+                case TriggerGuardDecision.Skip:
+                    App.Logger?.Information("VideoService: TriggerVideo skipped - trigger already in progress ({Sec:F1}s ago)",
+                        triggerAge.TotalSeconds);
+                    return;
+
+                case TriggerGuardDecision.ClearStaleAndProceed:
+                    App.Logger?.Warning("VideoService: clearing a STALE in-progress trigger ({Sec:F0}s old, ceiling {Ceiling:F0}s) - the previous trigger never reached PlayVideo; this one proceeds",
+                        triggerAge.TotalSeconds, TriggerStallCeiling.TotalSeconds);
+                    _triggerInProgress = false;
+                    // The dead trigger claimed the queue's Video slot and will never release it. Only
+                    // release when nothing is actually on screen - a live video's claim is its own.
+                    if (!_videoPlaying && _windows.Count == 0)
+                        App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+                    break;
             }
 
             // Teardown of a previous video is pumping messages (CloseAll/WaitWithMessagePump
@@ -1951,7 +2033,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
-                DeferTriggerPastCascade(silentIfEmpty, strictOverride);
+                DeferTriggerPastCascade(silentIfEmpty, strictOverride, userEarned);
                 return;
             }
 
@@ -1968,12 +2050,25 @@ namespace ConditioningControlPanel.Services
             //     cost #871 above), and a video the user popped a bubble to earn must not evaporate.
             //     So the trigger is held and replayed once the feed leaves the screen — closed, or
             //     ghosted away — exactly like the cascade guard.
+            //  3. #1135: the defer still swallowed a popped bubble whenever the user kept BROWSING.
+            //     It is capped at 90s, so on a feed the user stays in for minutes - which is what an
+            //     endless feed is for - the held video expires and the pop produced nothing, the same
+            //     outcome the outright drop had. The guard's whole justification is that the feed IS
+            //     the video experience and a SCHEDULED video must not barge in on it; a bubble the
+            //     user deliberately popped is not the scheduler barging in, it is the user asking for
+            //     a video while looking at the feed. So a user-earned trigger is not stood down for
+            //     the feed at all. (Audio: the feed renders in an out-of-process WebView2, so the
+            //     normal audio duck reaches it like any other app's playback.)
             //
             // The old comment's concern ("never queue: the feed can stay open far longer than the
             // queue's stuck window") is still honoured, twice over: the queue slot is RELEASED here
             // rather than held across the wait, and the wait itself is capped at FeedDeferMaxWait,
             // so nothing parks behind an all-evening feed session.
-            if (FeedOwnsTheScreen)
+            if (FeedOwnsTheScreen && userEarned)
+            {
+                App.Logger?.Information("VideoService: For You feed is on screen but this video was earned by a bubble pop - playing it rather than deferring");
+            }
+            else if (FeedOwnsTheScreen)
             {
                 App.Logger?.Information("VideoService: TriggerVideo deferred - For You feed on screen");
                 // Same release as the cascade guard: when this trigger was DEQUEUED the queue already
@@ -1986,7 +2081,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
                 }
-                DeferTriggerPastFeed(silentIfEmpty, strictOverride);
+                DeferTriggerPastFeed(silentIfEmpty, strictOverride, userEarned);
                 return;
             }
 
@@ -2000,7 +2095,7 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue.CurrentInteraction);
                 App.InteractionQueue.TryStart(
                     InteractionQueueService.InteractionType.Video,
-                    () => TriggerVideo(silentIfEmpty, strictOverride),
+                    () => TriggerVideo(silentIfEmpty, strictOverride, userEarned),
                     queue: true);
                 return;
             }
@@ -2022,6 +2117,7 @@ namespace ConditioningControlPanel.Services
             }
 
             _triggerInProgress = true;
+            _triggerStartedUtc = DateTime.UtcNow;   // stamped so a dead trigger cannot latch the guard (#1135)
 
             // Resolve strictness NOW (trigger time), not after the 800ms freeze delay —
             // the global setting can change inside that window.
@@ -2096,9 +2192,22 @@ namespace ConditioningControlPanel.Services
                 // Startup auto-play: a user who hasn't added videos shouldn't get a blocking
                 // dialog on every launch (#333). Log and bail quietly — manual triggers still
                 // fall through to the guidance prompt below.
+                //
+                // #1135: silentIfEmpty is NOT only the startup video any more - every popped video
+                // bubble comes through here with it set, and the old line claimed "startup video
+                // skipped" for a pop the user had just made, with no counts to say WHY the pool came
+                // back empty (no files, everything disabled, a duration filter that excludes the whole
+                // library, a pack that would not decrypt). Say what actually happened instead.
                 if (silentIfEmpty)
                 {
-                    App.Logger?.Information("VideoService: startup video skipped — no videos in {Path}", _videosPath);
+                    int remoteBuffered;
+                    lock (_remoteLock) remoteBuffered = _remoteVideoQueue.Count;
+                    App.Logger?.Information(
+                        "VideoService: video request refused - the pool handed back nothing (local={Local}, pack={Pack}, remote buffered={Remote}, minLen={Min}s, maxLen={Max}s, path={Path})",
+                        _videoQueue.Count, _packVideoQueue.Count, remoteBuffered,
+                        App.Settings?.Current?.VideoMinDurationSeconds ?? 0,
+                        App.Settings?.Current?.VideoMaxDurationSeconds ?? 0,
+                        _videosPath);
                     return;
                 }
 
@@ -2155,9 +2264,22 @@ namespace ConditioningControlPanel.Services
                         }
 
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo on UI thread");
-                        DispatcherHelper.RunOnUISync(() =>
+                        // RunOnUI (BeginInvoke), never RunOnUISync (#1135). The sync helper is bounded
+                        // at 5 seconds and, on timeout, ABANDONS the queued PlayVideo and returns
+                        // normally - so the video simply never happened, _triggerInProgress stayed
+                        // latched, and every video bubble popped for the next five minutes was dropped
+                        // as "trigger already in progress". Five seconds of UI-thread time is ordinary
+                        // here: CloseAll alone documents blocking the dispatcher for up to ~4.9s. There
+                        // is no result to wait for, so the queued call just runs when the thread frees.
+                        DispatcherHelper.RunOnUI(() =>
                         {
-                            PlayVideo(path, strict);
+                            try { PlayVideo(path, strict); }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Error(ex, "VideoService: PlayVideo after the freeze delay failed");
+                                _triggerInProgress = false;
+                                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+                            }
                         });
                     }
                     catch (Exception ex)
@@ -2246,9 +2368,17 @@ namespace ConditioningControlPanel.Services
                         }
 
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo for specific video");
-                        DispatcherHelper.RunOnUISync(() =>
+                        // RunOnUI, not RunOnUISync - same reasoning as the TriggerVideo path (#1135):
+                        // the bounded sync helper abandons the queued PlayVideo after 5s of busy UI
+                        // thread and reports nothing but a Warning, so the video silently never plays.
+                        DispatcherHelper.RunOnUI(() =>
                         {
-                            PlayVideo(videoPath, strictMode);
+                            try { PlayVideo(videoPath, strictMode); }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Error(ex, "VideoService: PlayVideo for the specific video failed");
+                                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+                            }
                         });
                     }
                     catch (Exception ex)
@@ -7483,7 +7613,11 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Using pack video: {Name} from pack {PackId}", packVideo.File.OriginalName, packVideo.PackId);
                     return tempPath;
                 }
-                // If decryption failed, try regular queue
+                // If decryption failed, try regular queue. Logged at Information, not swallowed
+                // (#1135): a pack that will not decrypt hands back null from a pool that LOOKS full,
+                // and the caller can only report "nothing happened when I popped the bubble".
+                App.Logger?.Information("VideoService: pack clip '{Name}' from pack {PackId} could not be decrypted - falling back to the regular queue ({Count} left)",
+                    packVideo.File.OriginalName, packVideo.PackId, _videoQueue.Count);
             }
 
             return _videoQueue.Count > 0 ? _videoQueue.Dequeue() : null;
