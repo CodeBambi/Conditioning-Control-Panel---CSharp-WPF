@@ -304,6 +304,12 @@ public sealed class EmiDeskService : IDisposable
             }
 
             win.RestorePlacement();
+            // What did the Locker put her in? Asked on every way in rather than only when the
+            // Arcademy pushes a change, because the window outlives a dismiss: she can be sent away,
+            // re-dressed at the campus and called back, and a push is one message this side does not
+            // get to be sure of. Cached against the save file's stamp, so a summon that changes
+            // nothing costs one FileInfo.
+            win.RefreshOutfit();
             win.Show();
             win.RunSummon();
 

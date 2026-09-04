@@ -107,8 +107,11 @@ public class EmiDeskLayerOrderTests
             var over = (Image)w.FindName("OutfitOverImage")!;
             var body = (Image)w.FindName("BodyImage")!;
 
-            // Nothing on the desk chooses an outfit yet: she must come up wearing no overlay, with
-            // no Source decoded and nothing on screen.
+            // Undressed is the resting state, and it costs nothing: no overlay, no Source decoded,
+            // nothing on screen. Set explicitly rather than assumed, because the widget now asks the
+            // Arcademy what the Locker armed when it is built, and the machine running this suite is
+            // allowed to have a save file with a garment in it.
+            w.SetOutfit(null);
             Assert.Null(w.Outfit);
             Assert.Equal(Visibility.Collapsed, over.Visibility);
             Assert.Null(over.Source);
@@ -131,8 +134,9 @@ public class EmiDeskLayerOrderTests
         // This used to say "three of the four have no overlay art and never will". They do now:
         // the campus side of THE SKIN LAW drew the missing 30 sheets, so the outfit with no art
         // is no longer one of hers - it is a name the art tree has never heard of. The seam must
-        // still take that quietly: no throw, no blank Image over her face, and the widget still
-        // reports what it was asked to wear.
+        // still take that quietly: no throw, no blank Image over her face, and - since the desk
+        // started dressing off the Locker's meta key - no folder read either. A name that is not
+        // one of the four is REFUSED at the gate and reads back as the standard art.
         foreach (var frame in EmiChains.BodyFrameFile.Keys)
             Assert.Null(EmiChains.OverPath("no-such-outfit", frame));
 
@@ -141,7 +145,7 @@ public class EmiDeskLayerOrderTests
             var over = (Image)w.FindName("OutfitOverImage")!;
 
             w.SetOutfit("no-such-outfit");
-            Assert.Equal("no-such-outfit", w.Outfit);
+            Assert.Null(w.Outfit);
             Assert.Equal(Visibility.Collapsed, over.Visibility);
             Assert.Null(over.Source);
 

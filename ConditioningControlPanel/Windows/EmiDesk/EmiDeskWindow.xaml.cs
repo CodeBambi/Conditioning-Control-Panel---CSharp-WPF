@@ -206,17 +206,27 @@ public partial class EmiDeskWindow : Window
     // ---------------------------------------------------------------- state
 
     private readonly EmiChains.Player _player;
+
+    // ONE OUTFIT'S TEN FRAMES, never four outfits' forty. Each pose PNG decodes to ~3 MB of pixels,
+    // so a cache that kept every sheet she has ever worn would be a hundred-megabyte souvenir of a
+    // wardrobe she is not in. Both caches are dropped whole in `SetOutfit` - see the note there.
     private readonly Dictionary<string, ImageSource> _bodyCache = new(StringComparer.Ordinal);
 
-    // THE OUTFIT OVERLAY (THE SKIN LAW; see the block in EmiChains.cs). `_outfit` is null on every
-    // road today - nothing on the desk picks a garment - so all of this rests at zero cost.
-    // `_overArmed` is the ONE probe per outfit: null means "not asked yet", and once it is a bool
-    // the answer is final for the sitting, so a sheet without an overlay costs one File.Exists and
-    // never touches the disk again however many times she sways.
+    // THE OUTFIT OVERLAY (THE SKIN LAW; see the block in EmiChains.cs). `_outfit` is the garment the
+    // Arcademy's Locker armed, read through `ArcademyHostService.EquippedEmiOutfit` and null for the
+    // standard art, which is still the ordinary case - so all of this rests at zero cost for a
+    // player who has never bought a sheet. `_overArmed` is the ONE probe per outfit: absent means
+    // "not asked yet", and once it is a bool the answer is final for the sitting, so a sheet without
+    // an overlay costs one File.Exists and never touches the disk again however many times she sways.
     private readonly Dictionary<string, ImageSource> _overCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _overArmed = new(StringComparer.Ordinal);
     private string? _outfit;
     private string? _overPose;
+
+    /// <summary>The outfit the bitmap currently in <c>BodyImage</c> was resolved for. It exists so
+    /// <see cref="SetPose"/>'s "that pose is already up" early-out cannot swallow a WARDROBE change
+    /// on the same pose - which is every outfit swap, because she is nearly always at idle.</summary>
+    private string? _bodySkin;
 
     private DispatcherTimer? _idleTimer;
     private DispatcherTimer? _swayTimer;
@@ -344,6 +354,9 @@ public partial class EmiDeskWindow : Window
         catch { _bodyWidth = 220; }
 
         ApplyBodyWidth(_bodyWidth);
+        // Dressed BEFORE her first pose is painted, so the very first frame she is ever built with
+        // is already the sheet the Locker armed - she never flashes the standard art first.
+        RefreshOutfit();
         SetPose("idle");
         DrawFace(EmiChains.RestFace);
 
@@ -808,11 +821,12 @@ public partial class EmiDeskWindow : Window
         try
         {
             var key = EmiChains.FrameKey(frame) ?? "idle";
-            if (key == _pose && BodyImage.Source != null) return;
+            if (key == _pose && BodyImage.Source != null
+                && string.Equals(_bodySkin, _outfit, StringComparison.Ordinal)) return;
             _pose = key;
             if (!_bodyCache.TryGetValue(key, out var img))
             {
-                var path = EmiChains.BodyPath(key);
+                var path = EmiChains.BodyPath(key, _outfit);
                 if (path == null)
                 {
                     // Art is allowed to arrive after the code does: keep whatever is up rather than
@@ -830,6 +844,7 @@ public partial class EmiDeskWindow : Window
                 _bodyCache[key] = img;
             }
             BodyImage.Source = img;
+            _bodySkin = _outfit;
             PaintOutfitOver();
         }
         catch (Exception ex)
@@ -839,38 +854,76 @@ public partial class EmiDeskWindow : Window
     }
 
     /// <summary>
-    /// The garment she is wearing, or null for the standard art. Null on every road today: nothing
-    /// on the desk chooses an outfit yet (see <see cref="EmiChains.Outfits"/>).
+    /// The garment she is wearing, or null for the standard art. Whatever the Arcademy's Locker
+    /// last armed and the wallet still backs (see <see cref="RefreshOutfit"/>).
     /// </summary>
     public string? Outfit => _outfit;
 
     /// <summary>
-    /// Put a wardrobe sheet's OVERLAY on her, or take it off with null. THE SKIN LAW's one seam.
+    /// Dress her in a wardrobe sheet, or take it off with null. THE SKIN LAW's one seam.
     ///
-    /// <para>This is the neutral setter the campus calls <c>setOutfit</c>. It is deliberately not
-    /// wired to anything: the desk has no outfit picker, no wardrobe and no outfit BODY sheets, and
-    /// this method invents none of them. What it guarantees is that when a sheet does arrive, the
-    /// part of it that crosses her glass resolves through
-    /// <see cref="EmiChains.OverPath"/> and lands in <c>OutfitOverImage</c> - which the XAML
-    /// authors ABOVE the face and the glass, so the garment is on top and stays there.</para>
+    /// <para>This is the neutral setter the campus calls <c>setOutfit</c>, and it moves BOTH halves
+    /// of a garment, because a garment is two sheets: the re-drawn body
+    /// (<see cref="EmiChains.BodyPath"/>, repainted below) and the part that crosses her glass
+    /// (<see cref="EmiChains.OverPath"/>, which lands in <c>OutfitOverImage</c> - authored by the
+    /// XAML ABOVE the face and the glass, so the garment is on top and stays there). Painting only
+    /// the second is how you get a collar floating on a girl in her school shirt.</para>
+    ///
+    /// <para><b>Both caches go with it.</b> They are keyed by POSE, not by outfit-and-pose, and that
+    /// is on purpose: ten frames at ~3 MB of decoded pixels each is the price of the sheet she is
+    /// actually wearing, and keeping the other three sheets warm for a swap that happens once a week
+    /// would be forty. Dropping them is what makes the swap free of leaks; re-decoding ten PNGs is
+    /// what it costs, once, on a change nobody makes twice a minute.</para>
     ///
     /// <para>Silent about missing art, exactly like the web: an outfit with no overlay sheet asks
-    /// once, is answered once, and leaves one collapsed Image behind.</para>
+    /// once, is answered once, and leaves one collapsed Image behind; a body frame the sheet does
+    /// not have falls back to the standard one for that pose.</para>
     /// </summary>
     /// <param name="outfit">A name from <see cref="EmiChains.Outfits"/>, or null for standard.</param>
     public void SetOutfit(string? outfit)
     {
         try
         {
-            var want = string.IsNullOrWhiteSpace(outfit) ? null : outfit!.Trim();
+            var want = EmiChains.OutfitName(outfit);
             if (string.Equals(want, _outfit, StringComparison.Ordinal)) return;
+            Log.Information("[EmiDesk] outfit -> {Outfit}", want ?? "standard");
             _outfit = want;
             _overPose = null;
-            PaintOutfitOver();
+            _bodyCache.Clear();
+            _overCache.Clear();
+            SetPose(_pose);      // the body first: _bodySkin no longer matches, so this repaints
+            PaintOutfitOver();   // ...and again for the sheet whose body art was missing entirely
         }
         catch (Exception ex)
         {
             Log.Debug(ex, "[EmiDesk] SetOutfit failed for {Outfit}", outfit);
+        }
+    }
+
+    /// <summary>
+    /// ASK THE LOCKER WHAT SHE IS WEARING and put it on. The desk's whole road into the wardrobe:
+    /// the Arcademy owns the picking, the prices and the ownership, and this side owns nothing but
+    /// the painting (community ask, 2026-09-01).
+    ///
+    /// <para>Called on the way in (every summon, and once when the widget is built) and pushed live
+    /// by <c>ArcademyHostService</c> the moment the Locker writes the key, so an equip made with her
+    /// on screen lands without a restart. A no-op when the answer has not changed, which is nearly
+    /// always - so the summon path costs one cached file-stamp check.</para>
+    /// </summary>
+    public void RefreshOutfit()
+    {
+        try
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(RefreshOutfit));
+                return;
+            }
+            SetOutfit(Services.Arcademy.ArcademyHostService.EquippedEmiOutfit());
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[EmiDesk] RefreshOutfit failed");
         }
     }
 
