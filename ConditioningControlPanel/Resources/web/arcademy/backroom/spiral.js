@@ -82,7 +82,7 @@ export const SP_LEX = Object.freeze({
   /* {0} how many wedges, {1} the multiple paid */
   bk_sp_odds_even: '{0} wedges in 24. pays {1} to 1.',
   bk_sp_odds_one: '1 wedge in 24. pays {0} to 1.',
-  bk_sp_odds_drop: 'One wedge in twenty-four is the drop. The drop pays nobody.',
+  bk_sp_odds_drop: 'One wedge in 24 is the drop. It takes every colour and word bet. Only a number on it pays.',
   bk_sp_grid_lbl: 'the twenty-four wedges',
   /* {0} the wedge number */
   bk_sp_grid_one: 'wedge {0}',
