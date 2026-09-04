@@ -14,12 +14,11 @@
        <ContentPresenter/>               ->  Content/ContentTemplate TemplateBindings, or the
                                             templated row draws nothing (CLAUDE.md trap 6)
        Image Source="pack://.../nav/door_studio.png"
-                                         ->  a wash chip. Resources/nav/*.png is not an
-                                            AvaloniaResource in this head, and ModResourceResolver
-                                            (which overrides that Source on every repaint) is a
-                                            WPF-head service. Same stand-in the BrainDrain port
-                                            uses for its hero plate.
-       tabs:HapticsTabView               ->  a placard, see PanelHaptics below.
+                                         ->  an Image over the wash chip, painted from code by
+                                            ApplyDoorIcon (Helpers.ModArt.TryLoad, mod override
+                                            first, this head's avares:// copy second). The chip and
+                                            its emoji stay underneath as the no-art fallback, which
+                                            is the WPF null path.
 
      The whole rack list is built in code from one table, exactly as on WPF - the key, the icon,
      the label, the dot, the panel and the bark key can never drift apart. -->
@@ -28,6 +27,7 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
              xmlns:feat="clr-namespace:ConditioningControlPanel.Avalonia.Views.Features"
              xmlns:studio="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Studio"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.StudioTabView">
 
     <UserControl.Resources>
@@ -102,16 +102,23 @@
 
         <!-- ============================ page header ============================ -->
         <Grid Grid.Row="0" Margin="4,2,4,12" ColumnDefinitions="Auto,*">
-            <!-- Stands in for the WPF Image whose pack:// Source is the DEFAULT and whose real
-                 art comes from ModResourceResolver on every repaint. Neither exists on this head;
-                 the name is kept so ApplyDoorIcon has something to point at when they land. -->
+            <!-- The WPF Image's pack:// Source is only the DEFAULT; the real art comes from the
+                 mod on every repaint. Both halves resolve here now, so the chip is the fallback
+                 rather than the stand-in - see ApplyDoorIcon. -->
             <Border x:Name="ImgStudioDoorIcon"
                     Grid.Column="0" Width="30" Height="30" Margin="0,0,12,0"
                     VerticalAlignment="Center" CornerRadius="8"
                     Background="{DynamicResource SectionHueStudioWashBrush}"
-                    BorderThickness="1" BorderBrush="{DynamicResource SectionHueStudioBorderBrush}">
-                <TextBlock Text="🎛" FontSize="15"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    BorderThickness="1" BorderBrush="{DynamicResource SectionHueStudioBorderBrush}"
+                    ClipToBounds="True">
+                <Panel>
+                    <TextBlock x:Name="TxtStudioDoorGlyph" Text="🎛" FontSize="15"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <!-- ApplyDoorIcon writes the medallion here and hides the glyph; a null
+                         resolve leaves this collapsed and the wash chip standing, which is the
+                         WPF null path. -->
+                    <Image x:Name="ImgStudioDoorArt" IsVisible="False" Stretch="UniformToFill"/>
+                </Panel>
             </Border>
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock x:Name="TxtStudioTitle" Text="{loc:Str st4_studio_title}"
@@ -239,27 +246,10 @@
                          modules (Phase-4 contract): System is configuration + the No-Panic safety
                          control, and both belong to the Settings/Home doors. -->
 
-                    <!-- ponytail: hosted RAW on WPF, because HapticsTabView's root is already a
-                         ScrollViewer and it carries its own page header (which is why DetailHeader
-                         hides for this module). HapticsTabView is not ported to this head yet, so
-                         the module hosts a placard instead of the page - the rack's `haptics` row,
-                         its tier-1 livery and its null bark key already expect the real thing.
-                         Replace this Border with <tabs:HapticsTabView x:Name="PanelHaptics"/> when
-                         it lands; nothing in the code-behind changes but the field's type. -->
-                    <Border x:Name="PanelHaptics" IsVisible="False"
-                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2A2A46"
-                            BorderThickness="1" CornerRadius="12" Padding="24"
-                            VerticalAlignment="Top" HorizontalAlignment="Left"
-                            Margin="2,0,14,10">
-                        <StackPanel>
-                            <TextBlock Text="📳" FontSize="34" Margin="0,0,0,10"/>
-                            <TextBlock Text="{loc:Str tab_haptics}" Foreground="White"
-                                       FontSize="17" FontWeight="SemiBold"/>
-                            <TextBlock Text="Not ported to this head yet — the Haptics page moves in whole, as one instance."
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" MaxWidth="460"/>
-                        </StackPanel>
-                    </Border>
+                    <!-- Hosted RAW, as on WPF: HapticsTabView's root is already a ScrollViewer
+                         and it carries its own page header, which is why the `haptics` row passes
+                         the default ownHeader:true and DetailHeader hides for this module. -->
+                    <tabs:HapticsTabView x:Name="PanelHaptics" IsVisible="False"/>
 
                     <!-- These wrap the LIVE Features/SchedulerFeatureControl and
                          Features/IntensityRampFeatureControl. Both fire the popup's single

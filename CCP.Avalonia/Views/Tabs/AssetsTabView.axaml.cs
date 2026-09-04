@@ -1,7 +1,11 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml;
+using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -13,10 +17,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// and the tab's real behaviour lives in MainWindow.Assets.cs. So there is nothing here that
     /// "only touches the view" to port, and no handler is wired in the XAML.
     ///
-    /// ponytail: needs MainWindow (asset scan, pack install, preset CRUD, remote media picker) plus
-    /// MediaHistoryWindow, wired when they move to Core. The wiring points, all named in the XAML:
-    ///   BtnRefreshAssets / BtnRefreshPacks / BtnGetPacks / BtnOpenAssetsFolder /
-    ///   BtnDeleteDownloadedPacks / BtnMediaLog (opens MediaHistoryWindow directly) /
+    /// TWO EXCEPTIONS, both restored below. <c>BtnMediaLog_Click</c> is the only handler in the
+    /// WPF file that does NOT forward - it opens MediaHistoryWindow itself, and that window is
+    /// ported at CCP.Avalonia/Views/Windows/MediaHistoryWindow.axaml.cs with nothing on this head
+    /// opening it until now. <c>BtnOpenAssetsFolder</c> forwards, but the whole of what it forwards
+    /// to is two Directory.CreateDirectory calls and a shell open, and CorePaths.EffectiveAssets is
+    /// the path.
+    ///
+    /// ponytail: the rest needs MainWindow (asset scan, pack install, preset CRUD, remote media
+    /// picker), wired when they move to Core. The wiring points, all named in the XAML:
+    ///   BtnRefreshAssets / BtnRefreshPacks / BtnGetPacks /
+    ///   BtnDeleteDownloadedPacks /
     ///   BtnSelectAllAssets / BtnDeselectAllAssets / BtnSaveAssetPreset / BtnUpdateAssetPreset /
     ///   BtnDeleteAssetPreset / CmbAssetPresets.SelectionChanged / AssetTreeView.SelectionChanged /
     ///   FolderCheckBox / ThumbnailCheckBox / ThumbnailItem click + context menu /
@@ -28,8 +39,57 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     {
         public AssetsTabView()
         {
-            AvaloniaXamlLoader.Load(this);
+            // InitializeComponent, not AvaloniaXamlLoader.Load: Load leaves every generated x:Name
+            // field null, so a later `BtnMediaLog?.Focus()` would compile and silently do nothing
+            // (CLAUDE.md trap 7). Nothing here dereferences one yet; the handlers below take their
+            // sender, and this is the ctor a reader will copy.
+            InitializeComponent();
             DataContext = new AssetsTabViewModel();
+        }
+
+        /// <summary>
+        /// The Media Log. The one WPF handler in this file that is not a forward - it builds the
+        /// window itself - and the window is ported. Non-modal and owned, exactly as on WPF; an
+        /// owner is only set when there is a real TopLevel, because the render harness hosts this
+        /// view without a Window.
+        /// </summary>
+        private void BtnMediaLog_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new Views.Windows.MediaHistoryWindow();
+                if (TopLevel.GetTopLevel(this) is Window owner) win.Show(owner);
+                else win.Show();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to open Media Log window");
+            }
+        }
+
+        /// <summary>
+        /// Opens the assets folder. WPF's MainWindow.Assets.cs:41 creates images/ and videos/ under
+        /// App.EffectiveAssetsPath and hands the path to explorer.exe; CorePaths.EffectiveAssets is
+        /// that path on this head and the Launcher is the portable shell open.
+        ///
+        /// <para>ponytail: WPF also fires App.Bark.NotifyUiAction("open_assets") first. BarkService
+        /// has no Core seam, so the line is dropped rather than faked - a missing bark costs a
+        /// voiced reaction, never a file.</para>
+        /// </summary>
+        private async void BtnOpenAssetsFolder_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var assets = CorePaths.EffectiveAssets;
+                Directory.CreateDirectory(Path.Combine(assets, "images"));
+                Directory.CreateDirectory(Path.Combine(assets, "videos"));
+                var launcher = TopLevel.GetTopLevel(this)?.Launcher;
+                if (launcher != null) await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(assets));
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to open the assets folder");
+            }
         }
     }
 

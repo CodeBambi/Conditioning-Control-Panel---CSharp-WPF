@@ -129,6 +129,7 @@
                     <TextBlock Text="{loc:Str btn_get_packs}"/>
                 </Button>
                 <Button x:Name="BtnOpenAssetsFolder" Theme="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                        Click="BtnOpenAssetsFolder_Click"
                         ToolTip.Tip="{loc:Str tooltip_open_assets_folder_in_explorer}">
                     <TextBlock Text="{loc:Str btn_open_folder}"/>
                 </Button>
@@ -136,6 +137,7 @@
                      log was last opened. Event-driven: a fixed 3-cycle animation fired on tab
                      show, never a standing loop. -->
                 <Button x:Name="BtnMediaLog" Theme="{StaticResource OutlineButton}" Padding="12,6"
+                        Click="BtnMediaLog_Click"
                         ToolTip.Tip="{loc:Str tooltip_media_log}">
                     <TextBlock Text="{loc:Str btn_media_log}"/>
                 </Button>

@@ -239,13 +239,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// Starts the slow ember breath under the slab. Called by the host when the active panel
         /// is shown.
-        /// ponytail: the gate is readable now (<c>CoreSettings.Current.LockdownPhotosafe</c>), but
-        /// the target is not: Avalonia cannot name an Effect (AVLN2000), so the WPF storyboard on
-        /// EEGlow.Opacity/BlurRadius has to become a keyframe Animation over a pseudo-class on the
-        /// plate Border, or a swapped DropShadowEffect instance - an XAML change, and the XAML is
-        /// not this layer's. POSSESSION.md: photosafe means no flicker, not no colour, so the
-        /// resting glow already in the XAML is the correct photosafe state, which is why an
-        /// unstarted pulse is a safe stub rather than a missing one.
+        /// ponytail: BOTH halves are reachable now, and neither is a service. The gate is
+        /// <c>CoreSettings.Current.LockdownPhotosafe</c>; the target is the DropShadowEffect at
+        /// LockdownTabView.axaml:498, which Avalonia cannot x:Name (AVLN2000) but which this file
+        /// can reach through the owning Border and swap for a mutable instance, then step off one
+        /// ~16ms DispatcherTimer (ChaosHudWindow is the worked example - Animation.RunAsync throws
+        /// on a code-held Effect). What is missing is the CALLER: nothing on this head shows the
+        /// active panel for a real reason, because there is no running lockdown to show it for
+        /// (see the placeholder in the ctor). A breath started by nobody is not worth the clock.
+        /// POSSESSION.md: photosafe means no flicker, not no colour, so the resting glow already
+        /// in the XAML is the correct photosafe state, which is why an unstarted pulse is a safe
+        /// stub rather than a missing one.
         /// </summary>
         internal void StartEmergencyExitPulse() { }
 
