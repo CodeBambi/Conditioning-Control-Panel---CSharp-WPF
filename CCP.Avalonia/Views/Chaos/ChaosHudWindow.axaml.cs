@@ -33,8 +33,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///    binds to <see cref="ChaosHudState"/> at the bottom of this file instead - the same
     ///    property names and the same computed text, filled with sample values that hit every
     ///    visual branch (a hot streak, a low-focus warning, filled toy AND accessory groups,
-    ///    run picks, modifiers, a feed). ponytail: needs ChaosRunState + ChaosModeService, wired
-    ///    when the Chaos services move to Core.
+    ///    run picks, modifiers, a feed). ponytail: needs <c>ChaosRunState</c> (and
+    ///    <c>ChaosSidebarBoon</c>) from ConditioningControlPanel/Services/Chaos/ChaosModels.cs and
+    ///    <c>ChaosModeService</c> from ConditioningControlPanel/Services/Chaos/ChaosModeService.cs.
+    ///    Those paths are where every "needs ChaosX" note below points; they are not repeated.
     ///  - <b>Win32.</b> The WPF window P/Invoked <c>GetWindowLong</c>/<c>SetWindowLong</c> to add
     ///    <c>WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE</c>, and <c>SetWindowPos(HWND_TOPMOST)</c> via
     ///    <c>ChaosWindowZ</c>. Both map without a shim: the ex-styles are
@@ -168,9 +170,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             { Children = { _streakScale, _streakRot, _streakJitter } };
             _panel.RenderTransform = _panelSlide;
 
-            // ponytail: needs ChaosWindowZ (Free Desktop runs aren't pinned above other apps),
-            // wired when it moves to Core. Topmost="True" in the XAML is the pinned default; on
-            // X11 Avalonia maps it to _NET_WM_STATE_ABOVE, which is the right mechanism.
+            // WPF: Topmost = ChaosWindowZ.BornTopmost, which is its PinTopmost field, which
+            // ChaosModeService.StartRun sets from AppSettings.ChaosPinOnTop. That setting is in
+            // Core and this window only exists during a run, so the read below IS the value WPF
+            // would be holding - a player who turned pin-on-top off is no longer overruled by the
+            // XAML's Topmost="True" (which stays as the pinned default). On X11 Avalonia maps
+            // Topmost to _NET_WM_STATE_ABOVE, which is the right mechanism.
+            Topmost = CoreSettings.Current.ChaosPinOnTop;
             _state = state;
             DataContext = state;
 
@@ -1159,11 +1165,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// (<c>_NET_WM_STATE_ABOVE</c>), and toggling it re-asserts the state, so no shim is
         /// needed. Ordering against our OTHER overlays would be
         /// <c>X11Overlay.RestackAbove</c>; this HUD never did that on Windows either.
-        /// ponytail: needs ChaosWindowZ for the Free Desktop demotion, wired when it moves to
-        /// Core - until then the HUD stays pinned in every mode.</para></summary>
+        ///
+        /// <para>The demote branch is real now. <c>ChaosWindowZ.RaiseTopmost</c> reads
+        /// <c>PinTopmost</c> - and ONLY that, never <c>DesktopMode</c> - to choose between
+        /// re-asserting and dropping the window out of the topmost band; <c>PinTopmost</c> is set
+        /// from <c>AppSettings.ChaosPinOnTop</c> in <c>ChaosModeService.StartRun</c>, and that
+        /// setting is in Core. So the un-pinned run demotes here exactly as it does on
+        /// Windows.</para></summary>
         public void RaiseToTopmost()
         {
-            try { Topmost = false; Topmost = true; }
+            try
+            {
+                if (!CoreSettings.Current.ChaosPinOnTop) { Topmost = false; return; }
+                Topmost = false; Topmost = true;
+            }
             catch (Exception ex) { Log.Debug("ChaosHud raise: {E}", ex.Message); }
         }
 
@@ -1415,6 +1430,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             var s = new ChaosHudState { ElapsedSec = 372 };
             s.ActiveSidebarToys.Add(new ChaosHudBoon
             {
+                // ponytail: "toy_wand" / "acc_collar" are invented sample ids, not real boon ids
+                // (those are e_stim, the_spanker, tail_plug, gold_digger ... - see
+                // ChaosBoonColors.cs). So neither tile is in the family-colour table and both
+                // render on the category fallback, which means the render CANNOT prove
+                // AccentBrush's lookup. Swap in real ids when ChaosSidebarBoon lands and the
+                // sample can be built from the real catalogue instead of guessed at.
                 Id = "toy_wand", Glyph = "🪄", Name = "Wand", Level = 3,
                 Desc = "a long press winds it up; let go and the nearest treat pops paid.",
                 Flavor = "it hums when you hold it too long.",
@@ -1448,9 +1469,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
     /// <summary>One tile in the HUD: a pocket toy, an accessory, a run pick or a modifier.
     /// The port of <c>ChaosSidebarBoon</c>, minus the WPF Visibility properties (bools here) and
-    /// with Avalonia brushes. ponytail: needs ChaosSidebarBoon + ChaosBoonColors, wired when the
-    /// Chaos services move to Core - the payload-family colour lookup is the fallback palette
-    /// below until then.</summary>
+    /// with Avalonia brushes. The payload-family colour lookup is real now: the head's
+    /// <c>AccentBrush</c> calls <c>ChaosBoonColors.BrushForOrDefault</c> over the category
+    /// fallback - not visible from ChaosHudWindow.xaml.cs, which is why the old note said the
+    /// fallback palette WAS the lookup - and that table is copied into ChaosBoonColors.cs beside
+    /// this file. ponytail: still needs <c>ChaosSidebarBoon</c> itself
+    /// (ConditioningControlPanel/Services/Chaos/ChaosModels.cs) to carry real run data into these
+    /// tiles; every value below is sample.</summary>
     public sealed class ChaosHudBoon
     {
         public string Id { get; init; } = "";
@@ -1476,8 +1501,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         public bool HasFlavor => !string.IsNullOrEmpty(Flavor);
         public bool HasExtra => !string.IsNullOrEmpty(Extra);
 
-        public IBrush AccentBrush =>
-            IsEmptySlot ? EmptyAccent : IsModifier ? ModAccent : IsCurse ? CurseAccent : Level > 0 ? PocketAccent : BoonAccent;
+        /// <summary>The category fallback, then the payload-based colour language over it -
+        /// <c>ChaosSidebarBoon.AccentBrush</c>'s exact shape, including its "an empty slot keeps
+        /// the fallback" branch. The lookup used to be missing, so every tile drew its category
+        /// colour and a mapped boon never showed its family.</summary>
+        public IBrush AccentBrush
+        {
+            get
+            {
+                var fallback = IsEmptySlot ? EmptyAccent : IsModifier ? ModAccent
+                             : IsCurse ? CurseAccent : Level > 0 ? PocketAccent : BoonAccent;
+                return IsEmptySlot ? fallback : ChaosBoonColors.BrushForOrDefault(Id, fallback);
+            }
+        }
         public IBrush TileBackBrush =>
             IsEmptySlot ? Brushes.Transparent : IsModifier ? ModBack : IsCurse ? CurseBack : Level > 0 ? PocketBack : BoonBack;
         public double TileOpacity => IsEmptySlot ? 0.55 : 1.0;
