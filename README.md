@@ -1,107 +1,92 @@
 # Conditioning Control Panel
 
-A desktop conditioning and hypnosis control panel for Windows, featuring flash images, mandatory videos, subliminal messaging, an AI-powered companion avatar, gamification, and session automation.
+A Windows desktop app for visual and audio conditioning: flash images, mandatory videos, subliminals, screen overlays, a companion that talks back, and a progression layer that turns all of it into a game.
 
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet)
 ![WPF](https://img.shields.io/badge/WPF-Windows-0078D6?style=flat-square&logo=windows)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D6?style=flat-square&logo=windows)
-![VirusTotal](https://img.shields.io/badge/VirusTotal-0%2F72%20Clean-brightgreen?style=flat-square)
+[![Latest release](https://img.shields.io/github/v/release/CodeBambi/Conditioning-Control-Panel---CSharp-WPF?style=flat-square&color=FF69B4)](https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest)
+[![build](https://img.shields.io/github/actions/workflow/status/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/build.yml?branch=main&style=flat-square)](https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/actions/workflows/build.yml)
 
-*A CC Labs LLC project*
+*A CC Labs LLC project* · [cclabs.app](https://cclabs.app) · [Discord](https://discord.gg/YxVAMt4qaZ) · [Patreon](https://www.patreon.com/CodeBambi)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/main/preview.png" alt="Preview" width="800"/>
+  <img src="preview.jpg" alt="The Conditioning Control Panel home screen" width="800"/>
 </p>
 
 ---
 
 ## About
 
-The Conditioning Control Panel (CCP) is a fully featured conditioning toolkit for Windows. It combines visual, audio, and interactive conditioning techniques with gamification, AI, and automation to create a comprehensive desktop experience.
+The desktop client in this repository is open source under the MIT license. The backend it talks to (accounts, cloud sync, AI, content delivery, the shared leaderboard) is operated by **CC Labs LLC** and lives in a private repository.
 
-The desktop client is open source. Backend services (cloud sync, AI, content delivery) are operated by **CC Labs LLC**.
-
-[Support the project on Patreon](https://www.patreon.com/CodeBambi)
+Everything on the free floor works offline with a local assets folder. A free account adds cloud sync and the community features. Patreon tiers unlock the vault and the lab (see below).
 
 ---
 
 ## Features
 
-### Conditioning Engine
-Flash images with GIF support, mandatory fullscreen videos with attention checks, subliminal text and audio whispers, and screen overlays (spirals, pink filter, brain drain blur, edge effects, bouncing text).
+### The free floor
+Twelve core tools, no account required: flash images (GIF-aware, multi-monitor), mandatory fullscreen videos with attention checks, subliminal text and audio whispers, spiral overlay, pink filter, brain drain blur, bouncing text, bubble pop, phrase lock, mind wipe, the feed, and an embedded browser with per-page enhancement.
 
-### AI Companion
-Animated avatar with speech bubbles, idle chatter, and trigger phrases. Detachable window that can float freely on screen or dock to the main window. AI-powered chat and window awareness with personality customization (Premium).
+### Companion
+An animated avatar that lives next to the panel or floats free on the desktop. Speech bubbles, idle chatter, spoken bark lines, trigger phrases, and a mod system that swaps her name, voice, art and personality. Six built-in personalities ship with the app; creators publish their own as `.ccpmod` packs (see [MODDING.md](MODDING.md)).
 
-### Gamification
-XP and leveling system with unlockable features at milestone levels. Skill tree, daily and weekly quests, 20+ achievements, and a seasonal leaderboard with cloud sync.
+### Progression
+XP and levels with feature unlocks, a skill tree, daily and weekly quests, 69 achievements, punch cards, a shared wallet across desktop, web and mobile, and a leaderboard. Since September 2026 progress is permanent: there are no seasonal wipes.
 
-### Sessions & Automation
-Pre-built conditioning sessions with phased intensity. Session scheduler with day-of-week selection and intensity ramps. Autonomy mode for hands-free operation. Remote control via session codes with PIN authentication.
+### Sessions and automation
+Built-in and custom sessions with phased intensity, a scheduler with day-of-week selection, intensity ramps, autonomy mode, and remote control from any phone or browser through a session code plus PIN with three permission tiers.
 
-### Content & Customization
-Downloadable content packs, mod support, custom asset folders, 9 languages, and community prompt sharing. Drop your own images, videos, and audio into the assets folder.
+### Tier 1: the velvet vault
+For You (your library cut into an endless feed), blink trainer, takeover, she's listening (open mic with a safety word), graded intake, haptics for every toy you own, screen and typing awareness, and lockdown mode. AI chat through the companion with personality customisation and window awareness.
 
-### Hardware & Integration
-Haptic device support, dual monitor mode, Discord rich presence, and system tray integration with configurable panic key.
+### Tier 2: the lab
+Down the Rabbit Hole (a separate descent with its own economy), the Arcademy mini-game campus, the goon game (two players, one spiral), and on-device webcam gaze tracking with two mini-games built on it.
 
-See the [Feature Guide](GUIDE.md) for a full walkthrough.
+### Integration
+Content packs, custom asset folders, nine UI languages, Discord rich presence, system tray with a configurable panic key, and an Android companion app in beta.
 
----
-
-## Premium Features
-
-A [Patreon subscription](https://www.patreon.com/CodeBambi) unlocks:
-
-- **AI Chat** — Conversational AI through the companion avatar with personality customization
-- **Window Awareness** — Avatar reacts contextually to your active windows and browser tabs
-- **Cloud Sync** — Profile, progression, and achievement sync across devices
-- **Content Packs** — Downloadable themed content packs
-- **Slut Mode** — Explicit AI responses and intensified reactions
-
-**Privacy**: Window Awareness sends active window/tab names to CC Labs LLC servers for AI processing. No data is stored permanently. The feature can be disabled at any time.
+The current tier contents are listed at [cclabs.app](https://cclabs.app). The full walkthrough is the [Getting Started guide](https://cclabs.app/guide.html).
 
 ---
 
-## Security & Privacy
+## Privacy
 
-[**VirusTotal Scan: 0/72 Clean**](https://www.virustotal.com/gui/file/187927f88cbcafbcb470b75c794f0d0095e2fcf84f3fc134f5137228c46ef334/detection)
-
-- Fully open source and auditable
-- Core features work entirely offline
-- Cloud features are handled by CC Labs LLC — no permanent data storage
-- No administrator privileges required
-- Local settings stored in `%APPDATA%/ConditioningControlPanel/`
+- Core features run entirely offline. Nothing leaves the machine unless you sign in.
+- Window awareness sends the titles of your active windows and tabs to CC Labs servers for the companion to react to. It is opt-in and can be switched off at any time.
+- Gaze tracking runs on your machine. Webcam frames never leave it.
+- Local settings and data live in `%LOCALAPPDATA%\ConditioningControlPanel\`.
+- No administrator rights are needed to install or run.
 
 ---
 
-## Getting Started
+## Getting started
 
 ### Requirements
-- **OS**: Windows 10 or 11 (64-bit)
-- **Runtime**: [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
-- **Browser**: [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (pre-installed on most Windows 10/11 systems)
+- Windows 10 or 11, 64-bit
+- Nothing else. The app ships self-contained, and the installer adds the Visual C++ and WebView2 runtimes if they are missing
 
-### Install via Installer (Recommended)
-1. Download the latest installer from [Releases](https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases)
-2. Run the installer and follow the prompts
-3. Launch **Conditioning Control Panel** from your Start Menu or desktop
+### Install
+1. Download the latest `Setup.exe` from [Releases](https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest)
+2. Run it and follow the prompts
+3. Launch **Conditioning Control Panel** from the Start menu
 
-### Build from Source
+Updates are offered inside the app.
+
+### Build from source
 ```bash
 git clone https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF.git
-cd Conditioning-Control-Panel---CSharp-WPF/ConditioningControlPanel
-dotnet restore
-dotnet build --configuration Release
-dotnet run
+cd Conditioning-Control-Panel---CSharp-WPF
+dotnet build ConditioningControlPanel.sln -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
+dotnet run --project ConditioningControlPanel
 ```
 
-### Quick Start
-1. **Add content** — Place images in `assets/images/` and videos in `assets/videos/`
-2. **Configure** — Adjust frequencies, sizes, and features in the Settings tab
-3. **Meet your companion** — The avatar appears next to the window (right-click for options)
-4. **Click START** — The conditioning engine begins
-5. **Panic key** — Press Escape to stop, double-tap to exit
+### First run
+1. Drop images into `assets\images\` and videos into `assets\videos\` (the app creates the folders on first launch, or point it at your own folder in Settings)
+2. Adjust frequencies, sizes and features on the dashboard
+3. Press **START**
+4. **Escape** stops everything. Press it twice to force-quit.
 
 ---
 
@@ -109,45 +94,38 @@ dotnet run
 
 | Action | Result |
 |--------|--------|
-| **Escape** (default) | Panic key — stop engine |
-| Double-tap panic key | Force exit application |
-| Click flash image | Dismiss (or spawn more in Corruption mode) |
-| Click bubble | Pop for XP |
-| Double-click avatar | Open AI Chat (Premium) |
-| Right-click avatar | Context menu |
-| Drag avatar (detached) | Reposition on screen |
+| **Escape** (default) | Panic key, stops the engine |
+| Double-tap the panic key | Force-quit the application |
+| Click a flash image | Dismiss it (or spawn more in corruption mode) |
+| Click a bubble | Pop it for XP |
+| Double-click the avatar | Open AI chat (Patreon) |
+| Right-click the avatar | Context menu |
+| Drag the avatar | Reposition it when detached |
 
 ---
 
 ## Troubleshooting
 
-**Application won't start** — Install the [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). If issues persist, check `logs/crash.log` for details.
+**The app will not start.** Reinstall from the latest `Setup.exe`, which repairs the bundled runtimes. If it still fails, check `%LOCALAPPDATA%\ConditioningControlPanel\logs\crash.log`.
 
-**Videos not playing** — Ensure videos are in `assets/videos/` and are `.mp4`, `.webm`, or `.avi` format.
+**Videos do not play.** Use `.mp4`, `.webm` or `.avi` files in `assets\videos\`.
 
-**Flash images not appearing** — Verify `assets/images/` contains valid images (`.jpg`, `.png`, `.gif`) and the feature is enabled in the Flashes tab.
+**Flash images do not appear.** Check that `assets\images\` holds `.jpg`, `.png` or `.gif` files and that Flash Images is enabled on the dashboard.
 
-**WebView2 error** — Download and install the [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+**Something else.** Ask in [Discord](https://discord.gg/YxVAMt4qaZ) or open a report in the [bug tracker](https://github.com/CC-Labs-llc/ccp-bugs/issues).
 
 ---
 
 ## Contributing
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR guidelines.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make your changes and test thoroughly
-4. Submit a pull request
-
----
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers the build, the test suite, the PR size limit and the review rules.
 
 ## Acknowledgments
 
-- AI powered by [Claude](https://www.anthropic.com/) (Anthropic)
 - Video playback via [LibVLCSharp](https://github.com/videolan/libvlcsharp)
 - Audio via [NAudio](https://github.com/naudio/NAudio)
 - GIF support via [XamlAnimatedGif](https://github.com/XamlAnimatedGif/XamlAnimatedGif)
+- Embedded browser via [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)
 
 ## License
 
