@@ -21,7 +21,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///
     /// PORTED from ConditioningControlPanel/Chaos/ChaosSlotPickerWindow.xaml.cs. Deviations:
     ///  - <c>ChaosMeta</c> / <c>ChaosMetaStore</c> / <c>ChaosRanks</c> are WPF-head services, so
-    ///    the picker draws <see cref="SampleSummaries"/> and the delete action is a stub. The
+    ///    the picker draws <see cref="SampleSummaries"/> and the delete action is a stub. Where
+    ///    they live, so the notes below do not have to repeat it:
+    ///    ConditioningControlPanel/Services/Chaos/ChaosUpgrades.cs (<c>ChaosMeta</c>),
+    ///    .../ChaosMetaStore.cs and .../ChaosRanks.cs. The
     ///    three card shapes (a live save, an empty slot, a stitched-shut slot) are all exercised
     ///    by that sample, so the render still proves every builder.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>; <see cref="Pick"/> is async, because

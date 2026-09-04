@@ -50,6 +50,19 @@
         <SolidColorBrush x:Key="TextDim" Color="#AAB8B8D0"/>
     </Window.Resources>
 
+    <Window.Styles>
+        <!-- The chaos hover-card chrome. WPF set these four on every ToolTip ChaosTips built;
+             one selector here covers the boon cards AND the two ToolTip.Tip strings below.
+             Same values as ChaosHudWindow's, and non-layered for the same reason: an Avalonia
+             tip is not a layered HWND, so it cannot collide with one. -->
+        <Style Selector="ToolTip">
+            <Setter Property="Background" Value="#F2151226"/>
+            <Setter Property="BorderBrush" Value="#55FF69B4"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="10,8"/>
+        </Style>
+    </Window.Styles>
+
     <Grid>
         <!-- dim backdrop (only for draft/results; hidden during countdown) -->
         <Rectangle x:Name="Backdrop" Fill="Black" Opacity="0.72" IsVisible="False"/>

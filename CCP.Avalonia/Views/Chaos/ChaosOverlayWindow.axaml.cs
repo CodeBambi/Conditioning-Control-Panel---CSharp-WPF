@@ -13,6 +13,9 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Platform;
+// ContentLocator: Core's two-root probe (install dir, then the downloaded content pack). The
+// chaos cue resolver ends on exactly this call in the head.
+using ConditioningControlPanel.Services;
 // ChaosConversation / ChaosConversationLine / ChaosSpeaker are ALREADY in Core, so the story card
 // binds the real narrative model rather than a stand-in.
 using ConditioningControlPanel.Services.Chaos;
@@ -72,11 +75,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// reveal, the auto-resume tick, the post-pick confirm beat and the score tally are logic, and
     /// they port one for one.</para>
     ///
-    /// <para><b>Services.</b> <c>ChaosSfx</c>, <c>ChaosArt</c>, <c>ChaosTips</c>,
-    /// <c>ChaosBoonColors</c>, <c>ChaosMeta</c>, <c>ChaosLessons</c>, <c>ChaosRanks</c>,
-    /// <c>ChaosGlyphs</c>, <c>ChaosNarrator</c>, <c>ChaosAnnouncerOverlay</c>, <c>ChaosWindowZ</c>,
-    /// <c>ChaosModeService</c>, <c>RevealService</c> and <c>App.Bark</c> all still live in the WPF
-    /// head, which this project may not reference. They are stubbed in the Stubs region below,
+    /// <para><b>Services.</b> Five of these are no longer stubs, because they turned out to be
+    /// content or a settings read rather than a service: <c>ChaosSfx</c> (ContentLocator +
+    /// CoreAudio + the master-volume curve), <c>ChaosTips</c> (40 lines of control composition),
+    /// <c>ChaosBoonColors</c> (an id table, now ChaosBoonColors.cs beside this file),
+    /// <c>ChaosRanks</c>'s two members (shipped copy) and <c>ChaosWindowZ.BornTopmost</c>
+    /// (<c>AppSettings.ChaosPinOnTop</c>). <c>ChaosArt</c>, <c>ChaosMeta</c>,
+    /// <c>ChaosLessons</c>, <c>ChaosGlyphs</c>, <c>ChaosNarrator</c>,
+    /// <c>ChaosAnnouncerOverlay</c>, <c>ChaosModeService</c>, <c>RevealService</c> and
+    /// <c>App.Bark</c> still live in the WPF
+    /// head - all under ConditioningControlPanel/Services/Chaos/ except <c>ChaosWindowZ</c> and
+    /// <c>ChaosAnnouncerOverlay</c>, which are ConditioningControlPanel/Chaos/ - and this project
+    /// may not reference it. They are stubbed in the Stubs region below,
     /// shaped so every call site ports unchanged. <c>ChaosBoon</c>, <c>ChaosRarity</c>,
     /// <c>ChaosRank</c> and the run snapshot are local stand-ins for the same reason;
     /// <c>ChaosConversation</c> and friends are already in Core and are used for real, as is
@@ -1483,11 +1493,69 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private enum ChaosAnnounceKind { Willpower, Temptation }
 
+        /// <summary>
+        /// Not a stub any more: all thirteen cues in this window fire for real. The head's
+        /// <c>Services/Chaos/ChaosSfx.cs</c> is a resolve plus a one-shot, and BOTH halves are
+        /// portable now - <see cref="ContentLocator"/> is in Core and is the exact fallback that
+        /// class ends on, <see cref="CoreAudio.PlayOneShot"/> is the seam its
+        /// <c>App.Audio.PlayOneShot("chaos-sfx")</c> becomes, and the master-volume curve reads
+        /// <c>CoreSettings.Current.MasterVolume</c>, which is the same property WPF reads. The
+        /// candidate lists and scales below are copied cue for cue.
+        ///
+        /// <para>ponytail: the one half still missing is the MOD OVERRIDE. WPF resolves through
+        /// <c>ModResourceResolver.ResolveAudioPath</c>, which probes the active mod's
+        /// <c>resources/sounds/</c> (with a .wav/.mp3 swap) before falling back to
+        /// ContentLocator. <c>CoreModArt.OverridePath</c> is NOT that seam - App.xaml.cs seeds it
+        /// from <c>ModResourceResolver.ResolveUri</c>, the IMAGE chain - so a mod's replacement
+        /// cue is not heard here. It needs a sounds twin of that provider in
+        /// CCP.Core/CoreModArt.cs, seeded from <c>ResolveAudioPath</c>; a stock install already
+        /// sounds right.</para>
+        ///
+        /// <para>Unseeded <c>CoreAudio</c> is silence, which is what this head is until a backend
+        /// lands - and exactly what the stub gave. Nothing here can be louder than the user's
+        /// master volume, and a missing file is still a silent no-op.</para>
+        /// </summary>
         private static class ChaosSfx
         {
-            public static void Play(string key, float volume) { }
-            public static void PlayBoonReveal(bool rare) { }
-            public static void PlayBoonPicked() { }
+            /// <summary>Generic one-shot: <c>Resources/sounds/chaos/{name}.mp3</c>, silent when
+            /// the asset is absent.</summary>
+            public static void Play(string key, float volume) => PlayFirstAvailable(new[] { $"chaos/{key}.mp3" }, volume);
+
+            /// <summary>A bright "dling" for rare, a dull "thud" otherwise - with the same
+            /// bundled fallbacks and the same two scales as the head.</summary>
+            public static void PlayBoonReveal(bool rare) => PlayFirstAvailable(
+                rare ? new[] { "chaos/dling.mp3", "chime1.mp3" }
+                     : new[] { "chaos/thud.mp3", "bubbles/Pop2.mp3" },
+                rare ? 0.6f : 0.65f);
+
+            public static void PlayBoonPicked() => PlayFirstAvailable(new[] { "chaos/boon_pick.mp3", "chime2.mp3" }, 0.7f);
+
+            /// <summary>First candidate that exists on disk wins; a miss in all of them is
+            /// silence, never an exception.</summary>
+            private static void PlayFirstAvailable(string[] candidates, float scale)
+            {
+                try
+                {
+                    foreach (var rel in candidates)
+                    {
+                        // Reject traversal before touching the disk, as ResolveAudioPath does.
+                        if (rel.Contains("..") || System.IO.Path.IsPathRooted(rel)) continue;
+                        var path = ContentLocator.Resolve(System.IO.Path.Combine(
+                            "Resources", "sounds", rel.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+                        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) continue;
+                        CoreAudio.PlayOneShot(path, Volume(scale), "chaos-sfx");
+                        return;
+                    }
+                }
+                catch (Exception ex) { Log.Debug("ChaosSfx resolve failed: {E}", ex.Message); }
+            }
+
+            /// <summary>The head's own curve: master volume times the cue's scale.</summary>
+            private static float Volume(float scale)
+            {
+                try { return Math.Clamp(CoreSettings.Current.MasterVolume / 100f * scale, 0f, 1f); }
+                catch { return scale; }
+            }
         }
 
         private static class ChaosArt
@@ -1498,15 +1566,56 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             public static Bitmap? ResolveRecap() => null;
         }
 
+        /// <summary>Real now. <c>Services/Chaos/ChaosTips.cs</c> is 40 lines of WPF control
+        /// composition and nothing else - no service, no state - so it ports as-is and the draft
+        /// cards get their hover card back instead of nothing. The chrome it set per-tooltip is
+        /// the <c>ToolTip</c> selector in this window's Styles instead, exactly as
+        /// <c>ChaosHudWindow.AttachTip</c> does it; <c>ToolTipService</c>'s show delay and duration
+        /// have no Avalonia twin worth a converter here.
+        /// <para>ponytail: this and <c>ChaosHudWindow.AttachTip</c> are now the same builder in two
+        /// files. Collapse them into one <c>Views/Chaos/ChaosTips.cs</c> the moment a third caller
+        /// appears - not before, because the head's own class is the source both are copying and a
+        /// third copy is where drift starts.</para></summary>
         private static class ChaosTips
         {
-            public static void Attach(Control target, string name, string desc, Color accent, string? flavor) { }
+            public static void Attach(Control target, string title, string? desc,
+                                      string? extra = null, Color? accent = null, string? flavor = null)
+            {
+                var a = accent ?? Color.FromRgb(0xFF, 0x69, 0xB4);
+                var sp = new StackPanel { MaxWidth = 260 };
+                sp.Children.Add(new TextBlock
+                {
+                    Text = title, FontWeight = FontWeight.Bold, FontSize = 13,
+                    Foreground = new SolidColorBrush(a),
+                });
+                if (!string.IsNullOrWhiteSpace(desc))
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text = desc, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 3, 0, 0),
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xDD, 0xE0, 0xE0, 0xF0)),
+                    });
+                if (!string.IsNullOrWhiteSpace(flavor))
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text = flavor, FontStyle = FontStyle.Italic, FontSize = 11,
+                        TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0),
+                        Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xB0, 0xB0, 0xC8)),
+                    });
+                if (!string.IsNullOrWhiteSpace(extra))
+                    sp.Children.Add(new TextBlock
+                    {
+                        Text = extra, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 3, 0, 0),
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00)),
+                    });
+                ToolTip.SetTip(target, sp);
+            }
         }
 
-        private static class ChaosBoonColors
-        {
-            public static Color ForOrDefault(string id, Color fallback) => fallback;
-        }
+        // ChaosBoonColors is no longer stubbed here: the head's class is a pure id -> family
+        // colour table, so it is copied whole into ChaosBoonColors.cs beside this file and the
+        // two call sites above now bind to that. Draft cards get their real family colour.
 
         private static class ChaosNarrator
         {
@@ -1519,11 +1628,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             public static void Announce(string text, ChaosAnnounceKind kind, string? artKey = null) { }
         }
 
+        /// <summary>Real now, not a stand-in. The head's <c>ChaosWindowZ.BornTopmost</c> is its
+        /// <c>PinTopmost</c> field, and the ONE place that writes it is
+        /// <c>ChaosModeService.StartRun</c>: <c>PinTopmost = App.Settings.Current.ChaosPinOnTop</c>
+        /// (reset to true when the run ends). That setting is in Core, and these windows only exist
+        /// during a run, so reading it here IS the value WPF would be holding. A player who turned
+        /// pin-on-top off was previously ignored - the XAML's <c>Topmost="True"</c> won.
+        /// <para>ponytail: <c>ChaosWindowZ.DesktopMode</c> is NOT reproduced and is not needed for
+        /// this - <c>RaiseTopmost</c> never reads it; it branches on <c>PinTopmost</c> alone.
+        /// What stays head-side is the Win32 <c>SetWindowPos</c> re-assert itself, which Avalonia's
+        /// <c>Topmost</c> covers on X11 (<c>_NET_WM_STATE_ABOVE</c>).</para></summary>
         private static class ChaosWindowZ
         {
-            /// <summary>WPF read the live run's flavour; Story descents are born topmost and Free
-            /// Desktop runs are not. True matches the XAML's Topmost.</summary>
-            public static bool BornTopmost => true;
+            public static bool BornTopmost => CoreSettings.Current.ChaosPinOnTop;
         }
 
         private static class ChaosModeService
@@ -1587,13 +1704,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             public const string Xp = "🕰";
         }
 
+        /// <summary>Not a stub any more. Both members this view calls are shipped COPY rather
+        /// than behaviour, so they are reproduced verbatim from
+        /// ConditioningControlPanel/Services/Chaos/ChaosRanks.cs instead of stood in for.
+        /// <c>Line</c> returned <c>""</c> before, which drew an empty row inside the rank card.
+        /// ponytail: the REST of that class - <c>For</c>, <c>Thresholds</c>, <c>RankSpecifics</c>,
+        /// <c>CapstoneLockedTip</c> - reads <c>ChaosMeta.State</c> and stays head-side. This view
+        /// calls none of it.</summary>
         private static class ChaosRanks
         {
             /// <summary>The head's <c>ChaosRanks.NameLower</c> is this exact mapping for all six
-            /// ranks. The one-line rank blurb is content that lives with it and is NOT reproduced
-            /// here. ponytail: needs ChaosRanks, wired when it moves to Core.</summary>
+            /// ranks.</summary>
             public static string NameLower(ChaosRank r) => r.ToString().ToLowerInvariant();
-            public static string Line(ChaosRank r) => "";
+
+            /// <summary>The one dim line under the bare rank word on the rank card. Ships
+            /// verbatim, as it does in the head.</summary>
+            public static string Line(ChaosRank r) => r switch
+            {
+                ChaosRank.Tempted   => "tempted. three times down. you can stop calling it curiosity.",
+                ChaosRank.Slipping  => "slipping. the climb out takes longer every time. you noticed. you came anyway.",
+                ChaosRank.Entranced => "entranced. you don't fall anymore. you arrive.",
+                ChaosRank.Devoted   => "devoted. the dollhouse keeps a room warm for you now. it always knew it would.",
+                ChaosRank.Claimed   => "claimed. it stopped counting your visits a long time ago. so did you.",
+                _                   => "",
+            };
         }
 
         /// <summary>The companion's reactive line. ponytail: needs App.Bark, wired when the bark

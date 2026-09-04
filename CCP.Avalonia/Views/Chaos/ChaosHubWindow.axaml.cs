@@ -32,7 +32,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///    state each builder branches on (equipped / owned / locked / rank-locked / empty;
     ///    trained-on / trained-off / untrained; seen / unseen / sin; sewn / for-sale / rank-short
     ///    / hazy), so the render proves the builders rather than one branch of them.
-    ///    ponytail: needs the Chaos services, wired when they move to Core.
+    ///    ponytail: needs the Chaos services. Every one of them is under
+    ///    ConditioningControlPanel/Services/Chaos/ - ChaosUpgrades.cs (<c>ChaosMeta</c>),
+    ///    ChaosMetaStore.cs, ChaosLifetimeBoons.cs, ChaosBubbleVariants.cs, ChaosRanks.cs,
+    ///    ChaosLessons.cs, ChaosModeService.cs, ChaosRevealService.cs - except <c>ChaosArt</c>,
+    ///    which is ConditioningControlPanel/Services/Chaos/ChaosArt.cs but returns
+    ///    <c>System.Windows.Media.ImageSource</c>, so only its path half can ever move. The
+    ///    per-member notes below name the symbol; this is where to find it.
     ///  - The four partials the WPF class spans (Bench / Reveals / Lessons / Debug) are NOT in
     ///    this layer. <c>BuildBench</c> is inlined here because <c>ImprovementsHost</c> must not
     ///    render empty; the reveal framework, the lesson gates and the CCP_CHAOS_DEBUG strip are
@@ -1679,8 +1685,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _dollhouseView.IsVisible = true;
         }
 
-        /// <summary>Straight into a descent. WPF also detached the companion for the handoff.
-        /// ponytail: needs App.AvatarWindow, wired when it moves to Core.</summary>
+        /// <summary>Straight into a descent. WPF also detached the companion for the handoff
+        /// (<c>App.AvatarWindow?.SetChaosRunActive(true)</c>).
+        /// <para>ponytail: NOT a Core move - <c>App.AvatarWindow</c> is an
+        /// <c>AvatarTubeWindow</c>, a window, and windows do not move to Core. What this needs is
+        /// on this head: <c>SetChaosRunActive</c> on
+        /// CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs (it has no such member yet) and
+        /// an owner holding the live instance.</para></summary>
         private void Menu_FallIn_Click(object? sender, RoutedEventArgs e) => FallIn();
 
         private void Menu_Dollhouse_Click(object? sender, RoutedEventArgs e)
@@ -1918,7 +1929,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private void SetFullscreen(bool on) => WindowState = on ? WindowState.Maximized : WindowState.Normal;
 
         /// <summary>WPF also detached the companion tube while maximized (it is anchored to the
-        /// main window). ponytail: needs App.AvatarWindow, wired when it moves to Core.</summary>
+        /// main window). ponytail: same head-side blocker as <see cref="Menu_FallIn_Click"/> -
+        /// <c>SetChaosRunActive</c> on CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs,
+        /// plus an owner for the live instance. Nothing here is waiting on Core.</summary>
         private void OnHubStateChanged(WindowState state) => _optFullscreen.IsChecked = state == WindowState.Maximized;
 
         /// <summary>Re-open the spoiler-free rules card on demand. WPF showed ChaosIntroWindow
@@ -1938,11 +1951,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             foreach (var t in grp.Children.OfType<ToggleButton>()) t.IsChecked = t.Tag?.ToString() == tag;
         }
 
-        /// <summary>WPF: <c>ChaosRanks.RankLockedTip</c> / <c>RankSpecifics(rank)</c>.
-        /// ponytail: needs ChaosRanks, wired when it moves to Core.</summary>
-        private const string RankLockedTip = "she'll show you this one when you've fallen further.";
+        /// <summary>WPF: <c>ChaosRanks.RankLockedTip</c> / <c>ChaosRanks.RankSpecifics(rank)</c>.
+        /// Both are shipped COPY plus the rank threshold table, i.e. content rather than
+        /// behaviour, so they are reproduced verbatim here instead of approximated - the two
+        /// strings that stood here before were invented and read nothing like hers.
+        /// ponytail: the only head-side part left is the live descent count -
+        /// <c>ChaosMeta.State.RunsCompleted</c> in
+        /// ConditioningControlPanel/Services/Chaos/ChaosUpgrades.cs; <see cref="Sample"/>'s
+        /// stands in, and the swap is one expression.</summary>
+        private const string RankLockedTip = "she'll sell this to someone deeper.";
 
-        private static string RankSpecifics(string rank) => $"reach {rank} to be shown this.";
+        /// <summary><c>ChaosRanks.Thresholds</c>, verbatim: lifetime completed descents per rank.
+        /// Keyed by the capitalized rank word because that is what <c>SampleBoon.RankFloor</c>
+        /// carries here (the head passes the <c>ChaosRank</c> enum and calls <c>Name()</c>).</summary>
+        private static readonly Dictionary<string, int> RankThresholds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Curious"] = 0, ["Tempted"] = 3, ["Slipping"] = 10,
+            ["Entranced"] = 25, ["Devoted"] = 50, ["Claimed"] = 100,
+        };
+
+        private static string RankSpecifics(string rank) =>
+            $"unlocks at {rank}: {(RankThresholds.TryGetValue(rank, out var need) ? need : 0)} descents "
+            + $"finished. you've finished {Sample.RunsCompleted}.";
 
         // ============================ sample data ============================
         // Everything below stands in for the Chaos services. It is deliberately shaped to hit
