@@ -225,6 +225,12 @@ export const DEFAULT_LEXICON = Object.freeze({
      iframe hands the page whatever it likes), and a requirement nobody can
      satisfy has to carry a door. */
   rotate_stuck_note: 'Phone not turning? Some are told to hold still. Pick a way in below.',
+  /* THE SAME CARD ON A WINDOW THAT CANNOT TURN AT ALL (orientgate second coda).
+     A host that knows says so, and then the card stops asking for a quarter turn
+     it will never get and offers the way in straight away instead. */
+  rotate_locked_title: 'This one plays wide',
+  rotate_locked_body: 'This room was drawn for a wide screen and this app stays upright, so the board comes in a little tighter than it was built for. Everything works. Nothing is running while you decide.',
+  rotate_locked_note: 'Pick a way in below.',
   rotate_play_anyway: 'Play it upright anyway',
   rotate_leave_class: 'Leave the class',
   /* The splash's knock line (boot.js). boot runs before this module loads, so

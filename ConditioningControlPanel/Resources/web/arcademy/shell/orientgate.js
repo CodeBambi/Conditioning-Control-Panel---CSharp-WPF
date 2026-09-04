@@ -33,6 +33,15 @@
  *      had turned), or leave the class (the caller's own door, via `onLeave`).
  *      The campus card is untouched - the campus is not a room you can be stuck
  *      inside, and its way out is the phone.
+ *      SECOND CODA (2026-09-04, the iOS store build): some hosts KNOW the
+ *      window can never turn, and say so in `init.platform.orientationLocked`.
+ *      Waiting out a grace period to offer a way in is then just seven seconds
+ *      of asking a player to do something impossible, so a locked viewport gets
+ *      the class card AT ONCE, worded as a notice rather than as an instruction
+ *      ("this one plays wide, here is the way in") with both buttons already on
+ *      screen. The campus card is not built at all on a locked viewport: it has
+ *      no buttons by Law 2, so a card that could never lift would be the locked
+ *      door this whole coda exists to prevent.
  *   3. ONE CARD, EVER. `requireOrientation` is idempotent and the node is
  *      REMOVED rather than hidden (trap 27), so a screen that repaints while the
  *      card is up cannot stack two of them.
@@ -52,7 +61,9 @@
  * ==========================================================================*/
 
 import { t } from '../core/lexicon.js';
-import { isMobile, orientation, orientationOk, onDeviceChange } from '../core/device.js';
+import {
+  isMobile, orientation, orientationOk, onDeviceChange, viewportCanRotate,
+} from '../core/device.js';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -67,7 +78,20 @@ function el(tag, cls, text) {
  * the device. Lexicon rows with English fallbacks, same as every other string
  * the shell renders, so a mod can re-voice all six.
  * -------------------------------------------------------------------------- */
-function copyFor(want, reason) {
+function copyFor(want, reason, locked) {
+  /* A LOCKED VIEWPORT IS TOLD, NOT ASKED. Same card, same buttons, different
+   * sentence: nothing here says "turn your phone", because on this host that is
+   * an instruction the player cannot carry out and every second they spend
+   * trying is a second we wasted for them. */
+  if (locked) {
+    return {
+      title: t('rotate_locked_title', 'This one plays wide'),
+      body: t('rotate_locked_body',
+        'This room was drawn for a wide screen and this app stays upright, so the'
+        + ' board comes in a little tighter than it was built for. Everything works.'
+        + ' Nothing is running while you decide.'),
+    };
+  }
   if (want === 'portrait') {
     return {
       title: t('rotate_portrait_title', 'Stand it back up'),
@@ -122,10 +146,11 @@ function standDown() {
 }
 
 /** Build the card. Called only when one is actually going up. */
-function build(want, reason) {
-  const words = copyFor(want, reason);
+function build(want, reason, locked) {
+  const words = copyFor(want, reason, locked);
 
-  const root = el('div', 'arc-orientgate arc-orientgate-' + want);
+  const root = el('div', 'arc-orientgate arc-orientgate-' + want
+    + (locked ? ' arc-orientgate-locked' : ''));
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-modal', 'true');
   root.setAttribute('aria-live', 'assertive');
@@ -155,10 +180,15 @@ function build(want, reason) {
    * yet never sees them - and `visibility` rides the same keyframe so they are
    * out of the tab order until they are on screen. */
   if (want === 'landscape' && reason === 'class') {
-    const acts = el('div', 'arc-orientgate-actions');
+    /* `arc-orientgate-now` skips the grace-period keyframe (second coda): the
+     * wait exists to let a phone that CAN turn turn first, and this one cannot. */
+    const acts = el('div', 'arc-orientgate-actions'
+      + (locked ? ' arc-orientgate-now' : ''));
     acts.appendChild(el('p', 'arc-note arc-orientgate-stuck',
-      t('rotate_stuck_note',
-        'Phone not turning? Some are told to hold still. Pick a way in below.')));
+      locked
+        ? t('rotate_locked_note', 'Pick a way in below.')
+        : t('rotate_stuck_note',
+          'Phone not turning? Some are told to hold still. Pick a way in below.')));
 
     const row = el('div', 'arc-orientgate-actionrow');
 
@@ -192,11 +222,18 @@ function build(want, reason) {
 
 /** Put the card up, take it down, or leave it exactly as it is. */
 function reconcile() {
-  const blocking = !!wanted && isMobile() && !orientationOk(wanted);
+  /* A HOST THAT SAYS THE WINDOW CANNOT TURN (second coda). The campus asks for
+   * width with a card that has no buttons, so on a locked viewport it is not
+   * built at all and the campus simply runs upright - which it has done since
+   * the floor plan stopped requiring landscape. A class still gets its card,
+   * because the card is now the notice and the two buttons are the point. */
+  const locked = !viewportCanRotate();
+  const blocking = !!wanted && isMobile() && !orientationOk(wanted)
+    && (!locked || wantedReason === 'class');
 
   if (blocking && !node) {
     try {
-      node = build(wanted, wantedReason);
+      node = build(wanted, wantedReason, locked);
       document.body.appendChild(node);
     } catch (e) { node = null; }
   } else if (!blocking && node) {
@@ -209,7 +246,7 @@ function reconcile() {
     try {
       if (!node.classList.contains(cls)) {
         node.remove();
-        node = build(wanted, wantedReason);
+        node = build(wanted, wantedReason, locked);
         document.body.appendChild(node);
       }
     } catch (e) { /* noop */ }
@@ -271,7 +308,10 @@ export function clearOrientation() {
 
 /** Test seam - never read by the shell. */
 export function diagnostics() {
-  return { wanted, reason: wantedReason, up: !!node, mobile: isMobile(), orientation: orientation() };
+  return {
+    wanted, reason: wantedReason, up: !!node, mobile: isMobile(),
+    orientation: orientation(), canRotate: viewportCanRotate(),
+  };
 }
 
 export default { requireOrientation, clearOrientation, isBlocking, diagnostics };

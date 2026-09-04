@@ -134,6 +134,36 @@ export function orientationOk(want) {
   return orientation() === want;
 }
 
+/**
+ * CAN THIS VIEWPORT EVER TURN? A device fact, and the only one on this page that
+ * the page cannot work out for itself.
+ *
+ * Everything else in this module is measured: a viewport is wide or it is tall,
+ * and if the phone turns the numbers change. But "this window will never be any
+ * shape but the one it is" is not measurable from inside the frame, because it
+ * looks exactly like a phone somebody simply has not turned yet. Only the host
+ * knows, so the host says: `init.platform.orientationLocked`, copied onto the
+ * window by boot.js the moment init lands.
+ *
+ * The one host that sets it today is the iOS App Store build, whose plist lists
+ * portrait alone, so no amount of asking rotates it. The Discord Activity iframe
+ * is the same shape of problem and may set it later. Every other host leaves it
+ * undefined, which reads as "it can rotate", which is what a phone does.
+ *
+ * WHAT READS IT: shell/orientgate.js, and nothing else. A requirement that
+ * cannot be satisfied is not a requirement, it is a locked door, so the gate
+ * stops asking and says something useful instead.
+ *
+ * @returns {boolean} false only when the host declared the viewport locked
+ */
+export function viewportCanRotate() {
+  try {
+    return !(typeof window !== 'undefined' && window.__ccpOrientationLocked === true);
+  } catch (e) {
+    return true;
+  }
+}
+
 /* ----------------------------------------------------------------------------
  * THE SEAM
  * One listener pair for the whole page, however many callers there are. iOS
