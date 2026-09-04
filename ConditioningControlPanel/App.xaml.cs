@@ -1512,15 +1512,13 @@ namespace ConditioningControlPanel
                 try { Directory.CreateDirectory(logPath); } catch { }
             }
 
-            Logger = new LoggerConfiguration()
-                .MinimumLevel.Information() // Security: Changed from Debug to avoid exposing sensitive data in logs
-                .WriteTo.File(Path.Combine(logPath, "app-.log"),
-                    rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 7,
-                    // Force a disk flush each second so the LAST lines survive a hard process death
-                    // (a native OOM kills the process with no managed unwind — see chaos OOM telemetry).
-                    flushToDiskInterval: TimeSpan.FromSeconds(1))
-                .CreateLogger();
+            // Everything about HOW a line is produced - the format, the category column, redaction,
+            // the size cap - now lives in Services/Logging/LogPipeline.cs. The floor is still
+            // Information (the "Security: changed from Debug" decision stands), but it is a switch
+            // rather than a constant, and redaction means Debug no longer implies exposure.
+            // --verbose or CCP_LOG_VERBOSE=1 puts Debug on disk for one run, for support.
+            Logger = Services.Logging.LogPipeline.Build(
+                logPath, Services.Logging.LogPipeline.VerboseRequested(e.Args));
 
             // The STATIC Serilog sink. Around 350 call sites across the app (every EmiDesk file,
             // plus Descent, Haptics, V2Auth, LocalizationManager) `using Serilog;` and write through
