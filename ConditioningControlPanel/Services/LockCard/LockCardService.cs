@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
-using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
@@ -15,25 +12,31 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// Service that manages Lock Card popups
+    /// The Windows head's half of the lock card: putting one on screen, and negotiating with the
+    /// interaction queue and a visible pop quiz for the right to do so.
+    ///
+    /// <para>The schedule is no longer here. <see cref="LockCardScheduler"/> in Core owns the timer,
+    /// the first-card offset, the ±30% spacing and the no-repeat phrase rotation - all of it
+    /// arithmetic over <c>AppSettings</c> and a clock, so all of it portable. This class keeps its
+    /// public shape (<see cref="Start"/>, <see cref="Stop"/>, <see cref="IsRunning"/>,
+    /// <see cref="ShowLockCard"/>, <see cref="TestLockCard"/>) so no caller moved, and forwards the
+    /// scheduling half to the shared <see cref="LockCardScheduler.Instance"/> - shared because every
+    /// ad-hoc card here (voice command, Deeper, the dashboard Test button, remote trigger) must draw
+    /// from the same rotation window the scheduled cards do.</para>
+    ///
+    /// <para>What deliberately did NOT move: <see cref="ResolveBlockedCardAction"/> and
+    /// <see cref="BlockedCardAction"/>. They are pure, but they describe a race between two WPF
+    /// window classes and this head's interaction queue, and moving them would have edited two test
+    /// files this layer does not own for no behaviour gained.</para>
     /// </summary>
     public class LockCardService : IDisposable
     {
-        private DispatcherTimer? _timer;
-        private Random _random = new();
-        private bool _isRunning;
         private bool _isDisposed;
-        private DateTime _lastShown = DateTime.MinValue;
 
-        // Per-session no-repeat rotation (mirrors BarkService's _recentlySpoken idiom, but in-memory
-        // only — lock-card rotation deliberately does NOT persist to disk). Avoids replaying any of
-        // the last few phrases so a pure random draw can't repeat the same phrase back-to-back.
-        private readonly Queue<string> _recentPhrases = new();
-        private readonly HashSet<string> _recentPhrasesSet = new(StringComparer.OrdinalIgnoreCase);
-        /// <summary>How many distinct just-shown phrases to avoid replaying.</summary>
-        private const int RecentPhrasesMemory = 3;
+        /// <summary>The schedule, in Core. Shared, so ad-hoc cards share its phrase rotation.</summary>
+        private static LockCardScheduler Scheduler => LockCardScheduler.Instance;
 
-        public bool IsRunning => _isRunning;
+        public bool IsRunning => Scheduler.IsRunning;
 
         /// <summary>
         /// Fires when the user finishes typing all repeats of a real (non-test) lock card.
@@ -73,34 +76,7 @@ namespace ConditioningControlPanel.Services
         /// minutes. When supplied, the first card is guaranteed to land inside that window with
         /// room to complete it. Null (dashboard use) means open-ended.
         /// </param>
-        public void Start(double? windowMinutes = null)
-        {
-            if (_isRunning) return;
-
-            var settings = App.Settings.Current;
-
-            if (!settings.LockCardEnabled)
-            {
-                App.Logger?.Information("LockCardService: Disabled in settings");
-                return;
-            }
-
-            _isRunning = true;
-
-            var perHour = Math.Max(1, settings.LockCardFrequency);
-            var firstDelay = ComputeFirstCardDelayMinutes(perHour, windowMinutes, _random.NextDouble());
-
-            _timer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMinutes(firstDelay)
-            };
-            _timer.Tick += Timer_Tick;
-            _timer.Start();
-
-            App.Logger?.Information(
-                "LockCardService started - approximately {PerHour}/hour, first card in {First:F1}min (window {Window})",
-                perHour, firstDelay, windowMinutes is > 0 ? $"{windowMinutes.Value:F1}min" : "open-ended");
-        }
+        public void Start(double? windowMinutes = null) => Scheduler.Start(windowMinutes);
 
         /// <summary>
         /// Stop the scheduler. <paramref name="dismissOpenCards"/> additionally tears down a card that
@@ -128,61 +104,14 @@ namespace ConditioningControlPanel.Services
                 try { LockCardWindow.ForceCloseAll(); } catch { }
             }
 
-            if (!_isRunning) return;
-            _isRunning = false;
-            
-            _timer?.Stop();
-            _timer = null;
-            
-            App.Logger?.Information("LockCardService stopped");
+            Scheduler.Stop();
         }
 
-        private void Timer_Tick(object? sender, EventArgs e)
-        {
-            // Recalculate next interval with randomness
-            var settings = App.Settings.Current;
-            var perHour = Math.Max(1, settings.LockCardFrequency);
-            var intervalMinutes = 60.0 / perHour;
-            var minInterval = intervalMinutes * 0.7;
-            var maxInterval = intervalMinutes * 1.3;
-            
-            if (_timer != null)
-            {
-                _timer.Interval = TimeSpan.FromMinutes(_random.NextDouble() * (maxInterval - minInterval) + minInterval);
-            }
-            
-            // Check if enabled
-            if (!settings.LockCardEnabled) return;
-            
-            // Show the lock card
-            ShowLockCard();
-        }
-
-        /// <summary>#736: delay before the FIRST lock card of a run, in minutes. Pure so the
-        /// reachability guarantee is unit-testable without a dispatcher.
-        ///
-        /// The first card is an OFFSET into the opening interval, not a whole inter-arrival gap.
-        /// Scheduling it at 60/freq ±30% (as before) put the earliest possible card at 1/hour at
-        /// minute 42, so a 30-minute session could never produce one — which hard-blocked every
-        /// program day whose task required a lock card. Subsequent cards keep the ±30% spacing in
-        /// <see cref="Timer_Tick"/>.
-        ///
-        /// When <paramref name="windowMinutes"/> is supplied the card is additionally clamped to
-        /// land inside it, leaving the tail free so the user can actually complete the card.
-        /// </summary>
-        /// <param name="perHour">Cards per hour; values below 1 are treated as 1.</param>
-        /// <param name="windowMinutes">Minutes the service will keep running, or null for open-ended.</param>
-        /// <param name="roll">A uniform random sample in [0,1).</param>
+        /// <summary>#736: delay before the FIRST lock card of a run, in minutes. The rule moved to
+        /// <see cref="LockCardScheduler.ComputeFirstCardDelayMinutes"/>; this forwards so
+        /// LockCardScheduleTests keeps testing the one implementation.</summary>
         internal static double ComputeFirstCardDelayMinutes(int perHour, double? windowMinutes, double roll)
-        {
-            var intervalMinutes = 60.0 / Math.Max(1, perHour);
-
-            var maxFirst = intervalMinutes;
-            if (windowMinutes is > 0)
-                maxFirst = Math.Min(maxFirst, windowMinutes.Value * 0.8);
-
-            return roll * maxFirst;
-        }
+            => LockCardScheduler.ComputeFirstCardDelayMinutes(perHour, windowMinutes, roll);
 
         /// <summary>Decision for what to do when <see cref="ShowLockCard"/> finds another fullscreen
         /// interaction already visible — a lock card (#676) or a pop quiz (#763). Pure so the
@@ -284,10 +213,7 @@ namespace ConditioningControlPanel.Services
                     var settings = App.Settings.Current;
 
                     // Get enabled phrases
-                    var enabledPhrases = settings.LockCardPhrases?
-                        .Where(p => p.Value)
-                        .Select(p => p.Key)
-                        .ToList() ?? new List<string>();
+                    List<string> enabledPhrases = LockCardScheduler.EnabledPhrases();
 
                     if (enabledPhrases.Count == 0)
                     {
@@ -306,16 +232,17 @@ namespace ConditioningControlPanel.Services
                     }
 
                     // Pick a random phrase (or use custom one if AI provided it). The custom (AI-supplied)
-                    // path bypasses rotation entirely — it isn't a draw from the enabled pool.
-                    var phrase = customPhrase ?? PickPhrase(enabledPhrases);
+                    // path bypasses rotation entirely — it isn't a draw from the enabled pool. The draw
+                    // happens HERE, past every gate above, so a deferred or dropped card never consumes a
+                    // rotation slot — and on the UI thread, which is what keeps the scheduler's rotation
+                    // state single-threaded.
+                    var phrase = customPhrase ?? Scheduler.PickPhrase(enabledPhrases)!;
                     var repeats = customRepeats >= 0 ? customRepeats : settings.LockCardRepeats;
                     var strict = customStrict || settings.LockCardStrict;
                     var voice = settings.LockCardVoiceMode;
 
                     // Show on all monitors with synced input
                     LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict, isTest, voice);
-
-                    _lastShown = DateTime.Now;
 
                     App.Logger?.Information("Lock Card shown on all monitors - Phrase: {Phrase}", phrase);
                 }
@@ -330,36 +257,6 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                 }
             });
-        }
-
-        /// <summary>
-        /// Pick a phrase at random while avoiding the last few shown, so the same phrase can't
-        /// repeat back-to-back. Filters the enabled pool against the recent set (rather than
-        /// re-rolling in a loop); if that empties the pool — or only one phrase is enabled — we
-        /// skip rotation and draw from the full list so we can never loop forever or go silent.
-        /// </summary>
-        private string PickPhrase(List<string> enabledPhrases)
-        {
-            var candidates = enabledPhrases;
-            if (enabledPhrases.Count > 1)
-            {
-                var fresh = enabledPhrases.Where(p => !_recentPhrasesSet.Contains(p)).ToList();
-                if (fresh.Count > 0) candidates = fresh;
-            }
-
-            var phrase = candidates[_random.Next(candidates.Count)];
-
-            // Remember it, then trim the window to at most (pool - 1) so there's always at least one
-            // fresh candidate next time, capped at RecentPhrasesMemory. Skip tracking a lone phrase.
-            if (enabledPhrases.Count > 1 && _recentPhrasesSet.Add(phrase))
-            {
-                _recentPhrases.Enqueue(phrase);
-                int cap = Math.Min(enabledPhrases.Count - 1, RecentPhrasesMemory);
-                while (_recentPhrases.Count > cap)
-                    _recentPhrasesSet.Remove(_recentPhrases.Dequeue());
-            }
-
-            return phrase;
         }
 
         /// <summary>

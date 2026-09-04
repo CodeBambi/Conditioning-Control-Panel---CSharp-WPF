@@ -1,12 +1,12 @@
 using System;
 using System.ComponentModel;
-using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
@@ -21,10 +21,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// warning, and voice mode still has to clear the mic consent flow before it is written. Both
     /// dialogs are awaited rather than blocking, and a decline reverts the box.</para>
     ///
-    /// <para>Still head-side: LockCardService (start/stop/test) and the mod-aware feature art. The
-    /// voice hint asks <see cref="CoreSpeech"/> for all four of its branches; with no speech
-    /// service seeded on this head it reports no capture device, so the "on" branch lands on
-    /// "No microphone detected", which is the honest answer here.</para>
+    /// <para>Start/stop/test are live now. The schedule is <see cref="LockCardScheduler"/> in Core;
+    /// showing a card goes through <see cref="CoreLockCard"/>, which this head seeds onto
+    /// <see cref="Windows.LockCardWindow.ShowOnAllMonitors"/>. The enable toggle keeps WPF's gate,
+    /// so with <see cref="CoreSession"/> unseeded here it never arms - Test is what puts a real card
+    /// on screen on this head.</para>
+    ///
+    /// <para>Still head-side: the mod-aware feature art. The voice hint asks
+    /// <see cref="CoreSpeech"/> for all four of its branches; with no speech service seeded on this
+    /// head it reports no capture device, so the "on" branch lands on "No microphone detected",
+    /// which is the honest answer here.</para>
     /// </summary>
     public partial class LockCardFeatureControl : UserControl
     {
@@ -113,10 +119,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             s.LockCardEnabled = on;
             CoreSettings.Save();
 
-            // ponytail: WPF live-applies here - App.LockCard.Start()/Stop(), gated on
-            // App.IsEngineRunning. Both are head-side: LockCardService
-            // (ConditioningControlPanel/Services/LockCard/LockCardService.cs) and
-            // App.IsEngineRunning (ConditioningControlPanel/App.xaml.cs:784).
+            // Live-apply, the same shape and the same gate as WPF: start or stop the schedule only
+            // while the engine is running. LockCardScheduler is in Core now, so this is a real call
+            // on both heads - but CoreSession is unseeded here (no session engine on this head yet),
+            // so IsEngineRunning is false and this branch never arms. That is the truth, not a stub:
+            // the Test button below is what shows a card on this head today.
+            if (CoreSession.IsEngineRunning)
+            {
+                if (on) LockCardScheduler.Instance.Start();
+                else LockCardScheduler.Instance.Stop();
+            }
         }
 
         private void SliderFreq_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -245,16 +257,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             Log.Information("Lock card phrases updated: {Count} items", editor.ResultData.Count);
         }
 
-        /// <summary>
-        /// The "no enabled phrases" guard is settings-backed, so it is real here; what it guards
-        /// is not, yet.
-        /// </summary>
+        /// <summary>Shows a real test card, through the same surface seam the scheduler uses.</summary>
         private async void BtnTest_Click(object? sender, RoutedEventArgs e)
         {
-            var s = CoreSettings.Current;
-
-            var enabledPhrases = s.LockCardPhrases.Where(p => p.Value).Select(p => p.Key).ToList();
-            if (enabledPhrases.Count == 0)
+            if (LockCardScheduler.EnabledPhrases().Count == 0)
             {
                 // WPF's MessageBox.Show(…, "No Phrases", OK, Warning), through this head's twin.
                 if (TopLevel.GetTopLevel(this) is Window owner)
@@ -262,8 +268,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                         owner, "No Phrases", Loc.Get("msg_no_phrases_enabled_add_some_phrases_first"));
                 return;
             }
-            // ponytail: needs App.LockCard.TestLockCard() - LockCardService
-            // (ConditioningControlPanel/Services/LockCard/LockCardService.cs), still head-side.
+            CoreLockCard.Show(isTest: true);
         }
 
         private async void BtnColorSettings_Click(object? sender, RoutedEventArgs e)

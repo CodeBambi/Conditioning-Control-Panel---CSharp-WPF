@@ -361,6 +361,11 @@ namespace ConditioningControlPanel
             // The engine-running flag, for the feature cards that only live-apply while a session
             // is up. The engine stays here; the flag is the whole seam.
             CoreSession.IsEngineRunningProvider = () => IsEngineRunning;
+            // The lock-card surface seam. The schedule moved to Core (LockCardScheduler); showing
+            // the card did not, because here it first has to clear the interaction queue and a
+            // visible pop quiz. Lazy, like the rest: LockCard is constructed in OnStartup, long
+            // after this ctor, and every existing caller already writes App.LockCard?.
+            CoreLockCard.ShowHandler = isTest => LockCard?.ShowLockCard(isTest: isTest);
             // The entitlement seam, for TierGate (now CCP.Core/Services/TierGate.cs). Deciding is
             // policy and moved; the two account bars, the daily-free wheel and the refusal toast
             // stay here. Every one is a lambda, not an eager read: Patreon, DailyFree and

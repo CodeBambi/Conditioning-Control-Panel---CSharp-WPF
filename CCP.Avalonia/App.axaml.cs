@@ -47,6 +47,25 @@ namespace ConditioningControlPanel.Avalonia
                 Settings = new SettingsService();
                 CoreSettings.ServiceProvider = () => Settings;
 
+                // The lock-card surface seam. The schedule and the no-repeat phrase rotation are in
+                // Core now (LockCardScheduler); this is the half that draws, and on this head that
+                // is LockCardWindow.ShowOnAllMonitors - which already refuses to stack a second
+                // card and already falls a voice-mode card back to typing, honestly, because there
+                // is no recognition seam here yet.
+                //
+                // The hop is explicit because CoreDispatch is unseeded on this head, so the
+                // scheduler's tick arrives on a thread-pool thread. Everything after the hop -
+                // including the phrase draw - therefore runs on the UI thread, which is what keeps
+                // the scheduler's rotation state single-threaded.
+                CoreLockCard.ShowHandler = isTest => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    var phrase = LockCardScheduler.Instance.PickPhrase(LockCardScheduler.EnabledPhrases());
+                    if (phrase is null) return;   // no enabled phrases: nothing to lock behind
+                    var s = CoreSettings.Current;
+                    Views.Windows.LockCardWindow.ShowOnAllMonitors(
+                        phrase, s.LockCardRepeats, s.LockCardStrict, isTest, s.LockCardVoiceMode);
+                });
+
                 // No CoreMods seeding here, deliberately. ModService is still in the WPF head, so
                 // this head has nothing to seed the mod seam with and leaves every provider null.
                 // Unseeded is the supported state: CoreMods answers from the built-in manifests,
