@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Spiral - cabinet fixture</title>
+<!-- No shell, no bridge, no host. The REAL floor and the REAL cabinet under a
+     STUBBED pit: send and listen are a little pretend croupier at the bottom of
+     this file, so the wheel can be looked at, shot and driven by a headless
+     probe without a server and without a penny of real ledger near it.
+
+     The driver goes through the FLOOR, not around it: it clicks the Spiral
+     cabinet the way a player does, so the mount contract in index.js is under
+     test too and not just the module.
+
+     ?kind=pink|violet|word|drop   what the pit's next answer lands on
+     ?wedge=N        land on this exact wedge instead (0..23)
+     ?bet=pink|violet|word|number  which bet the driver places
+     ?pick=N         which wedge, when the bet is a number
+     ?stake=N        which stake button the driver presses
+     ?poor=1         the pit refuses for want of chips
+     ?bad=1          the pit refuses the stake
+     ?insured=1      the answer carries insured:true
+     ?tier=1         the pit refuses with the tier gate (403)
+     ?dark=1         NO send/listen at all: the wheel must go covered, not throw
+     ?reduced=1      arms html.arc-reduced, the global still mode
+     ?lite=1         arms html.ae-lite + html.arc-mobile, the phone diet
+     ?shot=1         folds the fixture chrome and the cage away, for a screenshot
+     ?auto=open|spin|stakes|refuse|leave
+     Everything is written into #log, which is what the headless probe reads
+     back out of the dumped DOM. There is no test runner and no framework here
+     on purpose: the fixture IS the harness, so it can never drift from it. -->
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 16px 14px 60px; background: var(--ground); color: var(--ink);
+         font-family: var(--body); }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header.fx { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+              border-bottom: 3px solid var(--pink); padding-bottom: 8px; margin-bottom: 14px; }
+  header.fx h1 { font-family: var(--disp); font-size: 20px; margin: 0; letter-spacing: .08em; }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--ink-dim); }
+  .note { color: var(--ink-faint); font-size: 12px; font-family: var(--mono); margin-top: 14px; }
+  #log { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); white-space: pre-wrap;
+         margin-top: 10px; max-height: 200px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="fx">
+    <h1>THE SPIRAL</h1>
+    <span class="eyebrow">backroom/spiral.js · cabinet fixture</span>
+  </header>
+  <div id="host"></div>
+  <p class="note" id="note">stubbed pit. no ledger, no network, no chips that exist.</p>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import { openBackRoom } from './index.js';
+import { SPIRAL_LAYOUT } from './spiral.js';
+
+const q = new URLSearchParams(location.search);
+const logEl = document.getElementById('log');
+const log = (m) => { logEl.textContent += m + '\n'; };
+window.addEventListener('error', (e) => log('THREW ' + (e && e.message)));
+window.addEventListener('unhandledrejection', (e) => log('THREW ' + ((e && e.reason && e.reason.message) || e.reason)));
+
+if (q.has('reduced')) document.documentElement.classList.add('arc-reduced');
+if (q.has('lite')) document.documentElement.classList.add('ae-lite', 'arc-mobile');
+
+/* ------------------------------------------------------------------------
+ * THE PRETEND PIT. It answers the same frames the host will and it is the only
+ * thing in this fixture that knows a number. It holds a purse so a spin
+ * visibly moves the balance, which is what the shot is of.
+ * ---------------------------------------------------------------------- */
+const purse = { chips: 2000, sparkle: 27, pot: 41800 };
+const listeners = new Map();
+const delay = 160;
+const WORD = 'GOOD GIRL';
+
+function fire(type, msg) {
+  const set = listeners.get(type);
+  if (!set) return;
+  for (const fn of Array.from(set)) { try { fn(msg); } catch (e) { log('listener threw: ' + e.message); } }
+}
+
+function statusBody() {
+  return {
+    chips: purse.chips, sparkle: purse.sparkle, pot: purse.pot, rate: 100, earnedC: 0,
+    word: WORD,
+    tree: { cheapest_unowned: { id: 'soft_focus', cost: 40 }, owned: 6, total: 21 },
+    config: {
+      stakes: { twentyone: 25, triple: 10, spiral: 25, scratcher: 50, wheel: 500 },
+      paytables: { spiral: { stakes: [25, 50, 100], colour: 1, word: 20, number: 20 } },
+    },
+  };
+}
+
+/** The pit's answer for one spin. The WEDGE is picked from the query, never by
+ *  the page, which is the whole point: the cabinet must land where it is told. */
+function playBody(msg) {
+  const stake = Math.round(Number(msg.body.stake) || 0);
+  const bet = msg.body.input && msg.body.input.bet;
+  let wedge = q.has('wedge') ? Number(q.get('wedge')) : null;
+  if (wedge == null) {
+    const kind = q.get('kind') || 'pink';
+    wedge = SPIRAL_LAYOUT.indexOf(kind);
+    if (wedge < 0) wedge = 0;
+  }
+  const kind = SPIRAL_LAYOUT[wedge];
+  let payout = 0;
+  if (kind !== 'drop') {
+    if ((bet === 'pink' || bet === 'violet') && bet === kind) payout = stake * 2;
+    else if (bet === 'word' && kind === 'word') payout = stake * 21;
+    else if (typeof bet === 'number' && bet === wedge) payout = stake * 21;
+  }
+  let insured = false;
+  if (payout === 0 && q.has('insured')) { payout = stake; insured = true; }
+  purse.chips += payout - stake;
+  log('PIT wedge=' + wedge + ' kind=' + kind + ' payout=' + payout);
+  return Object.assign(statusBody(), {
+    machine: 'spiral', stake, payout, insured,
+    result: { wedge, kind, word: kind === 'word' ? WORD : null },
+  });
+}
+
+const ctx = {
+  log,
+  // The host sets BOTH: the html class is the CSS diet, ctx.lite is the JS one.
+  // Only arming the class was how the first phone shot came back with a
+  // desktop-sized wheel on it.
+  lite: q.has('lite'),
+  t: (key, fallback) => fallback || key,
+  words: ['GOOD GIRL', 'EMPTY', 'SOFT'],
+  send(msg) {
+    log('up   ' + JSON.stringify(msg));
+    if (msg.type !== 'casino-request') return;
+    setTimeout(() => {
+      let ok = true; let status = 200; let body = statusBody();
+      if (msg.op === 'play') {
+        if (q.has('tier')) { ok = false; status = 403; body = { code: 'arcademy_locked', min_tier: 2 }; }
+        else if (q.has('poor')) { ok = false; status = 200; body = { reason: 'insufficient_chips' }; }
+        else if (q.has('bad')) { ok = false; status = 200; body = { reason: 'invalid_stake' }; }
+        else body = playBody(msg);
+      }
+      fire('casino-result', { type: 'casino-result', reqId: msg.reqId, ok, status, body });
+      log('down casino-result ' + (ok ? 'ok' : status));
+    }, delay);
+  },
+  listen(type, fn) {
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type).add(fn);
+    return () => { const s = listeners.get(type); if (s) s.delete(fn); };
+  },
+};
+
+/* ?dark=1 pulls the line out from under the room. The wheel must still paint. */
+if (q.has('dark')) { delete ctx.send; delete ctx.listen; }
+
+const room = openBackRoom(ctx);
+document.getElementById('host').appendChild(room.root);
+window.__room = room;
+
+/* THE LADDER, exactly the way the shell holds it. Nothing in the cabinet binds
+ * Esc: the scene folds a step, and with none left the room leaves. */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (room.escapeStep()) { log('esc: folded the cabinet'); return; }
+  room.close();
+  log('esc: room closed');
+});
+
+/* ------------------------------------------------------------------------
+ * THE UNATTENDED DRIVER. It presses the same buttons a player does and then
+ * writes down what it saw. Nothing here reaches inside the cabinet.
+ * ---------------------------------------------------------------------- */
+const sp = () => room.root.querySelector('.bk-sp');
+const pick = (sel) => room.root.querySelector(sel);
+const esc = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+function openCabinet() {
+  const btns = Array.from(room.root.querySelectorAll('.bk-cab'));
+  const cab = btns[2];   // the floor's third frame is the Spiral
+  log('CAB sheet=' + (cab.classList.contains('bk-sheet') ? 'yes' : 'no'));
+  cab.click();
+  log('CAB mounted=' + (sp() ? 'yes' : 'no'));
+  // ?shot puts the cabinet at the top of a phone viewport by folding away the
+  // fixture's own furniture and the counter above it. Presentation only: not one
+  // element inside .bk-sp is touched, so a shot is of the real thing.
+  if (q.has('shot')) {
+    for (const sel of ['header.fx', '#note', '#log', '.bk-pot', '.bk-cage']) {
+      const n = document.querySelector(sel);
+      if (n) n.style.display = 'none';
+    }
+  }
+}
+
+function placeBet() {
+  const want = q.get('bet') || 'pink';
+  if (want === 'number') {
+    const n = Math.max(0, Math.min(23, Number(q.get('pick') || 6)));
+    room.root.querySelectorAll('.bk-sp-cell')[n].click();
+    log('BET number=' + n);
+  } else {
+    const map = { pink: 0, violet: 1, word: 2 };
+    room.root.querySelectorAll('.bk-sp-bet')[map[want] || 0].click();
+    log('BET ' + want);
+  }
+  if (q.has('stake')) {
+    const want2 = String(q.get('stake'));
+    for (const b of room.root.querySelectorAll('.bk-sp-stakebtn')) {
+      if (b.textContent === want2) { b.click(); log('STAKE ' + want2); break; }
+    }
+  }
+}
+
+function report(tag) {
+  log(tag + ' say=' + pick('.bk-sp-say').textContent);
+  log(tag + ' balance=' + pick('.bk-bal-n').textContent);
+  log(tag + ' goDisabled=' + pick('.bk-sp-go').disabled);
+  log(tag + ' veils=' + document.querySelectorAll('.bk-drop').length);
+}
+
+const auto = q.get('auto');
+if (auto === 'open') {
+  setTimeout(() => {
+    openCabinet();
+    log('OPEN cells=' + room.root.querySelectorAll('.bk-sp-cell').length);
+    log('OPEN bets=' + room.root.querySelectorAll('.bk-sp-bet').length);
+    log('OPEN stakes=' + Array.from(room.root.querySelectorAll('.bk-sp-stakebtn')).map((b) => b.textContent).join('/'));
+    log('OPEN odds=' + pick('.bk-sp-odds').textContent);
+    log('OPEN wordwedge=' + pick('.bk-wheel-face').getAttribute('aria-label').split(', ')[6]);
+    setTimeout(() => { report('OPEN'); log('AUTO done'); }, 1800);
+  }, 800);
+} else if (auto === 'spin' || auto === 'refuse') {
+  setTimeout(() => {
+    openCabinet();
+    placeBet();
+    pick('.bk-sp-go').click();
+    log('SPIN locked=' + pick('.bk-sp-go').disabled);
+    // The wheel takes 3.2s to travel, so the veil can only be up after it.
+    setTimeout(() => log('SPIN mid veils=' + document.querySelectorAll('.bk-drop').length), 4000);
+    setTimeout(() => { report('SPIN'); log('AUTO done'); }, 6600);
+  }, 800);
+} else if (auto === 'stakes') {
+  setTimeout(() => {
+    openCabinet();
+    const list = Array.from(room.root.querySelectorAll('.bk-sp-stakebtn'));
+    list[2].click();
+    log('STAKES list=' + list.map((b) => b.textContent).join('/'));
+    log('STAKES pressed=' + list.map((b) => b.getAttribute('aria-pressed')).join('/'));
+    log('AUTO done');
+  }, 800);
+} else if (auto === 'leave') {
+  /* UNMOUNT MID-SPIN. The stake is up the seam, the wheel is turning, and the
+   * player walks. Nothing may throw and nothing may come back afterwards. */
+  setTimeout(() => {
+    openCabinet();
+    placeBet();
+    pick('.bk-sp-go').click();
+    setTimeout(() => {
+      esc();
+      log('LEAVE cabinet=' + (sp() ? 'still up' : 'gone'));
+      log('LEAVE floorBack=' + (room.root.querySelector('.bk-floor').hidden ? 'no' : 'yes'));
+    }, delay + 500);
+    setTimeout(() => {
+      log('LEAVE afterSpin cabinet=' + (sp() ? 'still up' : 'gone'));
+      log('LEAVE veils=' + document.querySelectorAll('.bk-drop').length);
+      log('AUTO done');
+    }, 5200);
+  }, 800);
+}
+</script>
+</body>
+</html>

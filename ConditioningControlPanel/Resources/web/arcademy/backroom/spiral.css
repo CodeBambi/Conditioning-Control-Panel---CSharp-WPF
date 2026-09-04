@@ -1,0 +1,153 @@
+/* ============================================================================
+ * backroom/spiral.css - the wheel's corner of the felt.
+ *
+ * Lazy-linked by backroom/spiral.js on first open, the way backroom.css is
+ * linked by the floor. Everything here sits INSIDE .bk-sp, so a cabinet can
+ * never reach out and restyle the room around it.
+ *
+ * The palette is backroom.css's: --bk-brass, --bk-neon, --bk-neon-2, --bk-plate
+ * are already declared on .bk-room, and this sheet only ever reads them. The
+ * two exceptions are the pink and violet chips on the board, which carry the
+ * WHEEL's literal hues rather than the mod palette's, because the board and the
+ * face have to be the same two colours or the bet stops meaning anything.
+ *
+ * TYPE: --disp for the signage, --mono for numbers, --body for copy. No serif.
+ *
+ * MOTION: the only loops in here are the word-hit pulse and the pearl's knock,
+ * both decoration, both flattened under html.arc-reduced and both cut outright
+ * by the phone diet along with the glows.
+ * ==========================================================================*/
+
+.bk-sp {
+  --bk-sp-pink: #a83a6b;
+  --bk-sp-violet: #4f3f86;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: var(--body);
+}
+
+/* ---------------------------------- header ------------------------------- */
+.bk-sp-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bk-sp-name {
+  margin: 0; font-family: var(--disp); font-size: 16px; letter-spacing: .12em;
+  font-weight: 400; color: var(--bk-brass, var(--gold));
+}
+.bk-sp-sub { font-size: 12px; color: var(--ink-faint); }
+.bk-sp-spacer { flex: 1 1 auto; }
+.bk-sp-back {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+  padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  color: var(--ink); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--bk-brass, var(--gold)), transparent 55%);
+}
+.bk-sp-back:hover { border-color: var(--bk-brass, var(--gold)); }
+
+/* ----------------------------------- body -------------------------------- */
+.bk-sp-body { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.bk-sp-wheelbox { position: relative; flex: 0 0 auto; line-height: 0; }
+.bk-sp-board { flex: 1 1 300px; display: flex; flex-direction: column; gap: 10px; min-width: 260px; }
+.bk-sp-legend {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--ink-dim);
+}
+
+/* THE PEARL sits on the pin at twelve o'clock and never travels. It knocks once
+ * when the wheel arrives, which is the whole of its job. */
+.bk-sp-pearl {
+  position: absolute; top: 2px; left: 50%; width: 13px; height: 13px;
+  margin-left: -6.5px; border-radius: 50%; pointer-events: none; z-index: 2;
+  background: radial-gradient(circle at 34% 28%, #fff, #cfc6e4 55%, #7b7196);
+  box-shadow: 0 1px 3px #000a;
+}
+.bk-sp-pearl.bk-sp-pearl-hit { animation: bk-sp-knock .3s ease-out 1; }
+@keyframes bk-sp-knock {
+  0% { transform: translateY(0); } 45% { transform: translateY(4px); } 100% { transform: translateY(0); }
+}
+/* The word wedge announces itself for a beat when it pays. */
+.bk-wheel.bk-sp-wordhit .bk-wheel-face {
+  box-shadow: 0 0 26px color-mix(in srgb, var(--bk-brass, var(--gold)), transparent 25%);
+}
+
+/* ---------------------------------- the board ---------------------------- */
+.bk-sp-bets { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); }
+.bk-sp-bet {
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  padding: 9px 11px; border-radius: 8px; cursor: pointer; text-align: left;
+  background: var(--bk-plate, var(--panel)); color: var(--ink);
+  border: 1px solid var(--line);
+}
+.bk-sp-bet-name { font-family: var(--disp); font-size: 13px; letter-spacing: .1em; }
+.bk-sp-bet-odds { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); letter-spacing: .04em; }
+.bk-sp-bet-pink .bk-sp-bet-name { color: color-mix(in srgb, var(--bk-sp-pink), white 42%); }
+.bk-sp-bet-violet .bk-sp-bet-name { color: color-mix(in srgb, var(--bk-sp-violet), white 46%); }
+.bk-sp-bet-word .bk-sp-bet-name { color: var(--bk-brass, var(--gold)); }
+.bk-sp-bet[aria-pressed="true"] {
+  border-color: var(--bk-brass, var(--gold));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bk-brass, var(--gold)), transparent 60%);
+}
+.bk-sp-bet[disabled], .bk-sp-cell[disabled], .bk-sp-stakebtn[disabled] { opacity: .5; cursor: default; }
+
+/* THE WEDGE GRID. Every cell wears its own wedge's colour, so backing 6 or 18
+ * is backing the word or the drop with the eyes open. */
+.bk-sp-grid { display: grid; gap: 4px; grid-template-columns: repeat(12, 1fr); }
+.bk-sp-cell {
+  padding: 6px 0; border-radius: 5px; cursor: pointer; border: 1px solid transparent;
+  font-family: var(--mono); font-size: 11px; color: #fff;
+  background: var(--bk-sp-pink);
+}
+.bk-sp-cell.bk-sp-violet { background: var(--bk-sp-violet); }
+.bk-sp-cell.bk-sp-word { background: var(--bk-brass, var(--gold)); color: #231a06; }
+.bk-sp-cell.bk-sp-drop { background: #101024; color: #8f8fb8; }
+.bk-sp-cell[aria-pressed="true"] { border-color: var(--bk-brass, var(--gold)); transform: translateY(-1px); }
+
+/* --------------------------------- the stakes ---------------------------- */
+.bk-sp-stakes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bk-sp-stakebtn {
+  min-width: 48px; padding: 6px 10px; border-radius: 999px; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; color: var(--ink);
+  background: var(--bk-plate, var(--panel)); border: 1px solid var(--line);
+}
+.bk-sp-stakebtn[aria-pressed="true"] { border-color: var(--bk-neon, var(--pink)); color: var(--bk-neon, var(--pink)); }
+.bk-sp-stake-unit { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--ink-faint); }
+
+.bk-sp-odds {
+  margin: 0; font-size: 11.5px; color: var(--lav); line-height: 1.45;
+  border-left: 2px solid color-mix(in srgb, var(--lav), transparent 55%); padding-left: 8px;
+}
+
+.bk-sp-go {
+  align-self: flex-start; padding: 10px 26px; border-radius: 999px; cursor: pointer;
+  font-family: var(--disp); font-size: 14px; letter-spacing: .16em;
+  color: #201703; border: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bk-brass, var(--gold)), white 16%), var(--bk-brass, var(--gold)));
+}
+.bk-sp-go[disabled] { opacity: .45; cursor: default; }
+.bk-sp-bet:focus-visible, .bk-sp-cell:focus-visible, .bk-sp-stakebtn:focus-visible,
+.bk-sp-go:focus-visible, .bk-sp-back:focus-visible { outline: 2px solid var(--bk-brass, var(--gold)); outline-offset: 2px; }
+
+.bk-sp-say { font-size: 13px; color: var(--ink); min-height: 1.3em; }
+.bk-sp .bk-dealer { font-size: 12px; min-height: 1.2em; }
+
+/* The wheel with no line behind it is COVERED, and it says so rather than
+ * pretending it is about to take a bet. */
+.bk-sp-dark .bk-sp-bets, .bk-sp-dark .bk-sp-grid, .bk-sp-dark .bk-sp-stakes, .bk-sp-dark .bk-sp-go { opacity: .5; }
+
+/* ------------------------------- the phone diet -------------------------- */
+html.arc-mobile .bk-sp-body, html.ae-lite .bk-sp-body { gap: 12px; }
+html.arc-mobile .bk-sp-wheelbox, html.ae-lite .bk-sp-wheelbox { margin: 0 auto; }
+html.arc-mobile .bk-sp-sub, html.ae-lite .bk-sp-sub { display: none; }
+html.arc-mobile .bk-sp-grid, html.ae-lite .bk-sp-grid { grid-template-columns: repeat(8, 1fr); }
+html.arc-mobile .bk-sp-bets, html.ae-lite .bk-sp-bets { grid-template-columns: repeat(2, 1fr); }
+html.arc-mobile .bk-sp-bet-odds, html.ae-lite .bk-sp-bet-odds { font-size: 9px; }
+html.arc-mobile .bk-wheel.bk-sp-wordhit .bk-wheel-face,
+html.ae-lite .bk-wheel.bk-sp-wordhit .bk-wheel-face { box-shadow: none; }
+html.arc-mobile .bk-sp-pearl.bk-sp-pearl-hit, html.ae-lite .bk-sp-pearl.bk-sp-pearl-hit { animation: none; }
+
+/* ------------------------------- still mode ------------------------------ */
+html.arc-reduced .bk-sp-pearl.bk-sp-pearl-hit { animation: none; }
+html.arc-reduced .bk-sp-cell[aria-pressed="true"] { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .bk-sp-pearl.bk-sp-pearl-hit { animation: none; }
+  .bk-sp-cell[aria-pressed="true"] { transform: none; }
+}
