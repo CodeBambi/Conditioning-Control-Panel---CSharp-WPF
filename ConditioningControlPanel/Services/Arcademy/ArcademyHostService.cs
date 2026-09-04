@@ -1715,8 +1715,8 @@ internal static class ArcademyHostService
         ["prize_id_frame_navy_blurb"] = "Deep navy with a varsity edge, like the old team photos.",
         ["prize_confetti_stamp"] = "Confetti Stamp",
         ["prize_confetti_stamp_blurb"] = "Your stamp lands in a little burst of paper now, every time.",
-        ["prize_late_slip"] = "Late Slip",
-        ["prize_late_slip_blurb"] = "Slide one over and a single missed day never touches your streak.",
+        ["prize_late_slip"] = "Tardy Slip",
+        ["prize_late_slip_blurb"] = "Hand one in and the night you missed is filed as excused. Two on the desk, no more.",
         ["prize_honors_lever"] = "Honors Lever",
         ["prize_honors_lever_blurb"] = "Unbolts the third notch, which is where the S+ nights live.",
         ["prize_free_swim_key"] = "Free Swim Key",
@@ -1779,7 +1779,10 @@ internal static class ArcademyHostService
         ["free_swim_key_hint"] = "Your key opens this one for a practice run. Nothing counts, nothing costs.",
         ["payout_tickets"] = "Tickets",
         ["payout_token_minted"] = "A token dropped in the tray. That is your one for today.",
-        ["late_slip_used"] = "A late slip covered you. Your streak never noticed.",
+        ["late_slip_used"] = "A tardy slip was handed in for you. Your streak never noticed.",
+        // THE ONE SMALL BUTTON under the jeopardy line (Deck V, the Rake). `{name}` is filled
+        // from the catalog row itself, so a mod that renames the slip renames the offer too.
+        ["rake_slip_offer"] = "The counter sells a {name}.",
         // Reserved vocabulary: designed for, not built in v1 (GROUND-RULES §3).
         ["detention"] = "Detention",
         ["diploma"] = "Diploma",
@@ -3109,7 +3112,7 @@ internal static class ArcademyHostService
         // All four are well inside MergeModTable's 96-char skin cap (trap 26).
         ["booth_holdings"] = "What you are holding",
         ["booth_hold_none"] = "Nothing in your pockets tonight. The shelf is through the window.",
-        ["booth_hold_late_slip"] = "It spends itself the night you miss one. Nothing to press.",
+        ["booth_hold_late_slip"] = "It files itself the night you miss one. Nothing to press.",
         ["booth_hold_passive"] = "It spends itself the moment it is needed.",
         // The two wayfinding plates in the alley (shell/alleysign.js): the booth's
         // right-hand wall points at RM 004 and the Locker's left wall points back.
@@ -3645,8 +3648,11 @@ internal static class ArcademyHostService
             // running it unconditionally is what keeps a retake on a NEW local day (same UTC day,
             // player east of UTC) crediting the streak it has earned.
             var localDate = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            var (streak, perfect, classesToday, lateSlipUsed) =
-                _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0, false);
+            var (streak, perfect, classesToday, slipsSpent) =
+                _meta?.RecordAttendance(localDate, gameKey) ?? (0, 0, 0, 0);
+            // The page and the debrief only ever needed "did one cover me"; the COUNT is the
+            // server's business, because it holds the bag the slips come out of.
+            var lateSlipUsed = slipsSpent > 0;
 
             // ============================ THE TILL ============================
             // Tickets and tokens, wrapped on their own: the attendance credit above is the thing we
@@ -3659,7 +3665,7 @@ internal static class ArcademyHostService
             // MintCurrency runs here, in this order, exactly as it always has.
             var mintFrame = ArcademyWalletSyncService.DoorOpen
                 ? ArcademyWalletSyncService.BuildMintFrame(
-                    gameKey, grade, zen, streak, localDate, lever, lateSlipUsed, dayUtc)
+                    gameKey, grade, zen, streak, localDate, lever, slipsSpent, dayUtc)
                 : null;
             var till = mintFrame == null
                 ? MintCurrency(gameKey, grade, zen, streak, localDate, lever)

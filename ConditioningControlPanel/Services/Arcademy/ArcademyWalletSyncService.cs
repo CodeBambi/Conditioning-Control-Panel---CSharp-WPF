@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -834,7 +834,7 @@ internal static class ArcademyWalletSyncService
     /// to reach UTC, so a player at UTC+2 sends -120.</para>
     /// </summary>
     public static JObject BuildMintFrame(string gameKey, string grade, bool zen, int streak,
-        string localDay, string lever, bool lateSlipUsed, string seed)
+        string localDay, string lever, int slipsSpent, string seed)
     {
         int tz;
         try { tz = -(int)Math.Round(TimeZoneInfo.Local.GetUtcOffset(DateTime.Now).TotalMinutes); }
@@ -849,7 +849,13 @@ internal static class ArcademyWalletSyncService
             ["localDay"] = localDay,
             ["tzOffsetMinutes"] = Math.Clamp(tz, -840, 840),
             ["streak"] = Math.Clamp(streak, 0, 3650),
-            ["lateSlipUsed"] = lateSlipUsed,
+            // TWO WORDS FOR ONE FACT, and both are sent on purpose. `lateSlipUsed` is the
+            // original boolean and a server that predates the stack still reads it; `lateSlipsUsed`
+            // is the COUNT, which is the only one that can say "two nights were covered". A server
+            // that honours the count ignores the flag; one that does not spends exactly one, which
+            // is what it would have done before the stack existed.
+            ["lateSlipUsed"] = slipsSpent > 0,
+            ["lateSlipsUsed"] = Math.Clamp(slipsSpent, 0, ArcademyEconomy.SlipStackMax),
             ["lever"] = lever,
             ["mintId"] = Guid.NewGuid().ToString("N"),
             ["seed"] = seed.Length <= 64 ? seed : seed[..64],
