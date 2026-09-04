@@ -35,6 +35,7 @@ import { t, gradeLabel, tierLabel } from '../core/lexicon.js';
 import { gradeKey } from '../core/grades.js';
 import { exitBar, sign as signExit, campusPillRow } from './exits.js';
 import { canRenderCard, renderShareCard } from './sharepaint.js';
+import { deliverShareCard, DELIVERED } from './sharedeliver.js';
 
 /** Mod-anonymous, name-only, no URL. Do not "improve" this. */
 export const SHARE_HEADER = 'The Arcademy';
@@ -274,7 +275,7 @@ function printBeat(host, reduced) {
  *                                 preference with nowhere to live.
  */
 export function createReportCard({
-  ceremonies, seep, toast, log, onCounter, identity, shareNamed,
+  ceremonies, seep, toast, log, onCounter, identity, shareNamed, shareToHost,
 } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const shout = typeof toast === 'function' ? toast : () => {};
@@ -290,6 +291,10 @@ export function createReportCard({
   const readIdentity = typeof identity === 'function' ? identity : null;
   const namedGet = (shareNamed && typeof shareNamed.get === 'function') ? shareNamed.get : null;
   const namedSet = (shareNamed && typeof shareNamed.set === 'function') ? shareNamed.set : null;
+  /* The desktop app's clipboard, reached the only way the page is allowed to
+   * reach anything: a round trip the SHELL owns. A web build hands in nothing
+   * and that rung of the ladder simply is not there. */
+  const toHost = typeof shareToHost === 'function' ? shareToHost : null;
   let namedLocal = false;    // the sitting's answer when there is nowhere to save one
   const isNamed = () => (namedGet ? namedGet() === true : namedLocal);
   const setNamed = (v) => {
@@ -708,25 +713,33 @@ export function createReportCard({
           perfect: !!s.perfect,
           identity: ident,
         }).then((out) => {
-          endBeat();
-          setBusy(shareBtn, false);
-          busy = false;
           if (!out || !out.blob) {
             shout(t('share_unavailable', 'Sharing is not available here'));
             say('share image: the canvas would not export');
-            return;
+            return null;
           }
-          const ok = deliverDownload(out.blob, shareFileName(dateLabel));
-          shout(ok
-            ? t('share_saved', 'Report card saved')
-            : t('share_unavailable', 'Sharing is not available here'));
-          if (!ok) say('share image: this host refuses downloads');
+          return deliverShareCard(out.blob, shareFileName(dateLabel), {
+            toHost, download: deliverDownload,
+          }).then((how) => {
+            if (how === DELIVERED.SHARED) { shout(t('share_shared', 'Report card shared')); return; }
+            if (how === DELIVERED.COPIED) { shout(t('share_copied', 'Report card copied')); return; }
+            if (how === DELIVERED.SAVED) { shout(t('share_saved', 'Report card saved')); return; }
+            /* EVERY RUNG REFUSED. Say so. The Activity iframe can take the
+             * download without taking it, and a beat that looks like it
+             * worked is the one outcome worse than not sharing. */
+            shout(t('share_unavailable', 'Sharing is not available here'));
+            say('share image: no delivery this host will accept');
+          });
         }).catch((e) => {
+          shout(t('share_unavailable', 'Sharing is not available here'));
+          say('share image threw: ' + ((e && e.message) || e));
+        }).then(() => {
+          /* ONE owner for the latch, on every path. The ladder is two awaits
+           * deep now and a beat left running because a rung threw is a button
+           * nobody can press again tonight. */
           endBeat();
           setBusy(shareBtn, false);
           busy = false;
-          shout(t('share_unavailable', 'Sharing is not available here'));
-          say('share image threw: ' + ((e && e.message) || e));
         });
       });
       put(imgBox);

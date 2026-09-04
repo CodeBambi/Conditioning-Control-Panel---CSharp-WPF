@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json;
@@ -614,6 +615,11 @@ internal static class ArcademyHostService
                 // discordLinked is false - a linked account moves the rung with an ordinary
                 // set-setting instead (contract trap 1).
                 OnLinkDiscord();
+                break;
+            case "share-image":
+                // The report card's PNG, on its way to the Windows clipboard. Fire-and-forget
+                // from the page's side; exactly one reply always comes back.
+                OnShareImage((string?)o["png"]);
                 break;
             case "annex-stats":
                 // The registry link downstairs. Fire-and-forget: exactly one reply comes back,
@@ -1817,6 +1823,8 @@ internal static class ArcademyHostService
         ["share_image"] = "Share report card",
         ["share_add_name"] = "Add my name",
         ["share_saved"] = "Report card saved",
+        ["share_copied"] = "Report card copied",
+        ["share_shared"] = "Report card shared",
         ["share_unavailable"] = "Sharing is not available here",
         ["done"] = "Done",
         ["retake"] = "Retake",
@@ -5338,6 +5346,92 @@ internal static class ArcademyHostService
             });
         }
         catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PostAnnexStats: {E}", ex.Message); }
+    }
+
+    /// <summary>Biggest base64 payload the share card may push over the bridge: about 4.4 MB of
+    /// text, which is roughly 3.3 MB of PNG. The page caps itself well under this; the wall is
+    /// here because a page is a page and the bridge is not a file transfer.</summary>
+    private const int MaxShareImageChars = 4_400_000;
+
+    /// <summary>THE SHARE CARD'S LAST RUNG BEFORE THE FLOOR.
+    ///
+    /// WebView2 gives the page no async clipboard image write worth the name, so the page draws
+    /// the report card, hands the finished PNG over as base64, and C# puts it on the Windows
+    /// clipboard itself. Exactly ONE reply always goes back - <c>ok</c> true or false - because a
+    /// missing reply leaves a button spinning until its own deadline, and a share that quietly did
+    /// not happen is the worst outcome the whole feature has.
+    ///
+    /// The decode and the clipboard write both happen on the UI thread: WPF's clipboard is STA and
+    /// a BitmapImage handed across threads unfrozen is a crash waiting for a slow night.</summary>
+    private static void OnShareImage(string? png)
+    {
+        try
+        {
+            var epoch = Volatile.Read(ref _generation);
+            var win = _host?.Window;
+            if (win == null) return;
+            win.Dispatcher.BeginInvoke(() =>
+            {
+                var ok = false;
+                try
+                {
+                    if (_host == null || Volatile.Read(ref _generation) != epoch) return;
+                    ok = PutPngOnClipboard(png);
+                }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.share-image: {E}", ex.Message); }
+                try { _host?.Post(new { type = "share-image-result", ok }); }
+                catch (Exception ex) { App.Logger?.Debug("ArcademyHost.share-image reply: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.OnShareImage: {E}", ex.Message); }
+    }
+
+    /// <summary>Decode a base64 PNG and put it on the clipboard. UI thread only. Never throws:
+    /// every refusal - junk base64, something that is not a PNG, a clipboard another process is
+    /// holding open - is a plain false, and the page falls to its download rung.</summary>
+    private static bool PutPngOnClipboard(string? png)
+    {
+        if (string.IsNullOrEmpty(png) || png!.Length > MaxShareImageChars) return false;
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(png); }
+        catch (FormatException) { return false; }
+
+        // The PNG signature, checked before anything is asked to decode it. The page is our own
+        // and the bytes are still validated: a share card is never anything but a share card.
+        if (bytes.Length < 8 || bytes[0] != 0x89 || bytes[1] != 0x50 || bytes[2] != 0x4E || bytes[3] != 0x47)
+            return false;
+
+        BitmapImage img;
+        try
+        {
+            using var ms = new MemoryStream(bytes, writable: false);
+            img = new BitmapImage();
+            img.BeginInit();
+            img.CacheOption = BitmapCacheOption.OnLoad;   // the stream is gone the moment we leave
+            img.StreamSource = ms;
+            img.EndInit();
+            img.Freeze();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost: share image would not decode: {E}", ex.Message);
+            return false;
+        }
+
+        // CLIPBRD_E_CANT_OPEN: another process is holding the clipboard for a moment. One retry is
+        // what every other app on this machine does, and it is nearly always enough.
+        for (var attempt = 0; attempt < 2; attempt += 1)
+        {
+            try { Clipboard.SetImage(img); return true; }
+            catch (System.Runtime.InteropServices.COMException) { Thread.Sleep(60); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ArcademyHost: clipboard refused the share image: {E}", ex.Message);
+                return false;
+            }
+        }
+        return false;
     }
 
     /// <summary>True when remote media may appear anywhere in the app. Copied verbatim from

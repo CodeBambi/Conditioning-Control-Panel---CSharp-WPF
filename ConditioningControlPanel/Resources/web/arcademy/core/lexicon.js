@@ -87,6 +87,8 @@ export const DEFAULT_LEXICON = Object.freeze({
   share_image: 'Share report card',
   share_add_name: 'Add my name',
   share_saved: 'Report card saved',
+  share_copied: 'Report card copied',
+  share_shared: 'Report card shared',
   share_unavailable: 'Sharing is not available here',
   done: 'Done',
   xp: 'XP',

@@ -1016,6 +1016,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   let roomPage = null;
   /** The one in-flight annex stats request ({promise, resolve, timer}|null). */
   let annexStatsWait = null;
+  let shareImageWait = null;
   /* THE PUNCH-CARD CEREMONY. `punchStage` is the live overlay; `punchArm` is
    * what the shell is WAITING for while the host answers `class-ended`.
    * Both are null the rest of the time. */
@@ -1304,6 +1305,10 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       get: () => store.get('shareNamed', false) === true,
       set: (v) => store.set('shareNamed', v === true),
     },
+    /* The app only. On the web `src.mediaControls` is true and there is no
+     * host behind the bridge to ask, so that rung of the ladder is absent
+     * rather than present-and-broken. */
+    shareToHost: src.mediaControls === true ? null : shareImageToHost,
   });
 
   /* ---------------------- helpers --------------------------------------- */
@@ -4185,6 +4190,30 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     return w.promise;
   }
 
+  /* THE SHARE CARD'S LAST RUNG BEFORE THE FLOOR. WebView2 has no async
+   * clipboard image write the page can use, so the desktop app carries the PNG
+   * over the bridge and C# puts it on the Windows clipboard itself. Same shape
+   * as the registry link above: one request in flight, a deadline, and every
+   * failure resolves FALSE rather than hanging a button forever. A web build
+   * never gets here - reportcard.js is handed this only on the app. */
+  function shareImageToHost(png) {
+    if (typeof png !== 'string' || !png) return Promise.resolve(false);
+    if (shareImageWait) return Promise.resolve(false);
+    const w = {};
+    w.promise = new Promise((resolve) => {
+      w.resolve = resolve;
+      w.timer = setTimeout(() => { shareImageWait = null; resolve(false); }, 8000);
+    });
+    shareImageWait = w;
+    try { bridge.send({ type: 'share-image', png }); }
+    catch (e) {
+      clearTimeout(w.timer);
+      shareImageWait = null;
+      return Promise.resolve(false);
+    }
+    return w.promise;
+  }
+
   /* ============================ THE PUNCH CARD ==========================
    * PUNCHCARD §4. The ceremony is the ONLY place the page draws a hole, and it
    * draws the one the HOST minted: `punchcard-result` carries the post-mint
@@ -6413,6 +6442,17 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       annexStatsWait = null;
       try { clearTimeout(w.timer); } catch (e) { /* noop */ }
       w.resolve(m && m.body && typeof m.body === 'object' ? m.body : null);
+    },
+
+    /** {type:'share-image-result'} - the host either put the PNG on the
+     *  Windows clipboard or it did not. Resolves the one pending request;
+     *  an unsolicited frame is dropped on the floor. */
+    onShareImageResult(m) {
+      const w = shareImageWait;
+      if (!w) return;
+      shareImageWait = null;
+      try { clearTimeout(w.timer); } catch (e) { /* noop */ }
+      w.resolve(!!(m && m.ok));
     },
 
     /** {type:'setting'} post-clamp echo. THE only path that moves a setting. */
