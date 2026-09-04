@@ -2130,7 +2130,7 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                App.Logger?.Error("Failed to open hyperlink: {Uri} - {Error}", e.Uri.AbsoluteUri, ex.Message);
+                App.Logger?.Error("Failed to open hyperlink on {Host} - {Error}", Services.Logging.UrlLog.Host(e.Uri), ex.Message);
             }
         }
 

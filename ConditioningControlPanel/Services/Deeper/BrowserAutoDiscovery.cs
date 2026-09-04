@@ -106,7 +106,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (!match.Success) return;
 
                 var refUrl = match.Groups["url"].Value.TrimEnd(',', '.', ')', ']');
-                App.Logger?.Information("Deeper auto-discovery: found ccp ref {Url} on {Page}", UrlSafety.RedactUrl(refUrl), UrlSafety.RedactUrl(url));
+                App.Logger?.Information("Deeper auto-discovery: found ccp ref on {RefHost} from page on {Host}", Logging.UrlLog.Host(refUrl), Logging.UrlLog.Host(url));
 
                 var enh = await _fetcher.FetchAsync(refUrl, ct).ConfigureAwait(true);
                 if (enh == null || ct.IsCancellationRequested) return;

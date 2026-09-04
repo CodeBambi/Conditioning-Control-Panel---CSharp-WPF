@@ -3117,7 +3117,7 @@ namespace ConditioningControlPanel
                 if (Uri.TryCreate(u, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
                 {
                     try { Process.Start(new ProcessStartInfo(u) { UseShellExecute = true }); }
-                    catch (Exception ex) { App.Logger?.Warning(ex, "Failed to open video link preview: {Url}", u); }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "Failed to open video link preview on {Host}", Services.Logging.UrlLog.Host(u)); }
                 }
             };
             Grid.SetColumn(openBtn, 3);

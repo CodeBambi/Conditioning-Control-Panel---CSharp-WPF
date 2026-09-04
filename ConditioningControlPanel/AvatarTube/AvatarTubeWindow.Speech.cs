@@ -1159,7 +1159,8 @@ namespace ConditioningControlPanel
                 if (fuzzy != null)
                 {
                     linkPositions.Add((spanStart, spanLength, fuzzy.Value.Title, fuzzy.Value.Url));
-                    App.Logger?.Information("Fuzzy-linked video: '{Span}' -> '{Title}'", span, fuzzy.Value.Title);
+                    App.Logger?.Information("Fuzzy-linked video on {Host} ({Chars} chars of link text)",
+                        UrlLog.Host(fuzzy.Value.Url), span.Length);
                 }
             }
 

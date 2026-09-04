@@ -130,8 +130,8 @@ namespace ConditioningControlPanel.Services
                 _mediaPlayer.Play(media);
                 _isPlaying = true;
 
-                App.Logger?.Information("DualMonitorVideo: Started playback of {Url} on {Count} monitors",
-                    videoUrl, _windowData.Count);
+                App.Logger?.Information("DualMonitorVideo: Started playback from {Host} on {Count} monitors",
+                    Logging.UrlLog.Host(videoUrl), _windowData.Count);
             }
             catch (Exception ex)
             {

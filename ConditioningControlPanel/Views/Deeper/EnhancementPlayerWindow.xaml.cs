@@ -1441,7 +1441,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     || !IsAllowedPlayerHost(uri))
                 {
                     e.Cancel = true;
-                    App.Logger?.Debug("EnhancementPlayer: blocked nav to {Url}", e.Uri);
+                    App.Logger?.Debug("EnhancementPlayer: blocked nav to {Host}", Services.Logging.UrlLog.Host(e.Uri));
                 }
             }
             catch

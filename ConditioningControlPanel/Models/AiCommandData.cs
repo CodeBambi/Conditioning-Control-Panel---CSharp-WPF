@@ -42,13 +42,13 @@ namespace ConditioningControlPanel.Models
                 }
                 catch (Exception inner)
                 {
-                    App.Logger?.Warning(inner, "AiCommandData: brace-recovery parse failed for: {Json}", json);
+                    App.Logger?.Warning(inner, "AiCommandData: brace-recovery parse failed ({Bytes} bytes)", json?.Length ?? 0);
                     return null;
                 }
             }
             catch (Exception e)
             {
-                App.Logger?.Warning(e, "AiCommandData: parse failed for: {Json}", json);
+                App.Logger?.Warning(e, "AiCommandData: parse failed ({Bytes} bytes)", json?.Length ?? 0);
                 return null;
             }
         }

@@ -312,7 +312,7 @@ public class BouncingTextService : IDisposable
             logo.TextWidth = formattedText.Width;
             logo.TextHeight = formattedText.Height;
 
-            App.Logger?.Debug("Measured text '{Text}': {W}x{H}", logo.Text, logo.TextWidth, logo.TextHeight);
+            App.Logger?.Debug("Measured text ({Chars} chars): {W}x{H}", (logo.Text ?? "").Length, logo.TextWidth, logo.TextHeight);
         }
         catch (Exception ex)
         {
