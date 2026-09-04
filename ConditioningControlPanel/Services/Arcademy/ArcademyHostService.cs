@@ -3405,6 +3405,7 @@ internal static class ArcademyHostService
         ["bk_cage_bad"] = "The cage takes one to five hundred at a time. Typo guard, nothing more.",
         ["bk_cage_busy"] = "The cashier is with someone. Give her a moment.",
         ["bk_cage_locked"] = "The bank does not serve this account yet. Nothing was charged.",
+        ["bk_closed"] = "The house is closed tonight. Your chips keep. Come back when the sign is lit.",
         ["bk_cage_reset"] = "Your skills are mid reset. The cage waits for that to settle.",
         ["bk_cage_refused"] = "The cage would not take that one. Nothing moved.",
         ["bk_cage_tree"] = "The same {0} sparkle goes toward {1} on the tree, {2} short of it.",

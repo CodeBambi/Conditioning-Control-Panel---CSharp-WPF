@@ -1019,7 +1019,7 @@ function idCrestGlyph() {
  */
 export function createCampus({ state, gameName, banner, stats, reducedMotion, on, log,
   dateSeed, attractIdleMs, boardPulse, idCardMode, holdAttract, post, seep, annex,
-  capsule, account, economy, idFrame } = {}) {
+  capsule, account, economy, idFrame, backroomOpen } = {}) {
   const say = typeof log === 'function' ? log : () => {};
   const handlers = on || {};
   /* THE ACCOUNT CHIP (shell/accountchip.js): a host slot in the top-right
@@ -2243,6 +2243,17 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
     svg('circle', { cx: x, cy: 820.5, r: 2.8 }, 'campus-furnf')));
   facPut(backroomG, svg('line', { x1: 1280, y1: 824, x2: 1348, y2: 824 }, 'campus-furn'));
   stag(backroomG, 940);
+  /* THE SIGN OVER THE DOOR (the soft launch). No door until the house says
+   * open: `backroomOpen` is the server's word, relayed by the shell, and it is
+   * false on every host that has not asked yet or was not answered. The group
+   * is hidden rather than unbuilt so the shell can light it the moment the
+   * answer lands, without a rebuild. Hidden, the alley is the four-window
+   * alley it was before the wing: the plate, the rack and the neon all ride
+   * this one group. */
+  function setBackroomOpen(open) {
+    try { backroomG.style.display = (open === true) ? '' : 'none'; } catch (e) { /* noop */ }
+  }
+  setBackroomOpen(backroomOpen);
 
   /* Entrance hall dressing (notice board, trophy case, admissions desk, crest) */
   const hall = svg('g', null, 'campus-halldress');
@@ -3687,6 +3698,9 @@ export function createCampus({ state, gameName, banner, stats, reducedMotion, on
      * nothing else.
      */
     backroomDust: backroomDustCard,
+    /** The sign over the Back Room door, from outside: true draws the door,
+     *  anything else is a wall. Safe to call at any time. */
+    setBackroomOpen,
     /**
      * A viewBox point -> page coordinates, for a FLIP that has to start at a
      * place on the plan (ORIENTATION.md §3.4's handover). Fully guarded: the

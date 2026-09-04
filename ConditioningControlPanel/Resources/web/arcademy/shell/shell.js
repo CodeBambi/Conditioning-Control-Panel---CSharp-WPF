@@ -2319,9 +2319,13 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
          * show different frames - and it is the getter and not a value because
          * the campus outlives an equip made in the Locker. */
         idFrame,
+        // THE SIGN OVER THE BACK ROOM DOOR: the last answer, and false until
+        // there is one. askBackRoomOpen below lights it when the server says so.
+        backroomOpen: backRoomOpen,
         log: say,
       });
       campus.noteDescriptors(campusDescriptors());
+      askBackRoomOpen();
       /* THE CARD KNOWS WHO YOU ARE BEFORE IT IS EVER SEEN. The campus is torn
        * down and rebuilt on every visit, so the profile is handed over here
        * rather than held by the card - and an in-flight chip keeps its look
@@ -3942,6 +3946,47 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *  cannot leave a handler painting into a page that has been torn down. */
   let backRoomOffs = [];
 
+  /* THE SIGN OVER THE DOOR (the soft launch). The door is drawn ONLY when the
+   * server says the house is open for this player: a `casino-request` for
+   * status answers `body.open`, and anything else - offline, a 403, a timeout,
+   * a server that predates the flag - is a wall with no door in it. Asked on
+   * the campus build, throttled, and never blocking: the quad stands first
+   * and the door is lit when the answer lands. The ask is the shell's own and
+   * filters by its own reqId, so it can never eat a receipt the room is
+   * waiting on. No host change: both hosts already carry this frame. */
+  let backRoomOpen = false;
+  let backRoomAskedAt = 0;
+  const BACKROOM_ASK_EVERY_MS = 5 * 60 * 1000;
+  const BACKROOM_ASK_TIMEOUT_MS = 4000;
+  function setBackRoomOpen(open) {
+    backRoomOpen = open === true;
+    if (campus && typeof campus.setBackroomOpen === 'function') {
+      try { campus.setBackroomOpen(backRoomOpen); } catch (e) { /* noop */ }
+    }
+  }
+  function askBackRoomOpen() {
+    const now = Date.now();
+    if (now - backRoomAskedAt < BACKROOM_ASK_EVERY_MS) { setBackRoomOpen(backRoomOpen); return; }
+    backRoomAskedAt = now;
+    const reqId = 'bkgate' + now.toString(16)
+      + Math.floor(Math.random() * 0xFFFFFFFF).toString(16).padStart(8, '0');
+    let off = () => {};
+    const timer = setTimeout(() => { try { off(); } catch (e) { /* noop */ } }, BACKROOM_ASK_TIMEOUT_MS);
+    off = bridge.on('casino-result', (m) => {
+      if (!m || m.reqId !== reqId) return;
+      clearTimeout(timer);
+      try { off(); } catch (e) { /* noop */ }
+      setBackRoomOpen(m.ok === true && !!m.body && m.body.open === true);
+    });
+    try {
+      bridge.send({ type: 'casino-request', reqId, op: 'status', body: {}, localDay: localDate });
+    } catch (e) {
+      clearTimeout(timer);
+      try { off(); } catch (e2) { /* noop */ }
+      say('backroom gate ask failed: ' + ((e && e.message) || e));
+    }
+  }
+
   /** The module, fetched once. A FAILURE IS NOT CACHED - a fetch that lost the
    *  network is worth trying again the next time somebody tries the door. */
   function loadBackRoom() {
@@ -4020,6 +4065,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   function showBackRoom() {
+    // A door that is not drawn cannot be walked to, but a keybind or a stale
+    // handle could still ask. The sealed card, same as any other shut door.
+    if (!backRoomOpen) { refuseBackRoom('the house is closed'); return; }
     /* THE QUAD STAYS UP while the module is in the air. See the header. */
     loadBackRoom().then((mod) => {
       if (destroyed) return;

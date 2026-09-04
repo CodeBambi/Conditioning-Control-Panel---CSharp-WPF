@@ -130,9 +130,10 @@ function oddsRows(kit) {
 
 /** Which warm sentence a refusal gets. The server's word is never shown raw. */
 function refusalKey(status, body) {
+  const r = String((body && (body.reason || body.error)) || '');
+  if (r === 'casino_closed') return 'bk_closed';   // a 403 too, but the house's, not the account's
   if (status === 403) return 'bk_sc_locked';
   if (!status) return 'bk_sc_offline';
-  const r = String((body && (body.reason || body.error)) || '');
   if (r === 'insufficient_chips') return 'bk_sc_poor';
   return r === 'busy' ? 'bk_sc_busy' : 'bk_sc_refused';
 }

@@ -527,6 +527,7 @@ export function mount(root, kit, ctx) {
   function refusal(r) {
     const body = (r && r.body) || {};
     const reason = String(body.reason || body.code || '');
+    if (reason === 'casino_closed') return t('bk_closed');   // a 403 too, but the house's, not the account's
     if (r && r.status === 403) return t('bk_tt_locked');
     switch (reason) {
       case 'insufficient_chips': return t('bk_tt_poor');
