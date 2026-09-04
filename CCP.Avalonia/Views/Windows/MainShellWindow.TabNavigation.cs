@@ -55,7 +55,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Threading;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -202,15 +207,83 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>One door open at a time. ponytail: snaps, no height tween.</summary>
+        private const int NavDoorExpandMs = 160;      // WPF MainWindow.TabNavigation.cs:653
+        private const double NavEntryRowHeight = 32;  // WPF MainWindow.TabNavigation.cs:651
+
+        private string? _expandedDoor;
+
+        /// <summary>Which door the accordion currently holds open. The panel's Height cannot answer
+        /// this: an Avalonia transition animates the property itself, so mid-tween it reads back the
+        /// in-flight value rather than the intent.</summary>
+        internal string? ExpandedDoor => _expandedDoor;
+
         private void SetExpandedDoor(string? door)
         {
+            _expandedDoor = door;
             foreach (var d in NavDoorMap)
             {
                 if (d.Panel is null) continue;
-                var panel = this.FindControl<Control>(d.Panel);
-                if (panel is not null) panel.Height = d.Door == door ? double.NaN : 0;
+                var panel = this.FindControl<Border>(d.Panel);
+                if (panel is not null) SetDoorPanelExpanded(d.Door, panel, d.Door == door);
             }
         }
+
+        /// <summary>
+        /// The accordion, ported from WPF's SetDoorPanelExpanded (MainWindow.TabNavigation.cs:872).
+        ///
+        /// The first cut of this file set Height alone. That was a real defect, not a missing
+        /// flourish: the markup parks every closed door at <c>Height="0" IsHitTestVisible="False"</c>,
+        /// and nothing ever set hit-testing back, so an opened door drew its entries and NONE of them
+        /// could be clicked. Only the Home door worked, because it is the one panel the markup does
+        /// not park. WPF line 874 is <c>panel.IsHitTestVisible = expand;</c> and it is restored here.
+        ///
+        /// The tween is WPF's too - 160ms, quadratic ease-out - as an Avalonia
+        /// <see cref="DoubleTransition"/> on Height rather than a storyboard. A transition cannot
+        /// land on <c>NaN</c>, so it runs to a measured pixel height and the panel is handed back to
+        /// layout afterwards, exactly as WPF's Completed handler does, so that a later visibility
+        /// change on one entry still resizes the door. The completion guard asks the same question
+        /// WPF asks: a faster click may already own the panel, and a tween that started on a door
+        /// the user has since left must not write its height back.
+        /// </summary>
+        private void SetDoorPanelExpanded(string door, Border panel, bool expand)
+        {
+            panel.IsHitTestVisible = expand;
+
+            var entries = this.FindControl<StackPanel>(panel.Name!.Replace("DoorPanel", "DoorEntries"));
+            var to = expand ? MeasureDoorPanel(entries) : 0d;
+
+            // Snap when there is nothing to travel - first layout, or a door already where it
+            // belongs. Clearing Transitions first stops the assignment animating to NaN.
+            if (Math.Abs(panel.Bounds.Height - to) < 0.5)
+            {
+                panel.Transitions = null;
+                panel.Height = expand ? double.NaN : 0;
+                return;
+            }
+
+            panel.Transitions ??= new Transitions
+            {
+                new DoubleTransition
+                {
+                    Property = Layoutable.HeightProperty,
+                    Duration = TimeSpan.FromMilliseconds(NavDoorExpandMs),
+                    Easing = new QuadraticEaseOut(),
+                },
+            };
+            panel.Height = to;
+
+            DispatcherTimer.RunOnce(() =>
+            {
+                var stillOwnsThePanel = string.Equals(_expandedDoor, door, StringComparison.Ordinal);
+                if (stillOwnsThePanel != expand) return;
+                panel.Transitions = null;
+                panel.Height = expand ? double.NaN : 0;
+            }, TimeSpan.FromMilliseconds(NavDoorExpandMs + 20));
+        }
+
+        /// <summary>WPF MeasureDoorPanel: one row per visible entry, nothing cleverer.</summary>
+        private static double MeasureDoorPanel(StackPanel? entries)
+            => entries is null ? 0 : entries.Children.OfType<Control>().Count(c => c.IsVisible) * NavEntryRowHeight;
 
         private void NavDoor_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
