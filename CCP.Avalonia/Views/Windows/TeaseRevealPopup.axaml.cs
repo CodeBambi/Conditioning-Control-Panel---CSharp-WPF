@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
+using ConditioningControlPanel.Avalonia.Controls;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -141,16 +142,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// Arms the sheen sweep. The WPF original gates it on PerformanceProfile.AllowGlow AND
-        /// MotionFx.AllowAmbientLoops, and leaves the card on its static livery rim when either
-        /// says no.
-        /// ponytail: needs MotionFx/PerformanceProfile, gate the sweep when they move to Core
-        /// (FeatureCard/SplitFeatureCard run their loops ungated here for the same reason).
+        /// Arms the sheen sweep, gated exactly as WPF gates it: the performance tier has to allow
+        /// glow AND the motion setting has to allow ambient loops. When either says no the card
+        /// keeps a STATIC accent (the livery rim and its drop shadow), which is the resting look -
+        /// never "the same thing, slower".
+        ///
+        /// <para>WPF asks two services; this head asks <see cref="AmbientFxCanvas.Env"/>, which
+        /// carries both verbatim over the same <c>CoreSettings</c> fields. The conjunction collapses:
+        /// <c>AllowGlow(tier)</c> is <c>tier != Performance</c>, which is <c>Env.AllowAmbientMotion</c>,
+        /// and <c>Env.AllowAmbientLoops</c> is <c>Level == Full &amp;&amp; AllowAmbientMotion(tier)</c> -
+        /// so <c>AllowAmbientLoops</c> alone IS the WPF pair, not a weakened stand-in.</para>
         /// </summary>
         private void StartShimmer()
         {
             try
             {
+                if (!AmbientFxCanvas.Env.AllowAmbientLoops)
+                {
+                    _shimmerHost.IsVisible = false;
+                    return;
+                }
+
                 if (_shimmerBar.RenderTransform is not TransformGroup group) return;
                 var slide = group.Children.OfType<TranslateTransform>().FirstOrDefault();
                 if (slide is null) return;

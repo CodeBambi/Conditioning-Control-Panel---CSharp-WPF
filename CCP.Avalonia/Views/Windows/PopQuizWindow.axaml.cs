@@ -24,8 +24,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - The 200ms <c>_keepOnTopTimer</c> is dropped entirely. Both halves of it are gone: the
     ///    topmost re-assert is covered by the property above, and the "self-close once the main
     ///    window is genuinely gone" watchdog reads <c>App.MainWindowRef</c>.
-    ///    ponytail: needs App.MainWindowRef, wired when the shell moves to Core. Dropping it also
-    ///    means nothing here can outlive the window during --render-all.
+    ///    App.MainWindowRef is NOT the blocker - it resolves here as the desktop lifetime's
+    ///    <c>MainWindow</c>, the same lookup EmiMutePromptWindow.Ask uses. The watchdog stays
+    ///    DROPPED on purpose: a 200ms static timer is the only thing in this file that can outlive
+    ///    the window, and under --render-all (no lifetime, no shell) it would tick forever against
+    ///    a null MainWindow and close every rendered quiz. Restore it with the shell, not before.
     ///  - <c>PopQuizQuestion</c> is copied to the bottom of this file: it lives in the WPF head's
     ///    PopQuizService and this project may not reference that, same as TextEditorDialog's
     ///    TextItem.
@@ -61,8 +64,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             IsOpen = true;
 
-            // ponytail: needs AvatarWindow.IsMuted / SetMuteAvatar from
-            // ConditioningControlPanel/Windows/AvatarWindow.xaml.cs (head-side). WPF muted the
+            // ponytail: needs App.AvatarWindow.IsMuted / SetMuteAvatar - the type is
+            // AvatarTubeWindow, ConditioningControlPanel/AvatarTube/AvatarTubeWindow.*.cs (there is
+            // no AvatarWindow.xaml.cs; App.xaml.cs:952 is where the name comes from). WPF muted the
             // avatar for the whole quiz so her z-order work could not cover this window, and
             // restored it in OnClosed.
 
@@ -169,7 +173,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // first Complete just dequeued (same #462 class as the lock-card fix).
             _answered = true;
             // ponytail: needs InteractionQueueService.Complete(InteractionType.PopQuiz) from
-            // ConditioningControlPanel/Services/InteractionQueueService.cs — still head-side.
+            // ConditioningControlPanel/Services/UI/InteractionQueueService.cs — still head-side,
+            // and no Core seam names an interaction queue.
             Close();
         }
 
@@ -264,11 +269,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             IsOpen = false;
 
-            // ponytail: restoring the avatar mute state needs AvatarWindow.IsMuted /
-            // SetMuteAvatar from ConditioningControlPanel/Windows/AvatarWindow.xaml.cs, and the
-            // safety net `if (!_answered) InteractionQueue.Complete(...)` needs
-            // ConditioningControlPanel/Services/InteractionQueueService.cs. Both head-side. _answered is deliberately NOT set here — that flag is what tells the
-            // safety net an unanswered quiz still owes a Complete.
+            // ponytail: restoring the avatar mute state needs App.AvatarWindow (AvatarTubeWindow,
+            // ConditioningControlPanel/AvatarTube/) and the safety net
+            // `if (!_answered) InteractionQueue.Complete(...)` needs
+            // ConditioningControlPanel/Services/UI/InteractionQueueService.cs. Both head-side.
+            // _answered is deliberately NOT set here — that flag is what tells the safety net an
+            // unanswered quiz still owes a Complete.
 
             base.OnClosed(e);
         }

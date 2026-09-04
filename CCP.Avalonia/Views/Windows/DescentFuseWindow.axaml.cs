@@ -3,13 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Animation;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Animation.Easings;
 using Avalonia.Styling;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Services.Descent;
 using Serilog;
+using MotionLevel = ConditioningControlPanel.Models.MotionLevel;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -28,9 +31,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - WPF's <c>BeginAnimation(OpacityProperty, …)</c> becomes an Avalonia <c>Animation</c>
     ///    run from code (<see cref="FadeTo"/>), with <c>FillMode.Forward</c> so the ramp sticks at
     ///    its end value the way WPF's does.
-    ///  - <c>MotionFx.Level</c>, <c>DescentRoomSfx</c>, <c>App.DescentMigration</c>,
-    ///    <c>App.DescentCountdown</c>, <c>App.ProfileSync</c> and <c>Application.Current.MainWindow</c>
-    ///    are all still in the WPF head, so each is a stub below.
+    ///  - <c>MotionFx.Level</c> is <see cref="AmbientFxCanvas.Env"/>.<c>Level</c> here, which reads
+    ///    the same <c>CoreSettings.Current.MotionLevel</c>. Reduced motion is therefore REAL on this
+    ///    head and the Core timelines get the flag they expect.
+    ///  - <c>Application.Current.MainWindow</c> is the desktop lifetime's <c>MainWindow</c>, and
+    ///    Avalonia has no settable <c>Owner</c>, so ownership is <c>Show(parent)</c>.
+    ///  - <c>DescentRoomSfx</c>, <c>App.DescentMigration</c>, <c>App.DescentCountdown</c> and
+    ///    <c>App.ProfileSync</c> are still in the WPF head, so each is a stub below.
     ///  - <c>DescentFuseCopy</c> is likewise still in the WPF head; its two sentences are inlined.
     /// </summary>
     public partial class DescentFuseWindow : Window
@@ -51,8 +58,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private const double CatchUpFadeSeconds = 0.8;
 
-        // ponytail: needs DescentFuseCopy (WPF head, Services/Descent), inlined verbatim until it
-        // moves to Core. Two sentences, and between them every word the show says.
+        // ponytail: needs ConditioningControlPanel/Services/Descent/DescentFuseCopy.cs, inlined
+        // verbatim until it moves to Core. Two sentences, and between them every word the show
+        // says. The class itself is portable - static strings, no WPF - so this is a git mv, not a
+        // port; Core's own DescentFuseHandoff already cites DescentFuseCopy.ShowAwaits by name.
         private const string ShowAwaitsLine = "The ceremony awaits.";
         private const string IgnitionCopyLine = "Year One. The spiral is yours.";
 
@@ -97,13 +106,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _backdropLayer = this.FindControl<Border>("BackdropLayer")!;
             _showLine = this.FindControl<TextBlock>("ShowLine")!;
 
-            // ponytail: needs MotionFx (WPF head, Helpers), wired when it moves to Core. Full
-            // motion is the honest default — a stub that claimed "reduced" would silently drop the
-            // whole show on every machine.
-            _reduced = false;
+            // MotionFx.Level != MotionLevel.Full, verbatim. MotionFx itself is WPF Storyboard code
+            // and stays head-side, but its DECISION is CoreSettings.Current.MotionLevel, which this
+            // head already reads through AmbientFxCanvas.Env. The flag is threaded into every Core
+            // timeline call below, so "Reduced" now really does shorten the show here.
+            // The one WPF input with no twin is the OS animation-effects cap (MotionFx.ResolveLevel
+            // forces Reduced when it is off); Avalonia exposes no cross-platform equivalent, and
+            // that cap can only ever REMOVE motion, so its absence shows what the user picked.
+            _reduced = AmbientFxCanvas.Env.Level != MotionLevel.Full;
 
-            // ponytail: needs DescentFuseStageVisual (WPF DrawingVisual), wired when the show is
-            // redrawn for this head. StageHost is left empty; every other layer is real.
+            // ponytail: needs ConditioningControlPanel/Controls/DescentFuseStageVisual.cs, a WPF
+            // DrawingVisual that cannot cross - it is redrawn for this head, not moved. StageHost
+            // is left empty; every other layer is real.
 
             if (kind == DescentShowKind.Ignition)
             {
@@ -115,7 +129,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (kind == DescentShowKind.Live)
             {
-                // ponytail: needs App.DescentMigration.HoldOffers, wired when it moves to Core.
+                // ponytail: needs DescentMigrationService.HoldOffers from
+                // ConditioningControlPanel/Services/Descent/DescentMigrationService.cs (reached as
+                // App.DescentMigration). No Core seam exposes it.
                 // Holding the ceremony back until the light returns is choreography, not defence:
                 // without it an offer answered during the drain drops the ceremony on top of a
                 // crack that is four seconds from finishing.
@@ -147,9 +163,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 var window = new DescentFuseWindow(kind);
 
-                // ponytail: needs the app shell to own a main window here (WPF set Owner from
-                // Application.Current.MainWindow). Ownerless is correct until the shell exists.
-                window.Show();
+                // WPF: `if (main != null && main.IsLoaded && !ReferenceEquals(main, window))
+                // window.Owner = main;`. Avalonia's Owner is read-only - ownership is passed to
+                // Show - so the same guards pick between the two overloads.
+                //
+                // IsVisible, not WPF's IsLoaded, and the difference matters: Avalonia's
+                // Show(parent) THROWS when the parent is not visible, and a shell minimized to the
+                // tray is loaded but not visible - which is exactly the state the app is in when a
+                // countdown reaches zero unattended. A throw here is caught below and answers null,
+                // i.e. the show silently never opens. Ownerless is a fine fallback: this is a
+                // fullscreen topmost window, not a dialog.
+                var main = (global::Avalonia.Application.Current?.ApplicationLifetime
+                    as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+                if (main is { IsVisible: true } && !ReferenceEquals(main, window)) window.Show(main);
+                else window.Show();
                 window.Activate();
 
                 Log.Information("[Fuse] {Kind} show opened ({Motion}).",
@@ -242,7 +269,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (frame.Stage == DescentFuseStage.Crack && !_crackSounded)
             {
                 _crackSounded = true;
-                // ponytail: needs DescentRoomSfx (WPF head), wired when audio moves to Core.
+                // ponytail: needs DescentRoomSfx.PlayCrack from
+                // ConditioningControlPanel/Services/Descent/DescentRoomSfx.cs. It cannot come over
+                // as-is: it reads App.DescentCountdown.AudioEnabled and resolves its file through
+                // ChaosSfx.ResolvePath, neither of which is in Core. CoreAudio.PlayOneShot is the
+                // seam it would use - and is itself unseeded on this head (App.axaml.cs), so the
+                // sting would still be silent.
             }
 
             if (frame.Stage >= DescentFuseStage.Bloom && !_backdropRaised)
@@ -255,8 +287,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (_kind == DescentShowKind.Live && !_witnessedMarked)
                 {
                     _witnessedMarked = true;
-                    // ponytail: needs App.DescentCountdown.MarkLastNightWitnessed, wired when the
-                    // countdown service moves to Core.
+                    // ponytail: needs DescentCountdownService.MarkLastNightWitnessed from
+                    // ConditioningControlPanel/Services/Descent/DescentCountdownService.cs. The
+                    // keepsake it writes is a settings field, but nothing in Core owns the write.
                 }
 
                 // The light is back, so the door may open.
@@ -277,12 +310,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (frame.SinceBloom < 0) return;
 
-            // ponytail: needs App.DescentMigration.IsCeremonyOpen — false here, so this head always
-            // walks the timeout branch and shows the standing line rather than crossfading.
+            // ponytail: needs DescentMigrationService.IsCeremonyOpen
+            // (ConditioningControlPanel/Services/Descent/DescentMigrationService.cs) — false here,
+            // so this head always walks the timeout branch and shows the standing line rather than
+            // crossfading. That is the contract's own no-offer path, not a fake one: the ceremony
+            // really is still coming on the next sync, so nothing is written and nothing loops.
             switch (_handoff.Advance(frame.SinceBloom, ceremonyOpen: false))
             {
                 case DescentHandoffAction.Resync:
-                    // ponytail: needs App.ProfileSync.SyncProfileAsync, wired when sync moves to Core.
+                    // ponytail: needs ProfileSyncService.SyncProfileAsync from
+                    // ConditioningControlPanel/Services/Settings/ProfileSyncService.cs. No Core seam.
                     break;
 
                 case DescentHandoffAction.CrossfadeToCeremony:
@@ -387,7 +424,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (!_holdingOffers) return;
             _holdingOffers = false;
-            // ponytail: needs App.DescentMigration.ReleaseOffers, wired when it moves to Core.
+            // ponytail: needs DescentMigrationService.ReleaseOffers - the paired release for the
+            // HoldOffers above, same file, same missing seam.
         }
 
         private void SafeClose()

@@ -57,8 +57,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             base.OnOpened(e);
 
-            // ponytail: needs WebcamTrackingService (IsRunning / Calibration / OnGazeMove /
-            // OnTrackingStateChanged), wired when it moves to Core. With it back, this checks
+            // ponytail: needs ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs
+            // (IsRunning / Calibration / OnGazeMove / OnTrackingStateChanged). It is head-only by
+            // construction and no Core seam names a tracker. With it back, this checks
             // both preconditions, subscribes OnGazeMove and closes the window when the service
             // stops. Without it there is no tracking to visualise, which is exactly the WPF
             // original's first error path, so it takes that path verbatim.

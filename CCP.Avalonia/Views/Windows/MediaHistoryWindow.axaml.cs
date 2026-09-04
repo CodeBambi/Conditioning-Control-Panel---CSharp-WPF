@@ -109,8 +109,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// WPF read <c>App.MediaHistory.GetSnapshot()</c> and subscribed to EntryAdded / Cleared.
-        /// ponytail: needs MediaHistoryService, wired when it moves to Core. Until then these
-        /// placeholder rows let the list, the filters and the preview all draw their real states.
+        /// ponytail: needs ConditioningControlPanel/Services/Media/MediaHistoryService.cs. Until
+        /// then these placeholder rows let the list, the filters and the preview all draw their
+        /// real states.
         /// </summary>
         private static List<MediaHistoryRow> LoadRows()
         {
@@ -222,8 +223,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             _previewMissing.IsVisible = false;
 
-            // ponytail: the video and animated-GIF branches need a media stack (WPF used
-            // MediaElement and XamlAnimatedGif); wired when one is chosen for the Avalonia head.
+            // ponytail: the video and animated-GIF branches need a media stack. WPF used
+            // MediaElement and XamlAnimatedGif, both WPF-only; the Avalonia head has picked no
+            // replacement yet and adding one is a CCP.Avalonia.csproj change, which no view layer
+            // owns. A still Bitmap of frame 1 is deliberately NOT drawn for the GIF case - a frozen
+            // frame in a preview pane labelled "preview" reads as a broken animation, and the
+            // missing-media plate says the truth.
             if (row.IsVideo)
             {
                 _previewImage.IsVisible = false;

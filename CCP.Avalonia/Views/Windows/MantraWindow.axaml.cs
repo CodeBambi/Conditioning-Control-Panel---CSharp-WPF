@@ -22,9 +22,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    come from <c>CoreSettings.Current</c> (MantraPool, MantraDefaultCount) rather than an
     ///    invented English line; <see cref="SampleStreak"/> still drives the warm palette so the
     ///    render shows a live scene rather than a cold empty one.
-    ///  - Five WPF Storyboards (pulse, shake, letter-pulse, wrong-shake, glow) are dropped:
-    ///    Avalonia has no Storyboard and every one of them is begun from a service event that is
-    ///    stubbed above. ponytail: re-add as Avalonia Animations when MantraService reaches Core.
+    ///  - Five WPF Storyboards (pulse, shake, letter-pulse, wrong-shake, glow) are dropped, and
+    ///    MantraService is NOT what blocks four of them - it is that Avalonia's
+    ///    <c>TransformAnimator</c> seizes the target's <c>RenderTransform</c> and throws on a
+    ///    code-held <c>Transform</c>, so a ported shake/pulse has to be a tween stepped off a
+    ///    shared ~16ms <c>DispatcherTimer</c> (ChaosHudWindow is the worked example in this head).
+    ///    Letter-pulse is blocked differently and permanently: its target is a <c>Run</c>, which is
+    ///    not a <c>Visual</c>, so no Avalonia <c>Animation</c> can address it at all - the
+    ///    stepped-timer colour hop already in <see cref="UpdateHighlights"/> is its replacement.
     ///  - <c>DispatcherTimer</c> exists in Avalonia; the float timer is stopped in
     ///    <c>OnClosed</c> as well as <c>CleanupAndClose</c>, because --render-all closes the
     ///    window externally and a 16ms tick would outlive the view in that shared process.
@@ -208,8 +213,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 };
                 timer.Start();
 
-                // ponytail: the WPF LetterPulseStoryboard fired here; re-add as an Avalonia
-                // Animation alongside the other four.
+                // The WPF LetterPulseStoryboard fired here. It cannot be an Avalonia Animation:
+                // the target is the Run above and Animation.RunAsync takes a Visual. The DispatcherTimer
+                // colour hop immediately above IS the port of it, stepped rather than animated.
             }
 
             _prevMatchCount = matchCount;

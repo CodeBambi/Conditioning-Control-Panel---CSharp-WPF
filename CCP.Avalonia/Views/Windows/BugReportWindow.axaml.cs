@@ -73,9 +73,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // WPF ran this from Loaded. The preview is filled here so the headless render shows it.
             RefreshPreview();
-            // ponytail: needs BugReportService.SubmitAsync, wired when it moves to Core. Until then
-            // Send stays disabled (XAML) and the status line says so; label_coming_soon is the
-            // closest existing key.
+            // ponytail: needs BugReportService.SubmitAsync from
+            // ConditioningControlPanel/Services/BugReportService.cs, which is pinned to the head by
+            // App.Mods and its crash-log reader, not by anything WPF. Until then Send stays disabled
+            // (XAML) and the status line says so; label_coming_soon is the closest existing key.
             _txtStatus.Text = Loc.Get("label_coming_soon");
             Opened += (_, _) => _txtDescription.Focus();
         }
@@ -102,8 +103,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void RefreshPreview()
         {
-            // ponytail: needs BugReportService.CreateDraft/RenderPreview, wired when it moves to Core.
-            // Until then the metadata is what this process can see and the counts are zero.
+            // ponytail: needs BugReportService.CreateDraft/RenderPreview
+            // (ConditioningControlPanel/Services/BugReportService.cs). Until then the metadata is
+            // what this process can see and the counts are zero.
+            //
+            // DO NOT "fix" active_mod by writing CoreMods.ActiveModId here. BugReportService
+            // .ResolveActiveModId is a PRIVACY rule, not a lookup: a mod that is not built-in is
+            // reported as the literal "custom-mod", because a locally authored mod id narrowly
+            // identifies its author in a small community, and "unknown" is the no-mod-layer answer.
+            // Restoring the line means restoring that three-branch rule (CoreMods.InstalledMods
+            // carries ModPackage.IsBuiltIn, so it is expressible) - and this preview is what the
+            // user reads before consenting to send, so it must show exactly what would be sent.
             var appVersion = typeof(BugReportWindow).Assembly.GetName().Version?.ToString(3) ?? "?";
             _txtMetadataSummary.Text =
                 $"app_version : {appVersion}\n" +

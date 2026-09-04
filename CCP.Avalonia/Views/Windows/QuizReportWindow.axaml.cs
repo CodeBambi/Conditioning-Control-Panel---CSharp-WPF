@@ -226,7 +226,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <summary>
     /// Copied from ConditioningControlPanel/Services/Quiz/QuizService.cs: the report's payload
     /// types live in the WPF head, not in CCP.Core, and neither may be touched by this port.
-    /// ponytail: needs QuizService, delete these three when the quiz types move to Core.
+    /// ponytail: delete these three when the quiz payload types move out of
+    /// ConditioningControlPanel/Services/Quiz/QuizService.cs into Core. QuizService itself is not
+    /// what is needed here - only its nested QuizCategory / QuizDifficulty / QuizReport shapes are.
     /// </summary>
     public enum QuizCategory
     {

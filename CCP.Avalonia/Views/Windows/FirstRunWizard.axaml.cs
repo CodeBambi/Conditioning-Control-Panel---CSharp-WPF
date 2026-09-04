@@ -5,6 +5,8 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -12,6 +14,8 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.Styling;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
@@ -643,15 +647,49 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// ponytail: needs MotionFx.AllowTransitions (the reduced-motion gate), wired when it moves
-        /// to Core. The WPF original fades the step in over 140ms and simply swaps at MotionLevel
-        /// Off; the swap is what happens here, which is also the only behaviour a headless render
-        /// can capture - a step starting at Opacity 0 photographs blank.
+        /// The only motion on this screen, and it is gated, exactly as WPF has it: at MotionLevel
+        /// Off the page simply swaps. No loop, so there is nothing for the motion kill-switch to
+        /// stop.
+        ///
+        /// <para><c>MotionFx</c> itself is WPF Storyboard code and is NOT coming to Core, but its
+        /// DECISION is <c>CoreSettings.Current.MotionLevel</c>, which this head already reads
+        /// through <see cref="AmbientFxCanvas.Env"/> - so the gate is the real one.
+        /// <c>MotionFx.AllowTransitions</c> is <c>Level != Off</c>.</para>
+        ///
+        /// <para>The animation ends at 1 and stays there (<c>FillMode.Forward</c>), and a throw
+        /// lands on the swap rather than leaving a step parked at Opacity 0 - the wizard is the
+        /// first thing a new install sees, so an invisible page here is unrecoverable.</para>
         /// </summary>
         private void FadeInCurrentStep()
         {
             var host = _step == 1 ? (Control)_step1 : _step == 2 ? _step2 : _step3;
-            host.Opacity = 1;
+
+            if (AmbientFxCanvas.Env.Level == MotionLevel.Off)
+            {
+                host.Opacity = 1;
+                return;
+            }
+
+            try
+            {
+                host.Opacity = 0;
+                _ = new Animation
+                {
+                    Duration = TimeSpan.FromMilliseconds(140),
+                    Easing = new QuadraticEaseOut(),
+                    FillMode = FillMode.Forward,
+                    Children =
+                    {
+                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0d) } },
+                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 1d) } },
+                    },
+                }.RunAsync(host);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[FirstRun] Step fade failed, swapping instead: {Error}", ex.Message);
+                host.Opacity = 1;
+            }
         }
 
         // ------------------------------------------------------------------ step 2: mod pick
