@@ -3093,6 +3093,11 @@ internal static class ArcademyHostService
         ["account_signed_in_as"] = "Signed in as",
         ["account_open_card"] = "Open my card",
         ["account_profile"] = "Profile",
+        // THE FRONT GATE (2026-09-03): the third account verb, the way back to the CC Labs site.
+        // Web/activity hosts only (they alone list "dashboard" in account.actions); mirrored here
+        // so a mod can re-voice it, same as the other four rows.
+        ["account_dashboard"] = "Front Gate",
+        ["account_dashboard_hint"] = "back to CC Labs",
         ["account_sign_out"] = "Sign out",
 
         // THE LOCKER (2026-08-28): RM 004 + the booth arrival beat and the purchase toast verbs.

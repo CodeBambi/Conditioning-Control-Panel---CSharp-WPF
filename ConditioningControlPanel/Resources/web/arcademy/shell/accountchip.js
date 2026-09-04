@@ -11,7 +11,15 @@
  *
  *   init.account = { name, avatarUrl, actions }      (additive, legally absent)
  *   profile frame may carry `account` with the same shape (a late fetch)
- *   page -> host  { type:'account-action', action:'profile'|'signout' }
+ *   page -> host  { type:'account-action', action:'profile'|'dashboard'|'signout' }
+ *
+ * THE FRONT GATE (community ask, 2026-09-03): a player who walked into the
+ * campus from the site had no way back out of it - the menu could reach a
+ * profile page and it could end a session, and neither of those is "take me
+ * home". `dashboard` is that third verb. It is still a HOST verb: the page
+ * knows the label and nothing else, so the web host walks to the dashboard and
+ * the Discord activity opens the same address in the system browser (a
+ * top-level navigation closes an activity on Android).
  *
  * THREE RULES
  *  1. THE PAGE HOLDS NO URL. The host lists the ACTIONS it can honour and the
@@ -28,7 +36,7 @@
  * and the ladder never notices. The two document listeners are passive.
  * ==========================================================================*/
 
-const ACTIONS = Object.freeze(['profile', 'signout']);
+const ACTIONS = Object.freeze(['profile', 'dashboard', 'signout']);
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -119,11 +127,19 @@ export function createAccountChip({ t, account, isMobile, onOpenCard, onAction, 
   let destroyed = false;
   const items = [];
 
-  function item(cls, label, fn) {
-    const b = el('button', 'arc-acct-item ' + cls, label);
+  /* `hint` is a second, quieter line inside the same button (plain elements,
+   * never innerHTML). It is part of the button's accessible name on purpose:
+   * "Front Gate, back to CC Labs" is the whole point of the row. */
+  function item(cls, label, fn, hint) {
+    const b = el('button', 'arc-acct-item ' + cls);
     b.type = 'button';
     b.setAttribute('role', 'menuitem');
     b.tabIndex = -1;
+    b.appendChild(el('span', 'arc-acct-label', label));
+    if (hint) {
+      b.appendChild(el('span', 'arc-acct-hint', hint));
+      b.setAttribute('title', label + ' - ' + hint);
+    }
     b.addEventListener('click', () => { close(true); try { fn(); } catch (e) { say('account item threw: ' + ((e && e.message) || e)); } });
     menu.appendChild(b);
     items.push(b);
@@ -137,6 +153,14 @@ export function createAccountChip({ t, account, isMobile, onOpenCard, onAction, 
     }
     if (acct.actions.indexOf('profile') >= 0) {
       item('is-profile', tt('account_profile', 'Profile'), () => { if (onAction) onAction('profile'); });
+    }
+    if (acct.actions.indexOf('dashboard') >= 0) {
+      item(
+        'is-dashboard',
+        tt('account_dashboard', 'Front Gate'),
+        () => { if (onAction) onAction('dashboard'); },
+        tt('account_dashboard_hint', 'back to CC Labs'),
+      );
     }
     if (acct.actions.indexOf('signout') >= 0) {
       item('is-signout', tt('account_sign_out', 'Sign out'), () => { if (onAction) onAction('signout'); });

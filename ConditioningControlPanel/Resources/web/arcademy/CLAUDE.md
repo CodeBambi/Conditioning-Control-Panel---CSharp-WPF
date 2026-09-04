@@ -366,11 +366,15 @@ shell/idcard.js    THE STUDENT ID: the laminated card in the corner of the
 shell/accountchip.js THE ACCOUNT CHIP: the round photo miniature at the far right
                    of the topbar AND of the campus top-right cluster, and the
                    front-desk menu under it (Signed in as / Open my card /
-                   Profile / Sign out). A HOST SLOT: mounted only when
+                   Profile / Front Gate / Sign out). A HOST SLOT: mounted only when
                    `init.account` (or `account` on a `profile` frame) arrives -
                    the C# host never sends it, so the desktop is unchanged. The
                    page holds NO url: it posts `account-action {action}` and
-                   the host walks (cclabs-web PROFILE-CONTRACT §8). Photo =
+                   the host walks (cclabs-web PROFILE-CONTRACT §8). FRONT GATE
+                   (2026-09-03) is the third verb, `dashboard`: a player who
+                   came in from the site had no breadcrumb back out. Drawn only
+                   when the host LISTS it in `actions`, which the C# host never
+                   does (the desktop's Play tab is already the way out). Photo =
                    same-origin path or a drawn monogram; "Open my card" is the
                    shell's own showIdCard. No Esc rung (trap 59's shape)
 shell/annexreveal.js THE NIGHT THE WALL MOVED: the once-ever reveal cinematic
