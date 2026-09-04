@@ -2276,21 +2276,36 @@ namespace ConditioningControlPanel.Services
         // DropShadowEffect glow on top of that. At 0% the ramp is 2 writes per flash; at 100% it was
         // ~60 in and ~60 out per window, times MAX_CONCURRENT_FLASH. Two cheap brakes, layered path
         // only: cap the ramp length, and only write when the alpha has actually moved a visible step.
-        // Compositor/solid-host flashes write LayerItem.Opacity / a hosted element's Opacity, which
-        // costs nothing, so they keep the exact per-frame ramp.
+        //
+        // meadow again (#1134, still spiking on 6.9.1): that fix exempted the COMPOSITOR path on the
+        // premise that a LayerItem.Opacity write "costs nothing". It does not. Every write moves
+        // FlashLayer.FlashItem.Opacity, FlashLayer.Update sees the change and reports Dirty, and
+        // CompositorEngine.OnRendering answers one dirty layer with PresentSurface for the whole
+        // MAIN surface - a fullscreen raster of the entire layer stack plus a layered present, on
+        // every monitor. So a fading flash pins the unified renderer at one fullscreen present per
+        // composition frame, and because the ramp scales with the slider the duty cycle saturates:
+        // at 100% (1.0 s in, 1.0 s out) a flash is ramping for essentially its whole life, so the
+        // surface is dirty continuously with up to MAX_CONCURRENT_FLASH_HOST items on it. Lower
+        // percentages leave clean gaps, which is exactly the "smooth below 100%" the report says.
+        // Only the SOLID host is genuinely cheap (a plain WPF element opacity, composited off the
+        // UI thread by WPF itself), so the compositor now rides the quantiser as well. It keeps the
+        // slider's full ramp LENGTH: the quantiser bounds the writes per fade (target/epsilon),
+        // which makes a long ramp cost no more presents than a short one.
         private const double LAYERED_MAX_FADE_SECONDS = 0.5;
-        private const double LAYERED_ALPHA_EPSILON = 1.0 / 32.0;
+        private const double FADE_ALPHA_EPSILON = 1.0 / 32.0;
 
         /// <summary>
         /// Fade ramp length for one window. The layered (per-window, AllowsTransparency) path is
-        /// clamped to <see cref="LAYERED_MAX_FADE_SECONDS"/>; compositor and solid-host visuals are
-        /// cheap to nudge and keep the slider's full ramp. Pure so it can be unit-tested.
+        /// clamped to <see cref="LAYERED_MAX_FADE_SECONDS"/> because its cost is per FRAME of ramp;
+        /// compositor and solid-host visuals keep the slider's full ramp (their writes are thinned
+        /// instead, so ramp length is cost-neutral). Pure so it can be unit-tested.
         /// </summary>
-        internal static double ResolveFadeSeconds(double fadeSeconds, bool cheapAlpha)
-            => cheapAlpha ? fadeSeconds : Math.Min(fadeSeconds, LAYERED_MAX_FADE_SECONDS);
+        internal static double ResolveFadeSeconds(double fadeSeconds, bool fullRamp)
+            => fullRamp ? fadeSeconds : Math.Min(fadeSeconds, LAYERED_MAX_FADE_SECONDS);
 
         /// <summary>
-        /// Quantiser for the layered fade path: skip an opacity write the viewer cannot see, but
+        /// Quantiser for the layered and compositor fade paths: skip an opacity write the viewer
+        /// cannot see (on the compositor that write would cost a fullscreen present), but
         /// ALWAYS write the terminal values - the exact target alpha (so a fade-in settles where the
         /// Opacity slider says) and an exact 0 (the heartbeat's removal trigger reads
         /// <c>newAlpha &lt;= 0</c>, so a skipped zero would strand the window on screen).
@@ -2394,12 +2409,22 @@ namespace ConditioningControlPanel.Services
                     var showThisWindow = DateTime.Now < window.ExpiresAt && !window.IsFadingOut;
                     var targetAlpha = showThisWindow ? maxAlpha : 0.0;
 
+                    // #1134: the compositor spawn is off-thread, so the item can still be missing
+                    // here (the liveness check above kept the window alive for exactly that case).
+                    // Hold the ramp instead of running it forward against a dropped write, or the
+                    // flash pops in at whatever alpha the ramp reached while it was converting.
+                    if (window.UsesLayer && window.LayerItem == null) continue;
+
                     // Fade in/out per-window~ uwu (VisualOpacity routes to the hosted root in solid mode)
-                    // Layered windows pay a monitor-sized blit per opacity write, so their ramp is
-                    // clamped and their writes quantised; the ramp itself still advances every frame
-                    // (window.FadeAlpha), only the writes are thinned.
-                    var cheapAlpha = window.UsesLayer || window.UsesHost;
-                    var winFadeSeconds = ResolveFadeSeconds(fadeSeconds, cheapAlpha);
+                    // Only the SOLID host is cheap to nudge. A layered window pays a monitor-sized
+                    // blit per opacity write; a compositor write marks FlashLayer dirty, and the
+                    // engine answers that with a fullscreen re-raster + present of the shared
+                    // surface on every monitor (#1134). Both therefore quantise their writes; the
+                    // ramp itself still advances every frame (window.FadeAlpha), only the writes are
+                    // thinned. The compositor keeps the slider's full ramp length because the
+                    // quantiser, not the frame rate, is what bounds its writes.
+                    var cheapAlpha = window.UsesHost;
+                    var winFadeSeconds = ResolveFadeSeconds(fadeSeconds, fullRamp: cheapAlpha || window.UsesLayer);
                     var fadeStep = winFadeSeconds > 0 ? dt / winFadeSeconds : 1.0;
 
                     var currentAlpha = cheapAlpha ? window.VisualOpacity : window.FadeAlpha;
@@ -2407,7 +2432,7 @@ namespace ConditioningControlPanel.Services
                     {
                         var newAlpha = Math.Min(targetAlpha, currentAlpha + fadeStep);
                         window.FadeAlpha = newAlpha;
-                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, LAYERED_ALPHA_EPSILON))
+                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, FADE_ALPHA_EPSILON))
                         {
                             window.VisualOpacity = newAlpha;
                             window.LastWrittenAlpha = newAlpha;
@@ -2417,7 +2442,7 @@ namespace ConditioningControlPanel.Services
                     {
                         var newAlpha = Math.Max(0.0, currentAlpha - fadeStep);
                         window.FadeAlpha = newAlpha;
-                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, LAYERED_ALPHA_EPSILON))
+                        if (cheapAlpha || ShouldWriteAlpha(window.LastWrittenAlpha, newAlpha, targetAlpha, FADE_ALPHA_EPSILON))
                         {
                             window.VisualOpacity = newAlpha;
                             window.LastWrittenAlpha = newAlpha;
