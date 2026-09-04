@@ -11,7 +11,9 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
@@ -184,14 +186,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ============================== motion ==============================
 
         /// <summary>
-        /// ponytail: needs MotionFx (WPF head, Services/MotionFx.cs), wired when it moves to Core.
-        /// Full motion is the honest default — a stub that claimed "reduced" would silently drop
-        /// every loop in this file on every machine. The two gates are kept apart because the
-        /// original distinguishes them: loops are ambient, the flare and the splash fade are
-        /// transitions.
+        /// MotionFx's two gates, both real on this head. They are kept apart because the original
+        /// distinguishes them: loops are ambient, the flare and the splash fade are transitions.
+        ///
+        /// <para>PROPERTIES, not the consts they replaced: MotionFx is a property on WPF too, and
+        /// a field captured once would leave the ember loop running for the rest of the session
+        /// after someone turned motion off mid-run.</para>
+        ///
+        /// <para>ponytail: the ONE thing WPF has that this head does not is the cap to Reduced
+        /// when Windows' animation-effects flag is off — see AmbientFxCanvas.Env.Level, which owns
+        /// that note. AllowTransitions is spelled out rather than read from Env because Env carries
+        /// only the ambient half; MotionFx.cs:56 is this same comparison.</para>
         /// </summary>
-        private static readonly bool AllowAmbientLoops = true;
-        private static readonly bool AllowTransitions = true;
+        private static bool AllowAmbientLoops => AmbientFxCanvas.Env.AllowAmbientLoops;
+
+        private static bool AllowTransitions => CoreSettings.Current.MotionLevel != MotionLevel.Off;
 
         // ---- the parts ----
         private readonly Canvas _emberHost;

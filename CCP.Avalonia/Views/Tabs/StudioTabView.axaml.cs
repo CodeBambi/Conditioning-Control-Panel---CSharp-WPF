@@ -12,7 +12,10 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
@@ -50,17 +53,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <para><b>What is stubbed, and why.</b> Everything the WPF code-behind reaches into the app
     /// head for: <c>MainWindow.ToggleWallFeature</c> (the eleven wall modules' quick-toggle, which
     /// owns the session-lock refusal and the per-feature service start/stop),
-    /// <c>BarkService.NotifyFeatureOpened</c>, the rack's feature art and the door medallion
-    /// (whose resolver is done - <c>CoreModArt</c> plus <c>Helpers.ModArt</c> - and whose art is
-    /// linked; what is missing is an Image target in the .axaml, see <c>RefreshRackArt</c> and
-    /// <c>ApplyDoorIcon</c>), <c>MotionFx</c> and <c>PerimeterCometAdorner</c> (the detail
-    /// crossfade, the dot ping and the active tile's comet), and <c>HapticsTabView</c> with its
-    /// <c>ChkHapticsEnabled</c> master box. Each is marked <c>ponytail:</c> at its site.</para>
+    /// <c>BarkService.NotifyFeatureOpened</c>, <c>PerimeterCometAdorner</c> (the active tile's
+    /// comet) and the detail crossfade. Each is marked <c>ponytail:</c> at its site.</para>
+    ///
+    /// <para><b>The art is real.</b> The rack's feature plates and the door medallion resolve
+    /// through <see cref="ModArt.TryLoad"/> over <see cref="CoreModArt"/> against the
+    /// <c>Assets/features</c> and <c>Assets/nav</c> the csproj links, repainting on
+    /// <see cref="CoreMods.ModChanged"/>. Every authored wash, glyph and scrim stays underneath as
+    /// the no-art fallback, which is the WPF null path.</para>
     ///
     /// <para><b>Quiet surface (PLAN §2.7).</b> No ambient loop is registered for this view and
     /// none may be. On WPF the one exception is the checked tile's perimeter comet, gated twice on
-    /// <c>MotionFx</c>; with neither the adorner nor the gate on this head, the port carries no
-    /// clock at all - which is the safe direction, not a new one.</para>
+    /// <c>MotionFx</c>; the gate has a twin here now
+    /// (<c>AmbientFxCanvas.Env.AllowAmbientLoops</c>), but the adorner does not, so the port
+    /// carries no clock at all - which is the safe direction, not a new one.</para>
     /// </summary>
     public partial class StudioTabView : UserControl
     {
@@ -149,6 +155,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             public Grid? Tile;
             public TextBlock? TileLabel;
             public Ellipse? TileDot;
+
+            /// <summary>The tile's art layer. Its Background is the shared accent gradient until
+            /// <see cref="RefreshRackArt"/> resolves this module's plate, then an ImageBrush of
+            /// it. Null for the three art-less modules.</summary>
+            public Border? Plate;
+
+            /// <summary>The resting strip's 28px chip. Same swap, same fallback - except on a
+            /// tiered row, where the livery well owns the background and art must not take it.</summary>
+            public Border? Chip;
         }
 
         private readonly List<StudioRackEntry> _entries = new();
@@ -202,6 +217,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // Before BuildRack: the per-row closures it registers are appended to these.
             RegisterChromeTints();
             BuildRack();
+            // Seeds the art for whichever mod is ALREADY active at construction, the same way
+            // RetintChrome below seeds the accent; RepaintModAwareChrome handles every switch after.
+            try { RefreshRackArt(); ApplyDoorIcon(); }
+            catch (Exception ex) { Log.Debug(ex, "[Studio] the first art pass failed"); }
             // Land on the default without announcing it: nothing is on screen yet, and the
             // FeatureOpened bark belongs to the moment the user can actually see the panel.
             SelectEntry(DefaultRackKey, announce: false);
@@ -227,14 +246,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 ChipHueWashBrush.GradientStops[1].Color = WithAlpha(c, 0x1F);
             });
 
-            // The active tile's plate. On WPF this layer is the module's feature art behind a
-            // fade mask; here it is the same accent wash the art-less chips wear, so the checked
+            // The active tile's plate, for a module whose art does not resolve. On WPF this layer
+            // is the module's feature art behind a fade mask; RefreshRackArt paints that art per
+            // row, and this accent wash is what a row without any wears instead, so the checked
             // row still reads as a tile rather than as a taller strip.
-            // ponytail: the resolver and the art are BOTH here now - Helpers.ModArt.TryLoad(
-            // "features/" + e.Art) over CoreModArt, against Assets/features/*.png, which the
-            // csproj links. What is missing is the target: this layer is a LinearGradientBrush in
-            // this file, and swapping it for an ImageBrush per row means changing the row template
-            // in StudioTabView.axaml too. Do both together.
             _accentTints.Add(c =>
             {
                 TilePlateBrush.GradientStops[0].Color = WithAlpha(HueRotate(c, 38), 0x66);
@@ -315,27 +330,80 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// painted with. A null resolve KEEPS the current art: "the new mod ships no override and
         /// the embedded file failed to decode this time" must cost nothing, and blanking the row
         /// would turn a transient decode failure into a permanently empty rack.
-        /// <para>ponytail: neither the resolver nor the art blocks this any more —
-        /// <c>Helpers.ModArt.TryLoad("features/&lt;e.Art&gt;")</c> answers over
-        /// <see cref="CoreModArt"/>, and <c>Assets/features/*.png</c> is linked as
-        /// <c>avares://CCP.Avalonia/Resources/features/</c>. The blocker is the target: the rows
-        /// are painted with <c>TilePlateBrush</c>, a gradient built in this file, so there is no
-        /// ImageBrush to write into until the row template in StudioTabView.axaml grows one. A
-        /// no-op rather than a lie, and now a one-file-plus-markup job rather than a wait.</para>
+        /// <para>The tile plate and the resting chip are per-row Borders built in
+        /// <see cref="BuildArtTile"/> and <see cref="BuildRestingStrip"/> - only the accent
+        /// gradients behind them are shared - so this writes an ImageBrush into each row's own
+        /// Background and leaves the shared brushes alone.</para>
+        /// <para>A TIERED row keeps its livery well: the gold/diamond fill under the glyph is how
+        /// the tier reads on a small chip, and art over it would delete the mark. WPF paints the
+        /// tier livery after the art for the same reason.</para>
         /// </summary>
-        private void RefreshRackArt() { }
+        private void RefreshRackArt()
+        {
+            foreach (var e in _entries)
+            {
+                if (e.Art == null) continue;                 // art-less module: nothing to resolve
+
+                Bitmap? bmp;
+                try { bmp = ModArt.TryLoad("features/" + e.Art); }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "[Studio] feature art {Art} would not load", e.Art);
+                    continue;
+                }
+                if (bmp == null) continue;                   // keep what is already painted
+
+                // UniformToFill + right alignment: the tile is 56px tall and much wider, and the
+                // fade mask eats the left edge, so the interesting half of a feature plate is the
+                // right one.
+                if (e.Plate != null)
+                    e.Plate.Background = new ImageBrush(bmp)
+                    {
+                        Stretch = Stretch.UniformToFill,
+                        AlignmentX = AlignmentX.Right,
+                    };
+
+                // The chip takes the art WHATEVER its tier - WPF's order is art first, then the
+                // tier well only `if (chipArt == null)`, so a tiered module with art (Haptics)
+                // wears its plate under the gold frame rather than the amber well. The glyph goes
+                // with it: over there an art chip is built with no child at all.
+                if (e.Chip != null)
+                {
+                    e.Chip.Background = new ImageBrush(bmp)
+                    {
+                        Stretch = Stretch.UniformToFill,
+                        AlignmentX = AlignmentX.Center,
+                        AlignmentY = AlignmentY.Center,
+                    };
+                    if (e.Chip.Child != null) e.Chip.Child.IsVisible = false;
+                }
+            }
+        }
 
         /// <summary>
         /// The page-header door medallion. Same file the nav rail's Studio door uses, so a mod that
         /// reskins the rail reskins this too instead of leaving the header on stock art.
-        /// <para>ponytail: both halves resolve today —
-        /// <c>Helpers.ModArt.TryLoad("nav/door_studio.png")</c>, and <c>Assets/nav/</c> is linked
-        /// into this head. The blocker is that <c>ImgStudioDoorIcon</c> is a <c>Border</c> with an
-        /// emoji in it, not an <c>Image</c>: StudioTabView.axaml has to give it an Image (or take
-        /// an ImageBrush background) in the same change, and that file is markup this layer does
-        /// not own. The wash chip stands in until then.</para>
+        /// <para>A null resolve leaves the wash chip and its glyph exactly as they are, which is
+        /// the WPF null path - the medallion is decoration and a mod that ships none must cost
+        /// nothing. The glyph is only hidden once there is a picture to hide it behind.</para>
         /// </summary>
-        private void ApplyDoorIcon() { }
+        private void ApplyDoorIcon()
+        {
+            if (ImgStudioDoorArt == null) return;
+
+            Bitmap? bmp;
+            try { bmp = ModArt.TryLoad("nav/door_studio.png"); }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[Studio] the door medallion would not load");
+                return;
+            }
+            if (bmp == null) return;
+
+            ImgStudioDoorArt.Source = bmp;
+            ImgStudioDoorArt.IsVisible = true;
+            if (TxtStudioDoorGlyph != null) TxtStudioDoorGlyph.IsVisible = false;
+        }
 
         /// <summary>
         /// Replays every registered accent closure with the mod's current accent. Cheap and
@@ -420,11 +488,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// The Haptics page, re-hosted as a rack module. <c>MainWindow.HapticsTab</c> forwards
         /// here, so all ~71 <c>HapticsTab.&lt;x:Name&gt;</c> dereferences across the MainWindow
         /// partials keep working verbatim.
-        /// <para>ponytail: needs <c>Views/Tabs/HapticsTabView</c>, which is not on this head yet;
-        /// this returns the placard standing in for it, so the property's shape survives. Change
-        /// the return type back to <c>HapticsTabView</c> when the page lands.</para>
+        /// <para>The page IS the module now, hosted raw. Two shell partials reach through this
+        /// property by name - MainShellWindow.Haptics.cs's 34 forwards and
+        /// MainShellWindow.TabFxTakeoverLabStatus.cs's SetHapticsStatusPulse, whose lookup is
+        /// deliberately two hops (StudioRack -&gt; PanelHaptics -&gt; HapticStatusDot) because the
+        /// dot lives in this page's own namescope.</para>
         /// </summary>
-        internal Control HapticsPanel => PanelHaptics;
+        internal HapticsTabView HapticsPanel => PanelHaptics;
 
         // =====================================================================================
         //  rack construction
@@ -484,10 +554,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // Tier 1: the rack's one paid module, same bar as the premium rail's chip.
             Add("haptics", "📳", "vibe.png", "Haptics", "tab_haptics", PanelHaptics, null, null,
                 () => CoreSettings.Current.Haptics?.Enabled,
-                // ponytail: WPF flips PanelHaptics.ChkHapticsEnabled here, so the page's own
-                // handler AND its premium gate run with the write. HapticsTabView is not on this
-                // head, so the row keeps its honest dot and loses only the gesture; writing the
-                // nested flag from here would skip the gate, which is the unsafe direction.
+                // REFUSED, and the page being hosted now does not change it. WPF flips
+                // PanelHaptics.ChkHapticsEnabled so the page's own handler AND its premium gate
+                // run with the write; HapticsTabView.ChkHapticsEnabled_Changed is itself an empty
+                // stub on this head (all 34 of its forwards are - see the header of
+                // CCP.Avalonia/Views/Windows/MainShellWindow.Haptics.cs), so the flip would move a
+                // checkbox and nothing else. Writing CoreSettings.Current.Haptics.Enabled straight
+                // from here instead would skip the gate AND start no device, which is worse than
+                // an inert gesture on a page whose subject is hardware that touches the user.
                 toggle: null,
                 tier: 1);
 
@@ -676,11 +750,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 BorderThickness = new Thickness(1),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 9, 0),
-                // ponytail: the module's feature art goes here as an ImageBrush over
-                // Helpers.ModArt.TryLoad("features/" + e.Art) - both the loader and the art are
-                // here, this Background just has to become one. The emoji on the hue-wash is
-                // exactly the fallback WPF already shows for an art-less module, so a row without
-                // art keeps looking right either way.
+                // The hue-wash under the emoji is the no-art fallback; RefreshRackArt overwrites
+                // it with the module's feature plate when one resolves, which is exactly what WPF
+                // shows for a module with art and without.
                 Background = ChipHueWashBrush,
                 Child = new TextBlock
                 {
@@ -702,6 +774,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     ? Color.FromRgb(0x1E, 0x33, 0x40)    // deep ice under diamond
                     : Color.FromRgb(0x3D, 0x33, 0x1E));  // dark amber under gold
             }
+            e.Chip = chip;
             Grid.SetColumn(chip, 0);
             grid.Children.Add(chip);
 
@@ -813,6 +886,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Background = TilePlateBrush,
                 OpacityMask = TileArtFadeMask,
             };
+            e.Plate = plate;
             tile.Children.Add(plate);
 
             tile.Children.Add(new Border
@@ -855,8 +929,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <para>Height is CLEARED rather than set back to 38 so RackEntryStyle's own Height setter
         /// takes the row again — one place owns the resting height.</para>
         /// <para>ponytail: WPF also lights a <c>PerimeterCometAdorner</c> on the checked tile here,
-        /// gated twice on <c>MotionFx</c>. Neither the adorner nor the gate is on this head, so the
-        /// port carries no comet — the safe direction for a quiet surface.</para>
+        /// gated twice on <c>MotionFx</c>. The gate has a twin now
+        /// (<c>AmbientFxCanvas.Env.AllowAmbientLoops</c>); what is missing is
+        /// ConditioningControlPanel/Controls/PerimeterCometAdorner.cs, a WPF Adorner with no
+        /// Avalonia twin - the port carries no comet, the safe direction for a quiet surface.</para>
         /// </summary>
         private static void ApplyRowState(StudioRackEntry e)
         {
@@ -994,9 +1070,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// ponytail: needs <c>MainWindow.ToggleWallFeature(key)</c> for the eleven wall modules —
         /// it owns the session-lock refusal, the per-feature service start/stop and the Save — and,
         /// for the three that predate the wall (Haptics, Scheduler, Ramp), a flip of the panel's
-        /// own master checkbox so the panel's real handler and its premium gate run with it. Both
-        /// are WPF-head paths; wired when they move to Core. An unknown key is a quiet no-op over
-        /// there, so a typo costs a dead gesture, never a wrong write.
+        /// own master checkbox so the panel's real handler and its premium gate run with it.
+        /// ToggleWallFeature is a WPF-head path with no Core seam; the Haptics half is now blocked
+        /// one level nearer, on <c>HapticsTabView.ChkHapticsEnabled_Changed</c> being a stub. An
+        /// unknown key is a quiet no-op over there, so a typo costs a dead gesture, never a wrong
+        /// write.
         /// </summary>
         private static void QuickToggle(string key) => _ = WallToggleKeys.Contains(key);
 
@@ -1005,9 +1083,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// re-selecting deliberately re-announces, because opening a feature popup twice used to
         /// fire its bark twice too.
         /// <para>ponytail: WPF also crossfades the incoming panel over 120ms, gated on
-        /// <c>MotionFx.AllowTransitions</c>. Dropped rather than shipped un-gated: the motion
-        /// kill-switch has to be able to reach every clock on this page, and it does not exist on
-        /// this head yet.</para>
+        /// <c>MotionFx.AllowTransitions</c>. The gate is reachable now -
+        /// <c>CoreSettings.Current.MotionLevel != MotionLevel.Off</c>, which is MotionFx's own
+        /// definition and what <c>AmbientFxCanvas.Env</c> reads for the ambient half - so what is
+        /// left is only the 120ms fade itself. Still dropped here deliberately: an instant swap on
+        /// a quiet surface is not a defect, and adding a clock is the change that needs a reason.</para>
         /// </summary>
         private void SelectEntry(string? key, bool announce)
         {

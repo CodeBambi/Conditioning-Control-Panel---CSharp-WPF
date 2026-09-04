@@ -87,10 +87,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------
         // Stubs for what MainWindow owned
         // ------------------------------------------------------------------
-        // ponytail: BtnBecomeASubject_Click needs App.Patreon (free users go to Patreon, premium
-        // users to the Remote Control tab) and BtnConnectSubject_Click needs
-        // AvailableSubjectsService.TryClaimAsync plus MainWindow.ShowTab. Both are WPF-head
-        // services; wired when they move to Core, so the buttons are inert rather than wrong.
+        // ponytail: BtnBecomeASubject_Click is MainWindow.RemoteControl.cs:496 - a BRANCH, not a
+        // launch: App.Patreon.HasPremiumAccess or DailyFreeService.IsFreeToday("remote") goes to
+        // the Remote Control tab, everyone else to the Patreon page. DailyFreeService is in Core;
+        // App.Patreon is not, and there is no premium seam to stand in for it - so half the
+        // predicate is unreadable and the half that IS readable would send a paying subscriber to
+        // a payment page. Inert beats that.
+        // BtnConnectSubject_Click needs ConditioningControlPanel/Services/AvailableSubjectsService.cs
+        // (TryClaimAsync) plus the shell's ShowTab; the service polls over App.Http and marshals
+        // onto System.Windows.Application, so it does not move as-is.
 
         private void BtnBecomeASubject_Click(object? sender, RoutedEventArgs e) { }
 

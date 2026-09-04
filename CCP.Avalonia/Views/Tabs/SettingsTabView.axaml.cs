@@ -150,8 +150,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // the wiring is a rename away once those partials reach Core.
         //
         // ponytail: needs MainWindow (PremiumRail, DashboardFx, Browser, Login, HomeAudio,
-        // ProgramsTab, TeaseCard, TabNavigation), PremiumFeature, TierGate, LinkPhoneDialog and
-        // LayeredAudioWindow. None of them is on this head yet.
+        // ProgramsTab, TeaseCard, TabNavigation), PremiumFeature and TierGate - all WPF-head.
+        //
+        // "LinkPhoneDialog and LayeredAudioWindow, none of them on this head" was FALSE and is
+        // gone: both are ported (CCP.Avalonia/Views/Dialogs/LinkPhoneDialog.axaml.cs and
+        // Views/Windows/LayeredAudioWindow.axaml.cs). They are the only two handlers in the WPF
+        // file that do not forward - and each is refused for its own reason, at its own site
+        // below. Neither is waiting on a service.
         // ------------------------------------------------------------------------------
         private void WireStubs()
         {
@@ -320,7 +325,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void HomeBtnAudioOutputRefresh_Click(object? sender, RoutedEventArgs e) { }  // mw.BtnAudioOutputRefresh_Click(...)
         private void HomeBtnTestAudio_Click(object? sender, RoutedEventArgs e) { }           // mw.BtnTestAudio_Click(...)
         /// <summary>Self-contained on the old dashboard too - it only opens a window.</summary>
-        private void HomeBtnAudioLayers_Click(object? sender, RoutedEventArgs e) { }         // LayeredAudioWindow.Open(this)
+        // ponytail: WPF is `LayeredAudioWindow.Open(this)` and the window is ported, with its
+        // settings half REAL (tracks, master enable, master volume, audio-only, all over
+        // CoreSettings). What is NOT ported is Open itself - dropped at
+        // CCP.Avalonia/Views/Windows/LayeredAudioWindow.axaml.cs:34 with its best-effort owner and
+        // its SINGLE-INSTANCE re-surface. That guard is load-bearing here, not window-manager
+        // polish: two of these windows are two debounced writers of the same AudioLayers list, so
+        // a bare `new + Show` would make a second click cost the user a track. Restore Open (over
+        // Avalonia's Screens API) in that file, then this is one line.
+        private void HomeBtnAudioLayers_Click(object? sender, RoutedEventArgs e) { }
 
         // -- companion + account strips --------------------------------------------------
         /// <summary>Home's companion strip. Pure navigation into the Companion door - the strip
@@ -328,7 +341,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void CompanionStrip_Click(object? sender, PointerPressedEventArgs e) { }     // mw.ShowTab("companion")
         private void BtnUnifiedLogin_Click(object? sender, RoutedEventArgs e) { }            // mw.BtnUnifiedLogin_Click(...)
         private void BtnQuickLogout_Click(object? sender, RoutedEventArgs e) { }             // mw.BtnQuickLogout_Click(...)
-        private void BtnLinkPhone_Click(object? sender, RoutedEventArgs e) { }               // new LinkPhoneDialog().ShowDialog(...)
+        // REFUSED, and not for want of the dialog: LinkPhoneDialog is ported and would open. Its
+        // FetchCode is a stub with PLACEHOLDER data (V2AuthService.AuthorizeMobileLinkAsync and
+        // QRCoder are both WPF-head), so this button would show a QR and a six-letter code that
+        // pair nothing. A dead button is a dead button; a fake one-time auth code presented as a
+        // real one is the wrong direction on the one surface that signs an account in.
+        private void BtnLinkPhone_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDiscord_Click(object? sender, RoutedEventArgs e) { }                 // mw.BtnDiscord_Click(...)
         private void ChkDiscordRichPresence_Changed(object? sender, RoutedEventArgs e) { }   // mw.ChkDiscordRichPresence_Changed(...)
 

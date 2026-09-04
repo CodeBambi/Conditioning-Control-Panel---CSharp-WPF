@@ -24,14 +24,17 @@
                                            resolves what it touches with FindControl
        Checked/Unchecked               ->  IsCheckedChanged   (Avalonia has one event)
 
-     ponytail: the eleven hero ImageBrushes (features/dtrh.png, goon_game.png, remote_control.png,
-     lab_gaze_hero.png, lab_focusgaze_hero.png, blink_trainer.png, lab_quiz_hero.png, fyp.png,
-     justdrop.png, lockdown_icon.png, loom.png) are DROPPED. They are pack:// resources of the WPF
-     head and this head ships no Resources/; each plate keeps its scrim gradient so it draws a
-     card-coloured band rather than a hole. Restore them as avares:// ImageBrushes when the art
-     moves - the same call AiPermissionsGrid and SeasonRecapCard already made.
-     ponytail: the two Chaos checkboxes bound Source={x:Static local:App.Settings}; App lives in
-     the WPF head, so they are unbound placeholders here. -->
+     The eleven hero plates are REAL. "this head ships no Resources/" was false: the csproj links
+     ../Assets/features/*.png and ../Assets/*.png as avares://CCP.Avalonia/Resources/..., and
+     Helpers.ModArt.TryLoad picks a mod's override over the shipped copy. Avalonia cannot x:Name a
+     brush (AVLN2000), so where WPF named the ImageBrush this names the Border that owns it
+     (Play*HeroPlate) and PlayTabView.axaml.cs paints it - see RefreshHeroArt, which also repaints
+     on CoreMods.ModChanged. Every scrim and card colour underneath stays exactly where it was:
+     that is the no-art fallback, and it is what draws if a plate fails to resolve.
+     The two Chaos checkboxes are a REAL round-trip, not placeholders: ChaosAnnouncerEnabled and
+     ChaosWebGameEnabled are both in Core, so where WPF binds Source={x:Static local:App.Settings}
+     TwoWay, LoadChaosBoxes / the two _Changed handlers in the code-behind read and write
+     CoreSettings instead. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -241,9 +244,9 @@
             </LinearGradientBrush>
           </Border.Background>
           <Grid>
-            <!-- ponytail: the portal art (Resources/features/dtrh.png, x:Name PlayDtrhHeroBrush on
-                 WPF) is a pack:// resource; the layer stays so the veil below keeps its floor. -->
-            <Border Opacity="0.58" IsHitTestVisible="False"/>
+            <!-- The portal art. WPF names the ImageBrush PlayDtrhHeroBrush; here the Border is
+                 what carries a name, and the 0.58 opacity is the veil below's floor either way. -->
+            <Border x:Name="PlayDtrhHeroPlate" Opacity="0.58" IsHitTestVisible="False"/>
             <!-- The veil that makes the copy legible over a busy neon illustration: near-opaque
                  under the title and blurb on the left, near-opaque again under the FALL IN column
                  on the right, open across the middle third where the vortex sits. -->
@@ -314,16 +317,20 @@
                           Click="BtnQuickStartChaos_Click">
                     <TextBlock Text="💧 Quick Drop"/>
                   </Button>
-                  <!-- ponytail: both were TwoWay to App.Settings.Current.Chaos*Enabled; App lives
-                       in the WPF head, so they are unbound here. They stay NAMED because the T2
-                       lockband is hit-test invisible and RefreshPlayCards disables them with it. -->
+                  <!-- WPF binds these TwoWay to App.Settings.Current.Chaos*Enabled; both
+                       properties are in Core, and Avalonia cannot bind a static service the same
+                       way, so LoadChaosBoxes/SaveChaosBox in the code-behind are that round-trip.
+                       No IsChecked here on purpose: a markup default is the value the load pass
+                       would have to fight (Avalonia raises IsCheckedChanged on a programmatic set
+                       too). They stay NAMED because the T2 lockband is hit-test invisible and
+                       RefreshPlayCards disables them with it. -->
                   <CheckBox x:Name="ChkPlayChaosAnnouncer"
-                            Content="Announcements"
+                            Content="Announcements" IsCheckedChanged="ChkPlayChaosAnnouncer_Changed"
                             Foreground="{DynamicResource TextLightBrush}" FontSize="11" Cursor="Hand"
                             HorizontalAlignment="Right" Margin="0,12,0,0"
                             ToolTip.Tip="Flash on-screen subtitle announcements (mantra, resistance, depth, streak) during a descent"/>
                   <CheckBox x:Name="ChkPlayChaosWebGame"
-                            Content="3D game (recommended)" IsChecked="True"
+                            Content="3D game (recommended)" IsCheckedChanged="ChkPlayChaosWebGame_Changed"
                             Foreground="{DynamicResource TextLightBrush}" FontSize="11" Cursor="Hand"
                             HorizontalAlignment="Right" Margin="0,6,0,0"
                             ToolTip.Tip="Play inside the 3D rabbit-hole tunnel (browser engine). Untick to use the classic desktop version - e.g. if the 3D one won't start on this machine."/>
@@ -365,12 +372,12 @@
           <Grid x:Name="SlotGoon">
             <Border Theme="{StaticResource PlayCard}">
               <Grid RowDefinitions="Auto,Auto,*,Auto">
-                <!-- ponytail: the duel client's wordmark (features/goon_game.png, Stretch=Uniform
-                     with Viewbox 0.03,0.22,0.94,0.68) is a pack:// resource. The #FF161622 plate
-                     it lays on is kept, so the header reads as a deliberate dark band. -->
+                <!-- The duel client's wordmark, Stretch=Uniform inside WPF's 0.03,0.22,0.94,0.68
+                     Viewbox (SourceRect here). The #FF161622 plate stays underneath it. -->
                 <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}" Height="168"
                         Background="#FF161622">
                   <Grid>
+                    <Border x:Name="PlayGoonHeroPlate" CornerRadius="16,16,0,0"/>
                     <Border CornerRadius="16,16,0,0">
                       <Border.Background>
                         <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -421,9 +428,10 @@
                     fx:TierFxBorder.Tier="1" fx:TierFxBorder.RimThickness="3">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: features/remote_control.png (PlayRemoteHeroBrush) dropped. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}" Height="168">
                     <Grid>
+                      <Border x:Name="PlayRemoteHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -510,9 +518,10 @@
                     fx:TierFxBorder.Tier="2" fx:TierFxBorder.RimThickness="3">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: features/lab_gaze_hero.png (PlayGazeHeroBrush) dropped. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}">
                     <Grid>
+                      <Border x:Name="PlayGazeHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -571,9 +580,10 @@
                     fx:TierFxBorder.Tier="2" fx:TierFxBorder.RimThickness="3">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: features/lab_focusgaze_hero.png (PlayFocusHeroBrush) dropped. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}">
                     <Grid>
+                      <Border x:Name="PlayFocusHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -634,9 +644,10 @@
                     fx:TierFxBorder.Tier="1" fx:TierFxBorder.RimThickness="3">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: features/blink_trainer.png (PlayBlinkHeroBrush) dropped. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}">
                     <Grid>
+                      <Border x:Name="PlayBlinkHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -700,9 +711,10 @@
             <Border Theme="{StaticResource PlayCard}">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: features/lab_quiz_hero.png (PlayIntakeHeroBrush) dropped. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}">
                     <Grid>
+                      <Border x:Name="PlayIntakeHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -765,9 +777,10 @@
                     fx:TierFxBorder.Tier="1" fx:TierFxBorder.RimThickness="3">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: features/fyp.png (PlayFypHeroBrush) dropped. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}">
                     <Grid>
+                      <Border x:Name="PlayFypHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -809,9 +822,10 @@
                     fx:TierFxBorder.Tier="2" fx:TierFxBorder.RimThickness="3">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: features/justdrop.png (PlayJustDropHeroBrush) dropped. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}">
                     <Grid>
+                      <Border x:Name="PlayJustDropHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -846,11 +860,10 @@
                     fx:TierFxBorder.Tier="1" fx:TierFxBorder.RimThickness="3">
               <Grid>
                 <Grid RowDefinitions="Auto,Auto,*,Auto">
-                  <!-- ponytail: lockdown_icon.png (PlayLockdownHeroBrush) dropped. It lives at the
-                       RESOURCE ROOT, not under features/ - that is the path mods key against, so
-                       keep it when the art moves. -->
+
                   <Border Grid.Row="0" Theme="{StaticResource PlayCardArtPlate}">
                     <Grid>
+                      <Border x:Name="PlayLockdownHeroPlate" CornerRadius="16,16,0,0"/>
                       <Border CornerRadius="16,16,0,0">
                         <Border.Background>
                           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
@@ -960,11 +973,11 @@
                edge; the copy carries its own inset instead. -->
           <Border Theme="{StaticResource PlayCard}" Padding="0" MinHeight="118">
             <Grid ColumnDefinitions="216,*,Auto">
-              <!-- ponytail: features/loom.png (PlayLoomHeroBrush) dropped. The scrim Border stays:
-                   it is the same bottom-to-top fade every card hero carries, turned 90°, and it
-                   keeps the strip's left column a deliberate band rather than a hole. -->
+              <!-- features/loom.png. The scrim Border on top of it is the same bottom-to-top fade
+                   every card hero carries, turned 90°. -->
               <Border Grid.Column="0" CornerRadius="15,0,0,15" ClipToBounds="True">
                 <Grid>
+                  <Border x:Name="PlayLoomHeroPlate" CornerRadius="15,0,0,15"/>
                   <Border CornerRadius="15,0,0,15">
                     <Border.Background>
                       <LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,0%">

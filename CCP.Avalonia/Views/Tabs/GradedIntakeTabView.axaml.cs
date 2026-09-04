@@ -98,9 +98,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // that pretends the pass was spent.
         private void BtnStartIntake_Click(object? sender, RoutedEventArgs e) { }
 
-        // ponytail: the classic AI quiz, ConditioningControlPanel/MainWindow/MainWindow.Lab.cs
-        // (QuizWindow, which is unported; the AI half is CoreAi and does answer). The button is
-        // IsVisible="False" in the markup on both heads, so nothing can reach this today.
+        // ponytail: the classic AI quiz, ConditioningControlPanel/MainWindow/MainWindow.Lab.cs.
+        // QuizWindow is NOT unported, as this note used to say - CCP.Avalonia/Views/Windows/
+        // QuizWindow.axaml.cs keeps its own score, sounds and companion hand-off, and the AI half
+        // is CoreAi and does answer. What is left is MainWindow.Lab.cs's own preamble around it
+        // (the tier door and the question build). Moot either way: the button is IsVisible="False"
+        // in the markup on both heads, so nothing can reach this today.
         private void BtnStartQuiz_Click(object? sender, RoutedEventArgs e) { }
 
         // ponytail: needs ConditioningControlPanel/Services/Quiz/PopQuizService.cs, which shows a
