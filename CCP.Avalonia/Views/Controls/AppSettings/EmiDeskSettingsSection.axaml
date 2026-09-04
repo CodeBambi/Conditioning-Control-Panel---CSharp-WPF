@@ -5,10 +5,13 @@
        Style="{StaticResource X}"    ->  Theme="{StaticResource X}"
        ToolTip="..."                 ->  ToolTip.Tip="..."
        Content="{loc:Str x}"         ->  a <TextBlock> child (access-key underscore trap)
-       ctl:EmiRingPicker             ->  an empty WrapPanel placeholder (bucket B; not ported yet) -->
+       TxtRingHint's {loc:Str}       ->  seeded from code. RefreshRingRow overwrites this line with
+                                         the picker's live count, and a binding under a local value
+                                         would restore the static hint on the next language change. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:ctl="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.EmiDeskSettingsSection">
 
     <StackPanel>
@@ -152,12 +155,12 @@
                         </Button>
                     </Grid>
                     <TextBlock x:Name="TxtRingHint"
-                               Text="{loc:Str set2_emi_desk_ring_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,6"/>
-                    <!-- ponytail: placeholder for ctl:EmiRingPicker (Views/Controls/EmiRingPicker, bucket B),
-                         swap in when that control is ported -->
-                    <WrapPanel x:Name="RingPicker" Margin="0,0,0,2"/>
+                    <!-- The wall itself, shared verbatim with her options panel. This section draws
+                         its own count line and reset button in the row above, so the picker's are
+                         off. -->
+                    <ctl:EmiRingPicker x:Name="RingPicker" ShowHeader="False" Margin="0,0,0,2"/>
 
                     <TextBlock Text="{loc:Str set2_emi_desk_gestures_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"

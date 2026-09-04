@@ -143,7 +143,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
 
             Log.Information("Awareness intensity set to {Intensity}", intensity);
             // ponytail: WPF also re-syncs the room's hero through CompanionRoom.AwarenessVm.Sync()
-            // (ConditioningControlPanel/MainWindow/MainWindow.CompanionRoom.cs); no such host here.
+            // (ConditioningControlPanel/MainWindow/MainWindow.CompanionRoom.cs). The HOST is no
+            // longer the blocker - CompanionRoomView composes CompanionHeroCard now - but the pill
+            // it would repaint is CompanionHeroCardViewModel.AwarenessPillText, which is init-only
+            // and seeded from a viewmodel this head does not build from settings. Give the hero an
+            // awareness re-read and this becomes one call.
         }
 
         private void SliderAwarenessCooldown_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)

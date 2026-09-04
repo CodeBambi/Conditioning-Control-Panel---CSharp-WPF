@@ -83,7 +83,16 @@
         </ControlTheme>
     </Window.Resources>
 
-    <StackPanel Margin="26,22,26,20" HorizontalAlignment="Center">
+    <Panel>
+      <!-- The export stage. A throwaway card is parented HERE for the length of one
+           RenderTargetBitmap pass and removed again. It has to be in a real tree: an
+           unparented control is never styled, so every Theme= setter on the card is
+           unapplied and the PNG comes out an empty backdrop - proven with a probe, not
+           reasoned about. Zero-size and hit-test-transparent so it never affects layout. -->
+      <Panel x:Name="PART_ExportStage" Width="0" Height="0"
+             ClipToBounds="True" IsHitTestVisible="False"/>
+
+      <StackPanel Margin="26,22,26,20" HorizontalAlignment="Center">
         <!-- live animated card -->
         <Border x:Name="PART_CardHost" HorizontalAlignment="Center"/>
 
@@ -110,5 +119,6 @@
         <TextBlock x:Name="PART_Note" Text="{loc:Str recap_share_note}"
                    FontSize="10.5" TextAlignment="Center" TextWrapping="Wrap"
                    Foreground="{StaticResource RecapInkDimBrush}" Margin="0,12,0,0" MaxWidth="420"/>
-    </StackPanel>
+      </StackPanel>
+    </Panel>
 </Window>

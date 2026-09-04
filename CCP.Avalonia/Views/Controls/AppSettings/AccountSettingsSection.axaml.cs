@@ -19,10 +19,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             AvaloniaXamlLoader.Load(this);
         }
 
-        // ponytail: needs App.Patreon / App.IsLoggedIn, wired when the account service moves to Core
+        // ponytail: needs ConditioningControlPanel/Services/Account/PatreonService.cs (the tier and
+        // the entitlement) plus an App.IsLoggedIn twin. Neither is in Core and this head seeds no
+        // account seam at all, so the badge stays at its signed-out markup default - which is the
+        // honest reading of "we cannot tell whether you are signed in".
         internal void RefreshTierBadge() { }
 
-        // ponytail: needs the MainWindow.Patreon/SubscribeStar/CloudBackup partials, wired when they move to Core
+        // ponytail: needs ConditioningControlPanel/MainWindow/MainWindow.Patreon.cs and its
+        // SubscribeStar / CloudBackup siblings, all of which drive PatreonService and the WPF
+        // OAuth browser flow. CCP.Avalonia/Views/Dialogs/LoginDialog.axaml.cs is this head's
+        // device-code prompt and is the surface to hang these on once a provider exists.
         private void BtnPatreonLogin_Click(object? sender, RoutedEventArgs e) { }
         private void BtnSubscribeStarLogin_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDiscordLogin_Click(object? sender, RoutedEventArgs e) { }

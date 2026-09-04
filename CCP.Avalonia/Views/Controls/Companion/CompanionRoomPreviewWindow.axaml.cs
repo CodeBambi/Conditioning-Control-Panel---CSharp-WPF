@@ -26,7 +26,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// <summary>…and the width it goes back to. Both sit clear of the hysteresis band.</summary>
         private const double WideWidth = 1240;
 
-        // ponytail: mirrors MockCompanionRoomVm.Variants' keys; read the dictionary once the mock moves
+        // ponytail: mirrors the keys of MockCompanionRoomVm.Variants (ConditioningControlPanel/
+        // Views/Controls/Companion/MockCompanionRoomVm.cs). Read the dictionary directly once that
+        // file is reachable - it hangs off ICompanionRoomVm and its eight zone interfaces, which
+        // are the same thing blocking CompanionRoomView.ViewModel.
         private static readonly string[] Variants = { "default", "freeTier", "dormant", "empty", "drained", "disabled" };
 
         private readonly Dictionary<string, Button> _stateButtons = new(StringComparer.OrdinalIgnoreCase);
@@ -64,7 +67,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             if (variantKey == null || !_stateButtons.ContainsKey(variantKey)) return false;
 
-            // ponytail: Room.ViewModel = MockCompanionRoomVm.Get(key) once the mock moves off the head
+            // ponytail: WPF sets Room.ViewModel = MockCompanionRoomVm.Get(key) here. Blocked on the
+            // same pair as above (MockCompanionRoomVm + ICompanionRoomVm, both in the WPF head), so
+            // the strip changes the LABEL and nothing else: every zone on this head seeds itself
+            // from CoreSettings and has no variant to be switched into.
             CurrentVariantKey = variantKey;
             CurrentLabel.Text = variantKey;
 
