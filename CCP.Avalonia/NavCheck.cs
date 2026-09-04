@@ -21,6 +21,7 @@ namespace ConditioningControlPanel.Avalonia
             global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             bool Vis(string n) => w.FindControl<Control>(n)?.IsVisible == true;
             double H(string n) => w.FindControl<Control>(n)?.Height ?? -1;
+            bool Clickable(string n) => w.FindControl<Control>(n)?.IsHitTestVisible == true;
 
             var fails = 0;
             void Check(bool ok, string what) { if (!ok) { fails++; Console.Error.WriteLine("FAIL " + what); } }
@@ -29,11 +30,19 @@ namespace ConditioningControlPanel.Avalonia
 
             w.ShowTab("quests");
             Check(Vis("QuestsTab") && !Vis("SettingsTab"), "quests shows QuestsTab and hides Settings");
-            Check(double.IsNaN(H("DoorPanelYou")) && H("DoorPanelStudio") == 0, "quests unfolds the You door only");
+            Check(w.ExpandedDoor == "you", "quests unfolds the You door only");
+            // The assertion that was missing, and the reason a real defect survived every green run:
+            // the old check asked only about Height. The markup parks each closed door at
+            // IsHitTestVisible="False", and the port never set it back, so an open door drew its
+            // entries and not one of them could be clicked. Height alone cannot see that.
+            Check(Clickable("DoorPanelYou") && !Clickable("DoorPanelStudio"),
+                  "an unfolded door's entries can actually be clicked");
 
             w.ShowTab("Haptics");                       // alias + case-insensitive
             Check(Vis("StudioTab") && !Vis("QuestsTab"), "haptics lands on StudioTab");
-            Check(double.IsNaN(H("DoorPanelStudio")) && H("DoorPanelYou") == 0, "haptics unfolds the Studio door only");
+            Check(w.ExpandedDoor == "studio", "haptics unfolds the Studio door only");
+            Check(Clickable("DoorPanelStudio") && !Clickable("DoorPanelYou"),
+                  "the door that closed stops taking clicks");
 
             w.ShowTab("no-such-tab");
             Check(Vis("StudioTab"), "unknown key keeps the current tab, never a blank page");
