@@ -201,6 +201,11 @@ html.arc-reduced .bk-bal.bk-thud { animation: none; }
 html.arc-reduced .bk-pot.bk-live .bk-pot-n { animation: none; opacity: 1; }
 
 /* ----------------------------------------------------------------------------
+ * THE KIT BLOCKS BELOW CARRY TOKEN FALLBACKS. Everything above this line lives
+ * inside .bk-room and can rely on the room's own custom properties; a kit piece
+ * can be mounted anywhere a machine puts it, including a bench with no room
+ * around it, and a var() that resolves to nothing paints a pin nobody can see.
+ * ----------------------------------------------------------------------------
  * THE HOLD RING (kit/holdring.js)
  * The ring is a conic gradient driven by --bk-hold, so the sheet owns how the
  * hold LOOKS and the module only ever owns how far along it is. Under the
@@ -211,13 +216,13 @@ html.arc-reduced .bk-pot.bk-live .bk-pot-n { animation: none; opacity: 1; }
 .bk-hold { position: relative; --bk-hold: 0%; }
 .bk-hold::before {
   content: ''; position: absolute; inset: -4px; border-radius: inherit; pointer-events: none;
-  background: conic-gradient(var(--bk-neon) var(--bk-hold), transparent var(--bk-hold));
+  background: conic-gradient(var(--bk-neon, var(--pink)) var(--bk-hold), transparent var(--bk-hold));
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
   opacity: 0;
 }
 .bk-hold.bk-holding::before { opacity: 1; }
-.bk-hold.bk-held { box-shadow: 0 0 0 2px var(--bk-brass); }
+.bk-hold.bk-held { box-shadow: 0 0 0 2px var(--bk-brass, var(--gold)); }
 
 /* ----------------------------------------------------------------------------
  * THE DROP (kit/dropbeat.js)
@@ -234,7 +239,7 @@ html.arc-reduced .bk-pot.bk-live .bk-pot-n { animation: none; opacity: 1; }
 .bk-drop-eye { width: 190px; height: 190px; border-radius: 50%; filter: blur(1px); opacity: .8; }
 .bk-drop-line {
   font-family: var(--disp); font-size: 17px; letter-spacing: .06em; text-align: center;
-  color: var(--ink); text-shadow: 0 0 14px var(--bk-neon); max-width: 22ch;
+  color: var(--ink); text-shadow: 0 0 14px var(--bk-neon, var(--pink)); max-width: 22ch;
 }
 @keyframes bk-drop-in { from { opacity: 0; } to { opacity: 1; } }
 
@@ -243,3 +248,24 @@ html.arc-mobile .bk-drop-line, html.ae-lite .bk-drop-line { font-size: 15px; tex
 /* Still mode keeps the dim and the line and loses the fade. The module has
  * already stopped turning the spiral by the time this matters. */
 html.arc-reduced .bk-drop { animation: none; }
+
+/* ----------------------------------------------------------------------------
+ * THE WHEEL (kit/loomwheel.js)
+ * The pin is a fixed piece of furniture at twelve o'clock and the wheel turns
+ * under it. A pointer that swings is a pointer a player cannot read at a
+ * glance, and a wheel nobody can read at a glance is a wheel nobody can tell
+ * is honest.
+ * -------------------------------------------------------------------------- */
+.bk-wheel { position: relative; display: inline-block; line-height: 0; }
+.bk-wheel-face { display: block; max-width: 100%; height: auto; border-radius: 50%;
+                 box-shadow: 0 0 26px color-mix(in srgb, var(--bk-neon, var(--pink)), transparent 66%); }
+.bk-wheel-pin {
+  position: absolute; top: -4px; left: 50%; width: 0; height: 0; transform: translateX(-50%);
+  border-left: 9px solid transparent; border-right: 9px solid transparent;
+  border-top: 18px solid var(--bk-brass, var(--gold)); filter: drop-shadow(0 1px 2px #000);
+}
+/* Still mode's landing: the wheel is already on its answer, and this is the
+ * dissolve it arrives behind. A CSS transition would be flattened by the
+ * global freeze (trap 92), so the module times it and only borrows the look. */
+.bk-wheel-fade .bk-wheel-face { opacity: .35; }
+html.arc-mobile .bk-wheel-face, html.ae-lite .bk-wheel-face { box-shadow: none; }
