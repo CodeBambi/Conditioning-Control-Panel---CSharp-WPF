@@ -50,9 +50,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CmbMicDevice.SelectionChanged += CmbMicDevice_SelectionChanged;
             BtnMicRefresh.Click += BtnMicRefresh_Click;
             BtnChatShortcutDevices.Click += BtnChatShortcut_Click;
+            BtnWebcamRevokeConsent.Click += BtnWebcamRevokeConsent_Click;
 
             SyncFromSettings();
             PopulateMicDevices();
+            RefreshWebcamAvailability();
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -213,17 +215,92 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         //  webcam
         // =====================================================================================
 
-        // ponytail: the webcam engine bar's device/monitor combos, the calibrate / quick-recal /
-        // start / tracker-test / privacy / revoke buttons and the debug-cursor toggle all need
-        // WebcamTrackingService + App.GazeCursor (ConditioningControlPanel/Services/Webcam/,
-        // MainWindow.LabTab.cs), still in the WPF head. Their controls render inert.
-        //
-        // Re-checked against Core: CCP.Core/Services/Webcam/WebcamConsent.cs is there, but it is a
-        // READ predicate (IsCurrent) only. BtnWebcamRevokeConsent needs App.Webcam.RevokeConsent,
-        // which stops tracking, deletes the calibration file and disables the webcam features -
-        // four promises the dialog makes. Clearing the consent flag alone would keep three of them
-        // and still tell the user everything was undone, so the button stays inert until the
-        // service crosses.
+        /// <summary>
+        /// The engine bar's honest half, now that <see cref="CoreWebcam"/> exists: with no webcam
+        /// engine on this head every control that would talk to one is DISABLED and the reason is
+        /// stated, rather than left enabled-and-inert. A greyed button with a written reason is the
+        /// difference between "this build can't" and "this build is broken".
+        ///
+        /// <para>The three checkboxes above are untouched on purpose - blink-to-recalibrate, drift
+        /// correction and gaze restriction are pure settings writes on a file both heads share, and
+        /// WPF honours them. Storing a preference is not the same as promising a camera.</para>
+        ///
+        /// <para>ponytail: the device/monitor combos, calibrate, quick-recal, start tracking,
+        /// tracker test and the debug cursor stay stubs even once a head seeds the seam - each needs
+        /// the per-frame gaze/iris/pose feed, which <see cref="CoreWebcam"/> deliberately does not
+        /// carry (see the class doc there for why splitting state from frames would be worse than
+        /// carrying neither). <c>App.GazeCursor</c> is additionally a WPF window
+        /// (Services/Tracking/GazeDebugCursorService.cs).</para>
+        ///
+        /// <para>The status pill is likewise left at its <c>rf_webcam_stopped</c> literal: it would
+        /// need <c>OnTrackingStateChanged</c> to stay true, and a pill read once at construction is
+        /// a pill that lies the moment tracking starts.</para>
+        /// </summary>
+        private void RefreshWebcamAvailability()
+        {
+            bool has = CoreWebcam.IsAvailable;
+
+            CmbWebcamDevice.IsEnabled = has;
+            BtnWebcamDeviceRefresh.IsEnabled = has;
+            CmbWebcamMonitor.IsEnabled = has;
+            BtnWebcamReviewPrivacy.IsEnabled = has;
+            BtnWebcamDebugCalibrate.IsEnabled = has;
+            BtnWebcamDebugQuickRecal.IsEnabled = has;
+            BtnWebcamDebugStart.IsEnabled = has;
+            BtnWebcamDebugTrackerTest.IsEnabled = has;
+            BtnWebcamRevokeConsent.IsEnabled = has;
+            ChkWebcamDebugCursor.IsEnabled = has;   // IsEnabled only - never IsChecked, which would fire the handler
+
+            if (!has)
+                AppendWebcamDebugLog("No webcam tracking engine on this build — camera controls are unavailable.");
+        }
+
+        /// <summary>
+        /// MainWindow.LabTab.cs:1159, with the WPF <c>MessageBox.Show(..., OKCancel, Warning,
+        /// MessageBoxResult.Cancel)</c> as <see cref="MessageDialog.ConfirmAsync"/> with
+        /// <c>defaultToCancel</c> — same wording, same safe default.
+        ///
+        /// <para><b>Awaited, and the revoke happens strictly after the answer.</b> Avalonia's
+        /// ShowDialog is async; revoking first and asking second would make the confirmation
+        /// decorative on the one control in this section that deletes user data.</para>
+        ///
+        /// <para>Gated on <see cref="CoreWebcam.IsAvailable"/> a second time even though the button
+        /// is disabled without it: <see cref="CoreWebcam.RevokeConsent"/> is a no-op unseeded, so
+        /// running the rest would print "consent revoked" over a consent record still on disk.
+        /// Clearing <c>WebcamConsentGiven</c> here instead is exactly the half-measure the old note
+        /// refused — it would keep three of the dialog's four promises and claim all four.</para>
+        ///
+        /// <para>ponytail: WPF also unchecks the debug cursor and refreshes three blink-trainer rows
+        /// (RefreshBlinkTrainerWebcamColumn / RefreshBlinkTrainerStatusRow /
+        /// ApplyBlinkTrainerStageMode). The cursor toggle and the blink trainer are both still
+        /// WPF-head, so there is nothing here to re-read.</para>
+        /// </summary>
+        private async void BtnWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!CoreWebcam.IsAvailable) return;
+                if (TopLevel.GetTopLevel(this) is not Window owner || !owner.IsVisible) return;
+
+                bool ok = await MessageDialog.ConfirmAsync(owner, "Revoke webcam consent",
+                    "Revoke webcam consent?\n\n" +
+                    "This will:\n" +
+                    "  • Stop webcam tracking immediately\n" +
+                    "  • Delete your calibration data\n" +
+                    "  • Disable Focus Gaze and any webcam triggers\n" +
+                    "  • Clear your consent record\n\n" +
+                    "You'll be re-prompted to consent and recalibrate the next time you enable a webcam feature.",
+                    defaultToCancel: true);
+                if (!ok) return;
+
+                CoreWebcam.RevokeConsent();
+                AppendWebcamDebugLog("Consent revoked. Calibration deleted; webcam features disabled.");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Webcam revoke consent failed");
+            }
+        }
 
         private void ChkBlinkRecalShortcut_Changed(object? sender, RoutedEventArgs e)
         {
@@ -428,9 +505,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         // ponytail: BtnCameraShortcutDevices stays inert, and NOT for the reason the old note gave.
         // SerializeModifiers shipped with the tube, so the capture half would work - but the combo
         // it stores drives MainWindow.ToggleWebcamFromHotkey (MainWindow.SessionIO.cs:1485), which
-        // toggles WebcamTrackingService. No webcam engine exists on this head at all (see the
-        // webcam note above), so a rebind here would let the user configure a key for a feature
-        // that cannot fire - and the row's own label would then report a binding that does nothing.
-        // The label is left at its XAML literal for the same reason. Unblocks with the tracker.
+        // toggles WebcamTrackingService. CoreWebcam.IsAvailable is false on this head (see
+        // RefreshWebcamAvailability above), so a rebind here would let the user configure a key for
+        // a feature that cannot fire - and the row's own label would then report a binding that does
+        // nothing. The label is left at its XAML literal for the same reason. Not merely disabled
+        // like the engine bar: the seam carries no toggle, so there is no start/stop to gate on.
+        // Unblocks with the tracker.
     }
 }
