@@ -76,23 +76,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RoadmapPanel.IsVisible = true;
             BtnQuestSubDaily.Theme = TabTheme("TabButton");
             BtnQuestSubRoadmap.Theme = TabTheme("TabButtonActive");
-            // ponytail: RoadmapService IS in Core now (CCP.Core/Services/RoadmapService.cs) and
-            // this head's instance is MainShellWindow.Roadmap. What is still missing is the VIEW
-            // half: RefreshRoadmapUI / GenerateRoadmapNodes from
-            // ConditioningControlPanel/MainWindow/MainWindow.Roadmap.cs, which paint
-            // TrackLockedOverlay, TxtLockReason, BadgeIndicator and a node per step. The panel
-            // shows its authored placeholders until that port lands.
+            // The view half landed: QuestsTabView.Roadmap.cs paints the header, the lock overlay,
+            // the badge and a node per step off the real RoadmapService in Core, exactly where
+            // WPF's BtnQuestSubRoadmap_Click calls RefreshRoadmapUI.
+            RefreshRoadmapUI();
         }
 
         private void OnTrackClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
-            var tag = (sender as Button)?.Tag as string;
-            BtnTrack1.Theme = TabTheme(tag == "EmptyDoll" ? "TabButtonActive" : "TabButton");
-            BtnTrack2.Theme = TabTheme(tag == "ObedientPuppet" ? "TabButtonActive" : "TabButton");
-            BtnTrack3.Theme = TabTheme(tag == "SluttyBlowdoll" ? "TabButtonActive" : "TabButton");
-            // ponytail: the nodes for the new track are not repainted - there are no generated
-            // nodes to repaint yet. Blocked on GenerateRoadmapNodes, not on the service:
-            // MainShellWindow.Roadmap answers GetTrackProgress / IsTrackUnlocked today.
+            // Verbatim MainWindow.Roadmap.cs:62 - parse the Tag, and do NOTHING at all when it
+            // does not parse. The restyle sits inside that guard for the same reason it does in
+            // WPF: an unrecognised Tag must not leave all three buttons drawn inactive over the
+            // nodes of a track nobody selected.
+            if ((sender as Button)?.Tag is not string tag
+                || !Enum.TryParse<Models.RoadmapTrack>(tag, out var track)) return;
+
+            _currentRoadmapTrack = track;
+
+            BtnTrack1.Theme = TabTheme(track == Models.RoadmapTrack.EmptyDoll ? "TabButtonActive" : "TabButton");
+            BtnTrack2.Theme = TabTheme(track == Models.RoadmapTrack.ObedientPuppet ? "TabButtonActive" : "TabButton");
+            BtnTrack3.Theme = TabTheme(track == Models.RoadmapTrack.SluttyBlowdoll ? "TabButtonActive" : "TabButton");
+
+            RefreshRoadmapUI();
         }
 
         private ControlTheme? TabTheme(string key) =>

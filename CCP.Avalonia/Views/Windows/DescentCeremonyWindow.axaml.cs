@@ -42,6 +42,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    SizeChangedEventArgs is the same shape), and reads <c>e.NewSize.Height</c> exactly as
     ///    the original did.
     ///  - <c>Visibility</c> → <c>IsVisible</c> throughout.
+    ///
+    /// <para><b>STILL UNREACHABLE, AND THAT IS THE DESIGN.</b> Checked against both WPF call
+    /// sites, neither of which exists on this head:</para>
+    /// <list type="bullet">
+    ///   <item><c>DescentMigrationService.OfferReceived</c>
+    ///   (ConditioningControlPanel/Services/Descent/DescentMigrationService.cs:392) builds the
+    ///   offer and opens the window. Nothing in CCP.Core names <c>DescentMigrationService</c> or
+    ///   <c>DescentMigrationOffer</c>, so there is no offer on this head to open it with.</item>
+    ///   <item><see cref="ForceCloseAll"/> is called from <c>StopEngineCore</c>
+    ///   (ConditioningControlPanel/MainWindow/MainWindow.StartStop.cs:520) on the panic path, and
+    ///   this head's MainShellWindow.StartStop.cs carries no <c>StopEngine</c> at all — the panic
+    ///   path is not ported. <see cref="ForceCloseAll"/> stays public and ready for it.</item>
+    /// </list>
+    /// <para>Reaching it any other way was considered and REFUSED. This window asks a one-way,
+    /// once-per-account question, and the write that answers it is
+    /// <c>DescentMigrationService.ApplyChoice</c> — head-side. A menu item or debug flag that
+    /// opened it here would take a user through a ceremony that says a permanent choice was made
+    /// and then make none of it. The right unblock is DescentMigrationService reaching Core, with
+    /// the offer arriving from a real sync response, exactly as the paragraph above describes.</para>
     /// </summary>
     public partial class DescentCeremonyWindow : Window
     {

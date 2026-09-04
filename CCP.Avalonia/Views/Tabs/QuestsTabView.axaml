@@ -597,11 +597,13 @@
                 <Button x:Name="HelpBtnRoadmap" Theme="{StaticResource HelpButtonStyle}"
                         HorizontalAlignment="Right" VerticalAlignment="Top" Tag="Roadmap"/>
                 <StackPanel>
-                  <TextBlock x:Name="TxtRoadmapTrackName" Text="{loc:Str btn_the_empty_doll}"
+                  <!-- Text is written by RefreshRoadmapUI (QuestsTabView.Roadmap.cs); a {loc:Str}
+                       binding here would overwrite it on the next language change. -->
+                  <TextBlock x:Name="TxtRoadmapTrackName" Text="The Empty Doll"
                              Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"/>
-                  <TextBlock x:Name="TxtRoadmapTrackSubtitle" Text="{loc:Str label_gateway_phase}"
+                  <TextBlock x:Name="TxtRoadmapTrackSubtitle" Text="Gateway Phase"
                              Foreground="{DynamicResource TextMutedBrush}" FontSize="14"/>
-                  <TextBlock x:Name="TxtRoadmapTrackProgress" Text="{loc:Str label_0_7_steps_completed}"
+                  <TextBlock x:Name="TxtRoadmapTrackProgress" Text="0 / 7 steps completed"
                              Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,5,0,0"/>
                 </StackPanel>
                 <StackPanel x:Name="BadgeIndicator" Orientation="Horizontal"
@@ -619,7 +621,7 @@
               <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock Text="&#x1F512;" FontSize="44" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtLockReason"
-                           Text="{loc:Str label_complete_the_previous_track_to_unlock}"
+                           Text="Complete the previous track to unlock"
                            Foreground="White" FontSize="16" Margin="0,15,0,0"
                            HorizontalAlignment="Center"/>
               </StackPanel>
