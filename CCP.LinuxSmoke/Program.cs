@@ -144,6 +144,39 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("CoreProgression swallows a throwing provider", true);
                 CoreProgression.AddXPProvider = null;
                 CoreProgression.TrackBubbleCountResultProvider = null;
+                // The program seam (wire/102). Unseeded must not GRANT anything: HasPremium false
+                // is what makes a premium program refuse to enroll rather than hand one out on a
+                // head with no pledge service, and it is the only member here that gates.
+                Check("CoreProgram.HasPremium is false with no patron service", !CoreProgram.HasPremium);
+                Check("CoreProgram.ActivePackVideoCount is 0 with no content packs", CoreProgram.ActivePackVideoCount() == 0);
+                Check("CoreProgram.Roadmap is null with no roadmap instance", CoreProgram.Roadmap() == null);
+                CoreProgram.Notify("smoke", "Success", TimeSpan.FromSeconds(1));
+                CoreProgram.UnlockAchievement("smoke_badge");
+                Check("CoreProgram toast and badge are silent no-ops with no head", true);
+                CoreProgram.HasPremiumProvider = () => throw new InvalidOperationException("boom");
+                Check("CoreProgram.HasPremium stays false when the provider throws", !CoreProgram.HasPremium);
+                CoreProgram.HasPremiumProvider = null;
+                // The programs library and the ledger, both in Core now. Building the library is
+                // the whole point of the move: a head with no ProgramService can still browse.
+                var programs = Services.Program.BuiltInPrograms.All();
+                Check("BuiltInPrograms.All() builds the shipped library", programs.Count > 0);
+                var wellFormed = true;
+                Models.Program.ProgramDefinition? premium = null;
+                foreach (var p in programs)
+                {
+                    var dayCount = 0;
+                    foreach (var _ in p.AllDays) dayCount++;
+                    if (p.LengthDays <= 0 || dayCount == 0) wellFormed = false;
+                    if (premium == null && p.Tier == Models.Program.ProgramTier.Premium) premium = p;
+                }
+                Check("every shipped program has a length and days", wellFormed);
+                // The ledger runs here with no head at all. The tier gate is the assertion that
+                // matters: unseeded CoreProgram.HasPremium is false, so a premium program must
+                // REFUSE rather than be handed out.
+                var svc = new Services.Program.ProgramService();
+                Check("a premium program refuses to enroll with no pledge",
+                      premium != null && !svc.CanEnroll(premium, out _));
+                svc.Dispose();
                 // The speech seam (wire/21). Unseeded must be honest, never optimistic: a view
                 // that believed "available" here would offer voice input nothing can deliver.
                 Check("CoreSpeech.IsAvailable is false with no speech service", !CoreSpeech.IsAvailable);

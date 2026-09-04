@@ -342,6 +342,19 @@ namespace ConditioningControlPanel
             CoreProgression.AddXPProvider = (amount, source) =>
                 Progression?.AddXP(amount, Enum.TryParse<Services.XPSource>(source, out var s) ? s : Services.XPSource.Other);
             CoreProgression.TrackBubbleCountResultProvider = correct => Achievements?.TrackBubbleCountResult(correct);
+            // The Training Programs ledger moved to Core (Services/Program/ProgramService.cs).
+            // These five are what it still cannot own: the pledge check, the toast, the badge
+            // store, the content-pack video count and the roadmap instance. Read lazily, because
+            // every one of these services is constructed in OnStartup, long after this ctor.
+            CoreProgram.HasPremiumProvider = () => Patreon?.HasPremiumAccess == true;
+            CoreProgram.NotifyProvider = (message, kind, duration) => Notifications?.Show(
+                message,
+                Enum.TryParse<Services.NotificationType>(kind, out var t) ? t : Services.NotificationType.Info,
+                duration);
+            CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
+            CoreProgram.ActivePackVideoCountProvider = () => ContentPacks?.GetAllActivePackVideos().Count ?? 0;
+            CoreProgram.RoadmapProvider = () => Roadmap;
+
             // The engine-running flag, for the feature cards that only live-apply while a session
             // is up. The engine stays here; the flag is the whole seam.
             CoreSession.IsEngineRunningProvider = () => IsEngineRunning;
