@@ -255,7 +255,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
             // Legacy bus event kept for any other listeners; tutorial Part 2
             // start is dispatched from PendingPart2Tutorial below.
-            try { TutorialEventBus.Emit("WindowLoaded:DeeperEditorWindow"); } catch { }
+            try { TutorialEventBus.Emit("WindowLoaded:DeeperEditorWindow"); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Interactive tutorial Part 2 dispatch. The dialog finished Part 1
             // (clicked Create with a valid source) and queued a TutorialType to
@@ -294,7 +294,7 @@ namespace ConditioningControlPanel.Views.Deeper
                             if (Application.Current.MainWindow == null) return;
                             if (!thisWindow.IsLoaded) return;
 
-                            try { if (App.Tutorial.IsActive) App.Tutorial.Skip(); } catch { }
+                            try { if (App.Tutorial.IsActive) App.Tutorial.Skip(); } catch (Exception ex) { Diag.Swallowed(ex); }
                             App.Tutorial.Start(pendingType);
                             var overlay = new ConditioningControlPanel.TutorialOverlay(thisWindow, App.Tutorial);
                             overlay.Show();
@@ -306,7 +306,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     };
                     // Stop the timer if the editor goes away before it fires —
                     // covers the case where the user closes mid-delay.
-                    void StopIfEditorClosing(object? s, EventArgs ev) { try { startTimer.Stop(); } catch { } }
+                    void StopIfEditorClosing(object? s, EventArgs ev) { try { startTimer.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); } }
                     thisWindow.Closing += (s, ev) => StopIfEditorClosing(s, ev);
                     thisWindow.Closed += StopIfEditorClosing;
                     startTimer.Start();
@@ -683,16 +683,16 @@ namespace ConditioningControlPanel.Views.Deeper
                     // the temp window says we're not clean, retry cleanup.
                     if (_isPreviewFullscreen || _previewFullscreenWindow != null)
                     {
-                        Dispatcher.BeginInvoke(() => { try { ExitPreviewFullscreen(); } catch { } });
+                        Dispatcher.BeginInvoke(() => { try { ExitPreviewFullscreen(); } catch (Exception ex) { Diag.Swallowed(ex); } });
                     }
                 }
                 else if (msg == "ccp_zoom_in")
                 {
-                    Dispatcher.BeginInvoke(() => { try { AdjustPreviewZoom(+0.10); } catch { } });
+                    Dispatcher.BeginInvoke(() => { try { AdjustPreviewZoom(+0.10); } catch (Exception ex) { Diag.Swallowed(ex); } });
                 }
                 else if (msg == "ccp_zoom_out")
                 {
-                    Dispatcher.BeginInvoke(() => { try { AdjustPreviewZoom(-0.10); } catch { } });
+                    Dispatcher.BeginInvoke(() => { try { AdjustPreviewZoom(-0.10); } catch (Exception ex) { Diag.Swallowed(ex); } });
                 }
             }
             catch (Exception ex)
@@ -772,7 +772,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         hadFsSubscription = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 var screen = System.Windows.Forms.Screen.FromHandle(
                     new System.Windows.Interop.WindowInteropHelper(this).Handle);
@@ -846,8 +846,8 @@ namespace ConditioningControlPanel.Views.Deeper
                     // capture so timeline PreviewMouseWheel works too — wheel
                     // events are hit-test based, so focus on the WebView
                     // doesn't steal them when the cursor is over the timeline.
-                    try { Mouse.Capture(null); } catch { }
-                    try { BrowserPreview?.Focus(); } catch { }
+                    try { Mouse.Capture(null); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { BrowserPreview?.Focus(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 };
 
                 _previewFullscreenWindow = built;
@@ -858,7 +858,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // Flag the page so dblclick / click-pair handlers fire even
                 // when HTML5 fullscreen state was lost during reparent.
                 try { _ = BrowserPreview.CoreWebView2.ExecuteScriptAsync("window._ccpForcedFs = true;"); }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Commit state only after reparent is fully in place.
                 _isPreviewFullscreen = true;
@@ -873,11 +873,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     if (built != null)
                     {
-                        try { built.Content = null; } catch { }
-                        try { built.Close(); } catch { }
+                        try { built.Content = null; } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                        try { built.Close(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                     }
                 }
-                catch { }
+                catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 _previewFullscreenWindow = null;
                 SafeRestoreBrowserPreviewToHost();
                 try
@@ -888,7 +888,7 @@ namespace ConditioningControlPanel.Views.Deeper
                             "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
                     }
                 }
-                catch { }
+                catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 // _isPreviewFullscreen was never flipped, so no further unwind.
             }
             finally
@@ -900,7 +900,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         if (BrowserPreview?.CoreWebView2 != null)
                             BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged += OnPreviewFullscreenChanged;
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _fsTransitionInFlight = false;
             }
@@ -943,7 +943,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         hadFsSubscription = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Commit state up front — we're past the point where Enter
                 // could win the race, and downstream code should immediately
@@ -957,7 +957,7 @@ namespace ConditioningControlPanel.Views.Deeper
                             "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
                 if (_previewFullscreenWindow != null)
                 {
                     try { _previewFullscreenWindow.Close(); }
@@ -977,7 +977,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         if (BrowserPreview?.CoreWebView2 != null)
                             BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged += OnPreviewFullscreenChanged;
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _fsTransitionInFlight = false;
             }
@@ -1094,12 +1094,12 @@ namespace ConditioningControlPanel.Views.Deeper
             EventHandler<EventArgs>? pauseOnce = null;
             pauseOnce = (_, _) =>
             {
-                try { _mediaPlayer?.Pause(); } catch { }
+                try { _mediaPlayer?.Pause(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 Dispatcher.InvokeAsync(() =>
                 {
-                    try { BtnPlayPause.Content = "▶"; } catch { }
+                    try { BtnPlayPause.Content = "▶"; } catch (Exception ex) { Diag.Swallowed(ex); }
                 });
-                try { if (_mediaPlayer != null && pauseOnce != null) _mediaPlayer.Playing -= pauseOnce; } catch { }
+                try { if (_mediaPlayer != null && pauseOnce != null) _mediaPlayer.Playing -= pauseOnce; } catch (Exception ex) { Diag.Swallowed(ex); }
             };
             _mediaPlayer.Playing += pauseOnce;
 
@@ -1149,7 +1149,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // bare Play() is a no-op. Stop()+seek-to-zero means the next Play
             // (whether from Space or BtnPlayPause) actually replays — the
             // "replay-after-stop" promise from bb6f503.
-            try { _mediaPlayer?.Stop(); } catch { }
+            try { _mediaPlayer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             Dispatcher.InvokeAsync(() =>
             {
                 if (Dispatcher.HasShutdownStarted) return;
@@ -1345,7 +1345,7 @@ namespace ConditioningControlPanel.Views.Deeper
             else if (_audioReader != null)
             {
                 try { _audioReader.CurrentTime = TimeSpan.FromSeconds(_currentSeconds); }
-                catch { /* unsupported on some streams */ }
+                catch (Exception ex) { Diag.Swallowed(ex, "seek unsupported on some streams"); }
             }
             UpdatePlayheadPosition();
         }
@@ -1723,12 +1723,12 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_rubberBandRect != null)
             {
-                try { TimelineCanvas.Children.Remove(_rubberBandRect); } catch { }
+                try { TimelineCanvas.Children.Remove(_rubberBandRect); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _rubberBandRect = null;
             }
             if (_dragCreatePreview != null)
             {
-                try { TimelineCanvas.Children.Remove(_dragCreatePreview); } catch { }
+                try { TimelineCanvas.Children.Remove(_dragCreatePreview); } catch (Exception ex) { Diag.Swallowed(ex); }
                 _dragCreatePreview = null;
             }
             _dragMode = DragMode.None;
@@ -4202,7 +4202,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // Close here without committing leaves Committed=false → no apply.
             if (_gazePickerWindow == null) return;
             try { _gazePickerWindow.Close(); }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             _gazePickerWindow = null;
         }
 
@@ -4392,7 +4392,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     TutorialEventBus.LastSavedEnhancementPath = path;
                     TutorialEventBus.Emit("FileSaved");
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
             catch (Exception ex)
             {
@@ -4431,7 +4431,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         || currentSrc.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
             if (!srcIsUrl && EnhancementMediaBundler.IsSupportedExtension(currentSrc))
             {
-                try { if (File.Exists(currentSrc)) sourcePath = currentSrc; } catch { }
+                try { if (File.Exists(currentSrc)) sourcePath = currentSrc; } catch (Exception ex) { Diag.Swallowed(ex); }
             }
 
             if (sourcePath == null)
@@ -4566,7 +4566,7 @@ namespace ConditioningControlPanel.Views.Deeper
             else
             {
                 var exists = false;
-                try { exists = File.Exists(src); } catch { }
+                try { exists = File.Exists(src); } catch (Exception ex) { Diag.Swallowed(ex); }
                 TxtLinkedMediaStatus.Text = exists ? "✓" : "⚠";
                 TxtLinkedMediaStatus.ToolTip = exists
                     ? Loc.Get("deeper_editor_linked_status_local_ok")
@@ -4665,7 +4665,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     e.Effects = DragDropEffects.Copy;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             e.Handled = true;
         }
 
@@ -4999,7 +4999,7 @@ namespace ConditioningControlPanel.Views.Deeper
         public void ForceClose()
         {
             _suppressDirtyPromptOnClose = true;
-            try { Close(); } catch { }
+            try { Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -5020,11 +5020,11 @@ namespace ConditioningControlPanel.Views.Deeper
             }
 
             EndGazePick(commit: false);
-            try { _htFetchCts?.Cancel(); _htFetchCts?.Dispose(); _htFetchCts = null; } catch { }
+            try { _htFetchCts?.Cancel(); _htFetchCts?.Dispose(); _htFetchCts = null; } catch (Exception ex) { Diag.Swallowed(ex); }
             // Force the tutorial overlay closed so its OnClosed teardown runs;
             // otherwise its static TutorialEventBus.Event subscription would
             // outlive the editor and pin the closed window.
-            try { _editorTutorialOverlay?.Close(); } catch { }
+            try { _editorTutorialOverlay?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _editorTutorialOverlay = null;
 
             // Exit preview fullscreen synchronously so the reparent-on-Closed
@@ -5033,7 +5033,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // Check the window reference too — a partial prior exit can leave
             // the borderless host alive with the flag already cleared, and
             // skipping cleanup here would orphan it past the editor's death.
-            try { if (_isPreviewFullscreen || _previewFullscreenWindow != null) ExitPreviewFullscreen(); } catch { }
+            try { if (_isPreviewFullscreen || _previewFullscreenWindow != null) ExitPreviewFullscreen(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             DisposePlayback();
         }
@@ -5049,35 +5049,35 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (_mediaPlayer != null)
                 {
                     if (VideoPreview != null) VideoPreview.MediaPlayer = null;
-                    try { if (_vlcLengthChanged != null) _mediaPlayer.LengthChanged -= _vlcLengthChanged; } catch { }
-                    try { if (_vlcTimeChanged != null) _mediaPlayer.TimeChanged -= _vlcTimeChanged; } catch { }
-                    try { if (_vlcEndReached != null) _mediaPlayer.EndReached -= _vlcEndReached; } catch { }
+                    try { if (_vlcLengthChanged != null) _mediaPlayer.LengthChanged -= _vlcLengthChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { if (_vlcTimeChanged != null) _mediaPlayer.TimeChanged -= _vlcTimeChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { if (_vlcEndReached != null) _mediaPlayer.EndReached -= _vlcEndReached; } catch (Exception ex) { Diag.Swallowed(ex); }
                     _vlcLengthChanged = null;
                     _vlcTimeChanged = null;
                     _vlcEndReached = null;
-                    try { _mediaPlayer.Stop(); } catch { }
-                    try { _mediaPlayer.Dispose(); } catch { }
+                    try { _mediaPlayer.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { _mediaPlayer.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     _mediaPlayer = null;
                 }
                 if (_vlcMedia != null)
                 {
-                    try { _vlcMedia.Dispose(); } catch { }
+                    try { _vlcMedia.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     _vlcMedia = null;
                 }
                 if (_waveOut != null)
                 {
-                    try { if (_waveOutStopped != null) _waveOut.PlaybackStopped -= _waveOutStopped; } catch { }
+                    try { if (_waveOutStopped != null) _waveOut.PlaybackStopped -= _waveOutStopped; } catch (Exception ex) { Diag.Swallowed(ex); }
                     _waveOutStopped = null;
-                    try { _waveOut.Stop(); } catch { }
-                    try { _waveOut.Dispose(); } catch { }
+                    try { _waveOut.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { _waveOut.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     _waveOut = null;
                 }
                 _audioReader?.Dispose();
                 _audioReader = null;
                 if (_browserSource != null)
                 {
-                    try { _browserSource.PlaybackTimeChanged -= OnBrowserTimeChanged; } catch { }
-                    try { _browserSource.Dispose(); } catch { }
+                    try { _browserSource.PlaybackTimeChanged -= OnBrowserTimeChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { _browserSource.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     _browserSource = null;
                 }
                 _totalSeconds = 0;
@@ -5099,9 +5099,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (_mediaPlayer != null)
                 {
                     if (VideoPreview != null) VideoPreview.MediaPlayer = null;
-                    try { if (_vlcLengthChanged != null) _mediaPlayer.LengthChanged -= _vlcLengthChanged; } catch { }
-                    try { if (_vlcTimeChanged != null) _mediaPlayer.TimeChanged -= _vlcTimeChanged; } catch { }
-                    try { if (_vlcEndReached != null) _mediaPlayer.EndReached -= _vlcEndReached; } catch { }
+                    try { if (_vlcLengthChanged != null) _mediaPlayer.LengthChanged -= _vlcLengthChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { if (_vlcTimeChanged != null) _mediaPlayer.TimeChanged -= _vlcTimeChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { if (_vlcEndReached != null) _mediaPlayer.EndReached -= _vlcEndReached; } catch (Exception ex) { Diag.Swallowed(ex); }
                     _vlcLengthChanged = null;
                     _vlcTimeChanged = null;
                     _vlcEndReached = null;
@@ -5111,15 +5111,15 @@ namespace ConditioningControlPanel.Views.Deeper
                 }
                 if (_vlcMedia != null)
                 {
-                    try { _vlcMedia.Dispose(); } catch { }
+                    try { _vlcMedia.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     _vlcMedia = null;
                 }
 
                 if (_waveOut != null)
                 {
-                    try { if (_waveOutStopped != null) _waveOut.PlaybackStopped -= _waveOutStopped; } catch { }
+                    try { if (_waveOutStopped != null) _waveOut.PlaybackStopped -= _waveOutStopped; } catch (Exception ex) { Diag.Swallowed(ex); }
                     _waveOutStopped = null;
-                    try { _waveOut.Stop(); } catch { }
+                    try { _waveOut.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     _waveOut.Dispose();
                     _waveOut = null;
                 }
@@ -5134,7 +5134,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         BrowserPreview.CoreWebView2.WebMessageReceived -= OnPreviewWebMessageReceived;
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 if (_browserSource != null)
                 {
@@ -5147,8 +5147,8 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (BrowserPreview?.CoreWebView2 != null)
                         BrowserPreview.CoreWebView2.NavigationStarting -= OnBrowserNavigationStarting;
                 }
-                catch { }
-                try { BrowserPreview?.Dispose(); } catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+                try { BrowserPreview?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             catch (Exception ex)
             {
