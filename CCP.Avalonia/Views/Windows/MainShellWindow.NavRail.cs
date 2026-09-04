@@ -128,7 +128,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeNavRail();
         }
 
-        // ponytail: needs the services in MainWindow.NavRail.cs; wired when they move to Core.
+        /// <summary>
+        /// The rail's search pill. WPF is one line — <c>SettingsPaletteWindow.Toggle(this)</c>
+        /// (MainWindow.NavRail.cs:406) — and it stays a stub on purpose, not for want of a service
+        /// in this file. <c>SettingsPaletteWindow.Toggle</c> records the refusal itself
+        /// (Views/Windows/SettingsPaletteWindow.axaml.cs): its Lockdown check has no Core seam, and
+        /// a navigation palette floating over an active lockdown reads as an escape hatch. Its
+        /// <c>Refresh</c> also cannot query <c>Services/SettingsPaletteIndex.cs</c>, so today it
+        /// draws SAMPLE rows that navigate nowhere. Wiring the pill would open a search box that
+        /// finds fake settings and honours no lockdown. Both halves come back together.
+        /// </summary>
         private void BtnNavSearch_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
 
     }

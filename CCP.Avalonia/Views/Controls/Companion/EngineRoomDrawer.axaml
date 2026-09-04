@@ -249,7 +249,10 @@
                             Command="{ReflectionBinding TestConnectionCommand}">
                         <TextBlock Text="{ReflectionBinding #Root.Strings.LocBtnTest}"/>
                     </Button>
-                    <Button Theme="{StaticResource CmpGrayButtonStyle}"
+                    <!-- x:Name so the code-behind can hook Click: there is no
+                         EngineRoomRuntimeVm on this head, so SamplerSettingsCommand binds to
+                         nothing. See OpenSamplerSettingsAsync in the code-behind. -->
+                    <Button x:Name="BtnSampler" Theme="{StaticResource CmpGrayButtonStyle}"
                             Command="{ReflectionBinding SamplerSettingsCommand}">
                         <TextBlock Text="{ReflectionBinding #Root.Strings.LocBtnSampler}"/>
                     </Button>

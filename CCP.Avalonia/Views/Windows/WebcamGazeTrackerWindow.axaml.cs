@@ -26,6 +26,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    in the WPF head's Services/Webcam and may not be referenced from here.
     ///  - <c>Window_Closed</c> only unsubscribed from the service, so it goes with the
     ///    subscription; there is nothing left for it to do.
+    ///
+    /// <para><b>NO OPENER, DELIBERATELY.</b> WPF opens this from
+    /// <c>MainWindow.BtnWebcamDebugTrackerTest_Click</c> (MainWindow.LabTab.cs:1059) and only after
+    /// two preconditions it can evaluate and this head cannot: the tracking service is RUNNING
+    /// (starting it here if needed) and <c>svc.Calibration != null</c>. Neither exists on this head
+    /// — Services/Webcam/WebcamTrackingService.cs is the device, and CCP.Core/Services/Webcam holds
+    /// only WebcamConsent — so a button wired to this window would put up a full-screen "gaze
+    /// tracker" whose dot can never move, with the two checks that would have refused honestly
+    /// silently dropped. That is the judgement already recorded for the Lab status pills
+    /// (MainShellWindow.LabTab.cs) and it holds here. The window stays reachable only from
+    /// <c>--render-view</c> until a tracker seam lands.</para>
     /// </summary>
     public partial class WebcamGazeTrackerWindow : Window
     {

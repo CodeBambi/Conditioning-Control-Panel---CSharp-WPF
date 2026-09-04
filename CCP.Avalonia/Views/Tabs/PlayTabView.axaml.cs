@@ -269,8 +269,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// section.</summary>
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("appsettings");
 
-        /// <summary>ponytail: needs MainWindow.BtnGazeMinigame_Click - the gaze minigame window plus
-        /// Services/Webcam/WebcamTrackingService.cs and its consent flow.</summary>
+        /// <summary>
+        /// REFUSED ON THE GATE, and the old note named the wrong blocker. The window is ported and
+        /// it is honest: CCP.Avalonia/Views/Lab/GazeMinigame/GazeMinigameWindow disables Start and
+        /// says why, because with no tracker every round would resolve 0 >= 0 into GOOD GIRL. So
+        /// the minigame is not what stops this door. The gate is:
+        /// <c>TierGate.DemandLab(Loc.Get("label_gaze_minigame"))</c> (MainWindow.LabTab.cs:770) —
+        /// Tier 2, checked before the window is constructed. ConditioningControlPanel/Services/
+        /// TierGate.cs is head-side and there is no entitlement seam in Core, so a faithful port of
+        /// that line is <c>false</c> on this head, exactly as AiPermissionsGrid.IsLabEntitled fails
+        /// closed. Opening the window anyway would be a paid Lab door with its gate removed.
+        /// Restore this the day an entitlement seam exists, and not before it.
+        /// </summary>
         private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e) { }
 
         /// <summary>The only Focus Gaze switch in the app. ponytail: needs

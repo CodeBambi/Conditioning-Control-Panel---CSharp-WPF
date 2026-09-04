@@ -47,7 +47,13 @@
 //   IsImportableEnhancementPath is pure and would compile, and is held back with
 //   ImportEnhancementFiles, its only caller.
 //   SwitchToDeeperLibraryTab, MaybePromptMandatoryVideoEnhancement, BtnDeeperOpenPlayer_Click,
-//   BtnDeeperNewEnhancement_Click, BtnDeeperOpenLibraryFolder_Click - all relays into the above.
+//   BtnDeeperOpenLibraryFolder_Click - all relays into the above.
+//
+// NOT BLOCKED, RESTORED: BtnDeeperNewEnhancement_Click. It used to be listed on the line above with
+// the other library relays and that was wrong - the only thing it takes from EnhancementLibrary is
+// CreateBlank, which is a three-line construction of Core types
+// (ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs:396), and both windows it needs
+// are already on this head (Views/Deeper/NewEnhancementDialog, Views/Deeper/DeeperEditorWindow).
 
 using System;
 using Avalonia.Controls;
@@ -105,6 +111,46 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex)
             {
                 Log.Debug("UpdateDeeperWelcomeCardVisibility failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// "New enhancement": ask for a media type and a source, then open the editor on a blank
+        /// project. WPF (MainWindow.DeeperTab.cs:194) sends the dialog's answer through
+        /// <c>App.EnhancementLibrary.CreateBlank</c>; that method builds an <c>Enhancement</c> and
+        /// nothing else (Services/Deeper/EnhancementLibrary.cs:396), so it is inlined here rather
+        /// than holding the door shut on a service move. Everything the editor then does with the
+        /// project - the timeline, validation, save, the recent-files write - is already ported
+        /// (Views/Deeper/DeeperEditorWindow.axaml.cs and its inlined file-ops region).
+        ///
+        /// <para>Two things WPF also does are dropped and neither is a gate:
+        /// <c>App.Bark.NotifyUiAction("deeper_new")</c>, a UI-telemetry ping with no Core seam, and
+        /// the editor's <c>Closed</c> handler, which refreshed the hub list - still a stub in
+        /// MainShellWindow.DeeperHub.cs, so there is no list to refresh yet.</para>
+        /// </summary>
+        internal async void BtnDeeperNewEnhancement_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            try
+            {
+                // ShowDialog throws on an owner that is not VISIBLE, and a shell minimised to the
+                // tray is loaded but not visible.
+                if (!IsVisible) return;
+
+                var dialog = new Views.Deeper.NewEnhancementDialog();
+                if (!await dialog.ShowDialog<bool>(this)) return;
+
+                // CreateBlank, inlined. Name is deliberately left empty: the editor's header falls
+                // back to the localized "Untitled" until the user (or HT auto-fill) sets one.
+                var enhancement = new Models.Deeper.Enhancement
+                {
+                    MediaType = dialog.SelectedMediaType,
+                    MediaSource = dialog.SelectedSource,
+                };
+                new Views.Deeper.DeeperEditorWindow(enhancement, null).Show(this);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Deeper: opening the editor for a new enhancement failed");
             }
         }
 
