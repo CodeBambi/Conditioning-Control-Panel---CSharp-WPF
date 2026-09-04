@@ -235,7 +235,6 @@ internal static class ArcademyEconomy
 
     public const string CurTickets = "t";
     public const string CurTokens = "k";
-    public const string CurChips = "c"; // chips: the Back Room's currency, bought one way at the cage
 
     /// <summary>CHIPS, the Back Room's third purse. Bought one way at the cage with Sparkle Points
     /// and spendable only on the Back Room shelf: chips never cash out and nothing else ever mints
