@@ -1,0 +1,201 @@
+/* ============================================================================
+ * backroom/backroom.css - the felt, the neon and the brass.
+ *
+ * Lazy-linked by backroom/index.js on first open, exactly like rooms.css. Every
+ * colour is a var() off the shell's tokens or a color-mix of them, so a mod
+ * palette reskins the casino for free and nothing here is a taste nobody can
+ * override. The two literals are the felt greens, and they are literals for the
+ * same reason the card hues are: a casino table is a REMEMBERED colour, not a
+ * derived one, and a violet felt reads as a bug.
+ *
+ * TYPE: --disp for signage, --body for copy, --mono for numbers. No serif
+ * anywhere (house camera law) and no font host (trap 2).
+ *
+ * MOTION: every keyframe in here is decoration and the global freeze at the
+ * bottom of styles.css already flattens it under html.arc-reduced. What this
+ * sheet adds on top is the DIET: html.arc-mobile and html.ae-lite drop the
+ * glows, the chases and the felt texture, because those are the three things a
+ * phone pays a whole frame for.
+ * ==========================================================================*/
+
+.bk-room {
+  --bk-felt:#1b3a2e;
+  --bk-felt-dark:#0f2119;
+  --bk-brass:var(--gold);
+  --bk-neon:var(--pink);
+  --bk-neon-2:var(--lav);
+  --bk-edge:color-mix(in srgb, var(--bk-felt), black 40%);
+  --bk-plate:color-mix(in srgb, var(--panel), var(--bk-felt) 30%);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+  padding: 14px 16px 28px;
+  color: var(--ink);
+  font-family: var(--body);
+  background:
+    radial-gradient(ellipse 70% 45% at 50% -8%, color-mix(in srgb, var(--bk-neon), transparent 82%) 0%, transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bk-felt), black 26%), var(--ground) 78%);
+}
+/* The felt weave. One repeating gradient, no image, first thing the diet cuts. */
+.bk-room::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .16;
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0 3px, color-mix(in srgb, var(--bk-felt), white 12%) 3px 4px),
+    repeating-linear-gradient(-45deg, transparent 0 3px, color-mix(in srgb, var(--bk-felt-dark), black 20%) 3px 4px);
+}
+.bk-room > * { position: relative; z-index: 1; }
+
+/* ---------------------------------- header ------------------------------- */
+.bk-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 2px solid color-mix(in srgb, var(--bk-brass), transparent 62%);
+}
+.bk-title {
+  font-family: var(--disp); font-size: clamp(18px, 3.2vw, 30px); letter-spacing: .1em;
+  margin: 0; color: var(--bk-brass);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--bk-brass), transparent 55%), 0 2px 0 #0008;
+}
+.bk-head-spacer { flex: 1 1 auto; }
+
+/* the balance plate + the drawn stack (kit/chips.js) */
+.bk-bal {
+  display: inline-flex; align-items: baseline; gap: 7px;
+  padding: 5px 12px; border-radius: 999px;
+  background: var(--bk-plate); border: 1px solid color-mix(in srgb, var(--bk-brass), transparent 60%);
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.bk-bal-mark {
+  width: 11px; height: 11px; border-radius: 50%; align-self: center;
+  background: radial-gradient(circle at 35% 30%, var(--bk-neon), color-mix(in srgb, var(--bk-neon), black 45%));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink), transparent 78%);
+}
+.bk-bal-n { font-size: 16px; color: var(--ink); font-weight: 600; }
+.bk-bal-label { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); }
+.bk-bal.bk-thud { animation: bk-thud .26s ease-out 1; }
+.bk-bal.bk-thud.bk-down { animation-name: bk-thud-down; }
+@keyframes bk-thud { 0% { transform: scale(1); } 40% { transform: scale(1.09); } 100% { transform: scale(1); } }
+@keyframes bk-thud-down { 0% { transform: translateY(0); } 45% { transform: translateY(3px); } 100% { transform: translateY(0); } }
+
+.bk-stack { display: inline-flex; flex-direction: column-reverse; align-items: center; }
+.bk-disc {
+  width: 26px; height: 6px; border-radius: 3px; margin-top: -1px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bk-neon-2), white 12%), color-mix(in srgb, var(--bk-neon-2), black 42%));
+  box-shadow: 0 1px 0 #0006;
+}
+.bk-disc-hot { background: linear-gradient(180deg, color-mix(in srgb, var(--bk-neon), white 14%), color-mix(in srgb, var(--bk-neon), black 40%)); }
+
+/* THE BANK's flight layer. Body-level and fixed, so it can cross any panel. */
+.bk-flight { position: fixed; inset: 0; z-index: 62; pointer-events: none; }
+.bk-fly {
+  position: absolute; top: 0; left: 0; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+  border-radius: 50%; will-change: transform, opacity;
+  background: radial-gradient(circle at 34% 30%, var(--gold), color-mix(in srgb, var(--gold), black 48%));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gold), transparent 45%);
+}
+
+/* ---------------------------------- the pot ------------------------------ */
+.bk-pot {
+  display: flex; align-items: baseline; gap: 10px; align-self: flex-start;
+  padding: 8px 16px; border-radius: 8px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bk-neon), black 62%), color-mix(in srgb, var(--ground), black 20%));
+  border: 2px solid color-mix(in srgb, var(--bk-neon), transparent 55%);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--bk-neon), transparent 78%);
+}
+.bk-pot-label { font-family: var(--mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-dim); }
+.bk-pot-n { font-family: var(--disp); font-size: clamp(20px, 3.6vw, 34px); color: var(--bk-brass); letter-spacing: .04em; }
+.bk-pot-sub { font-size: 11px; color: var(--ink-faint); }
+.bk-pot.bk-live .bk-pot-n { animation: bk-breathe 3.6s ease-in-out infinite; }
+@keyframes bk-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .82; } }
+
+/* ---------------------------------- the cage ----------------------------- */
+.bk-cage {
+  display: grid; gap: 12px; padding: 14px 16px; border-radius: 10px;
+  background: color-mix(in srgb, var(--panel), var(--bk-felt-dark) 42%);
+  border: 1px solid color-mix(in srgb, var(--bk-brass), transparent 66%);
+}
+.bk-cage-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bk-cage h3 { margin: 0; font-family: var(--disp); font-size: 15px; letter-spacing: .1em; color: var(--bk-brass); font-weight: 400; }
+.bk-cage-rate { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: .08em; }
+.bk-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.bk-step {
+  min-height: 40px; min-width: 46px; padding: 6px 12px; cursor: pointer;
+  font-family: var(--mono); font-size: 13px; color: var(--ink);
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+}
+.bk-step[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--bk-neon), var(--panel2) 66%);
+  border-color: var(--bk-neon); color: var(--ink);
+}
+.bk-step:focus-visible, .bk-cage-go:focus-visible, .bk-cab:focus-visible { outline: 2px solid var(--bk-brass); outline-offset: 2px; }
+.bk-custom { display: flex; align-items: center; gap: 8px; }
+.bk-custom input {
+  width: 92px; min-height: 40px; padding: 4px 10px; font-family: var(--mono); font-size: 14px;
+  color: var(--ink); background: var(--navy); border: 1px solid var(--line); border-radius: 6px;
+}
+.bk-cage-lines { display: grid; gap: 4px; font-size: 13px; color: var(--ink-dim); }
+.bk-cage-lines b { color: var(--ink); font-family: var(--mono); }
+/* THE VISIBLE CHOICE (owner ruling): what the same Sparkle buys on the tree. */
+.bk-tree { font-size: 12px; color: var(--lav); border-left: 2px solid color-mix(in srgb, var(--lav), transparent 55%); padding-left: 8px; }
+.bk-cage-go {
+  justify-self: start; min-height: 44px; padding: 8px 20px; cursor: pointer;
+  font-family: var(--disp); font-size: 14px; letter-spacing: .1em;
+  color: var(--ground); background: linear-gradient(180deg, var(--bk-brass), color-mix(in srgb, var(--bk-brass), black 26%));
+  border: none; border-radius: 8px;
+}
+.bk-cage-go[disabled] { opacity: .45; cursor: default; }
+.bk-cage-say { font-size: 12px; color: var(--ink-dim); min-height: 1.2em; }
+.bk-cage-say.bk-warm { color: var(--gold); }
+/* THE DEALER speaks under the receipt, in her colour, never over the number. */
+.bk-dealer { margin-top: 4px; color: var(--bk-neon-2); font-style: normal; }
+/* Cash only. The cage with no line to the counter. */
+.bk-cage.bk-dark { opacity: .72; border-style: dashed; }
+.bk-cage.bk-dark .bk-steps, .bk-cage.bk-dark .bk-custom, .bk-cage.bk-dark .bk-cage-go { display: none; }
+
+/* ---------------------------------- cabinets ----------------------------- */
+.bk-floor { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.bk-cab {
+  position: relative; display: flex; flex-direction: column; gap: 6px;
+  min-height: 148px; padding: 14px; text-align: left; cursor: pointer;
+  background: linear-gradient(180deg, var(--bk-plate), color-mix(in srgb, var(--ground), black 14%));
+  border: 2px solid color-mix(in srgb, var(--bk-neon-2), transparent 66%); border-radius: 10px;
+  color: var(--ink); font-family: var(--body);
+}
+.bk-cab-name { font-family: var(--disp); font-size: 15px; letter-spacing: .09em; color: var(--bk-neon); }
+.bk-cab-sub { font-size: 12px; color: var(--ink-faint); }
+.bk-cab-stake { margin-top: auto; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; color: var(--ink-dim); }
+.bk-cab:hover, .bk-cab:focus-visible { border-color: var(--bk-neon); box-shadow: 0 0 22px color-mix(in srgb, var(--bk-neon), transparent 80%); }
+/* THE DUST SHEET. A cabinet whose module is not here yet, and it is furniture,
+ * never an error card - a room under a sheet still reads as a room. */
+.bk-cab.bk-sheet {
+  cursor: default; border-style: dashed; border-color: var(--line);
+  background: repeating-linear-gradient(120deg, color-mix(in srgb, var(--panel), white 4%) 0 12px, var(--panel) 12px 24px);
+  color: var(--ink-faint);
+}
+.bk-cab.bk-sheet .bk-cab-name { color: var(--slate); }
+.bk-cab.bk-sheet:hover { box-shadow: none; border-color: var(--line); }
+
+/* the mounted machine takes the whole floor over */
+.bk-stage { display: flex; flex-direction: column; gap: 12px; min-height: 320px; }
+
+/* ---------------------------------- the diet ----------------------------- */
+/* A phone pays for glow, weave and chase before it pays for anything the player
+ * came here to see. It loses all three and keeps every rect. */
+html.arc-mobile .bk-room, html.ae-lite .bk-room { padding: 10px 12px 22px; gap: 10px; }
+html.arc-mobile .bk-room::before, html.ae-lite .bk-room::before { display: none; }
+html.arc-mobile .bk-pot, html.ae-lite .bk-pot { box-shadow: none; }
+html.arc-mobile .bk-pot.bk-live .bk-pot-n, html.ae-lite .bk-pot.bk-live .bk-pot-n { animation: none; }
+html.arc-mobile .bk-title, html.ae-lite .bk-title { text-shadow: none; }
+html.arc-mobile .bk-cab:hover, html.ae-lite .bk-cab:hover { box-shadow: none; }
+html.arc-mobile .bk-floor { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+html.arc-mobile .bk-cab { min-height: 104px; padding: 10px; }
+html.arc-mobile .bk-cab-sub { display: none; }
+html.arc-mobile .bk-fly, html.ae-lite .bk-fly { box-shadow: none; }
+
+/* Reduced motion: the global freeze owns the durations, so all this sheet has
+ * to do is make sure nothing is left mid-flight looking broken. */
+html.arc-reduced .bk-bal.bk-thud { animation: none; }
+html.arc-reduced .bk-pot.bk-live .bk-pot-n { animation: none; opacity: 1; }
