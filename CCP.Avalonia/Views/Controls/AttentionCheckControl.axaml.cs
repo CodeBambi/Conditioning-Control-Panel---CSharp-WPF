@@ -23,6 +23,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     ///   SetProgress(0..1)  — fills the foreground ring clockwise.
     ///   StartPulse() / StopPulse() — gentle scale-pulse animation, useful
     ///                                 to signal "look here" on first appear.
+    ///
+    /// <para><b>Nothing on this head constructs this control, and that is not an oversight.</b>
+    /// Its only caller is <c>AttentionCheckService.EnsureWindow()</c>
+    /// (ConditioningControlPanel/Services/AttentionCheckService.cs:339), which is not ported and
+    /// cannot be until three things exist here: the gaze feed it drives the ring from
+    /// (<c>App.Webcam.OnGazeMove</c> / WebcamTrackingService — no webcam engine on this head at
+    /// all), a topmost, non-activating, hit-test-invisible transparent window to host it, and the
+    /// <c>HwndSource</c> WM_DPICHANGED swallow hook that keeps a re-show off the render thread.
+    /// Giving it any other entry point would put a ring on screen that fills from nothing and
+    /// scores a check the user was never actually measured on, so it stays unreached. Wire it
+    /// from the ported AttentionCheckService, not from a view.</para>
     /// </summary>
     public partial class AttentionCheckControl : UserControl
     {

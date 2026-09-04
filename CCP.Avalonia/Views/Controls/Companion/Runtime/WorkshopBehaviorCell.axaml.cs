@@ -89,6 +89,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
                 SliderBubbleDurationCompanion.Value = s.BubbleDurationSeconds;
                 TxtBubbleDurationCompanion.Text = $"{(int)s.BubbleDurationSeconds}s";
 
+                // The chat pill's label. WPF's RefreshChatShortcutLabel writes THIS TextBlock and
+                // the Devices one from the same combo (MainWindow.SessionIO.cs:1326/1332); the
+                // markup's "Ctrl+T" is only the design-time placeholder, and leaving it there once
+                // the cell is on screen would show every user the default whatever they had bound.
+                RefreshChatShortcutLabel();
+
+                // TxtCameraShortcutLabel keeps its XAML literal on purpose: the combo it would
+                // report drives WebcamTrackingService, which does not exist on this head, so there
+                // is no live binding for it to be honest about. Same call as the camera pill's.
+
                 // ChkPauseBrowserCompanion is deliberately NOT seeded: WPF restores it only from a
                 // session snapshot (MainWindow.Patreon.cs:1923), never from settings.
 
@@ -108,6 +118,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             }
             finally { _isLoading = false; }
         }
+
+        /// <summary>
+        /// Repaints the chat pill from the saved combo. Called on every sync and again by the host
+        /// after a rebind — WPF's MainWindow.SessionIO.cs:1326 does exactly this to the same
+        /// TextBlock. The literal in the markup is a placeholder, not a binding, so assigning
+        /// .Text here is safe (nothing on this control carries {loc:Str}).
+        /// </summary>
+        internal void RefreshChatShortcutLabel() =>
+            TxtChatShortcutLabel.Text = AvatarTube.AvatarTubeWindow.FormatChatShortcut();
 
         private void SliderIdleInterval_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
         {

@@ -17,6 +17,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// The strip, the current-state label and the width toggle cross as they are. What does not:
     /// <c>MockCompanionRoomVm</c> and <c>ICompanionRoomVm</c> live in the WPF head, so
     /// <see cref="ShowVariant"/> re-labels the strip but cannot yet swap the page's state.</para>
+    ///
+    /// <para><b>Nothing constructs this window here — and nothing constructs it on WPF either.</b>
+    /// Checked before assuming: its one entry point is
+    /// <c>CompanionRoomPreview.MaybeShow()</c> (ConditioningControlPanel/Views/Controls/Companion/
+    /// CompanionRoomPreview.cs), which is <c>#if DEBUG</c>, gated on <c>CCP_CTAB_PREVIEW=1</c>, and
+    /// whose own doc comment says "Nothing calls it today"; the session driver calls
+    /// <see cref="Launch"/> directly instead. So this is not an orphaned feature a user has lost —
+    /// it is a debug harness that is deliberately unreachable from a normal run, and porting
+    /// MaybeShow would only move the same uncalled hop across. If it ever should open from the app,
+    /// the arming call belongs in App.axaml.cs's startup, exactly where WPF left the hole.</para>
     /// </summary>
     public partial class CompanionRoomPreviewWindow : Window
     {
