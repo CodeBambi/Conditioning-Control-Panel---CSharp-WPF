@@ -2972,12 +2972,15 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   }
 
   /** How many of a consumable may be held at once. Display only - the host is
-   *  the one that refuses the third late slip, with reason "full". */
+   *  the one that refuses an over-full stack, with reason "full". The fallback
+   *  is the Tardy Slip's own ceiling, because it is the only consumable on the
+   *  shelf and a row that reached here without a `max` is a host that predates
+   *  the field. */
   function stackMaxFor(sku) {
     const row = catalogRow(sku);
     if (!row || row.kind !== 'consumable') return 0;
     const n = Number(row.max);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 3;
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 2;
   }
 
   /** Tonight's hot room, or null. Seeded per UTC day in C#; the page displays. */
@@ -3513,8 +3516,9 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
        * facts the shelf already reads, and not one of them is a proposal.
        *
        * NO `onUse`. Nothing on this shelf can be spent by hand: the one
-       * consumable, `late_slip`, is burned by the HOST inside the attendance
-       * credit (ArcademyEconomy.ConsumeLateSlip), so there is no press to wire
+       * consumable, `late_slip` (THE TARDY SLIP), is burned by the HOST inside
+       * the attendance credit (ArcademyEconomy.ConsumeLateSlips), so there is no
+       * press to wire
        * and the tray says so in words instead of growing a button that lies. */
       balance: () => walletBalance(),
       payday: () => economyPayday(),
@@ -4457,7 +4461,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
    *   - the numbers are unknown    -> say NOTHING (never invent jeopardy)
    * @returns {?string}
    */
-  function jeopardyLine() {
+  function streakFacts() {
     let s;
     try { s = store.streak(); } catch (e) { return null; }
     if (!s) return null;
@@ -4468,10 +4472,77 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     if (!Number.isFinite(n) || n <= 0) return null;
     const credited = (s.lastLocalDate && String(s.lastLocalDate) === localDate)
       || (s.classesToday | 0) > 0;
-    const tpl = credited
+    return { n, credited };
+  }
+
+  function jeopardyLine() {
+    const f = streakFacts();
+    if (!f) return null;
+    const tpl = f.credited
       ? t('rake_streak_credited', 'Attendance x{n} is banked for today already.')
       : t('rake_streak_cold', 'Attendance x{n} goes cold if today ends here.');
-    return String(tpl).replace('{n}', String(n));
+    return String(tpl).replace('{n}', String(f.n));
+  }
+
+  /* ---------------- THE TARDY SLIP, OFFERED ONCE AND QUIETLY -------------
+   * House Book Deck V: the loss is disguised as a purchase. The jeopardy line
+   * above is the LOSS; this is the purchase, and it is ONE SMALL BUTTON that
+   * WALKS TO THE COUNTER. It never buys anything (the counter's echo law is
+   * the only thing that may move a wallet, trap 1), it never appears when a
+   * slip is already in the bag - the cover is bought, and saying so a second
+   * time is the nag Law VI forbids - never on a night the streak is already
+   * banked, never when the shutter is down, and never when the shelf does not
+   * stock the row at all. The line above it reads exactly the same whether the
+   * button is there or not, so nothing about the jeopardy changes to sell.
+   * -------------------------------------------------------------------- */
+
+  /** The wire id of the Tardy Slip. It is `late_slip` and it always will be:
+   *  the sku is a KEY (held inventory, the server catalog, EMI's bark pool),
+   *  and only the words on the shelf were ever rebranded. */
+  const SKU_TARDY_SLIP = 'late_slip';
+
+  /** How many slips are in the bag. A COUNT - the desk holds two. */
+  function slipsHeld() {
+    try {
+      const row = walletInv()[SKU_TARDY_SLIP];
+      const n = row && typeof row === 'object' ? Number(row.n) : 0;
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    } catch (e) { return 0; }
+  }
+
+  /** Does the offer stand right now? Five facts, and every one of them is the
+   *  host's own - the page invents no jeopardy and no stock. */
+  function slipOfferWanted() {
+    if (slipsHeld() > 0) return false;                  // already covered
+    if (counterClosed()) return false;                  // the shutter answers first
+    if (!catalogRow(SKU_TARDY_SLIP)) return false;      // the shelf does not stock it
+    const f = streakFacts();
+    return !!f && !f.credited;                          // only a COLD streak is jeopardy
+  }
+
+  /** OUT OF THE CLASS AND INTO RM 003. `teardownClass()` first because the
+   *  counter's own screen does not tear a live class down - only showBoard()
+   *  does - and a class left standing behind the shelf would keep its clock,
+   *  its listeners and its cameo. Then the booth, WITH its walk: the player
+   *  did cross the quad to get here, even if the quad never painted. */
+  function walkToCounter() {
+    say('tardy slip offer taken - walking to the counter');
+    try { teardownClass(); } catch (e) { /* noop */ }
+    showPrizeBooth({});
+  }
+
+  /** The one small button, or null when the offer does not stand. Mounting it
+   *  is the caller's business; it is never a second answer to the question the
+   *  card is asking, and it never holds focus. */
+  function slipOfferButton() {
+    if (!slipOfferWanted()) return null;
+    const name = t('prize_late_slip', 'Tardy Slip');
+    const label = String(t('rake_slip_offer', 'The counter sells a {name}.'))
+      .replace('{name}', name);
+    const b = el('button', 'btn ghost arc-slip-offer', label);
+    b.type = 'button';
+    b.addEventListener('click', () => walkToCounter());
+    return b;
   }
 
   /** Say the jeopardy on the way out. Never blocks, never delays, never asks. */
@@ -4872,6 +4943,8 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
       // What leaving actually costs, in the HOST's own attendance numbers.
       // Unknown numbers print nothing at all - never invent jeopardy.
       note: jeopardyLine(),
+      // ...and the counter's one small offer under it. Null nine nights in ten.
+      noteAction: slipOfferButton(),
       onConfirm: () => {
         // No toast on the way out: the card's own note has already said what
         // this costs, and saying it twice reads as a scold.
@@ -6032,6 +6105,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
         const jeopardy = jeopardyLine();
         if (jeopardy) {
           overlay.appendChild(el('p', 'arc-note arc-jeopardy', jeopardy));
+          /* ...and the ONE small button under it, when the streak is cold and
+           * the bag is empty. Under the line, below Resume/Options/Leave, so
+           * it can never be mistaken for the answer to "paused". */
+          const offer = slipOfferButton();
+          if (offer) overlay.appendChild(offer);
         }
         overlay.appendChild(el('p', 'arc-note', 'Hold Esc to leave the Arcademy.'));
         active.root.appendChild(overlay);
@@ -6578,11 +6656,11 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
           };
         }
       }
-      /* THE LATE SLIP. The host consumed one inside the attendance path, which
-       * is the one purchase a player never sees happen - so it is the one that
-       * has to be said out loud. */
+      /* THE TARDY SLIP. The host consumed one (or two) inside the attendance
+       * path, which is the one purchase a player never sees happen - so it is
+       * the one that has to be said out loud. */
       if (m.lateSlipUsed === true) {
-        try { shout(t('late_slip_used', 'A late slip covered you. Your streak never noticed.')); }
+        try { shout(t('late_slip_used', 'A tardy slip was handed in for you. Your streak never noticed.')); }
         catch (e) { /* a toast may never hold a door */ }
       }
       if (m.levelUp) shout('Level up');

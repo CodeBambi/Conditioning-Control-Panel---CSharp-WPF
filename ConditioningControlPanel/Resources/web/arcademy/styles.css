@@ -545,6 +545,18 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   padding-top:9px; margin-top:2px;
 }
 
+/* THE TARDY SLIP OFFER, under that line. SMALL by construction: the button it
+   must never out-shout is Resume (on the pause card) or Stay in class (on the
+   confirm), both of which are the lit primary above it. No bulbs, no pulse,
+   no fill - a shop sign, read once, at the size of the note it hangs off. */
+.arc-slip-offer {
+  margin-top:7px;
+  font-size:11px; letter-spacing:.05em;
+  padding:4px 10px; min-height:0;
+  opacity:.82;
+}
+.arc-slip-offer:hover, .arc-slip-offer:focus-visible { opacity:1; }
+
 /* ============================ THE TWO CURRENCIES =========================
    The ticket stub and the token, drawn once and worn by THREE surfaces: the
    campus wallet chip, the Prize Counter's shelf, and the report card's till.

@@ -665,12 +665,12 @@ export const DEFAULT_LEXICON = Object.freeze({
    * translated string is a number a translator has to be trusted to keep.
    *
    * THE PASSIVE LINES ARE THE HONEST PART. There is exactly one consumable on
-   * this shelf and it has no press: a late slip is spent by the HOST, on the
+   * this shelf and it has no press: a tardy slip is spent by the HOST, on the
    * night you are not here, inside the attendance credit. So the row says so
    * rather than growing a button that would have nowhere to send you. */
   booth_holdings: 'What you are holding',
   booth_hold_none: 'Nothing in your pockets tonight. The shelf is through the window.',
-  booth_hold_late_slip: 'It spends itself the night you miss one. Nothing to press.',
+  booth_hold_late_slip: 'It files itself the night you miss one. Nothing to press.',
   booth_hold_passive: 'It spends itself the moment it is needed.',
   /* THE TWO SIGNS IN THE ALLEY (shell/alleysign.js). One pair, one alley: the
    * plate on the booth's right-hand wall points at RM 004 and the plate on the
@@ -703,7 +703,11 @@ export const DEFAULT_LEXICON = Object.freeze({
   /* the payout beat on the report card */
   payout_tickets: 'Tickets',
   payout_token_minted: 'A token dropped in the tray. That is your one for today.',
-  late_slip_used: 'A late slip covered you. Your streak never noticed.',
+  late_slip_used: 'A tardy slip was handed in for you. Your streak never noticed.',
+  /* THE ONE SMALL BUTTON under the jeopardy line (Deck V). `{name}` is filled
+   * from the catalog row's own name, so a mod that renames the slip renames
+   * the offer with it. */
+  rake_slip_offer: 'The counter sells a {name}.',
 
   /* ------------------------------------------------------------------------
    * THE LOCKER, RM 004 (the Locker wave, 2026-08-28).
