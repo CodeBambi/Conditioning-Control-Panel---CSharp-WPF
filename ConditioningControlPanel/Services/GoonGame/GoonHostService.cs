@@ -1034,7 +1034,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                     if (uri == null) return;
                     var disp = Application.Current?.Dispatcher;
                     if (disp == null || disp.HasShutdownStarted) return;
-                    disp.BeginInvoke(() => { try { PostDiscordEcho(); } catch { } });
+                    _ = disp.BeginInvoke(() => { try { PostDiscordEcho(); } catch { } });
                 });
             }
             catch (Exception ex) { App.Logger?.Debug("GoonHostService.KickOwnAvatarRefresh: {E}", ex.Message); }

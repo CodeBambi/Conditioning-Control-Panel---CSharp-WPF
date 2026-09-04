@@ -26,7 +26,7 @@ namespace ConditioningControlPanel.Services.Moderation
     /// is hardcoded in <see cref="ModerationGuard"/> and applies to every input that
     /// goes to an LLM and every output that comes back.
     ///
-    /// See <c>AI_AUDIT.md</c> sections 7, 11, and 13 for the CCBill rationale.
+    /// See <c>docs/audits/AI_AUDIT.md</c> sections 7, 11, and 13 for the CCBill rationale.
     /// </summary>
     public interface IModerationGuard
     {

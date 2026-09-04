@@ -35,6 +35,24 @@ trip over each other:
   PR that touches `ConditioningControlPanel/` unless it carries the `seam` label; check the
   coordination issue for "touching next" before opening a WPF PR.
 
+## Pull Request Size Rule
+
+Every PR is capped at about **600 changed lines** (additions + deletions, as reported by
+`git diff --stat origin/main...HEAD`). Bigger work ships as a stack of small PRs that each
+build, review and land on their own. Check before opening:
+
+```bash
+git diff --stat origin/main...HEAD | tail -1
+```
+
+- The only exception is a mechanical bulk change (lockfiles, generated files, binary assets,
+  a rename that touches many files). Put it in its own PR and say so in the body.
+- If a feature cannot fit, split it by layer (data model, service, UI) or by sub-feature,
+  and open the PRs in order. Each one must build on its own.
+- Agents driving PRs get this cap in their brief and report the line count in the PR body.
+
+Why: this is a multi-person codebase now, and a 2k-line PR cannot be reviewed.
+
 ## Quick File Reference
 
 ### Version Locations (ALL must be updated for releases)
@@ -48,7 +66,7 @@ trip over each other:
 | `MainWindow/MainWindow.xaml:~1985` | `BtnUpdateAvailable` Content + ToolTip loc keys |
 | `Localization/Languages/*.json` (9 files) | `btn_vX_Y_Z_is_out` + `tooltip_vX_Y_Z_*` keys |
 
-Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. The language files are strict-JSON clean as of 2026-07-29 - see **Localization** under Known Issues before editing them.
+Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release body; gitignored, never committed; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. The language files are strict-JSON clean as of 2026-07-29 - see **Localization** under Known Issues before editing them.
 
 ### Important Paths
 | Path | Purpose |

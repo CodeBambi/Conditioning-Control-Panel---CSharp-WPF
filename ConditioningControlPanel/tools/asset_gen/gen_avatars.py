@@ -42,7 +42,7 @@ from pathlib import Path
 # ----------------------------------------------------------------------------
 
 # Project root = two levels up from this file (tools/asset_gen/gen_avatars.py).
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUTPUT_ROOT = SCRIPT_DIR / "output"
 

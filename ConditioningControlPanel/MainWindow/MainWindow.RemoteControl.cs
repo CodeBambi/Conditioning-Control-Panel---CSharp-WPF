@@ -72,7 +72,7 @@ namespace ConditioningControlPanel
                 {
                     // Defer revert so it runs after the dialog's event stack fully unwinds,
                     // preventing WPF toggle animation from getting stuck in the ON position.
-                    Dispatcher.BeginInvoke(new Action(() =>
+                    _ = Dispatcher.BeginInvoke(new Action(() =>
                     {
                         _isLoading = true;
                         RemoteControlTab.ChkRemoteControlEnabled.IsChecked = false;

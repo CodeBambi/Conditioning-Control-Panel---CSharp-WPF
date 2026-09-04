@@ -16,8 +16,6 @@ namespace ConditioningControlPanel.Services
 
         private static string StartupFolderPath => Environment.GetFolderPath(Environment.SpecialFolder.Startup);
         private static string ShortcutPath => Path.Combine(StartupFolderPath, ShortcutName);
-        private static string ApplicationPath => System.Reflection.Assembly.GetExecutingAssembly().Location
-            .Replace(".dll", ".exe"); // Handle both .exe and .dll scenarios
 
         /// <summary>
         /// Checks if the application is registered to start with Windows.
@@ -115,19 +113,8 @@ namespace ConditioningControlPanel.Services
                 return processPath;
             }
 
-            // Fallback: construct from assembly location
-            var assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            if (!string.IsNullOrEmpty(assemblyLocation))
-            {
-                // For .NET Core/.NET 5+ single-file apps, the assembly location might be empty or point to .dll
-                var exePath = assemblyLocation.Replace(".dll", ".exe");
-                if (File.Exists(exePath))
-                {
-                    return exePath;
-                }
-            }
-
-            // Try AppContext.BaseDirectory
+            // Fallback: AppContext.BaseDirectory + the app name. Assembly.Location is
+            // deliberately not consulted — it is empty in a single-file build (IL3000).
             var baseDir = AppContext.BaseDirectory;
             var appName = AppDomain.CurrentDomain.FriendlyName;
             if (!appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))

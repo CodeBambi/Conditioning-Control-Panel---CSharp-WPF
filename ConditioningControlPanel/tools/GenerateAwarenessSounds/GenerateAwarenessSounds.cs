@@ -5,7 +5,7 @@
 // and loaded at runtime via KeywordTriggerService.ResolveAudioPath.
 //
 // Usage:
-//   dotnet run --project Tools/GenerateAwarenessSounds
+//   dotnet run --project ConditioningControlPanel/tools/GenerateAwarenessSounds
 //
 // Output: clicker.wav, lock-click.wav, chime.wav, bell.wav
 // Format: 16-bit PCM, 22050 Hz mono — all four clips stay well under 30 KB.
@@ -24,7 +24,7 @@ internal static class Program
     // pick it up without any project file changes.
     private static readonly string OutputDir = Path.Combine(
         AppContext.BaseDirectory,
-        "..", "..", "..", "..", "..",
+        "..", "..", "..", "..", "..", "..",
         "ConditioningControlPanel", "Resources", "AwarenessPresets", "audio");
 
     public static int Main()

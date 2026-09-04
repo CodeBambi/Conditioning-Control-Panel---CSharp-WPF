@@ -19,7 +19,7 @@ Also mints the early-release drop tone and the overflow chime layer.
 Pure stdlib (wave + struct + math) on purpose: this runs on a clean checkout with
 no numpy, exactly like the faucet_tick.wav that preceded it.
 
-    python Tools/asset_gen/gen_faucet_charge_sfx.py
+    python ConditioningControlPanel/tools/asset_gen/gen_faucet_charge_sfx.py
 
 Writes into ConditioningControlPanel/Resources/sounds/. Deterministic - re-running
 it produces byte-identical files, so it is safe to re-run before a release.
@@ -32,7 +32,7 @@ import wave
 
 RATE = 44100
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.normpath(os.path.join(HERE, "..", "..", "ConditioningControlPanel", "Resources", "sounds"))
+OUT = os.path.normpath(os.path.join(HERE, "..", "..", "..", "ConditioningControlPanel", "Resources", "sounds"))
 
 # The ladder. Roughly three semitones a rung over a bit more than an octave and a
 # half - wide enough that the climb reads on laptop speakers under a wobble tick.

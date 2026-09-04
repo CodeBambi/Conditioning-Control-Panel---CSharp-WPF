@@ -169,6 +169,9 @@ tools/
 !ConditioningControlPanel/tools/
 ConditioningControlPanel/tools/*
 !ConditioningControlPanel/tools/pack-indexer/
+!ConditioningControlPanel/tools/asset_gen/
+!ConditioningControlPanel/tools/bark/
+!ConditioningControlPanel/tools/GenerateAwarenessSounds/
 
 # Redistributables (re-downloadable from Microsoft; do not bloat the repo).
 # VC_redist.x64.exe is 25 MB and build-installer.bat fetches it on demand.
@@ -193,3 +196,6 @@ package-lock.json
 # describes explicit screenshots; topics.json describes unannounced features. Media is large
 # and some of it is suggestive. Nothing in here belongs on GitHub.
 marketing/
+
+# Release-notes drafts (the text lives in the GitHub release body; keep the file local)
+notes-v*.txt
