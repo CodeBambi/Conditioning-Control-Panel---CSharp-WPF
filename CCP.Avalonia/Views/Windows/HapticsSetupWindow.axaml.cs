@@ -24,8 +24,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// fallbacks, which never fired in the real app.)
     ///
     /// What is still NOT ported: the device half. <c>App.Haptics</c> (HapticService) and
-    /// <c>PatreonService</c> have no seam in Core, so the connect, the premium gate and the test
-    /// buzz are stubs. Each is marked.
+    /// <c>PatreonService</c> have no seam in Core, so there is no transport to open and no premium
+    /// answer to read. Connect and Test Buzz therefore report WPF's own FAILURE outcome rather than
+    /// a placeholder success - see <see cref="BtnConnect_Click"/> for why a fabricated device list
+    /// was removed. Nothing on page 3 claims a device is paired.
     ///
     /// Strings that the WPF code-behind ASSIGNS to a control carrying <c>{loc:Str}</c> are bound
     /// here instead (<see cref="BindLoc"/>): Avalonia keeps the XAML binding alive under a local
@@ -123,23 +125,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ------------------------------------------------------------------ page 3
 
+        /// <summary>
+        /// WPF's own failure branch, which is the TRUE outcome on a head with no haptic stack:
+        /// nothing connected, no devices, and the per-provider hint that tells the author what to
+        /// check. <see cref="ApplyProviderSettings"/> is deliberately NOT called from here - the
+        /// provider choice is already written when the page advances (BtnNext_Click), which is
+        /// where WPF writes it too on the path that never reaches a service.
+        ///
+        /// <para>ponytail: previously this showed <c>wizard_connect_ok</c> plus two fabricated
+        /// device names to exercise the list template. That was a control lying about state - the
+        /// wizard said "connected, 2 toys found" with no transport open and the premium gate never
+        /// consulted, and <c>_connected = true</c> swapped Connect for Done, so the author left
+        /// believing their toy was paired. Replaced with the failure the head can honestly report.
+        /// The real handler needs ConditioningControlPanel/Services/Haptics/HapticService.cs
+        /// (ConnectAsync / ConnectedDevices), and its gate needs
+        /// ConditioningControlPanel/Services/Account/PatreonService.cs (HasPremiumAccess) OR
+        /// DailyFreeService.IsFreeToday("haptics") - DailyFreeService is in Core, HasPremiumAccess
+        /// has no seam, and half a premium gate is not a gate, so the gate is not attempted here.
+        /// Its strings, when it lands, are "gate_premium_locked" / "msg_haptic_feedback_patreon_only".
+        /// The "connected but zero toys yet" branch (wizard_connect_no_toys) is a live-transport
+        /// state and cannot be reached without one.</para>
+        /// </summary>
         private void BtnConnect_Click()
         {
-            // ponytail: needs ConditioningControlPanel/Services/Haptics/HapticService.cs
-            // (ConnectAsync/ConnectedDevices) and ConditioningControlPanel/Services/Account/
-            // PatreonService.cs (HasPremiumAccess) for the premium gate - neither has a seam among
-            // the ten in Core, and DailyFreeService alone cannot answer the gate. Until then the
-            // page shows a placeholder result so the device-list template is actually exercised.
-            // The real handler also has a failure path: ShowResult(false, "wizard_connect_failed",
-            // <"wizard_fail_hint_lovense" | "wizard_fail_hint_intiface" | "wizard_fail_hint_generic">,
-            // empty), and a premium gate on "gate_premium_locked" /
-            // "msg_haptic_feedback_patreon_only" — WPF's FailureHint(), not carried as dead code.
-            ApplyProviderSettings();
-            _connected = true;
-            ShowResult(true, "wizard_connect_ok", "wizard_connect_ok_hint",
-                       new[] { "Sample Toy (placeholder)", "Sample Toy 2 (placeholder)" });
+            _connected = false;
+            ShowResult(false, "wizard_connect_failed", FailureHint(), Array.Empty<string>());
             UpdateChrome();
         }
+
+        /// <summary>Per-provider "what to check", ported verbatim from WPF's FailureHint().</summary>
+        private string FailureHint() => _provider switch
+        {
+            WizardProvider.Lovense => "wizard_fail_hint_lovense",
+            WizardProvider.Buttplug => "wizard_fail_hint_intiface",
+            _ => "wizard_fail_hint_generic"
+        };
 
         /// <summary>
         /// Keys rather than strings, unlike the WPF original: the two TextBlocks it writes carry

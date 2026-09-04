@@ -1029,17 +1029,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnImport_Click()
         {
-            // ponytail: needs SessionFileService + a StorageProvider file picker, wired when the
-            // service moves to Core. WPF filtered on *.session.json, validated the file, mapped it
-            // through TimelineSession.FromSession and reported with msg_invalid_session_file /
-            // msg_failed_to_import_session / msg_imported_session.
+            // ponytail: the picker is NOT the blocker - StorageProvider.OpenFilePickerAsync is on
+            // this head (ModCreatorWindow uses it). The blocker is the file FORMAT. A .session.json
+            // is Session/SessionSettings shaped, written by
+            // ConditioningControlPanel/Services/Session/SessionFileService.cs and mapped in through
+            // ConditioningControlPanel/Models/TimelineSession.cs; both are head-side, and the
+            // _session field below is EditorSession, a local stand-in whose JSON is a DIFFERENT
+            // shape. Reading a real .session.json into it would silently drop every per-feature
+            // setting the editor does not model, and the author would then save that loss back.
+            // Blocked until TimelineSession + SessionFileService reach Core, not until a picker does.
+            // WPF reported with msg_invalid_session_file / msg_failed_to_import_session /
+            // msg_imported_session.
             Log.Information("session editor: import is not wired on this head yet");
         }
 
         private void BtnExport_Click()
         {
-            // ponytail: needs SessionFileService.ExportSession + GetExportFileName and a save
-            // picker, wired when the service moves to Core (msg_session_exported_to on success).
+            // ponytail: same format blocker as BtnImport_Click, and worse in this direction -
+            // serialising EditorSession would put a file named *.session.json on disk that the
+            // Windows head cannot read back, so the author would ship a broken export believing it
+            // worked. Needs SessionFileService.ExportSession + GetExportFileName
+            // (ConditioningControlPanel/Services/Session/SessionFileService.cs) in Core; the save
+            // picker itself is already available here. (msg_session_exported_to on success.)
             _session.Name = TxtSessionName.Text ?? string.Empty;
             _session.Description = TxtDescription.Text ?? string.Empty;
             Log.Information("session editor: export is not wired on this head yet");

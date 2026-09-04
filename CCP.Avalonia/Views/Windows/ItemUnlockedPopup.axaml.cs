@@ -140,8 +140,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// Paints the item art, or a gift glyph when the PNG never landed. "No art" is a normal
         /// path, not an error - what must never happen is a broken-image box in the toast.
         ///
-        /// ponytail: needs Services.WardrobeCatalog.GetImage(item.Id), which resolves pack:// art in
-        /// the WPF head. Until it moves to Core every toast takes the gift-glyph branch.
+        /// ponytail: the note that stood here said WardrobeCatalog resolves pack:// art. It does
+        /// not - ConditioningControlPanel/Services/Profile/WardrobeCatalog.cs reads
+        /// Resources/cosmetics/&lt;mod&gt;/&lt;id&gt;.png OFF DISK from AppContext.BaseDirectory, on
+        /// purpose, so art that never shipped degrades instead of throwing a resource URI. Two real
+        /// blockers follow from that. The registry half (registry.json parsing, Find, the unlock
+        /// gates) is portable and belongs in Core; the same file's GetImage is WPF - BitmapImage,
+        /// DecodePixelWidth, Freeze - so the type has to be SPLIT, not moved. And the art itself is
+        /// linked only by ConditioningControlPanel.csproj (Assets/cosmetics -&gt; Resources/cosmetics
+        /// as Content); CCP.Avalonia.csproj links no cosmetics at all, so even a ported GetImage
+        /// would find nothing on this head. Until both, every toast takes the gift-glyph branch,
+        /// which is the WPF null path rather than a broken-image box.
         /// </summary>
         private void LoadItemArt()
         {

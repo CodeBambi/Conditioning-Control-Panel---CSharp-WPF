@@ -65,10 +65,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// are Core's (ModManifest / ModPackage) and the active mod comes from the CoreMods seam, which
     /// answers "the built-in default" on a head with no mod layer, so the ctor touches no disk.
     ///
+    /// Audio PREVIEW plays for real through <see cref="CoreAudio"/> - see
+    /// <see cref="ToggleAudioPreview"/>, which keeps only the half the seam can honestly do.
+    ///
     /// Stubbed, all with a ponytail marker at the call site: everything reaching App.*, a service,
-    /// NAudio, or one of the nine per-panel partial classes
+    /// or one of the ten per-panel partial classes
     /// (ModCreatorWindow.Pools.cs, .Personalities.cs, .Advanced.cs, .Barks.cs, .Mantras.cs,
-    /// .EventAudio.cs, .Portraits.cs, .Emotes.cs, .UiArt.cs / .ArtFraming.cs), which are their own
+    /// .EventAudio.cs, .Portraits.cs, .Emotes.cs, .UiArt.cs, .ArtFraming.cs), which are their own
     /// port layers. Their sidebar entries stay - they are part of this view's chrome - and each
     /// draws a "ported in a later layer" panel rather than a dead click.
     /// </summary>
@@ -1298,16 +1301,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _voiceLinesPanel?.Children.Add(row);
         }
 
+        /// <summary>
+        /// Preview an author-picked clip. WPF resolves the same two shapes - a fixed slot key, or a
+        /// voice line's direct path - and plays the file raw, at its own level, NOT scaled by the
+        /// master volume: this is the author checking what they just picked, not the app talking.
+        ///
+        /// <para>ponytail: this is PLAY only, and the method name is now a half-truth. WPF's other
+        /// half is a stop - the button becomes ⏹, a second click stops it, and StopAudioPreview
+        /// kills it on Reset All and on close. <see cref="CoreAudio"/> carries PlayOneShot / Duck /
+        /// Unduck and NOTHING that stops or cancels a one-shot, so a ⏹ glyph here would be a
+        /// button that cannot do what it shows. Dropped rather than mimed; the cost is that two fast
+        /// clicks overlap two previews and a preview outlives this window. Wiring it needs a
+        /// cancel on CCP.Core/CoreAudio.cs, which this layer does not own.</para>
+        /// </summary>
         private void ToggleAudioPreview(string keyOrPath, Button playBtn)
         {
-            // ponytail: needs an audio player, wired when playback moves behind a Core interface.
-            // The WPF version drives NAudio's WaveOutEvent/AudioFileReader directly, flips the
-            // button glyph to ⏹ while playing and restores it from PlaybackStopped.
+            var filePath = _audioSlots.TryGetValue(keyOrPath, out var slotPath) ? slotPath : keyOrPath;
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
+
+            CoreAudio.PlayOneShot(filePath, 1f, "modcreator-preview");
         }
 
+        /// <summary>
+        /// ponytail: nothing to stop - see <see cref="ToggleAudioPreview"/>. Kept as the call site
+        /// WPF has (OnClosed, Reset All) so the stop lands in one place the day
+        /// CCP.Core/CoreAudio.cs grows a cancel.
+        /// </summary>
         private void StopAudioPreview()
         {
-            // ponytail: needs an audio player - see ToggleAudioPreview.
         }
 
         private void LoadAudioFromResources(string resourcesDir)
@@ -1828,9 +1849,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             clearBtn.Click += (_, _) => ClearImageSlot(resourceKey);
             borderHolder.Children.Add(clearBtn);
 
-            // ponytail: needs ModCreatorWindow.ArtFraming.cs for the "Frame" affordance, which the
-            // WPF head adds here for slots whose path paints a framed surface. SlotIsFramable
-            // returns false until that layer lands, so nothing is added.
+            // ponytail: the DECISION is already portable - WPF's SlotIsFramable is one line,
+            // ModArtFramingRegistry.FramableBindingsFor(resourceKey).Any(), and that registry is in
+            // Core (CCP.Core/Services/ModArtFraming.cs). What is missing is where the affordance
+            // LEADS: ConditioningControlPanel/Windows/ModCreatorWindow.ArtFraming.cs is a
+            // drag-a-preview cropping editor, ~400 lines of WPF, a redraw and not a move. A "Frame"
+            // button with nothing behind it is worse than no button, so nothing is added here until
+            // that panel is ported.
 
             var border = new Border
             {
@@ -1974,14 +1999,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// ponytail: needs ModImageSlotRules (ModCreatorWindow.UiArt.cs) plus a message box, wired
-        /// when that layer lands. The WPF gate hard-rejects a file whose format does not match the
-        /// slot's filename, then asks before accepting anything oversized.
+        /// ponytail: NOT blocked on a message box - this head ships Views/Dialogs/MessageDialog.
+        /// Two other things block it. First, the rules: ModImageSlotRules is pure C# (Path,
+        /// FileInfo, invariant formatting) but is declared inside
+        /// ConditioningControlPanel/Windows/ModCreatorWindow.UiArt.cs, a WPF partial, so reaching it
+        /// means moving that type to Core - not copying it here, which is the duplication this split
+        /// exists to prevent. Second, half of the WPF gate is a CONFIRM ("this is 6.2 MB, use it
+        /// anyway?") and MessageDialog is async, so this synchronous bool cannot carry it; the
+        /// caller chain from the Browse handler down through SetImageSlot has to become async first.
+        /// The hard-reject half alone would be honest, but it still needs the rules type.
         /// </summary>
         private bool PassesImageSlotChecks(string key, string filePath) => true;
 
-        /// <summary>ponytail: needs ModCreatorWindow.ArtFraming.cs - drops the crop stored for a
-        /// slot whose image just changed or was cleared.</summary>
+        /// <summary>
+        /// WPF drops the crop stored for a slot whose image just changed or was cleared - left
+        /// behind, it silently re-attaches to whatever the author picks next, and to a manifest that
+        /// no longer ships the file it was measured against.
+        ///
+        /// <para>ponytail: correctly empty TODAY rather than blocked. The framing dictionary lives in
+        /// ConditioningControlPanel/Windows/ModCreatorWindow.ArtFraming.cs and there is no port of it
+        /// here, so nothing in this window holds a crop to drop - ApplyPanelSectionsToManifest never
+        /// writes ModManifest.ArtFraming either. The body arrives with that panel; the call sites
+        /// (SetImageSlot, ClearImageSlot) are already in the WPF places.</para>
+        /// </summary>
         private void DropArtFraming(string key) { }
 
         private void ClearImageSlot(string key)

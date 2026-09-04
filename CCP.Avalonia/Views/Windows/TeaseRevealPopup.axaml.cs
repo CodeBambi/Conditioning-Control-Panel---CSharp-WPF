@@ -95,7 +95,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 var popup = new TeaseRevealPopup(teaseTier);
-                if (owner is { IsLoaded: true }) popup.ShowDialog(owner);
+                // IsVisible, not IsLoaded: Avalonia's ShowDialog throws on an owner that is not
+                // visible, and a shell minimised to tray is loaded-and-not-visible. With IsLoaded
+                // the throw lands in the catch below and the teaser silently never opens; with
+                // IsVisible it falls through to the modeless Show(), which is the intended
+                // worst case.
+                if (owner is { IsVisible: true }) popup.ShowDialog(owner);
                 else popup.Show();
             }
             catch (Exception ex)
