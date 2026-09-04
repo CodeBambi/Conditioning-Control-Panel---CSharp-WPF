@@ -150,7 +150,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // the wiring is a rename away once those partials reach Core.
         //
         // ponytail: needs MainWindow (PremiumRail, DashboardFx, Browser, Login, HomeAudio,
-        // ProgramsTab, TeaseCard, TabNavigation), PremiumFeature and TierGate - all WPF-head.
+        // ProgramsTab, TeaseCard, TabNavigation) and PremiumFeature - both WPF-head. TierGate is NOT
+        // among them any more: CCP.Core/Services/TierGate.cs, over the CoreEntitlement seam.
         //
         // "LinkPhoneDialog and LayeredAudioWindow, none of them on this head" was FALSE and is
         // gone: both are ported (CCP.Avalonia/Views/Dialogs/LinkPhoneDialog.axaml.cs and

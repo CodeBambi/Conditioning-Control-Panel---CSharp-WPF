@@ -26,9 +26,10 @@
 //     StudioTab cases already there.
 //
 // STILL HEAD-SIDE, each with the exact symbol and where it lives today:
-//   DemandSheListeningPremium  - Services.TierGate.DemandPremium
-//                                (ConditioningControlPanel/Services/TierGate.cs). With it,
-//                                ToggleVoiceMic's arming half and the SheListeningGate veil.
+//   DemandSheListeningPremium  - nothing any more: TierGate is CCP.Core/Services/TierGate.cs.
+//                                Still unwired here only because its two readers below,
+//                                ToggleVoiceMic's arming half and the SheListeningGate veil, are
+//                                blocked on the mic services listed next.
 //   ToggleVoiceMic             - App.Autonomy.RefreshVoiceInputModes / StopVoiceInput
 //   DisarmVoiceMic               (ConditioningControlPanel/Services/AutonomyService.cs),
 //                                App.Speech.StopListening
@@ -45,8 +46,8 @@
 //                                CoreSpeech carries no wake engine, only the recognizer's status.
 //   UpdateMicPill              - MainShellWindow.PrivacyPill.cs, still a stub.
 //   SetSheListeningStatusPulse - MainShellWindow.SheListeningFx.cs, still a stub.
-//   RefreshPremiumRail         - MainShellWindow.PremiumRail.cs / RefreshPremiumGate, both
-//   RefreshPremiumGate           TierGate again.
+//   RefreshPremiumRail         - MainShellWindow.PremiumRail.cs / RefreshPremiumGate, neither of
+//   RefreshPremiumGate           which this layer owns. TierGate itself is no longer the blocker.
 // Every one of those calls is DROPPED from the restored bodies below, never faked.
 
 using System;

@@ -104,6 +104,28 @@ namespace ConditioningControlPanel.LinuxSmoke
                 CoreAudio.Duck(95); CoreAudio.Unduck();
                 Check("CoreAudio ducking is a no-op with no audio", CoreAudio.DuckGeneration == 0);
                 Check("CoreAi.IsAvailable is false with no head", !CoreAi.IsAvailable);
+                // The entitlement seam (wire/99). TierGate is Core policy now; the account bars and
+                // the refusal surface are the head's. Unseeded MUST deny - a gate that fails open on
+                // a head with no account service hands out Tier 2 for free.
+                Check("TierGate.RequiresPremium denies with no entitlement seeded",
+                      !TierGate.RequiresPremium("Smoke").Allowed);
+                Check("TierGate.RequiresLab denies with no entitlement seeded",
+                      !TierGate.RequiresLab("Smoke").Allowed);
+                Check("the daily-free overload does not open the door either",
+                      !TierGate.RequiresPremium("Smoke", "voice").Allowed);
+                Check("TierGate.DemandPremium refuses and does not throw with no refusal surface",
+                      !TierGate.DemandPremium("Smoke"));
+                Check("TierGate.DemandLab refuses and does not throw with no refusal surface",
+                      !TierGate.DemandLab("Smoke", "dtrh"));
+                // A provider that THROWS must read as denied, not as an unhandled exception.
+                CoreEntitlement.HasLabProvider = () => throw new InvalidOperationException("smoke");
+                Check("a throwing entitlement provider reads as denied", !TierGate.RequiresLab("Smoke").Allowed);
+                // ...and the seam must actually be CONSULTED, or "denies" would only prove the
+                // class hardcodes false. Flip it, check, put it back.
+                CoreEntitlement.HasLabProvider = () => true;
+                Check("a seeded entitlement opens the Lab bar", TierGate.RequiresLab("Smoke").Allowed);
+                CoreEntitlement.HasLabProvider = null;
+                Check("clearing the provider closes it again", !TierGate.RequiresLab("Smoke").Allowed);
                 // The progression seam (wire/35). A head with no XP service is a real state, so
                 // the only thing to assert unseeded is that awarding is silent and does not throw
                 // - a minigame must still finish its flow on a head that keeps no score.

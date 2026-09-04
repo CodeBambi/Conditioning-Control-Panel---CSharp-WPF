@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
@@ -26,9 +27,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// destroy a paid-up user's setting on every launch. Seeding shows the stored truth; only a
     /// head that can read Patreon may repair it.</para>
     ///
-    /// <para><see cref="ApplyTierGate"/> still fails closed, exactly as <c>TierGate.RequiresLab</c>
-    /// does with no Patreon service alive, so the effect half stays disabled on this head and the
-    /// restored writes below are reachable only once an entitlement is seeded.</para>
+    /// <para><see cref="ApplyTierGate"/> and the master toggle's refusal now call the real
+    /// <c>TierGate</c> (CCP.Core/Services/TierGate.cs), not a local stand-in. It still fails
+    /// closed here - this head seeds no <c>CoreEntitlement</c> providers, so there is no account
+    /// to read - but the band copy and the refusal are the shipped ones, and the day a head seeds
+    /// an entitlement this control opens with no further edit.</para>
     ///
     /// <para>Motion budget: zero.</para>
     /// </summary>
@@ -105,28 +108,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             }
         }
 
-        /// <summary>Whether this account clears the Tier 2 bar.</summary>
-        // ponytail: needs PatreonService.HasLabAccess, wired when it moves to Core. Fails closed.
-        internal bool IsLabEntitled => false;
-
         /// <summary>
         /// Paints the Tier 2 verdict onto the effects half: disabled and dimmed under a violet
         /// lockband when the account does not clear the bar, untouched when it does. Deliberately
         /// does NOT touch the memory half - chat memory is Tier 1.
+        ///
+        /// <para>The verdict is <see cref="TierGate.RequiresLab"/> itself now (it is in Core, over
+        /// the <c>CoreEntitlement</c> seam), band copy included - so this band and the refusal
+        /// toast cannot say different things. Unseeded on this head, so still closed.</para>
         /// </summary>
         internal void ApplyTierGate()
         {
             try
             {
-                var allowed = IsLabEntitled;
-                // Same sentence TierGate.RequiresLab formats, so this band and the toast agree.
-                var reason = allowed ? string.Empty
-                    : Loc.GetF("tiergate_denied_lab", Loc.Get("lab_ai_effects_memory_title"));
+                var verdict = TierGate.RequiresLab(Loc.Get("lab_ai_effects_memory_title"));
+                var allowed = verdict.Allowed;
 
                 EffectsGateHost.IsEnabled = allowed;
                 EffectsGateHost.Opacity = allowed ? 1.0 : LockedOpacity;
                 EffectsLockBand.IsVisible = !allowed;
-                TxtEffectsLockCopy.Text = reason;
+                TxtEffectsLockCopy.Text = verdict.Reason;
             }
             catch (Exception ex)
             {
@@ -181,7 +182,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             if (_isLoading) return;
             var on = ChkCapEffects.IsChecked == true;
-            if (on && !IsLabEntitled)
+            // WPF's own guard, verbatim (MainWindow.Patreon.cs:1662). DemandLab both decides and
+            // tells; with no entitlement seeded on this head it denies and only logs, which is a
+            // quieter refusal than Windows gives but the same refusal.
+            if (on && !TierGate.DemandLab(Loc.Get("lab_ai_effects_memory_title")))
             {
                 // A refusal must not write: put the switch back and leave the panel closed. The
                 // guard is raised around the snap-back because Avalonia re-enters this handler on

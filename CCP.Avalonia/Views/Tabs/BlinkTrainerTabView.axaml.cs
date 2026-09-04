@@ -26,8 +26,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ponytail: needs MainWindow's blink-trainer handlers -
         // ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs, the gaze calibration
-        // window, the overlay session and TierGate (Services/TierGate.cs). All four are still
-        // WPF-head; none has a Core seam. This is the same refusal the gaze minigame took in
+        // window and the overlay session. TierGate is NO LONGER a blocker here - it is in Core
+        // (CCP.Core/Services/TierGate.cs) over the CoreEntitlement seam; the other three are still
+        // WPF-head with no Core seam. This is the same refusal the gaze minigame took in
         // d5f2ac87 and BubblePopFeatureControl takes at its own site: a trainer that looks started
         // while nothing tracks the eyes is worse than a gesture that does nothing.
         private void BlinkTrainerMixOptionMix_Click(object? sender, PointerReleasedEventArgs e) { }

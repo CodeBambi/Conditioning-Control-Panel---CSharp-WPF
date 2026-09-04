@@ -330,6 +330,31 @@ namespace ConditioningControlPanel
             // The engine-running flag, for the feature cards that only live-apply while a session
             // is up. The engine stays here; the flag is the whole seam.
             CoreSession.IsEngineRunningProvider = () => IsEngineRunning;
+            // The entitlement seam, for TierGate (now CCP.Core/Services/TierGate.cs). Deciding is
+            // policy and moved; the two account bars, the daily-free wheel and the refusal toast
+            // stay here. Every one is a lambda, not an eager read: Patreon, DailyFree and
+            // Notifications are all constructed in OnStartup, long after this ctor runs, and until
+            // they are the seam answers false - which is deny, the direction a gate must fail.
+            CoreEntitlement.HasPremiumProvider = () => Patreon?.HasPremiumAccess == true;
+            CoreEntitlement.HasLabProvider = () => Patreon?.HasLabAccess == true;
+            CoreEntitlement.IsFreeTodayProvider = key => DailyFree?.IsFreeToday(key) == true;
+            CoreEntitlement.ShowDeniedHandler = verdict =>
+            {
+                try
+                {
+                    Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
+                        Loc.Get("tiergate_see_tiers"), () => MainWindowRef?.ShowAppInfoPopup());
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Debug("TierGate: denial toast failed: {E}", ex.Message);
+                }
+
+                // EMI Desk (MOMENTS 4.B): the ONE refusal surface in the app, so the one place she
+                // can see a locked door being tried. verdict.Feature is a localized display name.
+                try { EmiDesk?.Fire("premiumTeaseSeen", new { target = verdict.Feature?.ToLowerInvariant() }); }
+                catch { }
+            };
             // The app's one moderation log. Read lazily on every call because ModerationLog is
             // constructed in OnStartup, long after this ctor - and it is declared null! until then.
             CoreModerationLog.InstanceProvider = () => ModerationLog;
