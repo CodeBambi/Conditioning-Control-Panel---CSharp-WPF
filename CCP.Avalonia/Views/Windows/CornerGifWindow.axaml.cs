@@ -364,11 +364,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ApplyLive(int index = -1)
         {
             CoreSettings.Save();
-            // ponytail: needs CornerGifService.RefreshSlot(int) / RefreshOverlays()
-            // (ConditioningControlPanel/Services/CornerGifService.cs, reached as App.CornerGif),
-            // which is Win32-layered-window code still in the WPF head. The settings write above is
-            // live; only the re-realize of an already-showing overlay is missing.
-            _ = index;
+            // Where the overlay goes is CornerGifPlanner's answer now, and it is the same on every
+            // head. Raising the window is not: CoreCornerGif is the surface seam, seeded by the WPF
+            // head to App.CornerGif and UNSEEDED here until this head's overlay surface lands
+            // (CCP.Avalonia/Views/Overlays/), so this call is a deliberate no-op on Linux. The save
+            // above is the live part - the slot is correct on disk and shows the moment a surface
+            // exists.
+            CoreCornerGif.Refresh(index);
         }
     }
 }

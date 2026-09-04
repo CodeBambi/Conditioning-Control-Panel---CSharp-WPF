@@ -15,20 +15,11 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class CornerGifService
     {
-        /// <summary>Hard cap on simultaneous overlay windows, independent of what the settings file
-        /// contains - the config UI only ever writes CornerGifWindow.SlotCount entries, but a
-        /// hand-edited / migrated settings.json must not be able to spawn an unbounded number of
-        /// topmost layered windows.</summary>
-        private const int MaxOverlays = 2;
-
-        /// <summary>Diagonal inset (DIPs) applied per slot that lands in an already-claimed corner.</summary>
-        private const double SameCornerNudge = 40;
-
-        /// <summary>Real-time gap between two slots' realizations (#958). A dispatcher pass alone was
-        /// not enough: both slots still drained in the same pump, so the second layered surface was
-        /// created while the first GIF's animator had already started driving the render thread -
-        /// which is precisely the "enabled corner gif 2 and it froze" report.</summary>
-        private const int StaggerMs = 400;
+        /// <summary>Hard cap on simultaneous overlay windows, the same-corner nudge and the
+        /// realization stagger all live in <see cref="CornerGifPlanner"/> now - they are arithmetic
+        /// over settings, not window code, so every head gets one answer rather than a copy each.
+        /// This head keeps only what needs a Win32 surface.</summary>
+        private const int MaxOverlays = CornerGifPlanner.MaxOverlays;
 
         /// <summary>How many times a slot may be pushed back because a display change is in flight
         /// before it is realized anyway. 8 x <see cref="SpawnRetryMs"/> covers a monitor drag.</summary>
@@ -417,7 +408,7 @@ namespace ConditioningControlPanel.Services
         /// #709, and the "turned on corner gif 2 and it froze" hang in #958.
         ///
         /// <para>Background priority alone was not enough, because it only orders the work inside
-        /// one dispatcher drain. Each slot now also waits out a real <see cref="StaggerMs"/> gap
+        /// one dispatcher drain. Each slot now also waits out a real <see cref="CornerGifPlanner.StaggerMs"/> gap
         /// after the previous one, and no slot realizes while a display change is in flight
         /// (<see cref="Services.UI.DisplayChangeCoordinator.SpawnsSuppressed"/>) - #954 is a
         /// dual-monitor report, and layered-surface creation during a DPI/topology change is the
@@ -430,11 +421,9 @@ namespace ConditioningControlPanel.Services
             _pending.Add(index);
             SyncSentinel();
 
-            long now = Environment.TickCount64;
-            long at = Math.Max(now, _nextRealizeTick);
-            _nextRealizeTick = at + StaggerMs;
+            long delayMs = CornerGifPlanner.NextRealizeDelayMs(ref _nextRealizeTick, Environment.TickCount64);
 
-            ScheduleRealize(disp, index, setting, seq, Math.Max(0, at - now), 0);
+            ScheduleRealize(disp, index, setting, seq, delayMs, 0);
         }
 
         private void ScheduleRealize(Dispatcher disp, int index, CornerGifOverlaySetting setting,
@@ -514,17 +503,9 @@ namespace ConditioningControlPanel.Services
             // selection (App.Settings.SpiralPath, the "pool") -> built-in corner spiral.
             // So an enabled-but-unpicked slot draws whatever spiral the app is already using,
             // matching OverlayService.GetSpiralPath (the pool) rather than a separate file.
-            string filePath = "";
-            if (!string.IsNullOrEmpty(setting.GifPath) && System.IO.File.Exists(setting.GifPath))
-            {
-                filePath = setting.GifPath;
-            }
-            else
-            {
-                var poolPath = App.Settings?.Current?.SpiralPath;
-                if (!string.IsNullOrEmpty(poolPath) && System.IO.File.Exists(poolPath))
-                    filePath = poolPath;
-            }
+            // The first two steps are CornerGifPlanner's (they are the same on every head); only
+            // the built-in fallback below is this head's, because only it knows its pack:// art.
+            var filePath = CornerGifPlanner.ResolveSourcePath(setting, App.Settings?.Current?.SpiralPath);
 
             if (!string.IsNullOrEmpty(filePath))
             {
@@ -569,20 +550,6 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // Scale to the user's longest-edge size (default 300).
-            var targetSize = setting.Size > 0 ? setting.Size : 300;
-            double scale = targetSize / Math.Max(gifWidth, gifHeight);
-            double windowWidth = gifWidth * scale;
-            double windowHeight = gifHeight * scale;
-
-            if (!double.IsFinite(scale) || !double.IsFinite(windowWidth) || !double.IsFinite(windowHeight)
-                || windowWidth <= 0 || windowHeight <= 0)
-            {
-                App.Logger?.Warning("CornerGifService: computed non-finite overlay geometry (scale={Scale}, {W}x{H}) - skipping overlay",
-                    scale, windowWidth, windowHeight);
-                return;
-            }
-
             var screen = System.Windows.Forms.Screen.PrimaryScreen;
             if (screen == null) return;
 
@@ -592,40 +559,31 @@ namespace ConditioningControlPanel.Services
                 dpiScale = g.DpiX / 96.0;
             }
 
-            double screenWidth = screen.Bounds.Width / dpiScale;
-            double screenHeight = screen.Bounds.Height / dpiScale;
+            // Everything from here to the window itself is CornerGifPlanner's, because none of it
+            // needs a window: the longest-edge scale (default 300), the corner the user picked, the
+            // same-corner nudge - two slots may legitimately pick ONE corner, and stacking them on
+            // identical pixels gives two topmost animating windows fighting for z-order, so one of
+            // them just looks "gone" - and the opacity clamp. Null means the numbers came out
+            // degenerate or non-finite; #625 is what happens when that is handed to WPF layout
+            // anyway, so bail out loudly instead. A zero DPI read lands here too.
+            var placement = CornerGifPlanner.Place(
+                setting, gifWidth, gifHeight,
+                screen.Bounds.Width / dpiScale, screen.Bounds.Height / dpiScale,
+                CornerGifPlanner.CountEarlierSlotsInCorner(
+                    App.Settings?.Current?.CornerGifOverlays, index, setting.Position));
 
-            double left = 0, top = 0;
-            switch (setting.Position)
+            if (placement is not { } place)
             {
-                case CornerPosition.TopLeft:
-                    left = 0; top = 0;
-                    break;
-                case CornerPosition.TopRight:
-                    left = screenWidth - windowWidth; top = 0;
-                    break;
-                case CornerPosition.BottomLeft:
-                    left = 0; top = screenHeight - windowHeight;
-                    break;
-                case CornerPosition.BottomRight:
-                    left = screenWidth - windowWidth; top = screenHeight - windowHeight;
-                    break;
+                App.Logger?.Warning("CornerGifService: computed non-finite overlay geometry for slot {Index} (source {W}x{H}, size {Size}, dpi {Dpi}) - skipping overlay",
+                    index, gifWidth, gifHeight, setting.Size, dpiScale);
+                return;
             }
 
-            // Two slots may legitimately pick the same corner; stacking them on identical pixels
-            // gives two topmost animating windows fighting for z-order (one of them looks "gone").
-            // Nudge each later slot diagonally inward instead of refusing the user's pick. Counted
-            // from settings rather than from live windows so the offset is the same regardless of
-            // which slot realizes first.
-            int stacked = CountEarlierSlotsInCorner(index, setting.Position);
-            if (stacked > 0)
-            {
-                double nudge = SameCornerNudge * stacked;
-                left += setting.Position is CornerPosition.TopLeft or CornerPosition.BottomLeft ? nudge : -nudge;
-                top += setting.Position is CornerPosition.TopLeft or CornerPosition.TopRight ? nudge : -nudge;
-            }
-
-            var opacity = Math.Clamp(setting.Opacity, 1, 100) / 100.0;
+            double windowWidth = place.Width;
+            double windowHeight = place.Height;
+            double left = place.Left;
+            double top = place.Top;
+            var opacity = place.Opacity;
 
             var window = new Window
             {
@@ -692,20 +650,6 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Information("CornerGifService: overlay shown at {Position} ({Path}, {W}x{H}px, {Opacity}%)",
                 setting.Position, gifUri, (int)windowWidth, (int)windowHeight, setting.Opacity);
-        }
-
-        private static int CountEarlierSlotsInCorner(int index, CornerPosition position)
-        {
-            var overlays = App.Settings?.Current?.CornerGifOverlays;
-            if (overlays == null) return 0;
-
-            int count = 0;
-            for (int i = 0; i < index && i < overlays.Count; i++)
-            {
-                var o = overlays[i];
-                if (o != null && o.Enabled && o.Position == position) count++;
-            }
-            return count;
         }
 
         // Startup-restore flag file, same mechanism as EngineCrashSentinel (armed while the risky

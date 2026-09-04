@@ -54,6 +54,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             Roadmap();
             LockCard();
             MindWipe();
+            CornerGif();
 
             Console.WriteLine();
             if (_failures == 0)
@@ -725,6 +726,71 @@ namespace ConditioningControlPanel.LinuxSmoke
                   picked.Length == 1 && picked[0] == custom);
             Check("a custom path that does not exist falls back to the folders, not to nothing",
                   MindWipeSchedule.DiscoverClips(Path.Combine(CorePaths.UserData, "gone.wav")).Length == 1);
+        /// The corner-GIF split (wire/108). CornerGifPlanner decides where a corner overlay goes;
+        /// CoreCornerGif is the surface that draws it, and is UNSEEDED here - this head has no
+        /// overlay window yet. What is worth asserting off Windows is that the unseeded seam is a
+        /// silent no-op rather than a throw or a lie, that the placement arithmetic pins the corner
+        /// it was asked for, and above all that a degenerate source is answered NULL: bug #625 was
+        /// a 0x0 image producing NaN geometry that took the app down inside layout.
+        /// </summary>
+        private static void CornerGif()
+        {
+            Console.WriteLine("\nCorner GIF planner and surface seam");
+
+            Check("CoreCornerGif reports no surface with no head attached", !CoreCornerGif.HasSurface);
+            CoreCornerGif.Refresh();      // must not throw
+            CoreCornerGif.Refresh(1);
+            Check("an unseeded CoreCornerGif.Refresh is a silent no-op", true);
+
+            var slot = new Models.CornerGifOverlaySetting
+            {
+                Enabled = true, Size = 300, Opacity = 18,
+                Position = Models.CornerPosition.BottomRight
+            };
+
+            var placed = CornerGifPlanner.Place(slot, 600, 400, 1920, 1080, 0);
+            Check("a bottom-right slot is placed against both far edges",
+                  placed is { } p && Math.Abs(p.Left + p.Width - 1920) < 0.001
+                                  && Math.Abs(p.Top + p.Height - 1080) < 0.001,
+                  placed is { } q ? $"{q.Left}x{q.Top} {q.Width}x{q.Height}" : "null");
+
+            Check("the longest edge is scaled to the slot's size, aspect kept",
+                  placed is { } r && Math.Abs(r.Width - 300) < 0.001 && Math.Abs(r.Height - 200) < 0.001);
+
+            Check("opacity percent becomes a 0..1 fraction",
+                  placed is { } o && Math.Abs(o.Opacity - 0.18) < 0.0001);
+
+            Check("a second slot in the same corner is nudged diagonally inward",
+                  CornerGifPlanner.Place(slot, 600, 400, 1920, 1080, 1) is { } n
+                  && placed is { } b
+                  && Math.Abs(n.Left - (b.Left - CornerGifPlanner.SameCornerNudge)) < 0.001
+                  && Math.Abs(n.Top - (b.Top - CornerGifPlanner.SameCornerNudge)) < 0.001);
+
+            // #625. A degenerate source must never yield geometry a head can hand to a layout pass.
+            Check("a 0x0 source is answered null, not NaN geometry",
+                  CornerGifPlanner.Place(slot, 0, 0, 1920, 1080, 0) is null);
+            Check("a non-finite screen size is answered null",
+                  CornerGifPlanner.Place(slot, 600, 400, double.PositiveInfinity, 1080, 0) is null);
+
+            // The realization stagger: two slots must never create a layered surface back to back.
+            long cursor = 0;
+            long first = CornerGifPlanner.NextRealizeDelayMs(ref cursor, 1000);
+            long second = CornerGifPlanner.NextRealizeDelayMs(ref cursor, 1000);
+            Check("the first slot realizes immediately and the second waits out the stagger",
+                  first == 0 && second == CornerGifPlanner.StaggerMs, $"{first}/{second}");
+
+            // Source order: an unpicked slot falls through to the pool, and "no file" means the
+            // head draws its own default rather than nothing.
+            var poolFile = Path.Combine(CorePaths.UserData, "smoke_pool_spiral.gif");
+            Directory.CreateDirectory(CorePaths.UserData);
+            File.WriteAllText(poolFile, "not really a gif");
+            Check("an unpicked slot falls through to the pool spiral",
+                  CornerGifPlanner.ResolveSourcePath(slot, poolFile) == poolFile);
+            Check("a slot pick that is not on disk falls through too",
+                  CornerGifPlanner.ResolveSourcePath(
+                      new Models.CornerGifOverlaySetting { GifPath = poolFile + ".missing" }, poolFile) == poolFile);
+            Check("no pick and no pool means null - the head draws its own default",
+                  CornerGifPlanner.ResolveSourcePath(slot, null) is null);
         }
 
         /// <summary>Pure math must not drift with locale or floating-point defaults.</summary>

@@ -377,6 +377,19 @@ namespace ConditioningControlPanel
             // visible pop quiz. Lazy, like the rest: LockCard is constructed in OnStartup, long
             // after this ctor, and every existing caller already writes App.LockCard?.
             CoreLockCard.ShowHandler = isTest => LockCard?.ShowLockCard(isTest: isTest);
+
+            // The corner-GIF surface seam. CornerGifPlanner decides WHERE a corner GIF goes on
+            // every head; only the layered click-through window is ours, and this is the handback
+            // that raises it. A negative index rebuilds every slot (a corner pick or an enable
+            // toggle shifts the same-corner nudge, so both move); a non-negative one rebuilds only
+            // that slot, which is the live slider edit that must not restart the other's animation.
+            // Lazy on purpose: CornerGif is constructed later in OnStartup.
+            CoreCornerGif.RefreshHandler = index =>
+            {
+                if (index < 0) CornerGif?.RefreshOverlays();
+                else CornerGif?.RefreshSlot(index);
+            };
+
             // The entitlement seam, for TierGate (now CCP.Core/Services/TierGate.cs). Deciding is
             // policy and moved; the two account bars, the daily-free wheel and the refusal toast
             // stay here. Every one is a lambda, not an eager read: Patreon, DailyFree and
