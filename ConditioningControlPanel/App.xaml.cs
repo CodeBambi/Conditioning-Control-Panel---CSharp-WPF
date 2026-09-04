@@ -339,6 +339,17 @@ namespace ConditioningControlPanel
             CoreAudio.UnduckProvider = generation => Audio?.Unduck(generation);
             CoreAudio.DuckGenerationProvider = () => Audio?.DuckGeneration ?? 0;
             CoreAi.IsAvailableProvider = () => Ai?.IsAvailable == true;
+            // Mind wipe's playing half. The schedule (tick interval, per-tick probability, the
+            // session escalation and the clip folders) is MindWipeSchedule in Core; what cannot
+            // cross is NAudio's crossfading loop, so the card asks for it through this seam. Lazy
+            // lambdas: MindWipe is constructed in OnStartup, long after this ctor.
+            CoreMindWipe.TriggerOnceProvider = () => MindWipe?.TriggerOnce();
+            CoreMindWipe.StartLoopProvider = volume => MindWipe?.StartLoop(volume);
+            CoreMindWipe.StopLoopProvider = () => MindWipe?.StopLoop();
+            CoreMindWipe.IsLoopingProvider = () => MindWipe?.IsLooping == true;
+            CoreMindWipe.UpdateSettingsProvider = (frequency, volume) => MindWipe?.UpdateSettings(frequency, volume);
+            CoreMindWipe.ReloadClipsProvider = () => MindWipe?.ReloadAudioFiles();
+            CoreMindWipe.ClipCountProvider = () => MindWipe?.AudioFileCount ?? 0;
             // Progression, for the ported minigame windows that award XP or record a streak. The
             // source arrives as an XPSource member name - see CoreProgression for why - and an
             // unknown name is charged to Other rather than dropped.

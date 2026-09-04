@@ -97,14 +97,14 @@ namespace ConditioningControlPanel.Services
         public double FrequencyPerHour
         {
             get => _frequencyPerHour;
-            set => _frequencyPerHour = Math.Clamp(value, 1, 180);
+            set => _frequencyPerHour = MindWipeSchedule.ClampFrequency(value);
         }
         public double Volume
         {
             get => _volume;
             set
             {
-                _volume = Math.Clamp(value, 0, 1);
+                _volume = MindWipeSchedule.ClampVolume(value);
                 // Update live if playing
                 if (_audioReader != null)
                 {
@@ -126,7 +126,9 @@ namespace ConditioningControlPanel.Services
         {
             _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(10) // Check every 10 seconds for better high-frequency support
+                // Every ten seconds, for high-frequency support. The interval and the per-tick
+                // probabilities are one decision, so both live in MindWipeSchedule (CCP.Core).
+                Interval = MindWipeSchedule.TickInterval
             };
             _timer.Tick += Timer_Tick;
             
@@ -134,78 +136,15 @@ namespace ConditioningControlPanel.Services
         }
         
         /// <summary>
-        /// THE mind-wipe clip folder the UI advertises: <c>&lt;EffectiveAssetsPath&gt;\mindwipe</c>.
-        /// Until v6.8.7 the service read ONLY <see cref="LegacyAudioFolderPath"/>, so the
-        /// "assets/mindwipe/" hint in <c>mindwipe_no_audio_files</c> named a folder that was never
-        /// scanned. Same contract as Brain Drain now: new files go here, the legacy install folder
-        /// is still scanned so nobody's old files go silent, and nothing migrates, moves or deletes.
+        /// Which clips this service may play. The folder contract, the extension filter and the
+        /// "a custom file wins" rule all moved to <see cref="MindWipeSchedule"/> (CCP.Core) - they
+        /// are decisions about paths and settings, not about audio devices. The advertised folder
+        /// is still <c>&lt;EffectiveAssetsPath&gt;\mindwipe</c> and the legacy install folder is
+        /// still scanned; <c>CorePaths.EffectiveAssets</c> is seeded from
+        /// <c>App.EffectiveAssetsPath</c> in App's static ctor, so it resolves the same folder.
         /// </summary>
-        public static string AudioFolderPath
-        {
-            get
-            {
-                try { return Path.Combine(App.EffectiveAssetsPath, "mindwipe"); }
-                catch { return LegacyAudioFolderPath; }   // pre-settings startup / test host
-            }
-        }
-
-        /// <summary>
-        /// The ORIGINAL clip folder under the install directory (<c>Resources\sounds\mindwipe</c>),
-        /// where the built-in clips ship. Still scanned; never advertised as the place to put new
-        /// ones, never written to, never emptied.
-        /// </summary>
-        public static string LegacyAudioFolderPath =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "mindwipe");
-
-        private void LoadAudioFiles()
-        {
-            try
-            {
-                // User-chosen custom clip wins over the built-in folder (a short ~2s clip is recommended).
-                var customPath = App.Settings?.Current?.MindWipeAudioPath;
-                if (!string.IsNullOrWhiteSpace(customPath) && File.Exists(customPath))
-                {
-                    _audioFiles = new[] { customPath };
-                    App.Logger?.Information("MindWipe: Using custom audio file {Path}", customPath);
-                    return;
-                }
-
-                var audioFolderPath = AudioFolderPath;
-
-                App.Logger?.Information("MindWipe: Looking for audio files in {Path} (and legacy {Legacy})",
-                    audioFolderPath, LegacyAudioFolderPath);
-                
-                // Create the advertised folder so it exists to be found; the legacy folder is
-                // left exactly as the installer shipped it.
-                try { Directory.CreateDirectory(audioFolderPath); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "MindWipe: could not create {Path}", audioFolderPath); }
-
-                _audioFiles = new[] { audioFolderPath, LegacyAudioFolderPath }
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Where(Directory.Exists)
-                    .SelectMany(dir => Directory.GetFiles(dir, "*.*"))
-                    .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
-                               f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
-                               f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                
-                if (_audioFiles.Length == 0)
-                {
-                    App.Logger?.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", audioFolderPath);
-                }
-                else
-                {
-                    App.Logger?.Information("MindWipe: Loaded {Count} audio files: {Files}", 
-                        _audioFiles.Length, 
-                        string.Join(", ", _audioFiles.Select(Path.GetFileName)));
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "MindWipe: Failed to load audio files");
-                _audioFiles = Array.Empty<string>();
-            }
-        }
+        private void LoadAudioFiles() =>
+            _audioFiles = MindWipeSchedule.DiscoverClips(App.Settings?.Current?.MindWipeAudioPath);
         
         /// <summary>
         /// Reload audio files from disk (call after adding new files)
@@ -731,33 +670,23 @@ namespace ConditioningControlPanel.Services
                 return;
             }
             
-            // Calculate probability of triggering in this 30-second window
+            // Chance of triggering in this tick. The arithmetic - the escalation, its 15-plays cap
+            // and the 360-windows-per-hour divisor - is MindWipeSchedule's (CCP.Core).
             double probability;
-            
+
             if (_sessionMode)
             {
-                // Escalating frequency in session mode
                 var elapsed = DateTime.Now - _sessionStartTime;
-                var fiveMinBlocks = (int)(elapsed.TotalMinutes / 5);
-                var playsThisBlock = _sessionBaseFrequency + fiveMinBlocks;
-                
-                // Cap at reasonable maximum (15 plays per 5 min block)
-                playsThisBlock = Math.Min(playsThisBlock, 15);
-                
-                // 5 minutes = 30 ten-second windows
-                probability = playsThisBlock / 30.0;
-                
-                App.Logger?.Debug("MindWipe: Session mode - Block {Block}, plays: {Plays}, prob: {Prob:P0}", 
-                    fiveMinBlocks, playsThisBlock, probability);
+                probability = MindWipeSchedule.SessionProbability(_sessionBaseFrequency, elapsed);
+
+                App.Logger?.Debug("MindWipe: Session mode - Block {Block}, prob: {Prob:P0}",
+                    (int)(elapsed.TotalMinutes / 5), probability);
             }
             else
             {
-                // Normal mode: frequency per hour
-                // 360 ten-second windows per hour
-                // At 180/hour, probability = 0.5 = 50% chance per interval
-                probability = _frequencyPerHour / 360.0;
-                
-                App.Logger?.Debug("MindWipe: Normal mode - Freq: {Freq}/h, prob: {Prob:P0}", 
+                probability = MindWipeSchedule.Probability(_frequencyPerHour);
+
+                App.Logger?.Debug("MindWipe: Normal mode - Freq: {Freq}/h, prob: {Prob:P0}",
                     _frequencyPerHour, probability);
             }
             
@@ -924,10 +853,10 @@ namespace ConditioningControlPanel.Services
         public int GetCurrentSessionFrequency()
         {
             if (!_sessionMode) return (int)_frequencyPerHour;
-            
-            var elapsed = DateTime.Now - _sessionStartTime;
-            var fiveMinBlocks = (int)(elapsed.TotalMinutes / 5);
-            return Math.Min(_sessionBaseFrequency + fiveMinBlocks, 30);
+
+            // Capped at 30 here and at 15 in the tick above - two different numbers for the same
+            // escalation, preserved exactly as found. MindWipeSchedule keeps both.
+            return MindWipeSchedule.SessionFrequency(_sessionBaseFrequency, DateTime.Now - _sessionStartTime);
         }
         
         public void Dispose()

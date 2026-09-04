@@ -77,6 +77,14 @@ namespace ConditioningControlPanel.Avalonia
                 var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
                 CoreReleaseContent.AppVersionProvider = () =>
                     version is null ? null : $"{version.Major}.{version.Minor}.{version.Build}";
+                // CoreMindWipe stays unseeded, and it is the audio surface that is missing rather
+                // than the feature: MindWipeSchedule (Core) already decides the tick interval, the
+                // per-tick probability, the session escalation and which clips are candidates.
+                // What this head has no answer for is the playing half - a crossfading NAudio loop
+                // - so the Mind Wipe card configures correctly and plays nothing. Unseeded says
+                // exactly that: every action is a no-op, IsLooping is false and ClipCount is 0, so
+                // nothing reports a loop that is not running.
+                //
                 // CoreSession stays unseeded: this head has no session engine yet, so "not
                 // running" is the truth, and the feature cards fall to their save-only branch.
                 //

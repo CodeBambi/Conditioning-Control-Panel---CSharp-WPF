@@ -22,8 +22,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     ///
     /// <para>Win32's <c>OpenFileDialog</c> becomes Avalonia's <c>StorageProvider</c>, which is
     /// async and needs a TopLevel - so the handler is <c>async void</c> and the title and filter
-    /// carry over verbatim. Still head-side: MindWipeService (the audio loop itself) and the
-    /// mod-aware feature art.</para>
+    /// carry over verbatim.</para>
+    ///
+    /// <para>Every editor now also drives <see cref="CoreMindWipe"/>, the one-for-one port of the
+    /// WPF card's <c>App.MindWipe.*</c> calls. That seam is unseeded on this head - there is no
+    /// mind-wipe playback here yet - so the card configures correctly and plays nothing, and says
+    /// so rather than pretending: <c>IsLooping</c> reads false, so the "restart the loop for the
+    /// new clip" path starts no silent loop. The deciding half (tick interval, per-tick
+    /// probability, session escalation, clip discovery) is <c>MindWipeSchedule</c> in Core.
+    /// Still head-side: the playback itself, and the mod-aware feature art.</para>
     /// </summary>
     public partial class MindWipeFeatureControl : UserControl
     {
@@ -123,8 +130,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             TxtFreq.Text = $"{v}/h";
             if (s.MindWipeFrequency == v) return;
             s.MindWipeFrequency = v;
-            // ponytail: WPF pushes the pair through App.MindWipe.UpdateSettings(frequency,
-            // volume/100) - MindWipeService (ConditioningControlPanel/Services/), still head-side.
+            CoreMindWipe.UpdateSettings(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
             CoreSettings.Save();
         }
 
@@ -136,7 +142,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             TxtVolume.Text = $"{v}%";
             if (s.MindWipeVolume == v) return;
             s.MindWipeVolume = v;
-            // ponytail: same App.MindWipe.UpdateSettings call as SliderFreq_Changed.
+            CoreMindWipe.UpdateSettings(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
             CoreSettings.Save();
         }
 
@@ -147,16 +153,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var looping = ChkLoop.IsChecked ?? false;
             if (s.MindWipeLoop == looping) return;
             s.MindWipeLoop = looping;
-            // ponytail: WPF starts or stops the background loop here -
-            // App.MindWipe.StartLoop(volume/100) / StopLoop(), MindWipeService in the WPF head.
+            if (looping) CoreMindWipe.StartLoop(s.MindWipeVolume / 100.0);
+            else CoreMindWipe.StopLoop();
             CoreSettings.Save();
         }
 
-        private void BtnTest_Click(object? sender, RoutedEventArgs e)
-        {
-            // ponytail: needs App.MindWipe.TriggerOnce() - MindWipeService
-            // (ConditioningControlPanel/Services/), still in the WPF head.
-        }
+        /// <summary>
+        /// Plays one clip now. Ungated on purpose: the WPF card has no <c>IsEngineRunning</c>
+        /// check here and the service's <c>TriggerOnce</c> is documented as playing with the
+        /// service stopped, so gating it would make this button do less than the original.
+        /// </summary>
+        private void BtnTest_Click(object? sender, RoutedEventArgs e) => CoreMindWipe.TriggerOnce();
 
         /// <summary>
         /// Win32's <c>OpenFileDialog</c> in Avalonia terms. Same title, same extensions, and the
@@ -208,9 +215,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private void ApplyAudioChange(AppSettings s)
         {
             UpdateAudioFileLabel(s);
-            // ponytail: WPF then calls App.MindWipe.ReloadAudioFiles() and, when MindWipeLoop is
-            // on and IsLooping, restarts the loop so the new clip takes effect - MindWipeService
-            // (ConditioningControlPanel/Services/), still in the WPF head.
+            CoreMindWipe.ReloadClips();
+            // Only a loop that is actually playing is restarted - the seam answers "not looping"
+            // when no head is playing one, so nothing is started on this head's silence.
+            if (s.MindWipeLoop && CoreMindWipe.IsLooping)
+            {
+                CoreMindWipe.StopLoop();
+                CoreMindWipe.StartLoop(s.MindWipeVolume / 100.0);
+            }
         }
     }
 }
