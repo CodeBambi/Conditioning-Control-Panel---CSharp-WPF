@@ -272,6 +272,15 @@ namespace ConditioningControlPanel.LinuxSmoke
                 CoreModArt.OverridePathProvider = _ => throw new InvalidOperationException("boom");
                 Check("CoreModArt swallows a throwing provider", CoreModArt.OverridePath("tube.png") == null);
                 CoreModArt.OverridePathProvider = null;
+                // The audio half of the same seam. Unseeded is "no mod cue", which is what makes a
+                // head with no mod service fall back to its own shipped sound rather than to silence.
+                Check("CoreModArt.AudioOverridePath is null with no mod layer", CoreModArt.AudioOverridePath("chaos/heartbeat.mp3") == null);
+                CoreModArt.AudioOverridePathProvider = _ => "/hit.mp3";
+                Check("CoreModArt rejects traversal on the audio half too",
+                      CoreModArt.AudioOverridePath("../../etc/passwd") == null && CoreModArt.AudioOverridePath("bubbles/Pop.mp3") == "/hit.mp3");
+                CoreModArt.AudioOverridePathProvider = _ => throw new InvalidOperationException("boom");
+                Check("CoreModArt swallows a throwing audio provider", CoreModArt.AudioOverridePath("giggle5.mp3") == null);
+                CoreModArt.AudioOverridePathProvider = null;
                 Check("AwarenessIntensity.Current reads the ship default unseeded", Services.Awareness.AwarenessIntensityProfile.Current == Services.Awareness.AwarenessIntensity.Chatty);
                 // The subreddit rule moved from the online coordinator into Core with no test of its own.
                 Check("SubredditName strips r/", Services.Fyp.SubredditName.Sanitize("r/gonewild") == "gonewild");

@@ -13,7 +13,6 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
@@ -1796,14 +1795,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var borderHolder = new Grid { Width = width, Height = height };
 
             // Hint image (dimmed default). WPF called ModResourceResolver.ResolveImage, which
-            // cannot move to Core - it decodes to a WPF ImageSource. The portable half is
-            // CoreModArt.OverridePath plus this head's own avares:// copy.
+            // cannot move to Core - it decodes to a WPF ImageSource. Helpers.ModArt.TryLoad is
+            // this head's split of it: CoreModArt.OverridePath, then our own avares:// copy. Null
+            // is normal here - the head ships only a slice of achievements/ and skills/, so most
+            // badge slots legitimately have no hint.
             var hintImage = new Image
             {
                 Opacity = 0.2,
                 Stretch = Stretch.Uniform,
                 IsHitTestVisible = false,
-                Source = TryLoadSlotHint(resourceKey),
+                Source = Helpers.ModArt.TryLoad(resourceKey),
             };
             borderHolder.Children.Add(hintImage);
 
@@ -1924,40 +1925,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// border.Tag and pattern-matched it back out; a dictionary says the same thing without
         /// the cast, and Tag stays free.
         /// </summary>
-        /// <summary>
-        /// The mod's override first (<see cref="CoreModArt"/>), then this head's own shipped copy
-        /// under <c>avares://</c>. Null when neither exists, which is what an unhinted slot looked
-        /// like in the WPF head too - the head deliberately ships only a slice of achievements/
-        /// and skills/, so most badge slots legitimately have no hint here.
-        ///
-        /// ponytail: a byte-for-byte twin of TubeFitDialog.TryLoadImage, whose own note asks for a
-        /// head-wide helper once a second view wants the two-step. This is that second view, but
-        /// hoisting it means editing a file this layer does not own; do it in the layer that owns
-        /// both.
-        /// </summary>
-        private static Bitmap? TryLoadSlotHint(string resourceName)
-        {
-            var overridePath = CoreModArt.OverridePath(resourceName);
-            if (overridePath != null)
-            {
-                try { if (File.Exists(overridePath)) return new Bitmap(overridePath); }
-                catch (Exception ex) { Log.Warning(ex, "[ModCreator] mod override {Path} would not load", overridePath); }
-            }
-
-            try
-            {
-                var uri = new Uri($"avares://CCP.Avalonia/Resources/{resourceName}");
-                if (!AssetLoader.Exists(uri)) return null;
-                using var stream = AssetLoader.Open(uri);
-                return new Bitmap(stream);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "[ModCreator] built-in {Name} would not load", resourceName);
-                return null;
-            }
-        }
-
         private readonly Dictionary<string, (Button Clear, TextBlock Plus, Image Hint)> _imageSlotParts = new();
 
         private void SetImageSlot(string key, string filePath, bool validate = true)

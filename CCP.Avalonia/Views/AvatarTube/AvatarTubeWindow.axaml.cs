@@ -932,7 +932,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             {
                 if (useAlternative && ModOverridesAttachedTubeOnly()) useAlternative = false;
                 var name = useAlternative ? "tube2.png" : "tube.png";
-                var art = TryLoadImage(name);
+                var art = ModArt.TryLoad(name);
                 if (art != null) _imgTubeFrame.Source = art;
                 Log.Information("Tube style changed to: {Style}", name);
             }
@@ -974,20 +974,11 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             string prefix = setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose";
             for (int i = 0; i < poses.Length; i++)
             {
-                poses[i] = TryLoadImage($"{prefix}{i + 1}.png");
-                if (poses[i] == null && setNumber > 1) poses[i] = TryLoadImage($"avatar_pose{i + 1}.png");
+                poses[i] = ModArt.TryLoad($"{prefix}{i + 1}.png");
+                if (poses[i] == null && setNumber > 1) poses[i] = ModArt.TryLoad($"avatar_pose{i + 1}.png");
             }
             return poses;
         }
-
-        /// <summary>
-        /// The mod's override first, then this head's own shipped copy under <c>avares://</c>, else
-        /// null - which every caller treats as "draw nothing here" rather than as a failure.
-        /// <para>This WAS a private copy of that two-step; <c>Helpers/ModArt.TryLoad</c> is the
-        /// head-wide one and is byte-for-byte the same chain, so the copy is deleted rather than
-        /// kept in sync. TubeFitDialog and ModCreatorWindow still carry theirs.</para>
-        /// </summary>
-        private static Bitmap? TryLoadImage(string resourceName) => ModArt.TryLoad(resourceName);
 
         /// <summary>
         /// Per-set framing: sets 2+ read 12% bigger and 10px right, and Locked's set 1 ("The Lure")

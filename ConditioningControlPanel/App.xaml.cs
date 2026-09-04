@@ -298,6 +298,9 @@ namespace ConditioningControlPanel
                     : null;
             };
             CoreModArt.HasAvatarPortraitsProvider = Services.AvatarPortraitLoader.HasManifestForActiveMod;
+            // The AUDIO half of the same seam: the mod's replacement cue only, never our
+            // ContentLocator fallback - Core must not learn where a head keeps its shipped sounds.
+            CoreModArt.AudioOverridePathProvider = Services.ModResourceResolver.ModOverrideAudioPath;
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.ServiceProvider = () => Settings;

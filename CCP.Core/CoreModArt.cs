@@ -4,8 +4,8 @@ using System.IO;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// The mod-art seam: "does the active mod (or event skin) replace this picture, and where is
-    /// the replacement on disk". The WPF head answers it with
+    /// The mod-art seam: "does the active mod (or event skin) replace this picture - or this
+    /// sound - and where is the replacement on disk". The WPF head answers it with
     /// <c>Services.ModResourceResolver</c>, which cannot move here - it decodes to
     /// <c>System.Windows.Media.ImageSource</c> and falls back to <c>pack://</c> URIs, both head
     /// types. Only the RESOLUTION half is portable, so only the resolution half is here.
@@ -56,6 +56,38 @@ namespace ConditioningControlPanel
             if (path.Contains("..") || Path.IsPathRooted(path)) return null;
 
             var p = OverridePathProvider;
+            if (p is null) return null;
+            try { return p(path); } catch { return null; }
+        }
+
+        /// <summary>
+        /// The active mod's replacement for a sounds-relative logical name ("giggle5.mp3",
+        /// "bubbles/Pop.mp3", "chaos/heartbeat.mp3"), or null for "no mod cue - play your own".
+        ///
+        /// <para>Separate from <see cref="OverridePath"/> because the WPF chains genuinely
+        /// differ: the image chain probes <c>resources/&lt;path&gt;</c>, the audio chain probes
+        /// <c>resources/sounds/&lt;path&gt;</c> AND swaps .wav for .mp3 (and back) so a mod may
+        /// ship either format. One provider serving both would have to guess which rule to
+        /// apply.</para>
+        ///
+        /// <para>Override ONLY, same as the image half. Core must never learn where a head keeps
+        /// its shipped cues - the WPF head ends on <c>ContentLocator</c>, another head may not -
+        /// so a null here means "fall back the way you already do", never "silence".</para>
+        /// </summary>
+        public static volatile Func<string, string?>? AudioOverridePathProvider;
+
+        /// <summary>
+        /// The mod's replacement cue as an absolute path, or null for none. Traversal is rejected
+        /// HERE, before any head sees the string: a cue name can come out of mod-authored JSON.
+        /// </summary>
+        public static string? AudioOverridePath(string? soundRelativePath)
+        {
+            if (string.IsNullOrEmpty(soundRelativePath)) return null;
+
+            var path = soundRelativePath!.Replace('\\', '/');
+            if (path.Contains("..") || Path.IsPathRooted(path)) return null;
+
+            var p = AudioOverridePathProvider;
             if (p is null) return null;
             try { return p(path); } catch { return null; }
         }
