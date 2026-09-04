@@ -811,6 +811,11 @@ bridge.on('init', guard('init', (m) => {
    * this undefined, which reads as false, which is the full school. */
   try { window.__ccpStoreSafe = !!(m.platform && m.platform.storeSafe); }
   catch (e) { /* noop - a page with no window is a page with no games */ }
+  /* AND WHETHER THIS WINDOW CAN EVER TURN. `core/device.js viewportCanRotate`
+   * is the reader and shell/orientgate.js is the only caller; a host that never
+   * sets the field leaves this undefined, which reads as "it can rotate". */
+  try { window.__ccpOrientationLocked = !!(m.platform && m.platform.orientationLocked); }
+  catch (e) { /* noop */ }
   directGame = directLaunchKey(m);
   dressDirectLaunch();            // THE DIRECT LAUNCH: name the room on the splash
   bridge.markInitialized();       // flush anything the page queued pre-init

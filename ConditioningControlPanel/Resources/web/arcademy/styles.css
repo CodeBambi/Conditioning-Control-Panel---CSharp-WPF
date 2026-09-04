@@ -5338,6 +5338,18 @@ html.arc-mobile .arc-rs-close { top:8px; right:10px; }
   0%   { opacity:0; visibility:hidden; pointer-events:none; }
   100% { opacity:1; visibility:visible; pointer-events:auto; }
 }
+/* AND SO DOES A LOCKED VIEWPORT (orientgate second coda). The delay is there to
+   let a phone that can turn turn first; a window that can never turn has nothing
+   to wait for, so the way in is on screen with the sentence that offers it. The
+   two-class selector out-specifies the base rule above. */
+.arc-orientgate-actions.arc-orientgate-now {
+  animation:none; opacity:1; visibility:visible; pointer-events:auto;
+}
+/* The glyph is a phone tipping a quarter turn, which on a locked window is a
+   picture of something that will not happen. The card keeps its shape without
+   it. */
+.arc-orientgate-locked .arc-orientgate-art { display:none; }
+
 /* REDUCED MOTION SHOWS THEM AT ONCE. The freeze at the bottom of this file runs
    every animation at .001s with no delay, which would technically land the same
    end state - but relying on a blanket freeze to deliver the only way out of a
