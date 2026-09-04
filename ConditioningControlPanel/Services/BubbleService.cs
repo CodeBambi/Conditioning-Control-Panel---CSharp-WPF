@@ -1235,6 +1235,11 @@ public class BubbleService : IDisposable
 
         if (heavy)
         {
+            // Say out loud that the pop reached the payload (#1135). Every REFUSAL below this point
+            // already names itself in the log; without this line there was no way to tell a pop that
+            // was refused from a pop the field never registered at all, which is the whole reason
+            // "my video bubbles do nothing" could not be diagnosed from a user's log.
+            App.Logger?.Information("Bubble: firing {Kind} payload from a pop", payload.Kind);
             // Let the click return first; the payload opens a fullscreen window either way.
             DispatcherHelper.RunOnUI(() => FireAndLogPayload(payload), DispatcherPriority.Background);
             return;
@@ -1246,7 +1251,14 @@ public class BubbleService : IDisposable
     private static void FireAndLogPayload(EffectPayload payload)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        try { payload.Fire(); } catch { }
+        try { payload.Fire(); }
+        catch (Exception ex)
+        {
+            // Was a bare catch{} (#1135). A payload that threw on its way to opening a video left
+            // absolutely no trace anywhere: the bubble popped, nothing happened, nothing was logged.
+            App.Logger?.Warning(ex, "Bubble: {Kind} payload threw on Fire() - the pop produced nothing",
+                payload.Kind);
+        }
         sw.Stop();
         if (sw.ElapsedMilliseconds >= 20)
             App.Logger?.Information("[POPLAG] payload {Kind} Fire() took {Ms}ms",
