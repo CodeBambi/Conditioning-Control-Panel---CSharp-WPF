@@ -16,7 +16,9 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
 
@@ -68,17 +70,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     ///     <c>Extent.Height - Viewport.Height - Offset.Y</c>. <c>ScrollToTop</c> -&gt;
     ///     <c>ScrollToHome</c>.</item>
     ///   <item><c>DoubleAnimation</c>/<c>BeginAnimation</c> -&gt; <c>Animation.RunAsync</c> on the
-    ///     <c>ScaleTransform</c> itself (a <c>Transform</c> is an <c>Animatable</c>);
-    ///     <c>BeginTime</c> -&gt; <c>Delay</c>. The fold closes on the awaited sweep, which is the
-    ///     same "close on the LAST animation, never on a timer" rule the original states.</item>
+    ///     HOST VISUAL that owns the <c>ScaleTransform</c> - NOT on the transform, which compiles
+    ///     and throws; <c>BeginTime</c> -&gt; <c>Delay</c>. See <see cref="Scale"/>. The fold closes
+    ///     on the awaited sweep, which is the same "close on the LAST animation, never on a timer"
+    ///     rule the original states.</item>
     ///   <item><c>Tag = "on"</c> -&gt; the <c>on</c> style class, because Avalonia has no property
     ///     trigger. <c>MouseEnter/Leave</c> -&gt; <c>PointerEntered/Exited</c>;
     ///     <c>MouseLeftButtonUp</c> -&gt; <c>PointerReleased</c>.</item>
-    ///   <item>The constructor is parameterless. The WPF one takes the desk window that owns the
-    ///     book and that type does not exist on this head yet, so the owner hooks are stubs - and
-    ///     the same constructor is what <c>--render-all</c> discovers. It selects the first card,
-    ///     which the WPF constructor left to <see cref="OpenBook"/>: a window that draws nothing
-    ///     until a service calls it renders as an empty panel.</item>
+    ///   <item><b>The owner is real.</b> <see cref="EmiDeskWindow"/> is ported on this head, so the
+    ///     constructor takes it and the chrome hold, her body box and the follow-her-around
+    ///     subscriptions are the WPF behaviour rather than stubs. It stays NULLABLE for one reason:
+    ///     <c>--render-view</c> needs a parameterless constructor and a headless render has no
+    ///     widget to hang off, so every owner call is <c>?.</c> with the fallback the unowned book
+    ///     already used. The parameterless ctor also selects the first card, which the WPF one left
+    ///     to <see cref="OpenBook"/>: a window that draws nothing until a service calls it renders
+    ///     as an empty panel.</item>
     /// </list>
     /// </summary>
     public partial class EmiBookWindow : Window
@@ -101,11 +107,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>How many bullets a card may show, whatever the deck hands over.</summary>
         private const int MaxNudges = 4;
 
-        // ponytail: needs MotionFx (WPF head, Services/MotionFx.cs), wired when it moves to Core.
-        // Both gates read "allowed" here, which is the shipped default; a reduced-motion desk gets
-        // the animation it asked not to have until the gate lands.
-        private const bool AllowTransitions = true;
-        private const bool AllowAmbientLoops = true;
+        /// <summary>
+        /// <c>MotionFx.AllowTransitions</c>, spelled out. MotionFx itself is still head-side, but
+        /// what it reads is not: <see cref="AmbientFxCanvas.Env"/> in this assembly already carries
+        /// the ported gate off <c>CoreSettings.Current.MotionLevel</c> and the tier, so the unfurl
+        /// now obeys the reader's setting instead of assuming the shipped default.
+        /// <c>Level != Off</c> is MotionFx's own definition, verbatim.
+        /// </summary>
+        private static bool AllowTransitions
+        {
+            get
+            {
+                try { return AmbientFxCanvas.Env.Level != MotionLevel.Off; }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book motion gate failed"); return true; }
+            }
+        }
+
+        /// <summary><c>MotionFx.AllowAmbientLoops</c>, through the same gate.</summary>
+        private static bool AllowAmbientLoops
+        {
+            get
+            {
+                try { return AmbientFxCanvas.Env.AllowAmbientLoops; }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book loop gate failed"); return true; }
+            }
+        }
 
         private readonly List<Border> _dots = new();
 
@@ -158,14 +184,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         // ---------------------------------------------------------------- ctor
 
+        /// <summary>The widget this book hangs off. Null only under <c>--render-view</c>.</summary>
+        private readonly EmiDeskWindow? _owner;
+
+        /// <summary>The render constructor: a book with no widget behind it. See the header.</summary>
+        public EmiBookWindow() : this(null) { }
+
         /// <summary>
-        /// Builds the book. The WPF constructor takes the desk widget that owns it; that window is
-        /// not on this head yet, so the owner is a stub and this doubles as the render constructor.
+        /// Builds the book for one widget. Created hidden; <see cref="OpenBook"/> shows it.
         /// </summary>
-        // ponytail: needs EmiDeskWindow (owner: Moved, Resized, HoldChromeForPanel, SpeakLine,
-        // BodyScreenRect), wired when the desk moves to Core.
-        public EmiBookWindow()
+        public EmiBookWindow(EmiDeskWindow? owner)
         {
+            _owner = owner;
             AvaloniaXamlLoader.Load(this);
 
             _tab0 = this.FindControl<Button>("Tab0")!;
@@ -202,6 +232,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             PointerEntered += (_, _) => Hold(true);
             PointerExited += (_, _) => Hold(false);
 
+            // She moves, she resizes: the book is anchored to her body and has to come along.
+            if (_owner is not null)
+            {
+                _owner.Moved += OnOwnerMoved;
+                _owner.Resized += OnOwnerResized;
+            }
+
             // NOT in the WPF original, where OpenBook is always what fills the panel. Here the
             // render harness constructs the window and screenshots it, so an unpopulated book is an
             // empty pink box that passes.
@@ -209,29 +246,86 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             PaintStill();
         }
 
+        private void OnOwnerMoved(object? sender, EventArgs e)
+        {
+            if (_closingForGood || !IsVisible) return;
+            try { PlaceWindow(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book follow-move failed"); }
+        }
+
+        private void OnOwnerResized(object? sender, double width)
+        {
+            if (_closingForGood || !IsVisible) return;
+            try { PlaceWindow(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book follow-resize failed"); }
+        }
+
+        /// <summary>
+        /// The WPF original's <c>OnClosed</c>, verbatim in effect: the book is a sibling window
+        /// holding a subscription to hers, so the handlers come off however it went away - the
+        /// fold, her dismissal, or the app shutting down.
+        /// </summary>
+        protected override void OnClosed(EventArgs e)
+        {
+            try
+            {
+                StopClock();
+                if (_owner is not null)
+                {
+                    _owner.Moved -= OnOwnerMoved;
+                    _owner.Resized -= OnOwnerResized;
+                }
+                Hold(false);
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book teardown failed"); }
+            base.OnClosed(e);
+        }
+
         // ---------------------------------------------------------------- wiring
 
         /// <summary>
-        /// ponytail: needs EmiFace (WPF head, Services/EmiDesk/EmiFace.cs) for Press Start 2P and
-        /// the body face, wired when the shipped fonts land as AvaloniaResource on this head. The
-        /// SIZES are ported verbatim because they are the layout - 16 for the title, 8 for the
-        /// chrome, one whole number of pixels per 8x8 cell - but at those sizes the default UI face
-        /// reads much smaller than the pixel font does, so the chrome is small until the face lands.
+        /// Press Start 2P for the chrome and the title, the mono body face for the copy - as
+        /// NAME CHAINS, which is the road EmiRingWindow and EmiDeskWindow.axaml already take on this
+        /// head. WPF loads both through a pack:// base URI out of <c>Resources/emi/fonts</c> and its
+        /// header warns that naming a font in markup finds installed fonts only; on Avalonia there
+        /// is nothing to name yet either way.
+        ///
+        /// <para>ponytail: the blocker is NOT EmiFace, and it is not a move to Core. Both faces are
+        /// already in the repo at <c>Assets/emi/fonts/PressStart2P-latin.ttf</c> and
+        /// <c>NotoSansMono-latin.ttf</c>; what is missing is an <c>AvaloniaResource</c> link for
+        /// <c>Assets/emi/fonts/</c> in CCP.Avalonia.csproj, which this layer does not own. Until
+        /// that one line lands the chain falls through to the system mono face - so the pixel
+        /// look is missing, nothing is blank, and the panel lights up the moment the link is
+        /// added or a reader has the font installed.</para>
+        ///
+        /// <para>The SIZES are ported verbatim because they are the layout - 16 for the title, 8 for
+        /// the chrome, one whole number of pixels per 8x8 cell. At those sizes a proportional
+        /// fallback reads much smaller than Press Start 2P does, which is why the chrome looks
+        /// small on a machine without it.</para>
         /// </summary>
         private void ApplyFonts()
         {
             try
             {
-                foreach (var b in new[] { _tab0, _tab1, _tab2 }) b.FontSize = 8;
+                foreach (var b in new[] { _tab0, _tab1, _tab2 }) { b.FontFamily = PixelFont; b.FontSize = 8; }
 
+                _btnClose.FontFamily = PixelFont;
                 _btnClose.FontSize = 8;
+                _btnPrev.FontFamily = PixelFont;
                 _btnPrev.FontSize = 10;
+                _btnNext.FontFamily = PixelFont;
                 _btnNext.FontSize = 10;
+                _btnGo.FontFamily = PixelFont;
                 _btnGo.FontSize = 8;
 
+                _stageLabel.FontFamily = PixelFont;
                 _stageLabel.FontSize = 6;
+                _cardTitle.FontFamily = PixelFont;
                 _cardTitle.FontSize = 16;
+
+                _cardGist.FontFamily = FaceFont;
                 _cardGist.FontSize = 13;
+                _cardCatch.FontFamily = FaceFont;
                 _cardCatch.FontSize = 11.5;
             }
             catch (Exception ex)
@@ -239,6 +333,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 Log.Warning(ex, "[EmiDesk] book fonts failed");
             }
         }
+
+        /// <summary><c>EmiFace.PixelFont</c>'s chain, the same string EmiRingWindow uses.</summary>
+        private static readonly FontFamily PixelFont = new("Press Start 2P, Consolas, monospace");
+
+        /// <summary><c>EmiFace.FaceFont</c>'s chain, the same one EmiDeskWindow.axaml carries.</summary>
+        private static readonly FontFamily FaceFont =
+            new("Noto Sans Mono, DejaVu Sans Mono, Consolas, monospace");
 
         private void WireControls()
         {
@@ -257,13 +358,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             _nudgeScroll.ScrollChanged += (_, _) => UpdateMoreCue();
         }
 
-        // ponytail: needs EmiDeskWindow.HoldChromeForPanel, wired when the desk moves to Core.
-        private void Hold(bool on) { _ = on; }
+        /// <summary>Keep the chrome on her body lit while the pointer is in the book.</summary>
+        private void Hold(bool on)
+        {
+            try { _owner?.HoldChromeForPanel(on); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book chrome hold failed"); }
+        }
 
-        // ponytail: needs the EmiBook service (WPF head, Services/EmiDesk/EmiBook.cs) for Close,
-        // NoteCard and NoteSideChanged, wired when it moves to Core. Closing the window itself is
-        // the honest local half of it.
-        private void CloseBook() => Kill();
+        /// <summary>
+        /// The close button. Routed through the widget so SHE drops her reference to the book: a
+        /// bare <see cref="Kill"/> here would fold the window and leave the desk holding a closed
+        /// one, and the next <c>?</c> click would then re-open a dead panel.
+        ///
+        /// <para>ponytail: the WPF button calls <c>EmiBook.Close()</c>, whose two remaining halves
+        /// are still blocked - <c>EmiState.BookCard</c> (the bookmark) and <c>EmiBook.SideChanged</c>
+        /// (her bubble dodging away from the panel). Both live in
+        /// ConditioningControlPanel/Services/EmiDesk/EmiState.cs and EmiBook.cs.</para>
+        /// </summary>
+        private void CloseBook()
+        {
+            if (_owner is null) { Kill(); return; }
+            try { _owner.CloseBook(); }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] book close through the widget failed");
+                Kill();
+            }
+        }
 
         // ---------------------------------------------------------------- open / close
 
@@ -320,6 +441,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _closingForGood = true;
                 StopClock();
                 Hold(false);
+                if (_owner is not null)
+                {
+                    _owner.Moved -= OnOwnerMoved;
+                    _owner.Resized -= OnOwnerResized;
+                }
 
                 if (!IsVisible)
                 {
@@ -365,8 +491,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _openScale.ScaleY = 0.04;
                 _flash.Opacity = 0;
 
-                _ = Scale(ScaleTransform.ScaleXProperty, 0, 1, 170, 0, new CubicEaseOut()).RunAsync(_sweepScale);
-                _ = Scale(ScaleTransform.ScaleYProperty, 0.04, 1, 200, 160, new CubicEaseOut()).RunAsync(_openScale);
+                // THE VISUAL, NOT THE TRANSFORM. See the note on Scale: this window shipped
+                // animating the ScaleTransform objects, which throws before the flash is even
+                // reached, so the book snapped open with no unfurl and said nothing about it.
+                _ = Scale(ScaleTransform.ScaleXProperty, 0, 1, 170, 0, new CubicEaseOut()).RunAsync(_sweepHost);
+                _ = Scale(ScaleTransform.ScaleYProperty, 0.04, 1, 200, 160, new CubicEaseOut()).RunAsync(_openHost);
 
                 var flash = new Animation
                 {
@@ -389,7 +518,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
         }
 
-        /// <summary>One scale ramp, which is the only shape of animation this window has.</summary>
+        /// <summary>
+        /// One scale ramp, which is the only shape of animation this window has.
+        ///
+        /// <para><b>IT IS RUN ON THE VISUAL, NEVER ON THE TRANSFORM.</b> Avalonia resolves a
+        /// <c>Setter(ScaleTransform.ScaleXProperty, …)</c> to <c>TransformAnimator</c>, which casts
+        /// its target to <c>Visual</c>: <c>RunAsync(aScaleTransform)</c> throws
+        /// <c>InvalidCastException</c> SYNCHRONOUSLY, into whatever <c>catch</c> is nearest. That is
+        /// how this window shipped, so the unfurl snapped straight to the fallback in the catch, the
+        /// seam flash never ran at all (the throw is on the line above it), and the fold closed
+        /// instantly - three animations, silent, and a PNG cannot see any of it. Handed the VISUAL
+        /// that owns the transform it writes through to that same <c>ScaleTransform</c> instance:
+        /// measured on Avalonia 12.1.1 headless, 0.880 at 200 ms of a 400 ms CubicEaseOut ramp, same
+        /// object by reference at the end, and a later direct write still lands under the fill -
+        /// which is what <see cref="Unfurl"/>'s reset and its catch depend on.</para>
+        ///
+        /// <para>This is the cheap half of the same bug wire/61 found in EmiDeskWindow and
+        /// EmiRingWindow. It could not take this road there because those transforms are not the
+        /// visual's whole <c>RenderTransform</c>; here each host owns exactly one, so the fix is the
+        /// argument.</para>
+        /// </summary>
         private static Animation Scale(
             AvaloniaProperty prop, double from, double to, double ms, double delayMs, Easing easing)
         {
@@ -420,12 +568,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     return;
                 }
 
-                _ = Scale(ScaleTransform.ScaleYProperty, 1, 0.04, 130, 0, new CubicEaseIn()).RunAsync(_openScale);
+                _ = Scale(ScaleTransform.ScaleYProperty, 1, 0.04, 130, 0, new CubicEaseIn()).RunAsync(_openHost);
 
                 // Awaited rather than fired on a timer, which is the same rule the original states:
                 // the close hangs off the LAST animation, so a slow frame cannot leave the window on
-                // screen at zero width with nothing coming to close it.
-                await Scale(ScaleTransform.ScaleXProperty, 1, 0, 140, 120, new CubicEaseIn()).RunAsync(_sweepScale);
+                // screen at zero width with nothing coming to close it. The await is only an await
+                // now that the target is the visual - run on the transform this threw before it
+                // suspended, and the fold was an instant Close() out of the catch.
+                await Scale(ScaleTransform.ScaleXProperty, 1, 0, 140, 120, new CubicEaseIn()).RunAsync(_sweepHost);
                 Close();
             }
             catch (Exception ex)
@@ -680,7 +830,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 FontSize = 12.5,
                 Foreground = NudgePlain,
             };
-            // ponytail: needs EmiFace.FaceFont, as in ApplyFonts.
+            tb.FontFamily = FaceFont;
             Emphasize(tb, text, NudgePlain, NudgeHot);
             row.Children.Add(tb);
 
@@ -840,9 +990,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>
         /// Her line in the margin: a comment ON the card, not a reading of it.
         ///
-        /// <para>ponytail: needs EmiDeskWindow.SpeakLine and the LineDraw record (WPF head), wired
-        /// when the desk moves to Core. Priority 2, keyed "book.margin.&lt;id&gt;", face from the
-        /// card - all of that is data this stub already carries, so only the delivery is missing.</para>
+        /// <para>ponytail: the OWNER is here now, so this is one member away. What is missing is
+        /// <c>EmiDeskWindow.SpeakLine</c> and the <c>LineDraw</c> record, and those are blocked on
+        /// <c>EmiLineEngine</c> + <c>EmiChains.Player</c>
+        /// (ConditioningControlPanel/Services/EmiDesk/): the widget's <c>Say</c> and
+        /// <c>PlayChain</c> are still no-ops on this head, so a line handed over would be swallowed
+        /// rather than spoken. Priority 2, keyed "book.margin.&lt;id&gt;", face from the card - all
+        /// of that is data this stub already carries, so only the delivery is missing.</para>
         /// </summary>
         private void SpeakMargin()
         {
@@ -863,13 +1017,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // ---------------------------------------------------------------- placement
 
         /// <summary>
-        /// Her body box on the desk, in PHYSICAL pixels.
+        /// Her body box on the desk, in PHYSICAL pixels - read off the widget itself.
         ///
-        /// <para>ponytail: needs EmiDeskWindow.BodyScreenRect, wired when the desk moves to Core. A
-        /// fixed box on the right of a 1920 desk until then, which is where she usually stands and
-        /// therefore exercises the same branch the real one does.</para>
+        /// <para>With no owner (the headless render) it is a fixed box on the right of a 1920 desk,
+        /// which is where she usually stands and therefore exercises the same branch the real one
+        /// does. <c>EmiDeskWindow.BodyScreenRect</c> is a DIP-typed <see cref="Rect"/> already
+        /// holding physical pixels, so the only work here is the rounding into
+        /// <see cref="PixelRect"/>.</para>
         /// </summary>
-        private PixelRect BodyScreenRect => new(1480, 360, 220, 420);
+        private PixelRect BodyScreenRect
+        {
+            get
+            {
+                try
+                {
+                    var b = _owner?.BodyScreenRect;
+                    if (b is { Width: > 0, Height: > 0 })
+                        return new PixelRect(
+                            (int)Math.Round(b.Value.X), (int)Math.Round(b.Value.Y),
+                            (int)Math.Round(b.Value.Width), (int)Math.Round(b.Value.Height));
+                }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] book body-rect read failed"); }
+                return new PixelRect(1480, 360, 220, 420);
+            }
+        }
 
         private PixelRect WorkArea()
         {
@@ -953,7 +1124,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _sweepHost.RenderTransformOrigin = new RelativePoint(_onHerLeft ? 1 : 0, 0.5, RelativeUnit.Relative);
 
                 // ponytail: needs EmiBook.NoteSideChanged (her bubble dodges to the side the panel
-                // is NOT on), wired when it moves to Core.
+                // is NOT on). The event itself is trivial, but its one subscriber is the bubble's
+                // LayoutBubble dodge in EmiDeskWindow.Bubble.cs, which is not ported on this head -
+                // so an event raised here today would have nobody listening.
                 if (wasOnHerLeft != _onHerLeft)
                     Log.Debug("[EmiDesk] book changed side, now {Side}", SideOfHer);
             }
