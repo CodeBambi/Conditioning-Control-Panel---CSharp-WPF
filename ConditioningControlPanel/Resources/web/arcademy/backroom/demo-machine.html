@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Back Room - machine fixture</title>
+<!-- The REAL floor with a REAL machine mounted on it over a pretend cashier at
+     the bottom of this file. No shell, no bridge, no host, no ledger. The
+     cabinet is opened by CLICKING ITS FRAME, exactly as a player opens it, so
+     what is under test is the whole mount contract rather than a hand-built kit
+     that could quietly drift from index.js's.
+
+     ?m=scratcher|wheel  which frame to click (default scratcher)
+     ?dark=1     no send/listen at all. Every press must refuse warmly.
+     ?poor=1     the cashier refuses for want of chips. ?tier=1 the 403 gate.
+     ?free=0     today's free card is already spent.
+     ?prize=N    the scratcher's prize, ?row=N its winning row (-1 = none).
+     ?wedge=N    the wheel's landing, 0..6. ?fallback=1 makes an item wedge
+                 find the shelf already full, so the house pays 250 instead.
+     ?reduced=1  arms html.arc-reduced. ?lite=1 arms html.ae-lite + arc-mobile.
+     ?bare=1     folds the cage and the pot away, so a 1600x900 shot is of the
+                 CABINET rather than of the furniture above it.
+     ?auto=...   drives it unattended and writes what it saw into #log, which is
+                 what the headless probe reads back out of the dumped DOM.
+     No framework here on purpose: the fixture IS the harness, so it can never
+     drift from it. -->
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 14px 12px 48px; background: var(--ground); color: var(--ink);
+         font-family: var(--body); }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header.fx { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+              border-bottom: 3px solid var(--pink); padding-bottom: 8px; margin-bottom: 12px; }
+  header.fx h1 { font-family: var(--disp); font-size: 18px; margin: 0; letter-spacing: .08em; }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--ink-dim); }
+  #log { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); white-space: pre-wrap;
+         margin-top: 10px; max-height: 200px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="fx"><h1>THE BACK ROOM</h1><span class="eyebrow">machine fixture</span></header>
+  <div id="host"></div>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import { openBackRoom } from './index.js';
+
+const q = new URLSearchParams(location.search);
+const logEl = document.getElementById('log');
+const log = (m) => { logEl.textContent += m + '\n'; };
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+if (q.has('reduced')) document.documentElement.classList.add('arc-reduced');
+if (q.has('lite')) document.documentElement.classList.add('ae-lite', 'arc-mobile');
+
+/* ---------------------------------------------------------- the cashier ----
+ * It answers the frames the host will and it is the only thing here that knows
+ * a number. It holds a purse, so a stake visibly leaves and a prize visibly
+ * arrives, which is what the shot is of. */
+const purse = { chips: 2000, earnedC: 900, sparkle: 27, pot: 41800 };
+const listeners = new Map();
+
+function fire(type, msg) {
+  const set = listeners.get(type);
+  if (!set) return;
+  for (const fn of Array.from(set)) { try { fn(msg); } catch (e) { log('listener threw: ' + e.message); } }
+}
+function statusBody() {
+  return {
+    chips: purse.chips, earnedC: purse.earnedC, sparkle: purse.sparkle, pot: purse.pot, rate: 100,
+    free_scratch_available: num('free', 1) === 1,
+    tree: { cheapest_unowned: { id: 'soft_focus', cost: 40 }, owned: 6, total: 21 },
+    config: {
+      stakes: { twentyone: 25, triple: 10, spiral: 25, scratcher: 50, wheel: 500 },
+      paytables: {
+        scratcher: [{ prize: 50, odds: 3 }, { prize: 150, odds: 10 },
+                    { prize: 600, odds: 100 }, { prize: 5000, odds: 2500 }],
+        wheel: [{ weight: 36 }, { weight: 20 }, { weight: 18 }, { weight: 12 },
+                { weight: 8 }, { weight: 4 }, { weight: 2 }],
+      },
+    },
+  };
+}
+/** A card the server would have printed: nine cells, with the asked-for row
+ *  made three of a kind. */
+function scratchCard() {
+  const pool = [
+    { kind: 'spiral', v: 's1' }, { kind: 'spiral', v: 's2' }, { kind: 'word', v: 'OBEY' },
+    { kind: 'word', v: 'SINK' }, { kind: 'chip', v: '50' }, { kind: 'word', v: 'GOOD' },
+  ];
+  const grid = [];
+  for (let i = 0; i < 9; i++) grid.push(pool[(i * 5 + 2) % pool.length]);
+  const row = num('row', 1);
+  const prize = num('prize', 600);
+  if (row >= 0 && row <= 2 && prize > 0) for (let i = 0; i < 3; i++) grid[row * 3 + i] = pool[0];
+  return { grid, row: prize > 0 ? row : -1, prize: Math.max(0, prize), free: statusBody().free_scratch_available };
+}
+/** The seven wedges, in the order the server numbers them. Item wedges grant a
+ *  sku and pay nothing, which is why `amount` is null on them. */
+const PW = [
+  { kind: 'chips', amount: 250, sku: null }, { kind: 'chips', amount: 500, sku: null },
+  { kind: 'item', amount: null, sku: 'bk_scratcher' }, { kind: 'item', amount: null, sku: 'bk_insurance' },
+  { kind: 'chips', amount: 1000, sku: null }, { kind: 'item', amount: null, sku: 'late_slip' },
+  { kind: 'item', amount: null, sku: 'bk_visor' },
+];
+function wheelSpin() {
+  const i = Math.max(0, Math.min(PW.length - 1, num('wedge', 4)));
+  const w = PW[i];
+  // A stack already at its ceiling: the server grants nothing and buys the
+  // wedge back at 250, and the sku RIDES ALONG so the page can say which one.
+  if (w.kind === 'item' && q.has('fallback')) return { wedge: i, kind: 'chips', amount: 250, sku: w.sku };
+  return { wedge: i, kind: w.kind, amount: w.amount, sku: w.sku };
+}
+/** Where a machine's result comes from. */
+function resultFor(machine) { return machine === 'wheel' ? wheelSpin() : scratchCard(); }
+
+const ctx = {
+  log,
+  t: (key, fallback) => fallback || key,
+  send(msg) {
+    log('up   ' + JSON.stringify(msg));
+    if (msg.type !== 'casino-request') return;
+    setTimeout(() => {
+      let ok = true; let status = 200; let body = statusBody();
+      if (msg.op === 'play') {
+        if (q.has('tier')) { ok = false; status = 403; body = { code: 'arcademy_locked', min_tier: 2 }; }
+        else if (q.has('poor')) { ok = false; status = 200; body = { reason: 'insufficient_chips' }; }
+        else {
+          const stake = Math.round(Number(msg.body.stake) || 0);
+          const result = resultFor(msg.body.machine);
+          const payout = Math.max(0, Math.round(Number(result.amount != null ? result.amount : result.prize) || 0));
+          purse.chips = purse.chips - stake + payout;
+          purse.earnedC += payout;
+          body = Object.assign(statusBody(), { machine: msg.body.machine, stake, payout, result });
+        }
+      }
+      fire('casino-result', { type: 'casino-result', reqId: msg.reqId, ok, status, body });
+      log('down casino-result ' + (ok ? 'ok' : status));
+    }, 180);
+  },
+  listen(type, fn) {
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type).add(fn);
+    return () => { const s = listeners.get(type); if (s) s.delete(fn); };
+  },
+};
+if (q.has('dark')) { delete ctx.send; delete ctx.listen; }
+
+const room = openBackRoom(ctx);
+document.getElementById('host').appendChild(room.root);
+window.__room = room;
+if (q.has('bare')) for (const sel of ['.bk-cage', '.bk-pot']) {
+  const n = room.root.querySelector(sel);
+  if (n) n.hidden = true;
+}
+
+/* THE LADDER, exactly the way the shell holds it. Nothing inside binds Esc. */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (room.escapeStep()) { log('esc: folded a cabinet'); return; }
+  room.close();
+  log('esc: room closed');
+});
+
+/* ------------------------------------------------------------ the driver ---
+ * It reaches inside nothing: it presses what a player presses, sends the same
+ * pointer events a thumb sends, and writes down what it saw. */
+const machine = q.get('m') || 'scratcher';
+const auto = q.get('auto');
+const at = (sel) => room.root.querySelector(sel);
+const bal = () => (at('.bk-bal-n') || {}).textContent;
+const CAB = { scratcher: 'The Scratcher', wheel: 'The Prize Wheel' };
+
+function openCab() {
+  for (const b of room.root.querySelectorAll('.bk-cab')) {
+    if (b.querySelector('.bk-cab-name').textContent !== CAB[machine]) continue;
+    log('CAB sheet=' + (b.classList.contains('bk-sheet') ? 'yes' : 'no'));
+    b.click();
+    return true;
+  }
+  return false;
+}
+
+/** One stroke across a node, `rows` bands of `of`, in the events a thumb sends. */
+function stroke(node, rows, of) {
+  const r = node.getBoundingClientRect();
+  const send = (type, x, y) => node.dispatchEvent(new PointerEvent(type, {
+    bubbles: true, pointerId: 1, pointerType: 'touch', clientX: x, clientY: y,
+  }));
+  send('pointerdown', r.left + 12, r.top + 12);
+  for (let i = 0; i < rows; i++) {
+    const y = r.top + ((i + 0.5) / of) * r.height;
+    for (let k = 0; k <= 10; k++) send('pointermove', r.left + (k / 10) * r.width, y);
+  }
+  send('pointerup', r.left + 12, r.top + 12);
+}
+
+async function driveScratcher(stage) {
+  const buy = stage.querySelector('.bk-sc-buy');
+  log('SC buy=' + buy.textContent);
+  buy.click();
+  await wait(520);
+  log('SC cells=' + stage.querySelectorAll('.bk-sc-cell').length);
+  log('SC foil=' + (stage.querySelector('.bk-sc-foil') ? 'canvas'
+    : stage.querySelector('.bk-sc-plate') ? 'plate' : 'none'));
+  log('SC say=' + stage.querySelector('.bk-sc-say').textContent);
+  if (auto === 'refuse') { log('SC balance=' + bal()); return; }
+  const plate = stage.querySelector('.bk-sc-plate');
+  const foil = stage.querySelector('.bk-sc-foil');
+  if (plate) plate.click();
+  else if (auto === 'part') {
+    stroke(foil, 3, 12);
+    log('SC pct=' + stage.querySelector('.bk-sc-pct').textContent);
+    log('SC melted=' + (stage.querySelector('.bk-sc-foil') ? 'no' : 'yes'));
+    return;
+  } else if (auto === 'leave') {
+    stroke(foil, 3, 12);
+    room.escapeStep();
+    await wait(1400);
+    log('SC gone=' + (at('.bk-sc') ? 'no' : 'yes'));
+    log('SC balance=' + bal());
+    return;
+  } else stroke(foil, 14, 14);
+  // The bank flight plus the count-up. Both are ceilinged, neither is instant.
+  await wait(2600);
+  log('SC pct=' + stage.querySelector('.bk-sc-pct').textContent);
+  log('SC melted=' + (stage.querySelector('.bk-sc-foil, .bk-sc-plate') ? 'no' : 'yes'));
+  log('SC lit=' + stage.querySelectorAll('.bk-sc-hit').length);
+  log('SC say=' + stage.querySelector('.bk-sc-say').textContent);
+  log('SC buy=' + stage.querySelector('.bk-sc-buy').textContent);
+  log('SC balance=' + bal());
+}
+
+/** What the face is publishing, before a single chip is staked. */
+function logFace(stage) {
+  log('PW slices=' + stage.querySelector('.bk-pw').dataset.slices);
+  log('PW odds=' + stage.querySelectorAll('.bk-pw-odds-row').length);
+  log('PW spin=' + stage.querySelector('.bk-pw-spin').textContent);
+  log('PW say=' + stage.querySelector('.bk-pw-say').textContent);
+}
+
+async function driveWheel(stage) {
+  logFace(stage);
+  const btn = stage.querySelector('.bk-pw-spin');
+  btn.click();
+  await wait(420);
+  if (auto === 'refuse') {
+    log('PW say=' + stage.querySelector('.bk-pw-say').textContent);
+    log('PW balance=' + bal());
+    return;
+  }
+  if (auto === 'leave') {
+    room.escapeStep();
+    await wait(1400);
+    log('PW gone=' + (at('.bk-pw') ? 'no' : 'yes'));
+    log('PW balance=' + bal());
+    return;
+  }
+  // The spin and its ceiling, then the bank flight plus the count-up. Every
+  // one of those is ceilinged, none of them is instant.
+  await wait(6400);
+  log('PW wedge=' + stage.querySelector('.bk-pw').dataset.wedge);
+  log('PW card=' + stage.querySelector('.bk-pw-card').textContent);
+  log('PW note=' + stage.querySelector('.bk-pw-note').textContent);
+  log('PW say=' + stage.querySelector('.bk-pw-say').textContent);
+  log('PW spin=' + stage.querySelector('.bk-pw-spin').textContent);
+  log('PW balance=' + bal());
+}
+
+async function drive() {
+  await wait(900);
+  if (!auto) return;
+  if (!openCab()) { log('AUTO no-frame'); log('AUTO done'); return; }
+  await wait(120);
+  const stage = at('.bk-stage');
+  log('AUTO mounted=' + (stage.firstElementChild ? stage.firstElementChild.className : 'none'));
+  if (auto === 'open') { if (machine === 'wheel') logFace(stage); }
+  else if (machine === 'wheel') await driveWheel(stage);
+  else await driveScratcher(stage);
+  log('AUTO done');
+}
+drive().catch((e) => { log('THREW ' + (e && e.message)); log('AUTO done'); });
+</script>
+</body>
+</html>
