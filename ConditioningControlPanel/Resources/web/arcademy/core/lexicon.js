@@ -134,6 +134,18 @@ export const DEFAULT_LEXICON = Object.freeze({
   campus_desc_entrance: 'The notice board carries announcements. The trophy case waits for your diplomas.',
   campus_notice_board: 'Notice Board',
   campus_trophy_case: 'Trophy Case',
+  /* THE TIME CAPSULE (shell/capsule.js), the trophy case's one exhibit. The
+     plaque line is TWO clause rows joined with one space: the whole sentence is
+     102 characters and a NeutralLexicon value over 96 can never be mod-skinned
+     (trap 26), so it is split the way vn/lex.js PAPERS splits its two papers. */
+  campus_desc_trophy: 'One exhibit under glass. The school keeps its own first night in here.',
+  capsule_on_view: 'On view',
+  capsule_title: 'Time Capsule',
+  capsule_line_2026_02_a: 'The first dashboard. February 2026.',
+  capsule_line_2026_02_b: 'Everything was pink and the DROP button was the size of a doormat.',
+  capsule_footer: 'Sealed by the Registrar. Opened at thirty nights.',
+  capsule_sealed_tag: 'opens at 30 nights',
+  capsule_sealed_hint: 'The case is wrapped and taped. The tag has a number on it.',
   campus_admissions: 'Admissions',
   campus_bell_tower: 'Bell Tower',
   campus_main_gate: 'Main Gate',

@@ -1857,6 +1857,18 @@ internal static class ArcademyHostService
         ["campus_desc_entrance"] = "The notice board carries announcements. The trophy case waits for your diplomas.",
         ["campus_notice_board"] = "Notice Board",
         ["campus_trophy_case"] = "Trophy Case",
+        // THE TIME CAPSULE (Resources/web/arcademy/shell/capsule.js). The plaque
+        // line is TWO clause rows joined with one space in the page: the whole
+        // sentence is 102 characters and MergeModTable drops any mod string over
+        // 96, so a single row could never be re-voiced (trap 26).
+        ["campus_desc_trophy"] = "One exhibit under glass. The school keeps its own first night in here.",
+        ["capsule_on_view"] = "On view",
+        ["capsule_title"] = "Time Capsule",
+        ["capsule_line_2026_02_a"] = "The first dashboard. February 2026.",
+        ["capsule_line_2026_02_b"] = "Everything was pink and the DROP button was the size of a doormat.",
+        ["capsule_footer"] = "Sealed by the Registrar. Opened at thirty nights.",
+        ["capsule_sealed_tag"] = "opens at 30 nights",
+        ["capsule_sealed_hint"] = "The case is wrapped and taped. The tag has a number on it.",
         ["campus_admissions"] = "Admissions",
         ["campus_bell_tower"] = "Bell Tower",
         ["campus_main_gate"] = "Main Gate",

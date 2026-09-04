@@ -1920,6 +1920,17 @@ g.campus-room.locked:hover { filter:brightness(1.2); }
 .campus-pin.p3 { fill:var(--lav); }  .campus-pin.p4 { fill:var(--ink-dim); }
 .campus-trophy.gold { fill:var(--gold); } .campus-trophy.lav { fill:var(--lav); }
 .campus-trophy.dim { fill:var(--campus-line-dim); }
+/* THE TROPHY CASE READS AS PRESSABLE (community ask, Sept 2). Its glass and its
+   four lights are drawn in the HALL dressing group, one sibling BELOW the hit
+   area that takes the click, so `g.campus-room:hover`'s brightness can never
+   reach them - the case answers with a pane of its own instead: the hit rect,
+   invisible at rest, warms gold under the pointer. Nothing here moves, so the
+   decoration law and .arc-reduced have nothing to switch off. */
+g.campus-room.facility.trophy .campus-hit { transition:fill .2s ease-out; }
+g.campus-room.facility.trophy:hover .campus-hit,
+g.campus-room.facility.trophy:focus-within .campus-hit {
+  fill:color-mix(in srgb, var(--gold), transparent 88%);
+}
 
 /* fireflies */
 .campus-fly {
