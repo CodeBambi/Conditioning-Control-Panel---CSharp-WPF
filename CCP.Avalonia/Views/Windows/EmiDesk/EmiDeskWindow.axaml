@@ -23,9 +23,13 @@
 
      The window is a pad bigger than EMI on every side so her FX have room; that pad is
      Background-less on purpose. ponytail: on X11 a transparent Avalonia window still EATS the
-     clicks that fell through the pad on Windows (layered-window alpha hit-testing), and
-     Platform/X11Overlay.SetClickThrough is whole-window only - shaping input to the BodyRoot rect
-     needs an input-shape-region API the shim does not have yet. Its own layer. -->
+     clicks that fell through the pad on Windows (layered-window alpha hit-testing).
+     POSSIBLE, and blocked on one member rather than on a service: Platform/X11Overlay exposes
+     SetClickThrough(TopLevel, bool), which is whole-window only, and shaping input to BodyRoot's
+     rect needs SetInputRegion(TopLevel, IReadOnlyList<PixelRect>) beside it. The XFixes call is
+     already there - SetClickThrough builds a region and only ever builds the EMPTY one - so this
+     is a Platform/ layer, not a view one, and BodyRoot moves with ApplyBodyWidth so the region
+     has to be re-set on every resize. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"

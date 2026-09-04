@@ -626,8 +626,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         ///         the window can never hold the keyboard, so a local <c>KeyDown</c> here would not
         ///         be the same feature and is not offered as one.</item>
         /// </list>
-        /// <para>The honest replacement is a compositor-side dismissal (an X11 pointer grab, or a
-        /// layer-shell surface on Wayland), which is its own layer.</para>
+        /// <para>ponytail: POSSIBLE in principle and NOT a compositor's to grant, which the old
+        /// wording here had backwards. Neither half is a "hook" problem on X11: the primitive to
+        /// evaluate is a POINTER GRAB (<c>XGrabPointer</c>, or a passive XI2 grab), a client-side
+        /// ask this process can make for itself - unlike <c>SetWindowsHookEx</c>, which is what
+        /// makes the WPF original unportable. It belongs beside <c>SetClickThrough</c> in
+        /// CCP.Avalonia/Platform/X11Overlay.cs, which exposes no grab today, so it is a Platform/
+        /// layer rather than a view one. Wayland is the case that really does need the compositor:
+        /// there the answer is a layer-shell surface, not a grab.</para>
+        ///
+        /// <para>Escape stays lost either way while this window is <c>ShowActivated="False"</c> and
+        /// never holds focus - a local <c>KeyDown</c> here would receive nothing. The ring's own
+        /// recovery (a click landing INSIDE the window's transparent gaps folds it) does not
+        /// transfer: this panel is opaque edge to edge, so there is no in-window click that means
+        /// "dismiss".</para>
         ///
         /// <para>WPF's <c>OnGlobalDown</c>, <c>OnGlobalKey</c> and the <c>Post</c> helper that
         /// marshalled them back onto the UI thread go with the hooks: they existed only to be
