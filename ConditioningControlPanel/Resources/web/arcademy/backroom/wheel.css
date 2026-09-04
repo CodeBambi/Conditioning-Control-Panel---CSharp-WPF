@@ -1,0 +1,72 @@
+/* ============================================================================
+ * backroom/wheel.css - the cabinet the wheel is bolted into.
+ *
+ * Lazy-linked by wheel.js on first open, exactly like backroom.css. The FACE
+ * itself is already skinned by backroom.css (.bk-wheel, its pin, its fade),
+ * because the face is kit and the kit's skin belongs with the kit. Everything
+ * in here is the furniture around it: the button, the prize card, the table.
+ *
+ * TYPE: --disp for signage, --mono for the odds column, --body for copy.
+ * No serif (house camera law), no font host (trap 2).
+ *
+ * MOTION: nothing in here animates. The only moving thing on this machine is
+ * the face, and loomwheel.js gates its own loops in JS because the CSS freeze
+ * cannot reach one (trap 92). The diet's job here is layout: a 320px wheel and
+ * a 240px column do not sit side by side on a phone, so they stack.
+ * ==========================================================================*/
+
+.bk-pw { display: flex; flex-direction: column; gap: 12px; }
+.bk-pw-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bk-pw-head h3 { margin: 0; font-family: var(--disp); font-size: 15px; letter-spacing: .1em;
+  color: var(--bk-brass, var(--gold)); font-weight: 400; }
+.bk-pw-lede { font-size: 12px; color: var(--ink-faint); flex: 1 1 auto; }
+.bk-pw-stage { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------------ the face */
+/* The wheel wants a lane of its own: the pin overhangs the rim, so a tight box
+   clips the one part of the machine a player has to be able to read. */
+.bk-pw-face { flex: 0 0 auto; padding: 6px 4px 0; }
+
+/* ------------------------------------------------------------------ the side */
+.bk-pw-side { flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; min-width: 240px; }
+.bk-pw-spin {
+  align-self: flex-start; padding: 13px 26px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--bk-brass, var(--gold));
+  background: color-mix(in srgb, var(--gold), transparent 82%); color: var(--gold);
+  font-family: var(--disp); font-size: 14px; letter-spacing: .14em;
+}
+.bk-pw-spin[disabled] { opacity: .45; cursor: default; }
+.bk-pw-spin:focus-visible { outline: 2px solid var(--bk-brass, var(--gold)); outline-offset: 2px; }
+.bk-pw-say { font-size: 13px; color: var(--ink-dim); min-height: 1.3em; }
+.bk-pw-say.bk-warm { color: var(--gold); }
+
+/* THE PRIZE CARD. One sentence, and it is the biggest type on the machine,
+   because it is the only thing on it a player came for. */
+.bk-pw-card { font-family: var(--disp); font-size: 19px; letter-spacing: .04em;
+  color: var(--ink); min-height: 1.2em; line-height: 1.25; }
+.bk-pw-card.bk-warm { color: var(--gold); }
+/* The note is where the prize WENT, including the honest bad news. */
+.bk-pw-note { font-size: 12px; color: var(--ink-dim); min-height: 1.2em; }
+.bk-pw-note.bk-pw-kept { color: var(--bk-neon-2, var(--lav)); }
+
+/* --------------------------------------------------------- the published table */
+.bk-pw-odds {
+  margin-top: 4px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel), transparent 30%);
+  font-family: var(--mono); font-size: 11px; color: var(--ink-dim); line-height: 1.75;
+}
+.bk-pw-odds-h { display: block; font-family: var(--disp); font-size: 10px; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px; }
+.bk-pw-ticks { color: var(--ink-faint); margin-top: 4px; }
+
+/* --------------------------------------------------- the diet and the freeze */
+html.arc-mobile .bk-pw-stage, html.ae-lite .bk-pw-stage { gap: 12px; }
+html.arc-mobile .bk-pw-lede { display: none; }
+html.arc-mobile .bk-pw-face, html.ae-lite .bk-pw-face { padding-top: 2px; }
+/* The side keeps its column rather than being forced under the wheel. A 240px
+   face and a 200px column fit a landscape phone side by side, and a phone held
+   that way is 390 pixels TALL: stacked, the prize card lands below the fold and
+   a player has to scroll to find out what they won. Portrait still wraps. */
+html.arc-mobile .bk-pw-side, html.ae-lite .bk-pw-side { min-width: 0; flex: 1 1 200px; }
+html.arc-mobile .bk-pw-card, html.ae-lite .bk-pw-card { font-size: 17px; }
+html.arc-mobile .bk-pw-odds, html.ae-lite .bk-pw-odds { line-height: 1.55; padding: 8px 10px; }
