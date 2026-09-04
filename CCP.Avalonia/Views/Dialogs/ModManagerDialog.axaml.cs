@@ -28,10 +28,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    which is exactly what <c>App.Mods</c> answered before its service came up.
     ///  - <c>ModPackCatalog</c> is a WPF-head type, so the mod-id → pack-id mapping comes from
     ///    <see cref="ModPacks"/>, its twin on this head.
-    ///  - Installing, uninstalling, activating for real, exporting and sharing all need
-    ///    <c>ModManagerService</c> / the catalogue client, which stay in the WPF head; each is a
-    ///    stub with a <c>ponytail:</c> marker. Activation still flips in memory, so the star, the
-    ///    active indicator and the button rules behave.
+    ///  - Installing, uninstalling, activating for real, exporting and sharing all need the WRITE
+    ///    half of <c>ConditioningControlPanel/Services/ModService.cs</c> (WPF reaches it as
+    ///    <c>App.Mods</c>) or the catalogue client. There is no "ModManagerService" - earlier notes
+    ///    here named a type that exists nowhere in the repo. <see cref="CoreMods"/> is the seam,
+    ///    and it carries read-side providers only, so each write is a stub with a
+    ///    <c>ponytail:</c> marker naming the ModService member it wants. Activation still flips in
+    ///    memory, so the star, the active indicator and the button rules behave.
     ///  - The release-content event plumbing (<c>SubscribeToPackEvents</c>,
     ///    <c>OnPackProgressChanged</c>, <c>OnPackInstalled</c>, <c>OnModAvailabilityChanged</c>,
     ///    <c>RefreshListKeepingSelection</c>, <c>MarshalToUi</c>) is dropped rather than stubbed:
@@ -464,9 +467,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             if (_selectedMod == null) return;
 
-            // ponytail: needs ModManagerService.ActivateMod + SettingsService persistence, wired
-            // when they move to Core. The in-memory switch below is what the rest of the dialog
-            // reads, so the star, the indicator and the button rules all still behave.
+            // ponytail: needs ModService.ActivateMod (ConditioningControlPanel/Services/
+            // ModService.cs) - CoreMods is read-only, it has no write-side provider for this.
+            // CoreSettings.Current.ActiveModId + Save IS reachable here and is deliberately NOT
+            // written: persisting an id no service on this head can load would hand the WPF head a
+            // mod switch this one only mimed. The in-memory switch below is what the rest of the
+            // dialog reads, so the star, the indicator and the button rules all still behave.
             _activeModId = _selectedMod.Id;
 
             ModWasChanged = true;
@@ -488,7 +494,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             if (!confirmed) return;
 
-            // ponytail: needs ModManagerService.UninstallMod (it deletes the folder and drops the
+            // ponytail: needs ModService.UninstallMod (it deletes the folder and drops the
             // mod from InstalledMods) plus the CoreSettings.ActiveModId write WPF does when the
             // uninstalled mod was the active one. The listing is the service's dictionary now, so
             // there is nothing local to remove and the row correctly stays until it really goes.
@@ -517,7 +523,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _btnInstall.IsEnabled = false;
             try
             {
-                // ponytail: needs ModManagerService.InstallModAsync, wired when it moves to Core.
+                // ponytail: needs ModService.InstallModAsync (ConditioningControlPanel/Services/
+                // ModService.cs); CoreMods carries no write-side provider for it.
                 // WPF then refreshed the list and reported msg_mod_installed_successfully /
                 // msg_failed_to_install_mod. Deliberately silent rather than showing either of
                 // those: a real-looking result for work that did not happen is worse than none.
@@ -551,8 +558,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _btnExport.IsEnabled = false;
             try
             {
-                // ponytail: needs ModManagerService.ExportCurrentAsModAsync, wired when it moves to
-                // Core. Silent for the same reason as the install path above; WPF reported
+                // ponytail: needs ModService.ExportCurrentAsModAsync (ConditioningControlPanel/
+                // Services/ModService.cs), same missing write half as install.
+                // Silent for the same reason as the install path above; WPF reported
                 // msg_mod_exported_to / msg_export_failed here.
                 await Task.CompletedTask;
             }
@@ -570,9 +578,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             dialog.ShowDialog(this);
         }
 
-        private void BtnCreate_Click()
+        /// <summary>
+        /// WPF's <c>new ModCreatorWindow { Owner = this }.ShowDialog()</c>. The window IS on this
+        /// head (<c>Views/Windows/ModCreatorWindow.axaml</c>) and this is its first call site here.
+        /// Avalonia's ShowDialog is async and throws on an owner that is not on screen, so the
+        /// visibility guard is the twin of WPF's implicit "Owner is showing".
+        ///
+        /// <para>That window still carries its own stubs (several panel partials, audio preview,
+        /// art framing) and says so in its own notes. Opening it is still the right call: every
+        /// section it cannot edit is visibly absent rather than misreported, and its save path
+        /// writes a real mod.json.</para>
+        /// </summary>
+        private async void BtnCreate_Click()
         {
-            // ponytail: ModCreatorWindow is not ported to this head yet; WPF opened it modally here.
+            try
+            {
+                if (!IsVisible) return;
+                await new ModCreatorWindow().ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[ModManager] Mod creator failed to open");
+            }
         }
     }
 }

@@ -2,6 +2,8 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -34,9 +36,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
         }
 
-        private void BtnJoinDiscord_Click()
+        /// <summary>
+        /// WPF hopped through <c>MainWindow.BtnDiscord_Click</c>, whose entire body is
+        /// <c>Process.Start(DiscordLinks.Invite)</c> plus a log line — so the hop was never the
+        /// blocker and nothing here is waiting on Core. <see cref="DiscordLinks"/> is in Core
+        /// already; <c>TopLevel.Launcher</c> is this head's shell-execute.
+        /// </summary>
+        private async void BtnJoinDiscord_Click()
         {
-            // ponytail: needs MainWindow.BtnDiscord_Click (opens the invite URL), wired when it moves to Core
+            try
+            {
+                if (await Launcher.LaunchUriAsync(new Uri(DiscordLinks.Invite)))
+                    Log.Information("Opened Discord invite link");
+                else
+                    Log.Warning("Nothing on this system handled the Discord invite URI");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to open Discord link");
+            }
         }
     }
 }

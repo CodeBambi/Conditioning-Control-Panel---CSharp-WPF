@@ -21,7 +21,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>NullOrEmptyToCollapsedConverter</c> is gone: the XAML uses Avalonia's built-in
     ///    <c>StringConverters.IsNotNullOrEmpty</c> on <c>IsVisible</c>.
     ///  - Settings load and save for real against <see cref="CoreSettings"/>, knowledge links
-    ///    included; the community-prompt lookup and the moderation log are still stubs.
+    ///    included, and every flagged field is recorded through <see cref="CoreModerationLog"/>.
+    ///    The community-prompt lookup is the one stub left (see <c>UpdateActivePromptBadge</c>).
     ///  - <c>PromptValidator</c> lives in Core and runs for real on Save.
     ///  - <c>MessageBox.Show</c> becomes this head's <see cref="MessageDialog"/>, which is awaited,
     ///    so Remove / Reset All / Cancel are async void. Its two-button shape covers the Yes/No
