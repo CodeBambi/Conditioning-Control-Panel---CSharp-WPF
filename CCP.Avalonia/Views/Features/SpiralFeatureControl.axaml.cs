@@ -137,9 +137,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             else if (e.PropertyName == nameof(AppSettings.SpiralPath))
             {
                 Dispatcher.UIThread.Post(UpdateSelectionHighlight);
-                // ponytail: WPF also re-renders the corner-GIF slots left on "built-in"
-                // (App.CornerGif.RefreshOverlays, ConditioningControlPanel/Services/CornerGifService.cs),
-                // still in the WPF head.
+                // A corner-GIF slot with no pick of its own plays the pool spiral
+                // (CornerGifPlanner.ResolveSourcePath), so a new pool selection changes what those
+                // slots draw. Ask the surface to rebuild them. Unseeded on this head until its
+                // overlay surface exists, so today this is a no-op rather than a wrong picture.
+                CoreCornerGif.Refresh();
             }
         }
 
