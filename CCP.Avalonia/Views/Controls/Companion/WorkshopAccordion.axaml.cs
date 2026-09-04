@@ -1,7 +1,9 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 {
@@ -16,6 +18,95 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // the XAML AND assigns the x:Name fields. Load() alone leaves Drawer and CellHost null,
             // which compiles and then NREs the first time ExpandAndReveal runs.
             InitializeComponent();
+
+            // Composition, the thing that was missing: WPF builds the six cells in
+            // CompanionRoomRuntimeVm and hands them to this drawer. That runtime layer hangs off
+            // ICompanionRoomVm and is still in the head, so — like every other zone on this page —
+            // the drawer seeds itself instead. Without this the six finished cells in
+            // Runtime/ are constructed by nothing and the drawer opens empty.
+            var vm = new WorkshopRuntimeVm(ExpandAndReveal);
+            DataContext = vm;
+            WireCellHostActions(vm.Parts);
+        }
+
+        /// <summary>
+        /// The cells hoist their outbound actions as events for a host to wire — the port's
+        /// replacement for WPF's <c>Window.GetWindow(this) is MainWindow mw</c> forward. This is
+        /// that host. Only the actions whose targets exist on this head are connected; the rest
+        /// stay unsubscribed on purpose rather than being faked (see the note below).
+        /// </summary>
+        private void WireCellHostActions(WorkshopShelfParts parts)
+        {
+            parts.Behavior.ChatShortcutRequested += async (_, _) => await RebindChatShortcutAsync();
+
+            // Deliberately NOT wired, each for the reason a previous layer already recorded:
+            //
+            //  · Behavior.CameraShortcutRequested — the combo drives MainWindow.SessionIO.cs:1485
+            //    ToggleWebcamFromHotkey / WebcamTrackingService, and no webcam engine exists on this
+            //    head, so a rebind would configure a key for a feature that cannot fire. Same
+            //    refusal as DevicesSettingsSection.axaml.cs's BtnCameraShortcutDevices.
+            //  · Behavior.PauseBrowserChanged — WPF mutes and suspends the live WebView2
+            //    (MainWindow.Patreon.cs); this drawer holds no WebHost to suspend, and a switch
+            //    that flips with nothing behind it would report a paused browser that is playing.
+            //  · Roster.CompanionCardClicked / PersonalityAssignRequested — MainWindow's
+            //    CompanionCard_Click / BtnCompanionPersonality_Click (MainWindow.Patreon.cs), which
+            //    switch the active companion through App.Companion. No seam on this head.
+            //  · Library.AddVideoLinkRequested — MainWindow's per-mod Hypnotube link pool.
+            //  · Community.Browse/Import/Export/RefreshPromptsRequested — the community-prompt
+            //    service, still in the WPF head.
+        }
+
+        /// <summary>
+        /// Port of WPF's MainWindow.SessionIO.cs:1202 <c>BtnChatShortcut_Click</c>, reached here
+        /// from the Behavior cell's shortcut pill. Identical to the twin already restored on
+        /// DevicesSettingsSection — the same settings write, the same two re-applications — because
+        /// WPF's one handler serves both surfaces and repaints both labels
+        /// (MainWindow.SessionIO.cs:1326/1332).
+        ///
+        /// <para>The system-wide half of the toggle (GlobalHotkeyService, a Win32 RegisterHotKey)
+        /// stays in the WPF head; the flag is still stored, since it is one settings file across
+        /// both heads, and the in-window binding applied here is exactly what WPF falls back to
+        /// when the flag is off.</para>
+        /// </summary>
+        private async System.Threading.Tasks.Task RebindChatShortcutAsync()
+        {
+            try
+            {
+                // Avalonia throws on a non-visible owner, and the shell can be loaded-but-hidden in
+                // the tray. No visible window means no modal to show and nothing to capture.
+                if (TopLevel.GetTopLevel(this) is not Window owner || !owner.IsVisible) return;
+                var prompt = CoreSettings.Current.CompanionPrompt;
+                if (prompt == null) return;
+
+                var dlg = new Dialogs.ChatShortcutCaptureDialog { GlobalHotkey = prompt.ChatShortcutGlobal };
+                if (!await dlg.ShowDialog<bool>(owner)) return;
+
+                if (dlg.ResetToDefault)
+                {
+                    prompt.ChatShortcutKey = "T";
+                    prompt.ChatShortcutModifiers = "Control";
+                }
+                else
+                {
+                    prompt.ChatShortcutKey = dlg.CapturedKey.ToString();
+                    // Serialises "Windows", not Avalonia's "Meta", so a file written here still
+                    // parses on the WPF head.
+                    prompt.ChatShortcutModifiers =
+                        AvatarTube.AvatarTubeWindow.SerializeModifiers(dlg.CapturedModifiers);
+                }
+                prompt.ChatShortcutGlobal = dlg.GlobalHotkey;
+                CoreSettings.Save();
+
+                AvatarTube.AvatarTubeWindow.ApplyChatShortcutTo(owner);
+                AvatarTube.AvatarTubeWindow.ApplyChatShortcutTo(AvatarTube.AvatarTubeWindow.Live);
+                (DataContext as WorkshopRuntimeVm)?.Parts.Behavior.RefreshChatShortcutLabel();
+                Log.Information("Chat shortcut rebound to {Combo}",
+                                AvatarTube.AvatarTubeWindow.FormatChatShortcut());
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Workshop: chat shortcut rebind failed");
+            }
         }
 
         /// <summary>
