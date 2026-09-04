@@ -838,7 +838,7 @@ namespace ConditioningControlPanel.Services
                         if (outputs != null)
                         {
                             var names = string.Join(", ", outputs.Select(o => $"{o.Name} ({o.Description})"));
-                            App.Logger?.Information("LibVLC available aout modules: {Outputs}", names);
+                            App.Logger?.Debug("LibVLC available aout modules: {Outputs}", names);
                         }
                     }
                     catch (Exception aoutEx)
@@ -1638,7 +1638,7 @@ namespace ConditioningControlPanel.Services
             // CompleteIfCurrent never clears a claim that isn't ours.
             App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
 
-            App.Logger?.Information("VideoService stopped");
+            App.Logger?.Debug("VideoService stopped");
         }
 
         private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
@@ -7085,7 +7085,15 @@ namespace ConditioningControlPanel.Services
             // "the panic key did nothing". Every phase is timestamped so the next report tells us
             // which phase the teardown died in instead of just going quiet.
             var closeSw = System.Diagnostics.Stopwatch.StartNew();
-            VideoDiag.Log("CLOSE", $"CloseAll begin (synchronous={synchronous}, windows={_windows.Count})");
+            // A teardown with no windows open is the common case (every panic press, every engine
+            // stop, every session end funnels here) and it produced the same four CLOSE lines as a
+            // real teardown - four lines of "nothing happened" per event, in the one trace whose
+            // whole value is a short readable timeline. Trace the phases only when there is
+            // actually a window to take down; the wedge/straggler/skip lines below stay
+            // unconditional because those only fire when something IS wrong.
+            bool traceClose = _windows.Count > 0;
+            if (traceClose)
+                VideoDiag.Log("CLOSE", $"CloseAll begin (synchronous={synchronous}, windows={_windows.Count})");
             lock (_cleanupLock)
             {
                 if (_isCleaningUp)
@@ -7125,7 +7133,12 @@ namespace ConditioningControlPanel.Services
 
                 lock (_targets)
                 {
-                    App.Logger?.Information("ATTENTION: CloseAll() called - destroying {Count} targets", _targets.Count);
+                    // Destroying nothing is the normal case and was logged at Information on every
+                    // single teardown; only a real destroy is worth a line on disk.
+                    if (_targets.Count > 0)
+                        App.Logger?.Information("ATTENTION: CloseAll() destroying {Count} target(s)", _targets.Count);
+                    else
+                        App.Logger?.Debug("ATTENTION: CloseAll() called - no targets to destroy");
                     foreach (var t in _targets.ToList()) t.Destroy();
                     _targets.Clear();
                 }
@@ -7251,7 +7264,8 @@ namespace ConditioningControlPanel.Services
                 // Now detach MediaPlayers from VideoViews (safe since players are stopped and we waited).
                 // Detaching an HwndHost surface from a player that is still presenting is the
                 // historical multi-monitor freeze; if the trace stops here, that is what happened.
-                VideoDiag.Log("CLOSE", $"detaching VideoViews at +{closeSw.ElapsedMilliseconds}ms");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"detaching VideoViews at +{closeSw.ElapsedMilliseconds}ms");
                 var windowsCopy = _windows.ToList();
                 foreach (var w in windowsCopy)
                 {
@@ -7284,7 +7298,8 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Close video windows AFTER media players are stopped and detached
-                VideoDiag.Log("CLOSE", $"closing {_windows.Count} video window(s) at +{closeSw.ElapsedMilliseconds}ms");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"closing {_windows.Count} video window(s) at +{closeSw.ElapsedMilliseconds}ms");
                 foreach (var w in _windows.ToList())
                 {
                     try
@@ -7448,7 +7463,8 @@ namespace ConditioningControlPanel.Services
 
                 // Total UI-thread block for this teardown. Anything past ~1s here is the app being
                 // unresponsive to the user (and to the low-level keyboard hook) — #616-#623.
-                VideoDiag.Log("CLOSE", $"CloseAll end after {closeSw.ElapsedMilliseconds}ms of UI-thread time");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"CloseAll end after {closeSw.ElapsedMilliseconds}ms of UI-thread time");
             }
         }
 

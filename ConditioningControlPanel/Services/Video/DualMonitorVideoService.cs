@@ -253,7 +253,7 @@ namespace ConditioningControlPanel.Services
                 });
             }
 
-            App.Logger?.Information("DualMonitorVideo: Playback stopped");
+            App.Logger?.Debug("DualMonitorVideo: Playback stopped");
         }
 
         /// <summary>
@@ -681,7 +681,7 @@ namespace ConditioningControlPanel.Services
             }
             _libVLC = null;
 
-            App.Logger?.Information("DualMonitorVideoService disposed");
+            App.Logger?.Debug("DualMonitorVideoService disposed");
         }
     }
 }

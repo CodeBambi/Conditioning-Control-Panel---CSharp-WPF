@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace ConditioningControlPanel.Services
 {
@@ -67,6 +68,15 @@ namespace ConditioningControlPanel.Services
         // hook stays installed as long as this has any entries.
         private static readonly Dictionary<int, Action> _callbacks = new();
 
+        // id -> "Ctrl+Alt+E", for the single summary line. Registration is spread across four
+        // callers that each fire whenever their setting changes, so each one used to file its own
+        // Information line and the log carried four near-identical lines per launch saying the
+        // hotkeys were exactly where they were last launch. Now the per-hotkey detail is Debug and
+        // one coalesced line names the whole set - and it only reappears when the set CHANGES.
+        private static readonly SortedDictionary<int, string> _armed = new();
+        private static string _lastLoggedSet = "";
+        private static DispatcherTimer? _summaryTimer;
+
         /// <summary>
         /// Registers the given combo as a system-wide hotkey under <paramref name="id"/>.
         /// Replaces any prior registration for the same id. Returns true on success;
@@ -115,7 +125,9 @@ namespace ConditioningControlPanel.Services
                 }
 
                 _callbacks[id] = onPressed;
-                App.Logger?.Information("GlobalHotkeyService: registered {Mods}+{Key} as global hotkey (id=0x{Id:X})", modifiers, key, id);
+                _armed[id] = $"{modifiers}+{key}";
+                App.Logger?.Debug("GlobalHotkeyService: registered {Mods}+{Key} as global hotkey (id=0x{Id:X})", modifiers, key, id);
+                ScheduleSummary();
                 return true;
             }
             catch (Exception ex)
@@ -145,6 +157,8 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("GlobalHotkeyService: cleanup threw (id=0x{Id:X}): {Error}", id, ex.Message);
             }
             _callbacks.Remove(id);
+            _armed.Remove(id);
+            ScheduleSummary();
             if (_callbacks.Count == 0) TeardownHook();
         }
 
@@ -167,7 +181,50 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("GlobalHotkeyService: cleanup-all threw: {Error}", ex.Message);
             }
             _callbacks.Clear();
+            _armed.Clear();
             TeardownHook();
+        }
+
+        /// <summary>
+        /// Coalesces a burst of Register/Unregister calls into ONE line. Registration happens once
+        /// per hotkey at startup and again whenever the user edits a combo, so a short debounce
+        /// turns "four lines, one per slot" into "one line, the whole set". Never throws; if there
+        /// is no dispatcher (unit tests, teardown) the summary is simply skipped - it is a log
+        /// line, not behaviour.
+        /// </summary>
+        private static void ScheduleSummary()
+        {
+            try
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                if (_summaryTimer == null)
+                {
+                    _summaryTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+                    {
+                        Interval = TimeSpan.FromMilliseconds(750),
+                    };
+                    _summaryTimer.Tick += (_, _) => { _summaryTimer?.Stop(); LogSummary(); };
+                }
+                _summaryTimer.Stop();
+                _summaryTimer.Start();
+            }
+            catch { /* swallow: a diagnostic line must never be able to break hotkey arming */ }
+        }
+
+        private static void LogSummary()
+        {
+            try
+            {
+                // Only when the SET changed: re-applying the same combos (which several settings
+                // handlers do on any settings save) must not re-file the line.
+                var set = _armed.Count == 0 ? "(none)" : string.Join(", ", _armed.Values);
+                if (set == _lastLoggedSet) return;
+                _lastLoggedSet = set;
+                App.Logger?.Information("GlobalHotkeyService: {Count} global hotkey(s) armed: {Hotkeys}",
+                    _armed.Count, set);
+            }
+            catch { /* swallow: diagnostics only */ }
         }
 
         private static void TeardownHook()

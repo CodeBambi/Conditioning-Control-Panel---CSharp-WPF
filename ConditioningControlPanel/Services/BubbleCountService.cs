@@ -85,7 +85,7 @@ public class BubbleCountService : IDisposable
         CloseMessageWindows();
         CleanupTempPackFiles();
 
-        App.Logger?.Information("BubbleCountService stopped");
+        App.Logger?.Debug("BubbleCountService stopped");
     }
 
     private void ScheduleNextGame()

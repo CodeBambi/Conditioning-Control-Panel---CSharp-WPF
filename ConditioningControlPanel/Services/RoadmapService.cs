@@ -375,7 +375,7 @@ public class RoadmapService : IDisposable
             Save();
         }
 
-        App.Logger?.Information("RoadmapService disposed");
+        App.Logger?.Debug("RoadmapService disposed");
     }
 
     #endregion

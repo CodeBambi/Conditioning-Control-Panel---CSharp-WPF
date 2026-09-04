@@ -770,7 +770,7 @@ public class BubbleService : IDisposable
         // Update Discord presence back to idle (unless another activity takes over)
         App.DiscordRpc?.SetIdleActivity();
 
-        App.Logger?.Information("BubbleService stopped");
+        App.Logger?.Debug("BubbleService stopped");
     }
 
     /// <summary>Stand up the ambient shared-host overlay + its left-click hook when BubbleSharedHost is

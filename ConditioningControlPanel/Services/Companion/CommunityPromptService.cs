@@ -60,7 +60,7 @@ namespace ConditioningControlPanel.Services
             // Load cached manifest
             LoadCachedManifest();
 
-            App.Logger?.Information("CommunityPromptService initialized. Prompts folder: {Folder}", _promptsFolder);
+            App.Logger?.Debug("CommunityPromptService initialized. Prompts folder: {Folder}", _promptsFolder);
         }
 
         #region Manifest & Discovery

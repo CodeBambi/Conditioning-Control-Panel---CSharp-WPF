@@ -393,7 +393,7 @@ public partial class EmiRingWindow : Window
             _closeAnnounced = false;
 
             EmiSfx.RingOpen();
-            Log.Information("[EmiDesk] ring open with {Count} cards, {Native}", _slots.Count, NativeStyle());
+            Log.Debug("[EmiDesk] ring open with {Count} cards, {Native}", _slots.Count, NativeStyle());
         }
         catch (Exception ex)
         {

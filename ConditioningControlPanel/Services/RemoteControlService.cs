@@ -311,7 +311,7 @@ namespace ConditioningControlPanel.Services
             }
 
             CleanupSession();
-            App.Logger?.Information("[RemoteControl] Session stopped");
+            App.Logger?.Debug("[RemoteControl] Session stopped");
         }
 
         private void CleanupSession()

@@ -990,7 +990,7 @@ namespace ConditioningControlPanel
                 EnsureWatchdogRunning();
                 return;
             }
-            App.Logger?.Information("[EMOTE] xfade -> {Clip} (in={In}, outOp={OutOp:F2}, talkSeq={Talk})",
+            App.Logger?.Debug("[EMOTE] xfade -> {Clip} (in={In}, outOp={OutOp:F2}, talkSeq={Talk})",
                 clip, ReferenceEquals(inImg, ImgAvatarAnimated) ? "A" : "B", outImg.Opacity, _circeTalkSeqActive);
 
             inImg.Opacity = 0;

@@ -100,11 +100,11 @@ if (typeof window !== 'undefined') {
   try {
     window.addEventListener('error', (e) => {
       const src = e.filename ? ' @ ' + String(e.filename).split('/').pop() + ':' + e.lineno : '';
-      bridge.log('error: ' + (e.message || 'script error') + src);
+      bridge.log('error', 'error: ' + (e.message || 'script error') + src);
     });
     window.addEventListener('unhandledrejection', (e) => {
       const r = e && e.reason;
-      bridge.log('promise: ' + ((r && (r.message || r.stack || r)) || 'unknown'));
+      bridge.log('error', 'promise: ' + ((r && (r.message || r.stack || r)) || 'unknown'));
     });
   } catch (_e) { /* never throw at import */ }
 }
@@ -213,8 +213,8 @@ function teeDebug(level, m) {
 const logger = {
   debug: (m) => { try { console.debug('[gg]', m); } catch (_e) { /* ignore */ } },
   info: (m) => { try { console.info('[gg]', m); } catch (_e) { /* ignore */ } },
-  warn: (m) => { try { console.warn('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('warn: ' + m); teeDebug('warn', m); },
-  error: (m) => { try { console.error('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('error: ' + m); teeDebug('error', m); },
+  warn: (m) => { try { console.warn('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('warn', m); teeDebug('warn', m); },
+  error: (m) => { try { console.error('[gg]', m); } catch (_e) { /* ignore */ } bridge.log('error', m); teeDebug('error', m); },
 };
 
 /**
