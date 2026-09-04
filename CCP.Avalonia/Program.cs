@@ -19,6 +19,20 @@ namespace ConditioningControlPanel.Avalonia
             if (Array.IndexOf(args, "--nav-check") >= 0)
                 return NavCheck.Run();
 
+            // --click-through <dir> dispatches REAL pointer clicks at real controls and saves a
+            // frame per step. The only proof here that can see a button which draws but does not
+            // take a click - which is what the nav doors were doing.
+            var ct = Array.IndexOf(args, "--click-through");
+            if (ct >= 0)
+            {
+                if (ct + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine("usage: --click-through <out-dir>");
+                    return 2;
+                }
+                return ClickThrough.Run(args[ct + 1]);
+            }
+
             // --render <path> draws the real window offscreen and saves a PNG. Visual proof that
             // survives on a CI runner with no display server.
             var r = Array.IndexOf(args, "--render");
