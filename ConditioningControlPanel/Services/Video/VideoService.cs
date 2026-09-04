@@ -712,7 +712,7 @@ namespace ConditioningControlPanel.Services
                 if (_libVLCReady.Task.Wait(timeoutMs))
                     return _libVLC != null;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             App.Logger?.Warning("VideoService: Timed out waiting for LibVLC initialization");
             return _libVLC != null;
@@ -1238,7 +1238,7 @@ namespace ConditioningControlPanel.Services
             // a previous run that never disarmed (its teardown threw). Those handles are dead, and
             // acting on them would make the escape hatch's trace line lie about what it released.
             lock (_managedLock) { _managedWindowHandles.Clear(); }
-            try { _managedWedgeWatchdog?.Dispose(); } catch { }
+            try { _managedWedgeWatchdog?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _managedWedgeWatchdog = new System.Threading.Timer(_ => ManagedWedgeTick(), null, 3000, 3000);
             VideoDiag.Log("WEDGE", $"{label}: managed wedge watchdog armed");
         }
@@ -1250,7 +1250,7 @@ namespace ConditioningControlPanel.Services
             // not a game was running), so stay silent when there was nothing armed rather than write
             // a WEDGE line naming a run that ended long ago.
             bool wasArmed = _managedWedgeWatchdog != null;
-            try { _managedWedgeWatchdog?.Dispose(); } catch { }
+            try { _managedWedgeWatchdog?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _managedWedgeWatchdog = null;
             lock (_managedLock) { _managedWindowHandles.Clear(); }
             if (wasArmed) VideoDiag.Log("WEDGE", $"{_managedLabel}: managed wedge watchdog disarmed");
@@ -1604,9 +1604,9 @@ namespace ConditioningControlPanel.Services
             _feedDeferDeadlineUtc = DateTime.MinValue;
 
             try { Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch; }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged; }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Force cleanup of any playing video. Every caller of Stop() is a LIVE stop
             // (engine stop, panic, remote control, feature toggle) — app shutdown never
@@ -1878,7 +1878,7 @@ namespace ConditioningControlPanel.Services
             if (dispatcher == null || dispatcher.HasShutdownStarted)
             {
                 // No dispatcher to poll on, so the action can never run — release the caller's latch.
-                try { onExpired?.Invoke(); } catch { }
+                try { onExpired?.Invoke(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 return;
             }
 
@@ -1908,8 +1908,8 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    try { timer.Stop(); } catch { }
-                    try { onExpired?.Invoke(); } catch { }
+                    try { timer.Stop(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                    try { onExpired?.Invoke(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                     App.Logger?.Debug("VideoService.RunWhenFeedClear: {E}", ex.Message);
                 }
             };
@@ -2581,7 +2581,7 @@ namespace ConditioningControlPanel.Services
                                 if (!_isCleaningUp)
                                     Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
                             }
-                            catch { /* Last resort failed */ }
+                            catch (Exception exIgnored) { Diag.Swallowed(exIgnored, "last-resort cleanup failed"); }
                         }
                     });
                 };
@@ -2871,7 +2871,7 @@ namespace ConditioningControlPanel.Services
                 if (App.Achievements?.Progress?.TotalVideoMinutes <= 0)
                     App.EmiDesk?.Fire("firstVideoEver", null);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             // ---- hybrid routing (docs/BROWSER_VIDEO_ENGINE_PLAN.md §4) ----
             // The ONLY change to this path. When the browser engine takes the clip it satisfies the
@@ -3329,7 +3329,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
                             }
-                            catch { /* Last resort failed */ }
+                            catch (Exception exIgnored) { Diag.Swallowed(exIgnored, "last-resort cleanup failed"); }
                         }
                     });
                 };
@@ -3606,7 +3606,7 @@ namespace ConditioningControlPanel.Services
                     }
                     win?.Close();
                 }
-                catch { /* Ignore cleanup errors */ }
+                catch (Exception exIgnored) { Diag.Swallowed(exIgnored, "cleanup error"); }
 
                 // Create a black placeholder window so we don't crash
                 var fallbackDpi = BubbleCountWindow.GetDpiForScreen(screen);
@@ -3839,7 +3839,7 @@ namespace ConditioningControlPanel.Services
                             // Judging it here would skip to the next video the moment the user paused
                             // inside the grace window. Re-arm for another full grace instead.
                             VideoDiag.Log("BLUR", $"[{surfaceTag}] frame watchdog deferred - video is grace-paused");
-                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch (Exception ex) { Diag.Swallowed(ex); }
                             return;
 
                         case VideoSurfaceHealth.FrameWatchdogAction.Retry:
@@ -3848,7 +3848,7 @@ namespace ConditioningControlPanel.Services
                                 VoutGraceMs, surfaceTag);
                             VideoDiag.Log("BLUR", $"[{surfaceTag}] NO FRAME within {VoutGraceMs}ms - per-surface retry, clip untouched");
                             RetryBlurSurface(watch, gen);
-                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                            try { watch.Timer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch (Exception ex) { Diag.Swallowed(ex); }
                             return;
 
                         case VideoSurfaceHealth.FrameWatchdogAction.GiveUp:
@@ -4064,7 +4064,7 @@ namespace ConditioningControlPanel.Services
                         if (hwnd != IntPtr.Zero)
                             lock (_videoWindowHandlesLock) { _videoWindowHandles.Remove(hwnd); }
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     win.Hide();
                     App.Logger?.Warning("VideoService: the dead blurred surface {Surface} was hidden - that monitor is free instead of holding a black fullscreen window for the rest of the clip",
@@ -4087,7 +4087,7 @@ namespace ConditioningControlPanel.Services
             }
             foreach (var t in watches.Select(w => w.Timer).Where(t => t != null))
             {
-                try { t!.Dispose(); } catch { }
+                try { t!.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
 
@@ -4319,7 +4319,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (_frameBuffer != IntPtr.Zero)
                     {
-                        try { Marshal.FreeHGlobal(_frameBuffer); } catch { /* ignore */ }
+                        try { Marshal.FreeHGlobal(_frameBuffer); } catch (Exception ex) { global::ConditioningControlPanel.Diag.Swallowed(ex); }
                     }
                     _frameBuffer = Marshal.AllocHGlobal((int)(bw * bh * 4));
                     _w = bw;
@@ -4578,7 +4578,7 @@ namespace ConditioningControlPanel.Services
             private void Unhook()
             {
                 if (!_hooked) return;
-                try { CompositionTarget.Rendering -= OnRendering; } catch { /* ignore */ }
+                try { CompositionTarget.Rendering -= OnRendering; } catch (Exception ex) { global::ConditioningControlPanel.Diag.Swallowed(ex); }
                 _hooked = false;
             }
 
@@ -4862,7 +4862,7 @@ namespace ConditioningControlPanel.Services
                 }
                 if (buf != IntPtr.Zero)
                 {
-                    try { Marshal.FreeHGlobal(buf); } catch { /* ignore */ }
+                    try { Marshal.FreeHGlobal(buf); } catch (Exception ex) { global::ConditioningControlPanel.Diag.Swallowed(ex); }
                     Diag("frame buffer freed (player Stop() completed)");
                 }
             }
@@ -5104,7 +5104,7 @@ namespace ConditioningControlPanel.Services
                     if (e.Key == Key.Escape)
                     {
                         try { App.Lockdown?.NotifyEscapeAttempt(Services.Possession.EscapeKinds.SystemKey); }
-                        catch { /* never let the haunt break key suppression */ }
+                        catch (Exception ex) { Diag.Swallowed(ex, "the haunt must never break key suppression"); }
                     }
 
                     // In strict mode, block panic key, Alt+F4, and system keys
@@ -5357,7 +5357,7 @@ namespace ConditioningControlPanel.Services
                 lock (_targets) { left = _targets.Count; }
                 if (left == 0) App.EmiDesk?.ReleaseHold("attentionCheckShown");
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void SpawnTarget()
@@ -5394,7 +5394,7 @@ namespace ConditioningControlPanel.Services
                     var h = toyHandler;
                     if (h == null) return;
                     toyHandler = null;
-                    try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch { }
+                    try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
                 App.Logger?.Debug("Spawning attention target: '{Text}' on {ScreenCount} screen(s) ({Spawned}/{Total})",
@@ -5481,7 +5481,7 @@ namespace ConditioningControlPanel.Services
                 // A HOLD, not a line. Released the moment no target is left on the books.
                 if (spawnedTargets.Count > 0)
                 {
-                    try { App.EmiDesk?.Fire("attentionCheckShown", null); } catch { }
+                    try { App.EmiDesk?.Fire("attentionCheckShown", null); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
                 // PHASE F: arm the toy-button alternative for this spawn's lifetime.
@@ -5553,7 +5553,7 @@ namespace ConditioningControlPanel.Services
                         // stops the WPF routed event, not Win32 WM_MOUSEACTIVATE), which raised
                         // it above the chaos run's bubbles/HUD/overlays. Lift the game layer
                         // back first, then the attention targets on top of everything.
-                        try { App.Chaos?.RaiseGameLayerAboveVideo(); } catch { }
+                        try { App.Chaos?.RaiseGameLayerAboveVideo(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         lock (_targets)
                         {
                             foreach (var t in _targets)
@@ -6157,7 +6157,7 @@ namespace ConditioningControlPanel.Services
 
         private void StopGraceCountdown()
         {
-            try { _graceCountdownTimer?.Stop(); } catch { }
+            try { _graceCountdownTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _graceCountdownTimer = null;
         }
 
@@ -6240,7 +6240,7 @@ namespace ConditioningControlPanel.Services
             arm.Remaining = TimeSpan.Zero;
             if (timer == null || !timer.IsEnabled) return;
             arm.Remaining = RemainingTimerInterval(arm.ArmedUtc, arm.Interval, nowUtc);
-            try { timer.Stop(); } catch { }
+            try { timer.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void ResumeGuardTimers(DateTime nowUtc)
@@ -6504,9 +6504,9 @@ namespace ConditioningControlPanel.Services
 
         private void StopVoutWatchdog()
         {
-            try { _voutWatchTimer?.Dispose(); } catch { }
+            try { _voutWatchTimer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _voutWatchTimer = null;
-            try { _voutMidWatchTimer?.Dispose(); } catch { }
+            try { _voutMidWatchTimer?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _voutMidWatchTimer = null;
         }
 
@@ -6528,12 +6528,12 @@ namespace ConditioningControlPanel.Services
                 if (_gracePaused)
                 {
                     VideoDiag.Log("VOUT", "start watchdog deferred - video is grace-paused");
-                    try { _voutWatchTimer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch { }
+                    try { _voutWatchTimer?.Change(VoutGraceMs, System.Threading.Timeout.Infinite); } catch (Exception ex) { Diag.Swallowed(ex); }
                     return;
                 }
                 if (_voutSeen) return;
                 // Authoritative live check — covers a vout that appeared before the event was wired.
-                try { if (player.VoutCount > 0) return; } catch { }
+                try { if (player.VoutCount > 0) return; } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Reaching here IS the white-screen state the reports describe (#557-#560/#574, and
                 // now #616/#617/#621/#622/#623): the clip is decoding but nothing is on screen.
@@ -6572,7 +6572,7 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
                 }
-                catch { /* track probe is best-effort; fall through to the heal */ }
+                catch (Exception ex) { Diag.Swallowed(ex, "track probe is best effort, the heal follows"); }
 
                 // Retire first, retry only if the retire actually happened — if the circuit breaker
                 // tripped (or another heal already swapped the instance) a replay would just fail the
@@ -6802,9 +6802,9 @@ namespace ConditioningControlPanel.Services
 
         private void StopWedgeWatchdog()
         {
-            try { _wedgeWatchdog?.Dispose(); } catch { }
+            try { _wedgeWatchdog?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _wedgeWatchdog = null;
-            try { _heartbeatTimer?.Stop(); } catch { }
+            try { _heartbeatTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _heartbeatTimer = null;
         }
 
