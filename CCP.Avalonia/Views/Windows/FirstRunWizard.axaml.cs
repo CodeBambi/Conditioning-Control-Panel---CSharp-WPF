@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -293,8 +294,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// welcome heading, the active mod the cards pre-select against, the real pack ids and sizes
     /// (see <see cref="ModPacks"/>), and the pack-installed signal.</para>
     ///
-    /// <para>What does not survive: <see cref="Run"/> (it drives <c>MainWindow</c>'s folder picker
-    /// and <c>TutorialService</c>), <see cref="PrepareModStep"/> (the offline-offer bookkeeping is
+    /// <para><see cref="Run"/> is now real, and <c>MainShellWindow.FirstRun.cs</c> calls it: the
+    /// shell claims the gate in its constructor and opens this window once it is on screen. Both
+    /// of the wizard's outgoing actions land on this head - the content-folder picker is
+    /// <c>MainShellWindow.RequestPickAssetsFolder</c> and the short walk is
+    /// <c>CoreTutorial.Start("ShortWalk")</c>, a seam this head has not seeded, so that button
+    /// reaches the tour service and no tour appears (the same state AwarenessTabView and
+    /// ModCreatorWindow are in).</para>
+    ///
+    /// <para>KNOWN AND ACCEPTED, now that a fresh install actually walks these three steps: step 2
+    /// takes a mod choice that <see cref="CommitModChoice"/> does not commit, and its hint copy
+    /// ("Downloads carry on in the background", "you can switch any time from the title bar")
+    /// describes a mod system this head does not have at all - <c>CoreMods</c> is unseeded, and
+    /// the shell's own mod switcher (<c>BtnManageMods_Click</c>,
+    /// <c>ModSelectorCombo_SelectionChanged</c>) is a stub for the same reason. Nothing is
+    /// downloaded, charged, consented to or falsely reported as installed: the cards read their
+    /// state from <c>CoreReleaseContent</c>'s stamps, which answer "unknown" unseeded rather than
+    /// guessing. This is the mod seam's gap showing through, not a defect this screen introduces,
+    /// and it is worth less than an install with no onboarding at all - but it is the first thing
+    /// to fix once a mod service reaches Core.</para>
+    ///
+    /// <para>What does not survive: <see cref="PrepareModStep"/> (the offline-offer bookkeeping is
     /// <c>ModPickerDialog</c>'s, and reimplementing it is how a modular install loses its mod media)
     /// and <see cref="CommitModChoice"/> (<c>PendingModActivation</c> and
     /// <c>ModManagerService.ActivateMod</c>). Each is a stub naming what it needs.</para>
@@ -351,8 +371,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// The only constructor. WPF's took the owning MainWindow so the mod commit could call
         /// back into it; nothing here can, so it takes nothing - which is also what
-        /// <c>--render-all</c> needs to discover the view. Internal for the same reason
-        /// TextEditorDialog's render constructor is: no production caller ships the placeholder.
+        /// <c>--render-all</c> needs to discover the view. The owner is passed to
+        /// <c>ShowDialog</c> by <see cref="Run"/> instead, which is all Avalonia needs it for.
         /// </summary>
         internal FirstRunWizard()
         {
@@ -425,9 +445,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// First launch? Reads <c>Welcomed</c> and latches it (plus the assets-prompt one-shot),
-        /// exactly where <c>WelcomeDialog.ShowIfNeeded</c> used to. On this head that dialog still
-        /// carries its own copy of the latch and has no caller: whoever wires startup calls ONE of
-        /// the two, never both, or the second sees an already-claimed flag and shows nothing.
+        /// exactly where <c>WelcomeDialog.ShowIfNeeded</c> used to. That dialog carries a SECOND
+        /// copy of the same latch, and only one of the two may ever be called or the second sees
+        /// an already-claimed flag and shows nothing. SETTLED, and it is WPF's answer: the wizard
+        /// owns the latch. <c>MainShellWindow.FirstRun.cs</c> calls this and nothing else;
+        /// <c>WelcomeDialog.ShowIfNeeded</c> stays deliberately uncalled on this head.
         ///
         /// <para>Three flags are spent here rather than when the window opens, on purpose:</para>
         /// <list type="bullet">
@@ -501,12 +523,61 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// ponytail: needs MainWindow (BtnPickAssetsFolder_Click, StartTutorial) and
-        /// TutorialService, wired when they move to Core. WPF opens the wizard modally and then, at
-        /// Dispatcher Normal priority (never Loaded - Loaded-priority work is starved in this app),
-        /// runs the content-folder picker first and the SHORT WALK tutorial second.
+        /// Opens the wizard modally on <paramref name="owner"/> and performs whatever the user
+        /// asked for on the way out: the content-folder picker FIRST (it is a modal too, so it
+        /// must not race the tour), then the short walk. Never throws - a first-run screen must
+        /// never be the reason a fresh install fails to start.
+        ///
+        /// <para>WPF's <c>Run(MainWindow)</c> is synchronous because <c>ShowDialog</c> is;
+        /// Avalonia's is awaitable, so this returns a Task and the caller awaits it. The tail runs
+        /// straight after the await rather than from a second dispatcher post: WPF needed the post
+        /// only to get off <c>ShowDialog</c>'s nested message loop, and <c>await</c> already is
+        /// that. The picker is awaited before the tour starts, which is what WPF's one shared
+        /// action bought.</para>
+        ///
+        /// <para><c>StartTutorial(TutorialType.ShortWalk)</c> becomes
+        /// <c>CoreTutorial.Start("ShortWalk")</c> - the seam takes the head's tutorial-type name as
+        /// a string. This head seeds no <c>StartAction</c>, so that call is a silent no-op today
+        /// and the button starts no tour; it reaches the real seam, which is the same state every
+        /// other tour button on this head is in.</para>
         /// </summary>
-        public static void Run(object owner) { }
+        public static async Task Run(MainShellWindow owner)
+        {
+            FirstRunWizard? wizard = null;
+            try
+            {
+                MainShellWindow.IsStartupDialogShowing = true;
+                wizard = new FirstRunWizard();
+                await wizard.ShowDialog(owner);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[FirstRun] The first-run wizard failed to show");
+            }
+            finally
+            {
+                MainShellWindow.IsStartupDialogShowing = false;
+            }
+
+            if (wizard == null) return;
+
+            if (wizard.PickAssetsFolderRequested)
+            {
+                try { await owner.RequestPickAssetsFolder(); }
+                catch (Exception ex) { Log.Warning(ex, "[FirstRun] Assets folder picker failed"); }
+            }
+
+            if (wizard.StartTourRequested)
+            {
+                // The SHORT WALK, not the door-by-door tour: seven cards, about ninety seconds,
+                // and it teaches the app rather than the furniture. Somebody who has just been
+                // shown all seven doors on the screen behind this button does not need them named
+                // again. The full tour is the first row in the ? panel, which is what the wizard's
+                // outro says.
+                try { CoreTutorial.Start("ShortWalk"); }
+                catch (Exception ex) { Log.Warning(ex, "[FirstRun] Could not start the short walk"); }
+            }
+        }
 
         // ------------------------------------------------------------------ copy
 

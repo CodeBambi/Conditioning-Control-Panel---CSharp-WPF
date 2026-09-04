@@ -91,6 +91,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             AddHandler(DragDrop.DragEnterEvent, Window_DragEnter);
             AddHandler(DragDrop.DragOverEvent, Window_DragOver);
             AddHandler(DragDrop.DragLeaveEvent, Window_DragLeave);
+
+            // First launch? WPF claims the Welcomed latch from MainWindow's constructor
+            // (MainWindow.xaml.cs:555) and opens the wizard once the window is up. Same here -
+            // see MainShellWindow.FirstRun.cs, which owns both halves.
+            HookFirstRun();
         }
 
         // ---- window-level drag and drop ------------------------------------------------------

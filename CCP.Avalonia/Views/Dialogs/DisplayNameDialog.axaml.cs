@@ -14,6 +14,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - The MessageBox in Accept() guarded a path the UI already blocks (Confirm disabled and
     ///    Enter ignored outside 2-20 characters), so it is a plain return here.
     /// The parameterless constructor is the real "welcome" mode and doubles as the render ctor.
+    ///
+    /// <para>NO CALLER ON THIS HEAD, and not for want of one being written. All three WPF call
+    /// sites are blocked on code that is still Windows-only:</para>
+    /// <list type="bullet">
+    /// <item><c>MainWindow.Browser.cs:BtnChangeDisplayName_Click</c> and
+    /// <c>BtnDeleteProfile_Click</c> - both need <c>App.ProfileSync</c>
+    /// (ConditioningControlPanel/Services/Settings/ProfileSyncService.cs, no Core seam) for
+    /// <c>ChangeDisplayNameAsync</c> / <c>DeleteAccountAsync</c>, and both hang off DiscordTabView,
+    /// which is not converted. MainShellWindow.Browser.cs already lists them as blocked.</item>
+    /// <item><c>Services/Account/AccountService.cs:PromptForRegistrationAsync</c> - AccountService
+    /// is a static WPF-head class that has not been ported or moved to Core at all.</item>
+    /// </list>
+    /// <para>Wiring the dialog to anything else would open a name prompt whose answer nothing can
+    /// send, which is worse than a dialog nobody can reach.</para>
     /// </summary>
     public partial class DisplayNameDialog : Window
     {

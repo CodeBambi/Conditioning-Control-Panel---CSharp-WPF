@@ -28,6 +28,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - The shimmer sweep moved into the XAML as a Style.Animations block.
     ///  - The named <c>ScaleTransform</c> became a field: Avalonia generates fields only for
     ///    named Controls, so the transform is built here and assigned to ProgressFill.
+    ///
+    /// <para>NO CALLER ON THIS HEAD, and the call site is not missing - it is out of reach. WPF
+    /// owns the splash entirely from <c>ConditioningControlPanel/App.xaml.cs</c>: the field
+    /// <c>_splash</c> (line 83), <c>_splash = SplashScreen.ShowOnOwnThread()</c> in OnStartup
+    /// (line 1539), the <c>SetProgress</c> calls threaded through service initialisation, and
+    /// <c>FadeOutAndClose</c> when the main window appears. The Avalonia twin of that file is
+    /// <c>CCP.Avalonia/App.axaml.cs</c>, and the splash belongs in
+    /// <c>OnFrameworkInitializationCompleted</c> immediately before
+    /// <c>desktop.MainWindow = new MainShellWindow()</c> - not on MainShellWindow, which by
+    /// definition exists only after the startup this window is meant to cover. That file is
+    /// off-limits to this layer, so the call is named here rather than put somewhere it would be
+    /// a defect. There is also nothing yet for <c>SetProgress</c> to report: this head's startup
+    /// is one settings service and five seam assignments, all synchronous.</para>
     /// </summary>
     public partial class SplashScreen : Window
     {
