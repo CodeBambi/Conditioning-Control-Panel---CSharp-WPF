@@ -408,6 +408,10 @@ export const DEFAULT_LEXICON = Object.freeze({
   account_signed_in_as: 'Signed in as',
   account_open_card: 'Open my card',
   account_profile: 'Profile',
+  /* THE FRONT GATE (2026-09-03): the way back out to the CC Labs site. Two
+     rows because the row is two lines - the verb and the quiet line under it. */
+  account_dashboard: 'Front Gate',
+  account_dashboard_hint: 'back to CC Labs',
   account_sign_out: 'Sign out',
 
   /* Semester II ghost labels behind the tape (unregistered games get their

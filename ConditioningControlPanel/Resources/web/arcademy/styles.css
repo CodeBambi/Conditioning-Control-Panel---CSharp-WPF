@@ -5645,6 +5645,13 @@ html.arc-reduced .emi.arc-seep-frame::after { content:none; }
 .arc-acct-item:hover, .arc-acct-item:focus-visible { background:var(--panel); color:var(--ink); outline:none; }
 .arc-acct-item.is-signout { color:var(--ink-faint); }
 .arc-acct-item.is-card { color:var(--pink); }
+/* THE FRONT GATE row is two lines: the verb, and a quiet line saying where it
+   goes. The hint never carries meaning the label does not already carry. */
+.arc-acct-label { display:block; }
+.arc-acct-hint {
+  display:block; margin-top:2px; font-size:10px; letter-spacing:.04em;
+  color:var(--ink-faint); text-transform:none;
+}
 
 /* On a phone: a thumb-sized chip and a SHEET under the bar. Fixed and edge to
    edge so it never runs off the screen and never lands over the campus's own
