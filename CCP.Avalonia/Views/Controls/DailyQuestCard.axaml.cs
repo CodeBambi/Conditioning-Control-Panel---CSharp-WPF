@@ -231,7 +231,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// Seat the fill against the track's CURRENT width. Called both from Apply (which can run
         /// before the tab has ever been measured, in which case the track is 0 wide and this is a
         /// no-op) and from the track's SizeChanged, which is what finally lands it.
-        /// ponytail: needs MotionFx.BarFill for the tween, wired when it moves to Core; the width
+        /// ponytail: MotionFx is NOT coming to Core - it is WPF Storyboard code and Core has no
+        /// UI at all, so "wired when it moves" was never true. The Avalonia shape is a table of
+        /// tween closures stepped off one shared ~16ms DispatcherTimer (CCP.Avalonia/Views/Windows/
+        /// ChaosHudWindow.axaml.cs is the worked example); Animation.RunAsync cannot be used here
+        /// because TransformAnimator seizes the target visual's RenderTransform. The width
         /// is set directly here, so the bar is correct but never animates.
         /// </summary>
         private void ApplyFraction()
@@ -249,7 +253,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         // ---- INTERACTION ---------------------------------------------------------
 
-        // ponytail: needs MotionFx.HoverLift + the reduced-motion gate, wired when it moves to
+        // ponytail: MotionFx.HoverLift is WPF Storyboard code and stays head-side; the Avalonia
+        // shape is the shared-DispatcherTimer tween named above. The reduced-motion gate itself is
+        // NOT blocked - CoreSettings.Current.MotionLevel is in Core today. What is missing is
         // Core. The glow still attaches and clears; it just arrives at full strength instead of
         // blooming over 180ms.
         private void OnCardPointerEntered(object? sender, PointerEventArgs e)

@@ -32,7 +32,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
         public SchedulerRackPanel()
         {
             AvaloniaXamlLoader.Load(this);
-            // ponytail: needs Controls/HelpPopover.cs ported to this head. HelpContentService
+            // ponytail: blocked ONLY on the popover control - ConditioningControlPanel/Views/
+            // Controls/HelpPopover.cs has no Avalonia twin. HelpContentService
             // is already in Core; the popover control is the only thing still missing, and
             // it is what would call .GetContent("Scheduler") for HelpBtnStudioScheduler.
         }

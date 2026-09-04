@@ -1,13 +1,17 @@
 using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
@@ -30,9 +34,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// <para>The mod repaint is wired: <see cref="CoreMods.ModChanged"/> is the authoritative
     /// "the art answers differently now" signal, and the only one this tab gets, so the hook is
     /// taken on Loaded and released on Unloaded exactly as the WPF original does with
-    /// <c>App.Mods.ModChanged</c>. What it can re-read is still thin — see
-    /// <see cref="ApplyAvatarArt"/> — and the portrait's optical centring is stubbed, see
-    /// <see cref="CentrePortrait"/>.</para>
+    /// <c>App.Mods.ModChanged</c>. It re-reads the bust for real now: <see cref="ApplyAvatarArt"/>
+    /// resolves the same <c>avatar[N]_pose1.png</c> the WPF runtime viewmodel does, through
+    /// <see cref="CoreModArt"/> + <see cref="ModArt"/>, and <see cref="CentrePortrait"/> then
+    /// crops it the way WPF's measured Viewbox does. What is still head-only is the rest of
+    /// <c>Sync()</c> — her name, mod chip and flavour — named at <see cref="ApplyAvatarArt"/>.</para>
     /// </summary>
     public partial class CompanionHeroCard : UserControl
     {
@@ -40,6 +46,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         /// <summary>Guards the ModChanged hook: Loaded fires again on every re-parent.</summary>
         private bool _modHooked;
+
+        /// <summary>How much of the ring's inner diameter the figure's own INK may occupy.</summary>
+        private const double PortraitInkFill = 0.86;
+
+        /// <summary>Width the opaque-bounds scan runs at; below this the art is scanned as-is.</summary>
+        private const int PortraitProbeWidth = 96;
+
+        /// <summary>Alpha at or below which a pixel counts as transparent padding.</summary>
+        private const byte PortraitAlphaFloor = 8;
 
         public CompanionHeroCard()
         {
@@ -161,11 +176,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
             try
             {
-                // ponytail: the Sync() half needs ConditioningControlPanel/Views/Controls/Companion/
-                // Runtime/CompanionHeroRuntimeVm.Sync, which reads App.Companion, App.AvatarWindow
-                // and CompanionRuntimeContext.Navigator - head navigation, not a mod lookup, so it
-                // cannot cross to Core as it stands. The hook below it is live, so the moment a
-                // portable hero viewmodel exists this method re-reads on every mod switch.
+                // WPF's CompanionHeroRuntimeVm.LoadPortrait, minus the head types: the pose file
+                // is a plain Resources-relative name, so the mod override is CoreModArt's and the
+                // shipped copy is this head's avares:// one - both inside ModArt.TryLoad.
+                // GetAvatarSetForLevel returns a constant 7 since level gating was removed
+                // (AvatarTubeWindow.Avatar.cs), so the "< 1" branch does not need the player level.
+                var set = CoreSettings.Current.SelectedAvatarSet;
+                if (set < 1) set = 7;
+                var name = set == 1 ? "avatar_pose1.png" : $"avatar{set}_pose1.png";
+
+                if (ViewModel is { } vm) vm.Portrait = ModArt.TryLoad(name);
+
+                // ponytail: the REST of Sync() - her name, mod chip and flavour - needs
+                // ConditioningControlPanel/Views/Controls/Companion/Runtime/CompanionHeroRuntimeVm.cs,
+                // which reads App.Companion, App.AvatarWindow and CompanionRuntimeContext.Navigator:
+                // head navigation, not a mod lookup, so it cannot cross to Core as it stands.
                 CentrePortrait();
             }
             catch (Exception ex)
@@ -175,16 +200,115 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         }
 
         /// <summary>
-        /// Points the portrait brush at a square centred on the art's own opaque bounds.
+        /// Points the portrait brush at a square centred on the art's own opaque bounds - WPF's
+        /// measured <c>Viewbox</c>, which on Avalonia is <c>ImageBrush.SourceRect</c>.
+        ///
+        /// <para>Avalonia refuses an <c>x:Name</c> on a brush (AVLN2000), so the brush is reached
+        /// through the Ellipse that owns it. The Ellipse's name is resolved with
+        /// <c>FindControl</c> because this control loads with <c>AvaloniaXamlLoader.Load</c> and
+        /// the generated name fields are therefore never assigned.</para>
         /// </summary>
         private void CentrePortrait()
         {
-            // ponytail: blocked on CompanionHeroCard.axaml, which this layer does not own. WPF
-            // points a NAMED ImageBrush's Viewbox at the ink; the Avalonia XAML dropped every
-            // x:Name on non-controls (illegal there), so there is no brush to give a SourceRect to
-            // before the pixel probe (OpaqueBounds/InkViewbox, PortraitInkFill=0.86, alpha floor 8,
-            // 96px probe -> Bitmap.CopyPixels) is even relevant. The placeholder viewmodel ships
-            // Portrait=null and the vector disc needs no centring, so nothing is visibly wrong yet.
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(CentrePortrait); return; }
+
+            try
+            {
+                if (this.FindControl<Ellipse>("PortraitFill")?.Fill is not ImageBrush brush) return;
+                brush.SourceRect = InkViewbox(ViewModel?.Portrait as Bitmap);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Companion hero: portrait centring failed: {E}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// The relative source rect that puts <paramref name="bmp"/>'s opaque bounds dead centre in
+        /// a square viewport, at <see cref="PortraitInkFill"/> of its width. A SQUARE region, not
+        /// the ink rectangle, so <c>Stretch=Uniform</c> into the round hole is exact; it may run
+        /// off the source, which is what lets a tall thin figure sit in a circle un-widened.
+        /// Falls back to the whole image whenever the art cannot be measured.
+        /// </summary>
+        internal static global::Avalonia.RelativeRect InkViewbox(Bitmap? bmp)
+        {
+            var whole = new global::Avalonia.RelativeRect(0, 0, 1, 1, global::Avalonia.RelativeUnit.Relative);
+            if (bmp == null) return whole;
+
+            double w = bmp.PixelSize.Width, h = bmp.PixelSize.Height;
+            if (w <= 0 || h <= 0) return whole;
+
+            if (OpaqueBounds(bmp) is not { } f) return whole;
+
+            // fractions back onto the source's own pixel grid, where "square" means something
+            double side = Math.Max(f.W * w, f.H * h) / PortraitInkFill;
+            if (side <= 0) return whole;
+
+            double cx = (f.X + f.W / 2) * w, cy = (f.Y + f.H / 2) * h;
+            return new global::Avalonia.RelativeRect((cx - side / 2) / w, (cy - side / 2) / h, side / w, side / h,
+                                    global::Avalonia.RelativeUnit.Relative);
+        }
+
+        /// <summary>
+        /// The bounding box of everything that is not transparent padding, as fractions of the
+        /// image. Null when it cannot be read, or when the art is transparent end to end.
+        /// The scan runs on a <see cref="PortraitProbeWidth"/>-wide copy, which is what WPF's
+        /// TransformedBitmap buys there. Avalonia's <c>Bitmap.CopyPixels</c> only fills a raw
+        /// buffer in the bitmap's OWN format (there is no FormatConvertedBitmap equivalent), so a
+        /// source with no alpha channel is answered null - "cannot be measured", i.e. the whole
+        /// image - rather than scanned as if byte 3 meant something.
+        /// </summary>
+        private static (double X, double Y, double W, double H)? OpaqueBounds(Bitmap bmp)
+        {
+            IntPtr buffer = IntPtr.Zero;
+            try
+            {
+                var fmt = bmp.Format;
+                if (fmt != PixelFormat.Bgra8888 && fmt != PixelFormat.Rgba8888) return null;
+
+                int sw = bmp.PixelSize.Width, sh = bmp.PixelSize.Height;
+                int pw = Math.Min(sw, PortraitProbeWidth);
+                int ph = Math.Max(1, (int)Math.Round(sh * (pw / (double)sw)));
+
+                using var probe = pw < sw
+                    ? bmp.CreateScaledBitmap(new global::Avalonia.PixelSize(pw, ph))
+                    : null;
+                var src = (Bitmap?)probe ?? bmp;
+                pw = src.PixelSize.Width;
+                ph = src.PixelSize.Height;
+
+                int stride = pw * 4, size = stride * ph;
+                buffer = Marshal.AllocHGlobal(size);
+                src.CopyPixels(new global::Avalonia.PixelRect(0, 0, pw, ph), buffer, size, stride);
+
+                var row = new byte[stride];
+                int minX = pw, minY = ph, maxX = -1, maxY = -1;
+                for (int y = 0; y < ph; y++)
+                {
+                    Marshal.Copy(buffer + y * stride, row, 0, stride);
+                    for (int x = 0; x < pw; x++)
+                    {
+                        if (row[x * 4 + 3] <= PortraitAlphaFloor) continue;   // alpha is byte 3 in both formats
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+
+                if (maxX < minX || maxY < minY) return null;   // nothing opaque to centre on
+                return ((double)minX / pw, (double)minY / ph,
+                        (maxX - minX + 1) / (double)pw, (maxY - minY + 1) / (double)ph);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Companion hero: opaque-bounds probe failed: {E}", ex.Message);
+                return null;
+            }
+            finally
+            {
+                if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+            }
         }
     }
 
@@ -220,8 +344,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public string Name { get; init; } = "Bambi";
         public string ModName { get; init; } = "BAMBI SLEEP";
         public string Flavor { get; init; } = "Gains bonus XP from Pink Filter intensity. Currently plotting something.";
-        /// <summary>Companion bust. Null renders the gradient placeholder disc.</summary>
-        public IImage? Portrait { get; init; }
+        private IImage? _portrait;
+
+        /// <summary>
+        /// Companion bust. Null renders the gradient placeholder disc. Settable and notifying, not
+        /// <c>init</c>: the view re-resolves it from the mod layer on Loaded and on every
+        /// <see cref="CoreMods.ModChanged"/>, and the change is what re-runs the optical centring.
+        /// </summary>
+        public IImage? Portrait
+        {
+            get => _portrait;
+            set => Set(ref _portrait, value);
+        }
 
         // ---- state ----
         public bool IsCompanionEnabled { get; init; } = true;

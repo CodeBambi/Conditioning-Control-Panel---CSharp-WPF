@@ -39,19 +39,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         /// <summary>
         /// Same dialog the post-update "What's New" popup uses, so the notes are never formatted
-        /// two different ways. No tour action yet: the upgrade tour is a MainWindow tutorial
-        /// partial on WPF and is not on this head.
+        /// two different ways - and, for the same reason, the same upgrade-tour offer, now routed
+        /// through <see cref="CoreTutorial"/>.
         /// </summary>
         private async void BtnViewPatchNotes_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
                 if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                // The upgrade-tour offer is the WPF original's, restored: CoreTutorial.Start
+                // takes the head's tutorial-type NAME, and an unseeded head simply does nothing -
+                // which is why offering it here is safe rather than a button that lies. Reading
+                // the notes late is exactly when someone wants the tour, and the startup showing
+                // is one-shot per version.
                 var dialog = new Dialogs.WhatsNewDialog(
                     Loc.GetF("set2_whats_new_title_0", CoreReleaseContent.AppVersion),
-                    CoreReleaseContent.PatchNotes);
-                // ponytail: WPF also offers the upgrade tour here (MainWindow.StartTutorial
-                // (TutorialType.UpgradeTour)); wired when the tutorial seam exists
+                    CoreReleaseContent.PatchNotes,
+                    tourAction: () => CoreTutorial.Start("UpgradeTour"),
+                    tourButtonText: "Show me around (60s)");
                 await dialog.ShowDialog(owner);
             }
             catch (Exception ex)

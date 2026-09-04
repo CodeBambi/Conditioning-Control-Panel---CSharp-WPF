@@ -190,7 +190,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// <summary>Mirror of the head's dial enum, <c>CompanionVmPrimitives.cs:AwarenessIntensity</c>.
     /// NOT <c>Services/Awareness/AwarenessIntensity.cs</c>, which is a different enum
     /// (Off/Subtle/Chatty/Unhinged) with the same name.</summary>
-    // ponytail: local twin; delete when CompanionVmPrimitives.cs moves to Core.
+    // ponytail: local twin of the enum in ConditioningControlPanel/Views/Controls/Companion/
+    // CompanionVmPrimitives.cs (the WPF file, not this head's same-named one, which does not carry
+    // it). Delete when that enum reaches Core.
     public enum AwarenessIntensity
     {
         Off,
