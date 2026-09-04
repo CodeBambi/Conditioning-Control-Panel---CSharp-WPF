@@ -78,16 +78,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         private enum AssetType { Image, Video }
         private enum RoundOutcome { Correct, Wrong, Timeout }
 
-        /// <summary>ponytail: needs Lab/GazeMinigame/GazeMinigameSettings.cs:GazePackRole,
-        /// wired when it moves to Core.</summary>
+        /// <summary>ponytail: a copy of GazePackRole from
+        /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs. Deleted when that
+        /// file moves to CCP.Core/Lab/GazeMinigame/ - see the twin below for why it has not.</summary>
         private enum GazePackRole { Off, Focus, Ignore }
 
-        /// <summary>ponytail: needs Lab/GazeMinigame/GazeMinigameSettings.cs:GazeVibrationMode,
-        /// wired when it moves to Core.</summary>
+        /// <summary>ponytail: a copy of GazeVibrationMode from
+        /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs. Deleted with the twin.</summary>
         private enum GazeVibrationMode { None, OnCorrect, OnWrong }
 
-        /// <summary>ponytail: needs Lab/GazeMinigame/GazeMinigameSettings.cs:GazeRewardEffect,
-        /// wired when it moves to Core.</summary>
+        /// <summary>ponytail: a copy of GazeRewardEffect from
+        /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs. Deleted with the twin.</summary>
         private enum GazeRewardEffect { None, Flashes, Bubbles, Audio, MindWipe, OverlayPulse }
 
         private sealed record RoundSpec(AssetType Type, string CorrectPath, string NoisePath,
@@ -172,11 +173,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             public const int PassTimeMin = 3, PassTimeMax = 30;
             public const int WrongHoldMinMs = 0, WrongHoldMaxMs = 2000;
 
-            /// <summary>ponytail: needs GazeMinigameSettings.Load (Newtonsoft + CorePaths),
-            /// wired when it moves to Core. Defaults until then.</summary>
+            /// <summary>ponytail: the real Load is in
+            /// ConditioningControlPanel/Lab/GazeMinigame/GazeMinigameSettings.cs and reads the
+            /// shared gaze-minigame-settings.json. Defaults until that file is in Core; see the
+            /// class remarks for why this twin must not read it instead.</summary>
             public static GazeMinigameSettings Load() => new();
 
-            /// <summary>ponytail: needs GazeMinigameSettings.Save, wired when it moves to Core.</summary>
+            /// <summary>Clamp only. ponytail: the real Save is in the same head file; writing the
+            /// shared JSON from this shape would drop the user's Packs list - see the class remarks.</summary>
             public void Save() => Clamp();
 
             private void Clamp()
@@ -512,8 +516,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 CornerRadius = new CornerRadius(6, 6, 0, 0),
                 ClipToBounds = true,
             };
-            // ponytail: needs GazePackLibrary.ThumbnailPath; it is a one-liner over ImagePaths,
-            // so it is inlined rather than dragged across.
+            // GazePackLibrary.ThumbnailPath verbatim - it is one line over ImagePaths, so it is
+            // inlined rather than dragged across. Nothing is blocked here; it dies with the twin.
             var thumbPath = pack.ImagePaths.Count > 0 ? pack.ImagePaths[0] : null;
             if (thumbPath != null)
             {
@@ -627,19 +631,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             SaveSelection();
         }
 
-        /// <summary>ponytail: needs GazeMinigameSettings.Packs persistence (GazePackRef),
-        /// wired when it moves to Core. The in-memory _roles map is already authoritative
-        /// for this session.</summary>
+        /// <summary>ponytail: the Packs list (GazePackRef) that would persist these roles is on the
+        /// head's GazeMinigameSettings, not on this twin, so a role survives the session only. The
+        /// in-memory _roles map is authoritative while the window is open.</summary>
         private void SaveSelection() => _settings.Save();
+
+        /// <summary>Whether a gaze tracker is reachable from this head. Constant false until a
+        /// tracker seam exists; a single named gate so restoring one is one edit, not a hunt.
+        /// <para>Checked against the WPF original before leaving it false: there is no mouse or
+        /// keyboard fallback to restore. GameSide has exactly one writer there, OnGazeSideChanged,
+        /// fed by App.Webcam.OnGazeSide - so with no tracker no input can move a round.</para></summary>
+        private static bool HasGazeTracker => false;
 
         /// <summary>Why Start is disabled on this head, stated once so the summary line, the
         /// opening banner and the post-calibration banner cannot drift apart. Phrased as a
         /// missing capability rather than something the user forgot to do - there is no
         /// calibration they could run that would make the game playable here.</summary>
-        /// <summary>Whether a gaze tracker is reachable from this head. Constant false until a
-        /// tracker seam exists; a single named gate so restoring one is one edit, not a hunt.</summary>
-        private static bool HasGazeTracker => false;
-
         private const string NoTrackerReason =
             "This build has no webcam gaze tracker yet, so the game can't tell which side you're looking at — Start stays off until one is available.";
 
@@ -839,8 +846,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 _txtVibrationStatus.Text = "";
                 return;
             }
-            // ponytail: needs App.Haptics.IsConnected, wired when it moves to Core. Until then
-            // the honest answer is the not-connected one.
+            // ponytail: needs App.Haptics.IsConnected - HapticService lives in
+            // ConditioningControlPanel/Services/Haptics/HapticService.cs and does NOT move: it owns
+            // BLE/websocket devices. Core carries the provider INTERFACES only
+            // (CCP.Core/Services/Haptics/IHapticProvider.cs), no instance and no seam. Until one
+            // exists the not-connected line is the honest answer, and it matches FireVibration.
             _txtVibrationStatus.Text = "Haptic device not connected — setting saved but no vibration will fire.";
         }
 
@@ -1002,7 +1012,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
             // WPF also suspended the main-session FlashService here so its random flashes
             // don't pop over the gaze targets (bug #202), restoring it in Window_Closing.
-            // ponytail: needs App.Flash, wired when it moves to Core.
+            // ponytail: needs App.Flash (ConditioningControlPanel/Services/Flash/FlashService.cs), which
+            // owns the flash overlay windows and has no seam. Unreachable anyway - Start is gated.
 
             BeginCountdown();
         }
@@ -1131,8 +1142,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
             else
             {
-                // ponytail: needs LibVLCSharp's VideoView (and VideoService.SharedLibVLC),
-                // wired when video playback moves to Core. A glyph holds the pane meanwhile.
+                // ponytail: video rounds need a player CCP.Avalonia does not have. LibVLCSharp is
+                // not a Core move - it is a package reference this head lacks, and adding one is a
+                // .csproj change. This head's actual video path is the WebHost control (a real
+                // Avalonia WebView playing a file:// page's <video>), which DeeperEditorWindow
+                // proves for ONE pane; two side-by-side WebHosts are untested. A glyph holds the
+                // pane meanwhile - and nothing reaches it, because Start is gated.
                 var leftView = GlyphBlock("🎬");
                 var rightView = GlyphBlock("🎬");
                 _leftPane.Children.Add(leftView);
@@ -1177,7 +1192,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         /// WPF tore down two LibVLC players here with the hard-won STOP → DETACH → DISPOSE
         /// ordering and message-pump waits between each step. Nothing to tear down until
         /// video playback exists on this head.
-        /// ponytail: needs LibVLCSharp, wired when video playback moves to Core.
+        /// ponytail: nothing to restore until this head has a video player at all - see
+        /// AdvanceRound's video branch for what that would be.
         /// </summary>
         private void DisposeCurrentRoundPlayers(bool synchronous = false) { }
 
@@ -1330,7 +1346,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
         /// <summary>
         /// WPF posted HapticEventKind.GazeReward so the Haptics tab's "Gaze reward" routing row
-        /// decides how it feels. ponytail: needs App.Haptics, wired when it moves to Core.
+        /// decides how it feels. ponytail: needs a seam over App.Haptics
+        /// (ConditioningControlPanel/Services/Haptics/HapticService.cs); it owns the device, so it
+        /// does not move to Core. UpdateVibrationStatus already tells the user nothing will fire.
         /// </summary>
         private static void FireVibration(string tag)
             => Log.Debug("GazeMinigame: vibration {Tag} suppressed (haptics not on this head)", tag);
