@@ -199,3 +199,47 @@ html.arc-mobile .bk-fly, html.ae-lite .bk-fly { box-shadow: none; }
  * to do is make sure nothing is left mid-flight looking broken. */
 html.arc-reduced .bk-bal.bk-thud { animation: none; }
 html.arc-reduced .bk-pot.bk-live .bk-pot-n { animation: none; opacity: 1; }
+
+/* ----------------------------------------------------------------------------
+ * THE HOLD RING (kit/holdring.js)
+ * The ring is a conic gradient driven by --bk-hold, so the sheet owns how the
+ * hold LOOKS and the module only ever owns how far along it is. Under the
+ * global reduced freeze the module steps the value in fifths instead of
+ * sweeping it, which is why there is no transition on it here: a transition
+ * would be flattened by the freeze and the ring would simply jump (trap 92).
+ * -------------------------------------------------------------------------- */
+.bk-hold { position: relative; --bk-hold: 0%; }
+.bk-hold::before {
+  content: ''; position: absolute; inset: -4px; border-radius: inherit; pointer-events: none;
+  background: conic-gradient(var(--bk-neon) var(--bk-hold), transparent var(--bk-hold));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  opacity: 0;
+}
+.bk-hold.bk-holding::before { opacity: 1; }
+.bk-hold.bk-held { box-shadow: 0 0 0 2px var(--bk-brass); }
+
+/* ----------------------------------------------------------------------------
+ * THE DROP (kit/dropbeat.js)
+ * pointer-events:none is the load-bearing line in this whole block. The veil
+ * lies over the cabinet and the way out stays clickable underneath it for the
+ * entire beat, which is what keeps a ceremony from becoming a modal (Law VI).
+ * -------------------------------------------------------------------------- */
+.bk-drop {
+  position: absolute; inset: 0; z-index: 40; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: color-mix(in srgb, var(--ground), transparent 22%);
+  animation: bk-drop-in 220ms ease-out both;
+}
+.bk-drop-eye { width: 190px; height: 190px; border-radius: 50%; filter: blur(1px); opacity: .8; }
+.bk-drop-line {
+  font-family: var(--disp); font-size: 17px; letter-spacing: .06em; text-align: center;
+  color: var(--ink); text-shadow: 0 0 14px var(--bk-neon); max-width: 22ch;
+}
+@keyframes bk-drop-in { from { opacity: 0; } to { opacity: 1; } }
+
+html.arc-mobile .bk-drop-eye, html.ae-lite .bk-drop-eye { width: 120px; height: 120px; filter: none; }
+html.arc-mobile .bk-drop-line, html.ae-lite .bk-drop-line { font-size: 15px; text-shadow: none; }
+/* Still mode keeps the dim and the line and loses the fade. The module has
+ * already stopped turning the spiral by the time this matters. */
+html.arc-reduced .bk-drop { animation: none; }

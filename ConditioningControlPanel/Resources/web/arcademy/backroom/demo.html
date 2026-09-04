@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Back Room - floor fixture</title>
+<!-- No shell, no bridge, no host. The REAL modules under a STUBBED ctx: send
+     and listen are a little pretend cashier at the bottom of this file, so the
+     floor can be looked at, shot and driven by a headless probe without a
+     server and without a penny of real ledger anywhere near it.
+
+     ?dark=1     opens with NO send/listen at all (the cage must go dark and
+                 nothing may throw). This is the fixture's most important mode.
+     ?slow=1     the cashier takes 9s, so the 8s timeout can be watched.
+     ?poor=1     the cashier refuses for want of sparkle.
+     ?tier=1     the cashier refuses with the tier gate (403).
+     ?reduced=1  arms html.arc-reduced, the global still mode.
+     ?lite=1     arms html.ae-lite + html.arc-mobile, the phone diet.
+     ?auto=cage  presses the cage for ?n= sparkle, unattended.
+     ?auto=esc   sends Escape, unattended.
+     ?auto=hold  holds the bench button to the end and reports the commit.
+     ?auto=drop  runs the drop beat and reports that the veil lifted.
+     Both write their result into #log, which is what the headless probe reads
+     back out of the dumped DOM. There is no test runner and no framework here
+     on purpose: the fixture IS the harness, so it can never drift from it. -->
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 16px 14px 60px; background: var(--ground); color: var(--ink);
+         font-family: var(--body); }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header.fx { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+              border-bottom: 3px solid var(--pink); padding-bottom: 8px; margin-bottom: 14px; }
+  header.fx h1 { font-family: var(--disp); font-size: 20px; margin: 0; letter-spacing: .08em; }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--ink-dim); }
+  .note { color: var(--ink-faint); font-size: 12px; font-family: var(--mono); margin-top: 14px; }
+  .bench { display: flex; align-items: center; gap: 18px; margin-top: 18px; }
+  #dropstage { position: relative; flex: 1; min-height: 210px; border: 2px solid var(--line);
+               border-radius: var(--radius); background: var(--panel); }
+  #log { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); white-space: pre-wrap;
+         margin-top: 10px; max-height: 160px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="fx">
+    <h1>THE BACK ROOM</h1>
+    <span class="eyebrow">backroom/index.js &middot; floor fixture</span>
+  </header>
+  <div id="host"></div>
+  <!-- THE KIT BENCH. The two pieces with no cabinet to live in yet, so they
+       can still be driven, shot and asserted on before a machine exists. -->
+  <div class="bench">
+    <button id="holdbtn" class="bk-cage-go bk-hold" type="button">hold to commit</button>
+    <div id="dropstage"></div>
+  </div>
+  <p class="note" id="note">stubbed cashier. no ledger, no network, no chips that exist.</p>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import { openBackRoom } from './index.js';
+import { holdRing } from './kit/holdring.js';
+import { createDropBeat } from './kit/dropbeat.js';
+
+const q = new URLSearchParams(location.search);
+const logEl = document.getElementById('log');
+const log = (m) => { logEl.textContent += m + '\n'; };
+
+if (q.has('reduced')) document.documentElement.classList.add('arc-reduced');
+if (q.has('lite')) document.documentElement.classList.add('ae-lite', 'arc-mobile');
+
+/* ------------------------------------------------------------------------
+ * THE PRETEND CASHIER. It answers the same frames the host will, and it is
+ * the ONLY place in this fixture that knows any numbers. It holds a purse so
+ * a cage pull visibly moves both balances, which is the thing the shot is of.
+ * ---------------------------------------------------------------------- */
+const purse = { chips: 1250, sparkle: 27, pot: 41800 };
+const listeners = new Map();
+const delay = q.has('slow') ? 9000 : 220;
+
+function fire(type, msg) {
+  const set = listeners.get(type);
+  if (!set) return;
+  for (const fn of Array.from(set)) { try { fn(msg); } catch (e) { log('listener threw: ' + e.message); } }
+}
+
+function statusBody() {
+  return {
+    chips: purse.chips,
+    sparkle: purse.sparkle,
+    pot: purse.pot,
+    rate: 100,
+    free_scratch_available: true,
+    tree: { cheapest_unowned: { id: 'soft_focus', cost: 40 }, owned: 6, total: 21 },
+    config: { stakes: { twentyone: 25, triple: 10, spiral: 25, scratcher: 50, wheel: 500 } },
+  };
+}
+
+const ctx = {
+  root: document.getElementById('host'),
+  log,
+  t: (key, fallback) => fallback || key,
+  send(msg) {
+    // The WHOLE frame, because "did the cage send the right body" is the one
+    // assertion a dumped DOM has to be able to answer on its own.
+    log('up   ' + JSON.stringify(msg));
+    if (msg.type === 'triggers-request') {
+      setTimeout(() => fire('triggers-result', { type: 'triggers-result', triggers: [
+        'good girl now', 'drop for me', 'empty and warm', 'sleep sweet thing',
+      ] }), 120);
+      return;
+    }
+    if (msg.type !== 'casino-request') return;
+    setTimeout(() => {
+      let ok = true; let status = 200; let body = statusBody();
+      if (msg.op === 'cage') {
+        const n = Math.round(Number(msg.body.sparkle) || 0);
+        if (q.has('tier')) { ok = false; status = 403; body = { code: 'arcademy_locked', min_tier: 2 }; }
+        else if (q.has('poor') || n > purse.sparkle) { ok = false; status = 400; body = { reason: 'insufficient_sparkle' }; }
+        else {
+          purse.sparkle -= n;
+          purse.chips += n * 100;
+          body = Object.assign(statusBody(), { credited: n * 100, cageId: msg.body.cageId });
+        }
+      }
+      fire('casino-result', { type: 'casino-result', reqId: msg.reqId, ok, status, body });
+      log('down casino-result ' + (ok ? 'ok' : status));
+    }, delay);
+  },
+  listen(type, fn) {
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type).add(fn);
+    return () => { const s = listeners.get(type); if (s) s.delete(fn); };
+  },
+};
+
+/* ?dark=1 pulls the line out from under the room. It must still open. */
+if (q.has('dark')) { delete ctx.send; delete ctx.listen; }
+
+const room = openBackRoom(ctx);
+ctx.root.appendChild(room.root);
+window.__room = room;   // the headless probe drives this
+
+/* THE LADDER, exactly the way the shell holds it: the scene folds a step, and
+ * when it has none left the room leaves. Nothing inside the scene binds Esc. */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (room.escapeStep()) { log('esc: folded a cabinet'); return; }
+  room.close();
+  log('esc: room closed');
+});
+
+/* The bench pieces, wired to the same dealer the room uses. */
+const drop = createDropBeat({
+  host: document.getElementById('dropstage'),
+  voice: { line: () => 'The room wants you for a second.' },
+  reduced: document.documentElement.classList.contains('arc-reduced'),
+  lite: document.documentElement.classList.contains('ae-lite'),
+  log,
+});
+const holdBtn = document.getElementById('holdbtn');
+const ring = holdRing(holdBtn, {
+  reduced: document.documentElement.classList.contains('arc-reduced'),
+  onCommit: () => log('HOLD committed'),
+  onCancel: () => log('HOLD cancelled'),
+});
+
+/* ------------------------------------------------------------------------
+ * THE UNATTENDED DRIVER. Nothing here reaches inside the scene: it presses the
+ * same buttons and sends the same key a player would, then writes down what it
+ * saw, which is the only kind of test worth having on a room.
+ * ---------------------------------------------------------------------- */
+const auto = q.get('auto');
+if (auto === 'cage') {
+  setTimeout(() => {
+    const n = String(q.get('n') || '10');
+    const input = room.root.querySelector('.bk-custom input');
+    const go = room.root.querySelector('.bk-cage-go');
+    input.value = n;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    log('AUTO amount=' + n + ' goDisabled=' + go.disabled);
+    go.click();
+    setTimeout(() => {
+      log('AUTO balance=' + room.root.querySelector('.bk-bal-n').textContent);
+      log('AUTO say=' + room.root.querySelector('.bk-cage-say').textContent);
+      log('AUTO done');
+    }, delay + 2800);
+  }, 700);
+} else if (auto === 'esc') {
+  setTimeout(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    log('AUTO attached=' + (room.root.isConnected ? 'yes' : 'no'));
+    log('AUTO done');
+  }, 700);
+} else if (auto === 'hold') {
+  setTimeout(() => {
+    holdBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    setTimeout(() => log('HOLD armed=' + ring.holding()), 200);
+    setTimeout(() => {
+      log('HOLD holding=' + ring.holding());
+      // LETTING GO IS FREE, and that is the half worth asserting: a second
+      // press released early must cancel and cost nothing.
+      holdBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+      setTimeout(() => holdBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })), 120);
+      setTimeout(() => log('AUTO done'), 400);
+    }, 1500);
+  }, 400);
+} else if (auto === 'drop') {
+  setTimeout(() => {
+    log('DROP veils=' + document.querySelectorAll('.bk-drop').length);
+    drop.run({ ms: 1200 }).then(() => {
+      log('DROP lifted veils=' + document.querySelectorAll('.bk-drop').length);
+      log('AUTO done');
+    });
+    setTimeout(() => log('DROP mid veils=' + document.querySelectorAll('.bk-drop').length), 300);
+  }, 400);
+} else if (auto === 'open') {
+  setTimeout(() => {
+    log('AUTO sheets=' + room.root.querySelectorAll('.bk-cab.bk-sheet').length);
+    log('AUTO balance=' + room.root.querySelector('.bk-bal-n').textContent);
+    log('AUTO tree=' + room.root.querySelector('.bk-tree').textContent);
+    log('AUTO dark=' + (room.root.querySelector('.bk-cage').classList.contains('bk-dark') ? 'yes' : 'no'));
+    log('AUTO done');
+  }, 2200);
+}
+</script>
+</body>
+</html>
