@@ -1,7 +1,10 @@
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 {
@@ -62,10 +65,56 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// an explicit answer - dismissing the window included - comes back
         /// <see cref="EmiMuteChoice.Keep"/>.
         /// </summary>
-        // ponytail: needs App.MainWindowRef for WPF's ownerless CenterScreen fallback, wired when
-        // the app shell moves to Core. Avalonia's ShowDialog requires an owner, so the caller
-        // passes the one it already has.
         public static Task<EmiMuteChoice> Ask(Window owner) =>
             new EmiMutePromptWindow().ShowDialog<EmiMuteChoice>(owner);
+
+        /// <summary>
+        /// Ask with no owner in hand - WPF's own call shape (<c>EmiMutePromptWindow.Ask()</c> from
+        /// <c>EmiDeskService</c>), which set <c>Owner = App.MainWindowRef</c> and fell back to
+        /// <c>WindowStartupLocation.CenterScreen</c> when there was no main window.
+        ///
+        /// <para>The note here used to say this needed <c>App.MainWindowRef</c> "when the app shell
+        /// moves to Core". That has been stale since the shell landed: the desktop lifetime's
+        /// <see cref="IClassicDesktopStyleApplicationLifetime.MainWindow"/> IS what
+        /// <c>App.MainWindowRef</c> was, and it is asked for through the lifetime rather than by
+        /// naming <c>MainShellWindow</c> so it stays true whichever window the app has up. Same
+        /// resolution <c>EmiDeskWindow.AppMainWindow</c> uses.</para>
+        ///
+        /// <para>WPF's ownerless branch cannot be ported: Avalonia's <c>ShowDialog</c> REQUIRES an
+        /// owner, and there is nothing to be modal to when the app is showing no window at all - or
+        /// is holding one that is not visible. Avalonia refuses that outright ("Cannot show window
+        /// with non-visible owner.", read out of Avalonia.Controls 12.1.1) where WPF accepted it,
+        /// and the lifetime's MainWindow is exactly that between construction and Show, and again
+        /// whenever the shell is hidden to the tray. So the guard is <c>IsVisible</c>, not null -
+        /// null alone would leave a FAULTED task on the two paths she is most likely to arrive on.
+        /// Both answer <see cref="EmiMuteChoice.Keep"/> - not a refusal to ask so much as the file's
+        /// own rule, that a question which was never put is never consent to being silenced. It is
+        /// also the branch the headless render takes, which has no desktop lifetime.</para>
+        ///
+        /// <para>Uncalled on this head: the one caller is <c>EmiDeskService.MaybeAskAboutMuting</c>
+        /// (ConditioningControlPanel/Services/EmiDesk/EmiDeskService.cs), which moves with the
+        /// shell. It exists so that caller lands with no owner-threading edit.</para>
+        /// </summary>
+        public static Task<EmiMuteChoice> Ask()
+        {
+            Window? main = null;
+            try
+            {
+                main = (Application.Current?.ApplicationLifetime
+                    as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+            }
+            catch (System.Exception ex)
+            {
+                Log.Debug(ex, "[EmiDesk] mute prompt owner lookup failed");
+            }
+
+            if (main is null || !main.IsVisible)
+            {
+                Log.Debug("[EmiDesk] no visible window to own the mute prompt; keeping the avatar");
+                return Task.FromResult(EmiMuteChoice.Keep);
+            }
+
+            return Ask(main);
+        }
     }
 }

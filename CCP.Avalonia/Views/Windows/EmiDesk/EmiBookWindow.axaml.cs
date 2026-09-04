@@ -878,15 +878,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
         /// <summary>
-        /// ponytail: needs MainWindow, SessionEngine.Active and App.Tutorial - the same three
-        /// conditions EmiOffers.TourFeasible checks, minus the "already done" latch - wired when
-        /// they move to Core. True here, so a tour card renders lit rather than permanently ghosted.
+        /// Can the walk-through actually run? WPF's answer is <c>EmiOffers.TourFeasible</c>
+        /// (ConditioningControlPanel/Services/EmiDesk/EmiOffers.cs), four conditions.
+        ///
+        /// <para>ponytail: the old note here said all four need "a move to Core", and THREE of them
+        /// no longer do - RE-AUDITED 2026-09-04 against Core rather than believed:</para>
+        /// <list type="bullet">
+        ///   <item><c>Application.Current.MainWindow is MainWindow</c> resolves: the desktop
+        ///         lifetime's MainWindow is what <c>App.MainWindowRef</c> was, the resolution
+        ///         <c>EmiDeskWindow.AppMainWindow</c> already uses.</item>
+        ///   <item><c>SessionEngine.Active?.IsRunning</c> is <c>CoreSession.IsEngineRunning</c>,
+        ///         in Core. Unseeded on this head, and "no session is running" is the truth here,
+        ///         not a placebo.</item>
+        ///   <item><c>App.Tutorial?.IsActive</c> is <c>CoreTutorial.IsActive</c>, in Core since the
+        ///         tutorial seam landed. Also unseeded here - CCP.Avalonia/App.axaml.cs says why:
+        ///         TutorialService and its twenty-two step lists are still in the WPF head.</item>
+        ///   <item><c>EmiState.HasTourDone(tour)</c>, the already-walked latch, is the one that is
+        ///         genuinely still head-side (Services/EmiDesk/EmiState.cs).</item>
+        /// </list>
+        /// <para>So this is NOT restored, and deliberately: all three resolvable conditions are
+        /// constant-false on this head, so evaluating them would change nothing a reader can see
+        /// while implying the fourth was checked too. The thing that would make the button honest
+        /// is <see cref="Go"/> being able to START a tour, and it cannot - see there. It stays lit
+        /// so the card renders in its full shape, which is what the render proves.</para>
         /// </summary>
         private static bool TourReady() => true;
 
-        // ponytail: needs EmiTargets.Open and MainWindow.StartTutorial (both WPF head), wired when
-        // they move to Core. Everything the button does is a detour into the app, so there is
-        // nothing view-local left to port here.
+        /// <summary>
+        /// ponytail: the tour half is NOT blocked on a move any more and the old note was wrong to
+        /// say so. <c>CoreTutorial.Start(tourName)</c> is in Core; what is missing is that this head
+        /// leaves the seam UNSEEDED (CCP.Avalonia/App.axaml.cs), so <c>Start</c> is a silent no-op
+        /// and calling it would give a button that looks like it walked you somewhere. The door half
+        /// is <c>EmiTargets.Open</c> (ConditioningControlPanel/Services/EmiDesk/EmiTargets.cs),
+        /// which is deeply head-bound and moves with EmiSuggester. Both ends of the button are a
+        /// detour into the app, so there is still nothing view-local to port here.
         private void Go()
         {
             var cards = Book.All;
