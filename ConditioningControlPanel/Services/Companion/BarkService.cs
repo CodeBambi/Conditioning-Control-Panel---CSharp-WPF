@@ -1493,10 +1493,6 @@ namespace ConditioningControlPanel.Services
             return !s.DisabledPhraseIds.Contains(id) && !s.RemovedPhraseIds.Contains(id);
         }
 
-        /// <summary>One enumerable bark line, surfaced to the Phrase Manager.</summary>
-        public readonly record struct BarkLineInfo(
-            string LineId, string RuleId, string Trigger, string Text, string? AudioFileName, string? AudioFolder);
-
         /// <summary>
         /// All inline bark lines for the ACTIVE mod's loaded rule set, for display in the Phrase
         /// Manager. Skips <c>pool_ref</c> rules — those reuse existing phrase categories already shown

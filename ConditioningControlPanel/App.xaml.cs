@@ -307,6 +307,21 @@ namespace ConditioningControlPanel
             CoreModsHooks.EventAccentHexProvider = () => LiveEvent?.AccentHex;
             CoreModsHooks.ActiveCompanionProvider = () => Companion?.ActiveCompanion;
             CoreModsHooks.SwitchCompanion = cid => Companion?.SwitchCompanion(cid);
+            // The bark seam (CCP.Core/CoreBark.cs). BarkService stays here - it subscribes to some
+            // fifty head services and speaks through the avatar window - so only the doorbell
+            // crosses. Every lambda reads the static LAZILY: Bark is constructed in OnStartup,
+            // long after this ctor, so a method group would bind null once and stay null.
+            CoreBark.UiAction = a => Bark?.NotifyUiAction(a);
+            CoreBark.TabNavigated = t => Bark?.NotifyTabNavigated(t);
+            CoreBark.FeatureOpened = f => Bark?.NotifyFeatureOpened(f);
+            CoreBark.AvatarClicked = () => Bark?.NotifyAvatarClicked();
+            CoreBark.ChaosDraftAutopick = () => Bark?.NotifyChaosDraftAutopick();
+            CoreBark.ChaosResultsShown = (score, best, pbDelta, isPb, defused, detonated, bestCombo, difficulty) =>
+                Bark?.NotifyChaosResultsShown(score, best, pbDelta, isPb, defused, detonated, bestCombo, difficulty);
+            CoreBark.ChaosRankUp = rank => Bark?.NotifyChaosRankUp(rank);
+            CoreBark.AllLinesProvider = () =>
+                (System.Collections.Generic.IReadOnlyList<Services.Bark.BarkLineInfo>?)Bark?.GetAllBarkLines()
+                ?? System.Array.Empty<Services.Bark.BarkLineInfo>();
             // The downloadable packs: the pack service seeds what the mod service reads.
             CoreReleaseContent.StampProvider = ReleaseContentService.GetStampFor;
             CoreReleaseContent.PackInfoProvider = id => ReleaseContent?.GetPackInfo(id);

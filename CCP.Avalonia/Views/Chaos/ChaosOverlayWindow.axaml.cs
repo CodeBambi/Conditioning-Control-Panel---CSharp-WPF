@@ -82,8 +82,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// <c>ChaosRanks</c>'s two members (shipped copy) and <c>ChaosWindowZ.BornTopmost</c>
     /// (<c>AppSettings.ChaosPinOnTop</c>). <c>ChaosArt</c>, <c>ChaosMeta</c>,
     /// <c>ChaosLessons</c>, <c>ChaosGlyphs</c>, <c>ChaosNarrator</c>,
-    /// <c>ChaosAnnouncerOverlay</c>, <c>ChaosModeService</c>, <c>RevealService</c> and
-    /// <c>App.Bark</c> still live in the WPF
+    /// <c>ChaosAnnouncerOverlay</c>, <c>ChaosModeService</c> and <c>RevealService</c>
+    /// still live in the WPF
     /// head - all under ConditioningControlPanel/Services/Chaos/ except <c>ChaosWindowZ</c> and
     /// <c>ChaosAnnouncerOverlay</c>, which are ConditioningControlPanel/Chaos/ - and this project
     /// may not reference it. They are stubbed in the Stubs region below,
@@ -512,7 +512,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             var revealed = _draftCards.FindAll(dc => dc.Pick.IsEnabled);
             var pool = revealed.Count > 0 ? revealed : _draftCards;
             var chosen = pool[Random.Shared.Next(pool.Count)];
-            try { App.Bark?.NotifyChaosDraftAutopick(); } catch { }
+            CoreBark.NotifyChaosDraftAutopick();
             SelectBoon(chosen);
         }
 
@@ -826,7 +826,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _btnAdjust.IsVisible = _btnDollhouse.IsVisible;
 
             // Bark over the results (+ PB fields for the compulsion line).
-            App.Bark?.NotifyChaosResultsShown(score, ChaosMeta.State.BestScore, pbDelta, isPb,
+            CoreBark.NotifyChaosResultsShown(score, ChaosMeta.State.BestScore, pbDelta, isPb,
                 s.Defused, s.Detonated, s.BestCombo, s.Difficulty);
 
             // Rank spine: once the tally has settled, the quiet rank-up beat.
@@ -897,7 +897,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             // Stays bare and quiet by design — just a low velvet thump under the fade.
             ChaosSfx.Play("rank_settle", 0.6f);
 
-            try { App.Bark?.NotifyChaosRankUp(ChaosRanks.NameLower(rank)); } catch { }
+            CoreBark.NotifyChaosRankUp(ChaosRanks.NameLower(rank));
             ChaosMeta.State.LastRankSeen = (int)rank;
             ChaosMeta.Save();
             RevealService.Sync("rank_up");
@@ -1730,19 +1730,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             };
         }
 
-        /// <summary>The companion's reactive line. ponytail: needs App.Bark, wired when the bark
-        /// service moves to Core; null here so every call site keeps its `?.`.</summary>
-        private static class App
-        {
-            public static BarkStub? Bark => null;
-        }
-
-        private sealed class BarkStub
-        {
-            public void NotifyChaosDraftAutopick() { }
-            public void NotifyChaosResultsShown(double score, long best, double pbDelta, bool isPb,
-                                                int defused, int detonated, int bestCombo, string difficulty) { }
-            public void NotifyChaosRankUp(string rank) { }
-        }
     }
 }

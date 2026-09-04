@@ -25,7 +25,8 @@
 //         arriving at a tab cannot find a stale lock.
 //       * UpdateProfileSharingSummary() on "discord" - see the case itself for why it lands here
 //         and not in the FX partial WPF reaches it through.
-//   - Bark (App.Bark.NotifyTabNavigated) and EmiDesk (EmiTargets.NoteTabOpened) hooks.
+//   - EmiDesk (EmiTargets.NoteTabOpened). The Bark hook is REAL now, through CoreBark, and fires
+//     in the same place WPF fires it - see ShowTab.
 //   - The three keys that are WINDOWS, not tabs, and the one launcher door: "patreon" (opens
 //     Settings · Account via ShowAppInfoPopup), "fyp" (OpenFypFeed), "justdrop" (the shop host)
 //     and the "webapp" door. Each is a documented no-op below until its service exists here.
@@ -98,6 +99,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static readonly HashSet<string> WindowKeys = new(StringComparer.Ordinal)
             { "patreon", "fyp", "justdrop", "webapp" };
 
+        /// <summary>
+        /// A live tab key mapped onto the BARK key it must keep announcing itself with. Copied from
+        /// WPF's <c>BarkTabAliases</c> (MainWindow.TabNavigation.cs:83) and it is head-side by
+        /// nature: Phase 6 retired the Lab page into the Play door, every built-in mod has a
+        /// `nav_lab` rule keyed `tab_eq: "lab"`, and every third-party .ccpmod on disk carries its
+        /// own copy we can never edit. Deriving the bark key from the live key would fire nothing.
+        /// <para>ShowTab("lab") still works as a permanent alias and fires "lab" directly, so it is
+        /// deliberately NOT an entry here.</para>
+        /// </summary>
+        private static readonly Dictionary<string, string> BarkTabAliases =
+            new(StringComparer.OrdinalIgnoreCase) { ["play"] = "lab" };
+
         /// <summary>The rail's doors: Tag on the door button, the tab it opens, the tabs it owns,
         /// and the entry panel that unfolds under it (null for the two doors that have none).
         /// Copied from WPF's NavDoorMap.</summary>
@@ -122,6 +135,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             tab = (tab ?? string.Empty).ToLowerInvariant();
             if (WindowKeys.Contains(tab)) return;                 // a window, not a tab - see header
+
+            // Bark hook: announce navigation (gated/chanced in the rules so it isn't spammy).
+            // Routed through BarkTabAliases so renamed tabs keep answering to their old bark key.
+            // Placed exactly where WPF places it (MainWindow.TabNavigation.cs:158) - AFTER the
+            // window-key intercepts and BEFORE the panel lookup, so an unknown key announces
+            // itself here too, as it does there.
+            CoreBark.NotifyTabNavigated(BarkTabAliases.TryGetValue(tab, out var barkTab) ? barkTab : tab);
+
             if (!TabPanels.TryGetValue(tab, out var target)) return;
 
             foreach (var name in new HashSet<string>(TabPanels.Values))

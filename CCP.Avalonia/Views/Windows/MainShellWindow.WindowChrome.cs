@@ -1,8 +1,9 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.WindowChrome.cs (478 lines).
 //
 // The four title-bar handlers are the ONLY members of this partial that touch nothing but the
-// window, so they are ported for real; everything else in the WPF file reaches App.Bark,
-// App.Lockdown, the avatar tube window or Win32 and is listed below rather than faked.
+// window, so they are ported for real; everything else in the WPF file reaches App.Lockdown, the
+// avatar tube window or Win32 and is listed below rather than faked. The two bark pings the
+// minimize and close buttons fire DO cross now, through CoreBark.
 //
 // Win32 -> Avalonia, per the port's mapping table:
 //   DragMove()                         -> BeginMoveDrag(PointerPressedEventArgs)
@@ -46,8 +47,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnMinimize_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: needs App.Bark (NotifyUiAction) and App.Lockdown (NotifyEscapeAttempt),
-            // plus HideAvatarTube; wired when those move to Core.
+            CoreBark.NotifyUiAction("minimize");
+            // ponytail: still needs App.Lockdown (NotifyEscapeAttempt - minimizing during a
+            // lockdown stays ALLOWED, it just gets noticed) and HideAvatarTube.
             WindowState = WindowState.Minimized;
         }
 
@@ -75,9 +77,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnClose_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: the WPF handler runs EnsureSessionRestoredForExit and the tray/minimise-to-
-            // tray preference first. Both are services; this closes the window, which is what the
-            // button says it does.
+            CoreBark.NotifyUiAction("close");
+            // ponytail: the WPF handler also runs EnsureSessionRestoredForExit and the tray/
+            // minimise-to-tray preference. Both are services; this closes the window, which is
+            // what the button says it does.
             Close();
         }
     }
