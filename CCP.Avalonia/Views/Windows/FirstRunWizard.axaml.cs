@@ -536,8 +536,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtWizardTitle.Text = Title;
 
             // --- step 1 ---
-            // ponytail: needs ModResourceResolver (and App.Mods.IsCCPDefault / IsSissyMode to pick
-            // between logo.png and logo2.png), wired when they move to Core. WPF re-calls this from
+            // ponytail: every piece of this resolves today - CoreMods.IsCCPDefault and
+            // CoreSettings.Current.IsSissyMode pick the file, Helpers.ModArt.TryLoad loads it, and
+            // Assets/logo.png + logo2.png are both linked into this head. It is left unwired only
+            // because ImgWelcomeLogo carries its own (identical, now stale) note in
+            // FirstRunWizard.axaml, which this layer does not own - restore both in one change so
+            // the markup and the code-behind cannot disagree. WPF re-calls ApplyStaticText from
             // ShowStep(1) so Back-navigation after a mod pick repaints the right wordmark.
 
             _txtAppTitle.Text = Loc.Get("app_title");
@@ -688,9 +692,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// ponytail: needs App.Settings, App.ReleaseContent and ModPickerDialog
-        /// (ShouldDeferForOffline / ShouldReArmAfterOfflineShowing / MaxOfflineOffers), wired when
-        /// they move to Core. In WPF this is where the picker's one-shot offer is spent - at the
+        /// ponytail: settings and release content are NOT the blockers - CoreSettings.Current and
+        /// CoreReleaseContent both answer today. What is missing is the WPF ModPickerDialog's
+        /// offline policy (ShouldDeferForOffline / ShouldReArmAfterOfflineShowing /
+        /// MaxOfflineOffers); this head's ported Dialogs.ModPickerDialog does not carry it, and it
+        /// is the only part that matters. In WPF this is where the picker's one-shot offer is spent - at the
         /// moment the step is first shown, not when a download is queued - where a full/dev layout
         /// marks every card installed, and where offline is handled as a first-class state that
         /// hands the offer BACK rather than burning it. A reimplemented offline guard is how a
@@ -699,8 +705,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void PrepareModStep() { }
 
         /// <summary>
-        /// ponytail: needs PendingModActivation, App.Mods and MainWindow.ActivateChosenMod, wired
-        /// when they move to Core. WPF hands the chosen mod to the EXACT existing switching path:
+        /// ponytail: needs PendingModActivation and MainWindow.ActivateChosenMod, both still WPF
+        /// head-side. CoreMods is not the gap - it reads the active mod but cannot SWITCH one, and
+        /// CoreModsHooks.SwitchCompanion is unseeded on this head, so there is no path to commit
+        /// through. WPF hands the chosen mod to the EXACT existing switching path:
         /// content on disk goes straight through ActivateChosenMod, content that must be fetched
         /// records the intent and starts the download, so the switch happens the moment the pack
         /// lands - even after this window is gone. Choosing a mod MEANS choosing to run it.

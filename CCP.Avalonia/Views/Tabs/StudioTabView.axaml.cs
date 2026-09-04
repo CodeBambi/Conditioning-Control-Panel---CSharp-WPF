@@ -15,6 +15,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -49,8 +50,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <para><b>What is stubbed, and why.</b> Everything the WPF code-behind reaches into the app
     /// head for: <c>MainWindow.ToggleWallFeature</c> (the eleven wall modules' quick-toggle, which
     /// owns the session-lock refusal and the per-feature service start/stop),
-    /// <c>BarkService.NotifyFeatureOpened</c>, <c>ModResourceResolver</c> (the rack's feature art
-    /// and the door medallion), <c>MotionFx</c> and <c>PerimeterCometAdorner</c> (the detail
+    /// <c>BarkService.NotifyFeatureOpened</c>, the rack's feature art and the door medallion
+    /// (whose resolver is done - <c>CoreModArt</c> plus <c>Helpers.ModArt</c> - and whose art is
+    /// linked; what is missing is an Image target in the .axaml, see <c>RefreshRackArt</c> and
+    /// <c>ApplyDoorIcon</c>), <c>MotionFx</c> and <c>PerimeterCometAdorner</c> (the detail
     /// crossfade, the dot ping and the active tile's comet), and <c>HapticsTabView</c> with its
     /// <c>ChkHapticsEnabled</c> master box. Each is marked <c>ponytail:</c> at its site.</para>
     ///
@@ -77,12 +80,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             /// <summary>
             /// Filename under <c>Resources/features/</c> for this module's feature art, or null
             /// for the three modules that have never had any (Visuals, Scheduler, Ramp).
-            /// <para>ponytail: those files are not AvaloniaResources in this head and the
-            /// resolver that picks a mod's override for them is a WPF-head service, so nothing
-            /// decodes art here yet. The column is kept verbatim (case and all - the on-disk names
-            /// really are mixed) because it is still what decides which rows get the 56px active
-            /// TILE and which keep the plain strip, and it is what <c>RefreshRackArt</c> will read
-            /// when <c>ModResourceResolver</c> moves to Core.</para>
+            /// <para>ponytail: both halves of the lookup work now - the csproj links
+            /// <c>Assets/features/*.png</c> as <c>avares://CCP.Avalonia/Resources/features/</c>,
+            /// and <c>Helpers.ModArt.TryLoad</c> picks a mod's override over it. Nothing decodes
+            /// art here only because there is nowhere to put it (see <c>RefreshRackArt</c>). The
+            /// column is kept verbatim (case and all - the on-disk names really are mixed) because
+            /// it is what decides which rows get the 56px active TILE and which keep the plain
+            /// strip, and it is what <c>RefreshRackArt</c> will read.</para>
             /// </summary>
             public string? Art;
 
@@ -226,8 +230,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // The active tile's plate. On WPF this layer is the module's feature art behind a
             // fade mask; here it is the same accent wash the art-less chips wear, so the checked
             // row still reads as a tile rather than as a taller strip.
-            // ponytail: swap for the ImageBrush of ModResourceResolver.ResolveImageDecoded(
-            // "features/" + e.Art, 256) when the resolver and the art move to this head.
+            // ponytail: the resolver and the art are BOTH here now - Helpers.ModArt.TryLoad(
+            // "features/" + e.Art) over CoreModArt, against Assets/features/*.png, which the
+            // csproj links. What is missing is the target: this layer is a LinearGradientBrush in
+            // this file, and swapping it for an ImageBrush per row means changing the row template
+            // in StudioTabView.axaml too. Do both together.
             _accentTints.Add(c =>
             {
                 TilePlateBrush.GradientStops[0].Color = WithAlpha(HueRotate(c, 38), 0x66);
@@ -299,7 +306,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             static void Try(Action a)
             {
                 try { a(); }
-                catch { /* ponytail: App.Logger?.Debug(...) on WPF; no logger on this head yet */ }
+                catch (Exception ex) { Log.Debug(ex, "[Studio] a mod-aware repaint step failed"); }
             }
         }
 
@@ -308,18 +315,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// painted with. A null resolve KEEPS the current art: "the new mod ships no override and
         /// the embedded file failed to decode this time" must cost nothing, and blanking the row
         /// would turn a transient decode failure into a permanently empty rack.
-        /// <para>ponytail: needs <c>Services.ModResourceResolver.ResolveImageDecoded</c> and the
-        /// <c>Resources/features/*.png</c> art as AvaloniaResources. Until both land there is no
-        /// ImageBrush to write into — the rows wear the accent wash instead — so this is a no-op
-        /// rather than a lie.</para>
+        /// <para>ponytail: neither the resolver nor the art blocks this any more —
+        /// <c>Helpers.ModArt.TryLoad("features/&lt;e.Art&gt;")</c> answers over
+        /// <see cref="CoreModArt"/>, and <c>Assets/features/*.png</c> is linked as
+        /// <c>avares://CCP.Avalonia/Resources/features/</c>. The blocker is the target: the rows
+        /// are painted with <c>TilePlateBrush</c>, a gradient built in this file, so there is no
+        /// ImageBrush to write into until the row template in StudioTabView.axaml grows one. A
+        /// no-op rather than a lie, and now a one-file-plus-markup job rather than a wait.</para>
         /// </summary>
         private void RefreshRackArt() { }
 
         /// <summary>
         /// The page-header door medallion. Same file the nav rail's Studio door uses, so a mod that
         /// reskins the rail reskins this too instead of leaving the header on stock art.
-        /// <para>ponytail: needs <c>Services.ModResourceResolver</c> and
-        /// <c>Resources/nav/door_studio.png</c>. The XAML's wash chip stands in until then.</para>
+        /// <para>ponytail: both halves resolve today —
+        /// <c>Helpers.ModArt.TryLoad("nav/door_studio.png")</c>, and <c>Assets/nav/</c> is linked
+        /// into this head. The blocker is that <c>ImgStudioDoorIcon</c> is a <c>Border</c> with an
+        /// emoji in it, not an <c>Image</c>: StudioTabView.axaml has to give it an Image (or take
+        /// an ImageBrush background) in the same change, and that file is markup this layer does
+        /// not own. The wash chip stands in until then.</para>
         /// </summary>
         private void ApplyDoorIcon() { }
 
@@ -662,9 +676,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 BorderThickness = new Thickness(1),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 9, 0),
-                // ponytail: the module's feature art goes here as an unfrozen ImageBrush once
-                // ModResourceResolver and Resources/features/*.png reach this head; the emoji on
-                // the hue-wash is exactly the fallback WPF already shows for an art-less module.
+                // ponytail: the module's feature art goes here as an ImageBrush over
+                // Helpers.ModArt.TryLoad("features/" + e.Art) - both the loader and the art are
+                // here, this Background just has to become one. The emoji on the hue-wash is
+                // exactly the fallback WPF already shows for an art-less module, so a row without
+                // art keeps looking right either way.
                 Background = ChipHueWashBrush,
                 Child = new TextBlock
                 {

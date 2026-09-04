@@ -135,8 +135,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         }
 
         /// <summary>The target's flat hue with its name on a strip.
-        /// ponytail: card art comes through ModResourceResolver (WPF head); the flat-hue branch
-        /// is the one the WPF control takes when there is no art, so it is the only one here.</summary>
+        /// <para>ponytail: the WPF ring paints a card PNG behind this, and the portable half of
+        /// that lookup is <c>CoreModArt.OverridePath</c> today (<c>Helpers.ModArt</c> is the
+        /// head-side loader). What is still missing is the NAME to look up: the WPF resolver is
+        /// handed a per-target art path that <c>Target</c> does not carry on this head, so there
+        /// is nothing to resolve yet. The flat-hue branch is the one the WPF control takes when a
+        /// target has no art, so it is not a stand-in - it is one of the two real
+        /// branches.</para></summary>
         private static Control BuildTileFace(Target t, bool locked)
         {
             var grid = new Grid();

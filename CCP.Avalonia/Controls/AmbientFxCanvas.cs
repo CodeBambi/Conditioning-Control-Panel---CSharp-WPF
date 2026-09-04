@@ -1170,8 +1170,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
             public static Color FlashTintColor => ThemeColor("FxFlashTintColor");
 
             /// <summary>
-            /// FxTheme.MistOpacity. ponytail: needs <c>App.Mods.GetMistOpacity()</c>, which
-            /// CoreMods does not expose; 1.0 is what that call answers with no mod loaded.
+            /// FxTheme.MistOpacity. ponytail: the WPF original reads
+            /// <c>App.Mods.GetMistOpacity()</c>; <see cref="CoreMods"/> exposes no mist-opacity
+            /// provider, so there is nothing to call here yet - adding one is a Core change.
+            /// 1.0 is what the WPF call answers with no mod loaded, so this is the no-mod value
+            /// rather than an invented default.
             /// </summary>
             public static double MistOpacity => 1.0;
 

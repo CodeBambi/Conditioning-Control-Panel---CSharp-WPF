@@ -122,10 +122,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         private async void BtnExportPhrases_Click(object? sender, RoutedEventArgs e)
         {
             var settings = CoreSettings.Current;
-            if (TopLevel.GetTopLevel(this) is not { } top) return;
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
             _phraseBackupService ??= new PhraseBackupService();
 
-            var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Export Phrases",
                 SuggestedFileName = PhraseBackupService.GetExportFileName(),
@@ -141,12 +141,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             {
                 var count = _phraseBackupService.Export(settings, path);
                 Log.Information("Phrases exported: {Count} to {Path}", count, path);
-                // ponytail: WPF confirms with ShowStyledDialog ("Phrases Exported"); no styled
-                // message dialog on this head yet.
+                await Dialogs.MessageDialog.ShowAsync(owner, "Phrases Exported",
+                    $"Saved {count} phrase(s) to:\n{path}");
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to export phrases");
+                await Dialogs.MessageDialog.ShowAsync(owner, "Export Failed",
+                    $"Could not export phrases:\n{ex.Message}");
             }
         }
 
@@ -171,8 +173,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (!_phraseBackupService.Validate(path, out var error))
             {
                 Log.Warning("Phrase import rejected: {Error}", error);
-                // ponytail: WPF explains with ShowStyledDialog ("Import Failed"); no styled
-                // message dialog on this head yet.
+                await Dialogs.MessageDialog.ShowAsync(owner, "Import Failed",
+                    $"That file isn't a valid phrase backup:\n{error}");
                 return;
             }
 
@@ -192,10 +194,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 var count = _phraseBackupService.Import(settings, path);
                 CoreSettings.Save();
                 Log.Information("Phrases imported: {Count} from {Path}", count, path);
+                await Dialogs.MessageDialog.ShowAsync(owner, "Phrases Imported",
+                    $"Restored {count} phrase(s). You may need to reopen any open phrase editors to see them.");
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to import phrases");
+                await Dialogs.MessageDialog.ShowAsync(owner, "Import Failed",
+                    $"Could not import phrases:\n{ex.Message}");
             }
         }
 
@@ -252,7 +258,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 return;
             }
 
-            PerformFactoryReset();
+            if (!PerformFactoryReset(out var failure))
+            {
+                // The WPF head's set2_reset_failed_* box. It matters because the reset LOOKS like
+                // it worked otherwise: the app keeps running with the settings the user asked to
+                // be rid of and nothing on screen says why.
+                await Dialogs.MessageDialog.ShowAsync(owner,
+                    Loc.Get("set2_reset_failed_title"),
+                    Loc.GetF("set2_reset_failed_body", failure));
+            }
         }
 
         /// <summary>
@@ -264,9 +278,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// otherwise ack the new process straight back out), and the exit is hard because the
         /// normal shutdown saves settings — which would undo the reset. What stays, deliberately:
         /// assets, packs, mods, achievements, the account, crash logs and the daily .bak rotation.
+        ///
+        /// <para>Returns false, with the failure message, when settings.json could not be moved
+        /// aside — the one path where this method RETURNS instead of exiting, so the caller has to
+        /// tell the user. Every other path ends in <c>Environment.Exit</c>.</para>
         /// </summary>
-        private void PerformFactoryReset()
+        private bool PerformFactoryReset(out string failure)
         {
+            failure = "";
             var dir = CorePaths.UserData;
             var settingsPath = Path.Combine(dir, "settings.json");
             var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -329,9 +348,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 // The app keeps running on this path, so give it its saves back - a sealed service
                 // would silently stop persisting anything for the rest of the session.
                 CoreSettings.Service?.UnsealAfterFailedReset();
-                // ponytail: WPF also tells the user (MessageBox, set2_reset_failed_*); no styled
-                // message dialog on this head yet.
-                return;
+                failure = ex.Message;
+                return false;
             }
 
             // Belt and braces: a temp created by a save that was already mid-flight when the sweep
@@ -346,6 +364,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // whole [RESET] trail above is lost exactly when it matters.
             try { Log.Information("[RESET] flushing log before exit"); Serilog.Log.CloseAndFlush(); } catch { }
             Environment.Exit(0);
+            return true;   // unreachable; Exit does not come back. Here for the compiler only.
         }
 
         private static string[] SafeGlob(string dir, string pattern)

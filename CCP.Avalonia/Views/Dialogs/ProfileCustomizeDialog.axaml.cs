@@ -19,8 +19,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ProfileCustomizeDialog.xaml.cs. The tile
     /// builders, selection rules, pin cap and reset are the original's; <see cref="ProfileCosmetics"/>
-    /// is already in Core. What is not: Achievement, CosmeticsCatalog, WardrobeCatalog,
-    /// ModResourceResolver and the WardrobeEditorDialog all live in the WPF head, so
+    /// is already in Core. What is not: Achievement, CosmeticsCatalog, WardrobeCatalog and the
+    /// WardrobeEditorDialog all live in the WPF head (the mod-art resolver does NOT block anything
+    /// here any more - see <c>BuildPinTile</c> for the two things that do), so
     ///  - unlocked achievements arrive as (id, name) pairs instead of being resolved from Achievement.All,
     ///  - banners are the catalog's three generated gradients (no art file needed), avatar presets
     ///    are none (art needed), pins draw a trophy glyph where the achievement PNG would be,
@@ -372,8 +373,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private Border BuildPinTile(string achievementId, string name)
         {
             var content = new Grid();
-            // ponytail: needs ModResourceResolver + Resources/achievements/<png> (WPF head); a
-            // trophy glyph stands in for the art until the achievement assets move to Core.
+            // ponytail: the resolver is NOT the blocker (CoreModArt + Helpers.ModArt do it, and
+            // AchievementPopup already loads achievement art that way). Two other things are, and
+            // the second one is why restoring this would make the dialog WORSE:
+            //   1. this dialog is handed (Id, Name) tuples, not Achievements, so it has no
+            //      ImageName to resolve - the ctor and every caller would have to change;
+            //   2. WPF DROPS a pin tile whose art will not load (BuildPinTile returns null), and
+            //      only six achievement PNGs are linked into this head, so a faithful port would
+            //      hide almost every pin instead of showing it.
+            // The trophy glyph is therefore the deliberate answer, not a placeholder: it shows
+            // every unlocked achievement as pinnable. Restore the art and the drop rule together
+            // with the rest of the achievement assets, or not at all.
             content.Children.Add(new TextBlock
             {
                 Text = "🏆",

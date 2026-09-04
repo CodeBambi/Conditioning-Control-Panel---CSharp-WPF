@@ -60,9 +60,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <para><b>WebView2.</b> The original has no <c>wv2:WebView2</c> element in its XAML; browser
     /// mode builds a <c>BrowserVideoSurface</c> (a WebView2 host) in code and does
     /// <c>VideoContainer.Children.Add(...)</c>. The port mirrors that exactly with
-    /// <see cref="WebHost"/> - see <see cref="StartBrowserPlayback"/>. Everything the original did
-    /// through CoreWebView2 (the shared environment, InitAsync, Post, the WebMessage pump,
-    /// ProcessFailed) is a ponytail stub; the wrapper exposes none of it yet.</para>
+    /// <see cref="WebHost"/> - see <see cref="StartBrowserPlayback"/>. What the original did
+    /// through CoreWebView2 is a ponytail stub, but not for one reason any more: the shared
+    /// environment and InitAsync have no counterpart (WebHost probes and navigates on Source), the
+    /// Post could be written against <c>WebHost.InvokeScriptAsync</c> today, and the WebMessage
+    /// pump plus ProcessFailed are the real gap - WebHost wraps neither, so the page cannot report
+    /// anything back and the game clock has nothing to run on.</para>
     ///
     /// <para><b>Wired:</b> the pop sound (<c>CoreAudio.PlayOneShot</c> at the WPF
     /// <c>(master * bubbles) ^ 1.5</c> volume), the monitor set (<c>DualMonitorEnabled</c> from
@@ -73,7 +76,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// CreateManagedPlayer/ReleaseManagedPlayer, the wedge watchdog, the native poison cooldown,
     /// the bounded pumped Stop() batch, VideoView attach/detach and every message-pump wait that
     /// only existed to keep HwndHost teardown safe), BrowserVideoEngine/BrowserVideoGate,
-    /// ModResourceResolver, App.Achievements and VideoDiag. Each is marked at its site.</para>
+    /// App.Achievements and VideoDiag. Each is marked at its site. The mod art is NOT stubbed any
+    /// more - the bubble sprite loads through <c>CoreModArt</c> + <c>Helpers.ModArt</c>.</para>
     ///
     /// <para><c>Loaded</c> became <c>Opened</c>: WPF's Loaded fires synchronously inside Show(),
     /// which ShowOnAllMonitors' completion de-duplication leans on, and Avalonia's Opened is the
@@ -107,8 +111,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool _videoEnded = false;
         private bool _gameCompleted = false;
 
-        /// <summary>The bubble artwork, or null to draw the gradient ellipse fallback.
-        /// Always null today - see <see cref="LoadBubbleImage"/>.</summary>
+        /// <summary>The bubble artwork - the mod's override or this head's own bubble.png - or
+        /// null to draw the gradient ellipse fallback. See <see cref="LoadBubbleImage"/>.</summary>
         private IImage? _bubbleImage;
 
         // The web view surface, browser mode only. Mutually exclusive with the LibVLC player the
@@ -448,14 +452,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void StartBrowserPlayback()
         {
-            // ponytail: needs BrowserVideoEngine.BuildPageUrl to map the clip onto the player
-            // page's virtual host. Without it there is no page to navigate to, so the surface is
-            // built (that IS the port of VideoContainer.Children.Add(_browserSurface)) and left
-            // showing WebHost's fallback rather than a black rectangle.
+            // ponytail: needs BrowserVideoEngine.BuildPageUrl (WPF head) to map the clip onto the
+            // player page's virtual host, and WebHost has no virtual-host mapping to point it at
+            // either. Without both there is no page to navigate to, so the surface is built (that
+            // IS the port of VideoContainer.Children.Add(_browserSurface)) and left showing
+            // WebHost's fallback rather than a black rectangle.
             _browserSurface = new WebHost();
             _videoContainer.Children.Add(_browserSurface);
 
-            // ponytail: needs CoreWebView2. The original then did, in order:
+            // ponytail: needs a message pump. WebHost wraps Source, AllowNavigation,
+            // InvokeScriptAsync and HasEngine, but NOT NativeWebView.WebMessageReceived - and the
+            // page-to-app reports are what drive this whole game clock, so InvokeScriptAsync alone
+            // cannot stand in. The original did, in order:
             //   _browserSurface.Message += OnBrowserMessage        (WebMessageReceived pump:
             //       playing / timeupdate / ended / error / key reports drive the whole game clock)
             //   _browserSurface.ProcessFailed += OnBrowserProcessFailed
@@ -464,9 +472,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             //   await BrowserVideoEngine.SharedEnvironmentAsync()   (CoreWebView2Environment)
             //   await surface.InitAsync(env, mappings, startUrl, host)
             //       (EnsureCoreWebView2Async + SetVirtualHostNameToFolderMapping + Navigate)
-            // WebHost exposes only Source, so none of it can be expressed yet and none of it is
-            // invented here. Consequences: no audio routing, no first-frame watch, no page keys,
-            // and the clip never actually plays - the safety timer below is what ends the game.
+            // Two of those five could be written today (the load post through InvokeScriptAsync,
+            // the navigate through Source); the two event hookups and the virtual-host mapping
+            // have no twin, so nothing is invented here. Consequences: no audio routing, no
+            // first-frame watch, no page keys, and the clip never actually plays - the safety
+            // timer below is what ends the game.
 
             if (_isPrimary)
             {
@@ -513,10 +523,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var surface = _browserSurface;
             if (surface == null) return;
             _browserSurface = null;
-            // ponytail: needs CoreWebView2 - the original detached Message/ProcessFailed, posted
-            // {type="stop"} and Dispose()d the WebView2, which is what actually ends the browser
-            // process. Removing the control from the tree is all WebHost allows today, so a
-            // WebKitGTK process may outlive the window until the wrapper grows a Dispose.
+            // ponytail: the stop post could go through WebHost.InvokeScriptAsync now, but the
+            // teardown that matters cannot: the original detached Message/ProcessFailed and
+            // Dispose()d the WebView2, which is what actually ends the browser process, and
+            // WebHost wraps neither the events nor a Dispose. Removing the control from the tree
+            // is all it allows, so a WebKitGTK process may outlive the window until the wrapper
+            // grows one.
             try { _videoContainer.Children.Remove(surface); } catch { }
         }
 
@@ -538,14 +550,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _targetBubbleCount = Math.Max(3, _targetBubbleCount);
         }
 
+        /// <summary>
+        /// The bubble sprite: the mod's <c>bubble.png</c> if it ships one, else this head's copy
+        /// (<c>Assets/bubble.png</c>, linked as <c>avares://CCP.Avalonia/Resources/bubble.png</c>).
+        /// Null keeps CountBubble's gradient ellipse, which is the WPF original's own fallback for
+        /// an image that will not load, so a miss degrades rather than blanks.
+        /// </summary>
         private void LoadBubbleImage()
         {
-            // ponytail: needs Services.ModResourceResolver (mod-overridable "bubble.png"), and the
-            // WPF fallback was a pack:// URI into the WPF assembly's Resources - neither exists
-            // here, and this layer may not add an AvaloniaResource to the csproj. _bubbleImage
-            // stays null, so every bubble draws CountBubble's gradient-ellipse fallback, which the
-            // WPF original also drew whenever the image failed to load.
-            _bubbleImage = null;
+            _bubbleImage = Helpers.ModArt.TryLoad("bubble.png");
         }
 
         private void StartSafetyTimer(double videoDurationSeconds)

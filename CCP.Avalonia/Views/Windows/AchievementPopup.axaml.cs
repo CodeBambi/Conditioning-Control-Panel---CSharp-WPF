@@ -1,10 +1,13 @@
 using System;
+using System.IO;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -20,7 +23,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>SystemParameters.WorkArea</c> becomes <c>Screens.Primary.WorkingArea</c>, which is only
     ///    populated once the window has a platform handle, so placement moves to OnOpened.
     ///  - <c>MouseLeftButtonDown</c> becomes PointerPressed, wired in the constructor.
-    ///  - <c>App.Logger</c> calls are dropped; there is no logger on this head yet.
+    ///  - <c>App.Logger</c> becomes Serilog's static <c>Log</c>.
     /// </summary>
     public partial class AchievementPopup : Window
     {
@@ -29,7 +32,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly DispatcherTimer _autoCloseTimer;
 
         /// <summary>Render/design constructor: sample data so --render-view can draw the popup.</summary>
-        internal AchievementPopup() : this("Good Girl", "The first time it stopped feeling like a choice.", "good_girl.png")
+        internal AchievementPopup() : this("Retinal Burn", "The first time it stopped feeling like a choice.", "retinal_burn.png")
         {
             // The fade-in cannot complete inside a headless render's two dispatcher passes, so the
             // PNG would capture a fully transparent window. Skip the animation for the render.
@@ -113,13 +116,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>
-        /// ponytail: needs Services.ModResourceResolver (mod override, then a pack:// resource) and
-        /// the Resources/achievements/ payload; both stay in the WPF head. The art box renders empty
-        /// until they move to Core, exactly as the WPF original does for a missing file.
+        /// The WPF chain, step for step: the mod's override first (probing the shipped copy first
+        /// would make mod art unreachable), then this head's <c>avares://</c> copy, then a loose
+        /// file on disk beside the exe (a content pack or hand-dropped art). Nothing found leaves
+        /// the art box empty, which is the WPF original's own path for a missing file.
+        ///
+        /// <para>ponytail: only six achievement PNGs are linked into this head - the six in
+        /// <c>Assets/achievements/</c>. Every other id resolves through the disk probe or not at
+        /// all, so most popups still show an empty plate. Linking the rest is a .csproj change,
+        /// which this layer does not own.</para>
         /// </summary>
         private void LoadAchievementImage(string imageName)
         {
-            _ = imageName;
+            var image = this.FindControl<Image>("AchievementImage");
+            if (image == null || string.IsNullOrWhiteSpace(imageName)) return;
+
+            var art = Helpers.ModArt.TryLoad($"achievements/{imageName}");
+            if (art != null) { image.Source = art; return; }
+
+            try
+            {
+                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                                        "Resources", "achievements", imageName);
+                if (File.Exists(path)) image.Source = new Bitmap(path);
+                else Log.Warning("Achievement image not found: {Name}", imageName);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Achievement image {Name} would not load", imageName); }
         }
 
         private void FadeOutAndClose()

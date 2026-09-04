@@ -9,11 +9,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
     /// Brain Drain panel, ported from the WPF head.
     ///
     /// What is real here: both slider read-outs, the clip-library readout's format string and the
-    /// empty-state banner it drives. What is not: everything the WPF code-behind reaches for -
-    /// App.Settings (BrainDrainEnabled / Intensity / HighRefresh / BlurStrength / MeltEnabled /
-    /// AllowOverlayCapture), App.BrainDrain (the clip scan, ReloadAudioFiles, Start/Stop),
-    /// BrainDrainService's folder paths, OverlayService.BrainDrainWithheld, the mod art resolver
-    /// and the Explorer shell-open. Each is a WPF-head service.
+    /// empty-state banner it drives.
+    ///
+    /// What is not, and WHY - the settings are the interesting case. BrainDrainEnabled, Intensity,
+    /// HighRefresh, BlurStrength, MeltEnabled and AllowOverlayCapture are all on
+    /// <c>CoreSettings.Current</c> today, so "needs App.Settings" would be a stale reading. They
+    /// stay unwired here on purpose: on WPF each of these writes is followed by a call into
+    /// App.BrainDrain (Start/Stop, ReloadAudioFiles, the overlay-capture re-arm), so a control
+    /// that wrote the setting alone would show BRAIN DRAIN as ON with nothing draining. The
+    /// genuinely absent pieces are App.BrainDrain, BrainDrainService's folder paths,
+    /// OverlayService.BrainDrainWithheld and the shell folder-open - all WPF-head services with
+    /// no seam. Mod art is NOT a blocker any more (CoreModArt plus Helpers.ModArt), but there is
+    /// no art in this panel's markup to write into.
     ///
     /// The clip count is a placeholder 0, which is also the honest default for a fresh install and
     /// is what puts the empty-state banner on screen in the render.
@@ -29,11 +36,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
 
             RefreshClipCount();
 
-            // ponytail: needs App.Settings, App.BrainDrain, Services.BrainDrainService,
-            // OverlayService and ModResourceResolver, wired when they move to Core. ChkEnable,
-            // ChkMelt, ChkHighRefresh, ChkAllowCapture, both sliders' setting writes,
-            // BtnOpenAudioFolder(Empty) and BtnRefreshAudio are inert until then, and
-            // WithheldNotice stays hidden (OverlayService.BrainDrainWithheld is false anyway).
+            // ponytail: needs App.BrainDrain, Services.BrainDrainService and OverlayService -
+            // NOT App.Settings, which is CoreSettings.Current today. See the class summary for
+            // why the settings writes are still deliberately absent. ChkEnable, ChkMelt,
+            // ChkHighRefresh, ChkAllowCapture, both sliders' setting writes, BtnOpenAudioFolder
+            // (Empty) and BtnRefreshAudio are inert until the service lands, and WithheldNotice
+            // stays hidden (OverlayService.BrainDrainWithheld is false anyway).
             this.FindControl<Button>("BtnRefreshAudio")!.Click += (_, _) => RefreshClipCount();
         }
 

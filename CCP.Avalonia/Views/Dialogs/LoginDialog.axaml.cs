@@ -36,8 +36,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>ShowUsernamePanel</c>'s two title assignments are dropped: they set exactly the keys
     ///    the markup already binds.
     ///  - <c>SanitizeError</c> and <c>ShowError</c> are gone with their only callers. Both served
-    ///    the V2AuthService paths stubbed below, and WPF's <c>MessageBox</c> has no Avalonia
-    ///    equivalent and no package may be added; they return with the services.
+    ///    the V2AuthService paths stubbed below; they return with the services. (WPF's
+    ///    <c>MessageBox</c> is not what blocks them - <c>Dialogs.MessageDialog</c> is this head's
+    ///    equivalent and this dialog can own it.)
     ///  - <c>_firstProviderToken</c> is dropped: nothing can set it until the OAuth services move
     ///    to Core, and a field that is only ever null makes the stubs read as dead branches.
     ///
@@ -344,9 +345,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private static Task<bool> CheckNameAvailabilityAsync(string name) => Task.FromResult(true);
 
         /// <summary>
-        /// ponytail: needs V2AuthService.RegisterAsync / AuthenticateWith*Async plus App.Settings
-        /// and App.UnifiedUserId, wired when they move to Core. The guards and the loading state
-        /// are the original's; the account creation itself is what is missing.
+        /// ponytail: needs <c>ConditioningControlPanel/Services/Account/V2AuthService.cs</c>
+        /// (RegisterAsync / AuthenticateWith*Async) and <c>App.UnifiedUserId</c>; both are still
+        /// WPF head-side and neither has a seam. <c>CoreSettings.Current</c> covers the settings
+        /// half already, so settings are NOT what blocks this. Do not half-port it: the flow
+        /// carries an OAuth token and a password, and a partial that writes an identity without
+        /// the server's answer is worse than the stub. The guards and the loading state are the
+        /// original's; the account creation itself is what is missing.
         /// </summary>
         private void BtnConfirmUsername_Click()
         {
@@ -485,9 +490,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         /// <summary>
-        /// ponytail: needs V2AuthService.LoginAsync plus App.Settings / App.UnifiedUserId, wired
-        /// when they move to Core. The password is still wiped immediately after the (absent) call,
-        /// as audit C1 requires, and the failure path back to the form is the original's.
+        /// ponytail: needs <c>ConditioningControlPanel/Services/Account/V2AuthService.cs</c>
+        /// (LoginAsync) and <c>App.UnifiedUserId</c>, both still WPF head-side with no seam.
+        /// <c>CoreSettings.Current</c> is not the blocker. The password is still wiped immediately
+        /// after the (absent) call, as audit C1 requires, and the failure path back to the form is
+        /// the original's.
         /// </summary>
         private void TryAccountLogin(string displayName, string password)
         {

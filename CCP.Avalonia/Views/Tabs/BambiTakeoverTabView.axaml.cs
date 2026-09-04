@@ -34,12 +34,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// shows a tab by flipping <c>IsVisible</c> and never re-attaches, so the whole seed re-runs on
     /// the IsVisible edge as well as on attach and on a settings-instance swap.</para>
     ///
-    /// <para><b>Dropped:</b> the mod-aware feature art (ModService.ModChanged -&gt;
-    /// ModResourceResolver repainting the hero and side takeover.png plates, including the
-    /// BambiSleep "bambi takeover.png" fork). Both plates are art-less on this head - see the
-    /// .axaml header - so there is nothing to repaint yet. ponytail: needs
-    /// ConditioningControlPanel/Helpers/ModResourceResolver.cs; restore together with the plates
-    /// when Resources/features ships here.</para>
+    /// <para><b>Dropped:</b> the mod-aware feature art (ModService.ModChanged -&gt; the resolver
+    /// repainting the hero and side takeover.png plates, including the BambiSleep
+    /// "bambi takeover.png" fork). ponytail: the resolver is NOT the blocker - CoreMods raises
+    /// ModChanged and <c>Helpers.ModArt.TryLoad("features/bambi takeover.png")</c> resolves
+    /// against art the csproj already links. The blocker is that both plates are art-less in
+    /// BambiTakeoverTabView.axaml (see its header), so there is no Image to repaint; restore the
+    /// markup and this handler in one change.</para>
     /// </summary>
     public partial class BambiTakeoverTabView : UserControl
     {
@@ -350,11 +351,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>
         /// The master switch. WPF gates it on a consent dialog, the Patreon check and the lockdown
-        /// refusal before it starts AutonomyService. None of those is on this head, so only the
-        /// half that cannot arm anything the user has not already agreed to is restored: turning it
-        /// OFF always writes, turning it ON writes only when consent is already on file.
+        /// refusal before it starts AutonomyService. The consent gate is the one of those three
+        /// that is real here, and it is the one that matters: the setting is not written until the
+        /// answer is in, so no path can arm her on a "yes" that never came.
+        ///
+        /// <para><b>Async, so the order is deliberate.</b> The WPF box was synchronous and the
+        /// checkbox stayed visibly on across it; here nothing is written before the await, and the
+        /// box is put back under <see cref="_isLoading"/> AFTER the answer either way — a repaint
+        /// during the modal cannot leave it disagreeing with the setting.</para>
         /// </summary>
-        private void ChkAutonomyEnabled_Changed(object? sender, RoutedEventArgs e)
+        private async void ChkAutonomyEnabled_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             var s = CoreSettings.Current;
@@ -363,21 +369,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             if (enabled && !s.AutonomyConsentGiven)
             {
-                // ponytail: WPF shows the Autonomy consent MessageBox here and writes
-                // AutonomyConsentGiven on Yes (MainWindow.Autonomy.cs:55). No ported dialog exists
-                // for it, and arming her without consent is not a safe default, so the box reverts.
-                _isLoading = true;
-                ChkAutonomyEnabled.IsChecked = false;
-                _isLoading = false;
-                Log.Information("Takeover master switch refused: no consent on file and no consent dialog on this head");
-                return;
+                // The WPF text verbatim (MainWindow.Autonomy.cs:55) - an English literal there
+                // too, with no loc key, so nothing is invented here.
+                var owner = TopLevel.GetTopLevel(this) as Window;
+                var consented = owner != null && await Dialogs.MessageDialog.ConfirmAsync(owner,
+                    "Enable Autonomy Mode",
+                    "AUTONOMY MODE\n\n" +
+                    "This feature allows the companion to autonomously trigger effects:\n" +
+                    "• Flash images\n" +
+                    "• Videos\n" +
+                    "• Subliminal messages\n" +
+                    "• Make comments\n\n" +
+                    "She will act on her own within your configured intensity settings.\n\n" +
+                    "You can disable this at any time. Videos triggered autonomously are skippable " +
+                    "unless you explicitly enable Strict Videos in the Takeover settings.\n\n" +
+                    "Do you consent to enable Autonomy Mode?");
+
+                // No owner is not a "yes". A headless host cannot ask, so it refuses, exactly as
+                // the mic-consent flow below does.
+                if (!consented)
+                {
+                    _isLoading = true;
+                    ChkAutonomyEnabled.IsChecked = false;
+                    _isLoading = false;
+                    Log.Information("Takeover master switch refused: consent declined or no window to ask in");
+                    return;
+                }
+
+                s.AutonomyConsentGiven = true;
             }
 
             s.AutonomyModeEnabled = enabled;
             CoreSettings.Save();
-            // ponytail: WPF then starts or stops App.Autonomy behind the Patreon / daily-free check,
-            // and refuses a stop while Lockdown is active (#514). Needs Services/AutonomyService.cs
-            // and Services/LockdownService.cs, neither on this head.
+            _isLoading = true;
+            ChkAutonomyEnabled.IsChecked = enabled;
+            _isLoading = false;
+            // ponytail: WPF then starts or stops App.Autonomy behind the Patreon / daily-free
+            // check, and refuses a STOP while Lockdown is active (#514). Needs
+            // Services/AutonomyService.cs and Services/LockdownService.cs, neither on this head
+            // and neither seamed. Note which way that refusal cuts: it holds Takeover ON, so its
+            // absence is permissive rather than dangerous - the user can always turn her off here,
+            // which is the safe direction to be wrong in.
             Log.Information("Autonomy Mode toggled: {Enabled} (setting only - no service on this head)", enabled);
         }
 
