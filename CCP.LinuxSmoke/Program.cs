@@ -226,6 +226,37 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("CoreBark swallows a throwing sink and still answers empty",
                       CoreBark.AllLines is { Count: 0 });
                 CoreBark.UiAction = null; CoreBark.TabNavigated = null; CoreBark.AllLinesProvider = null;
+                // The account seam (wire/104). Unseeded must read as signed out and NOT ENTITLED.
+                // The entitlement half is the one that matters: failing open here would hand every
+                // Linux user the paid tier, so the throwing-provider checks below are the real
+                // assertions - a provider that blows up means "I could not determine your tier",
+                // which must never be read as "yes".
+                Check("CoreAccount.IsLoggedIn is false with no account service", !CoreAccount.IsLoggedIn);
+                Check("CoreAccount.DisplayName is null with no account service", CoreAccount.DisplayName == null);
+                Check("CoreAccount.HasPremiumAccess is false with no account service", !CoreAccount.HasPremiumAccess);
+                Check("CoreAccount.HasLabAccess is false with no account service", !CoreAccount.HasLabAccess);
+                Check("CoreAccount.IsWhitelisted is false with no account service", !CoreAccount.IsWhitelisted);
+                CoreAccount.HasPremiumAccessProvider = () => throw new InvalidOperationException("boom");
+                CoreAccount.HasLabAccessProvider = () => throw new InvalidOperationException("boom");
+                Check("a throwing entitlement provider fails CLOSED, never open",
+                      !CoreAccount.HasPremiumAccess && !CoreAccount.HasLabAccess);
+                CoreAccount.HasPremiumAccessProvider = () => true;
+                Check("CoreAccount.HasPremiumAccess forwards once seeded", CoreAccount.HasPremiumAccess);
+                CoreAccount.HasPremiumAccessProvider = null;
+                CoreAccount.HasLabAccessProvider = null;
+                // Rename and delete must REFUSE unseeded, never answer success: a caller that
+                // believed either would write a new name locally, or clear local data, on the
+                // strength of a server call that never happened.
+                var rename = CoreAccount.ChangeDisplayNameAsync("smoke").GetAwaiter().GetResult();
+                Check("CoreAccount.ChangeDisplayNameAsync refuses with no account service",
+                      !rename.success && rename.newName == null && rename.error != null, rename.error);
+                var deleted = CoreAccount.DeleteAccountAsync().GetAwaiter().GetResult();
+                Check("CoreAccount.DeleteAccountAsync refuses with no account service",
+                      !deleted.success && deleted.error != null, deleted.error);
+                CoreAccount.DeleteAccountProvider = () => throw new InvalidOperationException("boom");
+                Check("a throwing delete provider reports failure rather than propagating",
+                      !CoreAccount.DeleteAccountAsync().GetAwaiter().GetResult().success);
+                CoreAccount.DeleteAccountProvider = null;
                 CoreModerationLog.RecordEdit("smoke", 1, "linux_smoke");
                 CoreModerationLog.Record(ProhibitedCategory.Minor, "input", "smoke");
                 Check("CoreModerationLog records are silent no-ops with no log attached", true);

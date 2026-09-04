@@ -81,6 +81,15 @@ namespace ConditioningControlPanel.Avalonia
                 // is the truth here, and the safe direction on the only one that gates anything:
                 // HasPremium false refuses a premium enrolment rather than granting one.
 
+                // CoreAccount is deliberately left unseeded, and this one is a constraint rather
+                // than a gap. PatreonService owns an HttpListener OAuth callback and a
+                // SecureTokenStorage; this head seeds no CoreSecrets store, so by that seam's rule
+                // ("unseeded means NO store, never store in the clear") there is nowhere to keep a
+                // token even if the flow existed. Signed out and NOT entitled is therefore the
+                // literal truth here, not a placeholder - and it is the only safe unseeded answer,
+                // because an entitlement seam that failed open would hand every Linux user the
+                // paid tier.
+                //
                 // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
                 // exactly what that is. Seeding it with anything else would be a lie.

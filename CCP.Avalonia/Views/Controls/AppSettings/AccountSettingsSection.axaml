@@ -9,9 +9,9 @@
        x:FieldModifier="internal"    ->  dropped; the MainWindow partials that poke these fields
                                          are not ported. x:Names are kept.
 
-     The tier card is painted by RefreshTierBadge() in the code-behind; on this head it is a stub
-     that leaves the signed-out markup defaults, because App.Patreon / App.IsLoggedIn live in the
-     WPF head. -->
+     The tier card is painted by RefreshTierBadge() in the code-behind, which reads the CoreAccount
+     seam. This head seeds no account provider, so the seam answers signed out and not entitled and
+     the card paints "sign in" - the truth for a head with no OAuth flow, not a placeholder. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -36,12 +36,15 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
+                        <!-- No {loc:Str} on these two: RefreshTierBadge in the code-behind drives them (it has
+                             to - one of the three states shows the user's own name, which is not a loc key),
+                             and Avalonia keeps a binding alive under a local value, so a {loc:Str} here would
+                             quietly restore "sign in" over a signed-in name on the next language change.
+                             The code-behind re-runs on LanguageChanged instead. -->
                         <TextBlock x:Name="TxtAccountSectionName"
-                                   Text="{loc:Str account_chip_sign_in}"
                                    Foreground="{StaticResource SectionHueAccountBrush}"
                                    FontSize="15" FontWeight="Bold"/>
                         <TextBlock x:Name="TxtAccountSectionTier"
-                                   Text="{loc:Str label_login_to_unlock_exclusive_features}"
                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,2,0,0"
                                    TextWrapping="Wrap"/>
                     </StackPanel>
