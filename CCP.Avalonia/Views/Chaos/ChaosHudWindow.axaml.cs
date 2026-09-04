@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -42,14 +43,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///    no user32. <c>X11Overlay.SetClickThrough</c> is deliberately NOT called: this HUD is
     ///    interactive, and WPF never set <c>WS_EX_TRANSPARENT</c> on it either (the unpainted
     ///    alpha-0 region is click-through by itself on both platforms).
-    ///  - <b>Animation.</b> Every <c>DoubleAnimation</c>/<c>ColorAnimation</c>/storyboard here is
-    ///    transient juice (streak punch and shake, score pop, shield flash, focus blink, the
-    ///    ready-glow breath, the heat-bar shimmer, the 180ms panel slide). Avalonia has no
-    ///    <c>BeginAnimation</c> twin, and re-authoring nine of them as keyframe Animations is its
-    ///    own layer, so each is a ponytail stub that applies the animation's SETTLED value - the
-    ///    tier colour, the tier font size, the glow, the final opacity, the parked slide offset.
-    ///    The state-driven visuals are therefore all present; only the motion between them is not.
+    ///  - <b>Animation.</b> Every <c>DoubleAnimation</c>/<c>ColorAnimation</c> here is transient
+    ///    juice (streak punch and shake, score pop, shield flash and pop, focus breath and blink,
+    ///    the ready-glow breath, the clock's end-rush blink, the multiplier punch, the 180ms panel
+    ///    slide). All of them now run, through the tween pump near the bottom of this file rather
+    ///    than through Avalonia's keyframe <c>Animation</c>: each one drives a <c>Transform</c>,
+    ///    a <c>DropShadowEffect</c> or a <c>SolidColorBrush</c> that this code-behind holds, and
+    ///    <c>Animation.RunAsync</c> on a <c>Transform</c> throws <c>InvalidCastException</c>
+    ///    (<c>TransformAnimator</c> casts its target to <c>Visual</c> and takes ownership of that
+    ///    visual's <c>RenderTransform</c> - which would fight the <c>TransformGroup</c> assembled
+    ///    in the ctor and the jitter timer that writes into it). Verified, not assumed.
     ///    The one animation that was already a timer - the hot-streak jitter - is ported as-is.
+    ///    Still missing: the heat-bar shimmer, which is a brush <c>RelativeTransform</c> and has
+    ///    no Avalonia twin at all (see <see cref="StartLustShimmer"/>).
     ///  - <b>Settings.</b> The persisted edge (<c>ChaosHudOnRight</c>) and the panic-key hint
     ///    read and write <c>CoreSettings.Current</c>, one for one with the <c>App.Settings</c>
     ///    pair WPF used, so the side switch survives a restart again.
@@ -99,6 +105,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         internal ChaosHudWindow() : this(ChaosHudState.Sample())
         {
             SetPreRunExpanded(true);
+            // A headless render is two layout passes with no timer ticks, so the 180ms open would
+            // otherwise be caught at whatever frame it happened to be on - park it open instead.
+            StopTween("panel");
+            _panelSlide.X = 0;
         }
 
         public ChaosHudWindow(ChaosHudState state)
@@ -208,6 +218,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             };
             SetFocusLowVisual(state.FocusLow);
             SetRippleReadyVisual(state.RippleReady);
+            _lastCombo = state.Combo;                          // seeding must not read as a GAIN
             OnComboChanged(state.Combo);                       // seed the tier visuals
             OnMultiplierChanged();                             // seed the multiplier size/heat
             StartLustShimmer();                                // sweeping sheen on the heat bar
@@ -223,6 +234,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             Closed += (_, _) =>
             {
                 _closed = true;
+                _tweens.Clear();
+                _tweenTimer?.Stop();
                 _streakJitterTimer?.Stop();
                 _collapseRecheck?.Stop();
                 _openDwell?.Stop();
@@ -258,12 +271,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         }
 
         /// <summary>A glint that sweeps the heat bar.
-        /// ponytail: stub. WPF built a five-stop LinearGradientBrush whose RelativeTransform was
-        /// translated -1 -> 1 forever (a code-behind animation, per the chaos render-thread
-        /// contract), gated on ChaosSkiaFxOverlay.Enabled. Avalonia has no BeginAnimation and no
-        /// Skia FX flag on this head; the bar keeps its flat XAML orange, which is the settled
-        /// frame of that sweep. Re-author as an Avalonia Animation when the FX flag moves to
-        /// Core.</summary>
+        /// <para>ponytail: still a stub, but NOT for the reason the old note gave. The gate is
+        /// here - <c>ChaosSkiaFxOverlay.Enabled</c> is just <c>AppSettings.ChaosSkiaFxEnabled</c>,
+        /// which is in Core (<c>CCP.Core/Models/AppSettings.cs</c>), and the pump below could
+        /// drive the sweep. What is missing is the sweep's mechanism: WPF translated the
+        /// five-stop <c>LinearGradientBrush</c>'s <c>RelativeTransform</c>, and an Avalonia brush
+        /// has no <c>RelativeTransform</c> at all. Re-doing it means either re-offsetting the
+        /// <c>GradientStop</c>s every frame or sliding <c>StartPoint</c>/<c>EndPoint</c> with
+        /// <c>SpreadMethod.Repeat</c> - and neither is worth shipping unverified, because a brush
+        /// that does not invalidate on the change is silently inert. The bar keeps its flat XAML
+        /// orange, which is the settled frame of that sweep.</para></summary>
         private void StartLustShimmer()
         {
         }
@@ -549,12 +566,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         {
             if (!_expanded) return;
             _expanded = false;
-            // ponytail: was a 180ms DoubleAnimation on PanelSlide.X with a Completed handler that
-            // hid the panel. Applied as the settled frame - re-author as an Avalonia Animation
-            // together with the other eight (see the class note).
-            _panelSlide.X = _hiddenX;
-            _panel.IsVisible = false;
-            _strip.IsVisible = true;
+            // 180ms uneased slide off the edge; the panel is only hidden once it has left, which
+            // is what WPF's Completed handler did (and why the re-expand check is repeated there).
+            double from = _panelSlide.X;
+            StartTween("panel", 180, t => _panelSlide.X = from + (_hiddenX - from) * t, done: () =>
+            {
+                if (_expanded) return;
+                _panel.IsVisible = false;
+                _strip.IsVisible = true;
+            });
         }
 
         // ---- left/right side switch (the strip's under-clock toggle) ----
@@ -595,7 +615,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _strip.BorderThickness = _panel.BorderThickness = onRight
                 ? new Thickness(8, 0, 0, 8) : new Thickness(0, 0, 8, 8);
 
-            if (!_expanded) _panelSlide.X = _hiddenX;   // keep the collapsed panel parked off the active edge
+            // Keep the collapsed panel parked off the ACTIVE edge. A slide still in flight would
+            // drag it back to the old edge's offset, so it is stopped before the seat is re-set.
+            if (!_expanded) { StopTween("panel"); _panelSlide.X = _hiddenX; }
 
             // Both switches (strip + expanded-header) stay in sync — whichever is visible reads right.
             StyleSwitch(_sideLeftBtn, _sideRightBtn, _sideLeftGlyph, _sideRightGlyph, onRight);
@@ -673,9 +695,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         /// <summary>Pocket Watch only: the last ten seconds of the descent turn the clocks red —
         /// the run gets a visible finale instead of stopping mid-streak. A Relapse extension that
-        /// pushes the clock back out restores the calm look.
-        /// ponytail: the 420ms auto-reversing blink is dropped with the rest of the animations;
-        /// the red tint (its settled colour) is applied.</summary>
+        /// pushes the clock back out restores the calm look. Both clocks blink while it runs.</summary>
         private void UpdateClockEndRush()
         {
             try
@@ -690,9 +710,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     _txtStripClock.Foreground = new SolidColorBrush(red);
                     _txtRunTime.Foreground = new SolidColorBrush(red);
                     _barRunProgress.Foreground = new SolidColorBrush(red);
+                    StartTween("clockblink", 420, t => _txtStripClock.Opacity = _txtRunTime.Opacity = 1.0 - 0.75 * t,
+                               repeats: -1, alternate: true);
                 }
                 else
                 {
+                    StopTween("clockblink");
                     _txtStripClock.Opacity = _txtRunTime.Opacity = 1.0;
                     _txtStripClock.Foreground = Brushes.White;
                     _txtRunTime.Foreground = this.FindResource("TextDim") as IBrush ?? Brushes.Gray;
@@ -704,24 +727,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         /// <summary>READY carries a soft cyan glow on the strip's ripple readout; charging is dim.
         /// The dim/white split was a WPF DataTrigger on RippleReady, which has no Avalonia twin
-        /// without a converter, so it is applied here alongside the glow.
-        /// ponytail: the 950ms breathing pulse on that glow is dropped with the rest of the
-        /// animations; its mid-breath opacity is what is applied.</summary>
+        /// without a converter, so it is applied here alongside the glow.</summary>
         private void SetRippleReadyVisual(bool ready)
         {
             try
             {
+                // Always drop the running breath first. WPF had to do this to stop a Forever
+                // animation pinning a detached effect (and its render target) alive; here it
+                // stops the closure writing into an effect the control no longer shows.
+                StopTween("ripple");
                 if (ready)
                 {
                     _rippleStripText.Foreground = Brushes.White;
-                    _rippleStripText.Effect = new DropShadowEffect
+                    var glow = new DropShadowEffect
                     {
                         Color = Color.FromRgb(0x7A, 0xE0, 0xFF),
                         BlurRadius = 12,
                         OffsetX = 0,
                         OffsetY = 0,
-                        Opacity = 0.6,
+                        Opacity = 0.3,
                     };
+                    _rippleStripText.Effect = glow;
+                    StartTween("ripple", 950, t => glow.Opacity = 0.25 + 0.70 * t,
+                               new SineEaseOut(), repeats: -1, alternate: true);
                 }
                 else
                 {
@@ -804,9 +832,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             Log.Debug("ChaosHud pocket tile clicked: {Id}", string.IsNullOrEmpty(id) ? "(empty slot)" : id);
         }
 
-        /// <summary>ponytail: was a 180ms eased DoubleAnimation on PanelSlide.X. Applied as its
-        /// settled value - re-author with the other animations (see the class note).</summary>
-        private void Animate(double toX) => _panelSlide.X = toX;
+        /// <summary>Slide the panel to <paramref name="toX"/> over 180ms, eased out.</summary>
+        private void Animate(double toX)
+        {
+            double from = _panelSlide.X;
+            StartTween("panel", 180, t => _panelSlide.X = from + (toX - from) * t, new QuadraticEaseOut());
+        }
 
         private bool _focusLowShown;
 
@@ -830,25 +861,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             catch (Exception ex) { Log.Debug("ChaosHud focus-low visual: {E}", ex.Message); }
         }
 
-        /// <summary>The steady focus-bar look for the current state: the soft low-focus dim, or
-        /// full opacity.
-        /// ponytail: WPF ran a 650ms auto-reversing pulse between 0.75 and 0.35 here. The static
-        /// dim is its mid-breath value, so the warning still reads; the breathing does not.</summary>
+        /// <summary>The steady focus-bar look for the current state: the 650ms low-focus breath
+        /// between 0.75 and 0.35, or full opacity. Also what a one-shot flash hands the bars back
+        /// to when it ends - which is why the flash shares this element's tween key.</summary>
         private void ApplyFocusSteadyVisual(Control el)
         {
-            el.Opacity = _focusLowShown ? 0.55 : 1.0;
+            var key = FocusKey(el);
+            if (_focusLowShown)
+                StartTween(key, 650, t => el.Opacity = 0.75 - 0.40 * t,
+                           new QuadraticEaseInOut(), repeats: -1, alternate: true);
+            else
+            {
+                StopTween(key);
+                el.Opacity = 1.0;
+            }
         }
 
-        /// <summary>A NO FOCUS press just detonated a live bubble: WPF blinked both focus bars
-        /// three times so the eye lands on WHY, then resumed the steady visual.
-        /// ponytail: the blink is dropped with the rest of the animations; this restores the
-        /// steady visual, which is where that blink ended.</summary>
+        /// <summary>One tween slot per focus block, shared by the breath and the flash so the two
+        /// can never run into each other on the same Opacity.</summary>
+        private string FocusKey(Control el) => ReferenceEquals(el, _focusStripBlock) ? "focus:strip" : "focus:panel";
+
+        /// <summary>A NO FOCUS press just detonated a live bubble: three hard blinks on both focus
+        /// bars so the eye lands on WHY, then the steady visual resumes.</summary>
         public void FlashFocusBar()
         {
             try
             {
                 foreach (var el in new Control[] { _focusStripBlock, _focusPanelBlock })
-                    ApplyFocusSteadyVisual(el);
+                {
+                    var target = el;   // captured per iteration, not by the loop variable
+                    StartTween(FocusKey(el), 110, t => target.Opacity = 1.0 - 0.88 * t,
+                               repeats: 6, alternate: true, done: () => ApplyFocusSteadyVisual(target));
+                }
             }
             catch (Exception ex) { Log.Debug("ChaosHud focus flash: {E}", ex.Message); }
         }
@@ -859,6 +903,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         // the state PropertyChanged hook in the ctor — no service code involved.
 
         private int _streakTier;
+        private int _lastCombo;
         private DispatcherTimer? _streakJitterTimer;
         private readonly Random _streakRng = new();
 
@@ -878,25 +923,55 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         {
             try
             {
+                bool gained = combo > _lastCombo;
+                bool dropped = combo < _lastCombo;
+                _lastCombo = combo;
+                int prevTier = _streakTier;
                 _streakTier = StreakTierFor(combo);
                 var tierColor = StreakTierColors[_streakTier];
 
-                // Settle visuals for the tier: number, color, size, glow.
+                // Settle visuals for the tier: number, color, size, glow. The brush and the glow
+                // are fresh per change and held locally, so the flashes below animate THIS pair
+                // and never a brush a later change has already replaced.
                 _txtStreakNum.Text = "x" + combo;
                 _txtStreakNum.FontSize = 28.8 + _streakTier * 3.0;   // ~20% larger: 28.8 → 40.8 at fever
-                _txtStreakNum.Foreground = new SolidColorBrush(tierColor);
+                var brush = new SolidColorBrush(tierColor);
+                _txtStreakNum.Foreground = brush;
                 _txtStreakLbl.Foreground = _streakTier >= 2
                     ? new SolidColorBrush(Color.FromArgb(0xCC, tierColor.R, tierColor.G, tierColor.B))
                     : this.FindResource("TextDim") as IBrush ?? Brushes.Gray;
-                _txtStreakNum.Effect = _streakTier >= 2
+                var tierGlow = _streakTier >= 2
                     ? new DropShadowEffect
                       { Color = tierColor, BlurRadius = 8 + _streakTier * 4, OffsetX = 0, OffsetY = 0, Opacity = 0.9 }
                     : null;
+                _txtStreakNum.Effect = tierGlow;
 
-                // ponytail: the gain path's white-hot flash + spring punch + tier-crossing bloom,
-                // and the drop path's red flash + hard side shake, are all dropped with the rest
-                // of the animations. Every one of them settles on the tier visuals just applied,
-                // so the readout is correct at rest and only the transition is missing.
+                if (gained)
+                {
+                    // White-hot flash settling into the tier colour + a spring punch.
+                    StartTween("streak:color", 260, t => brush.Color = LerpColor(Colors.White, tierColor, t));
+                    double from = 1.30 + _streakTier * 0.06;
+                    StartTween("streak:scale", 340,
+                               t => _streakScale.ScaleX = _streakScale.ScaleY = from + (1.0 - from) * t,
+                               new BackEaseOut());
+                    // Crossing into a hotter tier: bloom the glow wide, then let it contract.
+                    if (_streakTier > prevTier && tierGlow is not null)
+                    {
+                        double rest = tierGlow.BlurRadius;
+                        StartTween("streak:glow", 440, t => tierGlow.BlurRadius = rest + 26 * (1.0 - t),
+                                   new CubicEaseOut());
+                    }
+                }
+                else if (dropped)
+                {
+                    // Red flash settling into wherever the streak landed + a hard side shake.
+                    var red = Color.FromRgb(0xFF, 0x38, 0x38);
+                    StartTween("streak:color", 650, t => brush.Color = LerpColor(red, tierColor, t), delayMs: 120);
+                    StartTween("streak:shake", 450, t => _streakJitter.X = ShakeOffsetAt(t));
+                    StartTween("streak:scale", 380,
+                               t => _streakScale.ScaleX = _streakScale.ScaleY = 0.80 + 0.20 * t,
+                               new BackEaseOut());
+                }
 
                 UpdateStreakJitter();
             }
@@ -918,6 +993,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     {
                         try
                         {
+                            // A drop-shake owns X while it runs. WPF got this free (an animation
+                            // outranks a local set); here the two writers have to be sequenced.
+                            if (_tweens.ContainsKey("streak:shake")) return;
                             double amp = (_streakTier - 1) * 0.9;             // 0.9 / 1.8 / 2.7 px
                             _streakJitter.X = (_streakRng.NextDouble() * 2 - 1) * amp;
                             _streakJitter.Y = (_streakRng.NextDouble() * 2 - 1) * amp;
@@ -935,30 +1013,57 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             }
         }
 
-        /// <summary>Colour flash on the resistance hearts: bright blue when a point lands,
-        /// red when a hit arrives that resistance couldn't pay.
-        /// ponytail: the 650ms fade back to the hearts' XAML pink is dropped with the rest of the
-        /// animations, so this sets the flash colour and hands it straight back to pink.</summary>
+        /// <summary>Colour flash on the resistance hearts: bright blue when a point lands, red
+        /// when a hit arrives that resistance couldn't pay. Holds the flash colour for 160ms, then
+        /// fades back to the hearts' XAML pink over 650ms. The stub before this ignored
+        /// <paramref name="gain"/> entirely and painted pink either way, so a hit that emptied
+        /// resistance flashed nothing at all.</summary>
         public void FlashShields(bool gain)
         {
             try
             {
-                _txtShields.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x6E, 0xC7));
+                var hot = gain ? Color.FromRgb(0x5A, 0xC8, 0xFA) : Color.FromRgb(0xFF, 0x38, 0x38);
+                var pink = Color.FromRgb(0xFF, 0x6E, 0xC7);
+                var brush = new SolidColorBrush(hot);
+                _txtShields.Foreground = brush;
+                StartTween("shield:color", 650, t => brush.Color = LerpColor(hot, pink, t), delayMs: 160);
             }
             catch (Exception ex) { Log.Debug("ChaosHud shield flash: {E}", ex.Message); }
         }
 
-        /// <summary>Brief scale pop on the resistance hearts (a regen/gain just landed).
-        /// ponytail: an elastic 420ms DoubleAnimation, dropped with the rest; it settles at 1.0,
-        /// which is where the XAML ScaleTransform already sits.</summary>
+        /// <summary>Brief elastic scale pop on the resistance hearts (a regen/gain just landed).
+        /// Avalonia's ElasticEaseOut has no Oscillations/Springiness knobs, so the bounce reads
+        /// looser than WPF's 2/5 - the arc and the 420ms are the same.</summary>
         private void PulseShields()
         {
+            try
+            {
+                if (_txtShields.RenderTransform is not ScaleTransform st) return;
+                StartTween("shield:pop", 420, t => st.ScaleX = st.ScaleY = 1.35 - 0.35 * t, new ElasticEaseOut());
+            }
+            catch (Exception ex) { Log.Debug("ChaosHud shield pulse: {E}", ex.Message); }
         }
 
-        /// <summary>A quick scale pop on the score when it ticks up.
-        /// ponytail: a throttled 240ms back-eased pop, dropped with the rest; it settles at 1.0.</summary>
+        private DateTime _lastScorePulseUtc;
+
+        /// <summary>A quick scale pop on the score when it ticks up. Throttled so the per-pop score
+        /// storm doesn't machine-gun it — it reads as a lively climb, not a seizure.</summary>
         private void PulseScore()
         {
+            try
+            {
+                var now = DateTime.UtcNow;
+                if ((now - _lastScorePulseUtc).TotalMilliseconds < 220) return;
+                _lastScorePulseUtc = now;
+                if (_txtStripScore.RenderTransform is not ScaleTransform st)
+                {
+                    st = new ScaleTransform(1, 1);
+                    _txtStripScore.RenderTransformOrigin = new RelativePoint(0, 0.5, RelativeUnit.Relative);
+                    _txtStripScore.RenderTransform = st;   // grow from the left edge
+                }
+                StartTween("score:pop", 240, t => st.ScaleX = st.ScaleY = 1.16 - 0.16 * t, new BackEaseOut());
+            }
+            catch (Exception ex) { Log.Debug("ChaosHud score pulse: {E}", ex.Message); }
         }
 
         // ---- Multiplier hero number: the rounded Fredoka digits grow bigger AND heat up (purple →
@@ -972,10 +1077,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             return Color.FromRgb(L(a.R, b.R), L(a.G, b.G), L(a.B, b.B));
         }
 
+        private double _lastMultShown = 1.0;
+        private DateTime _lastMultPulseUtc;
+        private SolidColorBrush? _multBrushStrip, _multBrushPanel;
+        private DropShadowEffect? _multGlowStrip, _multGlowPanel;
+
         /// <summary>Resize + recolour the multiplier readout for the current total. <c>t</c> maps
-        /// x1→x7 onto 0→1: scale climbs to ~1.65x, the colour lerps purple→gold and the bloom
-        /// swells. ponytail: the per-gain punch is dropped with the rest of the animations; the
-        /// scale it settles at is applied directly.</summary>
+        /// x1→x7 onto 0→1: scale climbs to ~1.65x, the colour lerps purple→gold, the bloom swells,
+        /// and a gain punches the number (throttled, so the per-pop storm doesn't machine-gun it).</summary>
         private void OnMultiplierChanged()
         {
             try
@@ -984,15 +1093,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 double t = Math.Clamp((mult - 1.0) / 6.0, 0, 1);
                 double target = 1.0 + 0.65 * t;
 
+                bool increased = mult > _lastMultShown + 0.001;
+                _lastMultShown = mult;
+                var now = DateTime.UtcNow;
+                bool punch = increased && (now - _lastMultPulseUtc).TotalMilliseconds >= 170;
+                if (punch) _lastMultPulseUtc = now;
+
                 var col = LerpColor(_multCold, _multHot, t);
                 var weight = t > 0.66 ? FontWeight.Black : t > 0.33 ? FontWeight.Bold : FontWeight.SemiBold;
-                ApplyMult(_txtStripMult, target, t, col, weight);
-                ApplyMult(_txtPanelMult, target, t, col, weight);
+                ApplyMult("strip", _txtStripMult, ref _multBrushStrip, ref _multGlowStrip, target, t, col, weight, punch);
+                ApplyMult("panel", _txtPanelMult, ref _multBrushPanel, ref _multGlowPanel, target, t, col, weight, punch);
             }
             catch (Exception ex) { Log.Debug("ChaosHud multiplier changed: {E}", ex.Message); }
         }
 
-        private void ApplyMult(TextBlock tb, double target, double t, Color col, FontWeight weight)
+        /// <summary>The brush and the glow are kept per readout and MUTATED, never replaced: the
+        /// scale tween and the next state tick both have to land on the same objects, and the XAML
+        /// foreground is an immutable brush that cannot be recoloured in place.</summary>
+        private void ApplyMult(string key, TextBlock tb, ref SolidColorBrush? brush, ref DropShadowEffect? glow,
+                               double target, double t, Color col, FontWeight weight, bool punch)
         {
             if (tb == null) return;
             if (tb.RenderTransform is not ScaleTransform st)
@@ -1000,18 +1119,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 st = new ScaleTransform(1, 1);
                 tb.RenderTransform = st;   // origin set to 50%,50% in XAML
             }
-            st.ScaleX = st.ScaleY = target;
+            double from = punch ? target * 1.16 : st.ScaleX;
+            StartTween("mult:" + key, punch ? 330 : 200,
+                       p => st.ScaleX = st.ScaleY = from + (target - from) * p, new BackEaseOut());
 
-            tb.Foreground = new SolidColorBrush(col);
+            if (brush is null) { brush = new SolidColorBrush(); tb.Foreground = brush; }
+            brush.Color = col;
             tb.FontWeight = weight;
-            tb.Effect = new DropShadowEffect
-            {
-                Color = col,
-                BlurRadius = 4 + 20 * t,
-                OffsetX = 0,
-                OffsetY = 0,
-                Opacity = 0.45 + 0.45 * t,
-            };
+
+            if (glow is null) { glow = new DropShadowEffect { OffsetX = 0, OffsetY = 0 }; tb.Effect = glow; }
+            glow.Color = col;
+            glow.BlurRadius = 4 + 20 * t;
+            glow.Opacity = 0.45 + 0.45 * t;
         }
 
         /// <summary>ponytail: needs ChaosModeService (StartRunFromSidebar / ToggleManualPause),
@@ -1047,6 +1166,129 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             try { Topmost = false; Topmost = true; }
             catch (Exception ex) { Log.Debug("ChaosHud raise: {E}", ex.Message); }
         }
+
+        // ========================= the tween pump =========================
+        // WPF drove this window's juice with BeginAnimation on Transforms, DropShadowEffects and
+        // SolidColorBrushes the code-behind held. Avalonia's keyframe Animation cannot target
+        // those: Animation.RunAsync(someTransform) throws InvalidCastException, because
+        // TransformAnimator casts its target to Visual and then owns that visual's
+        // RenderTransform - which would evict the TransformGroup the ctor assembles and fight the
+        // 45ms jitter timer writing into it. So one shared timer steps a small table of
+        // (duration, easing, apply) closures instead. That is also what the WPF original meant by
+        // "a code-behind animation, no XAML storyboard, per the chaos render-thread contract".
+        // ponytail: a 16ms dispatcher pump, not the compositor - it wakes the UI thread while
+        // anything is moving and idles otherwise. If the HUD ever costs frames, the upgrade is
+        // Avalonia Animations on the VISUALS (Opacity works there today; the transforms would
+        // first have to become TransformOperations on RenderTransform instead of a group).
+
+        private sealed class Tween
+        {
+            public double Elapsed;              // ms since Start, delay included
+            public double Delay;                // ms held on the from-value before moving
+            public double Duration = 1;         // ms per pass
+            public int Repeats = 1;             // -1 = forever
+            public bool Alternate;              // reverse every other pass
+            public Easing? Ease;
+            public Action<double> Apply = _ => { };
+            public Action? Done;
+        }
+
+        private readonly Dictionary<string, Tween> _tweens = new();
+        private DispatcherTimer? _tweenTimer;
+        private DateTime _tweenLastTick;
+
+        /// <summary>Where a tween sits after <paramref name="elapsed"/> ms: the 0..1 position of
+        /// the current pass, reversed on odd passes when alternating. <paramref name="finished"/>
+        /// says the passes have run out, and the returned value is then the position it settles
+        /// on - so an alternating tween with an odd pass count settles back at 0, and everything
+        /// else settles at 1. Pure, and the only arithmetic in the pump worth getting wrong.</summary>
+        internal static double TweenPhase(double elapsed, double durationMs, int repeats, bool alternate, out bool finished)
+        {
+            if (durationMs <= 0) { finished = repeats >= 0; return 1.0; }
+            double raw = elapsed / durationMs;
+            if (repeats >= 0 && raw >= repeats)
+            {
+                finished = true;
+                return alternate && (repeats - 1) % 2 == 1 ? 0.0 : 1.0;
+            }
+            finished = false;
+            int pass = (int)raw;
+            double phase = raw - pass;
+            return alternate && pass % 2 == 1 ? 1.0 - phase : phase;
+        }
+
+        /// <summary>Start (or restart) a named animation, applying its from-value at once. Re-using
+        /// a key REPLACES the running tween, which is what WPF's BeginAnimation did to a second
+        /// animation on the same property.</summary>
+        private void StartTween(string key, double durationMs, Action<double> apply, Easing? ease = null,
+                                int repeats = 1, bool alternate = false, double delayMs = 0, Action? done = null)
+        {
+            if (_closed) return;
+            _tweens[key] = new Tween
+            {
+                Delay = delayMs,
+                Duration = durationMs,
+                Repeats = repeats,
+                Alternate = alternate,
+                Ease = ease,
+                Apply = apply,
+                Done = done,
+            };
+            try { apply(ease?.Ease(0) ?? 0); }
+            catch (Exception ex) { Log.Debug("ChaosHud tween {Key} seed: {E}", key, ex.Message); _tweens.Remove(key); return; }
+
+            if (_tweenTimer is null)
+            {
+                _tweenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+                _tweenTimer.Tick += (_, _) =>
+                {
+                    var now = DateTime.UtcNow;
+                    double dt = (now - _tweenLastTick).TotalMilliseconds;
+                    _tweenLastTick = now;
+                    StepTweens(dt);
+                };
+            }
+            if (!_tweenTimer.IsEnabled) { _tweenLastTick = DateTime.UtcNow; _tweenTimer.Start(); }
+        }
+
+        /// <summary>Drop a named animation without applying anything: the caller paints the settled
+        /// visual itself, exactly as WPF cleared with <c>BeginAnimation(prop, null)</c> and then
+        /// assigned. Dropping a forever-tween is what stops it writing into a detached effect.</summary>
+        private void StopTween(string key) => _tweens.Remove(key);
+
+        private void StepTweens(double dtMs)
+        {
+            foreach (var pair in _tweens.ToList())
+            {
+                var tw = pair.Value;
+                tw.Elapsed += dtMs;
+                if (tw.Elapsed < tw.Delay) continue;
+                double t = TweenPhase(tw.Elapsed - tw.Delay, tw.Duration, tw.Repeats, tw.Alternate, out bool finished);
+                try { tw.Apply(tw.Ease?.Ease(t) ?? t); }
+                catch (Exception ex)
+                {
+                    // Loud, not swallowed: an animation that throws every frame is otherwise an
+                    // inert control that reviews clean.
+                    Log.Warning("ChaosHud tween {Key} failed, dropped: {E}", pair.Key, ex.Message);
+                    finished = true;
+                }
+                if (!finished) continue;
+                _tweens.Remove(pair.Key);
+                try { tw.Done?.Invoke(); }
+                catch (Exception ex) { Log.Debug("ChaosHud tween {Key} completion: {E}", pair.Key, ex.Message); }
+            }
+            if (_tweens.Count == 0) _tweenTimer?.Stop();
+        }
+
+        /// <summary>The streak-drop shake as a curve: WPF's eight linear key frames
+        /// (0, -9, 8, -6, 5, -3, 2, 0 px) sampled at <paramref name="t"/> in 0..1.</summary>
+        internal static double ShakeOffsetAt(double t)
+        {
+            double[] xs = { 0, -9, 8, -6, 5, -3, 2, 0 };
+            double p = Math.Clamp(t, 0, 1) * (xs.Length - 1);
+            int i = Math.Min((int)p, xs.Length - 2);
+            return xs[i] + (xs[i + 1] - xs[i]) * (p - i);
+        }
     }
 
     /// <summary>
@@ -1081,7 +1323,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         public int WaveCount { get; set; } = 5;
         public string ActWaveText => $"DEPTH {ToRoman(ActIndex)} · LOOP {WaveIndex}/{WaveCount}";
 
-        public double Score { get; set; } = 18420;
+        private double _score = 18420;
+        /// <summary>Notifies, unlike the auto-property it replaces: the strip and panel readouts
+        /// bind ScoreText, and the window's score pop hangs off that same notification - so a
+        /// silent setter left the number frozen and the pop unreachable.</summary>
+        public double Score
+        {
+            get => _score;
+            set { _score = value; OnChanged(); OnChanged(nameof(ScoreText)); }
+        }
         public string ScoreText => $"{(int)Score:N0}";
 
         private int _combo = 12;
