@@ -73,8 +73,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // and a card that draws its scrim first and its art a frame later flickers.
             RefreshHeroArt();
             LoadChaosBoxes();
+        }
+
+        // The mod-switch repaint, subscribed the way DeeperTabView and SheListeningTabView do it:
+        // ONCE PER ATTACH, off on every detach. Subscribing in the constructor instead would be
+        // one += against a -= that runs every detach, so the first detach would end the repaints
+        // for the life of the process - and nothing would say so.
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            CoreMods.ModChanged -= OnModChangedRepaintArt;   // idempotent: attach fires more than once
             CoreMods.ModChanged += OnModChangedRepaintArt;
-            DetachedFromVisualTree += (_, _) => CoreMods.ModChanged -= OnModChangedRepaintArt;
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            CoreMods.ModChanged -= OnModChangedRepaintArt;
+            base.OnDetachedFromVisualTree(e);
         }
 
         /// <summary>

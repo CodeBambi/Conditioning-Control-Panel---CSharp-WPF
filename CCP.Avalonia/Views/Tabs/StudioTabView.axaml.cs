@@ -363,8 +363,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                         AlignmentX = AlignmentX.Right,
                     };
 
-                if (e.Chip != null && e.Tier == 0)
-                    e.Chip.Background = new ImageBrush(bmp) { Stretch = Stretch.UniformToFill };
+                // The chip takes the art WHATEVER its tier - WPF's order is art first, then the
+                // tier well only `if (chipArt == null)`, so a tiered module with art (Haptics)
+                // wears its plate under the gold frame rather than the amber well. The glyph goes
+                // with it: over there an art chip is built with no child at all.
+                if (e.Chip != null)
+                {
+                    e.Chip.Background = new ImageBrush(bmp)
+                    {
+                        Stretch = Stretch.UniformToFill,
+                        AlignmentX = AlignmentX.Center,
+                        AlignmentY = AlignmentY.Center,
+                    };
+                    if (e.Chip.Child != null) e.Chip.Child.IsVisible = false;
+                }
             }
         }
 
