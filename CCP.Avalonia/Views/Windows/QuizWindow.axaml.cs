@@ -154,10 +154,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             IsOpen = true;
 
-            // ponytail: needs AvatarWindow.IsMuted / SetMuteAvatar from
-            // ConditioningControlPanel/Windows/AvatarWindow.xaml.cs - WPF muted the avatar for the
+            // ponytail: needs App.AvatarWindow.IsMuted / SetMuteAvatar - there is NO
+            // ConditioningControlPanel/Windows/AvatarWindow.xaml.cs, which is what this note used
+            // to claim. The type is AvatarTubeWindow and the two members are at
+            // ConditioningControlPanel/AvatarTube/AvatarTubeWindow.ChatInput.cs:1523/1528, where
+            // the mute is CoreWebView2.IsMuted on the hosted browser. This head's
+            // CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs exposes a read-only IsMuted
+            // over CoreSettings.AvatarMuted and no setter at all (same gap MainShellWindow.
+            // Companion.cs:121 records), so there is nothing to call. WPF muted the avatar for the
             // whole run so her z-order work could not cover the quiz, and restored the previous
-            // state on close. This head's avatar is AvatarTubeWindow, which carries no mute yet.
+            // state on close.
 
             AvaloniaXamlLoader.Load(this);
             // ponytail: the playDrone track (Resources/sounds/"00 Bimbo Drone.mp3") is a LOOP over a
