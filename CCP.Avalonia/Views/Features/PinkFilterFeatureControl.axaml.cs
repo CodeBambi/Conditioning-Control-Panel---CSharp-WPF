@@ -10,6 +10,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
+using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.UI;
 using Serilog;
@@ -122,9 +123,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (s.PinkFilterEnabled == want) return;   // an echo of the seed must not save
             s.PinkFilterEnabled = want;
             CoreSettings.Save();
-            // ponytail: WPF then calls App.Overlay.RefreshOverlays()
-            // (ConditioningControlPanel/Services/Notifications/OverlayService.cs), still in the WPF
-            // head - the tint windows are Win32 layered windows with no port yet.
+            PinkFilterOverlay.Refresh(this);
         }
 
         private void SliderOpacity_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -134,7 +133,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             TxtOpacity.Text = $"{v}%";
             CoreSettings.Current.PinkFilterOpacity = v;
             CoreSettings.Save();
-            // ponytail: WPF then calls App.Overlay.RefreshOverlays() - see ChkEnable_Changed.
+            PinkFilterOverlay.Refresh(this);
         }
 
         // ── Display monitor picker (#639) ─────────────────────────────────
@@ -186,7 +185,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
             s.PinkFilterTargetMonitor = target;
             CoreSettings.Save();
-            // ponytail: WPF then calls App.Overlay.RefreshOverlays() - see ChkEnable_Changed.
+            PinkFilterOverlay.Refresh(this);
         }
 
         /// <summary>
@@ -208,8 +207,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Current.PinkFilterColor = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
             CoreSettings.Save();
             UpdateSwatch();
-            // ponytail: WPF then calls App.Overlay.RefreshFilterColor() + RefreshOverlays() to push
-            // the colour into a tint already on screen - see ChkEnable_Changed.
+            PinkFilterOverlay.Refresh(this);   // WPF: RefreshFilterColor() + RefreshOverlays()
         }
 
         private void BtnResetColor_Click(object? sender, RoutedEventArgs e)
@@ -217,8 +215,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Current.PinkFilterColor = ""; // empty = default (mod / hot pink)
             CoreSettings.Save();
             UpdateSwatch();
-            // ponytail: WPF then calls App.Overlay.RefreshFilterColor() + RefreshOverlays() to push
-            // the colour into a tint already on screen - see ChkEnable_Changed.
+            PinkFilterOverlay.Refresh(this);   // WPF: RefreshFilterColor() + RefreshOverlays()
         }
 
         private void UpdateSwatch()
@@ -227,12 +224,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ColorSwatch.Background = new SolidColorBrush(Color.FromRgb(r, g, b));
         }
 
-        /// <summary>The colour the tint renders: the user's pick if set, else the active mod's
-        /// filter colour, which unseeded is the built-in default manifest's.</summary>
-        private static (byte R, byte G, byte B) EffectiveColor() =>
-            CoreMods.TryParseHexColor(CoreSettings.Current.PinkFilterColor, out var rgb)
-                ? rgb
-                : CoreMods.GetFilterColorRgb();
+        /// <summary>The colour the tint renders. One copy, on the host that paints it.</summary>
+        private static (byte R, byte G, byte B) EffectiveColor() => PinkFilterOverlay.EffectiveColor();
     }
 
     /// <summary>
