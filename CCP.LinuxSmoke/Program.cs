@@ -135,6 +135,33 @@ namespace ConditioningControlPanel.LinuxSmoke
                 CoreModerationLog.Record(ProhibitedCategory.Minor, "input", "smoke");
                 Check("CoreModerationLog records are silent no-ops with no log attached", true);
                 Check("CoreReleaseContent answers null with no pack service", CoreReleaseContent.GetPackInfo("mod-bambi") == null && CoreReleaseContent.GetStampFor("mod-bambi") == null);
+                // The tutorial seam (wire/77). Unseeded must read as "no tour" and never as a tour
+                // of length zero that is somehow running: an overlay believing IsActive here would
+                // draw a card over nothing, and a feature popup gated on it would never open again.
+                Check("CoreTutorial.IsActive is false with no tutorial service", !CoreTutorial.IsActive);
+                Check("CoreTutorial.CurrentStep is null with no tutorial service", CoreTutorial.CurrentStep == null);
+                Check("CoreTutorial counts 0 of 0 with no tutorial service", CoreTutorial.CurrentStepIndex == 0 && CoreTutorial.TotalSteps == 0);
+                // IsLastStep false with no tour is the point: "Finish" over nothing is the lie.
+                Check("CoreTutorial is on the first step and not the last with no tour", CoreTutorial.IsFirstStep && !CoreTutorial.IsLastStep);
+                CoreTutorial.Next(); CoreTutorial.Previous(); CoreTutorial.Skip(); CoreTutorial.Start("FullTour");
+                Check("CoreTutorial verbs are silent no-ops with no tutorial service", true);
+                var tutorialSteps = new[] { new CoreTutorial.Step { Id = "a" }, new CoreTutorial.Step { Id = "b" } };
+                int tutorialCursor = 1;
+                CoreTutorial.CurrentStepProvider = () => tutorialSteps[tutorialCursor];
+                CoreTutorial.CurrentStepIndexProvider = () => tutorialCursor;
+                CoreTutorial.TotalStepsProvider = () => tutorialSteps.Length;
+                CoreTutorial.PreviousAction = () => tutorialCursor--;
+                Check("CoreTutorial reports the seeded cursor", CoreTutorial.CurrentStep?.Id == "b" && CoreTutorial.IsLastStep && !CoreTutorial.IsFirstStep);
+                CoreTutorial.Previous();
+                Check("CoreTutorial.Previous reaches the seeded head", CoreTutorial.CurrentStep?.Id == "a" && CoreTutorial.IsFirstStep);
+                CoreTutorial.CurrentStepIndexProvider = () => throw new InvalidOperationException("boom");
+                Check("CoreTutorial swallows a throwing provider", CoreTutorial.CurrentStepIndex == 0);
+                CoreTutorial.StepChanged += (_, _) => throw new InvalidOperationException("boom");
+                CoreTutorial.RaiseStepChanged(null, tutorialSteps[0]);
+                CoreTutorial.RaiseFinished(null, true);
+                Check("CoreTutorial swallows a throwing subscriber", true);
+                CoreTutorial.CurrentStepProvider = null; CoreTutorial.CurrentStepIndexProvider = null;
+                CoreTutorial.TotalStepsProvider = null; CoreTutorial.PreviousAction = null;
                 // The mod-art seam (wire/37). Unseeded means "no mod overrides anything", which is
                 // what makes a head with no mod service draw its own shipped art rather than blank.
                 Check("CoreModArt.HasOverride is false with no mod layer", !CoreModArt.HasOverride("tube.png"));

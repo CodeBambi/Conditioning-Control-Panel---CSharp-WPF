@@ -68,6 +68,12 @@ namespace ConditioningControlPanel.Avalonia
                 // CCBill record file into a second tree. That is a fix to the class, in a later
                 // layer, not a seeding decision here.
 
+                // CoreTutorial stays unseeded, and that is the honest state rather than a gap:
+                // TutorialService and its twenty-two step lists are still in the WPF head, so this
+                // head has no tour to describe. Unseeded answers "not active, no step, 0 of 0", so
+                // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
+                // open. Seeding it with anything would put a tour on screen that nothing drives.
+
                 // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
                 // exactly what that is. Seeding it with anything else would be a lie.
