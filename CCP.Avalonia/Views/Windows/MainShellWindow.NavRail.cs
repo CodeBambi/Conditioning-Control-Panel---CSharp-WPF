@@ -82,7 +82,11 @@
 
 using System;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Layout;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -120,7 +124,89 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 RefreshNavPremiumTags();
             }
             catch (Exception ex) { Log.Debug("InitializeNavRail: {E}", ex.Message); }
+
+            // Its own try, deliberately. Sharing one with the pills meant a throw in them silently
+            // took the rail's hover with it - the two have nothing to do with each other, and a
+            // catch that swallows a whole feature because an unrelated line above it failed is how
+            // this port has already lost work once.
+            try { HookNavRailHover(); }
+            catch (Exception ex) { Log.Debug("HookNavRailHover: {E}", ex.Message); }
         }
+
+        private const double NavRailCollapsedWidth = 56;   // WPF MainWindow.NavRail.cs:61
+        private const double NavRailExpandedWidth = 236;   // WPF MainWindow.NavRail.cs:81
+        private const int NavRailAnimMs = 190;             // WPF MainWindow.NavRail.cs:85
+        private const int NavRailCollapseAnimMs = 150;     // WPF MainWindow.NavRail.cs:106
+
+        private bool _navRailExpanded;
+        private bool _navRailHooked;
+
+        /// <summary>
+        /// The rail widens under the pointer and shuts when it leaves, which is how every label in
+        /// it becomes readable: the labels are already in the tree and simply clipped by a 56px
+        /// rail, so the width IS the feature. WPF drives this from NavSidebar's MouseEnter/
+        /// MouseLeave (MainWindow.NavRail.cs:284-310); the same two events here.
+        ///
+        /// Only the width is ported. WPF also fades the labels and the premium pills on the same
+        /// clock so text never paints outside the clip mid-tween - that needs the label cache and
+        /// MotionFx, and this file's header lists both as still dropped. The effect of leaving the
+        /// fade out is that labels appear at full opacity as soon as there is room for them rather
+        /// than easing in; nothing is drawn outside the rail, because the rail clips.
+        /// </summary>
+        private void HookNavRailHover()
+        {
+            if (_navRailHooked) return;
+            var rail = this.FindControl<Border>("NavSidebar");
+            if (rail is null) return;
+            _navRailHooked = true;
+
+            rail.Width = NavRailCollapsedWidth;
+            rail.Transitions = new Transitions
+            {
+                new DoubleTransition
+                {
+                    Property = Layoutable.WidthProperty,
+                    Duration = TimeSpan.FromMilliseconds(NavRailAnimMs),
+                    Easing = new QuadraticEaseOut(),
+                },
+            };
+
+            // Driven from the WINDOW's pointer moves, not the rail's PointerEntered. NavSidebar is
+            // a Border whose Background sits on an inner element, and a Border with no Background of
+            // its own is not hit-testable in Avalonia - so PointerEntered never arrives on it and a
+            // rail hooked that way silently never opens. WPF hits the same shape and also carries a
+            // window-level MouseMove for the collapse (MainWindow.NavRail.cs:292 and 315-321); this
+            // is that, used for both edges. Geometry, not hit-testing, so it cannot be defeated by a
+            // transparent parent or a child that swallows the event.
+            PointerMoved += (_, e) =>
+            {
+                var p = e.GetPosition(this);
+                var r = rail.Bounds;
+                SetNavRailExpanded(rail, p.X >= r.X && p.X <= r.X + rail.Width && p.Y >= r.Y && p.Y <= r.Bottom);
+            };
+            PointerExited += (_, _) => SetNavRailExpanded(rail, false);
+        }
+
+        /// <summary>WPF's SetNavRailExpanded, width only. Early-outs on the state it is already
+        /// in, as WPF does, so a pointer moving inside the rail is one field read per move.</summary>
+        private void SetNavRailExpanded(Border rail, bool expand)
+        {
+            if (_navRailExpanded == expand) return;
+            _navRailExpanded = expand;
+
+            // Closing is quicker than opening on WPF, and that asymmetry is deliberate: the rail
+            // overlays the page, so it must get out of the way faster than it arrives.
+            if (rail.Transitions is { Count: > 0 } t && t[0] is DoubleTransition d)
+                d.Duration = TimeSpan.FromMilliseconds(expand ? NavRailAnimMs : NavRailCollapseAnimMs);
+
+            rail.Width = expand ? NavRailExpandedWidth : NavRailCollapsedWidth;
+        }
+
+        /// <summary>Whether the rail is currently open. NavCheck and the click-through driver read
+        /// this rather than Width, which mid-tween reports the in-flight value, not the intent.</summary>
+        internal bool NavRailExpanded => _navRailExpanded;
+
+        internal bool NavRailHooked => _navRailHooked;
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
         {
