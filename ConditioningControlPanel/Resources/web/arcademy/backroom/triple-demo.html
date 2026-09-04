@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Triple Trigger - cabinet fixture</title>
+<!-- The REAL floor and the REAL cabinet under a STUBBED cashier, exactly the
+     way backroom/demo.html does it: the room is opened, the Triple Trigger
+     frame is CLICKED, and everything after that is the shipped module. There
+     is no test runner and no framework here on purpose. The fixture IS the
+     harness, so it can never drift from it.
+
+     ?line=none|pair|scramble|royal   which answer the cashier gives back
+     ?poor=1     the cashier refuses for want of chips
+     ?tier=1     the cashier refuses with the tier gate (403)
+     ?dark=1     no send/listen at all: the cabinet must draw itself unplugged
+     ?reduced=1  arms html.arc-reduced, the global still mode
+     ?lite=1     arms html.ae-lite + html.arc-mobile, the phone diet (tap lever)
+     ?auto=open      mounts the cabinet and reports what it painted
+     ?auto=pull      pulls the lever once and reports where the reels landed
+     ?auto=holds     pulls, holds two reels, pulls again, reports the wire body
+     ?auto=unmount   pulls and steps back to the floor MID SPIN
+     ?shot=1     frames the cabinet for a screenshot (hides the fixture chrome)
+     Everything is written into #log, which is what the headless probe reads
+     back out of the dumped DOM. -->
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin: 0; padding: 16px 14px 60px; background: var(--ground); color: var(--ink);
+         font-family: var(--body); }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header.fx { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+              border-bottom: 3px solid var(--pink); padding-bottom: 8px; margin-bottom: 14px; }
+  header.fx h1 { font-family: var(--disp); font-size: 20px; margin: 0; letter-spacing: .08em; }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--ink-dim); }
+  #log { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); white-space: pre-wrap;
+         margin-top: 12px; max-height: 200px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="fx">
+    <h1>TRIPLE TRIGGER</h1>
+    <span class="eyebrow">backroom/triple.js &middot; cabinet fixture</span>
+  </header>
+  <div id="host"></div>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import { openBackRoom } from './index.js';
+
+const q = new URLSearchParams(location.search);
+const logEl = document.getElementById('log');
+const log = (m) => { logEl.textContent += m + '\n'; };
+const delay = 220;
+
+if (q.has('reduced')) document.documentElement.classList.add('arc-reduced');
+if (q.has('lite')) document.documentElement.classList.add('ae-lite', 'arc-mobile');
+
+/* ------------------------------------------------------------------------
+ * THE PRETEND CASHIER. It answers the frames the host will and it is the only
+ * thing in this fixture that knows a number. `RESULTS` is the canned answer
+ * table: one row per outcome class, with the reel indices the cabinet MUST
+ * land on, so "did the reels settle where the server said" is a thing a
+ * dumped DOM can answer on its own.
+ * ---------------------------------------------------------------------- */
+const purse = { chips: 1250, pot: 41800 };
+
+/* The reel list the host hands over. One entry is two words, so the kit's
+ * three-word filter is exercised; one is a duplicate of an authored row, so
+ * the dedupe is; and five survivors force one padded row out of BK_TRIGGERS. */
+const TRIGGERS = ['good girl now', 'drop for me', 'empty and warm',
+  'sleep sweet thing', 'two words', 'soft and slow'];
+
+/* reels are indices into the kit's list. -1 is the server's blank. */
+const RESULTS = {
+  none:     { reels: [0, 1, -1], line: 'none', mult: 0, potWon: 0, payout: 0 },
+  pair:     { reels: [2, 2, 0], line: 'pair', mult: 1.2, potWon: 0, payout: 12 },
+  scramble: { reels: [0, 1, 2], line: 'scramble', mult: 3, potWon: 0, payout: 30 },
+  royal:    { reels: [1, 1, 1], line: 'royal', mult: 100, potWon: 41800, payout: 1000 },
+};
+
+const listeners = new Map();
+function fire(type, msg) {
+  const set = listeners.get(type);
+  if (!set) return;
+  for (const fn of Array.from(set)) { try { fn(msg); } catch (e) { log('listener threw: ' + e.message); } }
+}
+
+function statusBody() {
+  return {
+    chips: purse.chips, earnedC: 0, sparkle: 27, pot: purse.pot, rate: 100,
+    tree: { cheapest_unowned: { id: 'soft_focus', cost: 40 }, owned: 6, total: 21 },
+    config: {
+      stakes: { twentyone: 25, triple: 10, spiral: 25, scratcher: 50, wheel: 500 },
+      paytables: { triple: { stake: 10, hold: 5, rows: [
+        { royal: 400, scramble: 10, pair: 4 },
+        { royal: 250, scramble: 8, pair: 3 },
+        { royal: 120, scramble: 6, pair: 2.5 },
+      ] } },
+    },
+  };
+}
+
+const ctx = {
+  root: document.getElementById('host'),
+  log,
+  t: (key, fallback) => fallback || key,
+  send(msg) {
+    // The WHOLE frame, because "did the cabinet send the right stake and the
+    // right holds" is the assertion that matters most on this machine.
+    log('up   ' + JSON.stringify(msg));
+    if (msg.type === 'triggers-request') {
+      setTimeout(() => fire('triggers-result', { type: 'triggers-result', triggers: TRIGGERS }), 90);
+      return;
+    }
+    if (msg.type !== 'casino-request') return;
+    setTimeout(() => {
+      let ok = true; let status = 200; let body = statusBody();
+      if (msg.op === 'play') {
+        const stake = Math.round(Number(msg.body.stake) || 0);
+        if (q.has('tier')) { ok = false; status = 403; body = { code: 'arcademy_locked', min_tier: 2 }; }
+        else if (q.has('poor') || stake > purse.chips) { ok = false; status = 200; body = { reason: 'insufficient_chips' }; }
+        else {
+          const res = RESULTS[q.get('line') || 'none'] || RESULTS.none;
+          purse.chips = purse.chips - stake + res.payout;
+          if (res.potWon > 0) purse.pot = 0;
+          body = Object.assign(statusBody(), {
+            machine: 'triple', stake, payout: res.payout,
+            result: { reels: res.reels, line: res.line, mult: res.mult, potWon: res.potWon },
+          });
+        }
+      }
+      fire('casino-result', { type: 'casino-result', reqId: msg.reqId, ok, status, body });
+      log('down casino-result ' + (ok ? 'ok' : status));
+    }, delay);
+  },
+  listen(type, fn) {
+    if (!listeners.has(type)) listeners.set(type, new Set());
+    listeners.get(type).add(fn);
+    return () => { const s = listeners.get(type); if (s) s.delete(fn); };
+  },
+};
+
+if (q.has('dark')) { delete ctx.send; delete ctx.listen; }
+
+const room = openBackRoom(ctx);
+ctx.root.appendChild(room.root);
+window.__room = room;
+
+/* The shell's ladder, exactly as shell.js holds it. Nothing inside the scene
+ * binds Esc, so this is the only listener on the page. */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (room.escapeStep()) { log('esc: folded a cabinet'); return; }
+  room.close();
+  log('esc: room closed');
+});
+
+/* ------------------------------------------------------------------------
+ * THE UNATTENDED DRIVER. Nothing here reaches inside the cabinet: it clicks
+ * the frame a player clicks and holds the lever a player holds.
+ * ---------------------------------------------------------------------- */
+const $ = (s) => room.root.querySelector(s);
+const $$ = (s) => Array.from(room.root.querySelectorAll(s));
+const txt = (s) => { const n = $(s); return n ? n.textContent.trim() : '(none)'; };
+
+function openCab() {
+  const btn = $$('.bk-cab').find((b) => /triple/i.test(b.textContent));
+  if (!btn) { log('THREW no triple frame on the floor'); return false; }
+  if (btn.disabled) { log('THREW triple frame is a dust sheet'); return false; }
+  btn.click();
+  return true;
+}
+
+/** Hold the lever to the end, or tap it under the diet. Both roads commit. */
+function heave() {
+  const lever = $('.bk-tt-pull');
+  if (!lever || lever.disabled) { log('THREW lever is dead'); return 0; }
+  if (q.has('lite')) { lever.click(); return 40; }
+  lever.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+  return 1000;                       // the ring's 900ms, with a frame to spare
+}
+
+function reportReels() {
+  log('TT at=' + $$('.bk-tt-reel').map((r) => r.dataset.at == null ? '?' : r.dataset.at).join(','));
+  log('TT say=' + txt('.bk-tt-say'));
+  log('TT balance=' + txt('.bk-bal-n'));
+  frame();
+}
+
+/** ?shot=1 puts the CABINET in the window instead of the top of the room. The
+ *  floor legitimately opens on the cage, so a naive headless shot photographs
+ *  the exchange desk and not the machine under test. Nothing here touches the
+ *  module: it hides the fixture's own chrome and scrolls. */
+function frame() {
+  if (!q.has('shot')) return;
+  document.querySelector('header.fx').style.display = 'none';
+  logEl.style.display = 'none';
+  const cab = $('.bk-tt');
+  if (!cab) return;
+  // A margin, not a scroll: a short document clamps scrollTop and the shot
+  // comes back as an empty field of felt. Shifting the page up cannot clamp.
+  const top = cab.getBoundingClientRect().top + window.scrollY;
+  document.body.style.marginTop = '-' + Math.max(0, top - 10) + 'px';
+}
+
+const auto = q.get('auto');
+if (auto) {
+  setTimeout(() => {
+    if (!openCab()) { log('AUTO done'); return; }
+    setTimeout(() => run(auto), 500);      // the reel list arrives on its own beat
+  }, 900);
+}
+
+function run(mode) {
+  if (mode === 'open') {
+    log('TT rows=' + ($$('.bk-tt-reel')[0] ? $$('.bk-tt-reel')[0].querySelectorAll('.bk-tt-cell').length : 0));
+    log('TT glyphs=' + $$('.bk-tt-reel')[0].querySelectorAll('.bk-tt-glyph').length);
+    log('TT words=' + Array.from($$('.bk-tt-reel')[0].querySelectorAll('.bk-tt-cell')).slice(0, 7).map((c) => c.textContent).join(' | '));
+    log('TT price=' + txt('.bk-tt-price'));
+    log('TT odds=' + txt('.bk-tt-odds table tbody tr'));
+    log('TT holdsDead=' + $$('.bk-tt-hold-btn').every((b) => b.disabled));
+    log('TT leverDead=' + $('.bk-tt-pull').disabled);
+    log('TT say=' + txt('.bk-tt-say'));
+    log('AUTO done');
+    return;
+  }
+  if (mode === 'pull') {
+    const wait = heave();
+    setTimeout(() => { reportReels(); log('AUTO done'); }, wait + delay + 3800);
+    return;
+  }
+  if (mode === 'holds') {
+    const wait = heave();
+    setTimeout(() => {
+      const btns = $$('.bk-tt-hold-btn');
+      log('TT holdsDead=' + btns.every((b) => b.disabled));
+      btns[0].click();
+      btns[2].click();
+      log('TT price=' + txt('.bk-tt-price'));
+      const w2 = heave();
+      setTimeout(() => { reportReels(); log('AUTO done'); }, w2 + delay + 3800);
+    }, wait + delay + 3800);
+    return;
+  }
+  if (mode === 'unmount') {
+    const wait = heave();
+    // MID SPIN, on purpose: the reels are turning and a stake is on the wire.
+    setTimeout(() => {
+      log('TT rolling=' + ($$('.bk-tt-reel').some((r) => r.className.indexOf('bk-tt-') >= 0)));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      log('TT cabinet=' + ($('.bk-tt') ? 'up' : 'folded'));
+      log('TT floor=' + ($('.bk-floor').hidden ? 'hidden' : 'shown'));
+      setTimeout(() => { log('TT stillFolded=' + ($('.bk-tt') ? 'no' : 'yes')); log('AUTO done'); }, 2600);
+    }, wait + 120);
+  }
+}
+
+window.addEventListener('error', (e) => log('THREW ' + (e.message || 'error')));
+window.addEventListener('unhandledrejection', (e) => log('THREW ' + ((e.reason && e.reason.message) || 'rejection')));
+</script>
+</body>
+</html>
