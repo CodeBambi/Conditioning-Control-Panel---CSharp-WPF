@@ -279,8 +279,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             },
         });
 
-        /// <summary>ponytail: RecapBackgrounds.ForMod names a pack:// resource; null until the art ships in Core.</summary>
-        public IImage? BackgroundImage => null;
+        private IImage? _background;
+        private bool _backgroundProbed;
+
+        /// <summary>
+        /// The season's neon plate. <c>RecapBackgrounds.ForMod</c> is in Core (Models/SeasonRecap.cs)
+        /// and names a plain Resources-relative file, so the WPF <c>pack://</c> half is just
+        /// <see cref="Helpers.ModArt"/>: the active mod's override first, this head's linked
+        /// <c>avares://</c> copy second, null when neither exists (the card then shows its gradient).
+        /// Decoded once - the card re-reads this property on every binding pass.
+        /// </summary>
+        public IImage? BackgroundImage
+        {
+            get
+            {
+                if (_backgroundProbed) return _background;
+                _backgroundProbed = true;
+                _background = Helpers.ModArt.TryLoad(RecapBackgrounds.ForMod(CoreMods.ActiveModId));
+                return _background;
+            }
+        }
 
         // ---------- header ----------
         public int SeasonNumber => SeasonNumbering.ToSeasonNumber(_s.SeasonKey);

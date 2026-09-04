@@ -316,7 +316,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// </summary>
     public sealed class MemoryDiaryViewModel : CompanionObservable
     {
-        // ponytail: copy of the head's FactOrdering.FilterKeys; delete when CompanionVmPrimitives moves to Core
+        // ponytail: copy of FactOrdering.FilterKeys from ConditioningControlPanel/Views/Controls/
+        // Companion/CompanionVmPrimitives.cs (the WPF one - this head's same-named file next door
+        // holds only CompanionRelayCommand/CompanionObservable and does NOT carry FactOrdering).
+        // Delete this copy when that class reaches Core.
         private static readonly string[] FilterKeys = { "all", "boundary", "joke", "preference", "goal", "moment" };
 
         private readonly List<MemoryFact> _all;
@@ -378,7 +381,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public string StorageLinkLabel { get; init; } = Loc.Get("companion_memory_storage_link");
         public string ForgetEverythingLabel { get; init; } = Loc.Get("companion_memory_forget_everything");
 
-        // ponytail: needs a shell "open folder" on CorePaths' companion dir, wired when the diary moves to Core
+        // ponytail: the PATH is not the blocker - CorePaths answers it today. What is missing is
+        // a head-side "reveal in file manager": Avalonia has no launcher for a directory
+        // (TopLevel.Launcher opens files and URIs), so this needs an xdg-open shim in
+        // CCP.Avalonia/Helpers before the command can do anything but lie about opening.
         public ICommand? OpenStorageFolderCommand => null;
         public ICommand ForgetEverythingCommand { get; }
 

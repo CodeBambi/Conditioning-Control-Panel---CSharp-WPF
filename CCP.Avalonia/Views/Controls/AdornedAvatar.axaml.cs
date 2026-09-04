@@ -23,9 +23,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// </summary>
     public partial class AdornedAvatar : UserControl
     {
-        // ponytail: WardrobeCatalog stays in the WPF head (pack:// art). Ratio copied; GetImage
-        // returns null until the catalogue moves to Core, so the plain avatar draws - the same
-        // quiet failure the WPF control documents for a missing PNG.
+        // ponytail: blocked on ConditioningControlPanel/Services/Profile/WardrobeCatalog.cs,
+        // which has not moved to Core. NOT on pack:// art, which the old note claimed: its
+        // ResolveArtPath reads plain files under <BaseDirectory>/Resources/cosmetics, so the
+        // loader half is portable and the DecoLayer Image below is already here to receive it.
+        // What is missing is the registry that maps a decoration id to a file. Until the
+        // catalogue crosses, GetImage returns null and the plain avatar draws - the same quiet
+        // failure the WPF control documents for a missing PNG.
         private const double AvatarCircleRatio = 0.70;
         private static IImage? GetImage(string? decorationId) => null;
 

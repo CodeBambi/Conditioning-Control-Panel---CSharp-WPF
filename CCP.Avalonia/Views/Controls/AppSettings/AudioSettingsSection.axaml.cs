@@ -19,13 +19,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         public AudioSettingsSection()
         {
             AvaloniaXamlLoader.Load(this);
-            // ponytail: placeholder so the combo is not an empty pill; real list comes from the audio device service
+            // ponytail: placeholder so the combo is not an empty pill. CCP.Core/CoreAudio.cs is
+            // PLAYBACK only (PlayOneShot / Duck / Unduck / DuckGeneration) - it has no device
+            // enumeration seam at all, so there is nothing in Core to ask for the real list yet.
             var cmb = this.FindControl<ComboBox>("CmbAudioOutputDevice")!;
             cmb.ItemsSource = new[] { "Default" };
             cmb.SelectedIndex = 0;
         }
 
-        // ponytail: needs MainWindow's audio handlers (AudioService, NAudio devices), wired when they move to Core
+        // ponytail: needs a device seam on CCP.Core/CoreAudio.cs (it carries playback only) plus
+        // a Linux backend for it - NAudio is Windows-only, so this is a per-head implementation
+        // behind a Core interface, not a move.
         private void SliderMaster_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
         private void SliderVideoVolume_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }
         private void SliderDuck_Changed(object? sender, RangeBaseValueChangedEventArgs e) { }

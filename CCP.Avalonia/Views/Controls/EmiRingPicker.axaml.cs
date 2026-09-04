@@ -18,9 +18,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     ///
     /// PORTED from ConditioningControlPanel/Views/Controls/EmiRingPicker.xaml.cs. The WPF control
     /// keeps no list of its own: the tiles ARE <c>EmiState.Pins</c>, written through
-    /// <c>EmiSuggester</c>. Those, <c>EmiTargets</c> and <c>ModResourceResolver</c> are all in the
-    /// WPF head, so this port carries a PLACEHOLDER catalogue and pin set (see the ponytail note)
-    /// that must be deleted, not kept, when the store moves to Core.
+    /// <c>EmiSuggester</c>. <c>EmiSuggester</c> and <c>EmiTargets</c> are still WPF-head only, so
+    /// this port carries a PLACEHOLDER catalogue and pin set (see the ponytail note) that must be
+    /// deleted, not kept, when the store moves to Core. <c>ModResourceResolver</c> is NOT a
+    /// blocker any more - <see cref="CoreModArt"/> plus <c>Helpers.ModArt</c> answer that half on
+    /// this head; what is missing is the per-target art NAME, see <c>BuildTileFace</c>.
     /// </summary>
     public partial class EmiRingPicker : UserControl
     {

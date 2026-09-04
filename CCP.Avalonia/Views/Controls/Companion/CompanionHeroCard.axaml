@@ -391,7 +391,7 @@
                                  the brush's Viewbox at a square centred on the art's own opaque
                                  bounds; on Avalonia that is ImageBrush.SourceRect - see
                                  CompanionHeroCard.axaml.cs · CentrePortrait. -->
-                            <Ellipse Margin="3" IsVisible="{Binding Portrait, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Ellipse x:Name="PortraitFill" Margin="3" IsVisible="{Binding Portrait, Converter={x:Static ObjectConverters.IsNotNull}}">
                                 <Ellipse.Fill>
                                     <ImageBrush Source="{Binding Portrait}"
                                                 Stretch="Uniform" AlignmentX="Center" AlignmentY="Center"/>
