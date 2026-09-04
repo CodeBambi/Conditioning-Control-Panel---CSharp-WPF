@@ -369,6 +369,13 @@ namespace ConditioningControlPanel
             CoreProgram.ActivePackVideoCountProvider = () => ContentPacks?.GetAllActivePackVideos().Count ?? 0;
             CoreProgram.RoadmapProvider = () => Roadmap;
 
+            // The subliminal split (CCP.Core/CoreSubliminal.cs): Core owns the interval, the phrase
+            // pick and the enable toggle; this head owns the flash surface and the whisper. Both
+            // are lambdas, not eager reads - Subliminal is constructed in OnStartup, long after
+            // this ctor runs, and until then the scheduler simply draws nothing.
+            CoreSubliminal.ShowProvider = text => Subliminal?.FlashPhrase(text);
+            CoreSubliminal.RunStateChanged = running => Subliminal?.OnRunStateChanged(running);
+
             // The engine-running flag, for the feature cards that only live-apply while a session
             // is up. The engine stays here; the flag is the whole seam.
             CoreSession.IsEngineRunningProvider = () => IsEngineRunning;
