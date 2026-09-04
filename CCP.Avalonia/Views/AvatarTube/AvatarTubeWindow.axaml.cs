@@ -1434,9 +1434,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// <summary>Refresh the context menu's checkmarks and the remote-emote item swap.</summary>
         private void UpdateQuickMenuState()
         {
-            // ponytail: needs App.Settings.Current.RemoteEmotePresets, App.Engine, App.Companion and
-            // AvatarTubeWindow.Reactions.cs's AvatarContextMenu_Opened, which retitles every item
-            // from live state on each open.
+            // ponytail: the settings half is NOT the blocker - RemoteEmotePresets is on
+            // CoreSettings.Current today. What is missing is the live state the menu titles read:
+            // App.Engine (running / paused) and App.Companion (her name and mood), neither of
+            // which has a seam, plus AvatarTubeWindow.Reactions.cs's AvatarContextMenu_Opened,
+            // which retitles every item on each open. Retitling from settings alone would print a
+            // menu that disagrees with what the engine is actually doing, so it stays inert.
         }
     }
 }

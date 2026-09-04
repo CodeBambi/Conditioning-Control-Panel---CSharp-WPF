@@ -141,14 +141,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void LoadRandomCard()
         {
-            // ponytail: needs ConditioningControlPanel/Services/ModResourceResolver.cs
-            // (ResolveImage), which is WPF head-side - it returns a System.Windows.Media.ImageSource
-            // and reads App.LiveEvent / App.Mods - AND Cards/*.png, which CCP.Avalonia.csproj does
-            // not link as an AvaloniaResource. Nothing resolves a card, so the host Border
-            // collapses: that is the WPF null path, not a blank plate. CardImages stays because the
-            // mod path names are the compat surface.
-            _ = CardImages;
-            this.FindControl<Border>("CardBorder")!.IsVisible = false;
+            // ponytail: only the MOD half resolves. Helpers.ModArt asks CoreModArt for an override
+            // and then falls back to avares://, and Cards/*.png is NOT linked into this head - the
+            // csproj links Assets/features, /nav, /quests and the loose Assets/*.png, not Cards.
+            // So a .ccpmod that ships resources/Cards/hearth.png paints; a stock install collapses
+            // the Border, which is the WPF null path rather than a blank plate. Linking the stock
+            // cards is a .csproj change, which this layer does not own.
+            var card = Helpers.ModArt.TryLoad(CardImages[Random.Shared.Next(CardImages.Length)]);
+            if (card != null) this.FindControl<Image>("ImgCard")!.Source = card;
+            this.FindControl<Border>("CardBorder")!.IsVisible = card != null;
         }
 
         /// <summary>
@@ -201,8 +202,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return;
                 }
 
-                // Neither the file nor its folder survived (#998). WPF said so in a MessageBox;
-                // this head has no MessageBox stand-in, so it is logged.
+                // Neither the file nor its folder survived (#998). ponytail: WPF said so in a
+                // MessageBox, and Dialogs.MessageDialog.ShowAsync is this head's equivalent - but
+                // this method is sync and called from a row's click handler, so telling the user
+                // means making that path async. Logged until then; nothing is lost but the notice.
                 Log.Information("SessionCompleteWindow: media file and its folder are both gone: {Path}", path);
             }
             catch (Exception ex)

@@ -29,9 +29,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // and MainWindow.DeeperFx, wired when the FX layer moves to Core. On WPF this rode
         // IsVisibleChanged; the Avalonia equivalent would be an IsVisibleProperty observer.
 
-        // ponytail: needs ModService + ModResourceResolver for the mod-aware deeper.png plates,
-        // wired when they move to Core. Both plates are art-less on this head anyway (see the
-        // .axaml header), so there is nothing to repaint yet.
+        // ponytail: the resolver is NOT the blocker - CoreMods answers the active mod and
+        // CoreModArt/Helpers.ModArt resolve "features/deeper.png", which IS linked into this
+        // head. What is missing is the target: both plates are art-less in DeeperTabView.axaml
+        // (see its header), so there is no Image or ImageBrush to write into. Restoring this
+        // means changing the .axaml and this file together.
 
         // ponytail: every handler below routes to MainWindow on WPF
         // (Window.GetWindow(this) is MainWindow mw -> mw.<same name>). Needs the

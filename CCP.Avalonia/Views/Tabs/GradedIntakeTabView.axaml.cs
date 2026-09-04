@@ -89,19 +89,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void ShowFrequency(int perHour) =>
             TxtPopQuizFrequency.Text = Loc.GetF("label_0_session_hr", perHour);
 
-        // ponytail: needs Services/Quiz/IntakeHostService (a WebView2 window) plus
-        // Services/IntakePassService and App.Ai for the tier gate in front of it -
-        // ConditioningControlPanel/MainWindow/MainWindow.Lab.cs:148. Nothing here can start a run,
-        // and a button that opens nothing is better than one that pretends the pass was spent.
+        // ponytail: the web view is NOT the blocker - this head ships Views/Controls/WebHost, a
+        // real Avalonia.Controls.WebView with a navigation gate and InvokeScriptAsync. What is
+        // missing is everything around it: Services/Quiz/IntakeHostService (the window and the
+        // page protocol), Services/IntakePassService (which spends the pass) and CoreAi for the
+        // tier gate in front of both - see ConditioningControlPanel/MainWindow/MainWindow.Lab.cs
+        // :148. Nothing here can start a run, and a button that opens nothing is better than one
+        // that pretends the pass was spent.
         private void BtnStartIntake_Click(object? sender, RoutedEventArgs e) { }
 
         // ponytail: the classic AI quiz, ConditioningControlPanel/MainWindow/MainWindow.Lab.cs
-        // (QuizWindow + App.Ai). The button is IsVisible="False" in the markup on both heads, so
-        // nothing can reach this today.
+        // (QuizWindow, which is unported; the AI half is CoreAi and does answer). The button is
+        // IsVisible="False" in the markup on both heads, so nothing can reach this today.
         private void BtnStartQuiz_Click(object? sender, RoutedEventArgs e) { }
 
-        // ponytail: needs App.PopQuiz - ConditioningControlPanel/Services/Quiz/PopQuizService.cs,
-        // which shows a WPF PopQuizWindow. Head-side by construction, not a settings write.
+        // ponytail: needs ConditioningControlPanel/Services/Quiz/PopQuizService.cs, which shows a
+        // WPF PopQuizWindow. Head-side by construction and unported; not a settings write, so
+        // CoreSettings is no help here.
         private void BtnTestPopQuiz_Click(object? sender, RoutedEventArgs e) { }
 
         private void ChkPopQuizEnabled_Changed(object? sender, RoutedEventArgs e)

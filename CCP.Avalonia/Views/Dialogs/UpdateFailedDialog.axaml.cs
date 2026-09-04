@@ -95,10 +95,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to show update failure dialog; falling back to a message box");
-                // ponytail: needs a cross-platform MessageBox for the last-resort fallback WPF had
-                // (MessageBox.Show with the releases URL); this head has no modal box that works
-                // without an owner Window, which is exactly the case this catch handles.
+                Log.Warning(ex, "Failed to show update failure dialog; nothing left to show it in");
+                // ponytail: this head DOES have a message box now (Dialogs.MessageDialog), but it
+                // is a Window like the one that just failed to open, and MessageDialog.ShowAsync
+                // needs an owner - which is exactly what this catch has established it does not
+                // have. WPF's MessageBox.Show(releasesUrl) needed neither. A second Window here
+                // would fail the same way, so the log line is the record until this head grows an
+                // ownerless notification (a tray toast, or a Window shown with .Show()).
             }
         }
 

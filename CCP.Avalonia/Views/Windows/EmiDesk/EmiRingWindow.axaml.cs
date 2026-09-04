@@ -937,9 +937,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             catch { return null; }
         }
 
-        // ponytail: needs Services.ModResourceResolver.ResolveImageDecoded (WPF head), so a .ccpmod's
-        // own card art wins exactly like the dashboard. Every card therefore draws the flat hue tile
-        // - which is a road the WPF ring already takes for a target with no PNG.
+        // ponytail: the resolver half is done - CoreModArt.OverridePath answers the mod override
+        // and Helpers.ModArt decodes it against this head's avares:// copy. The blocker is the
+        // ARGUMENT: EmiRingCard carries no Resources-relative art path, so there is no name to
+        // hand either of them. Give the card its art path (the WPF ring reads one per target) and
+        // this becomes `Helpers.ModArt.TryLoad(slot.ArtPath)`. Until then every card draws the
+        // flat hue tile - a road the WPF ring already takes for a target with no PNG.
         private static IImage? LoadThumb(EmiRingCard slot) => null;
 
         // ---------------------------------------------------------------- animation

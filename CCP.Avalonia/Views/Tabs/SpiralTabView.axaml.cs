@@ -492,11 +492,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// state.
         ///
         /// <para>ponytail: <c>SpiralEmbedView</c> (WebView2, Windows-only) becomes
-        /// <see cref="WebHost"/>, and four of its five members have no twin yet — <c>Start()</c>
-        /// (the runtime/environment handshake), <c>Navigated</c> (the splash's cue),
-        /// <c>Failed</c> (which handed the room to the waiting panel and latched
-        /// <c>_embedGaveUp</c> for the rest of the entry) and <c>PostState(block)</c> (which pushes
-        /// the descent block into the canvas). The URL is the real one and the lifecycle — built on
+        /// <see cref="WebHost"/>. <c>Start()</c> has no twin and needs none — WebHost probes for
+        /// an engine and navigates on <c>Source</c>. <c>PostState(block)</c> could be written
+        /// today against <c>WebHost.InvokeScriptAsync</c>, once the canvas page's message shape is
+        /// pinned down. What genuinely has no seam is the pair that report back:
+        /// <c>Navigated</c> (the splash's cue) and <c>Failed</c> (which handed the room to the
+        /// waiting panel and latched <c>_embedGaveUp</c> for the rest of the entry) — WebHost
+        /// wraps neither NavigationCompleted nor the failure signal, so nothing here can tell a
+        /// loaded page from a dead one. The URL is the real one and the lifecycle — built on
         /// entering the state, dropped on leaving it — is the real one.</para>
         /// </summary>
         private void EnsureEmbed()

@@ -29,8 +29,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>; <c>MouseLeftButtonUp</c> ->
     ///    <c>PointerReleased</c>; <c>Cursors.Hand</c> -> <c>StandardCursorType.Hand</c>;
     ///    <c>ToolTip =</c> -> <c>ToolTip.SetTip</c>; <c>App.Logger</c> -> Serilog's static Log.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so the
-    ///    erase confirmation is not raised at all (see <see cref="DeleteSlot_Click"/>).
+    ///  - <c>MessageBox.Show</c> is <c>Dialogs.MessageDialog</c> on this head now. The erase
+    ///    confirmation is still not raised, but for the other reason: there is no erase to
+    ///    confirm (see <see cref="DeleteSlot_Click"/>).
     ///  - The constructor is <c>internal</c> and parameterless, as in WPF; that also makes it the
     ///    render constructor <c>--render-all</c> discovers.
     /// </summary>
@@ -365,9 +366,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             }
         }
 
-        // ponytail: needs ChaosMeta.DeleteSlot plus a confirmation dialog (WPF used MessageBox,
-        // which Avalonia has no equivalent of), wired when they move to Core. Erasing a save
-        // unprompted is worse than not erasing it, so this only logs until both exist.
+        // ponytail: the dialog half is done - Dialogs.MessageDialog.ConfirmAsync is this head's
+        // MessageBox and this window can own it. The remaining blocker is the erase itself:
+        // ChaosMeta.DeleteSlot lives in ConditioningControlPanel/Services/Chaos/ChaosUpgrades.cs,
+        // still WPF head-side with no seam. Prompting for a delete this head cannot perform would
+        // be worse than the log line, so the prompt waits for the service, not the other way
+        // round.
         private void DeleteSlot_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             e.Handled = true;   // don't let the click also select the card

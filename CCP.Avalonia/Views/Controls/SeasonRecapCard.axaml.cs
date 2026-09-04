@@ -229,8 +229,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     {
         public string Label { get; init; } = "";
         public int Count { get; init; }
-        /// <summary>ponytail: badge art resolves through ModResourceResolver (WPF head); null
-        /// draws the empty badge tile until it moves to Core.</summary>
+        /// <summary>The feature icon: the active mod's override if it ships one, else this
+        /// head's own copy. Null draws the empty badge tile, which is the WPF path for a feature
+        /// whose PNG will not resolve.</summary>
         public IImage? Image { get; init; }
     }
 
@@ -238,8 +239,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// Avalonia twin of ConditioningControlPanel/ViewModels/SeasonRecapViewModel.cs. Same property
     /// names and the same Loc keys; every helper it uses (SeasonNumbering, TitleTiers,
     /// SeasonFeatureKeys, SeasonRecapSnapshot) is already in CCP.Core. Only two things pin the
-    /// original to the WPF head: <c>Visibility</c> (bool here) and pack:// image paths (IImage,
-    /// null placeholders here).
+    /// original to the WPF head: <c>Visibility</c> (bool here) and pack:// image paths, which
+    /// become <c>CoreModArt</c> plus an <c>avares://</c> fallback through
+    /// <see cref="Helpers.ModArt"/>.
     /// </summary>
     public class SeasonRecapCardViewModel
     {
@@ -368,6 +370,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     {
                         Label = def != null ? Loc.Get(def.LabelLocKey) : kv.Key,
                         Count = kv.Value,
+                        // Mod-aware, as WPF is: SeasonFeatureKeys.ImagePath is already
+                        // Resources-relative ("features/flash.png"), which is exactly what the
+                        // override seam and this head's avares:// layout both take.
+                        Image = def != null ? Helpers.ModArt.TryLoad(def.ImagePath) : null,
                     };
                 })
                 .ToList();
