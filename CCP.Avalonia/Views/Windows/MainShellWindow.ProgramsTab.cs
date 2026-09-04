@@ -1,15 +1,16 @@
 // NOT PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs (2312 lines).
-// Sorted member by member against the fifteen Core seams; unlike its neighbours the blanket claim
-// survives here, but for a reason the old header did not give and that is worth writing down so
-// nobody re-checks it: THE PROGRAM MODEL ITSELF IS STILL IN THE HEAD.
+// THE OLD BLOCKER IS GONE. This header used to say the program model itself was still in the WPF
+// head; it is not. ProgramDefinition, ProgramDay, ProgramEnrollment, ProgramService,
+// ProgramSessionBuilder and the whole BuiltInPrograms library are in CCP.Core (Models/Program/ and
+// Services/Program/), and this head references them. Only ProgramArt (WPF ImageSource) and
+// ProgramRewardService (App.MainWindowRef, the sessions list) stayed behind.
 //
-//   ProgramDefinition, ProgramDay, ProgramEnrollment   ConditioningControlPanel/Models/Program/
-//   ProgramService, ProgramSessionBuilder, ProgramArt  ConditioningControlPanel/Services/Program/
-//
-// Nothing in CCP.Core names any of them. That is a stronger blocker than a missing seam: not one
-// member of this file can be written at all, because there is no type here to write it against.
-// Check with `grep -rl "ProgramEnrollment\|ProgramDefinition" CCP.Core` before assuming otherwise -
-// when that grep starts hitting, most of this file becomes a straight transcription.
+// What blocks this file now is smaller and dumber: NOTHING ON THIS HEAD CONSTRUCTS A ProgramService.
+// CCP.Avalonia/App.axaml.cs builds SettingsService and nothing else, so there is no instance to
+// read Today off, no events to subscribe to and no ledger to command. Constructing one here before
+// the builders below exist would start a day clock and write programs.json for a tab that cannot
+// show the run - which is why it is deliberately not done yet. The instance and the builders are
+// one job, not two.
 //
 // What that leaves, grouped so the eventual port can be taken in bites:
 //
@@ -22,8 +23,11 @@
 //   THE COMMANDS - BtnProgramEnroll_Click, BtnProgramPauseResume_Click, BtnProgramWithdraw_Click,
 //   BtnProgramRestart_Click, BtnProgramDismissGraduated_Click, BtnProgramSubmitRitual_Click,
 //   BtnStartTodaySession_Click, StartProgramSession, AnnounceProgramSessionStarted /
-//   AnnounceProgramSessionEnded. ProgramService plus SessionEngine. None of these is a lie-risk -
-//   they simply have no service to command.
+//   AnnounceProgramSessionEnded. Every one of these now HAS a service to call - what they lack is
+//   an instance and a run panel to switch to. BtnProgramEnroll_Click is the one with a lie-risk:
+//   its gate is ProgramService.CanEnroll(def, out reason) BEFORE ProgramEnrollDialog opens, and
+//   Enroll(...) only on an awaited true. Enrolling with the run panel still unbuilt would leave the
+//   tab on the browse list while a real run ticked underneath it.
 //
 //   THE SUBSCRIPTIONS - EnsureProgramsSubscribed, EnsureProgramsAppHooks, OnProgramTodayChanged,
 //   OnProgramLapsed, OnProgramGraduated, MarshalProgramRefresh, _programsSubscribed,
@@ -38,7 +42,7 @@
 //   they are orphans: every caller is a builder above, and a lone contrast helper with nothing to
 //   contrast is padding, not a port. ProgramRailFillBrush and ProgramRadialGlowBrush additionally
 //   call Freeze(), which Avalonia has no equivalent for; ProgramHasPremium is App.Patreon;
-//   ProgramDaySettings is ProgramSessionBuilder.
+//   ProgramDaySettings is ProgramSessionBuilder, which is in Core now.
 //
 //   THE FX - EnsureProgramsFxHooked, OnProgramsTabVisibleChanged, StartProgramRunEntrance,
 //   AnimateProgramPanelIn, EnsureProgramSessionSheen, StopProgramSessionSheen, PopProgramScale,

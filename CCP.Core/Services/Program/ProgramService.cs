@@ -5,10 +5,10 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.Program;
+using ConditioningControlPanel.Services.Webcam;
+using Serilog;
 
 namespace ConditioningControlPanel.Services.Program;
 
@@ -79,9 +79,8 @@ public class ProgramLapsedEventArgs : EventArgs
 public class ProgramService : IDisposable
 {
     private readonly string _statePath;
-    private readonly DispatcherTimer? _saveTimer;
-    private readonly DispatcherTimer? _clockTimer;
-    private readonly List<Action> _engineUnsubscribe = new();
+    private readonly Timer _saveTimer;
+    private readonly Timer _clockTimer;
 
     /// <summary>
     /// Bumped by every <see cref="MarkDirty"/>, and only ever caught up to by a write that actually
@@ -123,11 +122,23 @@ public class ProgramService : IDisposable
     private bool _rolloverDeferred;
 
     /// <summary>
-    /// The engine handed over by <see cref="AttachSessionEngine"/>, kept so leaving the program can
-    /// end the session the program started. Subscribing to its events was never enough: withdrawing
-    /// has to be able to ACT on the engine, not just hear from it.
+    /// Set by <see cref="Dispose"/>. The head keeps its engine subscriptions - a static bridge
+    /// cannot know when this instance dies - so the two engine callbacks below check this instead.
+    /// Restores what the old in-service unsubscribe gave us: after Dispose, a late completion is
+    /// ignored rather than credited and written by a service that has already flushed.
     /// </summary>
-    private SessionEngine? _engine;
+    private volatile bool _disposed;
+
+    /// <summary>
+    /// The engine handed over by <see cref="AttachEngine"/>, reduced to the three things this
+    /// service ever asked of it, so the ledger can live in Core while SessionEngine stays in a
+    /// head. Kept because subscribing to its events was never enough: withdrawing has to be able
+    /// to ACT on the engine, not just hear from it. Unattached, IsRunning answers false and Stop
+    /// does nothing - which is exactly what a head with no session engine means.
+    /// </summary>
+    private Func<bool>? _engineIsRunning;
+    private Func<string?>? _engineCurrentSessionId;
+    private Action<bool>? _engineStop;
 
     public ProgramState State { get; private set; }
 
@@ -144,7 +155,7 @@ public class ProgramService : IDisposable
     public ProgramService()
     {
         _statePath = Path.Combine(
-            App.UserDataPath,
+            CorePaths.UserData,
             "programs.json");
 
         State = LoadState();
@@ -158,36 +169,29 @@ public class ProgramService : IDisposable
         // Startup rollover check, before any UI reads Today.
         EvaluateRollover();
 
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher != null && !dispatcher.HasShutdownStarted)
+        // Were WPF DispatcherTimers, so both ticks ran on the UI thread and neither could
+        // serialise or roll the clock while the UI mutated State. System.Threading.Timer ticks on
+        // the thread pool, so each body hops back through CoreDispatch - the same move
+        // RoadmapService makes, and not optional here because EvaluateRollover raises the events
+        // the Programs tab repaints from.
+        _saveTimer = new Timer(_ => CoreDispatch.Post(() =>
         {
-            _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-            _saveTimer.Tick += (_, _) =>
-            {
-                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
-                if (!HasUnsavedChanges) return;
+            if (HasUnsavedChanges) SaveAsync();
+        }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
-                SaveAsync();
-            };
-            _saveTimer.Start();
+        // One-minute poll rather than a midnight one-shot, matching QuestService: a one-shot
+        // does not survive sleep, DST or the clock being changed under it.
+        _clockTimer = new Timer(_ => CoreDispatch.Post(() =>
+        {
+            EvaluateRollover();
+            CheckNudge();
+        }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
 
-            // One-minute poll rather than a midnight one-shot, matching QuestService: a one-shot
-            // does not survive sleep, DST or the clock being changed under it.
-            _clockTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
-            _clockTimer.Tick += (_, _) =>
-            {
-                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
-                EvaluateRollover();
-                CheckNudge();
-            };
-            _clockTimer.Start();
-        }
-
-        App.Logger?.Information("ProgramService initialized. Active: {Program} day {Day}, library {Count}",
+        Log.Information("ProgramService initialized. Active: {Program} day {Day}, library {Count}",
             State.Active?.ProgramId ?? "none", State.Active?.CurrentDay ?? 0, Library.Count);
     }
 
-    private bool HasPremium => App.Patreon?.HasPremiumAccess == true;
+    private static bool HasPremium => CoreProgram.HasPremium;
 
     public ProgramEnrollment? ActiveEnrollment => State.Active;
 
@@ -311,7 +315,7 @@ public class ProgramService : IDisposable
     {
         if (!CanEnroll(program, out var reason))
         {
-            App.Logger?.Warning("Program enrollment refused ({Program}): {Reason}", program?.Id ?? "null", reason);
+            Log.Warning("Program enrollment refused ({Program}): {Reason}", program?.Id ?? "null", reason);
             return null;
         }
 
@@ -341,7 +345,7 @@ public class ProgramService : IDisposable
         if (State.Active != null)
         {
             State.History.Add(State.Active);
-            App.Logger?.Information("Archived the previous {State} run of {Program} before enrolling",
+            Log.Information("Archived the previous {State} run of {Program} before enrolling",
                 State.Active.State, State.Active.ProgramId);
         }
 
@@ -349,7 +353,7 @@ public class ProgramService : IDisposable
         MarkDirty();
         Save();
 
-        App.Logger?.Information("Enrolled in program {Program} (strict={Strict}, share={Share}, boundary={Hour})",
+        Log.Information("Enrolled in program {Program} (strict={Strict}, share={Share}, boundary={Hour})",
             program.Id, enrollment.StrictMode, shareLevel, boundary);
 
         RaiseTodayChanged();
@@ -378,8 +382,7 @@ public class ProgramService : IDisposable
         var enrollment = State.Active;
         if (enrollment is not { State: ProgramEnrollmentState.Active }) return false;
 
-        var engine = _engine;
-        if (engine?.IsRunning == true && IsProgramSession(engine.CurrentSession))
+        if (IsProgramSessionInFlight)
         {
             reason = "Today's session is still running.";
             return false;
@@ -399,7 +402,7 @@ public class ProgramService : IDisposable
 
         if (!CanPause(out var reason))
         {
-            App.Logger?.Information("Program {Program} pause declined: {Reason}", enrollment.ProgramId, reason);
+            Log.Information("Program {Program} pause declined: {Reason}", enrollment.ProgramId, reason);
             return false;
         }
 
@@ -407,7 +410,7 @@ public class ProgramService : IDisposable
         enrollment.PausedAt = DateTime.Now;
         MarkDirty();
         RaiseTodayChanged();
-        App.Logger?.Information("Program {Program} paused on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
+        Log.Information("Program {Program} paused on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
         return true;
     }
 
@@ -429,7 +432,7 @@ public class ProgramService : IDisposable
 
         MarkDirty();
         RaiseTodayChanged();
-        App.Logger?.Information("Program {Program} resumed on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
+        Log.Information("Program {Program} resumed on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
     }
 
     /// <summary>Always available, on every screen, without commentary.</summary>
@@ -453,7 +456,7 @@ public class ProgramService : IDisposable
         MarkDirty();
         Save();
         RaiseTodayChanged();
-        App.Logger?.Information("Withdrew from program {Program} on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
+        Log.Information("Withdrew from program {Program} on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
     }
 
     /// <summary>
@@ -473,7 +476,7 @@ public class ProgramService : IDisposable
         Save();
         RaiseTodayChanged();
 
-        App.Logger?.Information("Program {Program} restarted, attempt {Attempt}", program.Id, enrollment.AttemptNumber);
+        Log.Information("Program {Program} restarted, attempt {Attempt}", program.Id, enrollment.AttemptNumber);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -582,7 +585,7 @@ public class ProgramService : IDisposable
             Save();
             RaiseTodayChanged();
 
-            App.Logger?.Warning(
+            Log.Warning(
                 "Program {Program}: lapse on day {Day} reversed - {Bad} ledger row(s) were stamped Missed AND complete " +
                 "(pre-6.8.0 day clock, #959). {Left} day(s) off restored",
                 program.Id, enrollment.CurrentDay, audit.ContradictoryDays.Count, enrollment.DaysOffRemaining);
@@ -593,7 +596,7 @@ public class ProgramService : IDisposable
         {
             // A run that stays lapsed is recoverable by hand (Restart keeps banked rewards); a
             // throw here would take ProgramService's whole construction down with it.
-            App.Logger?.Error(ex, "Program lapse audit failed - leaving the run as saved");
+            Log.Error(ex, "Program lapse audit failed - leaving the run as saved");
         }
     }
 
@@ -605,14 +608,14 @@ public class ProgramService : IDisposable
     {
         try
         {
-            App.Notifications?.Show(
+            CoreProgram.Notify(
                 $"{program.Title} is running again - the run was stopped by a bug in the day counter, not by you. " +
                 "Your days off have been put back.",
-                NotificationType.Success, TimeSpan.FromSeconds(14));
+                "Success", TimeSpan.FromSeconds(14));
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("Lapse-reversed notice failed: {E}", ex.Message);
+            Log.Debug("Lapse-reversed notice failed: {E}", ex.Message);
         }
     }
 
@@ -641,7 +644,7 @@ public class ProgramService : IDisposable
             if (!_rolloverDeferred)
             {
                 _rolloverDeferred = true;
-                App.Logger?.Information("Program {Program}: rollover held - day {Day}'s session is still running",
+                Log.Information("Program {Program}: rollover held - day {Day}'s session is still running",
                     program.Id, enrollment.CurrentDay);
             }
             return;
@@ -670,7 +673,7 @@ public class ProgramService : IDisposable
             // The anchor is in the future, so the gap stays negative and every later evaluation
             // returns early: the run parks on this day forever and no amount of waiting fixes it.
             // A clock correction is not an absence - re-anchor and say so, spend nothing.
-            App.Logger?.Warning(
+            Log.Warning(
                 "Program {Program}: system clock moved backwards ({Anchor:yyyy-MM-dd} -> {Today:yyyy-MM-dd}) - re-anchoring day {Day}, nothing spent",
                 program.Id, enrollment.CurrentDayDate, today, enrollment.CurrentDay);
 
@@ -705,7 +708,7 @@ public class ProgramService : IDisposable
             MarkDirty();
             Save();
 
-            App.Logger?.Information("Program {Program} lapsed after {Missed} missed day(s)",
+            Log.Information("Program {Program} lapsed after {Missed} missed day(s)",
                 program.Id, result.MissedDays.Count);
 
             ProgramLapsed?.Invoke(this, new ProgramLapsedEventArgs(program, enrollment, result.MissedDays));
@@ -724,7 +727,7 @@ public class ProgramService : IDisposable
         MarkDirty();
         Save();
 
-        App.Logger?.Information("Program {Program} rolled over to day {Day} (missed {Missed}, days off left {Left})",
+        Log.Information("Program {Program} rolled over to day {Day} (missed {Missed}, days off left {Left})",
             program.Id, enrollment.CurrentDay, result.MissedDays.Count, enrollment.DaysOffRemaining);
 
         // The clock reports RanPastEnd when the absence swallowed the rest of the program. Nothing
@@ -751,7 +754,7 @@ public class ProgramService : IDisposable
         if (finalDay != null && finalRecord is { DayCompleted: true }
             && enrollment.State == ProgramEnrollmentState.Active)
         {
-            App.Logger?.Information(
+            Log.Information(
                 "Program {Program}: absence ran past the end and the final day was already complete - graduating",
                 program.Id);
 
@@ -761,7 +764,7 @@ public class ProgramService : IDisposable
             return true;
         }
 
-        App.Logger?.Information(
+        Log.Information(
             "Program {Program}: absence ran past the end - the run stands on final day {Day}, still to be finished",
             program.Id, program.LengthDays);
         return false;
@@ -813,7 +816,7 @@ public class ProgramService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to build program session for {Program} day {Day}", program.Id, day.DayIndex);
+            Log.Error(ex, "Failed to build program session for {Program} day {Day}", program.Id, day.DayIndex);
             return null;
         }
     }
@@ -826,10 +829,13 @@ public class ProgramService : IDisposable
     /// bar or mark the day complete. Same discriminator OnSessionCompleted uses, so the two can
     /// never disagree. Reads only in-memory state - safe to call every engine tick.
     /// </summary>
-    public bool IsProgramSession(Models.Session? session) =>
-        session != null
+    public bool IsProgramSession(Models.Session? session) => IsProgramSessionId(session?.Id);
+
+    /// <summary>Id-only form, for callers that hold a session id rather than the session.</summary>
+    public bool IsProgramSessionId(string? sessionId) =>
+        sessionId != null
         && _expectedSessionId != null
-        && string.Equals(session.Id, _expectedSessionId, StringComparison.Ordinal);
+        && string.Equals(sessionId, _expectedSessionId, StringComparison.Ordinal);
 
     /// <summary>The program's own session is on screen right now. Reads in-memory state only.</summary>
     private bool IsProgramSessionInFlight
@@ -838,8 +844,8 @@ public class ProgramService : IDisposable
         {
             try
             {
-                var engine = _engine;
-                return engine?.IsRunning == true && IsProgramSession(engine.CurrentSession);
+                return _engineIsRunning?.Invoke() == true
+                       && IsProgramSessionId(_engineCurrentSessionId?.Invoke());
             }
             catch
             {
@@ -874,21 +880,20 @@ public class ProgramService : IDisposable
     {
         try
         {
-            var engine = _engine;
-            if (engine == null || !engine.IsRunning) return false;
-            if (!IsProgramSession(engine.CurrentSession)) return false;
+            if (_engineIsRunning?.Invoke() != true) return false;
+            if (!IsProgramSessionId(_engineCurrentSessionId?.Invoke())) return false;
 
-            App.Logger?.Information("ProgramService: stopping program session ({Reason})", reason);
+            Log.Information("ProgramService: stopping program session ({Reason})", reason);
 
             // Raises SessionStopped synchronously, which is what re-derives the feature lock and
             // resets the bottom bar. Clear the id AFTER the stop so anything listening on that
             // event can still tell the session apart from a foreign one while it unwinds.
-            engine.StopSession(suppressAbandonTracking: suppressAbandonTracking);
+            _engineStop?.Invoke(suppressAbandonTracking);
             return true;
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "ProgramService: could not stop the program session ({Reason})", reason);
+            Log.Warning(ex, "ProgramService: could not stop the program session ({Reason})", reason);
             return false;
         }
         finally
@@ -899,50 +904,32 @@ public class ProgramService : IDisposable
     }
 
     /// <summary>
-    /// Wire the MainWindow-owned session engine. Mirrors BarkService.AttachSessionEngine - the engine
-    /// is created lazily on first session, so the service cannot subscribe at its own construction.
-    /// Re-attaching safely detaches the previous engine.
+    /// Wire the head-owned session engine, reduced to the three questions this service asks of it.
+    /// Mirrors BarkService.AttachSessionEngine - the engine is created lazily on first session, so
+    /// the service cannot subscribe at its own construction. Re-attaching simply replaces the
+    /// previous set; the head owns the event subscriptions and calls
+    /// <see cref="OnEngineSessionCompleted"/> / <see cref="OnEngineSessionEnded"/>.
     /// </summary>
-    public void AttachSessionEngine(SessionEngine engine)
+    /// <param name="isRunning">The engine has a session on screen right now.</param>
+    /// <param name="currentSessionId">Id of that session, or null.</param>
+    /// <param name="stop">Stop the session as if the user pressed STOP; the bool is suppressAbandonTracking.</param>
+    public void AttachEngine(Func<bool> isRunning, Func<string?> currentSessionId, Action<bool> stop)
     {
-        if (engine == null) return;
-
-        try
-        {
-            foreach (var unsubscribe in _engineUnsubscribe)
-            {
-                try { unsubscribe(); } catch { /* detaching a dead engine must never throw */ }
-            }
-            _engineUnsubscribe.Clear();
-
-            EventHandler<SessionCompletedEventArgs> completed = (_, e) => OnSessionCompleted(e);
-            engine.SessionCompleted += completed;
-            _engineUnsubscribe.Add(() => engine.SessionCompleted -= completed);
-
-            // A held rollover has to be released on ANY end, not just a completion: a session the
-            // user stops at 04:05 would otherwise keep the clock shut until the next minute tick,
-            // and a stop during shutdown would never release it at all.
-            EventHandler stopped = (_, _) => OnSessionEnded();
-            engine.SessionStopped += stopped;
-            _engineUnsubscribe.Add(() => engine.SessionStopped -= stopped);
-
-            _engine = engine;
-
-            App.Logger?.Debug("ProgramService: attached to SessionEngine");
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Warning(ex, "ProgramService: AttachSessionEngine failed");
-        }
+        _engineIsRunning = isRunning;
+        _engineCurrentSessionId = currentSessionId;
+        _engineStop = stop;
+        Log.Debug("ProgramService: attached to a session engine");
     }
 
-    private void OnSessionCompleted(SessionCompletedEventArgs e)
+    /// <summary>The engine completed a session. Ignored unless it is the one this program started.</summary>
+    public void OnEngineSessionCompleted(string? sessionId)
     {
         try
         {
-            if (e?.Session == null) return;
+            if (_disposed) return;
+            if (sessionId == null) return;
             if (_expectedSessionId == null) return;
-            if (!string.Equals(e.Session.Id, _expectedSessionId, StringComparison.Ordinal)) return;
+            if (!string.Equals(sessionId, _expectedSessionId, StringComparison.Ordinal)) return;
 
             _expectedSessionId = null;
             NotifySessionCompleted();
@@ -953,7 +940,7 @@ public class ProgramService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "ProgramService: session completion handling failed");
+            Log.Warning(ex, "ProgramService: session completion handling failed");
         }
     }
 
@@ -964,22 +951,18 @@ public class ProgramService : IDisposable
     /// Posted rather than run inline: SessionStopped is raised PART WAY through StopSession, before
     /// the completion event that credits the day. Running the clock here would judge the day a
     /// moment before its completion landed - which is the whole bug the hold exists to prevent.
-    /// Background priority is the same "StopSession has fully unwound" beat the Programs tab uses.
+    /// CoreDispatch.Post is the hop: seeded, it queues onto the head's UI thread, which is the
+    /// same "StopSession has fully unwound" beat the Programs tab uses. Unseeded (no head, no
+    /// engine either) it runs in place, which is harmless because nothing can have called this.
     /// </summary>
-    private void OnSessionEnded()
+    public void OnEngineSessionEnded()
     {
         try
         {
+            if (_disposed) return;
             if (!_rolloverDeferred) return;
 
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted)
-            {
-                _rolloverDeferred = false;
-                return;
-            }
-
-            dispatcher.BeginInvoke(new Action(() =>
+            CoreDispatch.Post(() =>
             {
                 try
                 {
@@ -989,13 +972,13 @@ public class ProgramService : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "ProgramService: held rollover failed to run");
+                    Log.Warning(ex, "ProgramService: held rollover failed to run");
                 }
-            }), DispatcherPriority.Background);
+            });
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "ProgramService: session end handling failed");
+            Log.Warning(ex, "ProgramService: session end handling failed");
             _rolloverDeferred = false;
         }
     }
@@ -1028,7 +1011,7 @@ public class ProgramService : IDisposable
         // has to undo that verdict, not sit alongside it, or the record reads as missed AND done.
         if (record.Missed)
         {
-            App.Logger?.Information(
+            Log.Information(
                 "Program {Program} day {Day}: completion arrived for a day already stamped missed - clearing the miss",
                 enrollment.ProgramId, dayIndex);
             record.Missed = false;
@@ -1041,7 +1024,7 @@ public class ProgramService : IDisposable
 
         MarkDirty();
 
-        App.Logger?.Information("Program {Program} day {Day}: session slot completed",
+        Log.Information("Program {Program} day {Day}: session slot completed",
             enrollment.ProgramId, dayIndex);
 
         CheckDayCompletion(dayIndex);
@@ -1087,7 +1070,7 @@ public class ProgramService : IDisposable
             {
                 record.CompletedTaskIds.Add(task.Id);
                 taskFinished = true;
-                App.Logger?.Information("Program {Program} day {Day}: task '{Task}' completed",
+                Log.Information("Program {Program} day {Day}: task '{Task}' completed",
                     enrollment.ProgramId, day.DayIndex, task.Id);
             }
         }
@@ -1182,7 +1165,7 @@ public class ProgramService : IDisposable
         {
             try
             {
-                var roadmap = App.Roadmap;
+                var roadmap = CoreProgram.Roadmap();
                 var stepId = task.RoadmapStepId;
                 string? filed = null;
 
@@ -1211,14 +1194,14 @@ public class ProgramService : IDisposable
             catch (Exception ex)
             {
                 // The program day must not hinge on the photo being filed.
-                App.Logger?.Warning(ex, "Program ritual task '{Task}' could not file its photo", task.Id);
+                Log.Warning(ex, "Program ritual task '{Task}' could not file its photo", task.Id);
             }
         }
 
         record.CompletedTaskIds.Add(task.Id);
         MarkDirty();
 
-        App.Logger?.Information("Program {Program} day {Day}: ritual '{Task}' submitted",
+        Log.Information("Program {Program} day {Day}: ritual '{Task}' submitted",
             enrollment.ProgramId, day.DayIndex, task.Id);
 
         CheckDayCompletion();
@@ -1264,7 +1247,7 @@ public class ProgramService : IDisposable
     {
         get
         {
-            try { return WebcamTrackingService.IsConsentCurrent(); }
+            try { return WebcamConsent.IsCurrent(CoreSettings.Current); }
             catch { return true; }   // unknown is not blocked - never forgive a day on a guess
         }
     }
@@ -1283,7 +1266,7 @@ public class ProgramService : IDisposable
 
             try
             {
-                var videosPath = Path.Combine(App.EffectiveAssetsPath, "videos");
+                var videosPath = Path.Combine(CorePaths.EffectiveAssets, "videos");
                 var extensions = new[] { ".mp4", ".webm", ".avi", ".mkv", ".mov", ".wmv" };
 
                 // EnumerateFiles, not GetFiles: this stops at the first hit instead of materialising
@@ -1292,11 +1275,11 @@ public class ProgramService : IDisposable
                     (Directory.Exists(videosPath)
                      && Directory.EnumerateFiles(videosPath, "*.*", SearchOption.AllDirectories)
                          .Any(f => extensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)))
-                    || (App.ContentPacks?.GetAllActivePackVideos().Count ?? 0) > 0;
+                    || CoreProgram.ActivePackVideoCount() > 0;
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Program video-library probe failed: {Error}", ex.Message);
+                Log.Debug("Program video-library probe failed: {Error}", ex.Message);
                 _hasVideoLibrary = true;   // unknown is not blocked
             }
 
@@ -1349,7 +1332,7 @@ public class ProgramService : IDisposable
 
         AwardDayXp(day);
 
-        App.Logger?.Information("Program {Program} day {Day} complete", program.Id, day.DayIndex);
+        Log.Information("Program {Program} day {Day} complete", program.Id, day.DayIndex);
         DayCompleted?.Invoke(this, new ProgramDayEventArgs(program, day, record));
 
         var chapter = program.GetChapterForDay(day.DayIndex);
@@ -1393,7 +1376,7 @@ public class ProgramService : IDisposable
         record.CompletedAt = DateTime.Now;
         MarkDirty();
 
-        App.Logger?.Information(
+        Log.Information(
             "Program {Program} day {Day} settled at rollover: session and every task done, ambient {Have}/{Need} min - counted complete, day XP withheld",
             program.Id, dayIndex, record.AmbientMinutes, ambient.RequiredMinutes);
 
@@ -1416,11 +1399,11 @@ public class ProgramService : IDisposable
         {
             var xp = 200 + (int)Math.Round(400 * Math.Clamp(day.Intensity, 0, 1));
             if (day.IsBoss) xp = (int)Math.Round(xp * 1.5);
-            App.Progression?.AddXP(xp, XPSource.Other);
+            CoreProgression.AddXP(xp);
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "Program day XP award failed");
+            Log.Warning(ex, "Program day XP award failed");
         }
     }
 
@@ -1445,12 +1428,12 @@ public class ProgramService : IDisposable
 
         if (string.IsNullOrWhiteSpace(chapter.RewardId))
         {
-            App.Logger?.Information("Program {Program} chapter '{Chapter}' complete (no reward)",
+            Log.Information("Program {Program} chapter '{Chapter}' complete (no reward)",
                 program.Id, chapter.Id);
         }
         else
         {
-            App.Logger?.Information(
+            Log.Information(
                 "Program {Program} chapter '{Chapter}' complete - reward '{Reward}' {Verb} ({Description})",
                 program.Id, chapter.Id, chapter.RewardId,
                 alreadyBanked ? "was already banked" : "banked",
@@ -1473,12 +1456,12 @@ public class ProgramService : IDisposable
 
         if (!string.IsNullOrWhiteSpace(program.GraduationBadgeId))
         {
-            try { App.Achievements?.TryUnlock(program.GraduationBadgeId!); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Program graduation badge unlock failed"); }
+            try { CoreProgram.UnlockAchievement(program.GraduationBadgeId!); }
+            catch (Exception ex) { Log.Warning(ex, "Program graduation badge unlock failed"); }
         }
 
         MarkDirty();
-        App.Logger?.Information("Program {Program} graduated on attempt {Attempt} ({Perfect}/{Length} perfect days)",
+        Log.Information("Program {Program} graduated on attempt {Attempt} ({Perfect}/{Length} perfect days)",
             program.Id, enrollment.AttemptNumber, enrollment.PerfectDayCount, program.LengthDays);
 
         ProgramGraduated?.Invoke(this, new ProgramDayEventArgs(program, day, record));
@@ -1545,21 +1528,21 @@ public class ProgramService : IDisposable
                 ? Localization.Loc.GetF("programs_nudge_open", program.Title)
                 : Localization.Loc.GetF("programs_nudge_day", program.Title, day.DayIndex, day.Title);
 
-            App.Notifications?.Show(title, NotificationType.Info, TimeSpan.FromSeconds(12));
+            CoreProgram.Notify(title, "Info", TimeSpan.FromSeconds(12));
 
-            App.Logger?.Information("Program {Program}: nudged for day {Day} at {Hour}:00",
+            Log.Information("Program {Program}: nudged for day {Day} at {Hour}:00",
                 program.Id, enrollment.CurrentDay, enrollment.NudgeHour);
         }
         catch (Exception ex)
         {
-            App.Logger?.Warning(ex, "Program nudge failed");
+            Log.Warning(ex, "Program nudge failed");
         }
     }
 
     private void RaiseTodayChanged()
     {
         try { TodayChanged?.Invoke(this, EventArgs.Empty); }
-        catch (Exception ex) { App.Logger?.Warning(ex, "ProgramService TodayChanged handler threw"); }
+        catch (Exception ex) { Log.Warning(ex, "ProgramService TodayChanged handler threw"); }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1597,7 +1580,7 @@ public class ProgramService : IDisposable
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Program state file corrupted, attempting recovery from .tmp");
+                Log.Warning(ex, "Program state file corrupted, attempting recovery from .tmp");
             }
         }
 
@@ -1611,13 +1594,13 @@ public class ProgramService : IDisposable
                 var recovered = JsonSerializer.Deserialize<ProgramState>(json);
                 if (recovered == null) continue;
 
-                App.Logger?.Warning("Recovered program state from {Temp}", candidate);
+                Log.Warning("Recovered program state from {Temp}", candidate);
                 try { File.Move(candidate, _statePath, overwrite: true); } catch { }
                 return recovered;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to recover program state from {Temp}", candidate);
+                Log.Error(ex, "Failed to recover program state from {Temp}", candidate);
             }
         }
 
@@ -1654,7 +1637,7 @@ public class ProgramService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to serialize program state");
+            Log.Error(ex, "Failed to serialize program state");
             return;
         }
 
@@ -1674,7 +1657,7 @@ public class ProgramService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to serialize program state");
+            Log.Error(ex, "Failed to serialize program state");
             return;
         }
 
@@ -1715,23 +1698,22 @@ public class ProgramService : IDisposable
             try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
             // Deliberately does NOT bank the generation: the change stays dirty, the 30s timer
             // retries, and Dispose still flushes it.
-            App.Logger?.Error(ex, "Failed to save program state");
+            Log.Error(ex, "Failed to save program state");
         }
     }
 
     public void Dispose()
     {
-        _saveTimer?.Stop();
-        _clockTimer?.Stop();
+        _disposed = true;
+        _saveTimer.Dispose();
+        _clockTimer.Dispose();
 
-        foreach (var unsubscribe in _engineUnsubscribe)
-        {
-            try { unsubscribe(); } catch { }
-        }
-        _engineUnsubscribe.Clear();
-        // Dropped alongside its subscriptions: an engine we no longer listen to is one we must not
-        // reach into either, and shutdown is not a moment to be calling StopSession.
-        _engine = null;
+        // Dropped so nothing can reach back into the engine after shutdown has begun - shutdown is
+        // not a moment to be calling StopSession. The head's event subscriptions outlive this
+        // instance; _disposed above is what makes them harmless.
+        _engineIsRunning = null;
+        _engineCurrentSessionId = null;
+        _engineStop = null;
 
         if (HasUnsavedChanges) Save();
     }

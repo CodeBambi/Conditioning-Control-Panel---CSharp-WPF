@@ -8,6 +8,8 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models.Program;
+using ConditioningControlPanel.Services.Program;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -19,9 +21,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// <see cref="DayBoundaryHour"/> and <see cref="NudgeHour"/> and calls the program service.
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ProgramEnrollDialog.xaml.cs. Deviations:
-    ///  - <c>ProgramDefinition</c> lives in the WPF head (Models/Program), which this head may not
-    ///    reference, so the dialog takes <see cref="ProgramEnrollInfo"/> - the same fields under
-    ///    the same names, nothing more. See the ponytail note on that type.
+    ///  - It takes the real <see cref="ProgramDefinition"/>: Models/Program is in CCP.Core now, so
+    ///    the local stand-in that stood in for it is gone.
     ///  - WPF's <c>DialogResult</c> becomes <c>Close(bool)</c>, as in TextEditorDialog: Avalonia
     ///    carries the result through <c>ShowDialog&lt;bool?&gt;</c>.
     ///  - <c>SystemParameters.WorkArea</c> -> <c>Screens.Primary.WorkingArea</c> (also the primary
@@ -33,18 +34,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>ToImmutable()</c>.
     ///  - PreviewKeyDown -> KeyDown, DragMove() -> BeginMoveDrag(e).
     /// </summary>
-    // STILL UNREACHABLE, blocked on an unported caller — not on this dialog.
-    // Its only WPF call site is BtnProgramEnroll_Click in
-    // ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs:2010, and this head's
-    // CCP.Avalonia/Views/Windows/MainShellWindow.ProgramsTab.cs is a wholesale stub for a reason
-    // stronger than a missing seam: ProgramDefinition, ProgramEnrollment and ProgramService are
-    // all still in ConditioningControlPanel/Models/Program/ and Services/Program/, so there is no
-    // ProgramDefinition on this head to hand the constructor and no ProgramService to enrol into.
-    // `grep -rl "ProgramDefinition" CCP.Core` returning nothing is the check. Inventing a
-    // different entry point would produce an enrol button with nothing behind it.
+    // STILL UNREACHABLE, and the reason has changed: the type blocker is gone (ProgramDefinition,
+    // ProgramEnrollment and ProgramService are all in CCP.Core as of this layer), but the CALLER is
+    // not ported. Its only WPF call site is BtnProgramEnroll_Click in
+    // ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs:2010, whose twin here,
+    // CCP.Avalonia/Views/Windows/MainShellWindow.ProgramsTab.cs, is still a stub - and crucially
+    // the RUN panel it would switch to on success is unported too. Wiring the enrol button before
+    // that panel exists would take a confirmed enrolment, write programs.json, start the day clock
+    // and leave the tab sitting on the browse list saying "Enroll" - a UI lying about a run that
+    // is now underway. The gate to bring with the caller is ProgramService.CanEnroll(def, out
+    // reason) BEFORE the dialog opens, and Enroll(...) only on an awaited true.
     public partial class ProgramEnrollDialog : Window
     {
-        private readonly ProgramEnrollInfo _program;
+        private readonly ProgramDefinition _program;
 
         private readonly RadioButton _radioModeStrict;
         private readonly ComboBox _cmbBoundaryHour;
@@ -57,10 +59,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         public int DayBoundaryHour { get; private set; } = 4;
         public int NudgeHour { get; private set; } = 20;
 
-        /// <summary>Render/design constructor: sample data so --render-view can draw the dialog.</summary>
-        internal ProgramEnrollDialog() : this(SampleProgram()) { }
+        /// <summary>
+        /// Render/design constructor. The first shipped program rather than invented sample data:
+        /// BuiltInPrograms builds every definition fresh on each call, so nothing is shared and
+        /// nothing here can reach a real enrolment.
+        /// </summary>
+        internal ProgramEnrollDialog() : this(BuiltInPrograms.All()[0]) { }
 
-        public ProgramEnrollDialog(ProgramEnrollInfo program)
+        public ProgramEnrollDialog(ProgramDefinition program)
         {
             AvaloniaXamlLoader.Load(this);
 
@@ -237,104 +243,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             Close(true);
         }
-
-        private static ProgramEnrollInfo SampleProgram() => new()
-        {
-            Icon = "🌸",
-            Title = "The Descent",
-            Subtitle = "28 days, four chapters",
-            Pitch = "A month of careful, escalating conditioning. One session a day, and a short list of tasks around it.",
-            AccentColor = "#FF69B4",
-            LengthDays = 28,
-            SafetyNote = "You can stop at any time, and nothing is lost when you do. Days off are built in. "
-                       + "If a day feels wrong, skip it - the program is a schedule, not a contract with anyone but yourself.",
-            ContractPhrase = "I choose this, and I choose to keep choosing it.",
-            Rules = new ProgramEnrollRules { DaysOffAllowed = 2, StrictAvailable = true, DefaultDayBoundaryHour = 4 },
-            Chapters =
-            {
-                new ProgramEnrollChapter
-                {
-                    Name = "Chapter I - Settling",
-                    Subtitle = "Short sessions, gentle pacing. Learning what the routine feels like.",
-                    AccentColor = "#FF8FC7",
-                    Days = Enumerable.Range(1, 7).Select(i => new ProgramEnrollDay { DayIndex = i, SessionMinutes = 30 }).ToList()
-                },
-                new ProgramEnrollChapter
-                {
-                    Name = "Chapter II - Deepening",
-                    Subtitle = "The sessions lengthen and the task list grows a little teeth.",
-                    AccentColor = "#E85BB0",
-                    RewardDescription = "Unlocks the Deepening ambient track, permanently.",
-                    Days = Enumerable.Range(8, 7).Select(i => new ProgramEnrollDay { DayIndex = i, SessionMinutes = 45 }).ToList()
-                },
-                new ProgramEnrollChapter
-                {
-                    Name = "Chapter III - Holding",
-                    Subtitle = "Consistency over intensity. The same weight, every day, without flinching.",
-                    AccentColor = "#C44BA0",
-                    Days = Enumerable.Range(15, 7).Select(i => new ProgramEnrollDay { DayIndex = i, SessionMinutes = 60 }).ToList()
-                },
-                new ProgramEnrollChapter
-                {
-                    Name = "Chapter IV - The Descent",
-                    Subtitle = "The last week. Longest sessions, and the boss day at the end of it.",
-                    AccentColor = "#9B3A8C",
-                    RewardDescription = "Files the final session into your own catalogue, replayable forever.",
-                    Days = Enumerable.Range(22, 7).Select(i => new ProgramEnrollDay { DayIndex = i, SessionMinutes = 75 }).ToList()
-                }
-            }
-        };
-    }
-
-    /// <summary>
-    /// What the enrollment ceremony reads off a program, and nothing else.
-    ///
-    /// ponytail: local stand-in for ConditioningControlPanel.Models.Program.ProgramDefinition,
-    /// which lives in the WPF head and cannot be referenced from here. Field names and shapes are
-    /// the original's, so when Models/Program moves to Core this type is deleted and the
-    /// constructor's parameter type changed - no other edit.
-    /// </summary>
-    public class ProgramEnrollInfo
-    {
-        public string Icon { get; set; } = "📅";
-        public string Title { get; set; } = "";
-        public string Subtitle { get; set; } = "";
-        public string Pitch { get; set; } = "";
-        public string AccentColor { get; set; } = "#FF69B4";
-        public int LengthDays { get; set; }
-        public string SafetyNote { get; set; } = "";
-        public string ContractPhrase { get; set; } = "";
-        public List<ProgramEnrollChapter> Chapters { get; set; } = new();
-        public ProgramEnrollRules Rules { get; set; } = new();
-
-        public IEnumerable<ProgramEnrollDay> AllDays =>
-            Chapters.SelectMany(c => c.Days).OrderBy(d => d.DayIndex);
-    }
-
-    /// <summary>A named block of days. See <see cref="ProgramEnrollInfo"/>.</summary>
-    public class ProgramEnrollChapter
-    {
-        public string Name { get; set; } = "";
-        public string Subtitle { get; set; } = "";
-        /// <summary>Hex, e.g. "#FF69B4". Falls back to the program accent when blank.</summary>
-        public string AccentColor { get; set; } = "";
-        public string? RewardDescription { get; set; }
-        public List<ProgramEnrollDay> Days { get; set; } = new();
-    }
-
-    /// <summary>One day. See <see cref="ProgramEnrollInfo"/>.</summary>
-    public class ProgramEnrollDay
-    {
-        public int DayIndex { get; set; }
-        public int SessionMinutes { get; set; } = 30;
-    }
-
-    /// <summary>Program-wide rules the ceremony shows. See <see cref="ProgramEnrollInfo"/>.</summary>
-    public class ProgramEnrollRules
-    {
-        public int DaysOffAllowed { get; set; } = 1;
-        public bool StrictAvailable { get; set; } = true;
-        public int DefaultDayBoundaryHour { get; set; } = 4;
     }
 
     /// <summary>

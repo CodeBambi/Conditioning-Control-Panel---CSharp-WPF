@@ -33,8 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ---- HANDLERS -------------------------------------------------------------
 
         // ponytail: each of these forwards to MainWindow on WPF (Window.GetWindow(this) is
-        // MainWindow mw -> mw.<same name>). Needs the MainWindow.ProgramsTab partial and
-        // ProgramService, wired when Services/Program moves to Core.
+        // MainWindow mw -> mw.<same name>). ProgramService is in CCP.Core now, so the blocker is
+        // no longer the type - it is that MainShellWindow.ProgramsTab.cs is still a stub and this
+        // head constructs no ProgramService instance. See the header of that file.
         private void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) { }
         private void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) { }
@@ -72,9 +73,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// leave ~900 lines of item templates completely unproven. All four are shown here instead,
         /// so --render-all draws every template in the file.
         ///
-        /// ponytail: needs ProgramService (App.Programs) plus the MainWindow.ProgramsTab partial;
-        /// when they land, delete this method and the sample carriers under it and the panels go
-        /// back to being driven one at a time.
+        /// ponytail: needs a live ProgramService instance plus the MainShellWindow.ProgramsTab
+        /// partial. The service itself is in CCP.Core as of the program-service layer, and the real
+        /// browse list is ProgramService.Library (BuiltInPrograms.All()); when the run/lapsed/
+        /// graduated builders land, delete this method and the sample carriers under it and the
+        /// panels go back to being driven one at a time.
         /// </summary>
         private void SeedPlaceholders()
         {

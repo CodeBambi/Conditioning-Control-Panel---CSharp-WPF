@@ -74,6 +74,13 @@ namespace ConditioningControlPanel.Avalonia
                 // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
                 // open. Seeding it with anything would put a tour on screen that nothing drives.
 
+                // CoreProgram stays unseeded, and every one of its five providers is a service
+                // this head does not have: no PatreonService, no NotificationService, no
+                // AchievementService, no ContentPackService, no RoadmapService instance. Unseeded
+                // it answers "no premium, no toast, no badge, no pack videos, no roadmap" - which
+                // is the truth here, and the safe direction on the only one that gates anything:
+                // HasPremium false refuses a premium enrolment rather than granting one.
+
                 // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
                 // exactly what that is. Seeding it with anything else would be a lie.
