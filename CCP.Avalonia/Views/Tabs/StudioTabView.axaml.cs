@@ -53,8 +53,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <para><b>What is stubbed, and why.</b> Everything the WPF code-behind reaches into the app
     /// head for: <c>MainWindow.ToggleWallFeature</c> (the eleven wall modules' quick-toggle, which
     /// owns the session-lock refusal and the per-feature service start/stop),
-    /// <c>BarkService.NotifyFeatureOpened</c>, <c>PerimeterCometAdorner</c> (the active tile's
-    /// comet) and the detail crossfade. Each is marked <c>ponytail:</c> at its site.</para>
+    /// <c>PerimeterCometAdorner</c> (the active tile's comet) and the detail crossfade. Each is
+    /// marked <c>ponytail:</c> at its site. The FeatureOpened bark is no longer among them - it
+    /// crosses on <see cref="CoreBark"/>.</para>
     ///
     /// <para><b>The art is real.</b> The rack's feature plates and the door medallion resolve
     /// through <see cref="ModArt.TryLoad"/> over <see cref="CoreModArt"/> against the
@@ -1165,13 +1166,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// The FeatureOpened bark, on exactly the keys the FeaturePopupWindow path used. Losing
         /// this silently kills 14 voiced rules per built-in mod, which is why it lives on the one
         /// path every reveal goes through instead of on the click handler.
-        /// <para>ponytail: needs <c>App.Bark.NotifyFeatureOpened</c>, wired when BarkService moves
-        /// to Core. The KEYS are already correct and are the load-bearing half — deriving them from
-        /// a type name is what would fire into silence for Scheduler and Ramp.</para>
+        /// <para>The KEYS are the load-bearing half — deriving them from a type name is what
+        /// would fire into silence for Scheduler and Ramp. <see cref="CoreBark"/> swallows, so
+        /// there is no try/catch here; WPF's wraps the same single call.</para>
         /// </summary>
         private static void Announce(StudioRackEntry entry)
         {
             if (string.IsNullOrEmpty(entry.BarkFeature)) return;
+            CoreBark.NotifyFeatureOpened(entry.BarkFeature);
         }
 
         // =====================================================================================

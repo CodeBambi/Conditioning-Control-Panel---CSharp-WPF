@@ -206,9 +206,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <c>DisabledPhraseIds</c> mutes it, <c>PhraseAudioOverrides</c> re-points its audio. That
         /// order is what keeps a mod top-up from resurrecting a phrase the user deleted (#892).
         ///
-        /// ponytail: voice-line files (CompanionPhraseService.ResolveVoiceLineFolder) and bark lines
-        /// (BarkService.GetAllBarkLines) are still head-side, so those two row kinds are missing
-        /// here. Collapses into one GetAllPhrases() call when the service moves to Core.
+        /// The bark rows come through <see cref="CoreBark.AllLines"/>, which is the seam over
+        /// <c>BarkService.GetAllBarkLines()</c> - the engine itself cannot move (it subscribes to
+        /// some fifty head services), so only the enumeration crosses. Unseeded it answers an
+        /// empty list, so this head shows no bark rows, which is the truth on a head with no bark
+        /// engine rather than a lie about one.
+        ///
+        /// ponytail: voice-line files (CompanionPhraseService.ResolveVoiceLineFolder) are still
+        /// head-side, so that row kind is missing here. Collapses into one GetAllPhrases() call
+        /// when the service moves to Core.
         /// </summary>
         private static List<CompanionPhrase> LoadPhrases()
         {
@@ -248,6 +254,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     IsBuiltIn = false,
                     IsEnabled = custom.Enabled,
                     AudioFileName = custom.AudioFileName,
+                });
+            }
+
+            // Reactive "bark" voicelines for the active mod. Treated as built-in: the "Bark:" id
+            // prefix shares DisabledPhraseIds / RemovedPhraseIds, so toggling or hiding one routes
+            // through the same path the mod rows use and BarkService drops disabled lines at speak
+            // time. Mirrors CompanionPhraseService.GetAllPhrases (:276).
+            foreach (var b in CoreBark.AllLines)
+            {
+                if (removed.Contains(b.LineId)) continue;
+                result.Add(new CompanionPhrase
+                {
+                    Id = b.LineId,
+                    Text = b.Text,
+                    Category = "Bark",
+                    IsBark = true,
+                    GroupLabel = "Bark · " + b.Trigger,
+                    IsBuiltIn = true,
+                    IsEnabled = !disabled.Contains(b.LineId),
+                    AudioFileName = b.AudioFileName,
+                    AudioFolder = b.AudioFolder,
                 });
             }
 

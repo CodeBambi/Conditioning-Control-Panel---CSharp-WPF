@@ -1399,11 +1399,18 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             var point = e.GetCurrentPoint(this);
             if (point.Properties.IsRightButtonPressed) return; // Avalonia opens the ContextMenu itself
-            // ponytail: needs ConditioningControlPanel/AvatarTube/AvatarTubeWindow.Avatar.cs
-            // (BounceAvatar - the click squash, which on this head would be a hand-stepped tween on
-            // AvatarBounceHost's RenderTransform, not an Animation) and .Reactions.cs
-            // (ImgAvatar_MouseLeftButtonDown - the click bark, which needs BarkService). Neither
-            // partial is a Core move: both reach App.* services throughout.
+
+            // The reaction bark, the one line of WPF's ImgAvatar_MouseLeftButtonDown
+            // (AvatarTubeWindow.ChatInput.cs:75) that crosses. It feeds the rolling 60s click
+            // count behind the click-escalation eggs.
+            CoreBark.NotifyAvatarClicked();
+
+            // ponytail: the rest of that handler stays head-side and none of it is a Core move -
+            // the 4-click animation refresh, the 50-clicks-in-60s collapse trigger,
+            // App.Achievements.TrackAvatarClick, CirceClickEmote and the 1-in-25 pop sound all
+            // reach App.* or the animated-avatar pipeline. So does BounceAvatar (the click squash,
+            // AvatarTubeWindow.Avatar.cs), which here would be a hand-stepped tween on
+            // AvatarBounceHost's RenderTransform, not an Animation.
         }
 
         /// <summary>Send whatever is in the input box to the companion.</summary>

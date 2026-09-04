@@ -72,14 +72,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// App.EffectiveAssetsPath and hands the path to explorer.exe; CorePaths.EffectiveAssets is
         /// that path on this head and the Launcher is the portable shell open.
         ///
-        /// <para>ponytail: WPF also fires App.Bark.NotifyUiAction("open_assets") first. BarkService
-        /// has no Core seam, so the line is dropped rather than faked - a missing bark costs a
-        /// voiced reaction, never a file.</para>
+        /// <para>The "open_assets" bark fires first, exactly where WPF fires it, through
+        /// <see cref="CoreBark"/>. Unseeded on this head, so it is silent here and voiced on
+        /// Windows.</para>
         /// </summary>
         private async void BtnOpenAssetsFolder_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
+                CoreBark.NotifyUiAction("open_assets");
                 var assets = CorePaths.EffectiveAssets;
                 Directory.CreateDirectory(Path.Combine(assets, "images"));
                 Directory.CreateDirectory(Path.Combine(assets, "videos"));

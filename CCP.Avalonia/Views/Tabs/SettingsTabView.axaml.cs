@@ -301,22 +301,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void CardVault_Click(object? sender, RoutedEventArgs e) { }           // mw.CardVault_Click(...)
         private void CardJustDrop_Click(object? sender, RoutedEventArgs e) { }        // mw.CardJustDrop_Click(...)
         /// <summary>
-        /// WIRED (the easter egg half only). WPF's handler
+        /// WIRED (the bark and the easter egg). WPF's handler
         /// (MainWindow.UiUpdates.cs:1210) does four things: an achievement track, a bark
-        /// notify, the 100-clicks-in-60-seconds easter egg, and a click pulse. Only the egg
-        /// is portable today - App.Achievements and App.Bark are still head-side services -
-        /// and it needs nothing but a clock, so it runs here rather than waiting on them.
+        /// notify, the 100-clicks-in-60-seconds easter egg, and a click pulse. The bark now
+        /// crosses on <see cref="CoreBark"/> and fires FIRST, before the egg's early return,
+        /// which is where WPF fires it - the rolling 60s click count it feeds is what drives
+        /// the click-escalation eggs, so a click swallowed by the return would be a lost count.
         ///
         /// The counter lives on this view and not on the shell because this view owns the
         /// click: the shell's copy would be a second set of fields nothing increments.
         ///
-        /// ponytail: needs App.Achievements.TrackAvatarClick and App.Bark.NotifyAvatarClicked
-        /// (ConditioningControlPanel/Services/Progression/AchievementService.cs and
-        /// Services/Bark/BarkService.cs); neither is in Core. The click pulse is a
-        /// ScaleTransform animation on ImgLogo and is left out with them.
+        /// ponytail: still needs App.Achievements.TrackAvatarClick
+        /// (ConditioningControlPanel/Services/Progression/AchievementService.cs), which is not in
+        /// Core. The click pulse is a ScaleTransform animation on ImgLogo and is left out with it.
         /// </summary>
         private async void ImgLogo_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e)
         {
+            // Bark hook: rolling 60s click count drives the click-escalation eggs.
+            CoreBark.NotifyAvatarClicked();
+
             if (_easterEggTriggered) return;
 
             var now = DateTime.Now;

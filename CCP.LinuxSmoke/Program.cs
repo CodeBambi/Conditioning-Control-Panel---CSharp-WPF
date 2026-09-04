@@ -166,6 +166,33 @@ namespace ConditioningControlPanel.LinuxSmoke
                 // The session and moderation-log seams (wire/36). Unseeded, "no engine is running"
                 // is the truth on a head that has none, and the log sink swallows the write.
                 Check("CoreSession.IsEngineRunning is false with no engine", !CoreSession.IsEngineRunning);
+                // The bark seam (wire/101). BarkService stays in the WPF head; only the doorbell
+                // crosses. Unseeded every ping is silent - a bark is a line the companion may say,
+                // never a gate - and the one member that returns data returns EMPTY, never null,
+                // so the Phrase Manager renders "no bark rows" rather than dereferencing nothing.
+                CoreBark.NotifyUiAction("minimize");
+                CoreBark.NotifyTabNavigated("lab");
+                CoreBark.NotifyFeatureOpened("SchedulerRamp");
+                CoreBark.NotifyAvatarClicked();
+                CoreBark.NotifyChaosDraftAutopick();
+                CoreBark.NotifyChaosResultsShown(1, 2, 3, true, 4, 5, 6, "hard");
+                CoreBark.NotifyChaosRankUp("claimed");
+                Check("CoreBark pings are silent no-ops with no bark engine", true);
+                Check("CoreBark.AllLines is empty and not null with no bark engine",
+                      CoreBark.AllLines is { Count: 0 });
+                var barkSeen = new System.Collections.Generic.List<string>();
+                CoreBark.UiAction = a => barkSeen.Add("ui:" + a);
+                CoreBark.TabNavigated = t => barkSeen.Add("tab:" + t);
+                CoreBark.NotifyUiAction("close");
+                CoreBark.NotifyTabNavigated("play");
+                Check("CoreBark forwards its key once seeded",
+                      barkSeen.Count == 2 && barkSeen[0] == "ui:close" && barkSeen[1] == "tab:play");
+                CoreBark.UiAction = _ => throw new InvalidOperationException("boom");
+                CoreBark.AllLinesProvider = () => throw new InvalidOperationException("boom");
+                CoreBark.NotifyUiAction("close");
+                Check("CoreBark swallows a throwing sink and still answers empty",
+                      CoreBark.AllLines is { Count: 0 });
+                CoreBark.UiAction = null; CoreBark.TabNavigated = null; CoreBark.AllLinesProvider = null;
                 CoreModerationLog.RecordEdit("smoke", 1, "linux_smoke");
                 CoreModerationLog.Record(ProhibitedCategory.Minor, "input", "smoke");
                 Check("CoreModerationLog records are silent no-ops with no log attached", true);

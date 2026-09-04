@@ -123,15 +123,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// project - the timeline, validation, save, the recent-files write - is already ported
         /// (Views/Deeper/DeeperEditorWindow.axaml.cs and its inlined file-ops region).
         ///
-        /// <para>Two things WPF also does are dropped and neither is a gate:
-        /// <c>App.Bark.NotifyUiAction("deeper_new")</c>, a UI-telemetry ping with no Core seam, and
-        /// the editor's <c>Closed</c> handler, which refreshed the hub list - still a stub in
-        /// MainShellWindow.DeeperHub.cs, so there is no list to refresh yet.</para>
+        /// <para>The "deeper_new" bark fires first, where WPF fires it, through
+        /// <see cref="CoreBark"/>. Still dropped: the editor's <c>Closed</c> handler, which
+        /// refreshed the hub list - still a stub in MainShellWindow.DeeperHub.cs, so there is no
+        /// list to refresh yet.</para>
         /// </summary>
         internal async void BtnDeeperNewEnhancement_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
             try
             {
+                CoreBark.NotifyUiAction("deeper_new");
+
                 // ShowDialog throws on an owner that is not VISIBLE, and a shell minimised to the
                 // tray is loaded but not visible.
                 if (!IsVisible) return;
