@@ -10,8 +10,11 @@
        Image + EmojiToImageSource (x5)     -> plain TextBlock (Avalonia draws colour emoji natively)
        Line X1/X2/Y1/Y2                    -> StartPoint / EndPoint
        wv2:WebView2 x:Name="BrowserPreview"-> controls:WebHost - Microsoft.Web.WebView2 is Windows-only
-       vlc:VideoView x:Name="VideoPreview" -> a labelled Border; LibVLCSharp.WPF cannot be referenced
-                                              from a net8.0 head and no package may be added here
+       vlc:VideoView x:Name="VideoPreview" -> controls:WebHost as well. A local clip is navigated to
+                                              and the engine wraps it in its own <video> media
+                                              document, so the two branches share one surface; the
+                                              Border named VideoPreview is now only the no-engine /
+                                              not-a-video fallback
        ContextMenu x:Shared="False"        -> inlined as <Canvas.ContextMenu> and, for the hero
                                               "+ Effect" button, a <MenuFlyout>. Avalonia has no
                                               x:Shared and no FindResource-a-menu; item names and
@@ -183,12 +186,20 @@
                                FontSize="12" FontWeight="SemiBold"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
 
-                    <!-- Browser zoom cluster: page-zooms the embedded preview. Visibility tracks
-                         BrowserPreview so it disappears in video-file / audio modes. -->
+                    <!-- Browser zoom cluster: page-zooms the embedded preview in WPF. HIDDEN here,
+                         and not because of a mode. AdjustPreviewZoom is a stub that only logs -
+                         NativeWebView has no zoom factor at all, and CSS zoom through the script
+                         channel is not a substitute (per-document, lost on the next navigation, and
+                         it does not scale a fullscreened video). WPF's binding was
+                         IsVisible="{Binding #BrowserPreview.IsVisible}"; restore that line and this
+                         cluster comes back the moment the buttons do something. Two enabled buttons
+                         that log is a toolbar lying about what it offers, which is why they are not
+                         merely disabled. Same call, same reason, in EnhancementPlayerWindow's
+                         ShowMediaPaneFor. -->
                     <StackPanel Grid.Row="0" Grid.Column="2" x:Name="PreviewZoomCluster"
                                 Orientation="Horizontal" VerticalAlignment="Center"
                                 Margin="8,0,0,0"
-                                IsVisible="{Binding #BrowserPreview.IsVisible}">
+                                IsVisible="False">
                         <TextBlock Text="🔍" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
                         <Button x:Name="BtnPreviewZoomOut" Content="−"
                                 ToolTip.Tip="{loc:Str deeper_zoom_out_tt}"
@@ -309,13 +320,20 @@
                 <Border Grid.Row="0" Background="{DynamicResource DeeperPreviewSurfaceBgBrush}" Margin="10,10,10,5"
                         CornerRadius="8">
                     <Grid x:Name="PreviewHost">
-                        <!-- ponytail: was <vlc:VideoView x:Name="VideoPreview"/>. LibVLCSharp.WPF is
-                             a WPF assembly and LibVLCSharp.Avalonia is a package this layer may not
-                             add, so local video preview is a labelled surface, not a picture. -->
+                        <!-- Was <vlc:VideoView x:Name="VideoPreview"/>. LibVLCSharp is NOT what
+                             blocks local video any more: since wire/78 a local clip plays through
+                             BrowserPreview below, which the engine wraps in its own <video> media
+                             document. This Border is now the FALLBACK surface for the two cases
+                             that have no picture - a machine with no web engine, and a source whose
+                             extension is not video - and InitializeVideo writes the reason into the
+                             TextBlock for whichever it is. The literal here is only what shows if
+                             the Border is ever made visible by some other path; it is a plain
+                             literal and not {loc:Str} precisely so that assignment is not the
+                             "local value under a live binding" trap. -->
                         <Border x:Name="VideoPreview" IsVisible="False"
                                 Background="{DynamicResource DeeperWaveformBgBrush}">
                             <TextBlock x:Name="TxtVideoPreviewStub"
-                                       Text="Video preview needs LibVLCSharp.Avalonia"
+                                       Text="No video preview for this source."
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        FontSize="12" FontStyle="Italic"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>

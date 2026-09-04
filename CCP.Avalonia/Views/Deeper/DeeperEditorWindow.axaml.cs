@@ -78,10 +78,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///         drove), and AddScriptToExecuteOnDocumentCreatedAsync.</item>
     ///   <item><b>Win32.</b> <c>WindowChromeHelper.ApplyDarkTitleBar</c> (DwmSetWindowAttribute),
     ///         <c>RestoreOwnerOnClose</c>, <c>System.Windows.Forms.Screen.FromHandle</c> +
-    ///         <c>WindowInteropHelper</c> (the borderless-fullscreen preview window) and
-    ///         <c>VisualTreeHelper.GetDpi</c> (the gaze picker's screen placement).</item>
-    ///   <item><b>App services.</b> App.Tutorial + TutorialOverlay, App.DeeperPlayer /
-    ///         App.DeeperHost, the haptics bus and GazePickerWindow. App.EnhancementLibrary is
+    ///         <c>WindowInteropHelper</c> (the borderless-fullscreen preview window).
+    ///         <c>VisualTreeHelper.GetDpi</c> is NOT one of these any more: TopLevel.RenderScaling
+    ///         is its twin and the gaze picker uses it - see BeginGazePick in the RuleEditor
+    ///         partial.</item>
+    ///   <item><b>App services.</b> App.DeeperPlayer / App.DeeperHost and the haptics bus.
+    ///         GazePickerWindow is NOT one - it is ported, beside this file, and now wired.
+    ///         App.Tutorial is the CoreTutorial seam and TutorialOverlay is ported; what stops the
+    ///         tutorial here is that nothing SEEDS that seam on this head - see
+    ///         <see cref="StartEditorTutorial"/>. App.EnhancementLibrary is
     ///         head-only too, but the five members the editor needs from it are inlined in the
     ///         file-ops region, so Save / Save As / Export / Swap / Change media / drag-drop are
     ///         real, and the unsaved-changes guard on swap, drop-load and close asks
@@ -543,11 +548,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
             _ = InitializePreviewAsync();
 
-            // ponytail: needs TutorialEventBus + App.Tutorial + TutorialOverlay + App.Settings.
-            // The WPF Loaded handler dispatched the interactive tutorial's Part 2 (queued by the
-            // New Enhancement dialog) and, failing that, auto-launched the first-run editor
-            // coachmarks once. Neither service exists on this head, so both are dropped here and
-            // BtnEditorHelp is inert; nothing else in the editor depended on them.
+            // ponytail: the WPF Loaded handler dispatched the interactive tutorial's Part 2 (queued
+            // by the New Enhancement dialog) and, failing that, auto-launched the first-run editor
+            // coachmarks once. THREE of the four things that note used to name have arrived and are
+            // not the blocker any more: App.Settings is CoreSettings, App.Tutorial is CoreTutorial,
+            // and TutorialOverlay is ported (CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs,
+            // live ctor TutorialOverlay(Window)). What is actually left is two things:
+            //   1. CoreTutorial is UNSEEDED on this head - see CCP.Avalonia/App.axaml.cs:71. The
+            //      step lists live in ConditioningControlPanel/Services/TutorialService.cs, so
+            //      CoreTutorial.Start(name) is a silent no-op and a live overlay would open a dim
+            //      sheet over a blank card. See StartEditorTutorial for the shape to restore.
+            //   2. The Part 2 hand-off needs TutorialEventBus.PendingPart2Tutorial
+            //      (ConditioningControlPanel/Services/TutorialEventBus.cs) and CoreTutorial
+            //      deliberately carries no event bus, so there is no seam to read it from.
+            // The first-run auto-launch's "shown once" flag is NOT a blocker: WPF used
+            // AppSettings.HasSeenDeeperEditorIntro and that is in Core (AppSettings.cs:7938).
         }
 
         private void BtnEditorHelp_Click(object? sender, RoutedEventArgs e)
@@ -555,11 +570,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             StartEditorTutorial();
         }
 
-        /// <summary>ponytail: needs App.Tutorial + TutorialOverlay, wired when the tutorial service
-        /// moves to Core. The "?" button is present and hit-testable but opens nothing.</summary>
+        /// <summary>
+        /// ponytail: the "?" button is present and hit-testable and opens nothing. The old note here
+        /// said this waits on "App.Tutorial + TutorialOverlay, wired when the tutorial service moves
+        /// to Core" and BOTH halves of that are now wrong: <c>CoreTutorial</c> is the seam and
+        /// <c>CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs</c> is the ported overlay, with a
+        /// live <c>TutorialOverlay(Window)</c> constructor that walks whatever tour the seam runs.
+        ///
+        /// <para>The single blocker is that NOTHING SEEDS the seam on this head - see
+        /// <c>CCP.Avalonia/App.axaml.cs:71</c>. The twenty-two step lists are sentences about WPF
+        /// controls and stay in <c>ConditioningControlPanel/Services/TutorialService.cs</c>, so
+        /// <c>CoreTutorial.Start("DeeperEditorTutorial")</c> is a silent no-op today. Showing the
+        /// overlay anyway is the failure to avoid: it would dim the editor behind an empty card.
+        /// The four lines to write once a tour exists, WPF's shape with that one guard added:</para>
+        /// <code>
+        /// if (CoreTutorial.IsActive) CoreTutorial.Skip();
+        /// CoreTutorial.Start("DeeperEditorTutorial");
+        /// if (!CoreTutorial.IsActive) return;   // unseeded seam: do not dim over nothing
+        /// new TutorialOverlay(this).Show();
+        /// </code>
+        /// </summary>
         private void StartEditorTutorial()
         {
-            Log.Debug("DeeperEditor: editor tutorial requested; App.Tutorial is not on this head");
+            Log.Debug("DeeperEditor: editor tutorial requested; CoreTutorial is unseeded on this head");
         }
 
         private void LoadEnhancement(Enhancement enhancement, string? filePath)
@@ -709,7 +742,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // first can start navigating before the predicate is in place.
                 var pinned = uri.Host;
                 BrowserPreview.AllowNavigation = u =>
-                    u.Scheme == Uri.UriSchemeHttps && HostsMatchIgnoringWww(u.Host, pinned);
+                    u.Scheme == Uri.UriSchemeHttps && DeeperPreview.HostsMatchIgnoringWww(u.Host, pinned);
                 BrowserPreview.Source = uri;
                 _browserNavigated = true;
                 _browserPollDisabled = false;
@@ -729,35 +762,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             return Task.CompletedTask;
         }
 
-        /// <summary>Host equality that ignores a leading "www.", the same fence the player uses.
-        /// Deliberately NOT a domain-suffix match: a subdomain is a different host here, because
-        /// this pins to one page's host rather than admitting a whole domain the way the
-        /// allowlist did.</summary>
-        private static bool HostsMatchIgnoringWww(string? a, string? b)
-        {
-            static string Strip(string? h) =>
-                (h ?? "").StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? h![4..] : (h ?? "");
-            var (x, y) = (Strip(a), Strip(b));
-            return x.Length > 0 && x.Equals(y, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// Addresses the page's LARGEST &lt;video&gt;, which was BrowserVideoTimeSource's rule too:
-        /// a HypnoTube page carries preview thumbnails that are also video elements, and the first
-        /// in document order is routinely not the one being watched. Returns "" when the page has
-        /// no video yet, so a caller can tell "did nothing" from "did it".
-        ///
-        /// The one-shot <c>_ccpScrolled</c> flag replaces WPF's injected scrollIntoView poller: HT
-        /// stacks promo banners above the player, so without it the preview lands at scrollTop=0
-        /// with the video offscreen. It lives on the element, so a navigation resets it for free.
-        /// </summary>
-        private static string BrowserVideoScript(string tail) =>
-            "(function(){var l=null,a=0;document.querySelectorAll('video').forEach(function(v){"
-            + "var s=(v.clientWidth||0)*(v.clientHeight||0); if(s>=a){a=s;l=v;}});"
-            + "if(!l)return '';"
-            + "if(!l._ccpScrolled){l._ccpScrolled=1;try{l.scrollIntoView({block:'center'});}catch(e){}}"
-            + "return " + tail + ";})()";
-
         /// <summary>
         /// BrowserVideoTimeSource's poll, minus the WebView2 binding: read currentTime, duration and
         /// paused off the page each tick so the read-out, the playhead and every duration-derived
@@ -774,8 +778,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _browserPollInFlight = true;
             try
             {
-                var raw = await BrowserPreview.InvokeScriptAsync(
-                    BrowserVideoScript("l.currentTime+'|'+(l.duration||0)+'|'+(l.paused?0:1)"));
+                var raw = await BrowserPreview.InvokeScriptAsync(DeeperPreview.ReadTime(scrollIntoView: true));
 
                 // Re-checked AFTER the await, not only before it: a late answer from a page that
                 // has since been blanked would rebuild the timeline against a dead duration, and a
@@ -783,7 +786,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // pointer. WPF's handler took the same three guards before touching anything.
                 if (!_browserNavigated || _isScrubbing || _fsTransitionInFlight) return;
 
-                var parts = Unquote(raw).Split('|');
+                var parts = DeeperPreview.Unquote(raw).Split('|');
                 if (parts.Length != 3) return;
 
                 if (double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var dur)
@@ -825,7 +828,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 {
                     _pauseLocalPreviewOnce = false;
                     _ = BrowserPreview.InvokeScriptAsync(
-                        BrowserVideoScript("(l.autoplay=false,l.pause(),'ok')"));
+                        DeeperPreview.Invoke("l.autoplay=false;l.pause();", scrollIntoView: true));
                     playing = false; // don't flash ⏸ for one tick over a video we are pausing
                 }
                 if (playing != _isPlaying)
@@ -844,11 +847,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             }
             finally { _browserPollInFlight = false; }
         }
-
-        /// <summary>WebView2 hands back a JSON literal (a string arrives quoted); WebKitGTK hands
-        /// back the raw value. Strip one layer of quotes so the caller sees the same on both.</summary>
-        private static string Unquote(string? s)
-            => string.IsNullOrEmpty(s) ? "" : (s.Length >= 2 && s[0] == '"' && s[^1] == '"' ? s[1..^1] : s);
 
         /// <summary>
         /// Blanks the preview page and closes the fence behind it. The gate is narrowed to
@@ -882,12 +880,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// The web engine wraps a navigated media file in its own <c>&lt;video&gt;</c> media
         /// document (the sibling player's <c>LoadLocalVideo</c> ships on exactly that), and this
         /// window already drives and reads a page's largest <c>&lt;video&gt;</c> through
-        /// <see cref="BrowserVideoScript"/>. So the local branch JOINS the browser branch rather
+        /// <see cref="DeeperPreview.LargestVideo"/>. So the local branch JOINS the browser branch rather
         /// than growing a parallel one: duration, playhead, play/pause and seek all describe the
         /// real file, and <see cref="PollBrowserTimeAsync"/> is the LengthChanged / TimeChanged /
         /// EndReached triple in one place.
         ///
-        /// <para>The same one-file fence the player uses. <see cref="IsLocalFile"/> proves a file is
+        /// <para>The same one-file fence the player uses, and now literally the same code - both
+        /// windows' gates are <see cref="DeeperPreview"/>'s. <see cref="IsLocalFile"/> proves a file is
         /// THERE, not that it is media, so the extension is checked BEFORE the engine is pointed at
         /// anything - a shared .ccpenh.json naming /etc/passwd would otherwise be rendered as a
         /// page - and the gate then pins the engine to that one file for the rest of the load.</para>
@@ -903,7 +902,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             PreviewPlaceholder.IsVisible = false;
 
             string? full = null;
-            if (IsLocalVideoFile(path))
+            if (DeeperPreview.IsLocalVideoFile(path))
             {
                 try { full = IOPath.GetFullPath(path); } catch { full = null; }
             }
@@ -930,14 +929,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             BrowserPreview.IsVisible = true;
 
             // Assigned BEFORE Source, like the remote branch: the gate is read at navigation time.
-            // Inlined rather than pulled out as a helper because the sibling player already carries
-            // its own copy of this comparison - see the handover note about that fold.
-            BrowserPreview.AllowNavigation = u =>
-            {
-                if (!u.IsFile) return false;
-                try { return string.Equals(IOPath.GetFullPath(u.LocalPath), full, StringComparison.Ordinal); }
-                catch { return false; }
-            };
+            // Pinned into a non-nullable local because the lambda outlives this method's flow
+            // analysis - the same shape the player's local-video fence uses.
+            var pinnedFile = full;
+            BrowserPreview.AllowNavigation = u => u.IsFile && DeeperPreview.PathsEqual(u.LocalPath, pinnedFile);
             BrowserPreview.Source = new Uri(full);
             _browserNavigated = true;
             _browserPollDisabled = false;
@@ -1054,7 +1049,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             if (_browserNavigated)
             {
                 _ = BrowserPreview.InvokeScriptAsync(
-                    BrowserVideoScript(_isPlaying ? "(l.pause(),'ok')" : "(l.play(),'ok')"));
+                    DeeperPreview.Invoke(_isPlaying ? "l.pause();" : "l.play();", scrollIntoView: true));
                 return;
             }
             // Nothing to play and no clock to run: leave the glyph alone. A press then reads as
@@ -1087,8 +1082,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
             if (_browserNavigated && _totalSeconds > 0)
             {
-                _ = BrowserPreview.InvokeScriptAsync(BrowserVideoScript(string.Format(
-                    CultureInfo.InvariantCulture, "(l.currentTime={0:0.###},'ok')", _currentSeconds)));
+                _ = BrowserPreview.InvokeScriptAsync(DeeperPreview.Invoke(string.Format(
+                    CultureInfo.InvariantCulture, "l.currentTime={0:0.###};", _currentSeconds),
+                    scrollIntoView: true));
             }
             // ponytail: LOCAL AUDIO needs a decoder's seek - the WPF version pushed the new position
             // to AudioFileReader.CurrentTime here. Local video seeks through the branch above,
@@ -2447,9 +2443,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 UpdateTitle();
 
                 // ponytail: WPF also set TutorialEventBus.LastSavedEnhancementPath and emitted
-                // "FileSaved" so the HT walkthrough could advance to its follow-up card.
-                // TutorialEventBus is head-only (ConditioningControlPanel/Services/TutorialEventBus.cs)
-                // and no tutorial runs on this head, so there is nothing listening to notify.
+                // "FileSaved" so the HT walkthrough could advance to its follow-up card. Still
+                // blocked, and the blocker is NOT "the tutorial has not been ported" - the overlay
+                // has been (CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs) and CoreTutorial is
+                // the seam. It is that CoreTutorial deliberately carries NO event bus: the
+                // OnEvent advance trigger crosses as an enum only, and the publisher side stays in
+                // ConditioningControlPanel/Services/TutorialEventBus.cs. Nothing here can emit, and
+                // with the seam unseeded on this head nothing would be listening either.
             }
             catch (Exception ex)
             {
@@ -2810,7 +2810,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
             // Just relink: point the open project at the new media.
             _enhancement.MediaSource = newSource;
-            _enhancement.MediaType = isLocal && !IsLocalVideoFile(newSource) ? MediaTypes.Audio : MediaTypes.Video;
+            _enhancement.MediaType = isLocal && !DeeperPreview.IsLocalVideoFile(newSource) ? MediaTypes.Audio : MediaTypes.Video;
             MarkDirty();
             RefreshLinkedFilesUi();
             TeardownPreview();
@@ -2880,7 +2880,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         {
             if (string.IsNullOrWhiteSpace(path)) return false;
             var ext = IOPath.GetExtension(path).ToLowerInvariant();
-            return IsLocalVideoFile(path)
+            return DeeperPreview.IsLocalVideoFile(path)
                 || ext is ".mp3" or ".wav" or ".flac" or ".ogg" or ".m4a" or ".aac";
         }
 
@@ -2910,19 +2910,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 return !_isDirty;
             }
             return true; // discard
-        }
-
-        /// <summary>
-        /// Extension gate for a local media path. It already existed here to pick MediaType on a
-        /// media swap; <see cref="InitializeVideo"/> now also uses it as the pre-flight that keeps
-        /// a non-media file from being rendered as a page. Not a content sniff - the cheap half of
-        /// "is this media", run before the path reaches the engine.
-        /// </summary>
-        private static bool IsLocalVideoFile(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path)) return false;
-            var ext = IOPath.GetExtension(path).ToLowerInvariant();
-            return ext is ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
         }
 
         private static string FormatTime(double seconds)

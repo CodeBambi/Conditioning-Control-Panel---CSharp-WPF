@@ -12,6 +12,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
 using Serilog;
@@ -32,7 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///   Mouse capture on a handle        -> e.Pointer.Capture(handle)
     ///   ActualWidth/Height               -> Bounds.Width / Bounds.Height
     ///   CheckBox.Click                   -> IsCheckedChanged
-    ///   MessageBox.Show                  -> Serilog (no message box on this head)
+    ///   MessageBox.Show                  -> Views/Dialogs/MessageDialog.ShowAsync, awaited. "Avalonia
+    ///                                       has no MessageBox" was true when this file was written
+    ///                                       and has not been since that dialog landed
     /// </summary>
     public partial class DeeperEditorWindow
     {
@@ -350,10 +353,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         };
 
         // -- Help popups: list every trigger / action with its description ----
-        // ponytail: needs a message box. The text is still assembled from the same keys and
-        // argument order, so wiring a real dialog later is a one-line swap at each site.
+        // RESTORED. The note here said these "need a message box", which stopped being true when
+        // Views/Dialogs/MessageDialog landed: three panels of user-facing help text were being
+        // assembled in full and then written to the DEBUG LOG, so the three "?" buttons ran a
+        // visible amount of work and showed the user nothing. MessageDialog scrolls and caps at
+        // 640px, which is what these need - the trigger list is long. Argument order is WPF's
+        // (message first, title second) re-stated as ShowAsync(owner, title, message).
 
-        private void BtnTriggerHelp_Click(object? sender, RoutedEventArgs e)
+        private async void BtnTriggerHelp_Click(object? sender, RoutedEventArgs e)
         {
             var isAudio = _enhancement?.MediaType == MediaTypes.Audio;
             var types = isAudio ? TriggerTypesForAudio : TriggerTypesForVideo;
@@ -366,11 +373,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                     sb.Append("  ").AppendLine(desc);
                 sb.AppendLine();
             }
-            Log.Debug("DeeperEditor: trigger help ({Title}) needs a message box:\n{Body}",
-                Loc.Get("deeper_editor_help_browse_triggers"), sb.ToString().TrimEnd());
+            await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_help_browse_triggers"),
+                sb.ToString().TrimEnd());
         }
 
-        private void BtnActionHelp_Click(object? sender, RoutedEventArgs e)
+        private async void BtnActionHelp_Click(object? sender, RoutedEventArgs e)
         {
             var sb = new StringBuilder();
             foreach (var a in AllActionTypes)
@@ -381,13 +388,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                     sb.Append("  ").AppendLine(desc);
                 sb.AppendLine();
             }
-            Log.Debug("DeeperEditor: action help ({Title}) needs a message box:\n{Body}",
-                Loc.Get("deeper_editor_help_browse_actions"), sb.ToString().TrimEnd());
+            await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_help_browse_actions"),
+                sb.ToString().TrimEnd());
         }
 
-        private void BtnRegionHelp_Click(object? sender, RoutedEventArgs e)
-            => Log.Debug("DeeperEditor: region help ({Title}) needs a message box:\n{Body}",
-                Loc.Get("deeper_editor_help_region"), Loc.Get("deeper_editor_help_region_body"));
+        private async void BtnRegionHelp_Click(object? sender, RoutedEventArgs e)
+            => await MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_help_region"),
+                Loc.Get("deeper_editor_help_region_body"));
 
         private void BtnDeleteRule_Click(object? sender, RoutedEventArgs e)
         {
@@ -1597,22 +1604,84 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         // Gaze rect picker
         // ---------------------------------------------------------------------------------
 
+        private GazePickerWindow? _gazePickerWindow;
+
         /// <summary>
-        /// ponytail: needs GazePickerWindow plus the Win32 screen placement the WPF version used -
-        /// PreviewHost.PointToScreen for the two corners and VisualTreeHelper.GetDpi(this) to
-        /// convert them back to device-independent units. Avalonia has Screens/Scaling equivalents,
-        /// but the picker window itself is not ported, so this is a named stub: the "Pick on video…"
-        /// button exists and is hit-testable, and the rect stays whatever the four x/y/w/h boxes
-        /// and the 3x3 preset grid put there.
+        /// RESTORED. The note here claimed "the picker window itself is not ported"; it is, and it
+        /// always was on this branch - <c>Views/Deeper/GazePickerWindow.axaml.cs</c>, right beside
+        /// this file, complete with its eight resize handles, Done/Cancel and normalised
+        /// <c>ResultRect</c>. Nothing was blocking this but the note.
+        ///
+        /// <para>Screen placement is the one real deviation. WPF read the two corners with
+        /// <c>PreviewHost.PointToScreen</c> and divided by <c>VisualTreeHelper.GetDpi(this)</c> to
+        /// get WPF's DIP <c>Left</c>/<c>Top</c>. Avalonia's <c>PointToScreen</c> already answers in
+        /// device pixels and <c>Window.Position</c> takes device pixels, so the origin needs NO
+        /// conversion - only the size does, because <c>Width</c>/<c>Height</c> are DIPs.
+        /// <c>TopLevel.RenderScaling</c> is the DpiScale of that pair.</para>
+        ///
+        /// <para>The write-back is WPF's, elementwise into the array the caller's getter hands us:
+        /// the picker cloned its input, so assigning the reference would update nothing.</para>
         /// </summary>
         private void BeginGazePick(Func<double[]> rectGetter)
         {
-            _ = rectGetter;
-            Log.Debug("DeeperEditor: gaze rect picker needs GazePickerWindow + screen placement");
+            EndGazePick(commit: false);
+
+            var current = rectGetter();
+            if (current == null || current.Length < 4)
+                current = new[] { 0.25, 0.25, 0.5, 0.5 };
+
+            try
+            {
+                var origin = PreviewHost.PointToScreen(new Point(0, 0));
+                var far = PreviewHost.PointToScreen(
+                    new Point(PreviewHost.Bounds.Width, PreviewHost.Bounds.Height));
+                var scale = RenderScaling <= 0 ? 1.0 : RenderScaling;
+
+                var picker = new GazePickerWindow(current)
+                {
+                    Position = origin,
+                    Width = (far.X - origin.X) / scale,
+                    Height = (far.Y - origin.Y) / scale,
+                };
+                _gazePickerWindow = picker;
+                picker.Closed += (_, _) =>
+                {
+                    if (!ReferenceEquals(_gazePickerWindow, picker)) return;
+                    _gazePickerWindow = null;
+                    if (!picker.Committed) return;
+
+                    var result = picker.ResultRect;
+                    var tgt = rectGetter();
+                    if (tgt != null && tgt.Length >= 4 && result.Length >= 4)
+                    {
+                        tgt[0] = result[0];
+                        tgt[1] = result[1];
+                        tgt[2] = result[2];
+                        tgt[3] = result[3];
+                    }
+                    MarkDirty();
+                    if (_selectedRule != null) BuildTriggerFields();
+                    ScheduleValidation();
+                };
+                picker.Show(this);
+            }
+            catch (Exception ex)
+            {
+                _gazePickerWindow = null;
+                Log.Debug("DeeperEditor: BeginGazePick failed: {Error}", ex.Message);
+            }
         }
 
-        /// <summary>Force-closes any open picker. A no-op while <see cref="BeginGazePick"/> is a
-        /// stub, but every selection path calls it, so it stays named and called.</summary>
-        private void EndGazePick(bool commit) { _ = commit; }
+        /// <summary>Force-closes any open picker. The Closed handler reads <c>Committed</c>, which
+        /// only the picker's own Done/Enter sets, so closing from here never applies a rect.</summary>
+        private void EndGazePick(bool commit)
+        {
+            _ = commit;
+            var w = _gazePickerWindow;
+            if (w == null) return;
+            _gazePickerWindow = null;
+            try { w.Close(); }
+            catch { /* a picker already gone is the state we wanted */ }
+        }
     }
 }

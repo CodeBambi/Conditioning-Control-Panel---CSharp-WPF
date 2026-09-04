@@ -185,9 +185,9 @@
                     </DockPanel>
                 </StackPanel>
 
-                <!-- Right: browser zoom cluster (video mode only) + source pill + Change popover.
-                     The WPF cluster bound its Visibility to VideoPane's; here ShowMediaPaneFor sets
-                     both in the same statement, which is the same rule without a binding. -->
+                <!-- Right: browser zoom cluster + source pill + Change popover. In WPF the cluster
+                     bound its Visibility to VideoPane's; here ShowMediaPaneFor pins it HIDDEN in
+                     BOTH modes, because AdjustVideoZoom only logs - see its comment for why. -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <StackPanel x:Name="BrowserZoomCluster" Orientation="Horizontal"
                                 VerticalAlignment="Center" Margin="0,0,8,0"
