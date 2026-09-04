@@ -32,8 +32,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
         public SchedulerRackPanel()
         {
             AvaloniaXamlLoader.Load(this);
-            // ponytail: needs Controls.HelpPopover.Attach + Services.HelpContentService
-            // .GetContent("Scheduler") on HelpBtnStudioScheduler, wired when they move to Core.
+            // ponytail: needs Controls/HelpPopover.cs ported to this head. HelpContentService
+            // is already in Core; the popover control is the only thing still missing, and
+            // it is what would call .GetContent("Scheduler") for HelpBtnStudioScheduler.
         }
 
         /// <summary>The live control this panel hosts, for callers that need the real editor.</summary>

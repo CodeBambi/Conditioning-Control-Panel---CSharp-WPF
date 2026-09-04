@@ -1,8 +1,9 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using System.Windows.Threading;
+using System.Threading;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services;
 
@@ -33,7 +34,7 @@ public class RoadmapService : IDisposable
 {
     private readonly string _progressPath;
     private readonly string _diaryFolderPath;
-    private readonly DispatcherTimer _saveTimer;
+    private readonly Timer _saveTimer;
     private bool _isDirty;
     private bool _disposed;
 
@@ -47,29 +48,32 @@ public class RoadmapService : IDisposable
     public RoadmapService()
     {
         _progressPath = Path.Combine(
-            App.UserDataPath,
+            CorePaths.UserData,
             "roadmap.json");
 
         _diaryFolderPath = Path.Combine(
-            App.UserDataPath,
+            CorePaths.UserData,
             "roadmap_diary");
 
         Progress = LoadProgress();
         EnsureDiaryFolderExists();
 
-        // Auto-save every 30 seconds if dirty
-        _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-        _saveTimer.Tick += (s, e) =>
+        // Auto-save every 30 seconds if dirty. Was a WPF DispatcherTimer, so the tick ran on the
+        // UI thread and Save() could never serialize Progress while the UI mutated it. A
+        // System.Threading.Timer ticks on the thread pool, so the body hops back through
+        // CoreDispatch to keep that guarantee where a head has seeded a UI thread; unseeded (the
+        // Avalonia head today, the smoke runner, the tests) Post runs it in place, which is the
+        // same contract every other Core caller already has.
+        _saveTimer = new Timer(_ => CoreDispatch.Post(() =>
         {
             if (_isDirty)
             {
                 Save();
                 _isDirty = false;
             }
-        };
-        _saveTimer.Start();
+        }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
 
-        App.Logger?.Information("RoadmapService initialized. Track1: {T1}, Track2: {T2}, Track3: {T3}",
+        Log.Information("RoadmapService initialized. Track1: {T1}, Track2: {T2}, Track3: {T3}",
             Progress.Track1Unlocked, Progress.Track2Unlocked, Progress.Track3Unlocked);
     }
 
@@ -87,7 +91,7 @@ public class RoadmapService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to load roadmap progress");
+            Log.Error(ex, "Failed to load roadmap progress");
         }
 
         return new RoadmapProgress();
@@ -108,7 +112,7 @@ public class RoadmapService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to save roadmap progress");
+            Log.Error(ex, "Failed to save roadmap progress");
         }
     }
 
@@ -123,7 +127,7 @@ public class RoadmapService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to create roadmap diary folder");
+            Log.Error(ex, "Failed to create roadmap diary folder");
         }
     }
 
@@ -211,7 +215,7 @@ public class RoadmapService : IDisposable
             }
 
             _isDirty = true;
-            App.Logger?.Information("Roadmap step started: {StepId}", stepId);
+            Log.Information("Roadmap step started: {StepId}", stepId);
         }
     }
 
@@ -222,7 +226,7 @@ public class RoadmapService : IDisposable
     {
         if (!IsStepActive(stepId))
         {
-            App.Logger?.Warning("Attempted to submit photo for non-active step: {StepId}", stepId);
+            Log.Warning("Attempted to submit photo for non-active step: {StepId}", stepId);
             return;
         }
 
@@ -275,7 +279,7 @@ public class RoadmapService : IDisposable
                         Progress.UnlockTrack(RoadmapTrack.ObedientPuppet);
                         unlockedNewTrack = true;
                         TrackUnlocked?.Invoke(this, RoadmapTrack.ObedientPuppet);
-                        App.Logger?.Information("Track 2 (Obedient Puppet) unlocked!");
+                        Log.Information("Track 2 (Obedient Puppet) unlocked!");
                     }
                     break;
 
@@ -285,7 +289,7 @@ public class RoadmapService : IDisposable
                         Progress.UnlockTrack(RoadmapTrack.SluttyBlowdoll);
                         unlockedNewTrack = true;
                         TrackUnlocked?.Invoke(this, RoadmapTrack.SluttyBlowdoll);
-                        App.Logger?.Information("Track 3 (Slutty Blowdoll) unlocked!");
+                        Log.Information("Track 3 (Slutty Blowdoll) unlocked!");
                     }
                     break;
 
@@ -296,7 +300,7 @@ public class RoadmapService : IDisposable
                         Progress.JourneyCompletedAt = DateTime.Now;
                         earnedBadge = true;
                         BadgeEarned?.Invoke(this, EventArgs.Empty);
-                        App.Logger?.Information("Certified Blowdoll badge earned!");
+                        Log.Information("Certified Blowdoll badge earned!");
                     }
                     break;
             }
@@ -308,7 +312,7 @@ public class RoadmapService : IDisposable
         // Fire completion event
         StepCompleted?.Invoke(this, new RoadmapStepCompletedEventArgs(stepDef, progress, unlockedNewTrack, earnedBadge));
 
-        App.Logger?.Information("Roadmap step completed: {StepId}, Time: {Minutes} mins",
+        Log.Information("Roadmap step completed: {StepId}, Time: {Minutes} mins",
             stepId, timeMinutes);
     }
 
@@ -332,7 +336,7 @@ public class RoadmapService : IDisposable
         }
         catch (Exception ex)
         {
-            App.Logger?.Error(ex, "Failed to save photo to diary: {Source}", sourcePhotoPath);
+            Log.Error(ex, "Failed to save photo to diary: {Source}", sourcePhotoPath);
             return "";
         }
     }
@@ -368,14 +372,14 @@ public class RoadmapService : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        _saveTimer.Stop();
+        _saveTimer.Dispose();
 
         if (_isDirty)
         {
             Save();
         }
 
-        App.Logger?.Information("RoadmapService disposed");
+        Log.Information("RoadmapService disposed");
     }
 
     #endregion

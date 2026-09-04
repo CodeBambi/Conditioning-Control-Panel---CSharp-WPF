@@ -31,8 +31,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
         public RampRackPanel()
         {
             AvaloniaXamlLoader.Load(this);
-            // ponytail: needs Controls.HelpPopover.Attach + Services.HelpContentService
-            // .GetContent("IntensityRamp") on HelpBtnStudioRamp, wired when they move to Core.
+            // ponytail: needs Controls/HelpPopover.cs ported to this head. HelpContentService
+            // is already in Core; the popover control is the only thing still missing, and
+            // it is what would call .GetContent("IntensityRamp") for HelpBtnStudioRamp.
         }
 
         /// <summary>The live control this panel hosts, for callers that need the real editor.</summary>

@@ -14,8 +14,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - BitmapImage -> Avalonia.Media.Imaging.Bitmap(path).
     ///  - The "Saved!" flash swaps the button's TextBlock text (the button holds a TextBlock, not
     ///    Content) and uses DispatcherTimer.RunOnce instead of a hand-rolled timer.
-    ///  - App.Roadmap (photo path resolution, note persistence) is a head service: see the
-    ///    ponytail stubs. A PhotoPath that is already absolute still loads.
+    ///  - App.Roadmap becomes MainShellWindow.Roadmap, this head's one RoadmapService (the service
+    ///    itself is now Core's). Photo-path resolution and note persistence are restored against it.
     /// </summary>
     public partial class RoadmapDiaryDialog : Window
     {
@@ -87,9 +87,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             try
             {
-                // ponytail: needs RoadmapService.GetFullPhotoPath for a diary-relative path, wired when it moves to Core
-                var fullPath = _progress.PhotoPath;
-                if (!string.IsNullOrEmpty(fullPath) && Path.IsPathRooted(fullPath) && File.Exists(fullPath))
+                var fullPath = string.IsNullOrEmpty(_progress.PhotoPath)
+                    ? null
+                    : Windows.MainShellWindow.Roadmap.GetFullPhotoPath(_progress.PhotoPath);
+                if (!string.IsNullOrEmpty(fullPath) && File.Exists(fullPath))
                 {
                     _imgFullPhoto.Source = new Bitmap(fullPath);
                     _txtNoPhoto.IsVisible = false;
@@ -111,7 +112,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private void BtnSaveNote_Click()
         {
             var newNote = _txtUserNote.Text?.Trim();
-            // ponytail: needs RoadmapService.UpdateStepNote(_stepId, newNote), wired when it moves to Core
+            // Writes through the service, which persists immediately; it mutates the same
+            // RoadmapStepProgress this dialog holds when the step is a real one. The direct
+            // assignment stays for the render/design instance, whose progress the service has
+            // never heard of.
+            Windows.MainShellWindow.Roadmap.UpdateStepNote(_stepId, newNote);
             _progress.UserNote = newNote;
 
             // Visual feedback

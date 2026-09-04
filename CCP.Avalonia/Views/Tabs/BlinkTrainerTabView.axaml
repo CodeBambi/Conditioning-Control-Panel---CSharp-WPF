@@ -139,8 +139,9 @@
               </StackPanel>
             </StackPanel>
 
-            <!-- Help button. ponytail: needs HelpContentService (WPF wires it in
-                 MainWindow.Presets.cs via SetHelpContent(..., "BlinkTrainer")). -->
+            <!-- Help button. ponytail: needs Controls/HelpPopover.cs ported to this head.
+                 HelpContentService is already in Core; WPF wires the two together in
+                 MainWindow.Presets.cs via SetHelpContent(..., "BlinkTrainer"). -->
             <Button x:Name="HelpBtnBlinkTrainer" Theme="{StaticResource HelpButtonStyle}"
                     HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"
                     Tag="BlinkTrainer"/>

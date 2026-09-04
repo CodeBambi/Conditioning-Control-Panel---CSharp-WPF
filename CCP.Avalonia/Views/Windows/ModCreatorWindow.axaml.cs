@@ -317,9 +317,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnHelp_Click()
         {
-            // ponytail: needs HelpContentService + HelpVideoWindow, wired when they move to Core.
-            // The WPF original shows the tutorial clip when the "Modding" topic ships one and
-            // falls back to the coach-mark tutorial otherwise.
+            // WPF's order: prefer the tutorial clip when the topic ships one, else the coach-mark
+            // tutorial. Both halves are reachable now - HelpContentService is Core's, HelpVideoWindow
+            // is this head's - and "Modding" does ship a clip, so this always takes the video branch
+            // and the popup always lands in its fail-soft state (no video surface on this head:
+            // title, glyph and the topic blurb). Taken anyway because the other branch,
+            // LaunchTutorial, is still a stub, so the alternative here is a dead button.
+            var content = Services.HelpContentService.GetContent("Modding");
+            if (content.HasClip)
+            {
+                HelpVideoWindow.Show(content, this);
+                return;
+            }
             LaunchTutorial();
         }
 

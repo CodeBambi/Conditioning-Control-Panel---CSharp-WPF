@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/RoadmapStepPopup.xaml.cs. Deviations:
     ///  - <c>App.Logger</c> calls are dropped; the logger lives on the WPF App singleton.
-    ///  - <c>App.Roadmap.GetFullPhotoPath</c> is stubbed, so the thumbnail never loads yet and the
+    ///  - <c>App.Roadmap.GetFullPhotoPath</c> becomes <c>MainShellWindow.Roadmap</c>'s; the
     ///    checkmark stays. <see cref="LoadPhotoThumbnail"/> is otherwise the WPF body.
     ///  - <c>SystemParameters.WorkArea</c> -> <c>Screens.Primary.WorkingArea</c>, which is in
     ///    physical pixels, so the 20px margin and the window size are scaled before subtracting.
@@ -137,8 +137,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             {
                 if (string.IsNullOrEmpty(progress.PhotoPath)) return;
 
-                // ponytail: needs App.Roadmap (RoadmapService.GetFullPhotoPath), wired when it moves to Core
-                string? fullPath = null;
+                var fullPath = Windows.MainShellWindow.Roadmap.GetFullPhotoPath(progress.PhotoPath);
                 if (string.IsNullOrEmpty(fullPath) || !System.IO.File.Exists(fullPath)) return;
 
                 using var stream = System.IO.File.OpenRead(fullPath);

@@ -31,7 +31,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    real dialog later is a one-line swap at each site.
     ///  - Import/Export need <c>OpenFileDialog</c>/<c>SaveFileDialog</c> plus SessionFileService;
     ///    both are stubs. Save/Cancel are fully ported.
-    ///  - <c>BtnHelp</c>'s <c>HelpContentService</c> lookup and <c>HelpVideoWindow</c> hand-off is
+    ///  - <c>BtnHelp</c> keeps the coach-mark overlay instead of the clip on purpose; see the
+    ///    handler. The old note said the lookup and the hand-off were
     ///    a stub; the button opens the coach-mark overlay, which was WPF's own fallback.
     ///  - Mouse -> pointer: <c>DragMove</c> -> <c>BeginMoveDrag</c>, <c>CaptureMouse</c> ->
     ///    <c>e.Pointer.Capture</c>, <c>MouseRightButtonDown</c> -> <c>PointerPressed</c> filtered
@@ -170,9 +171,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnHelp_Click()
         {
-            // ponytail: needs HelpContentService + HelpVideoWindow, wired when they are ported.
-            // WPF preferred the tutorial clip when the topic shipped one and fell back to this
-            // overlay; the fallback is what runs until then.
+            // DELIBERATE DEVIATION, not a stub. WPF preferred the tutorial clip when the topic
+            // shipped one and fell back to this overlay. Both halves are reachable now
+            // (HelpContentService is Core's, HelpVideoWindow is this head's) and "SessionEditor"
+            // does ship a clip - but this head has no video surface, so taking the video branch
+            // would ALWAYS swap a working coach-mark walkthrough for a caption-only popup. Restore
+            // the WPF order only once a clip can actually play here.
             TutorialOverlay.IsVisible = true;
         }
 
