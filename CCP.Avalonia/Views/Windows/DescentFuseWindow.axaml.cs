@@ -39,6 +39,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>DescentRoomSfx</c>, <c>App.DescentMigration</c>, <c>App.DescentCountdown</c> and
     ///    <c>App.ProfileSync</c> are still in the WPF head, so each is a stub below.
     ///  - <c>DescentFuseCopy</c> is likewise still in the WPF head; its two sentences are inlined.
+    ///
+    /// <para><b>STILL UNREACHABLE — blocked on unported callers, not on this window.</b>
+    /// <see cref="Open"/> is complete and takes its owner correctly; what is missing is everything
+    /// that would call it. All four WPF call sites were checked:</para>
+    /// <list type="bullet">
+    ///   <item><c>DescentShowDirector</c>
+    ///   (ConditioningControlPanel/Services/Descent/DescentShowDirector.cs:156/233/406) opens the
+    ///   Live, CatchUp and Ignition shows. CCP.Core/Services/Descent/ carries the SHOW — the
+    ///   timelines and the handoff this file already uses — but not the director and not
+    ///   <c>DescentCountdownService</c>, so nothing on this head knows a countdown reached zero.
+    ///   That is also what MainShellWindow.DescentFuse.cs is waiting on.</item>
+    ///   <item><see cref="ForceCloseAll"/> is the panic path's
+    ///   (MainWindow.StartStop.cs:525), and this head has no <c>StopEngine</c> to call it from.</item>
+    /// </list>
+    /// <para>The gate is the director's, not this window's: it opens the Live show only when the
+    /// countdown phase reaches Zero. Opening the show from anywhere else would put a fullscreen
+    /// topmost surface over the user with no countdown behind it, so no substitute entry point
+    /// was invented.</para>
     /// </summary>
     public partial class DescentFuseWindow : Window
     {

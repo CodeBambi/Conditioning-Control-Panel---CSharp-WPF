@@ -299,7 +299,68 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void MysteryRevealFace_Click(object? sender, PointerReleasedEventArgs e) { }   // mw.CardMystery_Click(...)
         private void CardVault_Click(object? sender, RoutedEventArgs e) { }           // mw.CardVault_Click(...)
         private void CardJustDrop_Click(object? sender, RoutedEventArgs e) { }        // mw.CardJustDrop_Click(...)
-        private void ImgLogo_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e) { } // mw.ImgLogo_MouseLeftButtonDown(...)
+        /// <summary>
+        /// WIRED (the easter egg half only). WPF's handler
+        /// (MainWindow.UiUpdates.cs:1210) does four things: an achievement track, a bark
+        /// notify, the 100-clicks-in-60-seconds easter egg, and a click pulse. Only the egg
+        /// is portable today - App.Achievements and App.Bark are still head-side services -
+        /// and it needs nothing but a clock, so it runs here rather than waiting on them.
+        ///
+        /// The counter lives on this view and not on the shell because this view owns the
+        /// click: the shell's copy would be a second set of fields nothing increments.
+        ///
+        /// ponytail: needs App.Achievements.TrackAvatarClick and App.Bark.NotifyAvatarClicked
+        /// (ConditioningControlPanel/Services/Progression/AchievementService.cs and
+        /// Services/Bark/BarkService.cs); neither is in Core. The click pulse is a
+        /// ScaleTransform animation on ImgLogo and is left out with them.
+        /// </summary>
+        private async void ImgLogo_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e)
+        {
+            if (_easterEggTriggered) return;
+
+            var now = DateTime.Now;
+            if (_easterEggFirstClick == DateTime.MinValue || (now - _easterEggFirstClick).TotalSeconds > 60)
+            {
+                _easterEggFirstClick = now;
+                _easterEggClickCount = 1;
+                return;
+            }
+
+            _easterEggClickCount++;
+            if (_easterEggClickCount < 100) return;
+
+            _easterEggTriggered = true;
+            await ShowEasterEgg();
+        }
+
+        /// <summary>
+        /// PORTED from MainWindow.UiUpdates.ShowEasterEgg. Deviations, all of them a service
+        /// this head does not have:
+        ///  - <c>App.ProfileSync.RecordEasterEggReadAsync</c> is head-side, so the reader count
+        ///    stays -1, which is exactly what the WPF path passes when ProfileSync is null. The
+        ///    window hides its reader line on a non-positive count, so nothing invents a number.
+        ///  - <c>App.AvatarWindow.PlayNoteClip</c> plus the <c>NewYearNoteReactionSeen</c> latch
+        ///    are skipped together. Skipping BOTH is deliberate: latching the flag without the
+        ///    clip actually playing would burn a once-ever moment on silence.
+        ///  - <c>ShowDialog</c> is async here and needs a VISIBLE owner - a shell minimised to
+        ///    the tray is loaded but not visible and Avalonia throws on it.
+        /// </summary>
+        private async System.Threading.Tasks.Task ShowEasterEgg()
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner || !owner.IsVisible) return;
+                await new Views.Windows.EasterEggWindow(-1).ShowDialog(owner);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Easter egg window failed to open");
+            }
+        }
+
+        private int _easterEggClickCount;
+        private DateTime _easterEggFirstClick = DateTime.MinValue;
+        private bool _easterEggTriggered;
         /// <summary>Weekly intake pass card face (the flipped-over centre logo tile). Sits INSIDE
         /// LogoBrandFrame, so the click would otherwise bubble on into the logo's click-pulse
         /// easter egg; MainWindow's handler marks the event handled to stop that.</summary>

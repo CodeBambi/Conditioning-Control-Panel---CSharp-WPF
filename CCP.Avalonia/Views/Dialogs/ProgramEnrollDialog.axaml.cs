@@ -33,6 +33,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>ToImmutable()</c>.
     ///  - PreviewKeyDown -> KeyDown, DragMove() -> BeginMoveDrag(e).
     /// </summary>
+    // STILL UNREACHABLE, blocked on an unported caller — not on this dialog.
+    // Its only WPF call site is BtnProgramEnroll_Click in
+    // ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs:2010, and this head's
+    // CCP.Avalonia/Views/Windows/MainShellWindow.ProgramsTab.cs is a wholesale stub for a reason
+    // stronger than a missing seam: ProgramDefinition, ProgramEnrollment and ProgramService are
+    // all still in ConditioningControlPanel/Models/Program/ and Services/Program/, so there is no
+    // ProgramDefinition on this head to hand the constructor and no ProgramService to enrol into.
+    // `grep -rl "ProgramDefinition" CCP.Core` returning nothing is the check. Inventing a
+    // different entry point would produce an enrol button with nothing behind it.
     public partial class ProgramEnrollDialog : Window
     {
         private readonly ProgramEnrollInfo _program;

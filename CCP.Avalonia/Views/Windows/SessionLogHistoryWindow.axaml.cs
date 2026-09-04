@@ -22,6 +22,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    may reference neither. The formatting it does — duration, media counts, status — is
     ///    ported verbatim, so restoring the <c>HistoryRow(SessionLog)</c> constructor when the model
     ///    reaches Core is a one-liner.
+    ///
+    /// <para><b>DELIBERATELY STILL UNREACHABLE.</b> Its WPF call site is
+    /// <c>MainWindow.Presets.BtnSessionHistory_Click</c>, and the button that raises it —
+    /// <c>BtnSessionHistory</c> — is already in this head's Views/Tabs/PresetsTabView.axaml with no
+    /// Click handler. Wiring those two together is a one-liner and is REFUSED, because
+    /// <see cref="LoadRecentRows"/> below has no data source on this head: WPF reads
+    /// <c>App.SessionLog.LoadRecentLogs()</c> from
+    /// ConditioningControlPanel/Services/Session/SessionLogService.cs, which is not in CCP.Core,
+    /// so the list is three fabricated sessions seeded for the render proof. A "Recent Sessions"
+    /// button that opens invented dates, durations and media counts is a window that LIES about
+    /// the user's own history — worse than a button that does nothing, and not something a
+    /// reviewer or a render can catch, since the fake rows look exactly like real ones.</para>
+    ///
+    /// <para>What unblocks it: <c>SessionLogService</c> and <c>Models.SessionLog</c> reaching Core.
+    /// At that point <see cref="LoadRecentRows"/> becomes a real read, the
+    /// <c>HistoryRow(SessionLog)</c> constructor comes back, and the wiring is
+    /// <c>BtnSessionHistory.Click += … new SessionLogHistoryWindow().ShowDialog(owner)</c> in
+    /// PresetsTabView's constructor, guarded on a VISIBLE owner.</para>
     /// </summary>
     public partial class SessionLogHistoryWindow : Window
     {
