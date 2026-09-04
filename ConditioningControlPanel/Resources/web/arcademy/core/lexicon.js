@@ -79,6 +79,15 @@ export const DEFAULT_LEXICON = Object.freeze({
   replay_board: 'Flip the board again',
   share: 'Copy share card',
   shared: 'Copied to clipboard',
+
+  /* the SLIP (shell/sharecard.js): the night drawn as a paper report card.
+   * The image itself is deliberately unskinnable - its header and its class
+   * names are the neutral English ones, so a paste never names your mod - but
+   * the BUTTONS around it are ordinary chrome and a mod may re-voice them. */
+  share_image: 'Share report card',
+  share_add_name: 'Add my name',
+  share_saved: 'Report card saved',
+  share_unavailable: 'Sharing is not available here',
   done: 'Done',
   xp: 'XP',
   streak: 'Streak',

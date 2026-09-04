@@ -1942,6 +1942,12 @@ internal static class ArcademyHostService
         ["replay_board"] = "Flip the board again",
         ["share"] = "Copy share card",
         ["shared"] = "Copied to clipboard",
+        // The SLIP (shell/sharecard.js). The drawn card is unskinnable on purpose - a
+        // paste must never name the player's mod - but its chrome is ordinary chrome.
+        ["share_image"] = "Share report card",
+        ["share_add_name"] = "Add my name",
+        ["share_saved"] = "Report card saved",
+        ["share_unavailable"] = "Sharing is not available here",
         ["done"] = "Done",
         ["retake"] = "Retake",
         ["xp"] = "XP",

@@ -362,6 +362,43 @@ kbd {
   padding:10px 12px; color:var(--ink-dim); overflow-x:auto; max-width:100%;
 }
 
+/* ---- the SLIP (shell/sharecard.js): the night drawn as a paper report card ----
+   The row is its own line under the text share, because the two are different
+   verbs and a player should never mash the wrong one. `position:relative` is
+   load-bearing: the print beat's paper is absolutely placed against this box. */
+.arc-shareimg { position:relative; margin-top:10px; }
+.arc-sharename {
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:13px; color:var(--ink-dim); cursor:pointer; user-select:none;
+}
+.arc-sharename input { accent-color:var(--pink); width:15px; height:15px; cursor:pointer; }
+.arc-sharename:hover { color:var(--ink); }
+
+/* THE PRINT BEAT. A slip slides out from under the button while the canvas
+   draws. It is decoration only - aria-hidden, no text, and the toast is what
+   actually reports the outcome. */
+.arc-shareslip {
+  position:absolute; left:10px; top:calc(100% - 6px);
+  width:64px; height:84px; pointer-events:none; z-index:1;
+  border-radius:2px 2px 4px 4px;
+  background:linear-gradient(180deg, #F2EBDD 0%, #E4DAC6 100%);
+  box-shadow:0 6px 16px rgba(0,0,0,.35);
+  transform-origin:50% 0%;
+  animation:arc-shareprint 900ms cubic-bezier(.25,.9,.3,1) infinite;
+}
+@keyframes arc-shareprint {
+  0%   { transform:translateY(-84px) scaleY(.2); opacity:0; }
+  45%  { transform:translateY(0) scaleY(1); opacity:1; }
+  100% { transform:translateY(0) scaleY(1); opacity:.55; }
+}
+/* Law VI, the reduced-motion collapse: the paper is still minted and still
+   says the same thing, it just arrives instead of sliding. */
+.arc-shareslip.still { animation:arc-sharefade 120ms linear both; }
+@keyframes arc-sharefade { from { opacity:0; } to { opacity:.85; } }
+@media (prefers-reduced-motion: reduce) {
+  .arc-shareslip { animation:arc-sharefade 120ms linear both; }
+}
+
 /* ---- the fullscreen report beat (shell marks <html> arc-report-on) ----
    The stage is the night ground under a desk lamp; the report itself is a
    graded PAPER laid on it. Base .reportcard/.rcell/.grade rules above still
