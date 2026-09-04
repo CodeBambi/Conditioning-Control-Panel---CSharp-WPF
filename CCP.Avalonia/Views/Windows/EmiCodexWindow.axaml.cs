@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -30,9 +31,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <c>controls:WebHost</c>. Deviations, all forced:</para>
     /// <list type="bullet">
     ///   <item>The whole <c>EmiCodex</c> service stays in the WPF head (it is built on
-    ///     Microsoft.Web.WebView2), so <see cref="Codex"/> below is a stub of the four calls this
-    ///     window makes, sample chapters included. Every layout path - headers, blurb, steps,
-    ///     figure captions, callouts, limits, the margin line - is the real one.</item>
+    ///     Microsoft.Web.WebView2), so <see cref="Codex"/> below stubs three of the four calls this
+    ///     window makes, sample chapters included. The fourth - opening the manual - is not stubbed:
+    ///     its WPF body is a ShellExecute, which is xdg-open here, and it ports verbatim. Every
+    ///     layout path - headers, blurb, steps, figure captions, callouts, limits, the margin line -
+    ///     is the real one.</item>
     ///   <item>The <c>CodexChapter</c>/<c>CodexBlock</c>/<c>CodexMargin</c> records are copied from
     ///     Services/EmiDesk/EmiCodex.cs minus their <c>[JsonProperty]</c> attributes: this head
     ///     never deserialises them, and Newtonsoft is a Core reference, not one of ours.</item>
@@ -488,10 +491,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// moves to Core.</summary>
         internal static void NoteChapter(string? chapterId) { _ = chapterId; }
 
-        /// <summary>ponytail: needs EmiCodex.OpenManualInBrowser (Process.Start plus its logging),
-        /// wired when it moves to Core. Cross-platform upgrade path here is
-        /// TopLevel.Launcher.LaunchUriAsync, which needs the window that owns this reader.</summary>
-        internal static void OpenManualInBrowser() { }
+        /// <summary>
+        /// <c>EmiCodex.OpenManualInBrowser</c>, which is portable in full: WPF's
+        /// <c>Process.Start(ManualUrl) { UseShellExecute = true }</c> is ShellExecute on Windows and
+        /// xdg-open on Linux, so the WPF body ports verbatim including its warning. The URL is the
+        /// same const the service carries.
+        /// </summary>
+        internal static void OpenManualInBrowser()
+        {
+            try { Process.Start(new ProcessStartInfo(ManualUrl) { UseShellExecute = true }); }
+            catch (Exception ex) { Log.Warning(ex, "[EmiCodex] could not open the manual in a browser"); }
+        }
     }
 
     /// <summary>

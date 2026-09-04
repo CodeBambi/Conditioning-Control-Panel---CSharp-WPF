@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -18,7 +19,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>SystemParameters.WorkArea</c> becomes <c>Screens.Primary.WorkingArea</c>, which is
     ///    only populated once the window has a platform handle, so placement moves to OnOpened.
     ///  - <c>MouseLeftButtonDown</c> / <c>Click</c> become PointerPressed / Click wired here.
-    ///  - <c>App.Logger</c> calls are dropped; there is no logger on this head yet.
+    ///  - <c>App.Logger</c> is Serilog's static <c>Log</c>; the two error templates are unchanged.
     ///  - <see cref="ForceToTopMost"/>'s Win32 body is stubbed; see the note on it.
     /// </summary>
     public partial class QuestCompletePopup : Window
@@ -91,7 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ForceToTopMost()
         {
             try { Topmost = true; }
-            catch { /* the WPF original swallowed the same failure */ }
+            catch (Exception ex) { Log.Error(ex, "QuestCompletePopup: ForceToTopMost failed"); }
         }
 
         /// <summary>
@@ -116,8 +117,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     area.Right - (int)((Width + 20) * scale),
                     area.Bottom - (int)((Height + 20) * scale));
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error(ex, "Failed to position quest complete popup");
                 // Fallback: centre on screen, as the WPF original did.
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }

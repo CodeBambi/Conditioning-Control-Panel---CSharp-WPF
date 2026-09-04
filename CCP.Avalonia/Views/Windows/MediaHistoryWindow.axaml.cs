@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -8,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -19,8 +21,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// PORTED from ConditioningControlPanel/Windows/MediaHistoryWindow.xaml.cs. Deviations:
     ///  - <c>App.MediaHistory</c> / <c>MediaLogEntry</c> / <c>MediaHistoryService</c> live in the
     ///    WPF head, so <see cref="LoadRows"/> returns placeholder rows and the EntryAdded /
-    ///    Cleared subscriptions, the Clear button and reveal-in-explorer are stubs. The filter,
-    ///    search, count and preview logic are ported verbatim and run against those rows.
+    ///    Cleared subscriptions and the Clear button are stubs. The filter, search, count and
+    ///    preview logic are ported verbatim and run against those rows.
+    ///  - Reveal-in-folder and open-file ARE live: WPF's Win32 <c>ExplorerLauncher</c> becomes
+    ///    <c>UseShellExecute</c>, which is ShellExecute on Windows and xdg-open on Linux. Only the
+    ///    SELECT-the-file half of Explorer's behaviour is lost.
     ///  - <see cref="MediaHistoryRow"/> takes the fields it formats rather than a
     ///    <c>MediaLogEntry</c>, for the same reason. Restoring the model constructor when it
     ///    reaches Core is a one-liner.
@@ -271,15 +276,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 RevealInExplorer(row.FilePath);
         }
 
-        /// <summary>ponytail: needs Helpers.ExplorerLauncher (Win32 shell), wired when it moves to
-        /// Core with a Linux xdg-open path.</summary>
-        private static void RevealInExplorer(string path) { _ = path; }
+        /// <summary>
+        /// WPF's <c>Helpers.ExplorerLauncher.RevealInExplorer</c> SELECTS the file in Explorer,
+        /// which is a Win32 shell call and stays in that head. The portable half is opening the
+        /// containing folder through the desktop's own handler - the same thing
+        /// <see cref="SessionCompleteWindow"/> does, and the same #998 fallback: when the file is
+        /// gone the folder is still worth opening.
+        /// </summary>
+        private static void RevealInExplorer(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            try
+            {
+                var dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                    Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+            }
+            catch (Exception ex) { Log.Warning(ex, "MediaHistoryWindow: failed to open folder for {Path}", path); }
+        }
 
-        /// <summary>ponytail: needs a shell-open helper, wired alongside ExplorerLauncher.</summary>
-        private void OpenSelectedFile() { }
+        /// <summary>Opens the selected file in whatever the desktop associates with it -
+        /// <c>UseShellExecute</c> is ShellExecute on Windows and xdg-open on Linux, so this needs no
+        /// per-head helper. A missing file is silently ignored, as the WPF shell call was.</summary>
+        private void OpenSelectedFile()
+        {
+            if (_mediaList.SelectedItem is not MediaHistoryRow row) return;
+            if (string.IsNullOrEmpty(row.FilePath) || !File.Exists(row.FilePath)) return;
+            try { Process.Start(new ProcessStartInfo { FileName = row.FilePath, UseShellExecute = true }); }
+            catch (Exception ex) { Log.Warning(ex, "MediaHistoryWindow: failed to open {Path}", row.FilePath); }
+        }
 
-        /// <summary>ponytail: needs MediaHistoryService.Clear plus a confirm dialog
-        /// (confirm_clear_media_log), wired when the service moves to Core.</summary>
+        /// <summary>ponytail: the confirm half is available now - Dialogs.MessageDialog.ConfirmAsync
+        /// with confirm_clear_media_log - but there is nothing to clear: the log itself is
+        /// MediaHistoryService, still in the WPF head (ConditioningControlPanel/Services/Media/),
+        /// so this view's rows come from a local placeholder. Asking "clear the log?" and then
+        /// clearing nothing would be a button that lies, so the whole handler stays a no-op until
+        /// the service reaches Core.</summary>
         private void BtnClear_Click() { }
 
         /// <summary>

@@ -321,8 +321,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // tutorial. Both halves are reachable now - HelpContentService is Core's, HelpVideoWindow
             // is this head's - and "Modding" does ship a clip, so this always takes the video branch
             // and the popup always lands in its fail-soft state (no video surface on this head:
-            // title, glyph and the topic blurb). Taken anyway because the other branch,
-            // LaunchTutorial, is still a stub, so the alternative here is a dead button.
+            // title, glyph and the topic blurb). LaunchTutorial is the other branch and is wired
+            // now, so the fallback is live rather than a dead button.
             var content = Services.HelpContentService.GetContent("Modding");
             if (content.HasClip)
             {
@@ -332,17 +332,49 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             LaunchTutorial();
         }
 
+        /// <summary>
+        /// WPF's <c>App.Tutorial.Start(TutorialType.Modding)</c> plus a <c>TutorialOverlay</c>, both
+        /// of which this head has: <see cref="CoreTutorial"/> is the seam and
+        /// <see cref="TutorialOverlay"/> is the ported overlay, which reads that seam itself.
+        ///
+        /// <para>The overlay is only shown once the seam confirms a tour is actually running.
+        /// Unseeded, <c>Start</c> is a silent no-op and <c>IsActive</c> stays false, so this does
+        /// nothing rather than putting an empty coach-mark card on screen - a tour that looks
+        /// started while nothing tracks is worse than no tour.</para>
+        ///
+        /// <para>ponytail: the step-rewriting half cannot be done through the seam. WPF walks
+        /// <c>App.Tutorial.CurrentSteps</c> and replaces each <c>step.OnActivate</c> so a step
+        /// tagged <c>RequiresTab="mod:&lt;section&gt;"</c> calls <see cref="NavigateToSection"/>.
+        /// <c>CoreTutorial</c> deliberately exposes only a per-step SNAPSHOT (no step list, no
+        /// OnActivate) because activation is head navigation - so until the seam grows a
+        /// step-activation callback, a Modding tour spotlights sections this window does not
+        /// navigate to. NavigateToSection is ready for it.</para>
+        /// </summary>
         private void LaunchTutorial()
         {
-            // ponytail: needs App.Tutorial + TutorialOverlay, wired when the tutorial service
-            // moves to Core. The WPF version also rewrites each step's OnActivate so a step
-            // tagged RequiresTab="mod:<section>" navigates here; NavigateToSection is ready for it.
+            if (_tutorialOverlay != null) return;
+
+            CoreTutorial.Start("Modding");
+            if (!CoreTutorial.IsActive) return;
+
+            _tutorialOverlay = new TutorialOverlay(this);
+            _tutorialOverlay.Closed += (_, _) => _tutorialOverlay = null;
+            _tutorialOverlay.Show();
         }
+
+        private TutorialOverlay? _tutorialOverlay;
 
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
             StopAudioPreview();
+            // Null the field BEFORE closing, and do not Skip here. TutorialOverlay.OnClosed already
+            // skips a still-running tour, and it also subscribes to CoreTutorial.Finished and closes
+            // itself from it - so calling Skip() first would close the overlay, run the Closed
+            // handler below that nulls this field, and leave the next line dereferencing null.
+            var overlay = _tutorialOverlay;
+            _tutorialOverlay = null;
+            overlay?.Close();
             CleanupTempDir();
         }
 

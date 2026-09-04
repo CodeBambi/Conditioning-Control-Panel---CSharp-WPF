@@ -46,10 +46,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// per-feature bitmaps.
     ///
     /// PORTED from ConditioningControlPanel/Windows/FeatureIntroPopup.xaml.cs. Deviations:
-    ///  - The show gate is ported, minus three head-only conditions it cannot see yet
-    ///    (App.Tutorial.IsActive, App.IsUpdateDialogActive, MainWindow.IsStartupDialogShowing);
-    ///    each is marked where it belongs. Without them the settle clock fires on its first tick
-    ///    instead of waiting the startup ladder out, and a card can land on top of a modal.
+    ///  - The show gate is ported. <c>App.Tutorial.IsActive</c> is the <see cref="CoreTutorial"/>
+    ///    seam and is wired at both WPF sites. <c>App.IsUpdateDialogActive</c> and
+    ///    <c>MainWindow.IsStartupDialogShowing</c> have no seam in Core and are still missing, each
+    ///    marked where it belongs, so a card can still land on top of a startup modal.
     ///  - <c>popup.ShowDialog()</c> needs an owner on Avalonia, so an ownerless call shows the
     ///    card modelessly - which also means <c>_opening</c> clears when Show() returns rather
     ///    than when the card closes.
@@ -176,10 +176,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                             return;
                         }
 
-                        // ponytail: WPF also holds the clock here on App.IsUpdateDialogActive,
-                        // MainWindow.IsStartupDialogShowing (ConditioningControlPanel/MainWindow/
-                        // MainWindow.xaml.cs) and App.Tutorial.IsActive (Services/TutorialService.cs).
-                        // With none of the three on this head, the very first tick shows the card.
+                        // Two of WPF's three gates. The tutorial one is the CoreTutorial seam,
+                        // which answers false unseeded, so a head with no tour is unaffected;
+                        // returning without Stop() keeps the clock ticking, which is what WPF did
+                        // so a long tour does not burn a try.
+                        // ponytail: still needs App.IsUpdateDialogActive and
+                        // MainWindow.IsStartupDialogShowing. Both are static flags on the WPF head
+                        // (ConditioningControlPanel/App.xaml.cs, MainWindow/MainWindow.xaml.cs) with
+                        // no seam in Core, so a card can still stack on a startup modal here.
+                        if (CoreTutorial.IsActive) return;
+
                         ShowCore(key, owner, paced: true, doorKey: doorKey);
                     }
                     catch (Exception ex)
@@ -207,9 +213,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var settings = CoreSettings.Current;
                 if (settings.SeenFeatureIntros.Contains(key) || _opening) return;
 
-                // ponytail: WPF also bails here on App.Tutorial?.IsActive == true
-                // (ConditioningControlPanel/Services/TutorialService.cs, reached as App.Tutorial) -
-                // the tour navigates tabs itself and a modal would ambush it.
+                // The tour navigates tabs itself and a modal would ambush it. CoreTutorial is the
+                // seam the WPF head's App.Tutorial feeds; unseeded it answers false.
+                if (CoreTutorial.IsActive) return;
+
                 if (paced && DateTime.UtcNow - _lastShownUtc < ShowCooldown) return;
                 if (doorKey != null && _doorSlotsSpentThisLaunch.Contains(doorKey)) return;
 

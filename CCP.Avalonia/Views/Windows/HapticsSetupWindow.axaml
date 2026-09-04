@@ -11,7 +11,7 @@
                                                       parses "_" in Content as an access key and
                                                       every key here is snake_case)
        Click="..."                                 -> wired in the constructor
-       pack:// guide screenshots                   -> placeholder frames, see the ponytail note
+       pack:// guide screenshots                   -> avares:// (Assets/haptics_guide is linked)
        DataTemplate {Binding}                      -> same, with x:DataType="sys:String" because
                                                       compiled bindings are on -->
 <Window xmlns="https://github.com/avaloniaui"
@@ -110,19 +110,16 @@
                                        FontSize="16" FontWeight="Bold" Margin="0,0,0,6"/>
                             <TextBlock Text="{loc:Str wizard_lovense_steps}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="13" LineHeight="20" Margin="0,0,0,12"/>
-                            <!-- ponytail: the four guide screenshots are pack:// resources in the WPF head and
-                                 this project ships no asset pipeline (the csproj includes Theme\**\*.xaml only,
-                                 and a port may not edit it). The frames are kept so the layout stays honest;
-                                 swap the placeholder for an Image when the PNGs become AvaloniaResource. -->
-                            <Border x:Name="ImgLovenseStep1" Background="#2D2D4A" CornerRadius="8" Padding="8"
-                                    Height="120" Margin="0,0,0,8">
-                                <TextBlock Text="lovense_step1.png" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- The four guide screenshots: Assets/haptics_guide is linked into this
+                                 head as Resources\haptics_guide, so WPF's pack:// URIs are avares://
+                                 here and the frames draw the real thing. -->
+                            <Border Background="#2D2D4A" CornerRadius="8" Padding="8" Margin="0,0,0,8">
+                                <Image x:Name="ImgLovenseStep1" Stretch="Uniform" MaxHeight="230"
+                                       Source="avares://CCP.Avalonia/Resources/haptics_guide/lovense_step1.png"/>
                             </Border>
-                            <Border x:Name="ImgLovenseStep2" Background="#2D2D4A" CornerRadius="8" Padding="8"
-                                    Height="120" Margin="0,0,0,12">
-                                <TextBlock Text="lovense_step2.png" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Background="#2D2D4A" CornerRadius="8" Padding="8" Margin="0,0,0,12">
+                                <Image x:Name="ImgLovenseStep2" Stretch="Uniform" MaxHeight="230"
+                                       Source="avares://CCP.Avalonia/Resources/haptics_guide/lovense_step2.png"/>
                             </Border>
 
                             <TextBlock Text="{loc:Str wizard_lovense_ip_label}" Foreground="White"
@@ -147,15 +144,13 @@
                                        FontSize="16" FontWeight="Bold" Margin="0,0,0,6"/>
                             <TextBlock Text="{loc:Str wizard_intiface_steps}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="13" LineHeight="20" Margin="0,0,0,12"/>
-                            <Border x:Name="ImgButtplugStep1" Background="#2D2D4A" CornerRadius="8" Padding="8"
-                                    Height="120" Margin="0,0,0,8">
-                                <TextBlock Text="buttplug_step1.png" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Background="#2D2D4A" CornerRadius="8" Padding="8" Margin="0,0,0,8">
+                                <Image x:Name="ImgButtplugStep1" Stretch="Uniform" MaxHeight="230"
+                                       Source="avares://CCP.Avalonia/Resources/haptics_guide/buttplug_step1.png"/>
                             </Border>
-                            <Border x:Name="ImgButtplugStep2" Background="#2D2D4A" CornerRadius="8" Padding="8"
-                                    Height="120" Margin="0,0,0,12">
-                                <TextBlock Text="buttplug_step2.png" Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Border Background="#2D2D4A" CornerRadius="8" Padding="8" Margin="0,0,0,12">
+                                <Image x:Name="ImgButtplugStep2" Stretch="Uniform" MaxHeight="230"
+                                       Source="avares://CCP.Avalonia/Resources/haptics_guide/buttplug_step2.png"/>
                             </Border>
                             <TextBlock Text="{loc:Str wizard_intiface_note}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>

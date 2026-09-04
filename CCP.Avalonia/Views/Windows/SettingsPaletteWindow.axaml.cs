@@ -14,13 +14,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///
     /// PORTED from ConditioningControlPanel/Windows/SettingsPaletteWindow.xaml.cs. What moved:
     ///  - <c>OpenPaletteCommand</c> (a WPF <c>RoutedUICommand</c>) is gone. Avalonia has no
-    ///    RoutedUICommand and the only consumer is MainWindow's KeyBinding, which has not ported;
-    ///    inventing an ICommand here would be a second API to reconcile later.
+    ///    RoutedUICommand, and its only consumer was MainWindow's KeyBinding; the shell HAS ported
+    ///    (MainShellWindow), so the remaining work is a KeyGesture on it calling
+    ///    <see cref="Toggle"/> - which is a shell file, not this one. Inventing an ICommand here
+    ///    would be a second API to reconcile later.
     ///  - <c>Refresh</c> cannot query the index: <c>Services.SettingsPaletteIndex</c> lives in the
     ///    WPF head, so this draws sample rows filtered by the query instead. See the stub below.
     ///  - <c>ActivateSelected</c> / <c>Navigate</c> / <c>ResolveFirst</c> / <c>FindElementByName</c> /
-    ///    <c>Pulse</c> / <c>ClearPulse</c> all reach into MainWindow (ShowTab, AppSettingsTabView,
-    ///    the visual-tree name walk and the accent glow). One stub stands in for the lot.
+    ///    <c>Pulse</c> / <c>ClearPulse</c> are one stub. The shell is NOT what blocks them any more:
+    ///    <c>MainShellWindow.ShowTab</c> is ported and opens the owning door exactly as WPF's did.
+    ///    What is missing is the tab key to pass it - see the note on <see cref="Refresh"/>.
     ///  - <c>Top = Math.Max(20, Top - 70)</c> becomes a <c>Position</c> nudge: Avalonia has no
     ///    Top/Left, only a device-pixel <c>PixelPoint</c>.
     ///  - <c>PreviewKeyDown</c> becomes a tunnelling KeyDown handler, which is what Preview meant.
@@ -280,15 +283,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// Closes first - the highlight pulse should be visible against the real page, and the
         /// owner needs focus back before anything navigates.
         ///
-        /// ponytail: needs MainWindow.ShowTab
-        /// (ConditioningControlPanel/MainWindow/MainWindow.TabNavigation.cs) and
-        /// AppSettingsTabView.FocusSection
-        /// (ConditioningControlPanel/Views/Tabs/AppSettingsTabView.xaml.cs) - the shell has not
-        /// ported, so there is no window to navigate. The WPF original called ShowTab (which opens
-        /// the owning door, fires the nav bark and moves the active indicator), then walked the
-        /// visual tree by x:Name across namescopes and hung a 2s self-removing DropShadow glow on
-        /// whatever it found; the glow needs Avalonia's DropShadowEffect rather than WPF's, so it
-        /// is a reimplementation, not a move.
+        /// ponytail: the shell is no longer the blocker - <c>MainShellWindow.ShowTab</c>
+        /// (MainShellWindow.TabNavigation.cs) is ported and opens the owning door and moves the
+        /// active indicator, exactly as WPF's did. What is missing is the ROW: a
+        /// <see cref="PaletteRow"/> here is three display strings, because
+        /// <c>Services.SettingsPaletteIndex</c> (ConditioningControlPanel/Services/
+        /// SettingsPaletteIndex.cs) is not in Core and its <c>SettingsPaletteEntry</c> is what
+        /// carries the tab key and the section name. Navigating a placeholder row would send the
+        /// user to a guessed tab, so this stays closed-and-nothing-else until the index moves.
+        /// The second half is a reimplementation either way: WPF walked the visual tree by x:Name
+        /// across namescopes and hung a 2s self-removing DropShadow glow on what it found, and
+        /// that needs Avalonia's DropShadowEffect rather than WPF's.
         /// </summary>
         private void ActivateSelected()
         {

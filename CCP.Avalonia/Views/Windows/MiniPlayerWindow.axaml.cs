@@ -22,8 +22,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    arrow key routing, the play glyph, the time formatting - is ported for real.
     ///  - LoadImage IS real: Avalonia's Bitmap loads from a path with no WPF dependency, and a
     ///    GIF falls back to its first frame through it, exactly as the WPF catch block did.
-    ///  - MessageBox.Show has no Avalonia equivalent and no package may be added; the failure
-    ///    paths log through Serilog and close, which is the same outcome the user saw.
+    ///  - MessageBox.Show maps to this head's <c>Dialogs.MessageDialog</c> everywhere else, but not
+    ///    here: the failure paths all fire from <see cref="LoadFile"/>, which callers run BEFORE
+    ///    Show(), and <c>ShowDialog(owner)</c> needs an owner that is already shown. So the failure
+    ///    paths log through Serilog and close - the same outcome the user saw, minus the notice.
     ///  - PreviewMouseDown/Up become plain PointerPressed/PointerReleased. The tunnelling pass
     ///    existed to beat the Thumb to the event; Avalonia's Slider raises these on the way out
     ///    too, and the flag they set is only read by the position timer.
@@ -156,8 +158,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             catch (Exception ex)
             {
-                // WPF also showed a MessageBox; this head has no stand-in, so the log is the
-                // whole report. Closing is the WPF behaviour and is what matters to the user.
+                // ponytail: WPF showed a MessageBox here. Dialogs.MessageDialog is this head's
+                // equivalent, but LoadFile runs before the window is shown and ShowDialog needs a
+                // shown owner, so telling the user means deferring the notice to Opened. Logged
+                // until then; closing is the WPF behaviour and is what matters to the user.
                 Log.Error(ex, "MiniPlayerWindow: Failed to load image");
                 Close();
             }

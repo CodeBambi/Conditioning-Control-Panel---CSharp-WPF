@@ -311,6 +311,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // Named controls. FindControl rather than the generated fields, matching the other ports.
         private readonly TextBlock _txtWizardTitle;
         private readonly TextBlock _txtStepCounter;
+        private readonly Image _imgWelcomeLogo;
         private readonly TextBlock _txtAppTitle;
         private readonly TextBlock _txtWelcomeHeading;
         private readonly TextBlock _txtWelcomeBody;
@@ -355,6 +356,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _txtWizardTitle = this.FindControl<TextBlock>("TxtWizardTitle")!;
             _txtStepCounter = this.FindControl<TextBlock>("TxtStepCounter")!;
+            _imgWelcomeLogo = this.FindControl<Image>("ImgWelcomeLogo")!;
             _txtAppTitle = this.FindControl<TextBlock>("TxtAppTitle")!;
             _txtWelcomeHeading = this.FindControl<TextBlock>("TxtWelcomeHeading")!;
             _txtWelcomeBody = this.FindControl<TextBlock>("TxtWelcomeBody")!;
@@ -530,19 +532,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (FormatException) { return template; }
         }
 
+        /// <summary>
+        /// The one art load on this screen that CAN be mod-aware: logo.png is a real
+        /// resource-relative path, so a mod shipping its own brand mark shows it here.
+        /// <para>
+        /// Which wordmark is WPF's branch verbatim: logo2.png is the neutral "Conditioning Control
+        /// Panel" mark used by CCP Default and Sissy, logo.png the Bambi-branded one. A fresh
+        /// install IS CCP Default, so the wizard must not hardcode logo.png.
+        /// </para>
+        /// <para>
+        /// WPF's <c>ModResourceResolver.ResolveUri</c> is <see cref="Helpers.ModArt.TryLoad"/> here
+        /// - the mod override through <see cref="CoreModArt"/>, then this head's own avares:// copy,
+        /// which Assets/logo.png and logo2.png are linked into. Null means neither exists, and the
+        /// frame is hidden rather than left as an empty 46px gap. WPF's DecodePixelWidth=92 has no
+        /// TryLoad equivalent; the PNGs are small and the Image scales, so full-res is the cost.
+        /// </para>
+        /// </summary>
+        private void RefreshWelcomeLogo()
+        {
+            try
+            {
+                var useNeutralLogo = CoreMods.IsCCPDefault || CoreSettings.Current.IsSissyMode;
+                var logo = Helpers.ModArt.TryLoad(useNeutralLogo ? "logo2.png" : "logo.png");
+                _imgWelcomeLogo.Source = logo;
+                _imgWelcomeLogo.IsVisible = logo != null;
+            }
+            catch (Exception ex) { Log.Debug("[FirstRun] logo resolve failed: {E}", ex.Message); }
+        }
+
         private void ApplyStaticText()
         {
             Title = Str("fr8_wizard_title", "Getting started");
             _txtWizardTitle.Text = Title;
 
             // --- step 1 ---
-            // ponytail: every piece of this resolves today - CoreMods.IsCCPDefault and
-            // CoreSettings.Current.IsSissyMode pick the file, Helpers.ModArt.TryLoad loads it, and
-            // Assets/logo.png + logo2.png are both linked into this head. It is left unwired only
-            // because ImgWelcomeLogo carries its own (identical, now stale) note in
-            // FirstRunWizard.axaml, which this layer does not own - restore both in one change so
-            // the markup and the code-behind cannot disagree. WPF re-calls ApplyStaticText from
-            // ShowStep(1) so Back-navigation after a mod pick repaints the right wordmark.
+            RefreshWelcomeLogo();
 
             _txtAppTitle.Text = Loc.Get("app_title");
             _txtWelcomeHeading.Text = StrF("fr8_welcome_heading", "Welcome, {0}.", CoreMods.Affirmation);
@@ -610,6 +634,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _txtNext.Text = Str("fr8_wizard_next", "Next");
             }
 
+            // WPF re-called RefreshWelcomeLogo from ShowStep(1), so Back-navigation after a mod
+            // pick repaints instead of showing the previous mod's mark.
+            if (_step == 1) RefreshWelcomeLogo();
             if (_step == 2) PrepareModStep();
 
             FadeInCurrentStep();
