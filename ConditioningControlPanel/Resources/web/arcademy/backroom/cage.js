@@ -196,6 +196,7 @@ export function createCage(opts) {
   function refusal(r) {
     const body = (r && r.body) || {};
     const reason = String(body.reason || body.code || '');
+    if (reason === 'casino_closed') return t('bk_closed');   // a 403 too, but the house's, not the account's
     if (r && r.status === 403) return t('bk_cage_locked');
     switch (reason) {
       case 'insufficient_sparkle': return t('bk_cage_poor');

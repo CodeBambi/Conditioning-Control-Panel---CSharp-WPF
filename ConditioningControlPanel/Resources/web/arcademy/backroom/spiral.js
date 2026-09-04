@@ -376,6 +376,7 @@ function mount(root, kit, ctx) {
   function refusal(r) {
     const b = (r && r.body) || {};
     const reason = String(b.reason || b.code || '');
+    if (reason === 'casino_closed') return t('bk_closed');   // a 403 too, but the house's, not the account's
     if (r && r.status === 403) return t('bk_sp_locked');
     switch (reason) {
       case 'insufficient_chips': return t('bk_sp_poor');
