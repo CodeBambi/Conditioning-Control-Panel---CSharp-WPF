@@ -10,6 +10,24 @@ dotnet build
 dotnet run
 ```
 
+## Pull Request Size Rule
+
+Every PR is capped at about **600 changed lines** (additions + deletions, as reported by
+`git diff --stat origin/main...HEAD`). Bigger work ships as a stack of small PRs that each
+build, review and land on their own. Check before opening:
+
+```bash
+git diff --stat origin/main...HEAD | tail -1
+```
+
+- The only exception is a mechanical bulk change (lockfiles, generated files, binary assets,
+  a rename that touches many files). Put it in its own PR and say so in the body.
+- If a feature cannot fit, split it by layer (data model, service, UI) or by sub-feature,
+  and open the PRs in order. Each one must build on its own.
+- Agents driving PRs get this cap in their brief and report the line count in the PR body.
+
+Why: this is a multi-person codebase now, and a 2k-line PR cannot be reviewed.
+
 ## Quick File Reference
 
 ### Version Locations (ALL must be updated for releases)
