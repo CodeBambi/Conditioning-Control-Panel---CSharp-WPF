@@ -38,7 +38,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// class in the WPF head with no Avalonia twin and nothing in Core, and neither
     /// <c>V2AuthService</c> nor <c>App.Patreon</c> / <c>App.Discord</c> has a seam. There is no
     /// authentication flow on this head to hang the picker off; opening it from anywhere else
-    /// would collect a name with no registration behind it and no logout to undo it.</para>
+    /// would collect a name with no registration behind it and no logout to undo it.
+    /// <c>CoreAccount</c> does not change that: it reports an identity and can rename or delete
+    /// one, but it deliberately carries no way to CREATE one, so this dialog's blocker is
+    /// unchanged.</para>
     /// </summary>
     public partial class UsernamePickerDialog : Window
     {

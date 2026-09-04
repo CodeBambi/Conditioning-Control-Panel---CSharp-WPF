@@ -386,6 +386,18 @@ namespace ConditioningControlPanel
                 try { EmiDesk?.Fire("premiumTeaseSeen", new { target = verdict.Feature?.ToLowerInvariant() }); }
                 catch { }
             };
+            // The account seam. Every provider reads lazily, so the construction order of Patreon,
+            // Discord, SubscribeStar and ProfileSync (all built well after this ctor) does not
+            // matter. The entitlement trio is the same pair of properties, in the same order, that
+            // Services.TierGate and the header chip read, so the seam can never claim an
+            // entitlement the gates would refuse.
+            CoreAccount.IsLoggedInProvider = () => IsLoggedIn;
+            CoreAccount.DisplayNameProvider = () => UserDisplayName;
+            CoreAccount.IsWhitelistedProvider = () => Patreon?.IsWhitelisted == true;
+            CoreAccount.HasPremiumAccessProvider = () => Patreon?.HasPremiumAccess == true;
+            CoreAccount.HasLabAccessProvider = () => Patreon?.HasLabAccess == true;
+            CoreAccount.ChangeDisplayNameProvider = name => ProfileSync?.ChangeDisplayNameAsync(name);
+            CoreAccount.DeleteAccountProvider = () => ProfileSync?.DeleteAccountAsync();
             // The app's one moderation log. Read lazily on every call because ModerationLog is
             // constructed in OnStartup, long after this ctor - and it is declared null! until then.
             CoreModerationLog.InstanceProvider = () => ModerationLog;
