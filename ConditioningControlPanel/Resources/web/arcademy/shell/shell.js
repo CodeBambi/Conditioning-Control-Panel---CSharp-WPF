@@ -99,7 +99,7 @@ import { installPaCaption } from './pacaption.js';
  * the `music` bus through the same door the beds use. The shell tells it where
  * the player is (campus, records, a class) and clearScreen tells it they left. */
 import { createOst } from './ost.js';
-import { createIdSpotlight, idReducedMotion } from './idcard.js';
+import { createIdSpotlight, idReducedMotion, studentNumber } from './idcard.js';
 import { createAccountChip, readAccount } from './accountchip.js';
 import { createAnnexReveal } from './annexreveal.js';
 /* THE SEEP - the foreshadowing layer. ONE director, and the shell's whole
@@ -1290,6 +1290,20 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
   } : null;
   reportCard = createReportCard({
     ceremonies, seep, toast: shout, log: say, onCounter: counterFromReport,
+    /* THE SLIP's two seams. `identity` is only ever CALLED when the player has
+     * ticked the box - the card is anonymous by default and the report card
+     * never reads a name it was not asked for - and `shareNamed` is where that
+     * tick lives. It is a page-owned meta key (it is not in HOST_OWNED_KEYS),
+     * so store.set write-throughs are legal and the tick survives the night. */
+    identity: () => {
+      const p = idProfile();
+      const num = studentNumber(p.selfId, p.enrolled, p.name);
+      return { name: p.name, number: num && num.no };
+    },
+    shareNamed: {
+      get: () => store.get('shareNamed', false) === true,
+      set: (v) => store.set('shareNamed', v === true),
+    },
   });
 
   /* ---------------------- helpers --------------------------------------- */
