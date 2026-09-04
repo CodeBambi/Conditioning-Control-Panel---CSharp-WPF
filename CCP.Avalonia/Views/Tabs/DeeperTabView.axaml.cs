@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
@@ -72,6 +73,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // and MainWindow.DeeperFx, wired when the FX layer moves to Core. On WPF this rode
         // IsVisibleChanged; the Avalonia equivalent would be an IsVisibleProperty observer.
 
+        /// <summary>WPF's <c>Window.GetWindow(this) as MainWindow</c>, written the way every other
+        /// ported tab writes it (PlayTabView.axaml.cs:56).</summary>
+        private MainShellWindow? Owner => TopLevel.GetTopLevel(this) as MainShellWindow;
+
         // ponytail: every handler below routes to MainWindow on WPF
         // (Window.GetWindow(this) is MainWindow mw -> mw.<same name>). Needs the
         // MainWindow.DeeperHub / MainWindow.BlinkTrainer partials, wired when EnhancementLibrary,
@@ -82,7 +87,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void BtnDeeperCatalogue_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperImport_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperNewEnhancement_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>The one handler here that is NOT a stub: its shell target is restored
+        /// (MainShellWindow.DeeperTab.cs), so this is the same one-line relay WPF writes.</summary>
+        private void BtnDeeperNewEnhancement_Click(object? sender, RoutedEventArgs e)
+            => Owner?.BtnDeeperNewEnhancement_Click(sender, e);
         private void BtnDeeperOpenLibraryFolder_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperOpenPlayer_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperTutorial_Click(object? sender, RoutedEventArgs e) { }

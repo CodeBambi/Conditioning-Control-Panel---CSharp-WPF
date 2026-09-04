@@ -25,6 +25,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public EngineRoomDrawer()
         {
             AvaloniaXamlLoader.Load(this);
+
+            // FindControl, not the generated field: Load(this) leaves every x:Name field null
+            // (CLAUDE.md porting trap 7), so a field write here would be a silent no-op.
+            var sampler = this.FindControl<Button>("BtnSampler");
+            if (sampler != null) sampler.Click += async (_, _) => await OpenSamplerSettingsAsync();
+        }
+
+        /// <summary>
+        /// "Sampler settings" — the OpenAI-compatible provider's temperature/top_p/… editor.
+        ///
+        /// <para>WPF routes this through <c>EngineRoomRuntimeVm.SamplerSettingsCommand</c> into
+        /// <c>MainWindow.BtnOpenAiSamplerSettings_Click</c> (MainWindow.Patreon.cs:1520), which is
+        /// four lines: read <c>CompanionPrompt</c>, show the dialog, save the settings when it
+        /// comes back true. The dialog itself is ported
+        /// (Views/Dialogs/OpenAiCompatibleSamplerSettingsDialog) and edits the settings object in
+        /// place, so this is the same four lines with the seam swapped in.</para>
+        ///
+        /// <para>ponytail: Click, not Command. That viewmodel is head-side, so the
+        /// <c>SamplerSettingsCommand</c> binding on the button resolves to nothing today; the
+        /// binding is left in place for when it ports, and this handler is what must be deleted
+        /// then — two live paths to one dialog would open it twice.</para>
+        /// </summary>
+        private async System.Threading.Tasks.Task OpenSamplerSettingsAsync()
+        {
+            try
+            {
+                // ShowDialog wants an owner that is actually visible, not merely loaded.
+                if (TopLevel.GetTopLevel(this) is not Window owner || !owner.IsVisible) return;
+
+                var dialog = new Views.Dialogs.OpenAiCompatibleSamplerSettingsDialog(
+                    CoreSettings.Current.CompanionPrompt);
+                if (await dialog.ShowDialog<bool>(owner))
+                    CoreSettings.Save();      // the dialog writes the object; only the caller persists it
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "EngineRoomDrawer: the sampler settings dialog failed");
+            }
         }
 
         /// <summary>The view's own strings. Bound as <c>#Root.Strings.LocX</c>, because the

@@ -48,6 +48,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///
     /// <para>The window is deliberately ordinary: opaque, titled, resizable, owned by main when
     /// there is one. It is not chrome and it is not her - she never comes out here.</para>
+    ///
+    /// <para><b>No opener yet, and the blocker is the CALLER.</b> Nothing in the app opens this
+    /// window from a button: WPF constructs it in <c>EmiCodex.OpenPlain</c>
+    /// (Services/EmiDesk/EmiCodex.cs:556), the fail-soft rung of a service that first tries a
+    /// WebView2-hosted book, and the offer that starts the whole flow is
+    /// <c>EmiCodex.MaybeOffer</c> -> <c>App.EmiDesk.Fire("bookOffer")</c>, gated on
+    /// <c>EmiState.Current.CodexOpens</c>. That service, its state file and the desk's event
+    /// pipe are all still head-side, so there is no place on this head where a reader would be the
+    /// right answer. Her flipbook (<c>EmiDesk/EmiBookWindow</c>) IS wired and is a different
+    /// window - do not point the desk's "?" chip here.</para>
     /// </summary>
     public partial class EmiCodexWindow : Window
     {

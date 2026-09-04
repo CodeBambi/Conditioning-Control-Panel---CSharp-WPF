@@ -22,6 +22,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    result through <c>ShowDialog&lt;bool?&gt;</c>.
     ///  - Loaded -> Opened, and the KeyDown / Click handlers are wired in the constructor rather
     ///    than in markup, per the porting convention.
+    ///
+    /// <para><b>NO OPENER, DELIBERATELY.</b> All three WPF call sites
+    /// (MainWindow.LabTab.cs:1116, MainWindow.BlinkTrainer.cs:1427, MainWindow.xaml.cs:1462) first
+    /// require the tracking service to be running AND a calibration to be loaded — Quick Recal only
+    /// nudges an existing one — and then READ THE RESULT to report the applied offset. On this head
+    /// the sampling sequence is gone with WebcamTrackingService, so the window would show its dot,
+    /// count nothing, and close having "recalibrated" a calibration that does not exist. A control
+    /// that reports a recal it never performed is worse than a door that is shut, so the door stays
+    /// shut; the Avalonia call sites (MainShellWindow.LabTab.cs's dropped
+    /// BtnWebcamDebugQuickRecal_Click, DeeperTabView.BtnDeeperWebcamQuickRecal_Click) stay stubs.
+    /// </para>
     /// </summary>
     public partial class WebcamQuickRecalWindow : Window
     {

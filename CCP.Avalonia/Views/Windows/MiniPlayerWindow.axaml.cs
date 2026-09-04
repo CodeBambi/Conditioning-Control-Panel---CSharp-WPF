@@ -30,6 +30,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    existed to beat the Thumb to the event; Avalonia's Slider raises these on the way out
     ///    too, and the flag they set is only read by the position timer.
     ///  - DragMove() -> BeginMoveDrag(e), which needs the event args.
+    ///
+    /// <para><b>No opener yet, and the blocker is the CALLER, not this window.</b> Its one WPF call
+    /// site is <c>MainWindow.OpenAssetPreview</c> (MainWindow.Assets.cs:1190), reached from a
+    /// thumbnail click in the Library tab. Nothing on this head raises that click: the asset tree
+    /// and the thumbnail grid are held back in MainShellWindow.Assets.cs because
+    /// <c>App.ContentPacks</c> (Services/Content/ContentPackService.cs) is not ported, and
+    /// OpenAssetPreview's first branch is a pack-file extraction through that same service. When
+    /// the tree lands, the wiring is <c>LoadFile(path)</c> then <c>Show(owner)</c> — the image path
+    /// is real today; video and GIF still need LibVLC.</para>
     /// </summary>
     public partial class MiniPlayerWindow : Window
     {

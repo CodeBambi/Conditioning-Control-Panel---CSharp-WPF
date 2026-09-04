@@ -38,6 +38,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <see cref="CatalogueEntry"/> is copied from
     ///    ConditioningControlPanel/Services/CatalogueLookupService.cs: the record lives in the WPF
     ///    head, not CCP.Core, and neither may be touched by this port.
+    ///
+    /// <para><b>No opener yet, and the blocker is the CALLER.</b> WPF reaches this from
+    /// <c>MainWindow.OpenCataloguePickerDialog</c> (MainWindow.DeeperTab.cs:1025), itself the
+    /// "pick one" action on a toast raised by <c>ShowCatalogueLookupToast</c> after
+    /// <c>RunCatalogueLookupAsync</c> matched the browser's current HypnoTube video. Both ends are
+    /// head-side — <c>App.CatalogueLookup</c> (Services/CatalogueLookupService.cs) for the lookup
+    /// AND the download, <c>App.Notifications</c> for the toast — and the dialog exists only to
+    /// feed <c>DownloadAndOpenCatalogueEntryAsync</c>. Opening it with entries nobody can fetch and
+    /// a selection nobody can download would be a picker that picks nothing. It arrives with the
+    /// lookup service, which is the same wait MainShellWindow.DeeperTab.cs records.</para>
     /// </summary>
     public partial class CataloguePickerDialog : Window
     {
