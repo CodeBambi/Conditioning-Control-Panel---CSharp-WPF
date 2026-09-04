@@ -565,6 +565,13 @@ internal static class ArcademyHostService
                 break;
             case "meta-command":
                 _meta?.Handle(o);
+                // THE LOCKER DRESSES THE DESKTOP TOO. Every equip the player makes is one of these
+                // (locker.js `metaSet(OUTFIT_KEY, ...)`), so this is where the desk hears about it
+                // without a poll and without the Arcademy having to close first. Read back through
+                // EquippedEmiOutfit, never off `o`: the store may have clamped or refused the write,
+                // and the wallet still has the last word on whether she may wear it.
+                if (string.Equals((string?)o["key"], EmiOutfitKey, StringComparison.Ordinal))
+                    PushEmiOutfitToDesk();
                 break;
             case "class-started":
                 _classActive = true;
@@ -899,6 +906,126 @@ internal static class ArcademyHostService
             App.Logger?.Debug("ArcademyHost.ReadOwnedSkus: {E}", ex.Message);
         }
         return owned;
+    }
+
+    // ============================ the Locker's outfit, read from outside ============================
+
+    /// <summary>The meta key the Locker arms EMI's outfit in (<c>OUTFIT_KEY</c>,
+    /// <c>Resources/web/arcademy/shell/locker.js</c>). Page-owned and free-form, like every other
+    /// non host-owned key in the blob.</summary>
+    public const string EmiOutfitKey = "lockerOutfit";
+
+    /// <summary>Which prize each garment is: the gate the Locker itself applies
+    /// (<c>OUTFIT_SKU</c>, locker.js) repeated verbatim so BOTH sides refuse the same thing.</summary>
+    private static readonly IReadOnlyDictionary<string, string> EmiOutfitSku =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["varsity"] = "emi_varsity",
+            ["labcoat"] = "emi_labcoat",
+            ["cheer"] = "emi_cheer",
+            ["swim"] = "emi_swim",
+        };
+
+    /// <summary>
+    /// WHAT IS EMI WEARING? The second door out of the Arcademy's state, and the one the EMI Desk
+    /// widget dresses off: the Locker arms an outfit on the campus, and the girl on the user's
+    /// desktop is the same girl, so she wears it there too (community ask, 2026-09-01).
+    ///
+    /// <para>Same two sources as <see cref="WalletOwnsSku"/> and for the same reason: the LIVE store
+    /// first, because while the Arcademy is open it is the only copy holding a pick made ten seconds
+    /// ago, and the persisted blob when it is closed (the store is minted at launch and dropped at
+    /// teardown, after a flush).</para>
+    ///
+    /// <para><b>Ownership is enforced HERE, not only page-side.</b> locker.js already clamps its own
+    /// read against the wallet (<c>readOutfit</c>), but that clamp lives in the same file that writes
+    /// the key, so a blob carrying a garment nobody bought - an older build, a hand-edited save, a
+    /// wallet that got rolled back by a sync - would dress her anyway. The desk asks the wallet
+    /// itself and answers null when the prize is not held.</para>
+    ///
+    /// <para>NEVER THROWS. Anything it cannot read, parse, recognise or verify is null, which is
+    /// "the standard art" - the sheet that has always been there.</para>
+    /// </summary>
+    /// <returns>An <see cref="EmiDesk.EmiChains.Outfits"/> name, or null for the standard art.</returns>
+    public static string? EquippedEmiOutfit()
+    {
+        try
+        {
+            var live = _meta;
+            var raw = live != null ? (string?)live.Get(EmiOutfitKey) : EmiOutfitOnDisk();
+
+            var name = EmiDesk.EmiChains.OutfitName(raw);
+            if (name == null) return null;
+
+            // Bought, or she is not wearing it. `varsity` has been gated since the restock and the
+            // other three got skus of their own in the same wave, so every name in the list has one.
+            if (!EmiOutfitSku.TryGetValue(name, out var sku)) return null;
+            if (!WalletOwnsSku(sku))
+            {
+                App.Logger?.Debug("ArcademyHost.EquippedEmiOutfit: '{Outfit}' is armed but {Sku} is not owned - standard art", name, sku);
+                return null;
+            }
+            return name;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.EquippedEmiOutfit: {E}", ex.Message);
+            return null;
+        }
+    }
+
+    private static readonly object _outfitDiskLock = new();
+    private static string? _outfitDiskValue;
+    private static long _outfitDiskStamp = -1L;   // -1 = never read; any write to the file moves it
+
+    /// <summary>The armed outfit out of the persisted blob, re-read only when the file's stamp
+    /// moves - the same cache shape as <see cref="WalletOwnsOnDisk"/>, so a desk that asks on every
+    /// summon costs one <c>FileInfo</c> and not one parse.</summary>
+    private static string? EmiOutfitOnDisk()
+    {
+        var path = Path.Combine(App.UserDataPath, "arcademy_meta.json");
+        long stamp;
+        try
+        {
+            var info = new FileInfo(path);
+            stamp = info.Exists ? (info.LastWriteTimeUtc.Ticks ^ info.Length) : 0L;
+        }
+        catch { stamp = 0L; }
+
+        lock (_outfitDiskLock)
+        {
+            if (_outfitDiskStamp != stamp)
+            {
+                _outfitDiskValue = ReadArmedOutfit(path);
+                _outfitDiskStamp = stamp;
+            }
+            return _outfitDiskValue;
+        }
+    }
+
+    private static string? ReadArmedOutfit(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            return (string?)JObject.Parse(File.ReadAllText(path))[EmiOutfitKey];
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ArcademyHost.ReadArmedOutfit: {E}", ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Tell the desk widget to re-read what the Locker armed. Cheap and safe from anywhere: it is a
+    /// no-op when she has never been summoned (the window is built on the first summon and lives
+    /// until the app closes), and the window itself re-reads on the way in, so this is only ever the
+    /// LIVE half - the swap that lands while she is already out.
+    /// </summary>
+    private static void PushEmiOutfitToDesk()
+    {
+        try { App.EmiDesk?.Window?.RefreshOutfit(); }
+        catch (Exception ex) { App.Logger?.Debug("ArcademyHost.PushEmiOutfitToDesk: {E}", ex.Message); }
     }
 
     /// <summary>
@@ -5769,6 +5896,12 @@ internal static class ArcademyHostService
             int emiMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiOpenedUtc).TotalMinutes);
             _emiOpenedUtc = DateTime.MinValue;
             try { App.EmiDesk?.Fire("arcademyClosed", new { minutes = emiMinutes }); } catch { }
+
+            // ...and she comes home in whatever the Locker put her in. The live hook on
+            // `meta-command` has normally already done this; this is the backstop for the session
+            // that changed an outfit and never sent the message we expected (a page error, a
+            // watchdog kill), so at worst the swap lands one Arcademy visit late instead of never.
+            PushEmiOutfitToDesk();
         }
 
         try
