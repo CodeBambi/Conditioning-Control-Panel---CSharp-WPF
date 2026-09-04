@@ -88,8 +88,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // REFUSED, not merely missing: on WPF this handler is a premium gate that mints a session
         // code for someone else to drive this app (MainWindow.RemoteControl.cs:35 -
         // TierGate.RequiresPremium, revert-then-refuse). Persisting the flag here would leave a
-        // toggle reading "remote control on" with no gate consulted and no session behind it. Needs
-        // ConditioningControlPanel/Services/RemoteControlService.cs and TierGate.
+        // toggle reading "remote control on" with no gate consulted and no session behind it.
+        // TierGate is no longer the blocker - it is Core now (CCP.Core/Services/TierGate.cs) and
+        // would refuse correctly here - but the REFUSAL is only half the handler. Still needs
+        // ConditioningControlPanel/Services/RemoteControlService.cs for the session the ON edge
+        // starts, so the refusal stands: a gate with nothing behind it is still a lying toggle.
         private void ChkRemoteControlEnabled_Changed(object? sender, RoutedEventArgs e) { }
 
         // ponytail: the rest forward to MainWindow on WPF (Window.GetWindow(this) is MainWindow mw

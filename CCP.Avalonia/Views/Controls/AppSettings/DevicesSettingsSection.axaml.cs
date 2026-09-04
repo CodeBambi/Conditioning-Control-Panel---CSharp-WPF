@@ -268,9 +268,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         //  voice modes
         // =====================================================================================
 
-        // ponytail: ChkSpeechWakeWord / ChkSpeechPushToTalk need TierGate.DemandPremium
-        // (ConditioningControlPanel/Services/TierGate.cs) and App.Autonomy.RefreshVoiceInputModes
-        // (ConditioningControlPanel/Services/Autonomy/), both still in the WPF head. They are
+        // ponytail: ChkSpeechWakeWord / ChkSpeechPushToTalk need App.Autonomy.RefreshVoiceInputModes
+        // (ConditioningControlPanel/Services/Autonomy/), still in the WPF head. TierGate is not the
+        // blocker any more - CCP.Core/Services/TierGate.cs - but the mic half is. They are
         // seeded above and left without a write handler: a toggle that saved the flag but could
         // neither charge the premium bar nor open the mic would be a lie in both directions.
         // BtnSetPttKey likewise needs MainWindow's global-hook key capture.

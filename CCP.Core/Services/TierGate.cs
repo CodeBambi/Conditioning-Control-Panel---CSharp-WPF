@@ -1,6 +1,7 @@
 using System;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
@@ -34,25 +35,25 @@ namespace ConditioningControlPanel.Services
     /// One truth for "may this account open that?", so launch handlers, CLI switches and card
     /// lockbands cannot drift apart the way the Lab smokescreen and the Goon host bar did.
     ///
-    /// Deliberately thin: it consults <see cref="PatreonService"/> and nothing else. Every other
+    /// Deliberately thin: it consults <see cref="CoreEntitlement"/> and nothing else. Every other
     /// entitlement source (whitelist, SubscribeStar, the 14-day grace) is already folded into
-    /// HasPremiumAccess / HasLabAccess, so reading settings here would only re-introduce the stale
-    /// second opinion this class exists to delete.
+    /// <c>PatreonService.HasPremiumAccess</c> / <c>HasLabAccess</c> behind that seam, so reading
+    /// settings here would only re-introduce the stale second opinion this class exists to delete.
     ///
     /// Two bars, and the names lie about which is which: "premium" in this codebase means TIER 1
-    /// (<see cref="PatreonService.HasPremiumAccess"/>, and <see cref="PatreonService.HasAiAccess"/>
-    /// resolves to the same thing despite the name); tier 2 is
-    /// <see cref="PatreonService.HasLabAccess"/>.
+    /// (<c>PatreonService.HasPremiumAccess</c>, and <c>HasAiAccess</c> resolves to the same thing
+    /// despite the name); tier 2 is <c>PatreonService.HasLabAccess</c>.
     ///
-    /// Fails CLOSED when App.Patreon is null — during startup, or if the service failed to
-    /// construct, a missing gate must not read as an open door.
+    /// Fails CLOSED when the entitlement seam is unseeded — a head with no account service, or a
+    /// WPF startup that has not reached the seeding block, must not read as an open door. That is
+    /// the same behaviour the original had when <c>App.Patreon</c> was null.
     /// </summary>
     public static class TierGate
     {
         /// <summary>Tier 1+ ("premium"): any pledge, whitelist, SubscribeStar, or the grace cache.</summary>
         public static TierVerdict RequiresPremium(string featureName)
         {
-            var allowed = App.Patreon?.HasPremiumAccess == true;
+            var allowed = CoreEntitlement.HasPremium;
             return new TierVerdict(allowed, featureName, PatreonTier.Level1,
                 allowed ? string.Empty : Loc.GetF("tiergate_denied_premium", featureName));
         }
@@ -66,8 +67,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static TierVerdict RequiresPremium(string featureName, string dailyKey)
         {
-            var allowed = App.Patreon?.HasPremiumAccess == true
-                          || App.DailyFree?.IsFreeToday(dailyKey) == true;
+            var allowed = CoreEntitlement.HasPremium
+                          || CoreEntitlement.IsFreeToday(dailyKey);
             return new TierVerdict(allowed, featureName, PatreonTier.Level1,
                 allowed ? string.Empty : Loc.GetF("tiergate_denied_premium", featureName));
         }
@@ -75,7 +76,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>Tier 2+ ("Lab"): the real T2 bar, whitelist folded in as permanent tier 2.</summary>
         public static TierVerdict RequiresLab(string featureName)
         {
-            var allowed = App.Patreon?.HasLabAccess == true;
+            var allowed = CoreEntitlement.HasLab;
             return new TierVerdict(allowed, featureName, PatreonTier.Level2,
                 allowed ? string.Empty : Loc.GetF("tiergate_denied_lab", featureName));
         }
@@ -87,8 +88,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static TierVerdict RequiresLab(string featureName, string dailyKey)
         {
-            var allowed = App.Patreon?.HasLabAccess == true
-                          || App.DailyFree?.IsFreeToday(dailyKey) == true;
+            var allowed = CoreEntitlement.HasLab
+                          || CoreEntitlement.IsFreeToday(dailyKey);
             return new TierVerdict(allowed, featureName, PatreonTier.Level2,
                 allowed ? string.Empty : Loc.GetF("tiergate_denied_lab", featureName));
         }
@@ -118,30 +119,21 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// The refusal surface: a toast whose action button opens the App Info &amp; Data popup,
-        /// which is where every other gated door already sends people (Programs, Blink Trainer,
-        /// the For You feed all call ShowAppInfoPopup). Non-blocking on purpose - a modal would
-        /// fight for focus with the window the click was about to open.
+        /// The refusal surface. Logging it is the engine's half and always happens; SHOWING it is
+        /// the head's, through <see cref="CoreEntitlement.ShowDeniedHandler"/> - on WPF a toast
+        /// whose action button opens the App Info &amp; Data popup, which is where every other
+        /// gated door already sends people, plus the EMI Desk beat. Non-blocking on purpose - a
+        /// modal would fight for focus with the window the click was about to open.
+        ///
+        /// With no head attached the refusal is log-only. The door still does not open: only the
+        /// telling is lost, never the denying.
         ///
         /// Never throws: a gate that crashes the handler is worse than one that only logs.
         /// </summary>
         public static void ShowDenied(in TierVerdict verdict)
         {
-            App.Logger?.Information("TierGate: blocked {Feature} (needs {Required})", verdict.Feature, verdict.Required);
-            try
-            {
-                App.Notifications?.Show(verdict.Reason, NotificationType.Warning, TimeSpan.FromSeconds(8),
-                    Loc.Get("tiergate_see_tiers"), () => App.MainWindowRef?.ShowAppInfoPopup());
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("TierGate: denial toast failed: {E}", ex.Message);
-            }
-
-            // EMI Desk (MOMENTS 4.B): the ONE refusal surface in the app, so the one place she can
-            // see a locked door being tried. verdict.Feature is already a localized display name.
-            try { App.EmiDesk?.Fire("premiumTeaseSeen", new { target = verdict.Feature?.ToLowerInvariant() }); }
-            catch { }
+            Log.Information("TierGate: blocked {Feature} (needs {Required})", verdict.Feature, verdict.Required);
+            CoreEntitlement.ShowDenied(verdict);
         }
     }
 }

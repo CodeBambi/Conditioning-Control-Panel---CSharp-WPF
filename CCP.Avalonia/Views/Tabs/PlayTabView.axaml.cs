@@ -8,6 +8,8 @@ using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Views.Windows;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Models;
 using Serilog;
 
@@ -270,23 +272,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("appsettings");
 
         /// <summary>
-        /// REFUSED ON THE GATE, and the old note named the wrong blocker. The window is ported and
-        /// it is honest: CCP.Avalonia/Views/Lab/GazeMinigame/GazeMinigameWindow disables Start and
-        /// says why, because with no tracker every round would resolve 0 >= 0 into GOOD GIRL. So
-        /// the minigame is not what stops this door. The gate is:
-        /// <c>TierGate.DemandLab(Loc.Get("label_gaze_minigame"))</c> (MainWindow.LabTab.cs:770) —
-        /// Tier 2, checked before the window is constructed. ConditioningControlPanel/Services/
-        /// TierGate.cs is head-side and there is no entitlement seam in Core, so a faithful port of
-        /// that line is <c>false</c> on this head, exactly as AiPermissionsGrid.IsLabEntitled fails
-        /// closed. Opening the window anyway would be a paid Lab door with its gate removed.
-        /// Restore this the day an entitlement seam exists, and not before it.
+        /// RESTORED, on the condition the previous note set: "the day an entitlement seam exists".
+        /// It does — <c>TierGate</c> is CCP.Core/Services/TierGate.cs over <c>CoreEntitlement</c> —
+        /// so this is MainWindow.LabTab.cs:770 verbatim: Tier 2 checked BEFORE the window is
+        /// constructed, because the Lab smokescreen is a tab-wide overlay and not a gate on this
+        /// door. The window itself is ported and honest (GazeMinigameWindow disables Start and says
+        /// why, since with no tracker every round would resolve 0 >= 0 into GOOD GIRL).
+        ///
+        /// <para>This head seeds no entitlement, so the gate denies and the window does not open -
+        /// which is the WPF answer with no Patreon service, not a new refusal.</para>
         /// </summary>
-        private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e)
+        {
+            if (!TierGate.DemandLab(Loc.Get("label_gaze_minigame"))) return;
+            // A non-modal Show still needs a visible owner; the shell can be minimised to tray.
+            if (Owner is not { IsVisible: true } owner) return;
+            new Lab.GazeMinigame.GazeMinigameWindow().Show(owner);
+        }
 
         /// <summary>The only Focus Gaze switch in the app. ponytail: needs
-        /// ConditioningControlPanel/Services/Tracking/GazeFocusService.cs, WebcamTrackingService and
-        /// TierGate - MainWindow.LabTab.cs:817 gates the ON edge on Tier 2 and on webcam consent
-        /// before it arms anything, and there is nothing safe to write without them. Turning the box
+        /// ConditioningControlPanel/Services/Tracking/GazeFocusService.cs and WebcamTrackingService.
+        /// The Tier 2 half is available now (TierGate is CCP.Core/Services/TierGate.cs), but
+        /// MainWindow.LabTab.cs:817 gates the ON edge on the tier AND on webcam consent before it
+        /// arms anything, and there is nothing safe to write without them. Turning the box
         /// OFF is never gated on WPF either, but there is no consumer here to release.</summary>
         private void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e) { }
 

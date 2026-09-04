@@ -50,9 +50,9 @@
 //                            SetAwarenessEnabled and EnsureAwarenessV2Consent below: there is no
 //                            observer on this head to start, so the setting write and the consent
 //                            record are the whole of what can be honoured.
-//   the premium bar        - Services.TierGate.DemandPremium
-//                            (ConditioningControlPanel/Services/TierGate.cs), the ON-edge gate in
-//                            SetAwarenessEnabled.
+// RESTORED since: the premium bar. TierGate is in Core (CCP.Core/Services/TierGate.cs) over the
+// CoreEntitlement seam, so SetAwarenessEnabled's ON-edge gate is the real one. This head seeds no
+// entitlement providers, so it denies - the same answer WPF gives with no Patreon service.
 //   AwarenessSettingsPanel - the legacy cooldown sliders' host, inside
 //                            CCP.Avalonia/Views/Controls/Companion/; CompanionTabView publishes
 //                            none of the room's cells (MainShellWindow.CompanionTab.cs).
@@ -134,6 +134,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // Turning it OFF is deliberately never gated: whatever her account is doing, the
             // switch that closes her eyes is on screen and it works.
+            //
+            // The entitlement bar, ON edge only (#1047), restored from MainWindow.CompanionRoom.cs:210
+            // now that TierGate is in Core. Asked BEFORE the consent dialog, as it is there and for
+            // the reason given there: it is rude to walk someone through a privacy explanation for a
+            // door that will not open. Unseeded on this head, so it currently denies - which is the
+            // WPF behaviour with no Patreon service, not a new refusal.
+            if (enabled && !Services.TierGate.DemandPremium(Loc.Get("tab_awareness"), "awareness"))
+                return false;
+
             if (enabled && !await AwarenessConsentDialog.EnsureConsentAsync(this, s))
             {
                 // Declined (or the dialog could not open). Nothing is written and nothing starts.

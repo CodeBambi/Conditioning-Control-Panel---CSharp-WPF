@@ -8,8 +8,9 @@
 // wall that would then draw every card unlocked.
 //
 // What each member needs, exactly:
-//   RefreshPlayCards        - Services.TierGate.RequiresLab / RequiresPremium
-//                             (ConditioningControlPanel/Services/TierGate.cs) for eight verdicts;
+//   RefreshPlayCards        - Services.TierGate.RequiresLab / RequiresPremium for eight verdicts,
+//                             which IS available now (CCP.Core/Services/TierGate.cs, over the
+//                             CoreEntitlement seam) - the rest of the member is not:
 //                             MainWindow.PremiumRail.cs's SetLockband / SetLockbandVisible to paint
 //                             one; App.Patreon.HasPremiumAccess / HasLabAccess
 //                             (ConditioningControlPanel/Services/Account/PatreonService.cs) for the
