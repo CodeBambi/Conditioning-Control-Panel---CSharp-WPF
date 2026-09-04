@@ -390,8 +390,14 @@ html.arc-reduced .arc-bugleprop-new { transition:none; }
   font-size: 20px; line-height: 22px;
   color: color-mix(in srgb, var(--ink), transparent 55%);
 }
-/* THE SINGLE PANEL: the season's comics form - one wide frame, caption below. */
-.arc-bugle-panel.is-wide { flex: 1 1 100%; min-height: 96px; }
+/* THE SINGLE PANEL: the season's comics form - one wide frame spanning the
+ * strip's three columns (the strip is a grid; the old flex rule did nothing
+ * and the panel sat in one third of the box). A drawn panel holds the plate
+ * edge to edge: the cartoonist inked his own border, the caption is in the
+ * picture. */
+.arc-bugle-panel.is-wide { grid-column: 1 / -1; min-height: 96px; }
+.arc-bugle-panel.is-drawn { background:var(--news); }
+.arc-bugle-panel.is-drawn img { display:block; width:100%; height:100%; object-fit:cover; }
 .arc-bugle-panelheld {
   position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
   padding:8px 14px; text-align:center;
