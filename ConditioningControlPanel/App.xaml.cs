@@ -358,6 +358,13 @@ namespace ConditioningControlPanel
             // The app's one moderation log. Read lazily on every call because ModerationLog is
             // constructed in OnStartup, long after this ctor - and it is declared null! until then.
             CoreModerationLog.InstanceProvider = () => ModerationLog;
+            // Webcam capability + the consent revoke. The tracking engine stays here (capture
+            // device, ONNX sessions, OpenCvSharp loop); only "is there one" and "undo consent"
+            // cross. Read lazily: Webcam is constructed in OnStartup, long after this ctor, and is
+            // declared null! until then - so the provider must not capture it now.
+            CoreWebcam.IsAvailableProvider = () => Webcam != null;
+            CoreWebcam.RevokeConsentAction = () => Webcam?.RevokeConsent();
+
             // Speech capability, for the views that ask whether voice input is worth offering.
             // SpeechService itself stays here - it owns a capture device. Reading ModelStatus
             // lazily probes the model exactly as the WPF views already did.

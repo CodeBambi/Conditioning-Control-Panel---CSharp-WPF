@@ -80,8 +80,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // ponytail: needs ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs
             // (IsRunning / Calibration / OnGazeMove / SetRuntimeOffset) plus
-            // ConditioningControlPanel/Services/CalibrationSoundService.cs. Neither is in Core and
-            // no Core seam names a tracker. With those back this shows the dot,
+            // ConditioningControlPanel/Services/CalibrationSoundService.cs. Neither is in Core.
+            // CoreWebcam carries capability + consent-revoke only, deliberately not the gaze feed
+            // (see its class doc): sampling is the whole of this window, so a capability flag alone
+            // unblocks nothing here. With those back this shows the dot,
             // samples for 2 s, takes the per-axis median after dropping the saccade onto the
             // dot, and writes (window centre - median) as the runtime offset. Without them
             // there is nothing to sample, so the window just parks in its opening state.

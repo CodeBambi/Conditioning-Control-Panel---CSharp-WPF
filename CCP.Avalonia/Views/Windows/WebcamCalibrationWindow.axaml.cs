@@ -178,7 +178,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // ponytail: needs App.Webcam - ConditioningControlPanel/Services/Webcam/
             // WebcamTrackingService.cs - for the IsRunning gate and the OnRawIris / OnHeadPose /
             // OnTrackingStateChanged subscriptions. It is head-only by construction (its capture
-            // stack is Windows-side) and no Core seam names a tracker.
+            // stack is Windows-side). CoreWebcam carries capability + consent-revoke only and
+            // deliberately no per-frame feed, which is all this window consumes - see its class doc
+            // for why state without frames would be the worse half.
             // The WPF original bails to ShowError when tracking is not running; with no service to
             // ask, the intro is shown unconditionally so the view still has a first frame.
 

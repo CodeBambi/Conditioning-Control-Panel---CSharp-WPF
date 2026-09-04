@@ -150,6 +150,19 @@ namespace ConditioningControlPanel.LinuxSmoke
                 Check("CoreSpeech.HasCaptureDevice is false with no speech service", !CoreSpeech.HasCaptureDevice);
                 Check("CoreSpeech.ModelStatus is NotProbed with no speech service", CoreSpeech.ModelStatus == CoreSpeechModelStatus.NotProbed);
                 Check("CoreSpeech.EnumerateInputDevices is empty with no speech service", CoreSpeech.EnumerateInputDevices().Count == 0);
+                // The webcam seam (wire/100). Unseeded must read as "this head has no camera
+                // engine": a view that believed "available" would draw an engine bar whose Start
+                // button opens nothing, and revoke must not claim it undid four things it did not.
+                Check("CoreWebcam.IsAvailable is false with no webcam service", !CoreWebcam.IsAvailable);
+                CoreWebcam.RevokeConsent();
+                Check("CoreWebcam.RevokeConsent is a silent no-op with no webcam service", true);
+                CoreWebcam.IsAvailableProvider = () => throw new InvalidOperationException("boom");
+                CoreWebcam.RevokeConsentAction = () => throw new InvalidOperationException("boom");
+                Check("CoreWebcam.IsAvailable is false when the provider throws", !CoreWebcam.IsAvailable);
+                CoreWebcam.RevokeConsent();
+                Check("CoreWebcam.RevokeConsent swallows a throwing action", true);
+                CoreWebcam.IsAvailableProvider = null;
+                CoreWebcam.RevokeConsentAction = null;
                 // The session and moderation-log seams (wire/36). Unseeded, "no engine is running"
                 // is the truth on a head that has none, and the log sink swallows the write.
                 Check("CoreSession.IsEngineRunning is false with no engine", !CoreSession.IsEngineRunning);

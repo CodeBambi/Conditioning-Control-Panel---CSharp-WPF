@@ -636,11 +636,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         /// in-memory _roles map is authoritative while the window is open.</summary>
         private void SaveSelection() => _settings.Save();
 
-        /// <summary>Whether a gaze tracker is reachable from this head. Constant false until a
-        /// tracker seam exists; a single named gate so restoring one is one edit, not a hunt.
+        /// <summary>Whether a gaze tracker is reachable from this head. Constant false; a single
+        /// named gate so restoring one is one edit, not a hunt.
         /// <para>Checked against the WPF original before leaving it false: there is no mouse or
         /// keyboard fallback to restore. GameSide has exactly one writer there, OnGazeSideChanged,
-        /// fed by App.Webcam.OnGazeSide - so with no tracker no input can move a round.</para></summary>
+        /// fed by App.Webcam.OnGazeSide - so with no tracker no input can move a round.</para>
+        /// <para><b>NOT <c>CoreWebcam.IsAvailable</c>, though the two read the same today.</b> This
+        /// gate stands for "a gaze-SIDE stream reaches this window", which is strictly more than
+        /// "this head has a camera engine". Binding it to the capability flag would enable Start the
+        /// moment any head seeded one, on a game whose rounds still could not advance. Point it at
+        /// the stream when the stream exists.</para></summary>
         private static bool HasGazeTracker => false;
 
         /// <summary>Why Start is disabled on this head, stated once so the summary line, the
@@ -1526,7 +1531,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
         // rather than the screen-projected OnGazeMove, because it already runs through the
         // calibrated left/right classifier with hysteresis and a 3-frame stability filter.
         // ponytail: needs WebcamTrackingService. It owns a camera, so it does not "move to
-        // Core" - it needs a seam, and there is none. Until then _currentSide is None forever,
+        // Core" - it needs a seam. CoreWebcam is now that seam, but it carries capability +
+        // consent-revoke only and NOT OnGazeSide, on purpose: this window's only input writer is
+        // that stream, so a capability flag would open Start onto a game nothing can play. Restore
+        // the gate and the stream in the same layer. Until then _currentSide is None forever,
         // which is why Start is gated (see the class header for what that silently produced).
         // OnFaceFound/OnFaceLost were the only writers of _faceLost; without the service the
         // face is simply never lost.

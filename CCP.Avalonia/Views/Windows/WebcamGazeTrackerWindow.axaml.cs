@@ -31,8 +31,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <c>MainWindow.BtnWebcamDebugTrackerTest_Click</c> (MainWindow.LabTab.cs:1059) and only after
     /// two preconditions it can evaluate and this head cannot: the tracking service is RUNNING
     /// (starting it here if needed) and <c>svc.Calibration != null</c>. Neither exists on this head
-    /// — Services/Webcam/WebcamTrackingService.cs is the device, and CCP.Core/Services/Webcam holds
-    /// only WebcamConsent — so a button wired to this window would put up a full-screen "gaze
+    /// — Services/Webcam/WebcamTrackingService.cs is the device, and Core holds only WebcamConsent
+    /// plus CoreWebcam (capability + revoke, no feed) — so a button wired to this window would put
+    /// up a full-screen "gaze
     /// tracker" whose dot can never move, with the two checks that would have refused honestly
     /// silently dropped. That is the judgement already recorded for the Lab status pills
     /// (MainShellWindow.LabTab.cs) and it holds here. The window stays reachable only from
@@ -70,10 +71,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // ponytail: needs ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs
             // (IsRunning / Calibration / OnGazeMove / OnTrackingStateChanged). It is head-only by
-            // construction and no Core seam names a tracker. With it back, this checks
-            // both preconditions, subscribes OnGazeMove and closes the window when the service
-            // stops. Without it there is no tracking to visualise, which is exactly the WPF
-            // original's first error path, so it takes that path verbatim.
+            // construction. CoreWebcam now exists but carries capability + consent-revoke ONLY,
+            // deliberately not IsRunning/Calibration - see its class doc. Gating on those two alone
+            // would be the worse half-port: the preconditions would pass and the dot would still
+            // never move, because OnGazeMove is what draws it. With the feed back, this checks both
+            // preconditions, subscribes OnGazeMove and closes the window when the service stops.
+            // Without it there is no tracking to visualise, which is exactly the WPF original's
+            // first error path, so it takes that path verbatim.
             ShowError("Webcam tracking is not running. Start tracking before opening the tracker test.");
         }
 
