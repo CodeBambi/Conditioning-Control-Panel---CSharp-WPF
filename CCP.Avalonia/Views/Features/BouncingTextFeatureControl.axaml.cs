@@ -162,9 +162,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // Live-apply: start/stop the bouncing-text service if the engine is running.
             if (CoreSession.IsEngineRunning)
             {
-                // ponytail: App.BouncingText.Start()/Stop() - BouncingTextService
-                // (ConditioningControlPanel/Services/Subliminal/BouncingTextService.cs), still in
-                // the WPF head - it draws Win32 layered windows.
+                if (want) CoreBouncingText.Start();
+                else CoreBouncingText.Stop();
             }
         }
 
@@ -342,12 +341,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             }
         }
 
-        // ponytail: both need App.BouncingText
-        // (ConditioningControlPanel/Services/Subliminal/BouncingTextService.cs), still in the WPF
-        // head. Kept as named no-ops so the call ORDER around them stays the WPF one.
-        private static void SafeRefresh() { }
+        /// <summary>Both go through <see cref="CoreBouncingText"/>, which swallows a fault the way
+        /// the WPF card's own try/catch did. Deliberately NOT gated on
+        /// <see cref="CoreSession.IsEngineRunning"/> - WPF gates only the enable toggle and lets
+        /// the service's own "am I running" guard answer these two. Unseeded, both are silent, and
+        /// the setting has already been saved by the caller either way.</summary>
+        private static void SafeRefresh() => CoreBouncingText.Refresh();
 
-        private static void SafeRestart() { }
+        private static void SafeRestart() => CoreBouncingText.Restart();
 
         // =====================================================================================
         //  view state
@@ -362,29 +363,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ColorSwatch.Background = new SolidColorBrush(Color.FromRgb(r, g, b));
         }
 
-        /// <summary>The colour Fixed mode renders: the user's pick if set, else hot pink.
-        /// Mirrors BouncingTextService.GetFixedColor.</summary>
+        /// <summary>The colour Fixed mode renders: the user's pick if set, else hot pink. This is
+        /// the engine's own static now, not a third copy of the parse, so the swatch cannot drift
+        /// from what actually gets drawn.</summary>
         private static (byte R, byte G, byte B) EffectiveColor()
-        {
-            if (TryParseHex(CoreSettings.Current.BouncingTextFixedColor, out var rgb)) return rgb;
-            return (255, 105, 180);
-        }
-
-        private static bool TryParseHex(string? hex, out (byte R, byte G, byte B) rgb)
-        {
-            rgb = (255, 105, 180);
-            if (string.IsNullOrWhiteSpace(hex)) return false;
-            hex = hex.Trim().TrimStart('#');
-            if (hex.Length != 6) return false;
-            try
-            {
-                rgb = (Convert.ToByte(hex.Substring(0, 2), 16),
-                       Convert.ToByte(hex.Substring(2, 2), 16),
-                       Convert.ToByte(hex.Substring(4, 2), 16));
-                return true;
-            }
-            catch { return false; }
-        }
+            => Services.BouncingTextEngine.GetFixedColor(CoreSettings.Current);
 
         /// <summary>
         /// WPF calls <c>Helpers.FontPickerHelper.Populate(CmbFont, s.BouncingTextFont, "Segoe UI")</c>

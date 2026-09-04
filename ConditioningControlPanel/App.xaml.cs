@@ -397,6 +397,16 @@ namespace ConditioningControlPanel
                 else CornerGif?.RefreshSlot(index);
             };
 
+            // The bouncing-text control seam (CCP.Core/CoreBouncingText.cs). The motion, colours
+            // and XP gating are BouncingTextEngine in Core now; what this head still owns is the
+            // surface - full-screen layered click-through windows - so the service stays here and
+            // the seam is the handle a settings card nudges. Null-conditional on purpose: the
+            // service is constructed later in OnStartup, and until it is every call is a no-op.
+            CoreBouncingText.StartAction = () => BouncingText?.Start();
+            CoreBouncingText.StopAction = () => BouncingText?.Stop();
+            CoreBouncingText.RefreshAction = () => BouncingText?.Refresh();
+            CoreBouncingText.RestartAction = () => BouncingText?.Restart();
+
             // The entitlement seam, for TierGate (now CCP.Core/Services/TierGate.cs). Deciding is
             // policy and moved; the two account bars, the daily-free wheel and the refusal toast
             // stay here. Every one is a lambda, not an eager read: Patreon, DailyFree and

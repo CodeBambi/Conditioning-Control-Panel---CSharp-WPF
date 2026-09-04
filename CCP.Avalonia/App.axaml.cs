@@ -117,6 +117,16 @@ namespace ConditioningControlPanel.Avalonia
                 // because an entitlement seam that failed open would hand every Linux user the
                 // paid tier.
                 //
+                // CoreBouncingText stays unseeded, and the split is the point: the motion, the
+                // colour modes and the XP rate limit are BouncingTextEngine in Core and identical
+                // on both heads, but nothing here owns a full-screen click-through surface to paint
+                // logos on yet. Unseeded, the Lab card's Start/Stop/Refresh/Restart are silent
+                // no-ops - the same answer the WPF card got from App.BouncingText?. before the
+                // service existed - and the checkbox still reads from the saved setting, so it says
+                // "on, drawing nothing" rather than lying about being off. Seeding this needs an
+                // overlay window in Views/Overlays/ plus the two facts the engine cannot work out
+                // for itself: screen bounds and glyph metrics.
+                //
                 // CoreSpeech is deliberately left unseeded: there is no speech engine on this head
                 // yet, and the seam's unseeded answers (no mic, empty device list, NotProbed) are
                 // exactly what that is. Seeding it with anything else would be a lie.
