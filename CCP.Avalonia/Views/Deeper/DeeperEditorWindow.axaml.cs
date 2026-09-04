@@ -18,6 +18,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
@@ -57,11 +58,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///
     /// <para><b>What is stubbed, and why.</b> Each site carries a <c>ponytail:</c> comment.</para>
     /// <list type="bullet">
-    ///   <item><b>Media playback.</b> LibVLCSharp.WPF (video) and NAudio (audio + waveform peaks)
-    ///         are Windows/WPF-only assemblies and this layer may not add a package, so
-    ///         <see cref="InitializeVideo"/>, <see cref="InitializeAudioAsync"/> and the transport's
-    ///         play/pause/seek drive <see cref="_totalSeconds"/> / <see cref="_currentSeconds"/>
-    ///         directly instead of a player. Everything downstream of those two numbers is real.</item>
+    ///   <item><b>Media playback.</b> LOCAL VIDEO is real, without LibVLC: <see cref="InitializeVideo"/>
+    ///         navigates the same <c>WebHost</c> the remote preview uses at the file, behind a gate
+    ///         pinned to that one path, and the engine's own media document supplies the
+    ///         &lt;video&gt; element that <see cref="PollBrowserTimeAsync"/> already reads and
+    ///         drives - so duration, playhead, play/pause and seek describe the file. LOCAL AUDIO
+    ///         is not: <see cref="InitializeAudioAsync"/> still needs a decoder (NAudio, or
+    ///         whatever replaces it) for both the waveform peaks and a duration, and until one
+    ///         lands the transport REFUSES on that branch rather than miming a clock.</item>
     ///   <item><b>The browser preview.</b> Real: the https pre-flight, a per-navigation host
     ///         fence, and the page's own &lt;video&gt; driven and read back through
     ///         <c>WebHost.InvokeScriptAsync</c>, so duration, playhead, play/pause and seek
@@ -100,9 +104,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool _isDirty;
         private bool _suppressDirty;
 
-        // ponytail: needs LibVLCSharp (video) and NAudio (audio + AudioWaveformResult). LOCAL
-        // media still has no player, so the two numbers every drawing path reads are driven
-        // directly; the remote branch no longer is - it polls the page (PollBrowserTimeAsync).
+        // ponytail: needs a decoder for AUDIO (NAudio's AudioFileReader + AudioWaveformResult, or
+        // a portable replacement). Local audio is the last branch where the two numbers every
+        // drawing path reads are driven directly; remote AND local video both poll the page's
+        // media element now (PollBrowserTimeAsync).
         private double[]? _waveformPeaks;
         private bool _isPlaying;
 
@@ -799,6 +804,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // The page plays and pauses without us - autoplay, an ad, the site's own controls.
                 // Follow it, or the glyph says "paused" over a running video.
                 var playing = parts[2] == "1";
+
+                // WPF opened a LOCAL clip PAUSED on purpose (its racy Play/Pause pair was replaced
+                // by a one-shot Playing handler for the same end): you place effects against a
+                // still frame, you do not chase a clip that started itself. A media document
+                // autoplays, so the first poll that sees a real duration turns that off.
+                //
+                // BOTH halves are needed and neither is conditional on what this poll saw. A
+                // duration exists at HAVE_METADATA and autoplay does not fire until
+                // HAVE_ENOUGH_DATA, so a poll landing in that window reads paused=1 for a clip
+                // that is about to start: clearing `autoplay` is what stops it, and pause() is
+                // what catches the case where the window had already closed. Checking `playing`
+                // first would let exactly that gap through - which is WPF's own bug, in the shape
+                // it took there (Pause() right after Play() was a no-op while still Opening).
+                //
+                // The flag is one-shot, so a later user-driven Play is never undone, and it is
+                // armed only by InitializeVideo, so a REMOTE page keeps WPF's other rule: the site
+                // owns its own player.
+                if (_pauseLocalPreviewOnce && dur > 0)
+                {
+                    _pauseLocalPreviewOnce = false;
+                    _ = BrowserPreview.InvokeScriptAsync(
+                        BrowserVideoScript("(l.autoplay=false,l.pause(),'ok')"));
+                    playing = false; // don't flash ⏸ for one tick over a video we are pausing
+                }
                 if (playing != _isPlaying)
                 {
                     _isPlaying = playing;
@@ -831,6 +860,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         {
             if (!_browserNavigated) return;
             _browserNavigated = false;
+            // Cleared with the page, not left armed: a swap from a video to a URL would otherwise
+            // pause the site's own player once, for a rule that only applies to a local clip.
+            _pauseLocalPreviewOnce = false;
             // The page owned _isPlaying while it was up. Leaving it true would make the next press
             // of a local-media transport toggle straight to "paused" and do nothing visible.
             _isPlaying = false;
@@ -843,16 +875,77 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             catch (Exception ex) { Log.Debug("DeeperEditor: preview blank failed: {Error}", ex.Message); }
         }
 
-        /// <summary>ponytail: needs LibVLCSharp. The WPF path created a MediaPlayer on VideoView and
-        /// hooked LengthChanged / TimeChanged / EndReached to drive _totalSeconds, _currentSeconds
-        /// and the play/pause glyph.</summary>
+        /// <summary>
+        /// Local video preview. WPF opened a LibVLCSharp <c>MediaPlayer</c> on a <c>VideoView</c>
+        /// and hooked LengthChanged / TimeChanged / EndReached; this head has no LibVLC and may not
+        /// add one. It does not need a second player, though - it needs the one it already has.
+        /// The web engine wraps a navigated media file in its own <c>&lt;video&gt;</c> media
+        /// document (the sibling player's <c>LoadLocalVideo</c> ships on exactly that), and this
+        /// window already drives and reads a page's largest <c>&lt;video&gt;</c> through
+        /// <see cref="BrowserVideoScript"/>. So the local branch JOINS the browser branch rather
+        /// than growing a parallel one: duration, playhead, play/pause and seek all describe the
+        /// real file, and <see cref="PollBrowserTimeAsync"/> is the LengthChanged / TimeChanged /
+        /// EndReached triple in one place.
+        ///
+        /// <para>The same one-file fence the player uses. <see cref="IsLocalFile"/> proves a file is
+        /// THERE, not that it is media, so the extension is checked BEFORE the engine is pointed at
+        /// anything - a shared .ccpenh.json naming /etc/passwd would otherwise be rendered as a
+        /// page - and the gate then pins the engine to that one file for the rest of the load.</para>
+        ///
+        /// <para>What does NOT cross: playback of a codec the engine will not take (.mkv and .avi
+        /// are in the extension list because the project model allows them, but a media document
+        /// shows a black cell where LibVLC decoded it), and the preferred-output-device routing WPF
+        /// got from <c>App.Audio.ApplyPreferredDevice</c> - the page plays on the system default.</para>
+        /// </summary>
         private void InitializeVideo(string path)
         {
-            BrowserPreview.IsVisible = false;
             WaveformCanvas.IsVisible = false;
             PreviewPlaceholder.IsVisible = false;
-            VideoPreview.IsVisible = true;
-            Log.Debug("DeeperEditor: local video preview unavailable on this head: {Path}", path);
+
+            string? full = null;
+            if (IsLocalVideoFile(path))
+            {
+                try { full = IOPath.GetFullPath(path); } catch { full = null; }
+            }
+
+            // No engine is the DEFAULT on a fresh Linux box and on every headless render, and a
+            // non-video source is a project the editor cannot preview at all. Both keep the
+            // labelled surface - with the reason written from here, because the .axaml's literal
+            // still names LibVLCSharp and that has not been the blocker since this method changed.
+            if (full is null || !BrowserPreview.HasEngine)
+            {
+                BrowserPreview.IsVisible = false;
+                VideoPreview.IsVisible = true;
+                // A plain literal in the .axaml, not a {loc:Str} binding, so assigning it here is
+                // not the "local value under a live binding" trap - nothing will overwrite it.
+                TxtVideoPreviewStub.Text = full is null
+                    ? "This media file is not a video the preview can open."
+                    : (WebHost.UnavailableReason ?? "No web engine available for video preview.");
+                Log.Debug("DeeperEditor: local video preview unavailable ({Reason})",
+                    full is null ? "not a video file" : "no engine");
+                return;
+            }
+
+            VideoPreview.IsVisible = false;
+            BrowserPreview.IsVisible = true;
+
+            // Assigned BEFORE Source, like the remote branch: the gate is read at navigation time.
+            // Inlined rather than pulled out as a helper because the sibling player already carries
+            // its own copy of this comparison - see the handover note about that fold.
+            BrowserPreview.AllowNavigation = u =>
+            {
+                if (!u.IsFile) return false;
+                try { return string.Equals(IOPath.GetFullPath(u.LocalPath), full, StringComparison.Ordinal); }
+                catch { return false; }
+            };
+            BrowserPreview.Source = new Uri(full);
+            _browserNavigated = true;
+            _browserPollDisabled = false;
+            _pauseLocalPreviewOnce = true;
+
+            // As in the remote branch: the poll runs whether or not we think anything is playing,
+            // because the media document starts and stops itself.
+            _playheadTimer?.Start();
         }
 
         /// <summary>ponytail: needs NAudio (WaveOutEvent + AudioFileReader) and the waveform peak
@@ -948,11 +1041,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// In browser mode this drives the page's own &lt;video&gt; and sets NOTHING locally: the
         /// poll flips the glyph off the page's real state a tick later, so a press on a page that
         /// has no video element yet (still loading, an error page, a navigation the fence refused)
-        /// reads as having done nothing - which is what happened.
+        /// reads as having done nothing - which is what happened. Local VIDEO takes this branch
+        /// too: it is a hosted media document, so the page owns the clock there as well.
         ///
-        /// <para>ponytail: LOCAL media still has no player, so there play/pause toggles the glyph
-        /// and the playhead timer and the timeline animates against the project's own
-        /// duration.</para>
+        /// <para>ponytail: LOCAL AUDIO has no decoder, so nothing on that branch can play. It is
+        /// refused rather than mimed: without a decoder <c>_totalSeconds</c> stays 0, the tick
+        /// below returns on its own, and flipping the glyph to ⏸ over silence is a control lying
+        /// about state. Same refusal covers a local video the machine has no web engine for.</para>
         /// </summary>
         private void BtnPlayPause_Click(object? sender, RoutedEventArgs e)
         {
@@ -962,6 +1057,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                     BrowserVideoScript(_isPlaying ? "(l.pause(),'ok')" : "(l.play(),'ok')"));
                 return;
             }
+            // Nothing to play and no clock to run: leave the glyph alone. A press then reads as
+            // having done nothing, which is what happened.
+            if (_totalSeconds <= 0) return;
             _isPlaying = !_isPlaying;
             BtnPlayPause.Content = _isPlaying ? "⏸" : "▶";
             if (_isPlaying) _playheadTimer?.Start(); else _playheadTimer?.Stop();
@@ -974,9 +1072,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             if (_browserNavigated) { _ = PollBrowserTimeAsync(); return; }
             if (_isScrubbing) return;
             if (!_isPlaying || _totalSeconds <= 0) return;
-            // ponytail: LOCAL media only. The WPF tick read AudioFileReader.CurrentTime (video time
-            // arrived on MediaPlayer.TimeChanged). With no player, advance by the timer interval so
-            // the playhead, the readout and any time-driven redraw stay honest about elapsed time.
+            // ponytail: LOCAL AUDIO only now - video reaches the branch above. The WPF tick read
+            // AudioFileReader.CurrentTime. With no decoder, advance by the timer interval so the
+            // playhead, the readout and any time-driven redraw stay honest about elapsed time.
             _currentSeconds = Math.Min(_totalSeconds, _currentSeconds + 0.08);
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
             UpdatePlayheadPosition();
@@ -992,8 +1090,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 _ = BrowserPreview.InvokeScriptAsync(BrowserVideoScript(string.Format(
                     CultureInfo.InvariantCulture, "(l.currentTime={0:0.###},'ok')", _currentSeconds)));
             }
-            // ponytail: LOCAL media needs the player's Seek - the WPF version pushed the new
-            // position to MediaPlayer.SeekTo / AudioFileReader.CurrentTime on these two branches.
+            // ponytail: LOCAL AUDIO needs a decoder's seek - the WPF version pushed the new position
+            // to AudioFileReader.CurrentTime here. Local video seeks through the branch above,
+            // because it is a hosted media element like the remote one.
             UpdatePlayheadPosition();
         }
 
@@ -2813,6 +2912,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             return true; // discard
         }
 
+        /// <summary>
+        /// Extension gate for a local media path. It already existed here to pick MediaType on a
+        /// media swap; <see cref="InitializeVideo"/> now also uses it as the pre-flight that keeps
+        /// a non-media file from being rendered as a page. Not a content sniff - the cheap half of
+        /// "is this media", run before the path reaches the engine.
+        /// </summary>
         private static bool IsLocalVideoFile(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return false;
@@ -2996,8 +3101,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _htFetchCts = null;
         }
 
-        /// <summary>ponytail: needs LibVLCSharp / NAudio - the WPF body disposed MediaPlayer,
-        /// Media, WaveOutEvent and AudioFileReader.</summary>
+        /// <summary>WPF disposed MediaPlayer, Media, WaveOutEvent and AudioFileReader here. The
+        /// video half needs nothing: <see cref="TeardownPreview"/> runs first and blanks the page,
+        /// which is what releases a hosted media element.
+        /// ponytail: the audio half is still a decoder this head does not have.</summary>
         private void DisposePlayback()
         {
             _isPlaying = false;
@@ -3005,15 +3112,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         // ---------------------------------------------------------------------------------
-        // Preview fullscreen / VLC / NAudio surface
+        // Preview fullscreen / audio-player surface
         //
-        // What is left here after the browser preview was wired: the fullscreen reparent and the
-        // four player callbacks. They are kept named and typed against portable signatures rather
-        // than deleted, so nothing silently disappears and the layer that brings a player has an
-        // exact list of what to fill in. The framework-typed parameters
-        // (MediaPlayerLengthChangedEventArgs, MediaPlayerTimeChangedEventArgs, StoppedEventArgs)
-        // become object?/EventArgs, since naming them would require the very packages this head
-        // must not reference.
+        // What is left here after the browser preview was wired and local video joined it: the
+        // fullscreen reparent, and ONE player callback - the audio one. It is kept named and typed
+        // against a portable signature rather than deleted, so the layer that brings an audio
+        // decoder has an exact place to fill in. The framework-typed parameter (StoppedEventArgs)
+        // becomes EventArgs, since naming it would require the very package this head must not
+        // reference.
         //
         // The FULLSCREEN half is stubbed for one reason and it is not a missing wrapper method:
         // ContainsFullScreenElementChanged has no counterpart in NativeWebView, so nothing on this
@@ -3036,6 +3142,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool _browserNavigated;
         private bool _browserPollInFlight;
         private bool _browserPollDisabled;
+        /// <summary>Armed by <see cref="InitializeVideo"/> only: pause a LOCAL clip's media
+        /// document once, the first time the poll sees it running, so the editor opens on a still
+        /// frame the way WPF's one-shot Playing handler made it.</summary>
+        private bool _pauseLocalPreviewOnce;
         private bool _isPreviewFullscreen;
         private bool _fsTransitionInFlight;
         private Window? _previewFullscreenWindow;
@@ -3094,20 +3204,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             UpdatePlayheadPosition();
         }
 
-        /// <summary>ponytail: needs LibVLCSharp MediaPlayer.LengthChanged - set _totalSeconds and
-        /// rebuilt every timeline visual against the new duration.</summary>
-        private void OnVlcLengthChanged(object? sender, EventArgs args) { }
+        // The three VLC callbacks that used to be stubbed here - OnVlcLengthChanged,
+        // OnVlcTimeChanged, OnVlcEndReached - are GONE rather than stubbed, on wire/69's precedent
+        // for IsAllowedPreviewHost: PollBrowserTimeAsync does all three jobs for local video now,
+        // and an empty method captioned "needs LibVLCSharp" is advice to build a second time
+        // source. End-of-media needs no member at all: an HTML media element that has ended seeks
+        // itself back to 0 on the next play(), which is exactly what WPF's Stop()+seek existed to
+        // fake. Only the audio twin survives, because the audio branch is still unported.
 
-        /// <summary>ponytail: needs LibVLCSharp MediaPlayer.TimeChanged - the video half of what
-        /// <see cref="PlayheadTimer_Tick"/> does for audio.</summary>
-        private void OnVlcTimeChanged(object? sender, EventArgs args) { }
-
-        /// <summary>ponytail: needs LibVLCSharp MediaPlayer.EndReached - reset the playhead and the
-        /// play/pause glyph at end of media.</summary>
-        private void OnVlcEndReached(object? sender, EventArgs args) { }
-
-        /// <summary>ponytail: needs NAudio WaveOutEvent.PlaybackStopped - the audio twin of
-        /// <see cref="OnVlcEndReached"/>.</summary>
+        /// <summary>ponytail: needs NAudio WaveOutEvent.PlaybackStopped - reset the play/pause
+        /// glyph at the end of a local AUDIO file. Video no longer needs a twin of this: the
+        /// poll reads <c>paused</c> off the media element.</summary>
         private void OnWaveOutPlaybackStopped(object? sender, EventArgs args) { }
     }
 
