@@ -50,6 +50,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             Determinism();
             Scrubbing();
             Arithmetic();
+            BouncingText();
             ConsentAndReports();
             Roadmap();
             LockCard();
@@ -724,6 +725,9 @@ namespace ConditioningControlPanel.LinuxSmoke
         {
             try { action(); return true; }
             catch { return false; }
+        }
+
+        /// <summary>
         /// Mind wipe's portable half (wire/107): the schedule decides here, the playback does not.
         /// A headless render cannot exercise either, so the arithmetic is asserted directly and
         /// the seam is asserted for the answer it gives when no head is playing anything - which
@@ -794,6 +798,9 @@ namespace ConditioningControlPanel.LinuxSmoke
                   picked.Length == 1 && picked[0] == custom);
             Check("a custom path that does not exist falls back to the folders, not to nothing",
                   MindWipeSchedule.DiscoverClips(Path.Combine(CorePaths.UserData, "gone.wav")).Length == 1);
+        }
+
+        /// <summary>
         /// The corner-GIF split (wire/108). CornerGifPlanner decides where a corner overlay goes;
         /// CoreCornerGif is the surface that draws it, and is UNSEEDED here - this head has no
         /// overlay window yet. What is worth asserting off Windows is that the unseeded seam is a
@@ -872,6 +879,118 @@ namespace ConditioningControlPanel.LinuxSmoke
             var heat = ProgramHeat.Compute(3, 30, 0.5, false);
             Check("ProgramHeat.Compute returns a finite value", !double.IsNaN(heat) && !double.IsInfinity(heat), heat.ToString("R"));
             Check("ProgramHeat.Compute is repeatable", Math.Abs(heat - ProgramHeat.Compute(3, 30, 0.5, false)) < double.Epsilon);
+        }
+
+        /// <summary>
+        /// The bouncing-text scheduler (wire/110). A headless render cannot exercise motion, so the
+        /// physics is asserted here instead: one logo placed by hand, one Step, and the reflection,
+        /// the corner detection, the hue walk and the XP rate limit checked against known numbers.
+        /// The seam that drives the surface is checked unseeded in the same pass.
+        /// </summary>
+        private static void BouncingText()
+        {
+            Console.WriteLine("\nBouncing text");
+
+            var s = new Models.AppSettings
+            {
+                BouncingTextSize = 100,
+                BouncingTextSpeed = 5,
+                BouncingTextColorMode = 0,
+                BouncingTextSecondText = false,
+                BouncingTextPool = new Dictionary<string, bool> { ["GOOD GIRL"] = true },
+            };
+
+            // Fixed seed + fixed metrics: every number below is then reproducible on any machine.
+            var e = new BouncingTextEngine(new Random(1234)) { Measure = (_, size) => (size * 4.0, size * 1.2) };
+            e.SetBounds(0, 0, 1920, 1080);
+            e.Start(s);
+            Check("the engine builds one logo from the settings", e.Logos.Count == 1);
+            Check("the head's glyph metrics are what the logo bounces with",
+                  Math.Abs(e.Logos[0].TextWidth - e.FontSize * 4.0) < 0.001);
+
+            var l = e.Logos[0];
+            // Park it one DIP short of the right wall, moving right at 100 DIP/s: 0.5s of travel
+            // overshoots, so the step must clamp to the wall and flip the sign.
+            l.TextWidth = 200; l.TextHeight = 60;
+            l.PosX = 1920 - 200 - 1; l.PosY = 500;
+            l.VelX = 100; l.VelY = 0;
+            var step = e.Step(l, 0.5, s);
+            Check("a right-wall hit clamps the logo to the wall", Math.Abs(l.PosX - (1920 - 200)) < 0.001);
+            Check("a right-wall hit reverses X and only X", l.VelX < 0 && l.VelY == 0);
+            Check("a wall hit reports Bounced on the X axis", step is { Bounced: true, BouncedX: true });
+            Check("a mid-wall hit is not a corner", !step.CornerHit);
+
+            // Both axes at once is the DVD corner.
+            l.PosX = 1; l.PosY = 1; l.VelX = -100; l.VelY = -100;
+            Check("both axes reversing at once is a corner hit", e.Step(l, 0.5, s).CornerHit);
+
+            // The rainbow wheel walks one step per bounce and wraps at 12.
+            s.BouncingTextColorMode = 2;
+            int hue0 = l.HueIndex;
+            l.PosX = 0; l.PosY = 500; l.VelX = -100; l.VelY = 0;
+            e.Step(l, 0.1, s);
+            Check("rainbow mode advances the hue wheel one step per bounce", l.HueIndex == (hue0 + 1) % 12);
+            s.BouncingTextColorMode = 0;
+
+            // XP: 15 a bounce, at most one award per 2s, so a second bounce in the same second is
+            // worth nothing. The gate is arithmetic and runs whether or not a head is listening.
+            double awarded = 0;
+            CoreProgression.AddXPProvider = (amount, _) => awarded += amount;
+            var x = new BouncingTextEngine(new Random(7)) { Measure = (_, size) => (size * 4.0, size * 1.2) };
+            x.SetBounds(0, 0, 1920, 1080);
+            x.Start(s);
+            var xl = x.Logos[0];
+            xl.TextWidth = 200; xl.TextHeight = 60; xl.PosY = 500; xl.VelY = 0;
+            xl.PosX = 0; xl.VelX = -100; x.Step(xl, 0.1, s);
+            Check("a bounce awards 15 XP", Math.Abs(awarded - 15) < 0.001);
+            xl.PosX = 0; xl.VelX = -100; x.Step(xl, 0.1, s);
+            Check("a second bounce inside the 2s cooldown awards nothing", Math.Abs(awarded - 15) < 0.001);
+            CoreProgression.AddXPProvider = null;
+            xl.PosX = 0; xl.VelX = -100; x.Step(xl, 0.1, s);
+            Check("the XP gate runs with no progression service attached and nothing throws", true);
+
+            // Effects off must be the identity transform - a scale of 0 would hide the text and a
+            // stray angle would spin it, both silently.
+            s.BouncingTextFxBreathing = s.BouncingTextFxWobble = s.BouncingTextFxSpin = false;
+            s.BouncingTextFxVelocityTilt = s.BouncingTextFxSquashStretch = s.BouncingTextFxCornerBurst = false;
+            var idle = e.Logos[0];
+            idle.SquashTimer = -1; idle.BurstTimer = -1;
+            e.Tick(1.0 / 60.0);
+            var t = e.ComputeEffectTransform(idle, s);
+            Check("no effects enabled is the identity transform",
+                  Math.Abs(t.sx - 1) < 1e-9 && Math.Abs(t.sy - 1) < 1e-9 && Math.Abs(t.angle) < 1e-9);
+            s.BouncingTextFxBreathing = true;
+            e.Tick(1.0 / 60.0);
+            var breathing = e.ComputeEffectTransform(idle, s);
+            Check("breathing scales both axes together and stays near 1",
+                  Math.Abs(breathing.sx - breathing.sy) < 1e-9 && breathing.sx > 0.9 && breathing.sx < 1.1);
+
+            // With no Measure delegate the engine must still size the text, not bounce a zero box.
+            var noMetrics = new BouncingTextEngine(new Random(99));
+            noMetrics.SetBounds(0, 0, 1920, 1080);
+            noMetrics.Start(s);
+            Check("with no head metrics the logo still has a positive size",
+                  noMetrics.Logos[0].TextWidth > 0 && noMetrics.Logos[0].TextHeight > 0);
+
+            // An empty pool must answer a phrase, never an empty string that draws nothing.
+            s.BouncingTextPool = new Dictionary<string, bool>();
+            Check("an all-disabled phrase pool falls back to a real phrase",
+                  !string.IsNullOrWhiteSpace(noMetrics.SelectRandomText(s)));
+
+            // The surface seam (wire/110). Unseeded is the Avalonia head's state: the card saved the
+            // setting, nothing is drawn, and nothing throws.
+            CoreBouncingText.Start(); CoreBouncingText.Stop();
+            CoreBouncingText.Refresh(); CoreBouncingText.Restart();
+            Check("CoreBouncingText is a silent no-op with no surface", true);
+            var calls = new List<string>();
+            CoreBouncingText.StartAction = () => calls.Add("start");
+            CoreBouncingText.RefreshAction = () => throw new InvalidOperationException("boom");
+            CoreBouncingText.Start();
+            CoreBouncingText.Refresh();
+            Check("CoreBouncingText forwards once seeded and swallows a throwing surface",
+                  calls.Count == 1 && calls[0] == "start");
+            CoreBouncingText.StartAction = null;
+            CoreBouncingText.RefreshAction = null;
         }
     }
 }
