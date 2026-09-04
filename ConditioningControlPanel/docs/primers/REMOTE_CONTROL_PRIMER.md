@@ -187,7 +187,25 @@ no caller in this repo** — the server/web side of the loop is the remaining wo
 | `set_pink_opacity` / `set_spiral_opacity` | clamp 0–50 → settings (`:1054`/`:1065`) | |
 | `start_bubbles` / `stop_bubbles` | `App.Bubbles.Start(bypassLevelCheck:true)` / `.Stop()` (`:1076`/`:1080`) | |
 | `trigger_video` / `start_video` / `stop_video` | `App.Video.TriggerVideo()` / `.Start()` / `.Stop()` (`:1085`/`:1089`/`:1093`) | |
-| `play_hypnotube` | `MainWindowRef.PlayHypnotubeFromRemote(url)` (`:1097`) | **Hard-gated**: URL must pass `HtUrlHelper.IsEligibleHtUrl` (`:1106`); routed through WebView2, NOT LibVLC. Only command that validates untrusted input. |
+| `play_hypnotube` | `MainWindowRef.PlayHypnotubeFromRemote(url)` (`:1097`) | **Hard-gated**: URL must pass `HtUrlHelper.IsEligibleHtUrl` (`:1106`); routed through WebView2, NOT LibVLC. Only command that validates untrusted input. **Returns a refusal string** - see below. |
+
+**`play_hypnotube` and the surface it needs** (ccp-bugs#1138). The video goes into the embedded
+browser, which lives inside MainWindow, so the command only means anything when MainWindow can be
+seen. Three things used to make it invisible, all silently:
+
+1. **The remote overlay's blindfold.** `ShowRemoteControlOverlay` hides `SettingsTab.BrowserContainer`
+   for the whole time a controller is connected (WebView2 airspace would paint over the WPF overlay).
+   `MainWindow.RevealBrowserForRemoteVideo(true)` now lifts that blindfold while a controller video is
+   up and puts it back when the video stops. Losing the airspace fight is the point: the controller's
+   video belongs above the "someone else is controlling your app" card.
+2. **A tray-tucked or minimized control panel.** `FocusBrowserSurface` called `Activate()`, which is a
+   no-op on a hidden window. It now calls `RestoreWindowForBrowserSurface()` first.
+3. **A screen-owning webview host.** An Arcademy class, a DtRH descent and a Graded Intake are
+   natively OWNED by MainWindow (`ChaosWebViewHost.OwnedByMainWindow`), so Windows will never let the
+   control panel be placed above them. `PlayHypnotubeFromRemote` therefore **refuses** while one is
+   open (the subject's game is not closed by a remote command) and returns the reason.
+   `ReportCommandRefused` logs it, sets `last_executed.status` to `"fail"` with a `reason`, and sends
+   it up the emote back-channel so the controller sees why nothing happened.
 | `trigger_haptic` | `App.Haptics.TriggerAsync("remote_control", 0.7, 2000)` (`:1116`) | |
 | `duck_audio` / `unduck_audio` | `App.Audio.Duck(80)` / `.ForceUnduck()` (`:1120`/`:1124`) | |
 | `start_autonomy` / `stop_autonomy` | `App.Autonomy.Start()`/`.Stop()` (`:1129`/`:1133`) | |

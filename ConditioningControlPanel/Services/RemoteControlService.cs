@@ -647,7 +647,11 @@ namespace ConditioningControlPanel.Services
                     {
                         id = lastCmdId,
                         action = lastAction,
-                        status = "ok",
+                        // "ok" unless a handler called ReportCommandRefused. The server stores
+                        // last_executed verbatim, so the extra reason costs nothing on the wire and
+                        // gives the controller something to show besides a stuck "Sent".
+                        status = _lastCommandStatus,
+                        reason = _lastCommandReason,
                         at = DateTime.UtcNow.ToString("o")
                     };
                 }
@@ -1070,8 +1074,44 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Status reported for the command named by <c>last_executed</c> on the next status push,
+        /// and the short reason behind it. Reset at the top of every <see cref="ExecuteCommand"/>,
+        /// so it always describes the command whose id we are echoing. "fail" is the value the
+        /// controller page already renders as "Failed"; anything unknown reads as "Sent", which is
+        /// the silence ccp-bugs#1138 was made of.
+        /// </summary>
+        private string _lastCommandStatus = "ok";
+        private string? _lastCommandReason;
+
+        /// <summary>
+        /// A command we cannot honour has to SAY SO on every channel that exists rather than be
+        /// swallowed: the local log (so the next bug report carries it), the status push (so the
+        /// controller's command log stops saying "Sent"), and the emote back-channel (the one
+        /// subject→controller path the controller page definitely renders). Before ccp-bugs#1138 a
+        /// play_hypnotube that landed on a surface the subject could not see still reported "ok".
+        /// </summary>
+        private void ReportCommandRefused(string action, string reason)
+        {
+            _lastCommandStatus = "fail";
+            _lastCommandReason = reason;
+            App.Logger?.Warning("[RemoteControl] {Action} not delivered: {Reason}", action, reason);
+            try
+            {
+                var text = $"Can't open that: {reason}";
+                if (text.Length > 60) text = text.Substring(0, 60);
+                _ = SendEmoteAsync(text, "🚫", "custom");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[RemoteControl] Refusal emote failed: {Error}", ex.Message);
+            }
+        }
+
         private void ExecuteCommand(string action, JObject? parameters)
         {
+            _lastCommandStatus = "ok";
+            _lastCommandReason = null;
             DispatcherHelper.RunOnUISync(() =>
             {
                 try
@@ -1216,7 +1256,13 @@ namespace ConditioningControlPanel.Services
                             }
                             App.Logger?.Information("[RemoteControl] play_hypnotube id={Id}",
                                 Helpers.HtUrlHelper.TryExtractHtVideoId(htUrl));
-                            MainWindowRef?.PlayHypnotubeFromRemote(htUrl);
+                            // Non-null = the video was NOT handed to the browser (an Arcademy class
+                            // / DtRH descent / Graded Intake owns the screen above the control
+                            // panel, or the browser could not be brought up). Say so on every
+                            // channel instead of accepting the command and showing nothing.
+                            var htRefusal = MainWindowRef?.PlayHypnotubeFromRemote(htUrl);
+                            if (!string.IsNullOrEmpty(htRefusal))
+                                ReportCommandRefused("play_hypnotube", htRefusal!);
                             break;
 
                         case "trigger_haptic":

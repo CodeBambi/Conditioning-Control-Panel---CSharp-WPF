@@ -330,9 +330,41 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // MainWindow itself may be away: TRAY-HIDDEN (Window.Hide(), via MinimizeToTrayForChaos
+            // when an Arcademy class or a DtRH descent takes the screen) or minimized (Graded
+            // Intake's duck). Activate()/Focus() are no-ops on both, so without this the page loads
+            // into a surface the user can never see and the navigation reads as "nothing happened"
+            // (ccp-bugs#1138).
+            RestoreWindowForBrowserSurface();
             ShowTab("settings");
             Activate();
             Focus();
+        }
+
+        /// <summary>
+        /// Brings the control panel itself back before we try to focus the embedded browser.
+        /// Tray-tucked (Hide()) and minimized are both states in which Activate() does nothing at
+        /// all, so a navigation into the embedded browser would stay invisible for as long as the
+        /// window stayed away - which for a remote-control command means "until someone happens to
+        /// restore the window", i.e. long after the controller has given up.
+        /// </summary>
+        private void RestoreWindowForBrowserSurface()
+        {
+            try
+            {
+                if (!IsVisible)
+                {
+                    App.Logger?.Information("Browser surface requested while the control panel was tray-hidden - restoring it");
+                    RestoreFromTrayForRemote();   // TrayIconService.ShowWindow(): Show + Normal + on-screen repair
+                    return;
+                }
+                if (WindowState == WindowState.Minimized)
+                {
+                    App.Logger?.Information("Browser surface requested while the control panel was minimized - restoring it");
+                    WindowState = WindowState.Normal;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("RestoreWindowForBrowserSurface failed: {Error}", ex.Message); }
         }
 
         private async System.Threading.Tasks.Task InitAndNavigateAsync(string url, bool autoPlayFullscreen)
@@ -2985,14 +3017,54 @@ namespace ConditioningControlPanel
         private bool _remoteBrowserVideoActive;
 
         /// <summary>
+        /// Names the screen-owning WebView2 host sitting ABOVE the control panel right now, or null
+        /// when nothing is. These windows are natively owned by MainWindow
+        /// (<c>ChaosWebViewHost.OwnedByMainWindow</c> glue), which is a rule about the future:
+        /// Windows will never let the owner - and therefore the browser embedded inside it - be
+        /// placed above them. A remote video routed into the embedded browser while one of these is
+        /// up therefore plays somewhere nobody can look at, no matter how hard we focus it.
+        /// </summary>
+        private static string? ScreenOwningWebHostName()
+        {
+            try
+            {
+                if (Services.Arcademy.ArcademyHostService.IsActive)
+                    return Services.Arcademy.ArcademyHostService.ProductName;
+                if (Services.Chaos.DtrhHostService.IsActive)
+                    return "Down the Rabbit Hole";
+                if (Services.Quiz.IntakeHostService.IsActive)
+                    return Services.Quiz.IntakeHostService.ProductName;
+            }
+            catch { /* a gate must never be the thing that throws */ }
+            return null;
+        }
+
+        /// <summary>
         /// Play a controller-supplied HypnoTube URL in the embedded browser (remote-control
         /// "play_hypnotube" command). Marks the browser video as remote-active so a later panic
         /// / session-end can stop it. The URL has already been allowlist-validated by
         /// RemoteControlService (HtUrlHelper.IsEligibleHtUrl).
         /// </summary>
-        public void PlayHypnotubeFromRemote(string url)
+        /// <returns>
+        /// null when the video was handed to the browser, otherwise a short reason the caller
+        /// reports back to the controller. Silence was the whole bug in ccp-bugs#1138: the command
+        /// was accepted, nothing appeared, and the controller kept pressing.
+        /// </returns>
+        public string? PlayHypnotubeFromRemote(string url)
         {
+            // Refuse, loudly, rather than navigate into a window that cannot be raised. The class
+            // / descent / intake stays where the subject put it - a controller command is not
+            // authority to close someone's game - but the controller is told why nothing happened
+            // instead of watching three commands vanish.
+            var ownedBy = ScreenOwningWebHostName();
+            if (ownedBy != null) return ownedBy + " is on screen";
+
             _remoteBrowserVideoActive = true;
+            // The remote-control overlay blindfolds the embedded browser for the WHOLE controller
+            // session (WebView2 airspace would otherwise paint over the WPF overlay). A video the
+            // controller just asked for is the one thing that has to win that contest, so lift the
+            // blindfold for as long as the remote video is up.
+            RevealBrowserForRemoteVideo(true);
             // A controller command is an explicit instruction from another person, so it takes
             // precedence over an in-flight video rather than being refused — but it must hand the
             // session over cleanly instead of navigating out from under the previous claim and
@@ -3004,8 +3076,11 @@ namespace ConditioningControlPanel
                 // Nothing is playing here, so don't leave the claim standing until the heartbeat
                 // retires it — panic/session-end would otherwise act on a video that never loaded.
                 _remoteBrowserVideoActive = false;
+                RevealBrowserForRemoteVideo(false);
                 App.BrowserMedia?.OnMediaStopped("remote-browser-unavailable");
+                return "the browser could not open it";
             }
+            return null;
         }
 
         /// <summary>
@@ -3019,6 +3094,9 @@ namespace ConditioningControlPanel
         {
             if (!_remoteBrowserVideoActive) return;
             _remoteBrowserVideoActive = false;
+            // Put the overlay's browser blindfold back: with the video gone there is nothing left
+            // for the WebView to paint over the "someone else is controlling your app" card with.
+            RevealBrowserForRemoteVideo(false);
             try
             {
                 if (_isBrowserFullscreen) ExitBrowserFullscreen();
