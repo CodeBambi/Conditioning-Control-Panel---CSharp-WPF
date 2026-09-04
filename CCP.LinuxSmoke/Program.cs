@@ -52,6 +52,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             Arithmetic();
             ConsentAndReports();
             Roadmap();
+            LockCard();
 
             Console.WriteLine();
             if (_failures == 0)
@@ -582,6 +583,77 @@ namespace ConditioningControlPanel.LinuxSmoke
                   roadmap.GetFullPhotoPath("t1_step1_x.png").StartsWith(roadmap.DiaryFolderPath, StringComparison.Ordinal));
             Check("an empty photo path resolves to empty, not to the folder itself",
                   roadmap.GetFullPhotoPath("") == "");
+        }
+
+        /// <summary>
+        /// The lock-card split: the schedule and the phrase rotation are Core's, the card itself is
+        /// the head's. A headless render cannot exercise either, so this is where the scheduler is
+        /// actually run.
+        /// </summary>
+        private static void LockCard()
+        {
+            Console.WriteLine("\nLock card (schedule in Core, surface in the head)");
+
+            Check("CoreLockCard.Show is a no-op with no surface seeded",
+                  Safe(() => { CoreLockCard.Show(); CoreLockCard.Show(isTest: true); }));
+
+            // #736 - the regression that hard-blocked Kept Day 1: a 30-minute session, cards
+            // deferred to minute 12, 1/hour. The worst-case roll must still land inside the window.
+            Check("the first card lands inside an 18-minute window at 1/hour",
+                  LockCardScheduler.ComputeFirstCardDelayMinutes(1, 18, 0.999999) < 18);
+            Check("an open-ended first card stays inside one interval",
+                  LockCardScheduler.ComputeFirstCardDelayMinutes(4, null, 0.999999) < 15.0 &&
+                  LockCardScheduler.ComputeFirstCardDelayMinutes(1, null, 0.0) == 0.0);
+            Check("the spacing after the first card is 60/freq +/-30%",
+                  Math.Abs(LockCardScheduler.ComputeNextIntervalMinutes(1, 0.0) - 42.0) < 1e-9 &&
+                  Math.Abs(LockCardScheduler.ComputeNextIntervalMinutes(1, 1.0) - 78.0) < 1e-9);
+            Check("frequency 0 is treated as 1/hour rather than dividing by zero",
+                  LockCardScheduler.ComputeNextIntervalMinutes(0, 0.5) == LockCardScheduler.ComputeNextIntervalMinutes(1, 0.5));
+
+            var scheduler = new LockCardScheduler();
+            var pool = new List<string> { "a", "b", "c" };
+            var noRepeat = true;
+            var previous = scheduler.PickPhrase(pool);
+            for (var i = 0; i < 50; i++)
+            {
+                var next = scheduler.PickPhrase(pool);
+                if (next == previous) noRepeat = false;
+                previous = next;
+            }
+            Check("the phrase rotation never repeats back-to-back over 50 draws", noRepeat);
+            Check("a one-phrase pool still draws that phrase every time",
+                  scheduler.PickPhrase(new List<string> { "only" }) == "only" &&
+                  scheduler.PickPhrase(new List<string> { "only" }) == "only");
+            Check("an empty pool draws null rather than throwing",
+                  scheduler.PickPhrase(new List<string>()) is null);
+
+            // CoreSettings.Current is one shared default instance for the whole run, so put the
+            // flag back or every later check inherits it.
+            var settings = CoreSettings.Current;
+            var wasEnabled = settings.LockCardEnabled;
+            try
+            {
+                settings.LockCardEnabled = false;
+                scheduler.Start();
+                Check("Start() with the feature off leaves the schedule stopped", !scheduler.IsRunning);
+
+                settings.LockCardEnabled = true;
+                scheduler.Start();
+                Check("Start() with the feature on runs the schedule", scheduler.IsRunning);
+                scheduler.Stop();
+                Check("Stop() stops it", !scheduler.IsRunning);
+            }
+            finally { settings.LockCardEnabled = wasEnabled; }
+
+            Check("the enabled pool reads through Core, and is never null",
+                  LockCardScheduler.EnabledPhrases() is not null);
+        }
+
+        /// <summary>True when the action ran without throwing.</summary>
+        private static bool Safe(Action action)
+        {
+            try { action(); return true; }
+            catch { return false; }
         }
 
         /// <summary>Pure math must not drift with locale or floating-point defaults.</summary>
