@@ -76,8 +76,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RoadmapPanel.IsVisible = true;
             BtnQuestSubDaily.Theme = TabTheme("TabButton");
             BtnQuestSubRoadmap.Theme = TabTheme("TabButtonActive");
-            // ponytail: needs RoadmapService (App.Roadmap), wired when it moves to Core. The panel
-            // shows its authored placeholders until then.
+            // ponytail: RoadmapService IS in Core now (CCP.Core/Services/RoadmapService.cs) and
+            // this head's instance is MainShellWindow.Roadmap. What is still missing is the VIEW
+            // half: RefreshRoadmapUI / GenerateRoadmapNodes from
+            // ConditioningControlPanel/MainWindow/MainWindow.Roadmap.cs, which paint
+            // TrackLockedOverlay, TxtLockReason, BadgeIndicator and a node per step. The panel
+            // shows its authored placeholders until that port lands.
         }
 
         private void OnTrackClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
@@ -86,8 +90,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnTrack1.Theme = TabTheme(tag == "EmptyDoll" ? "TabButtonActive" : "TabButton");
             BtnTrack2.Theme = TabTheme(tag == "ObedientPuppet" ? "TabButtonActive" : "TabButton");
             BtnTrack3.Theme = TabTheme(tag == "SluttyBlowdoll" ? "TabButtonActive" : "TabButton");
-            // ponytail: needs RoadmapService (App.Roadmap) to repaint the nodes for the new track,
-            // wired when it moves to Core.
+            // ponytail: the nodes for the new track are not repainted - there are no generated
+            // nodes to repaint yet. Blocked on GenerateRoadmapNodes, not on the service:
+            // MainShellWindow.Roadmap answers GetTrackProgress / IsTrackUnlocked today.
         }
 
         private ControlTheme? TabTheme(string key) =>

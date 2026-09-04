@@ -261,9 +261,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void BtnCalibrationHelp_Click()
         {
-            // ponytail: needs Services.HelpContentService.GetContent("WebcamCalibration") and the
-            // HelpVideoWindow popup (topmost:true so it layers above this fullscreen window),
-            // wired when the help service moves to Core.
+            // topmost: true so the popup layers above this full-screen calibration window.
+            // HelpContentService is Core's; HelpVideoWindow is this head's. The topic ships a clip
+            // that this head cannot play, so the popup takes its fail-soft branch - title, glyph
+            // and the topic's "what it does" blurb, video surface hidden. That is honest and it is
+            // strictly more than the nothing this button did before; WPF had no other fallback
+            // here either.
+            HelpVideoWindow.Show(Services.HelpContentService.GetContent("WebcamCalibration"), this, topmost: true);
         }
 
         // ─────────────────────────────────────────────────────────────────────

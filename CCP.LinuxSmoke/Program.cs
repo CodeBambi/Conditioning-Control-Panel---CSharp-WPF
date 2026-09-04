@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.LinuxSmoke
             Scrubbing();
             Arithmetic();
             ConsentAndReports();
+            Roadmap();
 
             Console.WriteLine();
             if (_failures == 0)
@@ -378,6 +379,47 @@ namespace ConditioningControlPanel.LinuxSmoke
             Check("consent with a stale version is not current", !WebcamConsent.IsCurrent(cam));
             cam.WebcamConsentVersion = WebcamConsent.ConsentVersion;
             Check("consent with the contract version is current", WebcamConsent.IsCurrent(cam));
+        }
+
+        /// <summary>
+        /// RoadmapService moved into Core (wire/76). It is the first Core service that opens a
+        /// folder and a repeating timer in its constructor, so what is worth asserting off Windows
+        /// is that construction lands inside the sandboxed user-data tree rather than a Windows
+        /// path, that a fresh profile reads as the documented start state, and that Dispose is
+        /// clean - the autosave tick now hops through CoreDispatch, which is unseeded here.
+        /// </summary>
+        private static void Roadmap()
+        {
+            Console.WriteLine("\nRoadmap service");
+
+            using var roadmap = new RoadmapService();
+
+            Check("the diary folder is created under the sandboxed user data",
+                  Directory.Exists(roadmap.DiaryFolderPath) &&
+                  roadmap.DiaryFolderPath.StartsWith(CorePaths.UserData, StringComparison.Ordinal),
+                  roadmap.DiaryFolderPath);
+
+            Check("a fresh profile starts on track 1 only",
+                  roadmap.IsTrackUnlocked(Models.RoadmapTrack.EmptyDoll) &&
+                  !roadmap.IsTrackUnlocked(Models.RoadmapTrack.ObedientPuppet) &&
+                  !roadmap.IsTrackUnlocked(Models.RoadmapTrack.SluttyBlowdoll));
+
+            Check("the first step is active, the second locked",
+                  roadmap.IsStepActive("t1_step1") && roadmap.IsStepLocked("t1_step2"));
+
+            // The tick body runs through CoreDispatch.Post, which with no head attached runs in
+            // place. StartStep only dirties; proving the explicit Save round-trips is what tells
+            // us the file lands somewhere writable on Linux.
+            roadmap.StartStep("t1_step1");
+            roadmap.Save();
+            Check("progress round-trips to disk",
+                  File.Exists(Path.Combine(CorePaths.UserData, "roadmap.json")) &&
+                  new RoadmapService().GetStepProgress("t1_step1")?.StartedAt is not null);
+
+            Check("a relative diary photo resolves inside the diary folder",
+                  roadmap.GetFullPhotoPath("t1_step1_x.png").StartsWith(roadmap.DiaryFolderPath, StringComparison.Ordinal));
+            Check("an empty photo path resolves to empty, not to the folder itself",
+                  roadmap.GetFullPhotoPath("") == "");
         }
 
         /// <summary>Pure math must not drift with locale or floating-point defaults.</summary>
