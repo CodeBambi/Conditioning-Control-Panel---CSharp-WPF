@@ -9,6 +9,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -19,15 +20,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// PORTED from ConditioningControlPanel/Windows/FeatureSettingsPopup.xaml.cs. Deviations:
     ///  - <c>LoadEvent</c> took a <c>TimelineSession</c> purely to reach its two phrase lists.
     ///    That type still lives in the WPF head, not Core, so the lists are passed directly.
-    ///  - <c>App.Mods?.GetAccentColorHex() ?? "#FF69B4"</c> becomes the theme's PinkBrush, which
-    ///    is that exact colour (Theme/Colors.xaml: PinkColor = #FFFF69B4).
+    ///  - <c>App.Mods?.GetAccentColorHex()</c> is <see cref="CoreMods.AccentColorHex"/>, so the
+    ///    active mod's accent reaches the generated controls here as it does on WPF. The theme's
+    ///    PinkBrush is only the unparseable-hex fallback.
     ///  - <c>_maxMinute</c> and <c>_settingControls</c> are dropped: the WPF original writes both
     ///    and reads neither.
     ///  - <c>Checked</c>/<c>Unchecked</c> collapse into <c>IsCheckedChanged</c>.
     ///  - <c>OpenFileDialog</c> -&gt; <c>TopLevel.StorageProvider.OpenFilePickerAsync</c>, which is
     ///    async, so the browse handler awaits instead of blocking.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so the
-    ///    empty-pool notice on import is a small owned window (the ModManagerDialog pattern).
+    ///  - <c>MessageBox.Show</c> is this head's <see cref="MessageDialog"/>; the empty-pool notice
+    ///    on import goes through <c>MessageDialog.ShowAsync</c>.
     /// </summary>
     public partial class FeatureSettingsPopup : UserControl
     {
@@ -152,8 +154,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static T? ThemeRes<T>(string key) where T : class =>
             Application.Current is { } app && app.TryFindResource(key, out var res) ? res as T : null;
 
-        /// <summary>WPF read this from App.Mods; PinkBrush is that same #FF69B4 on this head.</summary>
-        private static IBrush Accent => ThemeRes<IBrush>("PinkBrush") ?? Brush.Parse("#FF69B4");
+        /// <summary>The active mod's accent, through <see cref="CoreMods"/> - what
+        /// <c>App.Mods?.GetAccentColorHex()</c> answered on WPF. With no mod layer seeded the seam
+        /// gives the CCP default, and an unparseable hex falls back to the theme's PinkBrush.</summary>
+        private static IBrush Accent =>
+            CoreMods.TryParseHexColor(CoreMods.AccentColorHex, out var rgb)
+                ? new SolidColorBrush(Color.FromRgb(rgb.R, rgb.G, rgb.B))
+                : ThemeRes<IBrush>("PinkBrush") ?? Brush.Parse("#FF69B4");
 
         private void AddRampingControls()
         {
@@ -656,50 +663,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 SettingsChanged?.Invoke(this, _event);
         }
 
-        /// <summary>Minimal stand-in for WPF's information MessageBox, which Avalonia has no
-        /// equivalent of and no package may be added for. Shown owned when this control has a
-        /// host window; silently dropped when it does not, because a notice is not worth
-        /// stranding an ownerless window over.</summary>
+        /// <summary>WPF's information <c>MessageBox.Show</c>: this head's <see cref="MessageDialog"/>,
+        /// shown owned by whatever window hosts this control. Fire-and-forget, because every caller
+        /// is a notice with nothing gated on the answer; silently dropped with no host window,
+        /// because a notice is not worth stranding an ownerless dialog over.</summary>
         private void Notify(string title, string message)
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
-
-            var ok = new Button
-            {
-                Content = new TextBlock { Text = "OK" },
-                Padding = new Thickness(14, 6),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 16, 0, 0),
-                Cursor = new Cursor(StandardCursorType.Hand)
-            };
-
-            var dialog = new Window
-            {
-                Title = title,
-                SizeToContent = SizeToContent.WidthAndHeight,
-                CanResize = false,
-                ShowInTaskbar = false,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Background = ListBg,
-                Content = new StackPanel
-                {
-                    Margin = new Thickness(20),
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = message,
-                            Foreground = ValueGrey,
-                            FontSize = 13,
-                            TextWrapping = TextWrapping.Wrap,
-                            MaxWidth = 320
-                        },
-                        ok
-                    }
-                }
-            };
-            ok.Click += (_, _) => dialog.Close();
-            _ = dialog.ShowDialog(owner);
+            _ = MessageDialog.ShowAsync(owner, title, message);
         }
     }
 }

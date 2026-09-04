@@ -49,10 +49,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtHint = this.FindControl<TextBlock>("TxtHint")!;
             this.FindControl<Border>("ProgressFill")!.RenderTransform = _progressScale;
 
-            // ponytail: needs Services.UpdateService.AppVersion, wired when it moves to Core. The
-            // WPF ctor did `TxtVersion.Text = $"v{UpdateService.AppVersion}"` here; until that type
-            // exists on this head TxtVersion keeps the literal the XAML carries — the same stale
-            // one the WPF XAML showed before its ctor overwrote it.
+            // WPF's `TxtVersion.Text = $"v{UpdateService.AppVersion}"`. UpdateService stays in the
+            // WPF head (it is the installer's release constants), but the version it reported is
+            // the CoreReleaseContent seam, which App.axaml.cs seeds from this assembly's own
+            // version - so the splash reports the build that is actually running. Unseeded the
+            // seam answers "0.0.0", which is honest rather than a stale literal.
+            this.FindControl<TextBlock>("TxtVersion")!.Text = $"v{CoreReleaseContent.AppVersion}";
 
             // ponytail: placeholder progress. App.OnStartup is the only caller of SetProgress and
             // it is still in the WPF head, so nothing drives the bar in this head yet. Seeding a

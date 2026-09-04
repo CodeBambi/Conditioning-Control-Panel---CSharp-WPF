@@ -108,11 +108,12 @@
 
                     <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center"
                                 Margin="0,0,0,14">
-                        <!-- ponytail: needs ModResourceResolver for logo.png/logo2.png, wired when
-                             it moves to Core. This head ships no Resources/ PNGs, so the 46px
-                             frame is reserved and left empty rather than drawing the wrong mark. -->
+                        <!-- Source is set from code (RefreshWelcomeLogo): which wordmark it is
+                             depends on the active mod, and the mod-override probe is Helpers.ModArt.
+                             IsVisible is set there too, so a head with neither PNG leaves the frame
+                             out of the layout rather than drawing an empty 46px hole. -->
                         <Image x:Name="ImgWelcomeLogo" Width="46" Height="46" Margin="0,0,14,0"
-                               VerticalAlignment="Center"
+                               VerticalAlignment="Center" IsVisible="False"
                                RenderOptions.BitmapInterpolationMode="HighQuality"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock x:Name="TxtAppTitle" Foreground="White"

@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Serilog;
@@ -26,9 +27,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///    Delete it and switch the field's type when TimelineSession moves to Core.
     ///  - <c>DialogResult = x; Close()</c> -> <c>Close(x)</c>, as Avalonia carries the result
     ///    through <c>ShowDialog&lt;bool?&gt;</c>.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so the
-    ///    four message boxes log instead; the key and argument order are preserved so wiring a
-    ///    real dialog later is a one-line swap at each site.
+    ///  - <c>MessageBox.Show</c> is this head's <see cref="MessageDialog"/>. Both warning sites are
+    ///    notices the code returns straight after - nothing is gated on the answer - so the helper
+    ///    fires the dialog without awaiting it and its two callers stay synchronous.
     ///  - Import/Export need <c>OpenFileDialog</c>/<c>SaveFileDialog</c> plus SessionFileService;
     ///    both are stubs. Save/Cancel are fully ported.
     ///  - <c>BtnHelp</c> keeps the coach-mark overlay instead of the clip on purpose; see the
@@ -1068,12 +1069,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         #endregion
 
-        /// <summary>Stand-in for WPF's <c>MessageBox.Show(..., MessageBoxImage.Warning)</c>: Avalonia
-        /// ships no message box and no package may be added here. Keys and argument order are
-        /// preserved so each call site becomes a real dialog in one line later.
-        /// ponytail: needs a shared warning dialog, wired when one lands on this head.</summary>
-        private static void Warn(string titleKey, string message)
-            => Log.Warning("session editor [{Title}]: {Message}", Loc.Get(titleKey), message);
+        /// <summary>WPF's <c>MessageBox.Show(..., MessageBoxImage.Warning)</c>: this head's
+        /// <see cref="MessageDialog"/>, owned by this window. Both call sites are notices the code
+        /// returns straight after, so nothing reads the answer and the dialog is not awaited -
+        /// which keeps both handlers synchronous. The log line stays: it is what a headless run
+        /// sees, and the dialog is a no-op before this window is shown.</summary>
+        private void Warn(string titleKey, string message)
+        {
+            var title = Loc.Get(titleKey);
+            Log.Warning("session editor [{Title}]: {Message}", title, message);
+            _ = MessageDialog.ShowAsync(this, title, message);
+        }
 
         private IBrush? Res(string key) => this.TryFindResource(key, out var v) ? v as IBrush : null;
 

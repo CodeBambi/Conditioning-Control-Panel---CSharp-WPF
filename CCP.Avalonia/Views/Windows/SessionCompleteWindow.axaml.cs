@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using Serilog;
 
@@ -185,7 +186,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        private void MediaRow_Click(object? sender, RoutedEventArgs e)
+        private async void MediaRow_Click(object? sender, RoutedEventArgs e)
         {
             if (e.Source is not Control c) return;
             if (c.Tag as string is not { Length: > 0 } path) return;
@@ -202,11 +203,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return;
                 }
 
-                // Neither the file nor its folder survived (#998). ponytail: WPF said so in a
-                // MessageBox, and Dialogs.MessageDialog.ShowAsync is this head's equivalent - but
-                // this method is sync and called from a row's click handler, so telling the user
-                // means making that path async. Logged until then; nothing is lost but the notice.
+                // Neither the file nor its folder survived (#998). WPF said so in a MessageBox;
+                // MessageDialog is this head's equivalent, and the handler is async void for it -
+                // safe here because nothing is gated on the answer and the await is the last thing
+                // the method does.
                 Log.Information("SessionCompleteWindow: media file and its folder are both gone: {Path}", path);
+                await MessageDialog.ShowAsync(this, Loc.Get("title_error"),
+                    Loc.GetF("msg_file_not_found_with_path", path));
             }
             catch (Exception ex)
             {

@@ -85,8 +85,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (c.Tag is not HistoryRow) return;
 
             // WPF opened SessionCompleteWindow(row.Log, playSound: false) as a modal child.
-            // ponytail: needs SessionCompleteWindow (not ported yet) and the SessionLog model,
-            // wired when they move to Core.
+            //
+            // ponytail: SessionCompleteWindow IS ported (it sits beside this file) and takes a
+            // Recap, so the window is no longer the blocker - the DATA is. SessionLogService is
+            // still in the WPF head, so LoadRecentRows below fabricates its rows, and a HistoryRow
+            // carries none of the XP, difficulty or media list a Recap needs. Building one from a
+            // row would open a recap reading "0 XP, no media" over a session that had both, which
+            // is a window that lies. Wire this when SessionLogService reaches Core and a row can
+            // carry its real log.
         }
     }
 

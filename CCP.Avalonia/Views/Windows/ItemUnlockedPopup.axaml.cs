@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
@@ -29,7 +30,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     ///  - <c>SystemParameters.WorkArea</c> becomes <c>Screens.Primary.WorkingArea</c>, populated only
     ///    once the window has a handle, so placement moves to OnOpened.
     ///  - The Twemoji header/gift SVG lookups and their fallbacks collapse to plain TextBlocks.
-    ///  - <c>App.Logger</c> calls are dropped; there is no logger on this head yet.
+    ///  - <c>App.Logger</c> is Serilog's static <c>Log</c>; the templates are unchanged.
     /// </summary>
     public partial class ItemUnlockedPopup : Window
     {
@@ -166,8 +167,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     (int)(workArea.Bottom - AchievementPopupHeight - Height - StackGap
                           - _stackIndex * (Height + SiblingGap)));
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error(ex, "Failed to position item unlocked popup, using defaults");
                 WindowStartupLocation = WindowStartupLocation.CenterScreen;
             }
         }
@@ -180,9 +182,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 DispatcherTimer.RunOnce(() => { try { Close(); } catch { /* Ignore close errors */ } },
                     TimeSpan.FromMilliseconds(FadeMs));
             }
-            catch
+            catch (Exception ex)
             {
-                try { Close(); } catch { }
+                Log.Error(ex, "Error during item toast fade out, closing directly");
+                try { Close(); } catch { /* Ignore close errors */ }
             }
         }
 
