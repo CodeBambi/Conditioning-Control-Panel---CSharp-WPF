@@ -20,6 +20,8 @@
      ?auto=esc   sends Escape, unattended.
      ?auto=hold  holds the bench button to the end and reports the commit.
      ?auto=drop  runs the drop beat and reports that the veil lifted.
+     ?auto=wheel spins the bench wheel to a named wedge and reports the landing.
+     ?auto=reel  builds the reel from the stubbed trigger list.
      Both write their result into #log, which is what the headless probe reads
      back out of the dumped DOM. There is no test runner and no framework here
      on purpose: the fixture IS the harness, so it can never drift from it. -->
@@ -52,6 +54,7 @@
   <div class="bench">
     <button id="holdbtn" class="bk-cage-go bk-hold" type="button">hold to commit</button>
     <div id="dropstage"></div>
+    <div id="wheelhost"></div>
   </div>
   <p class="note" id="note">stubbed cashier. no ledger, no network, no chips that exist.</p>
   <div id="log"></div>
@@ -61,6 +64,8 @@
 import { openBackRoom } from './index.js';
 import { holdRing } from './kit/holdring.js';
 import { createDropBeat } from './kit/dropbeat.js';
+import { createLoomWheel } from './kit/loomwheel.js';
+import { reelRows } from './kit/triggers.js';
 
 const q = new URLSearchParams(location.search);
 const logEl = document.getElementById('log');
@@ -158,6 +163,17 @@ const drop = createDropBeat({
   lite: document.documentElement.classList.contains('ae-lite'),
   log,
 });
+const wheel = createLoomWheel({
+  host: document.getElementById('wheelhost'),
+  size: 230,
+  seed: 'bench',
+  reduced: document.documentElement.classList.contains('arc-reduced'),
+  lite: document.documentElement.classList.contains('ae-lite'),
+  wedges: ['25', '50', 'drop', '100', 'nil', '250', 'royal'].map((label, i) => ({
+    label, color: i % 2 ? '#2e2e55' : '#3a2a55', drop: label === 'drop',
+  })),
+  log,
+});
 const holdBtn = document.getElementById('holdbtn');
 const ring = holdRing(holdBtn, {
   reduced: document.documentElement.classList.contains('arc-reduced'),
@@ -214,6 +230,23 @@ if (auto === 'cage') {
     });
     setTimeout(() => log('DROP mid veils=' + document.querySelectorAll('.bk-drop').length), 300);
   }, 400);
+} else if (auto === 'wheel') {
+  setTimeout(() => {
+    wheel.spinTo(2, 1200).then((i) => {
+      log('WHEEL landed=' + i + ' at=' + wheel.at());
+      log('AUTO done');
+    });
+  }, 400);
+} else if (auto === 'reel') {
+  setTimeout(() => {
+    reelRows(new (class { triggers() { return Promise.resolve([
+      'good girl now', 'good  girl  NOW', 'two words', 'drop for me',
+    ]); } })()).then((rows) => {
+      log('REEL rows=' + rows.length);
+      log('REEL words=' + rows.map((r) => (r.glyph ? 'GLYPH' : r.word)).join(' | '));
+      log('AUTO done');
+    });
+  }, 300);
 } else if (auto === 'open') {
   setTimeout(() => {
     log('AUTO sheets=' + room.root.querySelectorAll('.bk-cab.bk-sheet').length);
