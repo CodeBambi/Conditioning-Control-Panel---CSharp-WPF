@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             showCancel: true)
         { }
 
-        public MessageDialog(string title, string message, bool showCancel)
+        public MessageDialog(string title, string message, bool showCancel, bool defaultToCancel = false)
         {
             InitializeComponent();
 
@@ -32,10 +32,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<TextBlock>("TxtTitle")!.Text = title;
             this.FindControl<TextBlock>("TxtMessage")!.Text = message;
 
+            var ok = this.FindControl<Button>("BtnOk")!;
             var cancel = this.FindControl<Button>("BtnCancel")!;
             cancel.IsVisible = showCancel;
             cancel.Click += (_, _) => Close(false);
-            this.FindControl<Button>("BtnOk")!.Click += (_, _) => Close(true);
+            ok.Click += (_, _) => Close(true);
+
+            // WPF's MessageBox.Show takes a defaultResult, and a guard prompt passes No so that
+            // Enter keeps the guard. IsDefault lives on OK in the markup, so it has to MOVE, not
+            // just lose focus: leaving it on OK would let Enter answer yes to the one question
+            // where a stray keypress must not.
+            if (showCancel && defaultToCancel)
+            {
+                ok.IsDefault = false;
+                cancel.IsDefault = true;
+                Opened += (_, _) => cancel.Focus();
+            }
         }
 
         /// <summary>Tells the user something. One OK button, so the result is true unless they
@@ -44,7 +56,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             => await new MessageDialog(title, message, showCancel: false).ShowDialog<bool?>(owner) == true;
 
         /// <summary>Asks the user something. True only on OK - Cancel and the X both answer false.</summary>
-        public static async Task<bool> ConfirmAsync(Window owner, string title, string message)
-            => await new MessageDialog(title, message, showCancel: true).ShowDialog<bool?>(owner) == true;
+        /// <param name="defaultToCancel">
+        /// Puts Enter on Cancel instead of OK, for a question where the safe answer is "no": the
+        /// port of a WPF <c>MessageBox.Show(..., MessageBoxResult.No)</c>. Leave it false for the
+        /// rest, which defaulted to the first button.
+        /// </param>
+        public static async Task<bool> ConfirmAsync(Window owner, string title, string message,
+                                                    bool defaultToCancel = false)
+            => await new MessageDialog(title, message, showCancel: true, defaultToCancel)
+                .ShowDialog<bool?>(owner) == true;
     }
 }

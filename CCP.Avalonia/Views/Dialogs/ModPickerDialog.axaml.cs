@@ -26,10 +26,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>Brush.Freeze()</c> has no Avalonia equivalent (immutability is <c>ToImmutable()</c> on
     ///    the concrete brush); the accent is built once per card and never mutated, so it is
     ///    dropped rather than emulated.
-    ///  - <c>ArtUri</c> was a <c>pack://</c> URI into the WPF assembly's Resource items. This head
-    ///    ships no such assets, so the card exposes an <see cref="Art"/> image that is null today
-    ///    and the accent-framed tile behind it is what draws — the same thing WPF shows before the
-    ///    bitmap resolves.
+    ///  - <c>ArtUri</c> was a <c>pack://</c> URI bound straight to <c>Image.Source</c>, never
+    ///    routed through <c>ModResourceResolver</c>. The same six PNGs are linked into this head
+    ///    under <c>avares://CCP.Avalonia/Resources/</c>, and <see cref="Art"/> loads them through
+    ///    <c>Helpers.ModArt.TryLoad</c> - so a mod MAY now override a pass card, which the WPF
+    ///    pack:// path did not allow. Null still draws the accent-framed tile alone, as WPF does
+    ///    before the bitmap resolves.
     /// </summary>
     public sealed class ModPickerCard : INotifyPropertyChanged
     {
@@ -41,8 +43,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         public string Description { get; init; } = "";
 
         /// <summary>
-        /// ponytail: needs the mod card art as an avares:// AvaloniaResource, wired when the
-        /// Resources/intake/ art moves off the WPF head. Null draws the accent-framed tile.
+        /// The pass-card art, mod override first (a tier WPF's bare pack:// URI did not have).
+        /// Null when neither the override nor the shipped copy loads, and the accent-framed tile
+        /// is then the whole card - not a failure.
         /// </summary>
         public IImage? Art { get; init; }
 
@@ -176,8 +179,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// One built-in mod's presentation data. Copied from
     /// ConditioningControlPanel/Dialogs/ModPackCatalog.cs (only the fields this screen reads): the
     /// catalogue lives in the WPF head next to the dialogs, not in CCP.Core, and neither may be
-    /// touched by this port. <c>ArtUri</c> is dropped — its pack:// URIs point into the WPF
-    /// assembly, so nothing here could resolve one.
+    /// touched by this port. WPF's <c>ArtUri</c> becomes <see cref="ArtName"/>: the same file,
+    /// named the way <c>Helpers.ModArt</c> wants it rather than as a <c>pack://</c> URI.
     /// </summary>
     public sealed class ModPickerCatalogEntry
     {
@@ -189,6 +192,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         public string NameLocKey { get; init; } = "";
         public string DescriptionLocKey { get; init; } = "";
+
+        /// <summary>
+        /// The card's art, as a forward-slash path under <c>Resources/</c> - the shape
+        /// <c>Helpers.ModArt.TryLoad</c> takes, so an active mod may override it.
+        /// </summary>
+        public string ArtName { get; init; } = "";
 
         /// <summary>Mod accent colour, for the card's art frame.</summary>
         public string AccentHex { get; init; } = "#FF69B4";
@@ -223,6 +232,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             new ModPickerCatalogEntry
             {
                 ModId = BuiltInMods.CCPDefaultId,
+                ArtName = "logo.png",
                 PackId = null, // ships in the box — the neutral baseline is what "skip everything" gives you
                 NameLocKey = "modpicker_name_ccp_default",
                 DescriptionLocKey = "modpicker_desc_ccp_default",
@@ -232,6 +242,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             new ModPickerCatalogEntry
             {
                 ModId = BuiltInMods.BambiSleepId,
+                ArtName = "intake/pass_card_bambi.png",
                 PackId = CoreReleaseContent.PackModBambi,
                 NameLocKey = "label_bambi_sleep",
                 DescriptionLocKey = "modpicker_desc_bambi",
@@ -241,6 +252,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             new ModPickerCatalogEntry
             {
                 ModId = BuiltInMods.SissyHypnoId,
+                ArtName = "intake/pass_card_sissy.png",
                 PackId = CoreReleaseContent.PackModSissy,
                 NameLocKey = "label_sissy_hypno",
                 DescriptionLocKey = "modpicker_desc_sissy",
@@ -250,6 +262,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             new ModPickerCatalogEntry
             {
                 ModId = BuiltInMods.LockedId,
+                ArtName = "intake/pass_card_circe.png",
                 PackId = CoreReleaseContent.PackModLocked,
                 NameLocKey = "modpicker_name_circe",
                 DescriptionLocKey = "modpicker_desc_circe",
@@ -260,6 +273,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             new ModPickerCatalogEntry
             {
                 ModId = BuiltInMods.DronificationId,
+                ArtName = "intake/pass_card_drone.png",
                 PackId = CoreReleaseContent.PackModDrone,
                 NameLocKey = "modpicker_name_drone",
                 DescriptionLocKey = "modpicker_desc_drone",
@@ -271,6 +285,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             new ModPickerCatalogEntry
             {
                 ModId = BuiltInMods.InfectionControlId,
+                ArtName = "intake/pass_card_infection.png",
                 PackId = CoreReleaseContent.PackModInfection,
                 NameLocKey = "modpicker_name_infection",
                 DescriptionLocKey = "modpicker_desc_infection",
@@ -437,6 +452,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     PackId = entry.PackId,
                     Name = Loc.Get(entry.NameLocKey),
                     Description = Loc.Get(entry.DescriptionLocKey),
+                    Art = Helpers.ModArt.TryLoad(entry.ArtName),
                     AccentBrush = accent,
                     PremiumNote = entry.PremiumProgramNote ? Loc.Get("modpicker_note_premium_programs") : "",
                     VoiceNote = entry.NoVoiceNote ? Loc.Get("modpicker_note_no_voice") : ""

@@ -14,6 +14,7 @@ using Avalonia.Platform.Storage;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -235,9 +236,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     UseShellExecute = true,
                 });
             }
-            catch
+            catch (Exception ex)
             {
-                // WPF logged through App.Logger here; the head has no logger yet.
+                // The button just does nothing when no handler is registered for an https URI.
+                Log.Warning(ex, "[ModManager] Could not open the web catalogue");
             }
         }
 

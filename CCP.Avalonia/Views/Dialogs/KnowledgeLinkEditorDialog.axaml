@@ -7,9 +7,11 @@
            The original is a latent WPF bug: a loc auto-pass swallowed the literal enum value, so it
            only parses while the active language is English ("Height"); de.json gives "Höhe".
        MessageBox.Show(validation)      -> the inline TxtError TextBlock below, which occupies the
-           row 3 spacer the original left empty. Avalonia has no MessageBox, and this is the same
-           shape UrlPromptDialog already uses. The hardcoded "Validation Error" caption has no
-           equivalent and drops out. -->
+           row 3 spacer the original left empty. This head does have a message box now
+           (Views/Dialogs/MessageDialog) - the inline label is the deliberate choice over it, the
+           same shape UrlPromptDialog uses: a validation message belongs next to the field that
+           failed, not behind a modal you must dismiss before you can fix it. The hardcoded
+           "Validation Error" caption has no equivalent and drops out. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.KnowledgeLinkEditorDialog"

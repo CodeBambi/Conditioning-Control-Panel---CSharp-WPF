@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -8,7 +7,6 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.AvatarTube;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
@@ -91,6 +89,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private readonly bool _portraitMode;
         /// <summary>The four loaded poses; a slot is null when neither the mod nor this head has it.</summary>
         private readonly Bitmap?[] _poses = new Bitmap?[4];
+        /// <summary>Attached and detached tube art, decoded once. Both are 2048 square, and
+        /// UpdatePreview runs on every slider tick - loading them per tick would decode 16MB a
+        /// frame during a drag. Sampled at open, so a mod swap mid-dialog is not seen, exactly
+        /// like the poses beside them.</summary>
+        private readonly Bitmap?[] _tubes = new Bitmap?[2];
         /// <summary>Drawn in place of a pose that would not load, so the stepper still reads.</summary>
         private static readonly string[] PoseGlyphs = { "🧍", "🙋", "💃", "🧎" };
         /// <summary>The XAML gradient and its frame, kept so a null pose puts the placeholder back.
@@ -106,6 +109,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private readonly Slider _sldScale;
         private readonly Slider _sldOffsetX;
         private readonly Slider _sldOffsetY;
+        private readonly Image _previewTubeImage;
         private readonly Border _previewTube;
         private readonly Border _previewAvatarBorder;
         private readonly Border _previewAvatar;
@@ -132,6 +136,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _sldScale = this.FindControl<Slider>("SldScale")!;
             _sldOffsetX = this.FindControl<Slider>("SldOffsetX")!;
             _sldOffsetY = this.FindControl<Slider>("SldOffsetY")!;
+            _previewTubeImage = this.FindControl<Image>("PreviewTubeImage")!;
             _previewTube = this.FindControl<Border>("PreviewTube")!;
             _previewAvatarBorder = this.FindControl<Border>("PreviewAvatarBorder")!;
             _previewAvatar = this.FindControl<Border>("PreviewAvatar")!;
@@ -234,53 +239,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// </summary>
         private void LoadPoses()
         {
+            _tubes[0] = Helpers.ModArt.TryLoad("tube.png");
+            _tubes[1] = Helpers.ModArt.TryLoad("tube2.png");
+
             string prefix = _avatarSet == 1 ? "avatar_pose" : $"avatar{_avatarSet}_pose";
 
             for (int i = 0; i < _poses.Length; i++)
             {
-                _poses[i] = TryLoadImage($"{prefix}{i + 1}.png");
+                _poses[i] = Helpers.ModArt.TryLoad($"{prefix}{i + 1}.png");
 
                 if (_poses[i] == null && _avatarSet > 1)
-                    _poses[i] = TryLoadImage($"avatar_pose{i + 1}.png");
+                    _poses[i] = Helpers.ModArt.TryLoad($"avatar_pose{i + 1}.png");
             }
 
             // Land on the first pose that actually loaded, so the preview opens on art.
             for (int i = 0; i < _poses.Length; i++)
             {
                 if (_poses[i] != null) { _poseIndex = i; break; }
-            }
-        }
-
-        /// <summary>
-        /// The mod's override first (<see cref="CoreModArt"/>), then this head's own shipped copy
-        /// under <c>avares://</c>. Null when neither exists. Never throws: a mod's broken PNG
-        /// degrades to the built-in exactly as ModResourceResolver.LoadFrozen does, and a missing
-        /// built-in degrades to the glyph.
-        ///
-        /// ponytail: private because TubeFitDialog is the seam's first consumer on this head. Hoist
-        /// it to a head-wide helper when a second view (Flash, BubblePop, Video, Studio, Spiral,
-        /// AchievementPopup ...) wants the same two-step.
-        /// </summary>
-        private static Bitmap? TryLoadImage(string resourceName)
-        {
-            var overridePath = CoreModArt.OverridePath(resourceName);
-            if (overridePath != null)
-            {
-                try { if (File.Exists(overridePath)) return new Bitmap(overridePath); }
-                catch (Exception ex) { Log.Warning(ex, "[TubeFit] mod override {Path} would not load", overridePath); }
-            }
-
-            try
-            {
-                var uri = new Uri($"avares://CCP.Avalonia/Resources/{resourceName}");
-                if (!AssetLoader.Exists(uri)) return null;
-                using var stream = AssetLoader.Open(uri);
-                return new Bitmap(stream);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "[TubeFit] built-in {Name} would not load", resourceName);
-                return null;
             }
         }
 
@@ -309,9 +284,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
           {
             bool useAttachedLayout = !_detachedMode || ModOverridesAttachedTubeOnly();
 
-            // Tube frame
+            // Tube. Real art goes into the Image WPF uses - unsized, Uniform, centred - because
+            // the attached/detached difference lives INSIDE tube.png vs tube2.png; the box and the
+            // margin swap below are the placeholder's way of showing that switch when the art is
+            // missing, and applying them to the art would move the tube twice.
+            var tubeName = useAttachedLayout ? "tube.png" : "tube2.png";
+            var tube = _tubes[useAttachedLayout ? 0 : 1];
+
+            _previewTubeImage.Source = tube;
+            _previewTubeImage.IsVisible = tube != null;
+            _previewTube.IsVisible = tube == null;
             _previewTube.Margin = useAttachedLayout ? AttachedTubeMargin : DetachedTubeMargin;
-            _txtTubeName.Text = useAttachedLayout ? "tube.png" : "tube2.png";
+            _txtTubeName.Text = tubeName;
 
             // Avatar pose. A loaded bitmap paints the box; a null slot keeps the XAML gradient and
             // the glyph, so the preview never goes blank on a head that is missing the art.

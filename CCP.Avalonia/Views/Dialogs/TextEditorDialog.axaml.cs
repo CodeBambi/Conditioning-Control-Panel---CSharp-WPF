@@ -20,8 +20,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// PORTED from ConditioningControlPanel/Dialogs/TextEditorDialog.xaml.cs. Deviations:
     ///  - WPF's <c>DialogResult</c> property becomes <c>Close(bool)</c> plus a <c>_dialogResult</c>
     ///    field, because Avalonia carries the result through <c>ShowDialog&lt;bool?&gt;</c>.
-    ///  - <c>MessageBox.Show</c> has no Avalonia equivalent and no package may be added, so
-    ///    <see cref="Ask"/> below is a minimal stand-in.
+    ///  - <c>MessageBox.Show</c> normally becomes <see cref="MessageDialog"/>, this head's message
+    ///    box - but not here. The unsaved-changes prompt is the one call site with THREE answers
+    ///    (Save / Discard / cancel the close), and MessageDialog is deliberately two-button, so
+    ///    <see cref="Ask"/> below stays until either that prompt loses an answer or MessageDialog
+    ///    grows a button set. Wiring it to the two-button dialog would silently drop Cancel and
+    ///    close a window the user asked to keep open.
     ///  - <c>OnClosing</c> cannot prompt synchronously: it cancels the close, awaits the prompt and
     ///    closes again. <c>_dialogResult</c> is what stops it prompting twice.
     ///  - The <c>ItemsSource = null; ItemsSource = _items;</c> refresh hacks are gone. TextItem
@@ -252,9 +256,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         }
 
         /// <summary>
-        /// Minimal stand-in for WPF's MessageBox, which Avalonia has no equivalent of. Each button
-        /// carries the value Close() hands back; dismissing the window yields null, matching the
-        /// Cancel button. Buttons hold a TextBlock, not Content, for the access-key reason above.
+        /// The three-answer prompt <see cref="MessageDialog"/> deliberately does not offer. Each
+        /// button carries the value Close() hands back; dismissing the window yields null, matching
+        /// the Cancel button - so a dismissed prompt cancels the close rather than discarding the
+        /// edits. Buttons hold a TextBlock, not Content, for the access-key reason above.
         /// The app has no btn_yes/btn_no loc keys - WPF got those strings from the OS - so Yes and
         /// No are English here. btn_ok and btn_cancel do exist and are used.
         /// </summary>
