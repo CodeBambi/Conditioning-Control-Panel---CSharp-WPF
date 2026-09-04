@@ -117,6 +117,13 @@ namespace ConditioningControlPanel
 
                 // All companions are unlocked from level 1
                 levelTexts[i].Text = progress.IsMaxLevel ? "MAX" : $"Lv.{progress.Level}";
+                // The roster lost its per-companion blurb in the Companion Room rework (the hero
+                // card shows the active one, nothing shows the others), so the XP mechanic each
+                // companion applies became invisible: Brainwashed Slavedoll still drains XP but
+                // nowhere says so (#ask-support 2026-09-03). Hover the card to read both lines.
+                var mechanic = App.Mods?.MakeModAware(def.XPMechanicDescription) ?? def.XPMechanicDescription;
+                var flavor = App.Mods?.MakeModAware(def.Description) ?? def.Description;
+                cards[i].ToolTip = string.IsNullOrWhiteSpace(mechanic) ? flavor : $"{flavor}\n{mechanic}";
 
                 // Highlight active companion with colored border
                 var isActive = companionId == activeId;
