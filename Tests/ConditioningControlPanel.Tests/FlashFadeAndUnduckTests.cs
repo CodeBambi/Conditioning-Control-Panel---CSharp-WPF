@@ -18,6 +18,10 @@ namespace ConditioningControlPanel.Tests;
 ///
 /// The fade ramp used to write Window.Opacity every frame. A flash window is AllowsTransparency,
 /// so each write is a re-rasterise plus a monitor-sized UpdateLayeredWindow blit on the UI thread.
+///
+/// #1134 is the same report from the same reporter one renderer over: the 6.9.1 brakes exempted the
+/// unified compositor, where an opacity write is not free either - it marks the flash layer dirty
+/// and the engine answers with a fullscreen present of the shared surface on every monitor.
 /// </summary>
 public class FlashFadeAndUnduckTests
 {
@@ -79,21 +83,21 @@ public class FlashFadeAndUnduckTests
     public void ResolveFadeSeconds_ClampsTheLayeredPath()
     {
         // 100% on the slider = a 1.0 s ramp; layered windows get at most 0.5 s of blits.
-        Assert.Equal(0.5, FlashService.ResolveFadeSeconds(1.0, cheapAlpha: false));
+        Assert.Equal(0.5, FlashService.ResolveFadeSeconds(1.0, fullRamp: false));
     }
 
     [Fact]
     public void ResolveFadeSeconds_LeavesShortLayeredRampsAlone()
     {
-        Assert.Equal(0.4, FlashService.ResolveFadeSeconds(0.4, cheapAlpha: false), 9);
-        Assert.Equal(0.0, FlashService.ResolveFadeSeconds(0.0, cheapAlpha: false), 9);
+        Assert.Equal(0.4, FlashService.ResolveFadeSeconds(0.4, fullRamp: false), 9);
+        Assert.Equal(0.0, FlashService.ResolveFadeSeconds(0.0, fullRamp: false), 9);
     }
 
     [Fact]
     public void ResolveFadeSeconds_DoesNotTouchCompositorOrHost()
     {
-        Assert.Equal(1.0, FlashService.ResolveFadeSeconds(1.0, cheapAlpha: true), 9);
-        Assert.Equal(0.4, FlashService.ResolveFadeSeconds(0.4, cheapAlpha: true), 9);
+        Assert.Equal(1.0, FlashService.ResolveFadeSeconds(1.0, fullRamp: true), 9);
+        Assert.Equal(0.4, FlashService.ResolveFadeSeconds(0.4, fullRamp: true), 9);
     }
 
     // ---- Bug 2b: opacity writes are quantised, terminals always land ----------------------
@@ -175,5 +179,43 @@ public class FlashFadeAndUnduckTests
 
         Assert.True(alpha >= target, "the ramp must reach the target");
         Assert.Equal(target, last, 9);
+    }
+
+    // ---- #1134: the compositor path is quantised too --------------------------------------
+
+    [Fact]
+    public void CompositorWriteCountDoesNotGrowWithTheFadeSlider()
+    {
+        // #1134 in one assertion: every LayerItem.Opacity write costs the compositor a fullscreen
+        // re-raster + present of the shared surface, so a 100% fade must not cost more of them than
+        // a 20% fade. Unquantised the compositor wrote once per frame, so at 144 Hz the 1.0 s ramp
+        // cost ~144 writes against the 0.2 s ramp's ~29.
+        var slow = WritesForRamp(fadeSeconds: 1.0);
+        var fast = WritesForRamp(fadeSeconds: 0.2);
+        Assert.InRange(slow, 1, 33);
+        Assert.InRange(slow, 1, fast + 1);
+    }
+
+    /// <summary>Writes a full 0 -> 1 ramp of the given length at 144 Hz costs under the quantiser.</summary>
+    private static int WritesForRamp(double fadeSeconds)
+    {
+        const double dt = 1.0 / 144.0;
+        const double target = 1.0;
+        double alpha = 0.0, last = 0.0;
+        int writes = 0, frames = 0;
+
+        while (alpha < target && frames < 100_000)
+        {
+            frames++;
+            alpha = Math.Min(target, alpha + dt / fadeSeconds);
+            if (FlashService.ShouldWriteAlpha(last, alpha, target, Eps))
+            {
+                writes++;
+                last = alpha;
+            }
+        }
+
+        Assert.Equal(target, last, 9);
+        return writes;
     }
 }
