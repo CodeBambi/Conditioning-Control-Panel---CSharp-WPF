@@ -3354,6 +3354,21 @@ internal static class ArcademyHostService
         ["locker_signpost_go"] = "Open The Locker",
         ["locker_unlock_hint"] = "{tok}2 at the counter",
         ["locker_open"] = "Open Locker",
+        // ---- THE BACK ROOM (casino wing W1: the door and the chips) ------------------
+        // The fifth window in the service alley. The desktop host ships these so a page
+        // running against it says the same words the web build does: a key the host does
+        // not carry falls back to English in silence and nobody ever sees the gap.
+        // Every value is under the 96-character mod-skin cap and none of them prices
+        // anything - chip costs ride the catalog, like every other row on that shelf.
+        ["campus_room_backroom"] = "The Back Room",
+        ["campus_desc_backroom"] = "Cash only. Chips only. The house always has time for you.",
+        ["backroom_sign"] = "Back Room",
+        ["campus_backroom_status"] = "Always open",
+        ["backroom_dust"] = "Not open yet.",
+        ["backroom_dust_line"] = "Sheets over the tables and the lights off at the wall. Another night.",
+        ["wallet_chips"] = "Chips",
+        ["prize_shelf_chips"] = "The Back Room shelf",
+        ["prize_shelf_chips_hint"] = "Chips only. What you carried out of the Back Room buys these.",
         // ---- EMI's stuck-hints (Daily Trigger, 2026-08-30) ----------------------------
         // The owner amended the "no mid-class mascot speech" law (arcademy/CLAUDE.md traps
         // 90 and 97) for one narrow channel: when the board says the player is beaten, EMI
