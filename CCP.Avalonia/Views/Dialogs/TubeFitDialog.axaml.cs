@@ -45,8 +45,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>AvatarTubeWindow.RefreshTubeLayout()</c> is on this head now, and
     ///    <c>AvatarTubeWindow.Live</c> is the App.AvatarWindow twin that finds the open one, so the
     ///    edit lands on screen while the dialog is still up instead of waiting for the tube's next
-    ///    construction. Null when no tube is open, which is a no-op rather than a failure. The tube
-    ///    frame itself stays the placeholder capsule - that is markup this layer does not own.
+    ///    construction. Null when no tube is open, which is a no-op rather than a failure.
+    ///  - <b>The tube frame is real too.</b> <c>PreviewTubeImage</c> draws tube.png / tube2.png
+    ///    through the same seam; the placeholder capsule Border behind it shows only on a head
+    ///    with no PNGs.
     ///  - WPF's <c>LayoutTransform</c> has no Avalonia twin on a plain control, so the avatar scale
     ///    is a <c>RenderTransform</c> about the centre. It does not grow the parent Border, so a
     ///    scaled avatar expands symmetrically rather than upward.

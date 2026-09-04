@@ -9,6 +9,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -19,9 +20,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/ProfileCustomizeDialog.xaml.cs. The tile
     /// builders, selection rules, pin cap and reset are the original's; <see cref="ProfileCosmetics"/>
-    /// is already in Core. What is not: Achievement, CosmeticsCatalog, WardrobeCatalog and the
-    /// WardrobeEditorDialog all live in the WPF head (the mod-art resolver does NOT block anything
-    /// here any more - see <c>BuildPinTile</c> for the two things that do), so
+    /// is already in Core. What is not: Achievement, CosmeticsCatalog and WardrobeCatalog live in
+    /// the WPF head (the mod-art resolver does NOT block anything here any more - see
+    /// <c>BuildPinTile</c> for the two things that do), so
     ///  - unlocked achievements arrive as (id, name) pairs instead of being resolved from Achievement.All,
     ///  - banners are the catalog's three generated gradients (no art file needed), avatar presets
     ///    are none (art needed), pins draw a trophy glyph where the achievement PNG would be,
@@ -492,9 +493,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _txtWardrobeSlots.Foreground = Muted;
         }
 
-        private void BtnArrange_Click()
+        /// <summary>
+        /// Opens the Wardrobe editor on the SAME draft instance, exactly as WPF does — it edits the
+        /// transform fields in place and snapshots them on open, so its own Cancel is the undo and
+        /// this method has nothing to write back.
+        ///
+        /// WPF also handed it the hero card's measured avatar and pixel size; this head has neither
+        /// on the dialog, so the editor takes its documented fallbacks (no avatar art, a typical
+        /// windowed hero for the stage). ponytail: pass the live values through if
+        /// ProfileCustomizeDialog ever measures the card. The sprites are still placeholder Borders
+        /// there until <c>Services/Profile/WardrobeCatalog</c> crosses — the arrangement is real,
+        /// the picture is not.
+        /// </summary>
+        private async void BtnArrange_Click()
         {
-            // ponytail: needs WardrobeEditorDialog (WPF head, bucket E drag/rotate canvas), ported separately
+            try
+            {
+                if (!IsVisible) return;   // ShowDialog throws on an owner that is not on screen
+                await new WardrobeEditorDialog(_draft, null).ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("ProfileCustomizeDialog: wardrobe editor failed: {E}", ex.Message);
+            }
         }
 
         // ============================== footer ==============================

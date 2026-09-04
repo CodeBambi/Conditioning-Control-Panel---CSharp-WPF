@@ -25,8 +25,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    indistinguishable from one that failed.
     ///  - <c>Unloaded</c> -> <c>Closed</c> for stopping the timer. --render-all runs every view in
     ///    one process; a 1s timer still ticking against a closed window is pure noise.
-    ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>; Serilog is dropped, the head has no
-    ///    reference to it and the stub has nothing to log.
+    ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>. No logging: the stub has nothing to log
+    ///    (Serilog IS referenced by this head — the earlier note saying otherwise was wrong).
+    ///
+    /// <para><b>Nothing opens this window, on purpose.</b> The Settings tab's "Link phone" button
+    /// is refused at <c>CCP.Avalonia/Views/Tabs/SettingsTabView.axaml.cs</c> precisely because the
+    /// dialog would open and display <c>ABCDEF</c> as if it were a live one-time auth code. Do not
+    /// add a call site before <c>V2AuthService.AuthorizeMobileLinkAsync</c> is reachable — a
+    /// render-only placeholder is safe, a shown one is not.</para>
     /// </summary>
     public partial class LinkPhoneDialog : Window
     {
