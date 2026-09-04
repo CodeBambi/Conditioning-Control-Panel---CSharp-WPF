@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -49,14 +50,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     ///         to feed the hook install.</item>
     /// </list>
     ///
-    /// <para><b>Animation.</b> Every <c>BeginAnimation</c> here was decorative - reveal pops,
-    /// dissolves, glow blooms, the ken-burns pan, the chevron bounce. Avalonia has no
-    /// <c>BeginAnimation</c>; each one would have to be re-authored as an
-    /// <c>Avalonia.Animation.Animation</c> with its own cancellation token, and the art they move
-    /// (ChaosArt's portraits, backdrops and boon squares) is not on this head anyway.
-    /// ponytail: the static end frame is applied instead - fully revealed, fully opaque, resting
-    /// scale - so nothing renders half-faded or invisible. Restore the motion together with
-    /// ChaosArt. The <c>DispatcherTimer</c>s are NOT stubs: the countdown steps, the staged card
+    /// <para><b>Animation.</b> The original's <c>BeginAnimation</c>s all run: the
+    /// countdown step's pop and fade, the staged card reveal, the unchosen cards' dissolve, the
+    /// chosen card's elastic burst, its glow bloom, its art-border pulse and its button bounce, the
+    /// recap verdict's delayed fade, the reward chips' staggered pop and cue, the rank card's fade,
+    /// the story card's fade in and out, the portrait's slide-in, the dialogue box's per-line
+    /// re-settle, the chevron's idle bounce and the two ken-burns drifts. They do NOT run through
+    /// Avalonia's keyframe <c>Animation</c> - see the animation-pump region for why that throws on
+    /// a code-behind-held transform - but off one shared 16ms <c>DispatcherTimer</c>, the shape
+    /// <c>ChaosHudWindow</c> landed first. Two fidelity gaps, both noted at their call sites:
+    /// Avalonia's <c>BackEaseOut</c> and <c>ElasticEaseOut</c> expose no Amplitude/Oscillations, so
+    /// those arcs read a little looser than WPF's.</para>
+    ///
+    /// <para>The portrait slide-in is written and guarded exactly as WPF guards it, on a non-null
+    /// portrait; with no <c>ChaosArt</c> here that resolves null and nothing slides, which is the
+    /// same branch the original takes for an unbacked portrait id. The ken-burns drift runs off the
+    /// backdrop the CALLER passes, not <c>ChaosArt</c>, so it is motion over real content whenever
+    /// there is any.</para>
+    ///
+    /// <para>The <c>DispatcherTimer</c>s are not stubs either: the countdown steps, the staged card
     /// reveal, the auto-resume tick, the post-pick confirm beat and the score tally are logic, and
     /// they port one for one.</para>
     ///
@@ -89,6 +101,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             public ChaosBoon Boon = null!;
             public Border Art = null!;                 // artwork square (placeholder until per-boon art ships)
             public SolidColorBrush ArtBorder = null!;  // its thick border brush — flashed on pick
+            public ScaleTransform PickScale = null!;   // the ACCEPT button's own scale, bounced on pick
+            public string Key = "";                    // tween namespace, so one card's motion never steals another's
         }
         private readonly List<DraftCard> _draftCards = new();
         private DispatcherTimer? _revealTimer;
@@ -126,6 +140,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private readonly TextBlock _storyName;
         private readonly TextBlock _storyTitle;
         private readonly TextBlock _storyText;
+        private readonly Border _storyBox;
+        private readonly TextBlock _storyAdvance;
 
         private T Part<T>(string name) where T : Control => this.FindControl<T>(name)
             ?? throw new InvalidOperationException($"ChaosOverlayWindow: no '{name}' in the XAML");
@@ -158,6 +174,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _storyName = Part<TextBlock>("StoryName");
             _storyTitle = Part<TextBlock>("StoryTitle");
             _storyText = Part<TextBlock>("StoryText");
+            _storyBox = Part<Border>("StoryBox");
+            _storyAdvance = Part<TextBlock>("StoryAdvance");
 
             _btnSkipBoon.Click += BtnSkipBoon_Click;
             _btnReroll.Click += BtnReroll_Click;
@@ -266,12 +284,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// cannot receive input itself. That made ANY click or keypress anywhere on the desktop
         /// skip straight to "SINK".
         ///
-        /// <para>ponytail: there is no global-hook capability on this head at all -
-        /// <see cref="X11Overlay"/> covers click-through and restacking only, and this wave may
-        /// not extend it. Until one exists (X11: an <c>XGrabKey</c>/XInput2 raw-event listener on
-        /// its own display, and it would need its own layer), <b>the countdown cannot be skipped
-        /// and always runs its full 3·2·1·SINK duration</b>. Nothing else about the countdown
-        /// changes: the timer, the steps and the completion callback are untouched.</para>
+        /// <para>ponytail: this is the ONE thing in this window that needs a capability
+        /// <see cref="X11Overlay"/> does not have - it exposes <c>SetClickThrough</c> and
+        /// <c>RestackAbove</c> and nothing else. Naming the missing member so a later layer does
+        /// not have to rediscover it: <c>X11Overlay.WatchRawInput(Action onAnyPress) : IDisposable</c>,
+        /// an <c>XISelectEvents</c> for <c>XI_RawButtonPress | XI_RawKeyPress</c> on the root
+        /// window of its OWN display connection, posting to the UI thread. That is its own layer -
+        /// a raw-input listener cannot be proved by a render, and it must be exercised inside a
+        /// nested compositor, never against the live session. It is also X11-only by construction:
+        /// Wayland has no equivalent at all, so on that session the countdown stays unskippable
+        /// whatever gets built.</para>
+        ///
+        /// <para><b>Until then the countdown cannot be skipped and always runs its full
+        /// 3·2·1·SINK duration.</b> Nothing else about it changes: the timer, the steps, the
+        /// completion callback and now the per-step pop and fade are all live.</para>
         /// </summary>
         private void InstallCountdownSkipHooks() { }
 
@@ -283,9 +309,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             ChaosSfx.Play(text == "SINK" ? "sink" : "countdown_tick", text == "SINK" ? 0.6f : 0.45f);
             _countdownText.Text = text;
             _countdownText.Foreground = text == "SINK" ? new SolidColorBrush(Color.FromRgb(120, 255, 160)) : Brushes.White;
-            // ponytail: the pop (BackEase 1.5->1.0) and the 0.2->1 fade are dropped with the rest
-            // of the animation; the step lands at its resting scale and full opacity.
-            _countdownBox.Opacity = 1;
+            // Each step lands big and pops down to rest, fading up from near-transparent.
+            // Fidelity gap: WPF's BackEase carried Amplitude 0.4; Avalonia's BackEaseOut exposes no
+            // amplitude, so the overshoot reads a little looser. Same arrival, same duration.
+            if (_countdownText.RenderTransform is ScaleTransform cs)
+                StartTween("countdown:pop", 350, t => cs.ScaleX = cs.ScaleY = 1.5 + (1.0 - 1.5) * t, new BackEaseOut());
+            StartTween("countdown:fade", 200, t => _countdownBox.Opacity = 0.2 + 0.8 * t);
         }
 
         // ============================ boon draft ============================
@@ -346,6 +375,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             foreach (var boon in options)
             {
                 var dc = BuildBoonCard(boon);
+                dc.Key = "card:" + _draftCards.Count;
                 dc.Card.Opacity = 0;
                 dc.Scale.ScaleX = dc.Scale.ScaleY = 0.7;
                 dc.Pick.IsEnabled = false;
@@ -379,11 +409,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private void RevealCard(DraftCard dc)
         {
             dc.Pick.IsEnabled = true;
-            // ponytail: the 220ms fade and the BackEase 0.7->1.0 pop are dropped with the rest of
-            // the animation. Snapping to the end state matters here rather than being cosmetic -
-            // a card left at Opacity 0 would be an invisible, clickable card.
-            dc.Card.Opacity = 1;
-            dc.Scale.ScaleX = dc.Scale.ScaleY = 1;
+            // The card fades up and pops out of its 0.7 build state. Both tweens are keyed per card
+            // so a fast re-deal cannot leave one mid-fade; either way they settle at 1, which is
+            // what keeps an invisible-but-clickable card impossible.
+            StartTween(dc.Key + ":fade", 220, t => dc.Card.Opacity = t);
+            StartTween(dc.Key + ":pop", 300, t => dc.Scale.ScaleX = dc.Scale.ScaleY = 0.7 + 0.3 * t, new BackEaseOut());
             if (dc.Boon.IsCurse) ChaosSfx.Play("sin_reveal", 0.55f);   // a sin lands with its own drone
             else ChaosSfx.PlayBoonReveal(dc.Boon.Rarity == ChaosRarity.Rare);
         }
@@ -396,13 +426,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _autoResumeTimer = null;
             _confirmTimer?.Stop();
             _confirmTimer = null;
-            // WPF also had to stop each card's Forever pulse here or the timing manager kept the
-            // clock, brush and effect render-target alive on every pick. With the animations gone
-            // only the effects need dropping.
+            // Stop every per-card tween BEFORE dropping the effects and brushes they write into.
+            // This is the leak the WPF original guarded here: its chosen card's Forever
+            // ColorAnimation otherwise kept the clock, the brush and the effect render-target alive
+            // on every single pick. The pump's equivalent is a forever tween holding a closure over
+            // a discarded SolidColorBrush and keeping the 16ms timer awake for the window's life.
             foreach (var c in _draftCards)
             {
                 try
                 {
+                    StopTween(c.Key + ":fade"); StopTween(c.Key + ":pop");
+                    StopTween(c.Key + ":dissolve"); StopTween(c.Key + ":burst");
+                    StopTween(c.Key + ":bloom"); StopTween(c.Key + ":pulse");
+                    StopTween(c.Key + ":bounce");
                     if (c.Card != null) c.Card.Effect = null;
                     if (c.Art != null) c.Art.Effect = null;
                 }
@@ -582,7 +618,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 RenderTransform = scale,
             };
 
-            var dc = new DraftCard { Card = card, Pick = pick, Scale = scale, Boon = boon, Art = art, ArtBorder = artBorderBrush };
+            var dc = new DraftCard { Card = card, Pick = pick, Scale = scale, Boon = boon, Art = art, ArtBorder = artBorderBrush, PickScale = pickScale };
             pick.Click += (_, _) => SelectBoon(dc);
             // The art square picks too — same gating as the button (disabled until revealed).
             art.Cursor = new Cursor(StandardCursorType.Hand);
@@ -614,32 +650,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 dc.Pick.IsEnabled = false;
                 if (dc == chosen) continue;
                 // Dissolve the unchosen cards (already-invisible unrevealed ones just stay gone).
-                // ponytail: the 260ms fade + shrink are dropped; the end state is the same card,
-                // gone.
-                dc.Card.Opacity = 0;
-                dc.Scale.ScaleX = dc.Scale.ScaleY = 0.8;
+                // The fade starts from wherever the card actually IS - a card still mid-reveal
+                // would otherwise jump to full opacity before dissolving.
+                StopTween(dc.Key + ":fade"); StopTween(dc.Key + ":pop");
+                double from = dc.Card.Opacity, fromScale = dc.Scale.ScaleX;
+                StartTween(dc.Key + ":dissolve", 260, t =>
+                {
+                    dc.Card.Opacity = from + (0.0 - from) * t;
+                    dc.Scale.ScaleX = dc.Scale.ScaleY = fromScale + (0.8 - fromScale) * t;
+                }, new QuadraticEaseIn());
             }
 
             // Snap the chosen card to fully shown, then brighten its border + add a glow.
+            StopTween(chosen.Key + ":fade"); StopTween(chosen.Key + ":pop");
             chosen.Card.Opacity = 1;
             chosen.Scale.ScaleX = chosen.Scale.ScaleY = 1;
-            // ponytail: the elastic pick burst is dropped with the rest of the animation.
+            // Pick flourish: an elastic burst so the chosen card pops as it locks in.
+            // Fidelity gap: WPF set Oscillations 2 / Springiness 5; Avalonia's ElasticEaseOut has
+            // neither knob, so the wobble is the framework's own.
+            StartTween(chosen.Key + ":burst", 540,
+                t => chosen.Scale.ScaleX = chosen.Scale.ScaleY = 1.22 + (1.0 - 1.22) * t, new ElasticEaseOut());
             // Highlight in the boon's family color (falls back to the old green/red if unmapped).
             var hi = ChaosBoonColors.ForOrDefault(chosen.Boon.Id,
                 chosen.Boon.IsCurse ? Color.FromRgb(255, 150, 150) : Color.FromRgb(120, 255, 170));
             chosen.Card.BorderBrush = new SolidColorBrush(hi);
             chosen.Card.BorderThickness = new Thickness(3);
-            // The bloom shockwave (64 -> 28 blur) is dropped; the glow sits at its resting size.
-            chosen.Card.Effect = new DropShadowEffect { Color = hi, BlurRadius = 28, OffsetX = 0, OffsetY = 0, Opacity = 0.9 };
+            var cardGlow = new DropShadowEffect { Color = hi, BlurRadius = 28, OffsetX = 0, OffsetY = 0, Opacity = 0.9 };
+            chosen.Card.Effect = cardGlow;
+            // ...with a one-shot bloom shockwave: the glow blooms wide, then contracts to rest.
+            StartTween(chosen.Key + ":bloom", 520, t => cardGlow.BlurRadius = 64 + (28 - 64) * t, new CubicEaseOut());
 
-            // The chosen art square: thick border in the highlight colour with a matching glow.
-            // ponytail: WPF pulsed that border bright↔accent on a Forever ColorAnimation; the
-            // static frame is the bright end of that pulse.
+            // The chosen art square: thick border in the highlight colour with a matching glow, its
+            // colour pulsing bright<->accent until the draft tears down (HideDraft stops it).
             chosen.Art.BorderThickness = new Thickness(5);
-            chosen.ArtBorder.Color = hi;
             chosen.Art.Effect = new DropShadowEffect { Color = hi, BlurRadius = 24, OffsetX = 0, OffsetY = 0, Opacity = 0.95 };
+            var pulseFrom = chosen.ArtBorder.Color;
+            StartTween(chosen.Key + ":pulse", 240, t => chosen.ArtBorder.Color = LerpColor(pulseFrom, hi, t),
+                       new QuadraticEaseInOut(), repeats: -1, alternate: true);
 
-            // The bounce on the chosen button goes with the animations too.
+            // Slight bounce on the chosen button.
+            StartTween(chosen.Key + ":bounce", 360,
+                t => chosen.PickScale.ScaleX = chosen.PickScale.ScaleY = 1.15 + (1.0 - 1.15) * t, new BackEaseOut());
             if (chosen.Pick.Content is TextBlock chosenText) chosenText.Text = "✓ CHOSEN";
 
             // No Continue button: hold the glowing pick for a short beat, then commit on its own.
@@ -722,8 +773,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             var verdict = isPb
                 ? AddResultLine($"★ NEW BEST  (+{pbDelta:N0} over {previousBest:N0})", 14, gold, FontWeight.Bold)
                 : AddResultLine($"best {previousBest:N0}   ({pbDelta:N0} vs best)", 12, dim, FontWeight.Normal);
-            // ponytail: WPF held the verdict at Opacity 0 and faded it in at 820ms, on the beat of
-            // the tally. Without the animation it would simply never appear, so it starts visible.
+            // Held dark, then faded in at 820ms - on the beat of the score tally landing, which is
+            // what puts a PB's reveal on the 900ms fanfare above.
+            verdict.Opacity = 0;
+            StartTween("verdict", 300, t => verdict.Opacity = t, delayMs: 820);
 
             _resultsBody.Children.Add(new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(70, 255, 105, 180)), Margin = new Thickness(0, 10, 0, 10) });
 
@@ -829,8 +882,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 Margin = new Thickness(0, 4, 0, 0),
             });
             _resultsBody.Children.Add(card);
-            // ponytail: the 700ms fade-in is dropped; the card is added already visible.
-            // Stays bare and quiet by design — just a low velvet thump under it.
+            card.Opacity = 0;
+            StartTween("rankcard", 700, t => card.Opacity = t);
+            // Stays bare and quiet by design — just a low velvet thump under the fade.
             ChaosSfx.Play("rank_settle", 0.6f);
 
             try { App.Bark?.NotifyChaosRankUp(ChaosRanks.NameLower(rank)); } catch { }
@@ -892,13 +946,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             timer.Start();
         }
 
-        /// <summary>WPF popped the take-home chips in one by one from Opacity 0 with a BackEase
-        /// scale and a soft cue each, starting after the tally.
-        ///
-        /// <para>ponytail: dropped with the rest of the animation. Leaving the entrance state
-        /// behind without the animation to undo it would hide the chips permanently, so they are
-        /// simply drawn - the cue timers go with them.</para></summary>
-        private void PopRewardChips(Grid row, int firstDelayMs) { }
+        /// <summary>The take-home chips pop in one by one from Opacity 0 with a BackEase scale and
+        /// a soft cue each, starting after the score tally has landed. 150ms apart, verbatim.</summary>
+        private void PopRewardChips(Grid row, int firstDelayMs)
+        {
+            int i = 0;
+            foreach (var child in row.Children)
+            {
+                if (child is not Border chip) continue;
+                int delay = firstDelayMs + i * 150;
+                i++;
+
+                var sc = new ScaleTransform(0.6, 0.6);
+                chip.RenderTransformOrigin = RelativePoint.Center;   // a bare 0.5,0.5 pair is ABSOLUTE px here
+                chip.RenderTransform = sc;
+                chip.Opacity = 0;
+
+                string key = "chip:" + i;
+                StartTween(key + ":fade", 180, t => chip.Opacity = t, delayMs: delay);
+                StartTween(key + ":pop", 320, t => sc.ScaleX = sc.ScaleY = 0.6 + 0.4 * t, new BackEaseOut(), delayMs: delay);
+                // WPF gave each chip its own DispatcherTimer for the cue, 60ms into the pop. Same
+                // beat off the shared pump: an empty tween whose only job is when it finishes.
+                StartTween(key + ":cue", 1, _ => { }, delayMs: delay + 60,
+                           done: () => { if (_resultsPanel.IsVisible) ChaosSfx.Play("chip_pop", 0.5f); });
+            }
+        }
 
         /// <summary>Equal-width row of stat chips for the recap card.</summary>
         private static Grid ChipRow(params Border[] chips)
@@ -993,6 +1065,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
+            _closed = true;
+            // The three forever tweens (the boon pulse, the two ken-burns drifts) would otherwise
+            // keep the 16ms pump awake on a dead window for the process's life.
+            _tweens.Clear();
+            _tweenTimer?.Stop(); _tweenTimer = null;
             try { RemoveCountdownSkipHooks(); } catch { }
             _rankBeatTimer?.Stop(); _rankBeatTimer = null;
             _rankCardTimer?.Stop(); _rankCardTimer = null;
@@ -1042,14 +1119,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _resultsPanel.IsVisible = false;
             _backdrop.IsVisible = false;
             _storyCardPanel.IsVisible = true;
-            _storyCardPanel.Opacity = 1;
+            // Keyed the same as the close fade below, deliberately: WPF's BeginAnimation on
+            // OpacityProperty REPLACED the running animation, and its Completed then never fired.
+            // Opening a card while the previous one is still fading out must drop that fade AND
+            // its teardown, or the old card's completion tears the new conversation down mid-line.
+            StartTween("story:fade", 180, t => _storyCardPanel.Opacity = t);
             BringToFront();
 
-            // ponytail: the portrait's slide-in from ±260px, the chevron's idle bounce and the
-            // ken-burns pan (see StartBgPan) all go with the animations. The portrait is drawn
-            // settled at X=0 rather than parked off its entrance offset, which is where the XAML's
-            // -260 would otherwise leave it.
-            SetPortraitOffset(0);
+            // Portrait slide-in (snappy, settles). Guarded exactly as WPF guards it: with no
+            // ChaosArt on this head the portrait resolves null and is hidden, so nothing slides -
+            // the same branch the original takes when a portrait id has no art behind it. When
+            // ChaosArt lands, this runs with no further edit.
+            if (portrait != null)
+            {
+                double fromX = convo.PortraitOnLeft ? -260 : 260;
+                StartTween("story:portraitfade", 220, t => _storyPortrait.Opacity = t);
+                StartTween("story:portrait", 290, t => SetPortraitOffset(fromX + (0 - fromX) * t), new BackEaseOut());
+            }
+            else SetPortraitOffset(0);   // the XAML parks it at -260; don't leave a hidden control off-screen
+
+            // Idle bounce on the advance chevron, alternating forever until the card closes.
+            if (_storyAdvance.RenderTransform is TranslateTransform chev)
+                StartTween("story:chevron", 520, t => chev.X = 6 * t, new SineEaseInOut(), repeats: -1, alternate: true);
 
             StartBgPan();
             ChaosSfx.Play("cards_in", 0.4f);
@@ -1068,20 +1159,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _storyText.FontStyle = line.Emphasis ? FontStyle.Italic : FontStyle.Normal;
             _storyText.Text = line.Text;
 
-            // ponytail: the per-line re-settle (150ms fade + a 0.97->1 scale pop on StoryBox) is
-            // dropped with the rest of the animation; the plaque simply swaps its text.
+            // Dialogue box re-settle on each line (fade + a small scale pop), so a swapped line
+            // reads as a new beat rather than as text changing under the reader.
+            StartTween("story:boxfade", 150, t => _storyBox.Opacity = t);
+            if (_storyBox.RenderTransform is ScaleTransform bs)
+                StartTween("story:boxpop", 180, t => bs.ScaleX = bs.ScaleY = 0.97 + 0.03 * t, new BackEaseOut());
 
             // duck the bed + play the line's clip (placeholder ok → text-only still ducks). NO auto-advance —
             // the scene waits for the user to press forward.
             ChaosNarrator.PlayCardLine(line.AudioKey, line.Text);
         }
 
-        /// <summary>A slow ken-burns drift on the background so the scene breathes.
-        /// ponytail: dropped with the rest of the animation - the background holds the 1.08 zoom
-        /// the XAML gives it and does not drift.</summary>
-        private void StartBgPan() { }
+        /// <summary>A slow ken-burns drift on the background so the scene breathes: a 16s zoom and
+        /// a 22s pan, both alternating forever on deliberately mismatched periods so the two never
+        /// resynchronise. Only started when a caller actually passed a backdrop - the plate is the
+        /// caller's image, not ChaosArt's, so this is motion over real content whenever there is
+        /// any, and nothing at all when there is not.</summary>
+        private void StartBgPan()
+        {
+            if (!_storyBg.IsVisible || _storyBg.RenderTransform is not TransformGroup g) return;
+            var scale = g.Children.OfType<ScaleTransform>().FirstOrDefault();
+            var trans = g.Children.OfType<TranslateTransform>().FirstOrDefault();
+            if (scale != null)
+                StartTween("story:bgzoom", 16000, t => scale.ScaleX = scale.ScaleY = 1.08 + 0.08 * t,
+                           new SineEaseInOut(), repeats: -1, alternate: true);
+            if (trans != null)
+                StartTween("story:bgpan", 22000, t => trans.X = -26 + 52 * t,
+                           new SineEaseInOut(), repeats: -1, alternate: true);
+        }
 
-        private void StopBgPan() { }
+        private void StopBgPan()
+        {
+            StopTween("story:bgzoom");
+            StopTween("story:bgpan");
+        }
 
         /// <summary>Press-forward (user click / key only): step to the next line, or close after the last.</summary>
         private void AdvanceStory()
@@ -1093,24 +1204,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             ShowStoryLine(_storyIndex);
         }
 
-        /// <summary>WPF ran the teardown from the close fade's Completed handler. Without the fade
-        /// the teardown runs inline, which is the same sequence one frame earlier.</summary>
+        /// <summary>Fade the card out, then tear down from the fade's completion - the same
+        /// ordering as WPF's <c>Completed</c> handler, which matters: the caller's continuation
+        /// resumes the field, and running it before the card has actually left would show the
+        /// bubbles through a still-opaque plate.</summary>
         private void CloseConversation()
         {
             if (_storyClosing) return;
             _storyClosing = true;
+            StopTween("story:chevron");
             StopBgPan();
             ChaosNarrator.EndCard();   // unduck + drop the speaking/bark hold
 
-            _storyCardPanel.IsVisible = false;
-            _storyCardPanel.Opacity = 1;
-            _storyBg.Source = null;
-            _storyPortrait.Source = null;
-            _storyLines = null;
-            SetClickThrough(true);
-            var cb = _onConversationComplete;
-            _onConversationComplete = null;
-            try { cb?.Invoke(); } catch (Exception ex) { Log.Debug("Story onComplete: {E}", ex.Message); }
+            double from = _storyCardPanel.Opacity;
+            StartTween("story:fade", 220, t => _storyCardPanel.Opacity = from + (0 - from) * t, done: () =>
+            {
+                _storyCardPanel.IsVisible = false;
+                _storyCardPanel.Opacity = 1;
+                _storyBg.Source = null;
+                _storyPortrait.Source = null;
+                _storyLines = null;
+                SetClickThrough(true);
+                var cb = _onConversationComplete;
+                _onConversationComplete = null;
+                try { cb?.Invoke(); } catch (Exception ex) { Log.Debug("Story onComplete: {E}", ex.Message); }
+            });
         }
 
         private void OnStoryKey(object? sender, KeyEventArgs e)
@@ -1209,6 +1327,116 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 Difficulty = "Deep",
             },
             baseXp: 1_240, skillMult: 1.6, finalXp: 1_984, previousBest: 19_500, sparksEarned: 340);
+
+        // ============================ animation pump ============================
+
+        // Avalonia's keyframe Animation cannot drive these: every one of them writes a
+        // ScaleTransform, a TranslateTransform, a DropShadowEffect or a SolidColorBrush this
+        // code-behind holds, and Animation.RunAsync(aTransform) throws InvalidCastException -
+        // TransformAnimator casts its target to Visual and then owns that visual's
+        // RenderTransform. So one shared 16ms DispatcherTimer steps a table of
+        // (delay, duration, easing, apply) closures, the shape wire/71 landed for ChaosHudWindow.
+        // ponytail: second copy of that pump - lift both into a shared TweenPump when a third
+        // window needs one. The phase arithmetic is NOT copied: ChaosHudWindow.TweenPhase is
+        // internal static and already carries its own assertions, so it is called.
+
+        private sealed class Tween
+        {
+            public double Elapsed;              // ms since Start, delay included
+            public double Delay;                // ms held on the from-value before moving
+            public double Duration = 1;         // ms per pass
+            public int Repeats = 1;             // -1 = forever
+            public bool Alternate;              // reverse every other pass
+            public Easing? Ease;
+            public Action<double> Apply = _ => { };
+            public Action? Done;
+        }
+
+        private readonly Dictionary<string, Tween> _tweens = new();
+        private DispatcherTimer? _tweenTimer;
+        private DateTime _tweenLastTick;
+        private bool _closed;
+
+        /// <summary>Start (or restart) a named animation, applying its from-value at once. Re-using
+        /// a key REPLACES the running tween, which is what WPF's <c>BeginAnimation</c> did to a
+        /// second animation on the same property.
+        ///
+        /// <para>Under <see cref="_renderSample"/> nothing is queued: the tween is applied at its
+        /// SETTLED value and its completion runs inline. The headless render pumps the dispatcher
+        /// twice and never ticks a timer, so without this the recap PNG would freeze on every
+        /// entrance state - an invisible verdict line and half-size reward chips.</para></summary>
+        private void StartTween(string key, double durationMs, Action<double> apply, Easing? ease = null,
+                                int repeats = 1, bool alternate = false, double delayMs = 0, Action? done = null)
+        {
+            if (_closed) return;
+            if (_renderSample)
+            {
+                // ease(1) == 1 for every easing, and an alternating forever tween settles where it
+                // started, so the settled value is the same arithmetic without a clock.
+                try { apply(repeats < 0 && alternate ? 0 : 1); done?.Invoke(); }
+                catch (Exception ex) { Log.Debug("ChaosOverlay tween {Key} settle: {E}", key, ex.Message); }
+                return;
+            }
+            _tweens[key] = new Tween
+            {
+                Delay = delayMs,
+                Duration = durationMs,
+                Repeats = repeats,
+                Alternate = alternate,
+                Ease = ease,
+                Apply = apply,
+                Done = done,
+            };
+            try { apply(ease?.Ease(0) ?? 0); }
+            catch (Exception ex) { Log.Debug("ChaosOverlay tween {Key} seed: {E}", key, ex.Message); _tweens.Remove(key); return; }
+
+            if (_tweenTimer is null)
+            {
+                _tweenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+                _tweenTimer.Tick += (_, _) =>
+                {
+                    var now = DateTime.UtcNow;
+                    double dt = (now - _tweenLastTick).TotalMilliseconds;
+                    _tweenLastTick = now;
+                    StepTweens(dt);
+                };
+            }
+            if (!_tweenTimer.IsEnabled) { _tweenLastTick = DateTime.UtcNow; _tweenTimer.Start(); }
+        }
+
+        /// <summary>Drop a named animation without applying anything: the caller paints the settled
+        /// visual itself, exactly as WPF cleared with <c>BeginAnimation(prop, null)</c> and then
+        /// assigned. Dropping a forever-tween is what stops it writing into a discarded brush -
+        /// the leak the WPF original's <c>HideDraft</c> comment is about.</summary>
+        private void StopTween(string key) => _tweens.Remove(key);
+
+        private void StepTweens(double dtMs)
+        {
+            foreach (var pair in _tweens.ToList())
+            {
+                var tw = pair.Value;
+                tw.Elapsed += dtMs;
+                if (tw.Elapsed < tw.Delay) continue;
+                double t = ChaosHudWindow.TweenPhase(tw.Elapsed - tw.Delay, tw.Duration, tw.Repeats, tw.Alternate, out bool finished);
+                try { tw.Apply(tw.Ease?.Ease(t) ?? t); }
+                catch (Exception ex)
+                {
+                    // Loud, not swallowed: an animation that throws every frame is otherwise an
+                    // inert control that reviews clean.
+                    Log.Warning("ChaosOverlay tween {Key} failed, dropped: {E}", pair.Key, ex.Message);
+                    finished = true;
+                }
+                if (!finished) continue;
+                _tweens.Remove(pair.Key);
+                try { tw.Done?.Invoke(); }
+                catch (Exception ex) { Log.Debug("ChaosOverlay tween {Key} completion: {E}", pair.Key, ex.Message); }
+            }
+            if (_tweens.Count == 0) _tweenTimer?.Stop();
+        }
+
+        private static Color LerpColor(Color a, Color b, double t) => Color.FromArgb(
+            (byte)(a.A + (b.A - a.A) * t), (byte)(a.R + (b.R - a.R) * t),
+            (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
 
         // ============================ stubs ============================
         //
