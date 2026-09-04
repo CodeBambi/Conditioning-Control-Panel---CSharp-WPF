@@ -1,0 +1,170 @@
+/* ============================================================================
+ * backroom/twentyone.css - THE TABLE'S SKIN.
+ *
+ * Lazy-linked by twentyone.js the first time the cabinet is opened, the same
+ * way backroom/index.js links the floor's sheet, so a player who never walks
+ * to this table never pays for it.
+ *
+ * IT BORROWS, IT DOES NOT REDECLARE. --bk-felt, --bk-neon, --bk-brass and the
+ * rest are declared on .bk-room in backroom.css, and every read here carries a
+ * fallback because a machine can be mounted on a bench with no room around it
+ * (the K1 lesson: an unfallen var() paints furniture nobody can see).
+ *
+ * NO SERIF ANYWHERE (house camera law). Display for the name, mono for
+ * numbers, body for the dealer's sentences, and nothing else.
+ *
+ * The still-mode and phone blocks sit at the bottom. The global freeze at the
+ * end of styles.css already flattens CSS animation under html.arc-reduced; the
+ * blocks here are for the things a flattened duration still leaves looking
+ * wrong, and for the glow a phone should not be paying for.
+ * ==========================================================================*/
+
+.bk21 { display: flex; flex-direction: column; gap: 10px; }
+
+/* ------------------------------------------------------------------- the hud */
+/* min-width:0 on every child is not tidiness, it is the fix: a flex item's
+   default min-width is auto, so the odds sentence refused to shrink and pushed
+   the whole page wider than a phone (the CLAUDE.md phone-shot gate catches it
+   as a horizontal scrollbar). Allowed to shrink, it simply wraps. */
+.bk21-hud { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bk21-hud > * { min-width: 0; }
+.bk21-name {
+  margin: 0; font-family: var(--disp); font-size: 16px; letter-spacing: .1em;
+  font-weight: 400; color: var(--bk-neon, var(--pink));
+}
+.bk21-sub { font-size: 12px; color: var(--ink-faint); }
+.bk21-spacer { flex: 1 1 auto; }
+.bk21-odds {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+  color: var(--bk-brass, var(--gold));
+}
+
+/* ------------------------------------------------------------------ the felt */
+.bk21-felt {
+  position: relative; display: flex; flex-direction: column; gap: 10px;
+  /* A table is a table, not a wall. Past about seven hundred pixels the felt
+     stops reading as furniture and starts reading as a background. */
+  max-width: 700px; padding: 14px 16px 18px;
+  border: 2px solid var(--bk-edge, var(--line));
+  border-radius: 70px 70px var(--radius, 10px) var(--radius, 10px);
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--bk-felt, #1b3a2e), white 8%), transparent 70%),
+    var(--bk-felt, #1b3a2e);
+  box-shadow: inset 0 0 40px #0008;
+}
+
+/* ---------------------------------------------------------------- the dealer */
+.bk21-dealer { display: flex; align-items: center; gap: 12px; }
+.bk21-crt {
+  position: relative; flex: none; width: 74px; height: 58px;
+  background: #0d0916; border: 4px solid var(--bk-neon-2, var(--lav));
+  border-radius: 12px 12px 10px 10px;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--bk-neon-2, var(--lav)), transparent 60%);
+}
+/* the aerial and its bead, so she reads as a set rather than as a rectangle */
+.bk21-crt::before {
+  content: ''; position: absolute; top: -14px; left: 50%; width: 2px; height: 14px;
+  background: var(--bk-neon-2, var(--lav)); transform: rotate(18deg); transform-origin: bottom;
+}
+.bk21-crt::after {
+  content: ''; position: absolute; top: -18px; left: calc(50% + 5px);
+  width: 8px; height: 8px; border-radius: 50%; background: var(--bk-neon, var(--pink));
+  box-shadow: 0 0 8px var(--bk-neon, var(--pink));
+}
+.bk21-eyes { position: absolute; left: 14px; right: 14px; top: 17px; display: flex; justify-content: space-between; }
+.bk21-eyes i {
+  width: 11px; height: 11px; background: var(--bk-neon, var(--pink));
+  box-shadow: 0 0 8px var(--bk-neon, var(--pink)); animation: bk21-blink 4.4s infinite;
+}
+.bk21-mouth {
+  position: absolute; left: 25px; right: 25px; bottom: 12px; height: 3px;
+  background: var(--bk-neon, var(--pink));
+}
+/* While the real mascot is standing at the plate, the drawn screen steps back.
+   It never leaves: she is on loan and the table keeps its own dealer. */
+.bk21-crt.bk21-lent { opacity: .25; }
+@keyframes bk21-blink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+
+.bk21-say { font-size: 13px; color: var(--ink); min-height: 1.2em; }
+.bk21-dealer-line { margin-top: 3px; font-size: 12px; color: var(--bk-neon-2, var(--lav)); }
+
+/* ----------------------------------------------------------------- the hands */
+.bk21-row { display: flex; flex-direction: column; gap: 4px; }
+.bk21-cap {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.bk21-count { font-size: 14px; letter-spacing: .06em; color: var(--ink); }
+.bk21-hand { display: flex; gap: 6px; min-height: 82px; flex-wrap: wrap; }
+
+.bk21-card {
+  width: 56px; height: 80px; padding: 5px; border-radius: 7px;
+  display: grid; grid-template-rows: auto 1fr auto; justify-items: start;
+  background: #fdf6f0; color: #2a1b44;
+  font-family: var(--mono); font-weight: 700; font-size: 13px;
+  box-shadow: 0 4px 10px #0006;
+}
+.bk21-card.bk21-hot { color: #d6357c; }
+.bk21-r { line-height: 1; }
+.bk21-r-low { justify-self: end; transform: rotate(180deg); }
+.bk21-suit { justify-self: center; align-self: center; color: currentColor; opacity: .9; }
+.bk21-card.bk21-back {
+  background: repeating-linear-gradient(45deg,
+    var(--bk-neon, var(--pink)) 0 6px, var(--bk-neon-2, var(--lav)) 6px 12px);
+  border: 3px solid #fdf6f0;
+}
+/* THE DEAL. Added by the module only when motion is allowed, so still mode
+   never has a flattened spring to sit inside. */
+.bk21-card.bk21-in { animation: bk21-deal .3s cubic-bezier(.2, 1.4, .4, 1) 1; }
+@keyframes bk21-deal {
+  from { opacity: 0; transform: translate3d(28px, -34px, 0) rotate(9deg) scale(.9); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ----------------------------------------------------------------- the verbs */
+.bk21-verbs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bk21-btn {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+  padding: 9px 14px; border-radius: 8px; cursor: pointer;
+  color: var(--ink); background: var(--bk-plate, var(--panel));
+  border: 1px solid var(--bk-neon, var(--pink));
+}
+.bk21-btn.bk21-gold { border-color: var(--bk-brass, var(--gold)); color: var(--bk-brass, var(--gold)); }
+.bk21-btn.bk21-ghost { border-color: var(--line); color: var(--ink-dim); }
+.bk21-btn.bk21-back { margin-left: auto; }
+.bk21-btn:focus-visible { outline: 2px solid var(--bk-brass, var(--gold)); outline-offset: 2px; }
+.bk21-btn[disabled] { opacity: .45; cursor: default; }
+.bk21-btn[hidden] { display: none; }
+
+/* A table with no line to the counter says so and stops pretending to deal. */
+.bk21-dark .bk21-felt { opacity: .7; border-style: dashed; }
+
+/* The blackjack beat: the felt lifts for a moment. A beat, never a fanfare. */
+.bk21-beat .bk21-felt {
+  box-shadow: inset 0 0 40px #0008, 0 0 30px color-mix(in srgb, var(--bk-brass, var(--gold)), transparent 55%);
+}
+
+/* ------------------------------------------------------------------ the diet */
+/* A phone pays for glow and springs before it pays for the cards. It loses
+   both and keeps every rect, which is the only rule that matters here. */
+html.arc-mobile .bk21-felt, html.ae-lite .bk21-felt { padding: 10px 12px 14px; border-radius: 44px 44px 10px 10px; }
+html.arc-mobile .bk21-card, html.ae-lite .bk21-card { width: 42px; height: 60px; font-size: 11px; box-shadow: 0 2px 5px #0006; }
+html.arc-mobile .bk21-card.bk21-in, html.ae-lite .bk21-card.bk21-in { animation: none; }
+html.arc-mobile .bk21-hand, html.ae-lite .bk21-hand { min-height: 62px; }
+html.arc-mobile .bk21-crt, html.ae-lite .bk21-crt { width: 52px; height: 42px; box-shadow: none; }
+html.arc-mobile .bk21-eyes, html.ae-lite .bk21-eyes { top: 12px; }
+html.arc-mobile .bk21-eyes i, html.ae-lite .bk21-eyes i { width: 8px; height: 8px; box-shadow: none; animation: none; }
+html.arc-mobile .bk21-mouth, html.ae-lite .bk21-mouth { left: 17px; right: 17px; bottom: 9px; }
+html.arc-mobile .bk21-sub, html.ae-lite .bk21-sub { display: none; }
+/* The odds line takes the whole second row on a phone, and the way out stops
+   being pushed to the far edge where a thumb cannot reach it. */
+html.arc-mobile .bk21-odds, html.ae-lite .bk21-odds { flex: 1 0 100%; font-size: 10px; }
+html.arc-mobile .bk21-btn.bk21-back, html.ae-lite .bk21-btn.bk21-back { margin-left: 0; }
+html.arc-mobile .bk21-btn, html.ae-lite .bk21-btn { padding: 10px 11px; letter-spacing: .08em; }
+html.arc-mobile .bk21-beat .bk21-felt, html.ae-lite .bk21-beat .bk21-felt { box-shadow: inset 0 0 40px #0008; }
+
+/* Still mode. The freeze owns the durations; these are the two things a
+   flattened duration would otherwise leave looking like a fault. */
+html.arc-reduced .bk21-card.bk21-in { animation: none; }
+html.arc-reduced .bk21-eyes i { animation: none; }
