@@ -20,30 +20,25 @@ namespace ConditioningControlPanel.Avalonia.Helpers
     /// caller must treat as the WPF null path (draw the glyph, collapse the plate) rather than as
     /// a failure.</para>
     ///
-    /// <para><b>Three private copies are still out there, and all three are BYTE-FOR-BYTE this
-    /// method</b> - same order, same catches, same log shape - so folding each one in is a delete
-    /// plus a call-site rename, not a port:</para>
-    /// <list type="bullet">
-    ///   <item><c>TubeFitDialog.TryLoadImage</c> (CCP.Avalonia/Views/Dialogs/TubeFitDialog.axaml.cs)</item>
-    ///   <item><c>AvatarTubeWindow.TryLoadImage</c> (CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs)</item>
-    ///   <item><c>ModCreatorWindow.TryLoadSlotHint</c> (CCP.Avalonia/Views/Windows/ModCreatorWindow.axaml.cs)</item>
-    /// </list>
-    /// <para>Six <c>Views/Features/*FeatureControl.axaml.cs</c> notes and
-    /// <c>EmiRingWindow.LoadThumb</c> still point a future wirer at
-    /// "TubeFitDialog.TryLoadImage is the decode pattern"; THIS is the answer they should name.
-    /// None of those files is reachable from Helpers/, so the layer that owns them makes the swap.</para>
+    /// <para>All three private copies of this two-step are folded in: <c>TubeFitDialog</c> and
+    /// <c>AvatarTubeWindow</c> call <see cref="TryLoad"/> directly, and
+    /// <c>ModCreatorWindow.TryLoadSlotHint</c> is gone. Exactly two notes still point a future
+    /// wirer at "TubeFitDialog.TryLoadImage is the decode pattern" - a method this file's fold
+    /// deleted - and THIS is the answer they should name:
+    /// <c>Views/Features/BubbleCountFeatureControl.axaml.cs</c> and
+    /// <c>Views/Features/PinkFilterFeatureControl.axaml.cs</c>. Neither is reachable from
+    /// Helpers/, so the layer that owns them makes the swap.</para>
     ///
-    /// <para>ponytail: no decode cache, and that is a decision rather than a gap. WPF's resolver
-    /// keys one on (event skin, mod id, path) because it serves per-frame art; every caller here
-    /// loads a handful of small PNGs once at build-time of a view. Add one the first time a caller
-    /// loads inside a render or a tick. <c>Controls/TierBadge</c> keeps its own three-bitmap cache
-    /// and does NOT come through here on purpose - tier livery is commerce chrome that a mod must
+    /// <para>ponytail: no decode cache, and that is now a measured decision rather than a guess.
+    /// All 42 call sites on this head were read: every one sits in a constructor, a one-shot
+    /// build (BubbleCountWindow.LoadBubbleImage, AvatarTubeWindow.LoadAvatarPoses), or a
+    /// user-driven repaint (SetTubeStyle, a ModChanged handler) that stores the Bitmap it gets.
+    /// Nothing decodes inside a render or a tick, so a cache would buy nothing and would need
+    /// invalidating on every mod switch. WPF's resolver keys one on (event skin, mod id, path)
+    /// because it also serves per-frame bubble sprites; this head does not. Add one the first
+    /// time a caller loads inside a render or a tick. <c>Controls/TierBadge</c> keeps its own
+    /// three-bitmap cache and does NOT come through here on purpose - tier livery is commerce chrome that a mod must
     /// not be able to restyle, which is why the WPF badge also reaches past ModResourceResolver.</para>
-    ///
-    /// <para>ponytail: the event-skin tier of the WPF chain is missing, and that half is Core's -
-    /// <see cref="CoreModArt"/> has no event-skin provider, so an event cannot outrank a mod on
-    /// this head. Needs a provider on CCP.Core/Services/CoreModArt.cs before anything here can
-    /// use it.</para>
     /// </summary>
     internal static class ModArt
     {

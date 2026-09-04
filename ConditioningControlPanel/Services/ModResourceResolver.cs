@@ -362,27 +362,41 @@ namespace ConditioningControlPanel.Services
 
             soundRelativePath = soundRelativePath.Replace('\\', '/');
 
-            var modPath = App.Mods?.ActiveMod?.InstalledPath;
-            if (modPath != null)
-            {
-                var modSoundsDir = Path.Combine(modPath, "resources", "sounds");
-                var overridePath = Path.Combine(modSoundsDir, soundRelativePath.Replace('/', Path.DirectorySeparatorChar));
-
-                // Check exact match first
-                if (File.Exists(overridePath))
-                    return overridePath;
-
-                // Check alternate extensions (.wav <-> .mp3) so mods can use either format
-                var altExt = Path.GetExtension(overridePath).ToLowerInvariant() == ".mp3" ? ".wav" : ".mp3";
-                var altPath = Path.ChangeExtension(overridePath, altExt);
-                if (File.Exists(altPath))
-                    return altPath;
-            }
-
             // Shared sounds: bundled install dir first, downloaded content pack second. A miss in both
             // comes back as the install-dir path so callers' "file missing" handling is unchanged.
-            return ContentLocator.Resolve(Path.Combine(
-                "Resources", "sounds", soundRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            return ModOverrideAudioPath(soundRelativePath)
+                   ?? ContentLocator.Resolve(Path.Combine(
+                       "Resources", "sounds", soundRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        }
+
+        /// <summary>
+        /// The active mod's replacement cue for a sounds-relative path, or null when it ships
+        /// none. The override half of <see cref="ResolveAudioPath"/>, split out because that is
+        /// the only half Core can be told about: <c>CoreModArt.AudioOverridePathProvider</c> is
+        /// seeded from here, and each head keeps its own idea of where the SHIPPED cue lives
+        /// (<see cref="ContentLocator"/> on this one).
+        ///
+        /// <para>The .wav/.mp3 swap is part of the override rule, not of the fallback - a mod may
+        /// ship either format for a cue we bundle as the other - so it travels with the seam.</para>
+        /// </summary>
+        public static string? ModOverrideAudioPath(string soundRelativePath)
+        {
+            if (string.IsNullOrEmpty(soundRelativePath)) return null;
+            if (soundRelativePath.Contains("..") || Path.IsPathRooted(soundRelativePath)) return null;
+
+            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            if (modPath == null) return null;
+
+            var overridePath = Path.Combine(modPath, "resources", "sounds",
+                soundRelativePath.Replace('\\', '/').Replace('/', Path.DirectorySeparatorChar));
+
+            // Check exact match first
+            if (File.Exists(overridePath)) return overridePath;
+
+            // Check alternate extensions (.wav <-> .mp3) so mods can use either format
+            var altExt = Path.GetExtension(overridePath).ToLowerInvariant() == ".mp3" ? ".wav" : ".mp3";
+            var altPath = Path.ChangeExtension(overridePath, altExt);
+            return File.Exists(altPath) ? altPath : null;
         }
 
         /// <summary>
