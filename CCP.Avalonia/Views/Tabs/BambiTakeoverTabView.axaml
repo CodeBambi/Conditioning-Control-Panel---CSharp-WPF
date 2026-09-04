@@ -28,12 +28,14 @@
        RenderTransformOrigin="0,0.5"     -> "0%,50%" (same reason)
 
      Dropped, each for a reason that is not a shortcut:
-       pack:// takeover art (hero strip, ImgBambiTakeoverDesc, side plate) - this head ships no
-         Resources/features PNGs yet (LockdownTabView / SheListeningTabView precedent). All three
-         plates keep their geometry, border, mask and scrim and stand in a faded emoji; the named
-         Image hook ImgBambiTakeoverDesc is kept, Source-less, so the art is a one-line re-add.
+       pack:// takeover art (hero strip, ImgBambiTakeoverDesc, side plate) - RESTORED. All three
+         are painted from code-behind (ApplyFeatureArt) through Helpers.ModArt.TryLoad, which is
+         the mod override first and this head's linked Assets/features copy second, and the whole
+         BambiSleep "bambi takeover.png" / "takeover.png" fork comes with it. The wash, the faded
+         emoji and the scrim stay underneath as the no-art fallback.
        x:Name on the two ImageBrushes (TakeoverHeroArtBrush / TakeoverSideArtBrush) - AVLN2000,
-         only a StyledElement can be named; moot once the art under them is gone.
+         only a StyledElement can be named, so the two BORDERS carry the names instead
+         (TakeoverHeroArt / TakeoverSideArt) and the brushes are built in code.
        feat:AdaptiveSideArt.CollapseBelow and hover:HoverPop.IsEnabled - attached behaviours that
          live in the WPF head. The 3*/2* split with MaxWidth="780" is kept verbatim.
        x:FieldModifier="internal" - no host re-publishes these fields on this head. The x:Names are
@@ -111,7 +113,8 @@
                 <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
                     <Grid>
-                        <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                        <Border x:Name="TakeoverHeroArt"
+                                CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
                                 Background="{StaticResource TabHueWashBrush}">
                             <Border.OpacityMask>
                                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
@@ -792,7 +795,8 @@
                          Background to CornerRadius but does NOT clip child content, so a child
                          Image would square off the rounded corners (round-2 lesson). -->
                     <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                        <Border CornerRadius="14" BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
+                        <Border x:Name="TakeoverSideArt"
+                                CornerRadius="14" BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                                 Background="{StaticResource TabHueWashBrush}"
                                 MinHeight="200" MaxHeight="300" Margin="0,0,0,10">
                             <Grid>

@@ -100,13 +100,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- STUBS ----------------------------------------------------------------
 
-        // ponytail: needs QuestService, wired when it moves to Core.
+        // ponytail: needs ConditioningControlPanel/Services/Progression/QuestService.cs
+        // (RerollDailyQuest) plus the reroll budget on Models/QuestProgress.CanRerollWeekly.
         private void OnDailyCardRerollRequested(object? sender, EventArgs e) { }
 
-        // ponytail: needs QuestService, wired when it moves to Core.
+        // ponytail: needs ConditioningControlPanel/Services/Progression/QuestService.cs
+        // (RerollWeeklyQuest), as MainWindow.QuestsTab.cs:62 calls it.
         private void RerollWeekly() { }
 
-        // ponytail: needs QuestStreakService, wired when it moves to Core.
+        // ponytail: there is NO QuestStreakService - the name in the note this replaces does not
+        // exist anywhere in the repo. The streak fix is
+        // ConditioningControlPanel/Services/Progression/SkillTreeService.cs:423 (UseStreakShield,
+        // for the charge count) plus the signed-in check, painted by
+        // ConditioningControlPanel/MainWindow/MainWindow.QuestsTab.cs:748. The dates it writes,
+        // AppSettings.StreakShieldUsedDates, are already in Core.
         private void FixStreak() { }
 
         // ---- STREAK CALENDAR ------------------------------------------------------
@@ -115,7 +122,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// Placeholder streak strip: seven day pips across the canvas, the first four stamped.
         /// The WPF original paints this from MainWindow on every quest refresh; painting a sample
         /// here keeps the 50px band from rendering as an unexplained blank in the render proof.
-        /// ponytail: needs QuestStreakService for the real days, wired when it moves to Core.
+        /// ponytail: half of the real calendar is reachable - AppSettings.StreakShieldUsedDates is
+        /// in Core. The completion dates are not: they are QuestService.Progress
+        /// .DailyQuestCompletionDates from
+        /// ConditioningControlPanel/Services/Progression/QuestService.cs. WPF paints the whole
+        /// CURRENT MONTH day by day (MainWindow.QuestsTab.cs:563), not seven pips, so this
+        /// placeholder is a different shape as well as different data.
         /// </summary>
         private void PaintStreakCalendar()
         {

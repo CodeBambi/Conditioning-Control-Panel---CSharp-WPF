@@ -3,9 +3,11 @@ using System.Collections.ObjectModel;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
+using Avalonia;
 using Avalonia.Media;
+using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -14,26 +16,61 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// The WPF code-behind is a pure relay: every handler is
     /// <c>if (Window.GetWindow(this) is MainWindow mw) mw.&lt;same name&gt;(...)</c>, plus the
-    /// mod-aware feature art and the FX lifecycle hook. None of that can move yet, so the
-    /// handlers are stubs with identical names so the eventual wiring diffs cleanly.
+    /// mod-aware feature art and the FX lifecycle hook. The relay targets have not moved, so the
+    /// handlers are stubs with identical names so the eventual wiring diffs cleanly - but the
+    /// FEATURE ART is real again: Helpers.ModArt.TryLoad plus CoreMods.ModChanged is the same
+    /// answer WPF's ModResourceResolver gives, and Assets/features/deeper.png is linked here.
     /// </summary>
     public partial class DeeperTabView : UserControl
     {
         public DeeperTabView()
         {
-            AvaloniaXamlLoader.Load(this);
+            // InitializeComponent, NOT AvaloniaXamlLoader.Load: the loader does not assign the
+            // generated x:Name fields, so DeeperHeroArt/DeeperSideArt would be permanently null
+            // and ApplyFeatureArt would be a silent no-op (CLAUDE.md porting trap 7).
+            InitializeComponent();
             DataContext = new DeeperTabViewModel();
+            ApplyFeatureArt();
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            CoreMods.ModChanged += OnModChanged;
+            ApplyFeatureArt();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            CoreMods.ModChanged -= OnModChanged;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>ModChanged can be raised off the UI thread, so the repaint is marshalled.</summary>
+        private void OnModChanged(object? sender, ModPackage mod) =>
+            Dispatcher.UIThread.Post(ApplyFeatureArt);
+
+        /// <summary>
+        /// The two deeper.png plates, mod override first - the split of WPF's ModResourceResolver
+        /// repaint across the seam. A null answer leaves the authored wash, glyph and scrim, which
+        /// is what the resolver's own null path does.
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            var art = Helpers.ModArt.TryLoad("features/deeper.png");
+            if (art == null) return;
+
+            DeeperHeroArt.Background = new ImageBrush(art)
+            {
+                Stretch = Stretch.UniformToFill,
+                AlignmentX = AlignmentX.Right,
+            };
+            DeeperSideArt.Background = new ImageBrush(art) { Stretch = Stretch.UniformToFill };
         }
 
         // ponytail: needs MainWindow.OnDeeperTabVisibilityChanged (the header glyph's drift clock)
         // and MainWindow.DeeperFx, wired when the FX layer moves to Core. On WPF this rode
         // IsVisibleChanged; the Avalonia equivalent would be an IsVisibleProperty observer.
-
-        // ponytail: the resolver is NOT the blocker - CoreMods answers the active mod and
-        // CoreModArt/Helpers.ModArt resolve "features/deeper.png", which IS linked into this
-        // head. What is missing is the target: both plates are art-less in DeeperTabView.axaml
-        // (see its header), so there is no Image or ImageBrush to write into. Restoring this
-        // means changing the .axaml and this file together.
 
         // ponytail: every handler below routes to MainWindow on WPF
         // (Window.GetWindow(this) is MainWindow mw -> mw.<same name>). Needs the

@@ -1,7 +1,11 @@
 using System.Collections.Generic;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -9,11 +13,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// Ported from ConditioningControlPanel/Views/Tabs/HapticsTabView.xaml.cs.
     ///
     /// <para>On WPF this file is a forwarding shim: every handler hands straight to the MainWindow
-    /// partial (MainWindow/MainWindow.Haptics.cs), which owns all the state, and Loaded/Unloaded
-    /// repaint the vibe.png plates through ModResourceResolver on a mod switch. None of that can
-    /// come across yet - MainWindow, HapticService, HapticDeviceManager, ModService and
-    /// ModResourceResolver all still live in the WPF head - so the 34 forwards are stubs with the
-    /// same names, and the art hooks are gone with the art (see the .axaml header).</para>
+    /// partial (ConditioningControlPanel/MainWindow/MainWindow.Haptics.cs), which owns all the
+    /// state. That partial has not moved, so the 34 forwards are stubs with the same names.</para>
+    ///
+    /// <para><b>The art hooks are real again.</b> WPF's Loaded/Unloaded pair repainted the vibe.png
+    /// plates through ModResourceResolver; here <see cref="Helpers.ModArt.TryLoad"/> answers the
+    /// same question (mod override first, this head's avares:// copy second) and
+    /// <see cref="CoreMods.ModChanged"/> is the repaint signal. Neither the resolver nor the art
+    /// is the blocker any more - Assets/features/vibe.png is linked into this head.</para>
     /// </summary>
     public partial class HapticsTabView : UserControl
     {
@@ -88,6 +95,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // WPF fills this from the live device list; one entry so the themed ComboBox draws text.
             CmbPatternToy.Items.Add(new ComboBoxItem { Content = "Lush 3" });
             CmbPatternToy.SelectedIndex = 0;
+
+            ApplyFeatureArt();
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            CoreMods.ModChanged += OnModChanged;
+            ApplyFeatureArt();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            CoreMods.ModChanged -= OnModChanged;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>ModChanged can be raised off the UI thread, so the repaint is marshalled.</summary>
+        private void OnModChanged(object? sender, ModPackage mod) =>
+            Dispatcher.UIThread.Post(ApplyFeatureArt);
+
+        /// <summary>
+        /// The two vibe.png plates, mod override first. A null answer means neither the mod nor this
+        /// head has the picture; the authored bare surface then stands, which is what WPF's resolver
+        /// falls back to as well.
+        /// </summary>
+        private void ApplyFeatureArt()
+        {
+            var art = Helpers.ModArt.TryLoad("features/vibe.png");
+            if (art == null) return;
+
+            HapticsHeroArt.Background = new ImageBrush(art)
+            {
+                Stretch = Stretch.UniformToFill,
+                AlignmentX = AlignmentX.Right,
+            };
+            ImgVideoHapticSync.Source = art;
         }
 
         // ponytail: every handler below forwards to MainWindow on WPF

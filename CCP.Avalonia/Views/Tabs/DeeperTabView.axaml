@@ -14,13 +14,14 @@
        <ContentPresenter/>               ->  Content/ContentTemplate TemplateBinding (trap 6)
        DataTrigger placeholder overlay   ->  TextBox.Watermark (native, one attribute)
 
-     Dropped, each for a reason that is not a shortcut:
-       both deeper.png ImageBrush plates - this head ships no Resources/ PNGs yet
-         (AiPermissionsGrid precedent). The hero keeps its fade, the side plate keeps its
-         frame and gets a faded 🌊 the way SystemFeatureControl:221 does. Re-add as an
-         avares:// ImageBrush when the art moves.
-       x:Name on those two ImageBrushes  - AVLN2000, only a StyledElement can be named.
-       Border.OpacityMask                - moot once the art under it is gone.
+     Restored since the port:
+       both deeper.png plates - Assets/features/deeper.png is linked into this head, so
+         DeeperHeroArt and DeeperSideArt are named BORDERS painted from code-behind through
+         Helpers.ModArt.TryLoad + CoreMods.ModChanged (mod override first). The accent wash,
+         the 🌊 and the scrim stay underneath as the no-art fallback.
+       x:Name on those two ImageBrushes  - still AVLN2000; only a StyledElement can be named,
+         which is why the BORDER carries the name and the brush is built in code.
+       Border.OpacityMask                - kept; Avalonia has OpacityMask on Visual.
        feat:AdaptiveSideArt.CollapseBelow - attached behaviour lives in the WPF head.
        PanningMode, VirtualizingPanel.*, ScrollViewer.CanContentScroll and the ItemsControl's
          inner-ScrollViewer template - the outer ScrollViewer already scrolls the page.
@@ -322,10 +323,9 @@
                     <!-- Art plate. Spans both columns and is declared first, so the identity block
                          and the action cluster draw over it. Right-aligned at a fixed 240 - well
                          under the width the action cluster already gives the Auto column, so the
-                         span can never inflate it.
-                         ponytail: the deeper.png ImageBrush + its left-fade OpacityMask are
-                         dropped - this head ships no Resources/ PNGs. Only the accent wash is
-                         drawn. Re-add as an avares:// ImageBrush when the art moves. -->
+                         span can never inflate it. The accent wash below is the no-art
+                         fallback; DeeperHeroArt overwrites it with deeper.png when the art
+                         resolves. -->
                     <Border Grid.Column="0" Grid.ColumnSpan="2"
                             CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right">
                         <Border.Background>
@@ -334,6 +334,16 @@
                                 <GradientStop Color="#387B5CFF" Offset="1"/>
                             </LinearGradientBrush>
                         </Border.Background>
+                    </Border>
+                    <Border x:Name="DeeperHeroArt" Grid.Column="0" Grid.ColumnSpan="2"
+                            CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                            Opacity="0.9">
+                        <Border.OpacityMask>
+                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                                <GradientStop Color="#00000000" Offset="0"/>
+                                <GradientStop Color="#E6000000" Offset="0.55"/>
+                            </LinearGradientBrush>
+                        </Border.OpacityMask>
                     </Border>
 
                     <!-- Identity: drifting glyph + title/BETA + one-line pitch. A Grid (not a
@@ -820,11 +830,10 @@
 
                 <!-- SIDE ART. Top-pinned with a fixed 520px height (same as AwarenessTabView's side
                      plate) so it sits directly under the hero bar.
-                     ponytail: the deeper.png ImageBrush is dropped - this head ships no Resources/
-                     PNGs. The plate keeps its frame, its accent wash and its scrim, and carries a
-                     faded glyph the way SystemFeatureControl:221 does. Re-add as an avares://
-                     ImageBrush when the art moves. -->
-                <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                     Background is set from code-behind (deeper.png, mod override first); the
+                     accent wash, the faded glyph and the scrim below are the no-art fallback. -->
+                <Border x:Name="DeeperSideArt"
+                        Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                         BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                         Background="{StaticResource DeeperHueWashBrush}"
                         VerticalAlignment="Top" Height="520">
