@@ -1,7 +1,10 @@
+using System;
 using System.Text.RegularExpressions;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using Avalonia.Input.Platform;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -9,13 +12,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// PORTED from ConditioningControlPanel/Dialogs/UpdateNotificationDialog.xaml.cs. Deviations:
     ///  - <c>DialogResult</c> becomes <c>Close(bool)</c>; Avalonia carries the result through
     ///    <c>ShowDialog&lt;bool?&gt;</c>.
-    ///  - <c>UpdateService.GetCurrentVersion()</c>, <c>UpdateService.ReleasesPageUrl</c> and
-    ///    <c>BrowserLauncher</c> live in the WPF head, so they are stubbed (see below).
+    ///  - <c>UpdateService.GetCurrentVersion()</c> becomes <c>CoreReleaseContent.AppVersion</c>,
+    ///    which answers "0.0.0" on a head that seeded no provider - the same string the stub used
+    ///    to hardcode, so nothing regresses when the seam is unseeded.
+    ///  - <c>UpdateService.ReleasesPageUrl</c> is <c>ReleaseLinks.ReleasesPageUrl</c> in Core, and
+    ///    <c>BrowserLauncher</c>'s two steps (open, else copy) are the platform Launcher plus the
+    ///    clipboard - the same pair <see cref="UpdateFailedDialog"/> uses. Neither needed the WPF
+    ///    head after all.
     ///  - The version/size/notes strings are English literals in the WPF original too - there are
     ///    no loc keys for them - so they are copied verbatim rather than invented.
     /// </summary>
     public partial class UpdateNotificationDialog : Window
     {
+        // Same address, same Core constant UpdateFailedDialog reads.
+        private const string ReleasesPageUrl = ConditioningControlPanel.Services.ReleaseLinks.ReleasesPageUrl;
+
         /// <summary>
         /// Whether the user chose to install the update
         /// </summary>
@@ -34,8 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             AvaloniaXamlLoader.Load(this);
 
-            // ponytail: needs UpdateService.GetCurrentVersion(), wired when UpdateService moves to Core
-            const string currentVersion = "0.0.0";
+            var currentVersion = CoreReleaseContent.AppVersion;
 
             this.FindControl<TextBlock>("TxtVersionInfo")!.Text =
                 $"Version {updateInfo.Version} is now available.\n" +
@@ -90,10 +100,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// Opens the GitHub releases page so the user can install the update by hand. The dialog
         /// stays open - they may still want the automatic install if the browser route falls over.
         /// </summary>
-        private void LinkManualDownload_Click()
+        private async void LinkManualDownload_Click()
         {
-            // ponytail: needs BrowserLauncher.OpenUrlOrPrompt(UpdateService.ReleasesPageUrl,
-            // "open the download page"), wired when both move to Core
+            // BrowserLauncher's two steps, and the second one is the point: Launcher REPORTS
+            // failure rather than throwing when nothing handles the URI (no xdg-open, no default
+            // browser), so the result is checked as well as the exception and the link still
+            // reaches the clipboard on a machine with no usable browser.
+            var opened = false;
+            try
+            {
+                opened = await Launcher.LaunchUriAsync(new Uri(ReleasesPageUrl));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to open the releases page");
+            }
+
+            if (opened) return;
+
+            Log.Warning("Could not open the releases page; copying the link instead");
+            try
+            {
+                if (Clipboard is not null) await Clipboard.SetTextAsync(ReleasesPageUrl);
+            }
+            catch (Exception ex)
+            {
+                // The clipboard can be held by another app - say nothing, the dialog stays open
+                // and the automatic install is still one button away.
+                Log.Warning(ex, "Failed to copy the releases link to the clipboard");
+            }
         }
 
         private void BtnLater_Click()

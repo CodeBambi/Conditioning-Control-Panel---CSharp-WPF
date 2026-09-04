@@ -23,11 +23,14 @@
      is not what the WPF dialog shows. Naming the key here is the smallest fix that does not touch
      a file another layer owns; drop it if the implicit ControlTheme is ever added.
 
-     The two Image elements are placeholder Borders. tube.png / tube2.png and the four avatar
-     poses come from Services.ModResourceResolver (WPF head, pack:// URIs) and this head ships no
-     Resources/ PNGs yet - see the ponytail notes in the code-behind. Everything the dialog exists
-     to show (the nested-Viewbox tube geometry, the margin formulas, the scale transform and the
-     readouts) still runs against the placeholders. -->
+     The two Image elements are Borders, not Images, because each one paints EITHER real art or a
+     placeholder. tube.png / tube2.png and the four avatar poses load through Helpers.ModArt
+     (CoreModArt override first, then this head's avares:// copy of the same file), and a loaded
+     bitmap becomes the Border's Uniform ImageBrush inside the box WPF's <Image> occupied, with the
+     gradient, the frame and the file-name label dropped. A slot that will not load keeps the
+     placeholder, so the dialog never goes blank - and everything it exists to show (the
+     nested-Viewbox geometry, the margin formulas, the scale transform, the readouts) runs either
+     way. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
@@ -140,9 +143,17 @@
                         <Grid Width="780" Height="1020" ClipToBounds="True">
                             <Viewbox Stretch="Uniform">
                                 <Grid Width="780" Height="1080" ClipToBounds="False">
-                                    <!-- Stands in for <Image x:Name="PreviewTube"/>. Its margin is
-                                         retargeted in code so the attached/detached switch moves the
-                                         tube exactly as swapping tube.png for tube2.png does. -->
+                                    <!-- WPF's PreviewTube, verbatim: no size, Uniform, centred in
+                                         this 780x1080 grid. tube.png and tube2.png are both 2048
+                                         square and carry the attached/detached difference inside
+                                         the art, so swapping the Source is the whole switch. -->
+                                    <Image x:Name="PreviewTubeImage" Stretch="Uniform"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           IsVisible="False"/>
+
+                                    <!-- Shown only when neither the mod nor this head has the art.
+                                         Its margin is retargeted in code so the attached/detached
+                                         switch still MOVES something on a head with no PNGs. -->
                                     <Border x:Name="PreviewTube" Width="330" Height="980"
                                             HorizontalAlignment="Left" VerticalAlignment="Top"
                                             CornerRadius="165" BorderThickness="10"

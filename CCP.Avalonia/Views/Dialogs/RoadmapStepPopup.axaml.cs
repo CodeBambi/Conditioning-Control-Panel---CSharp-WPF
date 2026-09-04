@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ConditioningControlPanel.Models;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -16,7 +17,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// Popup window shown when a roadmap step is completed.
     ///
     /// PORTED from ConditioningControlPanel/Dialogs/RoadmapStepPopup.xaml.cs. Deviations:
-    ///  - <c>App.Logger</c> calls are dropped; the logger lives on the WPF App singleton.
+    ///  - <c>App.Logger</c> becomes Serilog's static <c>Log</c>, which every head configures.
     ///  - <c>App.Roadmap.GetFullPhotoPath</c> becomes <c>MainShellWindow.Roadmap</c>'s; the
     ///    checkmark stays. <see cref="LoadPhotoThumbnail"/> is otherwise the WPF body.
     ///  - <c>SystemParameters.WorkArea</c> -> <c>Screens.Primary.WorkingArea</c>, which is in
@@ -147,9 +148,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 _photoEllipse.IsVisible = true;
                 _checkmarkIcon.IsVisible = false;
             }
-            catch
+            catch (Exception ex)
             {
-                // Keep showing checkmark icon
+                // Keep showing the checkmark icon - a step whose photo will not decode still
+                // reports as completed, which is what the popup is for.
+                Log.Warning(ex, "[RoadmapStepPopup] Could not load the step photo thumbnail");
             }
         }
 

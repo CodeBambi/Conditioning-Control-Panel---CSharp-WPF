@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using ConditioningControlPanel.Localization;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -20,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - <c>MouseLeftButtonDown</c> + <c>DragMove()</c> -> <c>PointerPressed</c> + <c>BeginMoveDrag</c>.
     ///  - Newtonsoft's <c>JObject</c> -> <c>System.Text.Json</c>: the head has no Newtonsoft
     ///    reference and one bool read does not justify adding one.
-    ///  - <c>App.Logger</c> in the availability catch is dropped; the logger is on the WPF App.
+    ///  - <c>App.Logger</c> in the availability catch becomes Serilog's static <c>Log</c>.
     ///  - <c>ConfigureForNewUser</c> no longer re-assigns TxtSubtitle.Text. The WPF body set it to
     ///    the very key the XAML already carries, and assigning over a <c>{loc:Str}</c> binding is
     ///    undone on the next language change (see CLAUDE.md).
@@ -132,6 +133,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
             catch (Exception ex)
             {
+                Log.Warning(ex, "[UsernamePicker] Display-name availability check failed");
                 SetAvailabilityStatus(Loc.GetF("login_could_not_check", ex.Message), Brushes.Orange, false);
             }
         }
