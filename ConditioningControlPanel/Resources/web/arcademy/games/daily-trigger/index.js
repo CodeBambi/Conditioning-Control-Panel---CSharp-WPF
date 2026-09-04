@@ -883,7 +883,7 @@ export default {
     const DT_CAT_FALLBACK = Object.freeze({
       trance: 'spirally', training: 'training arc', submission: "yes ma'am",
       denial: 'not yet', bimbo: 'glittery', arcade: 'hometown',
-      school: 'classroom', melt: 'melty', common: 'civilian',
+      school: 'classroom', melt: 'melty', focus: 'fresh air', common: 'civilian',
     });
 
     /** Letters nailed in place so far. Two is a player closing in, not a player
