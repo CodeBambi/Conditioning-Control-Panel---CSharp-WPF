@@ -4389,6 +4389,11 @@ Application State:
                 // happened to quote. LogScrubber only cleaned that up at bug-report upload time,
                 // which is far too late for a file that is already sitting in the logs folder.
                 File.AppendAllText(crashLogPath, Services.Logging.LogRedactor.Redact(crashInfo));
+
+                // The stack says where it died; the flight recorder says what led there. Dump the
+                // ring next to the crash so the report carries the minutes BEFORE it, which is the
+                // half every freeze/black-video report has been missing.
+                Services.Logging.FlightRecorderSink.DumpIfActive("crash");
             }
             catch
             {
