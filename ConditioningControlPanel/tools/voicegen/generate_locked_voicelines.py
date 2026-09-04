@@ -87,7 +87,7 @@ ACTIVITY_OVERRIDES = {
 # render all 8 slots. Written straight into the Locked asset-gen source folder;
 # build_locked_resources.py copies them to resources/sounds/.
 HUMS_DIR = (
-    r"C:\Projects\Conditioning-Control-Panel---CSharp-WPF\Tools\asset_gen\output\locked_sounds"
+    r"C:\Projects\Conditioning-Control-Panel---CSharp-WPF\ConditioningControlPanel\tools\asset_gen\output\locked_sounds"
 )
 HUM_LINES = [
     ("giggle1", "Mmm."),

@@ -19,9 +19,9 @@ import os
 import shutil
 import zipfile
 
-ASSET_GEN = os.path.dirname(os.path.abspath(__file__))                 # .../Tools/asset_gen
+ASSET_GEN = os.path.dirname(os.path.abspath(__file__))                 # .../ConditioningControlPanel/tools/asset_gen
 OUTPUT = os.path.join(ASSET_GEN, "output")
-CCP = os.path.normpath(os.path.join(ASSET_GEN, "..", "..", "ConditioningControlPanel"))
+CCP = os.path.normpath(os.path.join(ASSET_GEN, "..", "..", "..", "ConditioningControlPanel"))
 LOCKEDMOD = os.path.join(CCP, "LockedMod")
 BUNDLE = os.path.join(LOCKEDMOD, "locked-resources.ccpmod")
 

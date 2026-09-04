@@ -16,7 +16,7 @@ namespace ConditioningControlPanel.Services.Moderation
     /// - <see cref="ModerationGuard"/> is the load-bearing defense; this is the
     ///   in-prompt second layer (Layer 2). When the two disagree, the guard wins.
     ///
-    /// See AI_AUDIT.md §15 for full rationale and CCBill cross-reference.
+    /// See docs/audits/AI_AUDIT.md §15 for full rationale and CCBill cross-reference.
     /// </summary>
     internal static class SafetyComposer
     {
