@@ -368,12 +368,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             base.OnClosed(e);
             StopAudioPreview();
-            if (_tutorialOverlay != null)
-            {
-                CoreTutorial.Skip();
-                _tutorialOverlay.Close();
-                _tutorialOverlay = null;
-            }
+            // Null the field BEFORE closing, and do not Skip here. TutorialOverlay.OnClosed already
+            // skips a still-running tour, and it also subscribes to CoreTutorial.Finished and closes
+            // itself from it - so calling Skip() first would close the overlay, run the Closed
+            // handler below that nulls this field, and leave the next line dereferencing null.
+            var overlay = _tutorialOverlay;
+            _tutorialOverlay = null;
+            overlay?.Close();
             CleanupTempDir();
         }
 
