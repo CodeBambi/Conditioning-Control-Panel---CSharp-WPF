@@ -1072,6 +1072,19 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public Task<bool> StartAsync() => Task.Run(() => Start());
 
+        /// <summary>
+        /// Runs <see cref="Stop"/> on a worker thread, for the same reason
+        /// <see cref="StartAsync"/> exists. Stop() joins the capture thread with
+        /// 2s + 3s timeouts and then disposes the OpenCV capture and the three
+        /// ONNX sessions; on a wedged driver that is a 5s UI freeze followed by a
+        /// native teardown that can take seconds more (BUG-BRR252E2RM: the panel
+        /// "acts as if the system is under a very heavy load", only closable from
+        /// Task Manager). UI callers should await this rather than calling Stop()
+        /// directly. The shutdown path (Dispose) keeps the synchronous Stop(),
+        /// because the process must not exit while the join is still pending.
+        /// </summary>
+        public Task StopAsync() => Task.Run(() => Stop());
+
         public void Stop()
         {
             Thread? thread;
@@ -1105,10 +1118,10 @@ namespace ConditioningControlPanel.Services
             {
                 if (!thread.Join(TimeSpan.FromSeconds(2)))
                 {
-                    App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s — extending wait");
+                    App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s (thread state {ThreadState}) — extending wait", thread.ThreadState);
                     if (!thread.Join(TimeSpan.FromSeconds(3)))
                     {
-                        App.Logger?.Error("WebcamTrackingService: capture thread did not exit within 5s total — leaving native handles alive to avoid disposal race");
+                        App.Logger?.Error("WebcamTrackingService: capture thread did not exit within 5s total (thread state {ThreadState}) — leaving native handles alive to avoid disposal race. The abandoned loop throttles itself and exits once the driver returns.", thread.ThreadState);
                         lock (_stateLock)
                         {
                             SetState(WebcamTrackingState.Error);
@@ -1806,6 +1819,18 @@ namespace ConditioningControlPanel.Services
 
                     if (!capture.Read(frame) || frame.Empty())
                     {
+                        // Read() can sit for seconds on a wedged driver, so a stop
+                        // may have been requested (and even abandoned by Stop()'s
+                        // join) while we were inside it. Back off before looping:
+                        // once Stop() has given up, nothing else throttles this
+                        // thread, and a dead camera fails Read() instantly - that
+                        // is the tight spin that pegs a core and makes the whole
+                        // machine feel loaded (BUG-BRR252E2RM).
+                        if (_stopRequested)
+                        {
+                            Thread.Sleep(100);
+                            break;
+                        }
                         consecutiveReadFails++;
                         if (consecutiveReadFails >= MaxConsecutiveReadFails)
                         {
@@ -1817,6 +1842,12 @@ namespace ConditioningControlPanel.Services
                         continue;
                     }
                     consecutiveReadFails = 0;
+
+                    // Honour a stop request within one frame: skip ~20-30ms of
+                    // inference (and the UI events it raises) for a frame nobody
+                    // is waiting for any more, so Stop()'s join lands inside its
+                    // first timeout instead of leaking the thread.
+                    if (_stopRequested) break;
 
                     // Capture-clock fps watchdog. Ticked HERE — the instant
                     // Read() returned a frame, before any processing and before
