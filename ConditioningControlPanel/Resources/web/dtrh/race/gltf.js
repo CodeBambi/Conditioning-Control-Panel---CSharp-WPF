@@ -232,8 +232,10 @@ export function setFace(model, index) {
   const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
   const i = Math.min(FACE_N - 1, Math.max(0, index | 0));
   let hit = false;
-  for (const m of mats) {
-    const tex = m && m.map;
+  // the atlas may ride the base map or the emissive map (emi.glb puts it on the emissive
+  // slot so the screen stays self-lit); shift whichever the material carries
+  for (const m of mats) for (const key of ['map', 'emissiveMap']) {
+    const tex = m && m[key];
     if (!tex) continue;
     tex.wrapS = THREE.RepeatWrapping;
     tex.magFilter = THREE.NearestFilter;
