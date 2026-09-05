@@ -50,6 +50,7 @@ CAMERA, GAZE AND COMPANION
 - the Focus Gaze switch shows your setting, not whether the engine happens to be running.
 - companion roster cards show each companion's XP mechanic again (hover the card).
 - the AI companion's ""play audio"" effect stops claiming it played something when it did not.
+- daily and weekly quests stop dealing Blink Trainer tasks to machines with no camera. a re-roll never costs you the same dead quest twice.
 - switching mods repaints the Studio rack in the right colours instead of the previous mod's.
 
 THE ARCADEMY (from the suggestions forum)
