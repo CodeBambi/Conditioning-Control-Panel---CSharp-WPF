@@ -37,6 +37,12 @@ namespace ConditioningControlPanel.Services
         // terse (one short line per transition), so 200 lines covers several videos plus a whole
         // freeze window at a few KB — well inside the crash-log-sized fields the server accepts.
         private const int MaxVideoDiagLines = 200;
+        // Flight-recorder attachment. The ring holds Debug detail that has never reached a disk
+        // before, so it is the most valuable thing in the field and also the largest; these caps
+        // keep the whole app-log field inside the server's 200,000-char limit with room to spare.
+        private const int MaxAppLogChars = 120_000;
+        private const int MaxDiagDumpChars = 60_000;
+        internal const int MaxAppLogFieldChars = 190_000;
         // Diagnostic-line rescue (#634 + freeze reports). The last-N tail scrolls the [RES]/
         // [WATCHDOG] history out of every report because a relaunch writes far more startup
         // chatter than MaxAppLogLines. Scan a much wider tail and keep only the marker lines so
@@ -150,7 +156,11 @@ namespace ConditioningControlPanel.Services
             var appCounts = ScrubberCounts.Empty;
             if (includeAppLog && !isSuggestion)
             {
-                var appLogRaw = TryReadRecentAppLog(MaxAppLogLines);
+                // Freeze the ring FIRST: whatever the user was doing when they hit "report" is
+                // still in memory at this instant and nowhere else.
+                Services.Logging.FlightRecorderSink.DumpIfActive("bugreport");
+
+                var appLogRaw = Tail(TryReadRecentAppLog(MaxAppLogLines), MaxAppLogChars);
 
                 // #616/#617/#621/#622/#623: the app-log tail alone was useless for the v6.5.0 freeze
                 // reports. A user whose PC had to be hard-reset must relaunch the app to file the
@@ -166,6 +176,14 @@ namespace ConditioningControlPanel.Services
                       "===== video/panic diagnostic trace (video-diag.log) =====" + Environment.NewLine +
                       diagRaw;
 
+                // The flight-recorder dump: the last 4,096 events including Debug, which the file
+                // sink never carried. For a freeze or a black video this is the only part of the
+                // report that says what happened BEFORE the symptom.
+                var ring = Tail(TryReadNewestDiagDump(), MaxDiagDumpChars);
+                if (!string.IsNullOrWhiteSpace(ring))
+                    combined = combined + Environment.NewLine + Environment.NewLine +
+                        "===== flight recorder (diag dump) =====" + Environment.NewLine + ring;
+
                 // #634 + freeze reports: rescue the [RES]/[WATCHDOG] resource+hang timeline from a
                 // much wider window of the rolling app log so it survives even when the 100-line
                 // tail above is all startup chatter. Appended to the same field before scrubbing,
@@ -176,6 +194,10 @@ namespace ConditioningControlPanel.Services
                         "## Diagnostics (sampled)" + Environment.NewLine + diagSampled;
 
                 (scrubbedApp, appCounts) = LogScrubber.Scrub(combined);
+
+                // Hard cap below the server's 200,000, applied AFTER scrubbing so the cap can never
+                // decide which text got redacted. Newest wins - the tail is the failure.
+                scrubbedApp = Tail(scrubbedApp, MaxAppLogFieldChars);
             }
 
             var totalCounts = crashCounts.Add(appCounts);
@@ -666,6 +688,36 @@ namespace ConditioningControlPanel.Services
             if (section.Length > MaxDiagSectionChars)
                 section = section.Substring(section.Length - MaxDiagSectionChars);
             return section;
+        }
+
+        /// <summary>Keep the last <paramref name="maxChars"/> characters. Empty in, empty out.</summary>
+        internal static string Tail(string? text, int maxChars)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            return text!.Length <= maxChars ? text! : text!.Substring(text!.Length - maxChars);
+        }
+
+        /// <summary>
+        /// Read the newest flight-recorder dump. Written moments ago by CreateDraft, or by the
+        /// crash/hang triggers if the app died before the user could file anything.
+        /// </summary>
+        private static string TryReadNewestDiagDump()
+        {
+            try
+            {
+                var logDir = Path.Combine(App.UserDataPath, "logs");
+                var newest = Services.Logging.FlightRecorderSink.NewestDump(logDir);
+                if (newest == null) return string.Empty;
+                using var fs = new FileStream(newest, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+                using var sr = new StreamReader(fs, Encoding.UTF8);
+                return sr.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[BugReport] diag dump read failed: {Msg}", ex.Message);
+                return string.Empty;
+            }
         }
 
         /// <summary>

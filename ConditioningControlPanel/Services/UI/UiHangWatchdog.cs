@@ -336,6 +336,11 @@ public static class UiHangWatchdog
 
             App.Logger?.Error("[WATCHDOG] hang report written: {Path}", path);
             VideoDiag.Log("WATCHDOG", "hang report written: " + path);
+
+            // The hang report is a snapshot of the moment; the flight recorder is the run-up to it.
+            // A frozen UI is exactly the case where the last few hundred Debug lines - which have
+            // never reached a disk before - say which subsystem stopped answering.
+            Services.Logging.FlightRecorderSink.DumpIfActive("hang");
         }
         catch (Exception ex)
         {

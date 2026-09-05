@@ -14,10 +14,14 @@ namespace ConditioningControlPanel.Services.Logging
     public static class LogPipeline
     {
         /// <summary>
-        /// The global floor, held as a switch rather than a constant so the flight recorder can
-        /// drop it to Debug later without the file sink following it down.
+        /// The global floor. Debug, so the 2,927 Debug calls in this codebase finally go SOMEWHERE:
+        /// the flight recorder's ring, in memory. The file sink below is restricted separately, so
+        /// what lands on disk is unchanged unless --verbose asks otherwise.
         /// </summary>
-        public static readonly LoggingLevelSwitch LevelSwitch = new(LogEventLevel.Information);
+        public static readonly LoggingLevelSwitch LevelSwitch = new(LogEventLevel.Debug);
+
+        /// <summary>Identifies this run in diag dumps (and, from the session-files PR, the header).</summary>
+        public static string SessionId { get; } = DateTime.Now.ToString("yyyyMMdd-HHmmss");
 
         /// <summary>8 MB. The daily roll alone let one bad loop write an unbounded file.</summary>
         public const long FileSizeLimitBytes = 8L * 1024 * 1024;
@@ -62,7 +66,10 @@ namespace ConditioningControlPanel.Services.Logging
             LogRedactor.ConfigureRoots(App.UserDataPath, AppContext.BaseDirectory);
             LogRedactor.AssetsRootProvider = () => App.EffectiveAssetsPath;
 
-            LevelSwitch.MinimumLevel = verbose ? LogEventLevel.Debug : LogEventLevel.Information;
+            LevelSwitch.MinimumLevel = LogEventLevel.Debug;
+
+            var recorder = new FlightRecorderSink(logsDir, SessionId);
+            FlightRecorderSink.Instance = recorder;
 
             // The file sink is built as its own logger so it can be WRAPPED. Serilog's Logger is an
             // ILogEventSink, which is the only way to put the throttle between the pipeline and the
@@ -96,6 +103,9 @@ namespace ConditioningControlPanel.Services.Logging
                 // touches, but the formatter needs BOTH properties present when it renders.
                 .Enrich.With(new CategoryEnricher())
                 .Enrich.With(new RedactingEnricher())
+                // Debug reaches the ring and nothing else. The file keeps its Information floor
+                // unless this run asked for verbose, so enabling Debug costs disk nothing.
+                .WriteTo.Sink(recorder)
                 .WriteTo.Sink(throttled,
                     restrictedToMinimumLevel: verbose ? LogEventLevel.Debug : LogEventLevel.Information);
 
