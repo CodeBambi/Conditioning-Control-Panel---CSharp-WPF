@@ -1577,7 +1577,10 @@ namespace ConditioningControlPanel.Services
                         }
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
-                        App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);
+                        // Status + size only: the error body echoes fields from the profile we
+                        // just posted, and logs get pasted into Discord support threads.
+                        App.Logger?.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)",
+                            (int)v2Response.StatusCode, error?.Length ?? 0);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
                         // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
                         // retrying cannot change those answers. A 5xx is transient like the 429
@@ -1596,12 +1599,20 @@ namespace ConditioningControlPanel.Services
                     PendingCosmeticsClear = false;
 
                     var v2Json = await v2Response.Content.ReadAsStringAsync();
-                    App.Logger?.Information("V2 Profile synced successfully: {Response}", v2Json);
+                    // The response is the user's whole profile (~2.7 KB of JSON, and 11% of every
+                    // log file we ever received). Size here; the fields we actually act on are
+                    // summarised at Debug once the payload is deserialised, just below.
+                    App.Logger?.Information("V2 Profile synced successfully ({Bytes} bytes)", v2Json?.Length ?? 0);
 
                     // Check for server-side flags in V2 sync response
                     try
                     {
                         var v2Result = JsonConvert.DeserializeObject<V2SyncResponse>(v2Json);
+                        App.Logger?.Debug(
+                            "V2 Sync response: ok={Success} sp={SkillPoints} skills={SkillCount} xp={TotalXp} mins={Minutes} cosmetics={HasCosmetics} webXp={HasWebXp}",
+                            v2Result?.Success, v2Result?.SkillPoints, v2Result?.UnlockedSkills?.Count ?? 0,
+                            v2Result?.TotalXpEarned, v2Result?.TotalConditioningMinutes,
+                            v2Result?.Cosmetics != null, v2Result?.WebXp != null);
                         if (v2Result?.ResetWeeklyQuest == true)
                         {
                             App.Logger?.Information("V2 Sync: Server requested weekly quest reset");
@@ -2344,7 +2355,16 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to sync profile to cloud");
+                // The overwhelmingly common instance of this is the exit-time sync: the app is
+                // tearing down while the request is in flight, so the HttpClient is disposed and
+                // the task cancels. That is expected shutdown behaviour, not an error, and its
+                // 16-line TaskCanceledException stack was filed at ERR on every single quit.
+                // Anything else is a real failure and keeps the whole exception.
+                if (IsExpectedCancellation(ex))
+                    App.Logger?.Warning("Profile sync did not finish: {ExType}: {Error}",
+                        ex.GetType().Name, ex.Message);
+                else
+                    App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
                 // Mobile streak parity: the cloud is unreachable, so a deferred streak break
                 // gets the pre-parity behavior now instead of waiting out the full timeout.
@@ -3894,6 +3914,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Adds the X-Auth-Token header to a V2 API request if an auth token is available.
         /// </summary>
+        /// <summary>
+        /// True when an exception out of a sync/backup call is the app shutting down mid-request
+        /// (or the request timing out) rather than a genuine failure. Those are expected, so they
+        /// are logged as one compact Warning line with no stack: an ERR plus a 16-line
+        /// TaskCanceledException stack on every clean exit is noise that hides real errors.
+        /// </summary>
+        private static bool IsExpectedCancellation(Exception ex)
+        {
+            // TaskCanceledException derives from OperationCanceledException, so one check covers
+            // both. HttpClient wraps a disposed-during-shutdown handler either way round depending
+            // on where the teardown caught it, so look through one level of wrapping too.
+            if (ex is OperationCanceledException || ex is ObjectDisposedException) return true;
+            var inner = ex.InnerException;
+            return inner is OperationCanceledException || inner is ObjectDisposedException;
+        }
+
         private static void AddAuthHeader(HttpRequestMessage request)
         {
             var token = App.Settings?.Current?.AuthToken;
@@ -4275,7 +4311,13 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Settings backup failed");
+                // Same shape as the profile sync above: a backup interrupted by shutdown or a
+                // server cooldown is expected, and does not need a stack on disk.
+                if (IsExpectedCancellation(ex))
+                    App.Logger?.Warning("Settings backup did not finish: {ExType}: {Error}",
+                        ex.GetType().Name, ex.Message);
+                else
+                    App.Logger?.Warning(ex, "Settings backup failed");
                 return false;
             }
         }

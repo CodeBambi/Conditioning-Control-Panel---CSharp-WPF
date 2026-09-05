@@ -341,7 +341,7 @@ public class QuestDefinitionService : IDisposable
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to cache quest image for {QuestId}: {Url}", quest.Id, quest.ImageUrl);
+                App.Logger?.Warning(ex, "Failed to cache quest image for {QuestId} from {Host}", quest.Id, Logging.UrlLog.Host(quest.ImageUrl));
             }
         }
     }

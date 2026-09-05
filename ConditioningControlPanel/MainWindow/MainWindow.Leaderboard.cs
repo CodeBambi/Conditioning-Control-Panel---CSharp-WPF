@@ -922,7 +922,7 @@ namespace ConditioningControlPanel
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "Failed to open Discord profile for user {DiscordId}", discordId);
+                    App.Logger?.Warning(ex, "Failed to open Discord profile for a leaderboard entry");
                 }
             }
         }
@@ -932,7 +932,7 @@ namespace ConditioningControlPanel
             // Get the double-clicked item
             if (LeaderboardTab?.LstLeaderboard?.SelectedItem is Services.LeaderboardEntry entry && !string.IsNullOrEmpty(entry.DisplayName))
             {
-                App.Logger?.Information("Leaderboard double-click: Opening profile for {DisplayName}", entry.DisplayName);
+                App.Logger?.Information("Leaderboard double-click: Opening profile for rank {Rank}", entry.Rank);
 
                 // Switch to Discord tab (which contains the Profile Viewer)
                 ShowTab("discord");

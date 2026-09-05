@@ -152,7 +152,7 @@ public class GamificationBridge : IDisposable
                 if (ach != null) ach.SuppressPopups = wasSuppressed;
             }
 
-            App.Logger?.Information("GamificationBridge started — achievement subscriptions wired");
+            App.Logger?.Debug("GamificationBridge started — achievement subscriptions wired");
         }
         catch (Exception ex)
         {

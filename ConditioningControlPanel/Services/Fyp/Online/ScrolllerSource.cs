@@ -337,8 +337,8 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
             var text = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
-                App.Logger?.Warning("[FYP online] scrolller API HTTP {Code}: {Body}",
-                    (int)resp.StatusCode, text.Length > 200 ? text[..200] : text);
+                App.Logger?.Warning("[FYP online] scrolller API HTTP {Code} (body {Bytes} bytes)",
+                    (int)resp.StatusCode, text?.Length ?? 0);
                 return null;
             }
             var parsed = JObject.Parse(text);

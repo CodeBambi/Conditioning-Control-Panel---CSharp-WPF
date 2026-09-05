@@ -31,11 +31,11 @@ const dom = {
 // Uncaught errors go to the host log - there are no devtools in the hosted page.
 window.addEventListener('error', (e) => {
   const src = e.filename ? ` @ ${String(e.filename).split('/').pop()}:${e.lineno}` : '';
-  bridge.log('error: ' + (e.message || 'script error') + src);
+  bridge.log('error', 'error: ' + (e.message || 'script error') + src);
 });
 window.addEventListener('unhandledrejection', (e) => {
   const r = e.reason;
-  bridge.log('promise: ' + ((r && (r.message || r.stack || r)) || 'unknown'));
+  bridge.log('error', 'promise: ' + ((r && (r.message || r.stack || r)) || 'unknown'));
 });
 
 const media = createHostMediaSource();
@@ -84,7 +84,7 @@ async function maybeStart() {
     bridge.log('engine live (game mode)');
   } catch (err) {
     bootSettled = true;
-    bridge.log('3D boot failed: ' + (err && (err.stack || err.message) || err));
+    bridge.log('error', '3D boot failed: ' + (err && (err.stack || err.message) || err));
     bridge.send({ type: 'boot-error', msg: String(err && err.message || err) });
     if (dom.loader) dom.loader.hidden = true;
     if (dom.nope) dom.nope.hidden = false;
@@ -108,7 +108,7 @@ function armBootDeadline() {
   bootDeadline = setTimeout(() => {
     if (bootSettled) return;
     bootSettled = true;
-    bridge.log('boot deadline (45s since last progress) - engine never came live'
+    bridge.log('error', 'boot deadline (45s since last progress) - engine never came live'
       + (initMsg ? '' : ' [no init]') + (haveManifest ? '' : ' [no manifest]'));
     bridge.send({ type: 'boot-error', msg: 'boot deadline: engine not live 45s after last progress' });
     if (dom.loader) dom.loader.hidden = true;

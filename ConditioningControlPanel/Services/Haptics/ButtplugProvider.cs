@@ -49,7 +49,7 @@ namespace ConditioningControlPanel.Services.Haptics
         public void SetUrl(string url)
         {
             _serverUrl = url;
-            Log.Debug("ButtplugProvider: URL set to {Url}", url);
+            Log.Debug("ButtplugProvider: URL set to {Host}", Logging.UrlLog.Host(url));
         }
 
         /// <summary>Snapshot of the devices we currently drive (never enumerate the field directly).</summary>
@@ -69,7 +69,7 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             try
             {
-                Log.Information("ButtplugProvider: Connecting to {Url}", _serverUrl);
+                Log.Information("ButtplugProvider: Connecting to {Host}", Logging.UrlLog.Host(_serverUrl));
 
                 // Create client
                 _client = new ButtplugClient("Conditioning Control Panel");

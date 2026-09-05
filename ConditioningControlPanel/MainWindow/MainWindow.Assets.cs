@@ -268,7 +268,7 @@ namespace ConditioningControlPanel
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("Failed to load preview image from {Url}: {Error}", url, ex.Message);
+                    App.Logger?.Debug("Failed to load preview image from {Host}: {Error}", Services.Logging.UrlLog.Host(url), ex.Message);
                 }
             }
 

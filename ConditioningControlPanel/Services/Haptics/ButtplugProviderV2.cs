@@ -151,7 +151,7 @@ namespace ConditioningControlPanel.Services.Haptics
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
                     throw new UriFormatException($"'{url}' is not a valid WebSocket URL.");
 
-                Log.Information("ButtplugProviderV2: connecting to {Url}", url);
+                Log.Information("ButtplugProviderV2: connecting to {Host}", Logging.UrlLog.Host(url));
 
                 client = new ButtplugClient("Conditioning Control Panel");
                 client.DeviceAdded += OnDeviceAdded;
@@ -179,7 +179,7 @@ namespace ConditioningControlPanel.Services.Haptics
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "ButtplugProviderV2: connect failed ({Url})", url);
+                Log.Warning(ex, "ButtplugProviderV2: connect failed ({Host})", Logging.UrlLog.Host(url));
                 RaiseError($"Intiface connection failed: {ex.Message}");
                 if (!ReferenceEquals(client, _client))
                 {

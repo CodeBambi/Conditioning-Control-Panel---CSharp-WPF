@@ -540,7 +540,7 @@ namespace ConditioningControlPanel.Services
 
             try { EnabledChanged?.Invoke(this, false); } catch { }
 
-            App.Logger?.Information("AutonomyService: Stopped");
+            App.Logger?.Debug("AutonomyService: Stopped");
         }
 
         /// <summary>
@@ -550,7 +550,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void CancelActivePulses()
         {
-            App.Logger?.Information("AutonomyService: CancelActivePulses called");
+            App.Logger?.Debug("AutonomyService: CancelActivePulses called");
 
             var settings = App.Settings?.Current;
             if (settings == null) return;
@@ -808,7 +808,7 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue?.IsBusy == true);
             };
             _heartbeatTimer.Start();
-            App.Logger?.Information("AutonomyService: Heartbeat timer started (logs every 30s)");
+            App.Logger?.Debug("AutonomyService: Heartbeat timer started (logs every 30s)");
         }
 
         /// <summary>
@@ -1510,7 +1510,8 @@ namespace ConditioningControlPanel.Services
             _shownWebVideos.Add(videoName);
             App.Logger?.Debug("AutonomyService: Shown {Shown}/{Total} web videos", _shownWebVideos.Count, videoList.Count);
 
-            App.Logger?.Information("AutonomyService: Playing web video '{Name}' at {Url}", videoName, videoUrl);
+            App.Logger?.Information("AutonomyService: Playing web video {Index}/{Total} on {Host}",
+                _shownWebVideos.Count, videoList.Count, Logging.UrlLog.Host(videoUrl));
 
             // Find MainWindow - try multiple approaches
             var mainWindow = Application.Current?.MainWindow as MainWindow
@@ -1974,19 +1975,21 @@ namespace ConditioningControlPanel.Services
                     // (no XP, no quest, no program day).
                     if (App.Mantra?.TryCompleteMantra() != true)
                         App.Mantra?.CreditExternalMantra();
-                    App.Logger?.Information("AutonomyService: SpokenMantra matched '{Phrase}' (score={Score:0.00}, conf={Conf:0.00})",
-                        phrase, result.Score, result.Confidence);
+                    App.Logger?.Information("AutonomyService: SpokenMantra matched ({Chars} chars, score={Score:0.00}, conf={Conf:0.00})",
+                        (phrase ?? "").Length, result.Score, result.Confidence);
                 }
                 else if (result.TimedOut && string.IsNullOrWhiteSpace(result.Transcript))
                 {
                     SpeakLine(App.MantraVoice?.GetTimeout(), "Too shy? I'll ask again later~");
-                    App.Logger?.Information("AutonomyService: SpokenMantra timed out (no speech) for '{Phrase}'", phrase);
+                    App.Logger?.Information("AutonomyService: SpokenMantra timed out, no speech ({Chars} chars)", (phrase ?? "").Length);
                 }
                 else
                 {
                     SpeakLine(App.MantraVoice?.GetRetry(), "Mmm, not quite. Next time say it just for me~");
-                    App.Logger?.Information("AutonomyService: SpokenMantra miss for '{Phrase}' — heard '{Heard}' (score={Score:0.00})",
-                        phrase, result.Transcript, result.Score);
+                    // Never the transcript: that is a recording of the user's own voice in text
+                    // form, and it is the one thing in this method they did not choose to write down.
+                    App.Logger?.Information("AutonomyService: SpokenMantra miss ({Chars} chars, heard {HeardChars} chars, score={Score:0.00})",
+                        (phrase ?? "").Length, (result.Transcript ?? "").Length, result.Score);
                 }
             }
             catch (Exception ex)

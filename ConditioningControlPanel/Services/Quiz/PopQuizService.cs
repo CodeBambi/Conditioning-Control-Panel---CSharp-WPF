@@ -138,7 +138,7 @@ namespace ConditioningControlPanel.Services
             // Close any open quiz windows
             CloseAllQuizWindows();
 
-            App.Logger?.Information("PopQuizService stopped");
+            App.Logger?.Debug("PopQuizService stopped");
         }
 
         private static void CloseAllQuizWindows()

@@ -56,7 +56,7 @@ public class SkillTreeService : IDisposable
         _pinkRushCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
         _pinkRushCheckTimer.Tick += PinkRushCheckTimer_Tick;
 
-        App.Logger?.Information("SkillTreeService initialized");
+        App.Logger?.Debug("SkillTreeService initialized");
     }
 
     #region Skill Management

@@ -238,7 +238,7 @@ namespace ConditioningControlPanel.Services.JustDrop
                 switch (type)
                 {
                     case "ready":
-                        App.Logger?.Information("JustDrop bridge: page ready");
+                        App.Logger?.Debug("JustDrop bridge: page ready");
                         break;
 
                     case "session-start":

@@ -651,7 +651,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     || !IsAllowedPreviewHost(uri))
                 {
                     e.Cancel = true;
-                    App.Logger?.Debug("DeeperEditor: blocked preview navigation to {Url}", e.Uri);
+                    App.Logger?.Debug("DeeperEditor: blocked preview navigation to {Host}", Services.Logging.UrlLog.Host(e.Uri));
                 }
             }
             catch
