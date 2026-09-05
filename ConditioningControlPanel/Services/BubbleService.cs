@@ -96,7 +96,7 @@ public class BubbleService : IDisposable
                 if (hwnd != IntPtr.Zero) handles.Add(hwnd);
             }
         }
-        catch { /* a diagnostic/reconciler accessor must never throw */ }
+        catch (Exception ex) { Diag.Swallowed(ex, "diagnostic accessor must never throw"); }
         return handles;
     }
 
@@ -418,7 +418,7 @@ public class BubbleService : IDisposable
             hop.Tick += (_, _) =>
             {
                 hop.Stop();
-                try { if (t.IsAlive) t.Pop(); } catch { }
+                try { if (t.IsAlive) t.Pop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             };
             hop.Start();
         }
@@ -456,7 +456,7 @@ public class BubbleService : IDisposable
             hop.Tick += (_, _) =>
             {
                 hop.Stop();
-                try { if (target.IsAlive) target.Pop(); } catch { }
+                try { if (target.IsAlive) target.Pop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             };
             hop.Start();
         }
@@ -688,7 +688,7 @@ public class BubbleService : IDisposable
             // thread wedged in CWGXBitmapLockState::LockRead) — give the surge a beat to pass.
             await Task.Delay(2500, ct);
         }
-        catch (OperationCanceledException) { /* run ended / shutdown mid-egg */ }
+        catch (OperationCanceledException) { } // swallow: run ended or shutdown mid-egg
         catch (Exception ex) { App.Logger?.Debug("Avatar bubble egg failed: {E}", ex.Message); }
         finally
         {
@@ -696,7 +696,7 @@ public class BubbleService : IDisposable
             // 4) send the companion home (re-attach or restore coords); swallow if we're tearing down
             try { if (avatar != null && Application.Current?.Dispatcher?.HasShutdownStarted != true)
                       await avatar.ReturnFromBubbleAsync(CancellationToken.None); }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             _avatarEggActive = false;
             _avatarEggCooldownUntil = DateTime.UtcNow + TimeSpan.FromSeconds(AVATAR_EGG_COOLDOWN_SEC);
         }
@@ -706,7 +706,7 @@ public class BubbleService : IDisposable
     /// the claimed bubble can actually be cleared (the claim-pop guard would otherwise strand it).</summary>
     private void CancelAvatarEgg()
     {
-        try { _eggCts?.Cancel(); } catch { }
+        try { _eggCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
         foreach (var b in _bubbles) if (b.ClaimedByAvatar) b.ReleaseAvatarClaim();
         _avatarEggActive = false;
     }
@@ -744,7 +744,7 @@ public class BubbleService : IDisposable
                 return (int)Math.Clamp(r.TotalTime.TotalMilliseconds + 900, 1500, 6000);
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         return (int)Math.Clamp((text?.Length ?? 0) * 55 + 600, 1500, 4500);
     }
 
@@ -809,7 +809,7 @@ public class BubbleService : IDisposable
         if (!_ambientHost) return;
         _ambientHost = false;
         Bubble.AmbientHostActive = false;
-        try { _ambientHook?.Dispose(); } catch { }
+        try { _ambientHook?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _ambientHook = null;
         ChaosBubbleHostOverlay.CloseActive();
         if (ChaosClickDiscsSnapshot.Length > 0) ChaosClickDiscsSnapshot = Array.Empty<(double, double, double, bool)>();
@@ -1781,7 +1781,7 @@ public class BubbleService : IDisposable
             foreach (var b in _bubbles)
                 if (b.HintKey == key) b.HideHint();
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>Drop every tether + window (field cleared / run over).</summary>
@@ -1854,7 +1854,7 @@ public class BubbleService : IDisposable
                 hop.Tick += (_, _) =>
                 {
                     hop.Stop();
-                    try { if (target.IsAlive) target.Pop(); } catch { }
+                    try { if (target.IsAlive) target.Pop(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 };
                 hop.Start();
             }
@@ -2116,7 +2116,7 @@ public class BubbleService : IDisposable
                 // Direct cleanup without dispatcher - force destroy
                 foreach (var bubble in _bubbles.ToArray())
                 {
-                    try { bubble.ForceDestroy(); } catch { }
+                    try { bubble.ForceDestroy(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _bubbles.Clear();
                 return;
@@ -2156,7 +2156,7 @@ public class BubbleService : IDisposable
         Stop();
 
         // Close pooled bubble window shells (static pool holds hidden HWNDs for the process life).
-        try { DispatcherHelper.RunOnUI(Bubble.DrainWindowPool); } catch { }
+        try { DispatcherHelper.RunOnUI(Bubble.DrainWindowPool); } catch (Exception ex) { Diag.Swallowed(ex); }
 
         // Audio devices are no longer pooled here — AudioService owns every one-shot device
         // and disposes it deterministically (#778/#779).
@@ -2252,7 +2252,7 @@ internal class Bubble
         if (w == null) return;
         // Restore the topmost default: a Free Desktop chaos bubble may have set this false, and the
         // pool is shared with ambient bubbles that must always ride on top.
-        try { w.Effect = null; w.Content = null; w.Opacity = 0; w.Topmost = true; w.Hide(); } catch { }
+        try { w.Effect = null; w.Content = null; w.Opacity = 0; w.Topmost = true; w.Hide(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (_windowPoolCount < WINDOW_POOL_MAX)
         {
             if (!_windowPool.TryGetValue(bucket, out var stack))
@@ -2263,7 +2263,7 @@ internal class Bubble
             stack.Push(w);
             _windowPoolCount++;
         }
-        else { try { w.Close(); } catch { } }
+        else { try { w.Close(); } catch (Exception ex) { Diag.Swallowed(ex); } }
     }
 
     /// <summary>Close every pooled shell (service Dispose / app shutdown) — the pool is static
@@ -2274,7 +2274,7 @@ internal class Bubble
         {
             while (stack.Count > 0)
             {
-                try { stack.Pop()?.Close(); } catch { }
+                try { stack.Pop()?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
         _windowPool.Clear();
@@ -2579,7 +2579,7 @@ internal class Bubble
             _bubbleImage.Effect = new DropShadowEffect
             { Color = Color.FromRgb(0xFF, 0x2D, 0x2D), BlurRadius = 30, ShadowDepth = 0, Opacity = 0.95 };
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosLabel("ENRAGED", Color.FromRgb(0xFF, 0x5A, 0x5A));
     }
     // ---- prism shadow pop ("Look at the bright colors...") ----
@@ -3238,7 +3238,7 @@ internal class Bubble
                         Opacity = 0.85
                     };
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
 
@@ -3248,7 +3248,7 @@ internal class Bubble
         {
             _isSpanked = true;
             _spankGrowth = 1.0;
-            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x8A, 0x14), BlurRadius = 36, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
+            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x8A, 0x14), BlurRadius = 36, ShadowDepth = 0, Opacity = 1.0 }; } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // Show + alt-tab hide (per-window mode only — the host/layer is already shown). A recycled shell
@@ -3356,7 +3356,7 @@ internal class Bubble
                             Canvas.SetTop(sp.Shape, sp.Y - sp.Size / 2);
                             sp.Shape.Opacity = Math.Max(0, sp.Alpha);
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
 
                     _sparkles[i] = sp;
@@ -3889,7 +3889,7 @@ internal class Bubble
                     Opacity = 0.8
                 };
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // Spawn sparkle particles if sparkle boost is unlocked
@@ -4064,7 +4064,7 @@ internal class Bubble
             BubbleService.ChaosLastPopXPx = popPx.X;
             BubbleService.ChaosLastPopYPx = popPx.Y;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosLabel("SNAP", SnapColor);
         // First-contact verb hints: a completed hold is the lesson (per-variant key). Bound
         // pairs learn on the PAIR clearing (OnBoundHalfResolved) — one half held isn't enough.
@@ -4137,7 +4137,7 @@ internal class Bubble
                 if (ChaosSkiaFxOverlay.Enabled)
                     ChaosSkiaFxOverlay.Burst(popPx, _spec.IsLive ? SnapColor : _spec.Tint, _spec.IsLive ? 1.3 : 1.0);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             // Mimic prism: the shadow pop — the copied bubble ghosts out underneath the burst.
             if (_spec.IsPrism && _prismGhost != null)
             {
@@ -4147,7 +4147,7 @@ internal class Bubble
                     _prismGhost.BeginAnimation(UIElement.OpacityProperty,
                         new System.Windows.Media.Animation.DoubleAnimation(0.6, 0, TimeSpan.FromMilliseconds(650)));
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
             // Chaos bubble: a live bubble clicked in time is a DEFUSE (reward, no payload);
             // a darter caught is its own reward path; a benign bubble is a treat.
@@ -4198,7 +4198,7 @@ internal class Bubble
             // steer and hurry it — no compounding back up to comedy size.
             _spankGrowth = Math.Max(1.0, BubbleService.ChaosSpankGrowNow);
             // It changes color: the chase-glow deepens to a hot ally-pink.
-            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
+            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch (Exception ex) { Diag.Swallowed(ex); }
             ShowChaosLabel("SPANKED", Color.FromRgb(0xFF, 0x4D, 0xC4));
         }
     }
@@ -4226,7 +4226,7 @@ internal class Bubble
         {
             _isSpanked = true;
             _spankGrowth = 1.0;   // no Spanker swell — the wave only throws it
-            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch { }
+            try { _bubbleImage.Effect = new DropShadowEffect { Color = Color.FromRgb(0xFF, 0x14, 0x93), BlurRadius = 34, ShadowDepth = 0, Opacity = 1.0 }; } catch (Exception ex) { Diag.Swallowed(ex); }
             ShowChaosLabel("FLUNG", Color.FromRgb(0x7A, 0xE0, 0xFF));
         }
     }
@@ -4247,7 +4247,7 @@ internal class Bubble
             if (ChaosSkiaFxOverlay.Enabled)
                 ChaosSkiaFxOverlay.Burst(px, Color.FromRgb(0xFF, 0x3D, 0x5A), 1.4);   // risk-red detonation
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosLabel("✖", Color.FromRgb(0xFF, 0x3D, 0x5A));
         _onTeaseTouched?.Invoke(this);
     }
@@ -4267,7 +4267,7 @@ internal class Bubble
             BubbleService.ChaosLastPopXPx = px.X;
             BubbleService.ChaosLastPopYPx = px.Y;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         if (_prismGhost != null)
         {
             try
@@ -4276,7 +4276,7 @@ internal class Bubble
                 _prismGhost.BeginAnimation(UIElement.OpacityProperty,
                     new System.Windows.Media.Animation.DoubleAnimation(0.6, 0, TimeSpan.FromMilliseconds(650)));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
         ShowChaosLabel("SHATTER", Color.FromRgb(0xCF, 0xEC, 0xFF));
         _onBrittleShattered?.Invoke(this);
@@ -4335,7 +4335,7 @@ internal class Bubble
             BubbleService.ChaosLastPopXPx = detPx.X;
             BubbleService.ChaosLastPopYPx = detPx.Y;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ShowChaosEffectLabel();   // the live effect is firing → flash its color-coded word at the bubble
         _onDetonate?.Invoke(this);
         // Pop/burst animation + Destroy handled by AnimateFrame().
@@ -4366,7 +4366,7 @@ internal class Bubble
             double cy = _posY + _size / 2.0;
             ChaosPopText.Show(cx, cy + yOffsetDip, word, color);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>Builds the chaos-only visual layers (tint, label, fuse ring). No-op for ambient bubbles.</summary>
@@ -4622,7 +4622,7 @@ internal class Bubble
             _hintEl.BeginAnimation(UIElement.OpacityProperty, null);
             _hintEl.Visibility = Visibility.Collapsed;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         _hintEl = null;
     }
 
@@ -4677,7 +4677,7 @@ internal class Bubble
                 && _teaseAnimatedAlive < PerformanceProfile.MaxAnimatedTeaseBubbles(PerformanceProfile.CurrentTier))
             {
                 long len = 0;
-                try { len = new FileInfo(path).Length; } catch { }
+                try { len = new FileInfo(path).Length; } catch (Exception ex) { Diag.Swallowed(ex); }
                 animate = len > 0 && len <= ChaosTuning.TEASE_ANIMATED_MAX_BYTES;
             }
             if (animate)
@@ -4719,9 +4719,9 @@ internal class Bubble
                                 if (_teaseStillCache.Count > 12) _teaseStillCache.Clear();
                                 _teaseStillCache[file] = bmp;
                             }
-                            Application.Current?.Dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch { } });
+                            Application.Current?.Dispatcher.BeginInvoke(() => { try { img.Source = bmp; } catch (Exception ex) { Diag.Swallowed(ex); } });
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     });
                 }
             }
@@ -4846,24 +4846,24 @@ internal class Bubble
             // leaving it on a recycled pooled window would root this dead bubble forever.
             if (_winClickHandler != null)
             {
-                try { _window.MouseLeftButtonDown -= _winClickHandler; } catch { }
-                try { _window.MouseRightButtonDown -= _winClickHandler; } catch { }
+                try { _window.MouseLeftButtonDown -= _winClickHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { _window.MouseRightButtonDown -= _winClickHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
                 _winClickHandler = null;
             }
             _grid.Children.Clear();
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
 
         if (_useLayer)
         {
             // Layer mode: drop the draw item (disposes its owned tease frames) — no window, no Canvas child.
-            try { if (_layerItem != null) s_layer?.Remove(_layerItem); } catch { }
+            try { if (_layerItem != null) s_layer?.Remove(_layerItem); } catch (Exception ex) { Diag.Swallowed(ex); }
             _layerItem = null;
         }
         else if (_useHost)
         {
             // Host mode: pull the grid off the shared Canvas — there's no per-bubble window to recycle.
-            try { ChaosBubbleHostOverlay.Remove(_grid); } catch { }
+            try { ChaosBubbleHostOverlay.Remove(_grid); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
         else
         {
@@ -4874,7 +4874,7 @@ internal class Bubble
         }
 
         // Notify service to remove from list (after animation completed)
-        try { _onDestroy?.Invoke(this); } catch { }
+        try { _onDestroy?.Invoke(this); } catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -4892,7 +4892,7 @@ internal class Bubble
             if (hwnd == IntPtr.Zero) return;
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -4914,7 +4914,7 @@ internal class Bubble
             int side = (int)Math.Round(_winDim * _dpiScale);
             SetWindowPos(hwnd, IntPtr.Zero, px, py, side, side, SWP_NOZORDER | SWP_NOACTIVATE);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     #region Win32
@@ -4979,7 +4979,7 @@ internal class Bubble
             if (hwnd == IntPtr.Zero) return;
             SetWindowLong(hwnd, GWL_EXSTYLE, GetWindowLong(hwnd, GWL_EXSTYLE) | WS_EX_TRANSPARENT);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private void HideFromAltTab()
@@ -4999,7 +4999,7 @@ internal class Bubble
                 flags |= WS_EX_TRANSPARENT;
             SetWindowLong(hwnd, GWL_EXSTYLE, flags);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private const int GWL_EXSTYLE = -20;

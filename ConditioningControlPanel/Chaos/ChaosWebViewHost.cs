@@ -259,7 +259,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         _countedActive = true;
         System.Threading.Interlocked.Increment(ref _activeHostCount);
         if (_opts.OwnedByMainWindow) AttachMainWindowGlue();
-        if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
+        if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
 
         _ = InitWebAsync();
         App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
@@ -373,7 +373,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             if (_window.ActualHeight > 0) _windowedH = _window.ActualHeight;
         }
         ApplyWindowMode(on);
-        if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
+        if (_opts.InputEnabled) { try { _window.Activate(); } catch (Exception ex) { Diag.Swallowed(ex); } }
     }
 
     // ======================= host-owned fullscreen (Options.HostOwnedFullscreen) =======================
@@ -462,8 +462,8 @@ internal sealed class ChaosWebViewHost : IDisposable
         // the claim after another window took focus is how a modal ends up alive and invisible
         // BEHIND the page, holding the input queue with no way to reach the button that dismisses
         // it. Dropped on deactivation, taken back on activation.
-        _window.Deactivated += (_, _) => { try { if (_isFullscreen && _window != null) _window.Topmost = false; } catch { } };
-        _window.Activated += (_, _) => { try { if (_isFullscreen && _window != null) _window.Topmost = true; } catch { } };
+        _window.Deactivated += (_, _) => { try { if (_isFullscreen && _window != null) _window.Topmost = false; } catch (Exception ex) { Diag.Swallowed(ex); } };
+        _window.Activated += (_, _) => { try { if (_isFullscreen && _window != null) _window.Topmost = true; } catch (Exception ex) { Diag.Swallowed(ex); } };
     }
 
     /// <summary>
@@ -490,7 +490,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             // Pump the render queue between the frame change and the maximize; skipping it is what
             // produces the mis-sized first frame on per-monitor-DPI displays.
             try { _window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render); }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
         _window.WindowState = WindowState.Maximized;
         _window.Topmost = true;
@@ -562,7 +562,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             _window?.Activate();
             _web?.Focus();
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     // ============================ main-window glue ============================
@@ -624,7 +624,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                         System.Windows.Threading.DispatcherPriority.Background,
                         new Action(EnsureNativeVisible));
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             };
             main.StateChanged += _glueOwnerStateChanged;
             App.Logger?.Information("{Tag}: glued above MainWindow (native owner)", _opts.LogTag);
@@ -694,7 +694,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                 // at the top of the NON-topmost band — still under the tube, which is how the tube ended
                 // up floating over the Graded Intake window. SinkToMainZOrder self-marshals to the avatar
                 // thread (never block main on it), so it lands right after our own insert below and wins.
-                try { App.AvatarWindow?.SinkToMainZOrder(); } catch { }
+                try { App.AvatarWindow?.SinkToMainZOrder(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 var insertAfter = _glueOwnerHandle;
                 var tube = App.AvatarWindow?.AttachedHandleOrZero ?? IntPtr.Zero;
                 if (tube != IntPtr.Zero && IsWindowVisible(tube)) insertAfter = tube;
@@ -759,7 +759,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                     System.Windows.Threading.DispatcherPriority.Background,
                     new Action(() => KickRenderVisibility("owner-minimize cascade vetoed")));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
         return IntPtr.Zero;
     }
@@ -785,7 +785,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                     System.Windows.Threading.DispatcherPriority.Background,
                     new Action(() => KickRenderVisibility("cascade hide healed")));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
         catch (Exception ex) { App.Logger?.Debug("{Tag}.EnsureNativeVisible: {E}", _opts.LogTag, ex.Message); }
     }
@@ -819,7 +819,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             if (_disposed || _window == null || _web == null) return;
             if (!_window.Dispatcher.CheckAccess())
             {
-                try { _window.Dispatcher.BeginInvoke(new Action(() => KickRenderVisibility(reason))); } catch { }
+                try { _window.Dispatcher.BeginInvoke(new Action(() => KickRenderVisibility(reason))); } catch (Exception ex) { Diag.Swallowed(ex); }
                 return;
             }
             if (_window.Visibility != Visibility.Visible) return;   // hidden on purpose (tray)
@@ -841,7 +841,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                     c.IsVisible = true;
                 }
             }
-            catch { /* SDK internals moved — the element bounce below still re-drives the wrapper */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "SDK internals moved, the element bounce below still re-drives the wrapper"); }
 
             bool elementWas = _web.IsVisible;
             _web.Visibility = Visibility.Hidden;
@@ -867,13 +867,13 @@ internal sealed class ChaosWebViewHost : IDisposable
             if (_glueOwner != null && _glueOwnerStateChanged != null)
                 _glueOwner.StateChanged -= _glueOwnerStateChanged;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         try
         {
             if (_glueHwndSource != null && _glueWndHook != null)
                 _glueHwndSource.RemoveHook(_glueWndHook);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         ApplyNativeOwner(false);
         _glueAttached = false;
         _glueOwner = null;
@@ -1082,7 +1082,7 @@ internal sealed class ChaosWebViewHost : IDisposable
     {
         var setting = Models.MotionLevel.Full;
         try { setting = App.Settings?.Current?.MotionLevel ?? Models.MotionLevel.Full; }
-        catch { /* no settings yet = the default, Full */ }
+        catch (Exception ex) { Diag.Swallowed(ex, "no settings yet, so the default stands"); }
         var arg = PrefersReducedMotionArgument(setting);
 
         // THE BREADCRUMB THAT SETTLES THE NEXT REPORT, at Information because Serilog's floor is
@@ -1098,7 +1098,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                     "{Tag}: Windows animation effects are OFF; hosted page is kept in motion anyway ({Arg}) - #980",
                     _opts.LogTag, arg);
         }
-        catch { /* the flag is unreadable on some sessions; the argument still stands */ }
+        catch (Exception ex) { Diag.Swallowed(ex, "the flag is unreadable on some sessions, the argument still stands"); }
 
         return arg;
     }
@@ -1331,7 +1331,7 @@ internal sealed class ChaosWebViewHost : IDisposable
     private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
     {
         App.Logger?.Warning("{Tag}: WebView2 process failed ({Kind})", _opts.LogTag, e.ProcessFailedKind);
-        try { _opts.OnProcessFailed?.Invoke(e.ProcessFailedKind); } catch { }
+        try { _opts.OnProcessFailed?.Invoke(e.ProcessFailedKind); } catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -1406,7 +1406,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         if (_web?.CoreWebView2 == null) return;
         foreach (var json in _pending)
         {
-            try { _web.CoreWebView2.PostWebMessageAsJson(json); } catch { }
+            try { _web.CoreWebView2.PostWebMessageAsJson(json); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
         _pending.Clear();
     }
@@ -1426,10 +1426,10 @@ internal sealed class ChaosWebViewHost : IDisposable
                 _web.CoreWebView2.PermissionRequested -= OnPermissionRequested;
             }
         }
-        catch { }
-        try { DetachMainWindowGlue(); } catch { }
-        try { _web?.Dispose(); } catch { }
-        try { _window?.Close(); } catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+        try { DetachMainWindowGlue(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _web?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _window?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (_countedActive) { _countedActive = false; System.Threading.Interlocked.Decrement(ref _activeHostCount); }
         _web = null; _window = null; IsReady = false; _pending.Clear();
     }
@@ -1451,7 +1451,7 @@ internal sealed class ChaosWebViewHost : IDisposable
             int ex = GetWindowLong(hwnd, GWL_EXSTYLE);
             SetWindowLong(hwnd, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private const int GWL_EXSTYLE = -20;

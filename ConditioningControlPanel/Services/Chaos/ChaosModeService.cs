@@ -218,7 +218,7 @@ public sealed class ChaosModeService
                 ChaosPopText.Show(BubbleService.ChaosLastPopXDip, BubbleService.ChaosLastPopYDip - 30,
                     $"+{amount} {ChaosGlyphs.Drops} {label}", Color.FromRgb(0xC8, 0xA8, 0xFF));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }));
     }
 
@@ -239,7 +239,7 @@ public sealed class ChaosModeService
                 _lastRevealToastUtc = DateTime.UtcNow;
                 _state.PushEvent("something new in the dollhouse.");
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }));
     }
 
@@ -607,7 +607,7 @@ public sealed class ChaosModeService
     /// <summary>Close the Warren-phase sidebar (hub closed or a run is taking over).</summary>
     public void CloseLoadoutSidebar()
     {
-        try { _preHud?.Close(); } catch { }
+        try { _preHud?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _preHud = null;
         _preState = null;
     }
@@ -745,30 +745,30 @@ public sealed class ChaosModeService
         // would fight them bringing a browser/work window forward.
         if (!ChaosWindowZ.PinTopmost) return;
         // Bottom of the gameplay band: ambient FX that read fine UNDER the bubbles.
-        try { ChaosFieldFxOverlay.RaiseActive(); } catch { }
-        try { ChaosSkiaFxOverlay.RaiseActive(); } catch { }
+        try { ChaosFieldFxOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosSkiaFxOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
         // The shared bubble host (when enabled) sits just above the ambient FX, below the chrome.
-        try { ChaosBubbleHostOverlay.RaiseActive(); } catch { }
-        try { ChaosPopText.RaiseActive(); } catch { }
-        try { ChaosDvdOverlay.RaiseActive(); } catch { }
-        try { ChaosEffectBannerOverlay.RaiseActive(); } catch { }
-        try { ChaosAnnouncerOverlay.RaiseActive(); } catch { }
-        try { ChaosCursorGlowOverlay.RaiseActive(); } catch { }
-        try { ChaosEStimOverlay.RaiseActive(); } catch { }
-        try { ChaosVibeTrailOverlay.RaiseActive(); } catch { }
+        try { ChaosBubbleHostOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosPopText.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosDvdOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEffectBannerOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosAnnouncerOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosCursorGlowOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEStimOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosVibeTrailOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
         // Run chrome sits BELOW the bubbles so the player can always pop what's drifting over the
         // sidebar / boon ribbon / active-skill buttons instead of the chrome stealing the click.
-        try { _fx?.RaiseToTopmost(); } catch { }
-        try { ChaosWaveTimerOverlay.RaiseActive(); } catch { }
-        try { ChaosBoonBarOverlay.RaiseActive(); } catch { }
-        try { _hud?.RaiseToTopmost(); } catch { }
-        foreach (var b in _toyButtons) { try { b.RaiseToTopmost(); } catch { } }
+        try { _fx?.RaiseToTopmost(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosWaveTimerOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosBoonBarOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _hud?.RaiseToTopmost(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        foreach (var b in _toyButtons) { try { b.RaiseToTopmost(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         // Bubbles ride ABOVE the chrome...
         App.Bubbles?.BringAllToFront();
         // ...and the big attention assets (gif cascades + flashes) ride ABOVE the bubbles.
-        try { ChaosGifCascadeOverlay.RaiseActive(); } catch { }
-        try { ChaosFlashOverlay.RaiseActive(); } catch { }
-        try { App.Flash?.RaiseAllToFront(); } catch { }
+        try { ChaosGifCascadeOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosFlashOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { App.Flash?.RaiseAllToFront(); } catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -788,17 +788,17 @@ public sealed class ChaosModeService
         // avoids BringAllToFront yanking the bubbles back over the foreground app).
         if (!ChaosWindowZ.PinTopmost) return;
         // Chrome first (lowest of the pinned set).
-        try { _hud?.RaiseToTopmost(); } catch { }
-        try { _fx?.RaiseToTopmost(); } catch { }
-        try { ChaosWaveTimerOverlay.RaiseActive(); } catch { }
-        try { ChaosBoonBarOverlay.RaiseActive(); } catch { }
-        foreach (var b in _toyButtons) { try { b.RaiseToTopmost(); } catch { } }
+        try { _hud?.RaiseToTopmost(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _fx?.RaiseToTopmost(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosWaveTimerOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosBoonBarOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        foreach (var b in _toyButtons) { try { b.RaiseToTopmost(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         // Bubbles above the chrome so they stay poppable over the sidebar / boons / active buttons.
         App.Bubbles?.BringAllToFront();
         // Attention assets above the bubbles.
-        try { ChaosGifCascadeOverlay.RaiseActive(); } catch { }
-        try { ChaosFlashOverlay.RaiseActive(); } catch { }
-        try { App.Flash?.RaiseAllToFront(); } catch { }
+        try { ChaosGifCascadeOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosFlashOverlay.RaiseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { App.Flash?.RaiseAllToFront(); } catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -814,8 +814,8 @@ public sealed class ChaosModeService
         var disp = Application.Current?.Dispatcher;
         if (disp == null) return;
         // A fullscreen video fully covers the tunnel — pause its render loop (0% tunnel GPU).
-        try { disp.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(true))); } catch { }
-        try { disp.BeginInvoke((Action)RaiseGameLayerAboveVideo); } catch { }
+        try { disp.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(true))); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { disp.BeginInvoke((Action)RaiseGameLayerAboveVideo); } catch (Exception ex) { Diag.Swallowed(ex); }
         System.Threading.Tasks.Task.Delay(60).ContinueWith(_ =>
         {
             if (Application.Current?.Dispatcher == null) return;
@@ -1721,7 +1721,7 @@ public sealed class ChaosModeService
         if (first)
         {
             _state?.PushEvent($"{ChaosGlyphs.Gold} gold. she takes it at her bench.");
-            try { App.Bark?.NotifyChaosGoldFirst(); } catch { }
+            try { App.Bark?.NotifyChaosGoldFirst(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
     }
 
@@ -2180,14 +2180,14 @@ public sealed class ChaosModeService
         if (e.PropertyName != nameof(ChaosRunState.Combo)) return;
         var st = _state;
         if (st == null) return;
-        try { ChaosTunnelService.SetStreak(st.Combo, st.ComboMult); } catch { }
+        try { ChaosTunnelService.SetStreak(st.Combo, st.ComboMult); } catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>Any video ending during a run (natural end, attention-check retry, cap) starts
     /// the teardown quarantine so no cascade rises into the LibVLC disposal churn.</summary>
     private void OnVideoEndedDuringRun(object? sender, EventArgs e)
     {
-        try { Application.Current?.Dispatcher?.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(false))); } catch { }
+        try { Application.Current?.Dispatcher?.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(false))); } catch (Exception ex) { Diag.Swallowed(ex); }
         ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);
     }
 
@@ -2404,7 +2404,7 @@ public sealed class ChaosModeService
     private void CloseToyButtons()
     {
         foreach (var b in _toyButtons.ToArray())
-            try { b.Close(); } catch { }
+            try { b.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _toyButtons.Clear();
     }
 
@@ -2461,7 +2461,7 @@ public sealed class ChaosModeService
                 _keyHook.Dispose();
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         _keyHook = null;
     }
 
@@ -2483,7 +2483,7 @@ public sealed class ChaosModeService
 
     private void StopRippleHook()
     {
-        try { _rippleHook?.Dispose(); } catch { }
+        try { _rippleHook?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _rippleHook = null;
     }
 
@@ -2752,7 +2752,7 @@ public sealed class ChaosModeService
                 if (enabled.Count > 0) return enabled[Random.Shared.Next(enabled.Count)];
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
         return "GIVE IN";
     }
 
@@ -3088,33 +3088,33 @@ public sealed class ChaosModeService
         _paused = false;
         _runTimer?.Stop();
         _spawnTimer?.Stop();
-        try { App.Bubbles?.EndChaosMode(); } catch { }
-        try { App.Bubbles?.Resume(); } catch { }
+        try { App.Bubbles?.EndChaosMode(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { App.Bubbles?.Resume(); } catch (Exception ex) { Diag.Swallowed(ex); }
         StopKeyHook();
         CloseToyButtons();
         EndSlowMo(); EndFreeze();
-        try { ChaosFlashOverlay.CloseActive(); } catch { }
-        try { ChaosGifCascadeOverlay.CloseActive(); } catch { }
-        try { ChaosAnnouncerOverlay.CloseActive(); } catch { }
-        try { ChaosUnlockCardOverlay.CloseActive(); } catch { }
-        try { ChaosDvdOverlay.CloseActive(); } catch { }
-        try { ChaosEffectBannerOverlay.CloseActive(); } catch { }
-        try { ChaosWaveTimerOverlay.CloseActive(); } catch { }
-        try { ChaosBoonBarOverlay.CloseActive(); } catch { }
-        try { DisarmRabbitCall(); ChaosCursorGlowOverlay.CloseActive(); } catch { }
-        try { ChaosVibeTrailOverlay.CloseActive(); } catch { }
-        try { ChaosEStimOverlay.CloseActive(); } catch { }
-        try { ChaosFieldFxOverlay.CloseActive(); } catch { }
-        try { ChaosSkiaFxOverlay.CloseActive(); } catch { }
-        try { ChaosPopText.ShutdownPool(); } catch { }
-        try { _fx?.Close(); } catch { }
+        try { ChaosFlashOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosGifCascadeOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosAnnouncerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosUnlockCardOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosDvdOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEffectBannerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosWaveTimerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosBoonBarOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { DisarmRabbitCall(); ChaosCursorGlowOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosVibeTrailOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEStimOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosFieldFxOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosSkiaFxOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosPopText.ShutdownPool(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _fx?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (_overlay != null)
         {
             _overlay.OnDismissed = null;   // avoid re-entrant cleanup
             _overlay.OnRunAgain = null;
-            try { _overlay.Close(); } catch { }
+            try { _overlay.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
-        try { _hud?.Close(); } catch { }
+        try { _hud?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         CleanupAfterRun();
     }
 
@@ -3123,7 +3123,7 @@ public sealed class ChaosModeService
         if (!_spawning || _state == null) return;
         LogMemSample("run-end");
         ChaosCrashSentinel.Clear();   // the field is coming down — a vanish after here isn't a run crash
-        try { System.Windows.Media.CompositionTarget.Rendering -= OnChaosRendering; } catch { }
+        try { System.Windows.Media.CompositionTarget.Rendering -= OnChaosRendering; } catch (Exception ex) { Diag.Swallowed(ex); }
         bool ranFullCourse = _state.ElapsedSec >= _state.RunDurationSec;
         // The final loop ends at the run clock, not a wave boundary — its tip lands here
         // (full-course descents only; a quit mid-fall forfeits the loop's tip).
@@ -3142,21 +3142,21 @@ public sealed class ChaosModeService
         CloseToyButtons();
         App.Bubbles?.EndChaosMode();
         EndSlowMo(); EndFreeze();
-        try { ChaosFlashOverlay.CloseActive(); } catch { }
-        try { ChaosGifCascadeOverlay.CloseActive(); } catch { }
-        try { ChaosAnnouncerOverlay.CloseActive(); } catch { }
-        try { ChaosUnlockCardOverlay.CloseActive(); } catch { }
-        try { ChaosDvdOverlay.CloseActive(); } catch { }
-        try { ChaosEffectBannerOverlay.CloseActive(); } catch { }
-        try { ChaosWaveTimerOverlay.CloseActive(); } catch { }
-        try { ChaosBoonBarOverlay.CloseActive(); } catch { }
-        try { DisarmRabbitCall(); ChaosCursorGlowOverlay.CloseActive(); } catch { }
-        try { ChaosVibeTrailOverlay.CloseActive(); } catch { }
-        try { ChaosEStimOverlay.CloseActive(); } catch { }
-        try { ChaosFieldFxOverlay.CloseActive(); } catch { }
-        try { ChaosSkiaFxOverlay.CloseActive(); } catch { }
-        try { ChaosPopText.ShutdownPool(); } catch { }
-        try { _fx?.Close(); } catch { }
+        try { ChaosFlashOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosGifCascadeOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosAnnouncerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosUnlockCardOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosDvdOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEffectBannerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosWaveTimerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosBoonBarOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { DisarmRabbitCall(); ChaosCursorGlowOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosVibeTrailOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEStimOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosFieldFxOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosSkiaFxOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosPopText.ShutdownPool(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _fx?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _fx = null;
 
         double durMin = Math.Max(1, _state.RunDurationSec) / 60.0;
@@ -3177,7 +3177,7 @@ public sealed class ChaosModeService
         catch (Exception ex) { App.Logger?.Debug("Chaos meta award: {E}", ex.Message); }
 
         // RunsCompleted just moved — queue any freshly crossed reveals for the next dollhouse open.
-        try { RevealService.Sync("run_end"); } catch { }
+        try { RevealService.Sync("run_end"); } catch (Exception ex) { Diag.Swallowed(ex); }
 
         // Rank spine: did this descent push the rank past the last card shown? Only the
         // HIGHEST new rank gets a card (a debug fast-forward skips the ones in between).
@@ -3187,7 +3187,7 @@ public sealed class ChaosModeService
             var nowRank = ChaosRanks.For(ChaosMeta.State.RunsCompleted);
             if ((int)nowRank > ChaosMeta.State.LastRankSeen) rankUp = nowRank;
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
 
         string diff = _state.Config.Difficulty.ToString();
         App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff);
@@ -3219,31 +3219,31 @@ public sealed class ChaosModeService
             App.Bubbles?.EndChaosMode();
             App.Bubbles?.Resume();
         }
-        try { _hud?.Close(); } catch { }
+        try { _hud?.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
         CleanupAfterRun();
     }
 
     private void CleanupAfterRun()
     {
         ChaosCrashSentinel.Clear();   // every run teardown path funnels through here — disarm the sentinel
-        try { System.Windows.Media.CompositionTarget.Rendering -= OnChaosRendering; } catch { }
+        try { System.Windows.Media.CompositionTarget.Rendering -= OnChaosRendering; } catch (Exception ex) { Diag.Swallowed(ex); }
         if (App.Video != null) App.Video.VideoStarted -= OnVideoStartedDuringRun;   // belt-and-suspenders (mid-run close)
         if (App.Video != null) App.Video.VideoEnded -= OnVideoEndedDuringRun;
         StopKeyHook();   // idempotent; covers the overlay-closed-mid-run path
         StopRippleHook();
         CloseToyButtons();
-        try { ChaosDvdOverlay.CloseActive(); } catch { }
-        try { ChaosEffectBannerOverlay.CloseActive(); } catch { }
-        try { ChaosWaveTimerOverlay.CloseActive(); } catch { }
-        try { ChaosBoonBarOverlay.CloseActive(); } catch { }
-        try { DisarmRabbitCall(); ChaosCursorGlowOverlay.CloseActive(); } catch { }
-        try { ChaosVibeTrailOverlay.CloseActive(); } catch { }
-        try { ChaosEStimOverlay.CloseActive(); } catch { }
-        try { ChaosFieldFxOverlay.CloseActive(); } catch { }
-        try { ChaosSkiaFxOverlay.CloseActive(); } catch { }
-        try { ChaosBackdropService.CloseActive(); } catch { }
-        try { ChaosTunnelService.CloseActive(); } catch { }
-        try { ChaosPopText.ShutdownPool(); } catch { }
+        try { ChaosDvdOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEffectBannerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosWaveTimerOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosBoonBarOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { DisarmRabbitCall(); ChaosCursorGlowOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosVibeTrailOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosEStimOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosFieldFxOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosSkiaFxOverlay.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosBackdropService.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosTunnelService.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { ChaosPopText.ShutdownPool(); } catch (Exception ex) { Diag.Swallowed(ex); }
         App.AvatarWindow?.SetChaosRunActive(false);   // restore the avatar's normal attached z-order
         ChaosHappyPath.OnRunEnded();   // the script never outlives its run (idempotent)
         ChaosNarrativeHooks.OnRunEnded();   // drop the Madam's run-scoped state + any duck

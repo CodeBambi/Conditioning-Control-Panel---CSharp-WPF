@@ -184,13 +184,13 @@ internal static class ArcademyHostService
         }
 
         // EMI Desk: the ring learns from every open, not just its own cards.
-        try { App.EmiDesk?.NoteOpen("arcademy"); } catch { }
+        try { App.EmiDesk?.NoteOpen("arcademy"); } catch (Exception ex) { Diag.Swallowed(ex); }
         // She does not follow you to school. If she is out, she says goodbye here and winks
         // herself off screen a couple of seconds later, BEFORE `arcademyOpened` and before the
         // ring's own `arcademyFromRing` can land: the farewell claims her voice for that window,
         // so whichever of the three paths opened the Arcademy, the last thing you get is the bye.
-        try { App.EmiDesk?.FarewellForArcademy(); } catch { }
-        try { App.EmiDesk?.Fire("arcademyOpened", null); } catch { }
+        try { App.EmiDesk?.FarewellForArcademy(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { App.EmiDesk?.Fire("arcademyOpened", null); } catch (Exception ex) { Diag.Swallowed(ex); }
         _emiOpenedUtc = DateTime.UtcNow;
 
         _devDoor = devDoor;
@@ -584,7 +584,7 @@ internal static class ArcademyHostService
                     (string?)o["gameKey"], (int?)o["gradeTier"] ?? 0);
                 // CAMPUS PRESENCE: a door opened. Best-effort and gated on the share rung inside;
                 // at `off`, or with no identity, this line does nothing at all.
-                try { ArcademyPresenceService.NoteRoomEnter((string?)o["gameKey"]); } catch { }
+                try { ArcademyPresenceService.NoteRoomEnter((string?)o["gameKey"]); } catch (Exception ex) { Diag.Swallowed(ex); }
                 break;
             case "class-ended":
                 OnClassEnded(o);
@@ -1451,7 +1451,7 @@ internal static class ArcademyHostService
                     if (name == norm) return ToAudioUrl(host, Path.GetFileName(f));
                 }
             }
-            catch { /* the scan is best-effort; the exact-match pass already ran */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "the scan is best effort, the exact-match pass already ran"); }
         }
         return null;
     }
@@ -3862,7 +3862,7 @@ internal static class ArcademyHostService
             // junk field from the page cannot mint a grade for a stranger's map. A zen `pass` is
             // not one of S/A/B/C and rides as null, which the renderer draws as a finish with no
             // letter. Own try/catch: nothing about company may cost the payout frame below.
-            try { ArcademyPresenceService.NoteClassEnd(gameKey, grade); } catch { }
+            try { ArcademyPresenceService.NoteClassEnd(gameKey, grade); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Everything the debrief needs that is NOT money, gathered once so both endings below
             // send the same frame and there is only one place to change the wording of a payout.
@@ -4434,7 +4434,7 @@ internal static class ArcademyHostService
                 App.Logger?.Information("ArcademyHost: Discord link timed out after {S}s - cancelled",
                     LinkDeadline.TotalSeconds);
                 _linkCancelled = true;
-                try { d.CancelOAuthFlow(); } catch { }
+                try { d.CancelOAuthFlow(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 PushProfile("cancelled");
                 return;
             }
@@ -4499,7 +4499,7 @@ internal static class ArcademyHostService
         if (Volatile.Read(ref _linkInFlight) == 0) return;
         App.Logger?.Information("ArcademyHost: cancelling the open Discord link-up ({Why})", why);
         _linkCancelled = true;
-        try { App.Discord?.CancelOAuthFlow(); } catch { }
+        try { App.Discord?.CancelOAuthFlow(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (tellPage) PushProfile("cancelled");
     }
 
@@ -4733,7 +4733,7 @@ internal static class ArcademyHostService
             App.Logger?.Warning("ArcademyHost: remote batch failed: {E}", ex.Message);
             if (Volatile.Read(ref _generation) == epoch)
             {
-                try { _host?.Post(new { type = "assets", reqId, urls = Array.Empty<object>(), done = true }); } catch { }
+                try { _host?.Post(new { type = "assets", reqId, urls = Array.Empty<object>(), done = true }); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
         finally { Interlocked.Exchange(ref _remoteFetchInFlight, 0); }
@@ -4802,7 +4802,7 @@ internal static class ArcademyHostService
         foreach (var w in list)
         {
             if (w.Epoch != epoch) continue;
-            try { PostTaggedAssets(w.ReqId, w.Tag, TakeBuffered(key, w.Want), true); } catch { }
+            try { PostTaggedAssets(w.ReqId, w.Tag, TakeBuffered(key, w.Want), true); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
     }
 
@@ -5018,7 +5018,7 @@ internal static class ArcademyHostService
             App.Logger?.Warning("ArcademyHost: tagged batch failed: {E}", ex.Message);
             if (Volatile.Read(ref _generation) == epoch)
             {
-                try { PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true); } catch { }
+                try { PostTaggedAssets(reqId, tag, Array.Empty<AssetUrl>(), true); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
             DrainTaggedWaiters(key);
         }
@@ -5348,7 +5348,7 @@ internal static class ArcademyHostService
             App.Logger?.Warning("ArcademyHost: sub probe failed: {E}", ex.Message);
             if (Volatile.Read(ref _generation) == epoch)
             {
-                try { PostSubProbe(reqId, clean, false, null, "offline"); } catch { }
+                try { PostSubProbe(reqId, clean, false, null, "offline"); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
         finally { lock (ProbesInFlight) ProbesInFlight.Remove(clean); }
@@ -5629,7 +5629,7 @@ internal static class ArcademyHostService
                 App.Video.VideoEnded -= OnVideoEnded;
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     /// <summary>
@@ -5657,7 +5657,7 @@ internal static class ArcademyHostService
                 App.BrowserMedia.PlayingChanged -= OnBrowserVideoPlayingChanged;
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private static void OnBrowserVideoPlayingChanged(object? sender, bool playing)
@@ -5733,7 +5733,7 @@ internal static class ArcademyHostService
                 _settingsReplaceHooked = true;
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private static void OnSettingsCurrentReplaced()
@@ -5907,7 +5907,7 @@ internal static class ArcademyHostService
 
     private static void CancelBootDeadline()
     {
-        try { _bootWatch?.Stop(); } catch { }
+        try { _bootWatch?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _bootWatch = null;
     }
 
@@ -5936,7 +5936,7 @@ internal static class ArcademyHostService
 
     private static void StopHeartbeatWatch()
     {
-        try { _heartbeatWatch?.Stop(); } catch { }
+        try { _heartbeatWatch?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _heartbeatWatch = null;
     }
 
@@ -5979,7 +5979,7 @@ internal static class ArcademyHostService
                     Loc.GetF("arcademy_boot_error_body", ProductName, msg ?? string.Empty),
                     ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         });
     }
 
@@ -5995,7 +5995,7 @@ internal static class ArcademyHostService
 
     private static void CancelExitWatchdog()
     {
-        try { _exitWatchdog?.Stop(); } catch { }
+        try { _exitWatchdog?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _exitWatchdog = null;
     }
 
@@ -6013,7 +6013,7 @@ internal static class ArcademyHostService
         {
             int emiMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiOpenedUtc).TotalMinutes);
             _emiOpenedUtc = DateTime.MinValue;
-            try { App.EmiDesk?.Fire("arcademyClosed", new { minutes = emiMinutes }); } catch { }
+            try { App.EmiDesk?.Fire("arcademyClosed", new { minutes = emiMinutes }); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // ...and she comes home in whatever the Locker put her in. The live hook on
             // `meta-command` has normally already done this; this is the backstop for the session
@@ -6036,17 +6036,17 @@ internal static class ArcademyHostService
             // Unbind the mirror BEFORE the store goes: a push still sitting in the debounce is
             // sent now (payload taken first, so the request outlives this window without touching
             // anything being disposed) and every reply still in the air is dropped by generation.
-            try { ArcademySyncService.Detach(); } catch { }
+            try { ArcademySyncService.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // And the wallet with it. Nothing to flush here: a frame the server never took is
             // already on disk in `pendingMints`, and the next launch is what carries it up.
-            try { ArcademyWalletSyncService.Detach(); } catch { }
+            try { ArcademyWalletSyncService.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Stop the presence poll BEFORE the host goes: the timer must never outlive the window
             // that armed it, and Detach also sends this session's one best-effort `campus_leave`.
-            try { ArcademyPresenceService.Detach(); } catch { }
+            try { ArcademyPresenceService.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // A link-up the player started from the student ID belongs to THIS window. No frame:
             // there is nothing left to paint it.
-            try { CancelPendingLink("teardown", tellPage: false); } catch { }
-            try { _meta?.FlushSave(); } catch { }
+            try { CancelPendingLink("teardown", tellPage: false); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _meta?.FlushSave(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _meta = null;
             _classActive = false;
             _panicSuspended = false;
@@ -6056,7 +6056,7 @@ internal static class ArcademyHostService
             // The piles belong to the class that picked them; the next launch names its own.
             lock (TaggedChannels) TaggedChannels.Clear();
             _taggedSubsEmptyLogged = false;
-            try { _host?.Dispose(); } catch { }
+            try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _host = null;
             _exiting = false;
             // Bring the control panel back from the tray if we tucked it away at launch. Every
@@ -6065,7 +6065,7 @@ internal static class ArcademyHostService
             if (_minimizedMainWindow)
             {
                 _minimizedMainWindow = false;
-                try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch { }
+                try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             App.Logger?.Information("ArcademyHostService: closed");
         }

@@ -93,7 +93,7 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     try { App.Logger?.Debug("FlashService unduck failed: {Error}", ex.Message); }
-                    catch { }
+                    catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 }
             });
         }
@@ -285,7 +285,7 @@ namespace ConditioningControlPanel.Services
                             NativeMethods.SetWindowPos(hostHwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
                                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             });
         }
@@ -317,7 +317,7 @@ namespace ConditioningControlPanel.Services
                     }
                 }
             }
-            catch { /* a diagnostic/reconciler accessor must never throw */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "diagnostic accessor must never throw"); }
             return handles;
         }
 
@@ -458,7 +458,7 @@ namespace ConditioningControlPanel.Services
             App.Logger.Information("FlashService started, images path: {Path}", _imagesPath);
 
             // EMI Desk (MOMENTS 4.B). Fire last: nothing about her may sit in front of the start.
-            try { App.EmiDesk?.Fire("flashesStarted", null); } catch { }
+            try { App.EmiDesk?.Fire("flashesStarted", null); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         public void Stop()
@@ -474,9 +474,9 @@ namespace ConditioningControlPanel.Services
             var retiredCts = _cancellationSource;
             _cancellationSource = null;
             try { retiredCts?.Cancel(); }
-            catch (ObjectDisposedException) { }
+            catch (ObjectDisposedException) { } // swallow: retired CTS already disposed
             try { retiredCts?.Dispose(); }
-            catch (ObjectDisposedException) { }
+            catch (ObjectDisposedException) { } // swallow: retired CTS already disposed
             StopHeartbeat();
             _schedulerTimer?.Stop();
 
@@ -492,7 +492,7 @@ namespace ConditioningControlPanel.Services
             App.DiscordRpc?.SetIdleActivity();
 
             // EMI Desk (MOMENTS 4.B): how long it ran, read before the start stamp is cleared.
-            try { App.EmiDesk?.Fire("flashesStopped", new { minutes = RunMinutes }); } catch { }
+            try { App.EmiDesk?.Fire("flashesStopped", new { minutes = RunMinutes }); } catch (Exception ex) { Diag.Swallowed(ex); }
             _runStartedUtc = null;
 
             App.Logger.Information("FlashService stopped");
@@ -821,7 +821,7 @@ namespace ConditioningControlPanel.Services
                     // same two destinations, and the moment's launch/1 limit is what keeps the
                     // three sites that can reach this beat (here, the wallpaper, the summon) to
                     // exactly one line.
-                    try { EmiDesk.EmiOffers.AnnounceEmptyLibrary(); } catch { }
+                    try { EmiDesk.EmiOffers.AnnounceEmptyLibrary(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                     _isBusy = false;
                     return;
@@ -917,7 +917,7 @@ namespace ConditioningControlPanel.Services
             // Drain any stragglers so unobserved exceptions don't linger.
             if (pending.Count > 0)
             {
-                try { await Task.WhenAll(pending); } catch { /* individual tasks are already guarded */ }
+                try { await Task.WhenAll(pending); } catch (Exception ex) { Diag.Swallowed(ex, "individual tasks are already guarded"); }
             }
 
             return loaded;
@@ -1001,7 +1001,7 @@ namespace ConditioningControlPanel.Services
                                 BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                             srcW = probe.PixelWidth; srcH = probe.PixelHeight;
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
 
                         var bmp = new BitmapImage();
                         bmp.BeginInit();
@@ -1186,7 +1186,7 @@ namespace ConditioningControlPanel.Services
                         BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                     srcW = probe.PixelWidth; srcH = probe.PixelHeight;
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
@@ -1329,7 +1329,7 @@ namespace ConditioningControlPanel.Services
                             }
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }, TaskContinuationOptions.NotOnCanceled);
             }
 
@@ -1364,7 +1364,7 @@ namespace ConditioningControlPanel.Services
                                     SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration, capturedSuppressHaptic, capturedOneShotGen);
                             });
                         }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }, TaskContinuationOptions.NotOnCanceled);
                 }
             }
@@ -1501,7 +1501,7 @@ namespace ConditioningControlPanel.Services
                             window.IsFadingOut = true;
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 });
 
                 // Create image control (layer mode has no WPF visual tree at all - the layer
@@ -1771,8 +1771,8 @@ namespace ConditioningControlPanel.Services
             {
                 // If anything fails before the window is tracked, dispose the CTS so it doesn't leak~ 🧹
                 App.Logger?.Debug("SpawnFlashWindow failed: {Error}", ex.Message);
-                try { windowCts.Cancel(); } catch { }
-                try { windowCts.Dispose(); } catch { }
+                try { windowCts.Cancel(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                try { windowCts.Dispose(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 if (window != null)
                 {
                     try
@@ -1793,7 +1793,7 @@ namespace ConditioningControlPanel.Services
                         if (window.UsesLayer) CloseStateBagWindow(window);
                         else if (!window.UsesHost) window.Close();
                     }
-                    catch { }
+                    catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 }
                 return;
             }
@@ -1814,7 +1814,7 @@ namespace ConditioningControlPanel.Services
                     if (App.Achievements?.Progress?.TotalFlashImages == 1)
                         App.EmiDesk?.Fire("firstFlashEver", null);
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
 
@@ -2043,7 +2043,7 @@ namespace ConditioningControlPanel.Services
             if (frames == null) return;
             foreach (var f in frames)
             {
-                try { f?.Dispose(); } catch { }
+                try { f?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
         }
 
@@ -2061,7 +2061,7 @@ namespace ConditioningControlPanel.Services
         private void ReleaseLayerHook()
         {
             if (_layerHook == null) return;
-            try { _layerHook.Dispose(); } catch { }
+            try { _layerHook.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _layerHook = null;
             _layerHits = Array.Empty<LayerHit>();
         }
@@ -2144,7 +2144,7 @@ namespace ConditioningControlPanel.Services
                         exclude = new float[] { r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top };
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             _layerVideoExcludePx = exclude;
 
             if (!anyLayer) ReleaseLayerHook();
@@ -2154,7 +2154,7 @@ namespace ConditioningControlPanel.Services
         private void OnFlashClicked(FlashWindow window, AppSettings settings, bool fromGaze = false)
         {
             // Cancel only THIS window's lifetime — other windows keep living~ ✨
-            try { window.LifetimeCts?.Cancel(); } catch { }
+            try { window.LifetimeCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             lock (_lockObj)
             {
@@ -3319,7 +3319,7 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Information("FlashService: warmed {Warmed} remote still(s), {Ready} ready", warmed, ready);
                 }
             }
-            catch (OperationCanceledException) { /* teardown */ }
+            catch (OperationCanceledException) { } // swallow: teardown
             catch (Exception ex)
             {
                 App.Logger?.Debug("FlashService: remote prefetch failed (non-fatal): {Error}", ex.Message);
@@ -3453,7 +3453,7 @@ namespace ConditioningControlPanel.Services
                 return LooksLikeGif(header.Slice(0, read));
             }
             catch { return false; }
-            finally { try { if (stream.CanSeek) stream.Position = 0; } catch { } }
+            finally { try { if (stream.CanSeek) stream.Position = 0; } catch (Exception ex) { Diag.Swallowed(ex); } }
         }
 
         /// <param name="allowAnimated">False for the single-bitmap overlay caller, which only ever
@@ -3485,7 +3485,7 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Debug("FlashService: remote GIF from {Host} frame decode failed, falling back to still: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 }
-                finally { try { if (stream.CanSeek) stream.Position = 0; } catch { } }
+                finally { try { if (stream.CanSeek) stream.Position = 0; } catch (Exception ex) { Diag.Swallowed(ex); } }
             }
 
             // WIC first - same decoder, same decode-time downscale and same WPF-owned buffer as
@@ -3499,7 +3499,7 @@ namespace ConditioningControlPanel.Services
                     var probe = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                     srcW = probe.PixelWidth; srcH = probe.PixelHeight;
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 stream.Position = 0;
                 var bmp = new BitmapImage();
@@ -4090,7 +4090,7 @@ namespace ConditioningControlPanel.Services
                         // process lifetime. Close it explicitly - a leaked USER object per pool
                         // eviction is exactly the kind of drip that ends a 4h session with
                         // CreateWindowEx failing (#627).
-                        try { pooled.Close(); } catch { }
+                        try { pooled.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         continue;
                     }
                     if (match == null && (int)pooled.Width == width && (int)pooled.Height == height)
@@ -4137,10 +4137,10 @@ namespace ConditioningControlPanel.Services
             {
                 if (s is FlashWindow fw)
                 {
-                    try { fw.LifetimeRegistration?.Dispose(); } catch { }
+                    try { fw.LifetimeRegistration?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     fw.LifetimeRegistration = null;
-                    try { fw.LifetimeCts?.Cancel(); } catch { }
-                    try { fw.LifetimeCts?.Dispose(); } catch { }
+                    try { fw.LifetimeCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { fw.LifetimeCts?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     fw.LifetimeCts = null;
                 }
             };
@@ -4178,12 +4178,12 @@ namespace ConditioningControlPanel.Services
             try
             {
                 // Dispose CTS registration first to release the closure capturing this window
-                try { window.LifetimeRegistration?.Dispose(); } catch { }
+                try { window.LifetimeRegistration?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 window.LifetimeRegistration = null;
 
                 // Cancel and dispose per-window lifetime token~ 🧹
-                try { window.LifetimeCts?.Cancel(); } catch { }
-                try { window.LifetimeCts?.Dispose(); } catch { }
+                try { window.LifetimeCts?.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { window.LifetimeCts?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 window.LifetimeCts = null;
 
                 // Release bitmap references before retiring to prevent memory accumulation
@@ -4209,7 +4209,7 @@ namespace ConditioningControlPanel.Services
                         glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.BlurRadiusProperty, null);
                         glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                     window.GlowEffect = null;
                 }
 
@@ -4275,7 +4275,7 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to close flash window: {Error}", ex.Message);
-                try { window.Close(); } catch { }
+                try { window.Close(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
 
@@ -4296,11 +4296,11 @@ namespace ConditioningControlPanel.Services
                 {
                     window.Dispatcher.BeginInvoke(() =>
                     {
-                        try { window.Close(); } catch { }
+                        try { window.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // WndProc hook for flash windows: drop WM_DPICHANGED so WPF never runs its auto DPI-rescale
@@ -4401,19 +4401,19 @@ namespace ConditioningControlPanel.Services
         public void Dispose()
         {
             Stop();
-            try { _flashLayer?.Clear(); } catch { }
+            try { _flashLayer?.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Drain the recycled-window pool — the only place pooled hwnds actually close
             // (app shutdown; nothing else is animating, so the close is safe here).
             while (_windowPool.Count > 0)
             {
-                try { _windowPool.Pop().Close(); } catch { }
+                try { _windowPool.Pop().Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             _cancellationSource?.Dispose();
             // Stop any remote prefetch mid-download. Separate from _cancellationSource, which
             // Stop() already cancelled - the warm pool is meant to survive a stop/start cycle
             // and only dies with the service.
-            try { _remoteCts.Cancel(); } catch { }
-            try { _remoteCts.Dispose(); } catch { }
+            try { _remoteCts.Cancel(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _remoteCts.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             lock (_remoteLock) _remoteReady.Clear();
             StopCurrentSound();
             CleanupTempPackFiles();
@@ -4583,10 +4583,9 @@ namespace ConditioningControlPanel.Services
                 LifetimeCts.CancelAfter(extraMs);
                 ExpiresAt = DateTime.Now.AddMilliseconds(extraMs);
             }
-            catch
+            catch (Exception ex)
             {
-                // CTS may have been disposed (window fading out) — silent
-                // is fine, the window is already on its way out.
+                Diag.Swallowed(ex, "lifetime CTS disposed, the window is already fading out");
             }
         }
 
