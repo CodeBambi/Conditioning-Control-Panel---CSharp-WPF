@@ -176,6 +176,9 @@ namespace ConditioningControlPanel.Services
         // How long the next video waits (pumping) for those stragglers before it abandons the owning
         // instance and builds its players on a fresh one.
         private const int PendingStopWaitMs = 2000;
+        // The "no videos found" guidance dialog is a per-LAUNCH one-off (#1124). Every trigger used
+        // to raise its own modal, so a long session stacked dozens of them on the dispatcher.
+        private static int _noVideosDialogShown;
 
 #if DEBUG
         // Fault injection for the wedge cluster (#765/#766/#767). Set CCP_FAULT_WEDGE_STOP=1 and the
@@ -2248,6 +2251,15 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
+                // One dialog per app launch (#1124). A trigger fires every couple of minutes, so a
+                // 33-minute session used to stack dozens of identical modals - each one blocking
+                // this call and pumping a nested message loop on the dispatcher.
+                if (Interlocked.Exchange(ref _noVideosDialogShown, 1) != 0)
+                {
+                    App.Logger?.Information("VideoService: still no videos in {Path}; the guidance dialog was already shown this launch", _videosPath);
+                    return;
+                }
+
                 // Build helpful error message
                 var activePackCount = App.ContentPacks?.GetActivePackIds()?.Count ?? 0;
                 var installedPackCount = App.ContentPacks?.InstalledPacks?.Count ?? 0;
@@ -2265,13 +2277,25 @@ namespace ConditioningControlPanel.Services
 
                 message += Loc.Get("video_add_files_hint");
 
-                System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
+                // Posted, not called: MessageBox.Show blocks its caller and pumps a nested message
+                // loop, and this caller is the trigger path. It returns immediately now and the box
+                // opens on the dispatcher's own time (#1124).
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
 
-                // AFTER the box closes, never before: MessageBox.Show runs a nested message pump,
-                // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
-                // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
-                // budget, shared with the flash/wallpaper/first-run dead ends.
-                App.OfferRemoteMediaSource("videos");
+                        // AFTER the box closes, never before: MessageBox.Show runs a nested message pump,
+                        // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
+                        // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
+                        // budget, shared with the flash/wallpaper/first-run dead ends.
+                        App.OfferRemoteMediaSource("videos");
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("VideoService: no-videos dialog failed: {Error}", ex.Message); }
+                }));
                 return;
             }
 
@@ -7987,9 +8011,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Refills both video queues (regular and pack videos).
         /// </summary>
+        /// <summary>
+        /// Containers the local video walk accepts. Everything here is something LibVLC demuxes and
+        /// the browser engine either plays or hands back to LibVLC, so the cost of a wide list is a
+        /// clip that fails at play time; the cost of a narrow one is a folder that silently scans to
+        /// zero videos and a "no videos" dialog on a folder that visibly has some (#1124).
+        /// </summary>
+        internal static readonly string[] SupportedVideoExtensions =
+        {
+            ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm",
+            ".m4v", ".mpg", ".mpeg", ".flv", ".ts"
+        };
+
+        /// <summary>Extension gate of the local video walk, case-insensitive. Pure, so it is unit
+        /// tested (VideoExtensionFilterTests) rather than only exercised through a disk scan.</summary>
+        internal static bool IsSupportedVideoExtension(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            var ext = Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext)) return false;
+            return SupportedVideoExtensions.Contains(ext.ToLowerInvariant());
+        }
+
         private void RefillVideoQueues()
         {
-            var validExtensions = new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
 
             // Remote injection point. A refill is the moment the pipeline admits it needs more
             // material, so it is where the remote buffer gets topped up too - but ONLY as a
@@ -8003,22 +8048,29 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Debug("VideoService: Scanning for videos in {Path}", _videosPath);
 
-            // Load regular videos
+            // Load regular videos.
+            // The counters below are the #1124 funnel: a Release log used to say nothing at all
+            // about WHY a folder full of files scanned to zero videos, because every step here was
+            // Debug-only. One Information line at the end reports the whole ladder.
+            int seen = 0, keptExt = 0, keptSecurity = 0;
+            bool folderMissing = false;
             var files = new List<string>();
             if (Directory.Exists(_videosPath))
             {
                 // Scan subfolders to support user-organized categories
                 var allFiles = Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories);
+                seen = allFiles.Length;
                 App.Logger?.Debug("VideoService: Found {Count} total files in videos folder", allFiles.Length);
 
                 foreach (var file in allFiles)
                 {
                     var ext = Path.GetExtension(file).ToLowerInvariant();
-                    if (!validExtensions.Contains(ext))
+                    if (!IsSupportedVideoExtension(file))
                     {
                         App.Logger?.Debug("VideoService: Skipping non-video file: {Path} (ext: {Ext})", file, ext);
                         continue;
                     }
+                    keptExt++;
 
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
@@ -8041,14 +8093,17 @@ namespace ConditioningControlPanel.Services
                     }
 
                     files.Add(file);
+                    keptSecurity++;
                 }
             }
             else
             {
+                folderMissing = true;
                 App.Logger?.Warning("VideoService: Videos directory does not exist: {Path}", _videosPath);
             }
 
             App.Logger?.Debug("VideoService: {Count} videos passed security checks", files.Count);
+            int keptEnabled = files.Count;
 
             // Filter out disabled assets (blacklist approach).
             // Normalize for case-insensitive, separator-agnostic comparison so saved
@@ -8073,6 +8128,7 @@ namespace ConditioningControlPanel.Services
                 }).ToList();
                 App.Logger?.Debug("VideoService: {Before} -> {After} after disabled filter", beforeCount, files.Count);
             }
+            keptEnabled = files.Count;
 
             // Duration filter (Phase 5). Best-effort: videos with no cached
             // duration are included and parsed lazily — they'll get filtered
@@ -8116,6 +8172,28 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService: {Before} -> {After} after duration filter [{Min}s, {Max}s]",
                     beforeDur, files.Count, minSec, maxSec);
             }
+            int keptDuration = files.Count;
+
+            // The #1124 funnel line. Information, not Debug: the report that needs it is a Release
+            // log from a user whose folder "has videos" and whose app says it has none, and until
+            // now that log carried the final count and nothing about the ladder that produced it.
+            // The path goes through the same scrubber as every other logged path.
+            var drops = new (int Count, string Reason)[]
+            {
+                (seen - keptExt, $"extension filter ({seen - keptExt} file(s); supported: {string.Join(" ", SupportedVideoExtensions)})"),
+                (keptExt - keptSecurity, $"path/name security checks ({keptExt - keptSecurity} file(s))"),
+                (keptSecurity - keptEnabled, $"the user's disabled-assets list ({keptSecurity - keptEnabled} file(s))"),
+                (keptEnabled - keptDuration, $"duration filter ({keptEnabled - keptDuration} file(s); min {minSec}s max {maxSec}s)")
+            };
+            var worstDrop = drops.OrderByDescending(d => d.Count).First();
+            string biggestDrop =
+                folderMissing ? "the videos folder does not exist"
+                : seen == 0 ? "the folder is empty"
+                : worstDrop.Count <= 0 ? "nothing was dropped"
+                : worstDrop.Reason;
+            App.Logger?.Information(
+                "VideoService: refill funnel for {Path} - {Seen} file(s) seen, {Ext} kept by extension, {Sec} after path/name checks, {Enabled} after the disabled list, {Dur} after the duration filter. Biggest drop: {Drop}",
+                _videosPath, seen, keptExt, keptSecurity, keptEnabled, keptDuration, biggestDrop);
 
             // Shuffle using Fisher-Yates algorithm for reliable randomization
             ShuffleList(files);
