@@ -139,7 +139,7 @@ namespace ConditioningControlPanel
                 Directory.CreateDirectory(UserDataPath);
                 File.WriteAllText(FileOpenHandoffPath, action + "\n" + path);
             }
-            catch { /* best effort — failure just means second instance has no handoff */ }
+            catch (Exception ex) { Diag.Swallowed(ex, "file-open handoff is best effort"); }
         }
 
         private static (string? action, string? path) ConsumeFileOpenHandoff()
@@ -149,7 +149,7 @@ namespace ConditioningControlPanel
                 var p = FileOpenHandoffPath;
                 if (!File.Exists(p)) return (null, null);
                 var lines = File.ReadAllText(p).Split('\n');
-                try { File.Delete(p); } catch { }
+                try { File.Delete(p); } catch (Exception ex) { Diag.Swallowed(ex); }
                 if (lines.Length < 2) return (null, null);
                 var action = lines[0].Trim();
                 var path = ValidateMediaArgPath(lines[1].Trim());
@@ -176,7 +176,7 @@ namespace ConditioningControlPanel
                 if (!string.IsNullOrWhiteSpace(overrideDir) && Path.IsPathRooted(overrideDir))
                     return overrideDir;
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "ConditioningControlPanel");
@@ -369,14 +369,14 @@ namespace ConditioningControlPanel
                         dirsToClean.Add(tempDir);
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             // System temp (fallback path)
             try
             {
                 dirsToClean.Add(Path.GetTempPath());
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             int deleted = 0;
             foreach (var dir in dirsToClean)
@@ -386,15 +386,15 @@ namespace ConditioningControlPanel
                     foreach (var file in Directory.GetFiles(dir, "ccp_temp_*"))
                     {
                         try { File.Delete(file); deleted++; }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
                     foreach (var file in Directory.GetFiles(dir, "haptic_video_*"))
                     {
                         try { File.Delete(file); deleted++; }
-                        catch { }
+                        catch (Exception ex) { Diag.Swallowed(ex); }
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
             }
 
             // Clean up old installer downloads (each version has a different filename so they pile up)
@@ -407,7 +407,7 @@ namespace ConditioningControlPanel
                     deleted++;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             if (deleted > 0)
                 Logger?.Information("Cleaned up {Count} stale temp files/folders from previous session", deleted);
@@ -946,7 +946,7 @@ namespace ConditioningControlPanel
                             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
                             if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
                         }
-                        catch { /* skip malformed window */ }
+                        catch (Exception ex) { Diag.Swallowed(ex, "skip malformed window entry"); }
                     }
 
                     // Bouncing text lives in a full-screen overlay window that
@@ -1196,10 +1196,10 @@ namespace ConditioningControlPanel
             int flashEvery  = EnvInt("CCP_STRESS_FLASH_EVERY", 6);// flash-window churn cadence (in ticks)
             int toggleEvery = EnvInt("CCP_STRESS_TOGGLE_EVERY", 40); // shared-host create/close churn cadence
 
-            try { Logger?.Warning("[STRESS] Hang-hunt stress mode ON — tick={Tick}ms spawn={Spawn} flashEvery={Flash} toggleEvery={Toggle}", tickMs, spawnPer, flashEvery, toggleEvery); } catch { }
+            try { Logger?.Warning("[STRESS] Hang-hunt stress mode ON — tick={Tick}ms spawn={Spawn} flashEvery={Flash} toggleEvery={Toggle}", tickMs, spawnPer, flashEvery, toggleEvery); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Make sure the bubble engine is actually running so spawns render (bypass the level gate).
-            try { Bubbles?.Start(bypassLevelCheck: true); } catch { }
+            try { Bubbles?.Start(bypassLevelCheck: true); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             long tick = 0;
             var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal)
@@ -1212,11 +1212,11 @@ namespace ConditioningControlPanel
                 // Bubble spawns — SpawnOnce self-marshals and respects its own cap, so continuous calls
                 // keep create/destroy churn at the cap indefinitely.
                 for (int i = 0; i < spawnPer; i++)
-                    try { Bubbles?.SpawnOnce(); } catch { }
+                    try { Bubbles?.SpawnOnce(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Flash windows — pool churn (create/show/hide of layered flash surfaces).
                 if (tick % flashEvery == 0)
-                    try { Flash?.TriggerFlashOnce(); } catch { }
+                    try { Flash?.TriggerFlashOnce(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // The prime suspect: flip the shared-host flag so the click-through host window is
                 // created and closed repeatedly — the keep-alive contract warns this deadlocks the
@@ -1228,7 +1228,7 @@ namespace ConditioningControlPanel
                         Settings.Current.BubbleSharedHost = !Settings.Current.BubbleSharedHost;
                         Settings.Current.ChaosBubbleSharedHost = Settings.Current.BubbleSharedHost;
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             };
             timer.Start();
@@ -1279,7 +1279,7 @@ namespace ConditioningControlPanel
             if (e.Args.Length >= 3 && e.Args[0] == "--write-hang-dump" && int.TryParse(e.Args[1], out int hangDumpPid))
             {
                 bool dumpOk = false;
-                try { dumpOk = Services.UiHangWatchdog.TryWriteDumpOfProcess(hangDumpPid, e.Args[2]); } catch { }
+                try { dumpOk = Services.UiHangWatchdog.TryWriteDumpOfProcess(hangDumpPid, e.Args[2]); } catch (Exception ex) { Diag.Swallowed(ex); }
                 Environment.Exit(dumpOk ? 0 : 1);
                 return;
             }
@@ -1303,7 +1303,7 @@ namespace ConditioningControlPanel
                             p.PopupAnimation = System.Windows.Controls.Primitives.PopupAnimation.None;
                         }
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }));
 
             // Show splash screen IMMEDIATELY - before anything else
@@ -1336,7 +1336,7 @@ namespace ConditioningControlPanel
                 // Write the "Open with CCP" handoff BEFORE signaling so a live primary can read it.
                 if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
                 {
-                    try { WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath); } catch { }
+                    try { WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
                 EventWaitHandle? ackWait = null;
@@ -1357,12 +1357,12 @@ namespace ConditioningControlPanel
                         signal.Set();
                         signal.Dispose();
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     bool tookOver = false;
                     try { tookOver = _mutex.WaitOne(TimeSpan.FromSeconds(8)); }
                     catch (AbandonedMutexException) { tookOver = true; } // old build died holding it — we own it now
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     if (!tookOver)
                     {
@@ -1372,25 +1372,25 @@ namespace ConditioningControlPanel
                     }
 
                     _mutexOwned = true;
-                    try { ConsumeFileOpenHandoff(); } catch { }
+                    try { ConsumeFileOpenHandoff(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     // Fall through — the legacy primary is gone; this instance is now the primary.
                 }
                 else
                 {
                     // Clear any stale ack from a prior handshake, poke the primary, then wait for it
                     // to confirm liveness from its UI thread.
-                    try { ackWait.Reset(); } catch { }
+                    try { ackWait.Reset(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     try
                     {
                         var signal = EventWaitHandle.OpenExisting(ShowSignalName);
                         signal.Set();
                         signal.Dispose();
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     bool acknowledged = false;
-                    try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
-                    try { ackWait.Dispose(); } catch { }
+                    try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { ackWait.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                     if (acknowledged)
                     {
@@ -1414,11 +1414,11 @@ namespace ConditioningControlPanel
                     // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
                     try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
                     catch (AbandonedMutexException) { _mutexOwned = true; }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
                     // drop any on-disk handoff to avoid a spurious re-open on a later signal.
-                    try { ConsumeFileOpenHandoff(); } catch { }
+                    try { ConsumeFileOpenHandoff(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
                     // Fall through — this instance is now the primary.
                 }
@@ -1445,7 +1445,7 @@ namespace ConditioningControlPanel
                             // this thread frozen too, so takeover still catches real zombies.)
                             if (_startupPhase)
                             {
-                                try { _showAckSignal?.Set(); } catch { }
+                                try { _showAckSignal?.Set(); } catch (Exception ex) { Diag.Swallowed(ex); }
                             }
 
                             Dispatcher.BeginInvoke(() =>
@@ -1471,7 +1471,7 @@ namespace ConditioningControlPanel
                                 // waiting second instance so it exits instead of killing us. Sent
                                 // even when mainWin is null (still starting): a responsive
                                 // dispatcher is proof enough that we are not wedged.
-                                try { _showAckSignal?.Set(); } catch { }
+                                try { _showAckSignal?.Set(); } catch (Exception ex) { Diag.Swallowed(ex); }
                             });
                         }
                     }
@@ -1940,7 +1940,7 @@ namespace ConditioningControlPanel
             catch (Exception exDesk) { Logger?.Warning(exDesk, "[EmiDesk] service construction failed; EMI Desk is unavailable this run"); }
             if (_engineCrashRecovered)
             {
-                try { EmiDesk?.Fire("crashRecovered", null); } catch { }
+                try { EmiDesk?.Fire("crashRecovered", null); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             QuestDefinitions = new QuestDefinitionService();
             _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
@@ -2030,7 +2030,7 @@ namespace ConditioningControlPanel
             // No-op for cloud users; silent on failure (Ollama may not be running).
             if (Ai is AiServiceStrategy aiStrategy)
             {
-                _ = Task.Run(async () => { try { await aiStrategy.WarmUpLocalAsync(); } catch { } });
+                _ = Task.Run(async () => { try { await aiStrategy.WarmUpLocalAsync(); } catch (Exception ex) { Diag.Swallowed(ex); } });
             }
 
             WindowAwareness = new WindowAwarenessService();
@@ -2138,7 +2138,7 @@ namespace ConditioningControlPanel
                 // pipeline is still there and still works. Detach so the legacy mouth is not left
                 // suppressed by a half-built v2 that can never speak.
                 Awareness = null;
-                try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+                try { Services.Awareness.AwarenessV2Routing.Detach(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 Services.Awareness.AwarenessLive.Ledger = null;
                 Services.Awareness.AwarenessLive.Memory = null;
                 Services.Awareness.AwarenessLive.ResetObserverState = null;
@@ -2214,12 +2214,12 @@ namespace ConditioningControlPanel
             KeywordHighlight = new KeywordHighlightService();
             RemoteControl = new RemoteControlService();
             // Quest credit: each remote-control command received (Patreon-exclusive quest category).
-            RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch { } };
+            RemoteControl.CommandReceived += (_, _) => { try { Quests?.TrackRemoteCommand(); } catch (Exception ex) { Diag.Swallowed(ex); } };
             // Quest credit for the GIVING side: each command this user issues to ANOTHER subject
             // as a Controller (take_the_reins_d, free for every tier). Raised by
             // RemoteControlService.ReportCommandIssued - read its remarks for why the giving side
             // is reported in rather than dispatched here.
-            RemoteControl.CommandIssued += (_, e) => { try { Quests?.TrackRemoteCommandIssued(e.TargetUnifiedId); } catch { } };
+            RemoteControl.CommandIssued += (_, e) => { try { Quests?.TrackRemoteCommandIssued(e.TargetUnifiedId); } catch (Exception ex) { Diag.Swallowed(ex); } };
             // (No app-level GoonGameService singleton: the Goon Game's clients build their own
             // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
             // so an always-constructed idle singleton owned nothing and was never read.)
@@ -2405,7 +2405,7 @@ namespace ConditioningControlPanel
             LockdownDose = new Services.Haptics.LockdownDoseKeeper(Lockdown);
             LockdownDose.Install();
             // Quest credit: each completed lockdown (Patreon-exclusive quest category).
-            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch { } };
+            Lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(); } catch (Exception ex) { Diag.Swallowed(ex); } };
 
             // Initialize mantra lab service
             Mantra = new MantraService();
@@ -2524,7 +2524,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Failed to create main window");
-                try { splash?.CloseImmediate(); } catch { }
+                try { splash?.CloseImmediate(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 _splash = null;
                 throw; // Re-throw to let DispatcherUnhandledException show the error
             }
@@ -2780,8 +2780,8 @@ namespace ConditioningControlPanel
             {
                 Task.Run(() =>
                 {
-                    try { _ = Speech?.IsAvailable; } catch { }                                   // warm Vosk off-UI
-                    try { if (Settings?.Current?.SpeechWakeWordEnabled == true) _ = WakeWord?.IsAvailable; } catch { } // warm KWS off-UI
+                    try { _ = Speech?.IsAvailable; } catch (Exception ex) { Diag.Swallowed(ex); }                                   // warm Vosk off-UI
+                    try { if (Settings?.Current?.SpeechWakeWordEnabled == true) _ = WakeWord?.IsAvailable; } catch (Exception ex) { Diag.Swallowed(ex); } // warm KWS off-UI
                 }).ContinueWith(_ =>
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
@@ -2927,7 +2927,7 @@ namespace ConditioningControlPanel
                         // Process may have exited on its own, or we lack rights to end it.
                         NoteStaleInstanceDecision($"[LIFECYCLE] Takeover could not act on pid {otherId}: {ex.GetType().Name} {ex.Message}");
                     }
-                    finally { try { proc.Dispose(); } catch { } }
+                    finally { try { proc.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); } }
                 }
             }
             catch (Exception ex)
@@ -2958,10 +2958,10 @@ namespace ConditioningControlPanel
                         if (QueryFullProcessImageName(handle, 0, buffer, ref size) && size > 0)
                             return buffer.ToString();
                     }
-                    finally { try { CloseHandle(handle); } catch { } }
+                    finally { try { CloseHandle(handle); } catch (Exception ex) { Diag.Swallowed(ex); } }
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             try { return proc.MainModule?.FileName; }
             catch { return null; }
@@ -2988,7 +2988,7 @@ namespace ConditioningControlPanel
                         _staleInstanceDecisions.Add(message);
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private const int PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
@@ -3064,7 +3064,7 @@ namespace ConditioningControlPanel
                         else if (t.IsCanceled || !t.Result)
                             Logger?.Warning("Achievement '{Name}' did NOT post to Discord (see preceding warning for cause)", achievement.Name);
                     }
-                    catch { /* diagnostics only — never let logging fault the continuation */ }
+                    catch (Exception ex) { Diag.Swallowed(ex, "diagnostics only, must not fault the continuation"); }
                 }, TaskContinuationOptions.ExecuteSynchronously);
             }
             else
@@ -3903,7 +3903,7 @@ namespace ConditioningControlPanel
                     var avatarWindow = Current.Windows.OfType<Window>().FirstOrDefault(w => w.GetType().Name == "AvatarTubeWindow");
                     avatarWindow?.Hide();
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 progressDialog = new UpdateProgressDialog();
                 progressDialog.Topmost = true;
@@ -3927,10 +3927,10 @@ namespace ConditioningControlPanel
                                     dialog.SetProgress(progress);
                                 }
                             }
-                            catch { }
+                            catch (Exception ex) { Diag.Swallowed(ex); }
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 };
 
                 Update.DownloadProgressChanged += progressHandler;
@@ -4008,7 +4008,7 @@ namespace ConditioningControlPanel
             {
                 Logger?.Error(ex, "Failed to download installer for fresh install");
 
-                try { progressDialog?.Close(); } catch { }
+                try { progressDialog?.Close(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
 
                 // Restore the main window if update failed
                 RestoreHiddenWindows();
@@ -4202,7 +4202,7 @@ namespace ConditioningControlPanel
                                 UseShellExecute = true
                             });
                         }
-                        catch { }
+                        catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                     }
                     return false;
                 }
@@ -4538,7 +4538,7 @@ Application State:
                                 migratedCount++;
                                 Logger?.Debug("Migrated spiral: {File} from {Source}", fileName, basePath);
                             }
-                            catch { }
+                            catch (Exception ex) { Diag.Swallowed(ex); }
                         }
                     }
                 }
@@ -4650,7 +4650,7 @@ Application State:
                     foreach (var file in Directory.EnumerateFiles(logDir))
                     {
                         try { Consider(File.GetCreationTimeUtc(file)); }
-                        catch { /* one unreadable log file must not lose the other candidates */ }
+                        catch (Exception ex) { Diag.Swallowed(ex, "one unreadable log file must not lose the others"); }
                     }
                 }
             }
@@ -4743,19 +4743,19 @@ Application State:
 
             // EMI Desk (MOMENTS 4.B / 3.8): the wordless flinch. appClosing is a HOLD with no pool
             // and never gets one - she does not get a goodbye speech while the app is going away.
-            try { EmiDesk?.Fire("appClosing", null); } catch { }
+            try { EmiDesk?.Fire("appClosing", null); } catch (Exception ex) { Diag.Swallowed(ex); }
 
-            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // A clean shutdown — even mid-run — is NOT a crash. Clear both dirty-shutdown
             // sentinels so the next launch doesn't false-report an abnormal exit.
-            try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
-            try { Services.EngineCrashSentinel.Clear(); } catch { }
-            try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch { }
+            try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { Services.EngineCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { Services.CornerGifService.ClearSentinelOnCleanExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // A shutdown that takes >13s (video teardown, haptics stop, WebView2 dispose) can trip
             // the watchdog on the way out. That is not the freeze we are hunting — disarm it so the
             // next launch doesn't cry hang over a clean, if slow, exit.
-            try { Services.UiHangWatchdog.ClearSentinelOnCleanExit(); } catch { }
+            try { Services.UiHangWatchdog.ClearSentinelOnCleanExit(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Haptics FIRST and synchronously (bounded ~2s): a Lovense level has no server-side
             // watchdog, so a toy we don't countermand keeps running after the app is gone. This
@@ -4771,19 +4771,19 @@ Application State:
             try { EmiDesk?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "[EmiDesk] shutdown failed"); }
 
             // DtRH browser game: dispose the WebView2 window/process if it's up.
-            try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
+            try { Services.Chaos.DtrhHostService.CloseActive(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // The Arcademy: same reason - a WebView2 process outliving the app is a leak, and its
             // meta store has a debounced write that must be flushed before we go. ShutdownFlush, NOT
             // CloseActive: the graceful close waits on a 1200ms DispatcherTimer for the page's
             // exit-done, and that timer can never tick from inside OnExit - so the flush it guards
             // never happened and the last class's grades/streak went with the process.
-            try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch { }
+            try { Services.Arcademy.ArcademyHostService.ShutdownFlush(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // The Emergency Exit's friction door: a WebView2 process outliving the app is a leak, and
             // Close() is safe from here - it has no state to flush and never touches the lockdown (any
             // verdict was applied the moment it was rolled).
-            try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch { }
+            try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it
@@ -4843,13 +4843,13 @@ Application State:
             Compositor?.Dispose(); // after effect services so their layers deactivate first
             // Before the window goes: Dispose runs the crash-safe UndoAll so no haunt is left painted on
             // a control (or, worse, left mid-transform in a saved layout).
-            try { Possession?.Dispose(); } catch { }
+            try { Possession?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             ScreenShake?.Dispose();
-            try { Chaos?.ForceShutdown(); } catch { }
+            try { Chaos?.ForceShutdown(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Standalone corner-GIF overlays are unowned topmost windows (#709) - close them here
             // as well as from MainWindow.Closing, since a Shutdown() that bypasses the main
             // window's close path would otherwise leave them alive.
-            try { CornerGif?.StopAll(); } catch { }
+            try { CornerGif?.StopAll(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // Each guarded individually (#1071). These were a bare unguarded run of calls, so a
             // throw in ANY of them skipped every line after it - including the achievement flush,
             // which is the last write of the user's progress before OnExit reaches TerminateProcess.
@@ -4865,7 +4865,7 @@ Application State:
             // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
             // observer's own Stop is what closes the open visit and flushes the ledger to disk.
             // Detach first so nothing can route a line into a half-disposed arbiter on the way down.
-            try { Services.Awareness.AwarenessV2Routing.Detach(); } catch { }
+            try { Services.Awareness.AwarenessV2Routing.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); }
             Awareness?.Dispose();
             Services.Awareness.AwarenessLive.ResetObserverState = null;
             Services.Awareness.AwarenessLive.Ledger = null;
@@ -4941,7 +4941,7 @@ Application State:
             // Dispose the single-instance ack gate
             var ackSignal = _showAckSignal;
             _showAckSignal = null;
-            try { ackSignal?.Dispose(); } catch { }
+            try { ackSignal?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Release single instance mutex (only if we own it)
             if (_mutexOwned && _mutex != null)
@@ -4952,8 +4952,7 @@ Application State:
                 }
                 catch (ApplicationException)
                 {
-                    // Mutex was not owned by this thread - ignore
-                }
+                } // swallow: mutex was not owned by this thread
             }
             _mutex?.Dispose();
 
