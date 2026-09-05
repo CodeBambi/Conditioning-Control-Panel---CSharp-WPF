@@ -1441,7 +1441,12 @@ namespace ConditioningControlPanel.Services
         /// and the play path force-unmutes, so folding this into GetEffectiveVolume is the
         /// one place that covers every site at once - play-time AND live slider drags.
         /// </summary>
-        private static volatile bool _externalMute;
+        ///
+        /// INSTANCE, not static (#1103). As a static it outlived the VideoService that owned it: a
+        /// dive torn down on an unusual path left it set and every video for the rest of the process
+        /// was created silent, with nothing in the log to say why. Per-instance, a service restart
+        /// clears it, and the only writer is the DtRH host.
+        private volatile bool _externalMute;
 
         /// <summary>Silence (or release) every video for an external owner. Applies live.
         /// MUST be released on teardown - see DtrhHostService.DisposeAll.</summary>
@@ -1462,6 +1467,23 @@ namespace ConditioningControlPanel.Services
             var master = App.Settings.Current.MasterVolume;
             var video = App.Settings.Current.VideoVolume;
             return (int)((master / 100.0) * (video / 100.0) * 100);
+        }
+
+        /// <summary>
+        /// Where the current effective volume comes from, for the one play-time log line (#1103).
+        /// "The video had no sound" reports used to carry nothing that separated "the user's slider
+        /// is at zero" from "a DtRH dive left the external mute set", which are the same silence
+        /// with completely different fixes. Audio ducking is named here only to rule it out: Duck()
+        /// lowers OTHER apps, never this player.
+        /// </summary>
+        private string DescribeVolumeOrigin()
+        {
+            var master = App.Settings.Current.MasterVolume;
+            var video = App.Settings.Current.VideoVolume;
+            if (_externalMute) return $"DtRH dive external mute (user setting is master {master}%, video {video}%)";
+            if (master <= 0) return "user setting: master volume is 0";
+            if (video <= 0) return "user setting: video volume is 0";
+            return $"user setting (master {master}%, video {video}%)";
         }
 
         /// <summary>
@@ -1530,7 +1552,11 @@ namespace ConditioningControlPanel.Services
                     // drags: player.Mute reads true while no audio output exists yet (transient),
                     // so the primary player got skipped. Volume and Mute are independent in
                     // LibVLC - setting Volume never unmutes, and no-audio secondaries ignore it.
+                    // Mute is driven from the same number (#1103): silence is the PLAYER's state
+                    // now, so a drag back up has to clear it or the video stays silent for the rest
+                    // of the clip. Secondaries carry :no-audio and ignore both.
                     player.Volume = effectiveVolume;
+                    player.Mute = effectiveVolume <= 0;
                 }
                 catch (Exception ex)
                 {
@@ -2639,10 +2665,10 @@ namespace ConditioningControlPanel.Services
             // Create media from URL — disposed after Play() (LibVLC ref-counts internally)
             using var media = new Media(_libVLC!, url, FromType.FromLocation);
             // Secondaries skip audio decoding entirely — prevents a parallel WASAPI session
-            // from opening on the same MMDevice and racing the primary's mixer state. Also
-            // skip it when audio is deactivated (effective volume 0), else the async Play()
-            // lets the video blip at 100% before the volume set below lands (see file path).
-            if (!withAudio || GetEffectiveVolume() <= 0) media.AddOption(":no-audio");
+            // from opening on the same MMDevice and racing the primary's mixer state. A zero
+            // effective volume no longer bakes it in: that made the silence permanent for the
+            // whole clip, mute state included (#1103, see the file path for the full note).
+            if (!withAudio) media.AddOption(":no-audio");
 
             // Subscribed BEFORE Play(): a fast start raises Playing inside Play() itself, and this
             // handler owns everything that needs a live aout - the volume re-apply (the set after
@@ -2652,7 +2678,12 @@ namespace ConditioningControlPanel.Services
                 int audioRouted = 0; // Playing can fire again after a seek/restart - route once
                 mediaPlayer.Playing += (s, e) =>
                 {
-                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    try
+                    {
+                        var eff = GetEffectiveVolume();
+                        mediaPlayer.Mute = eff <= 0;
+                        mediaPlayer.Volume = eff;
+                    }
                     catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: URL volume apply on Playing failed"); }
 
                     if (System.Threading.Interlocked.Exchange(ref audioRouted, 1) == 0)
@@ -2664,8 +2695,11 @@ namespace ConditioningControlPanel.Services
 
             if (withAudio)
             {
-                mediaPlayer.Mute = false;
-                mediaPlayer.Volume = GetEffectiveVolume();
+                var effective = GetEffectiveVolume();
+                mediaPlayer.Mute = effective <= 0;
+                mediaPlayer.Volume = effective;
+                App.Logger?.Information("VideoService: effective URL video volume {Vol}% (mute={Mute}) - origin: {Origin}",
+                    effective, effective <= 0, DescribeVolumeOrigin());
             }
 
             return win;
@@ -3520,15 +3554,15 @@ namespace ConditioningControlPanel.Services
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
-            // Also skip it when audio is deactivated (effective volume 0): Play() is async, so
-            // the Volume=0 set below no-ops until the aout exists and the video would start at
-            // 100% for a beat before the Playing handler cuts it — the audible blip a
-            // "deactivated audio" user hears. :no-audio never decodes audio, so nothing blips.
-            // Same reasoning covers a muted player (dive master-mute or a zeroed slider): it has to
-            // start SILENT, and killing audio at the media level is the only way to beat the aout.
-            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory dive
-            // video, and any later playback opens a fresh Media that re-evaluates this.
-            if (!withAudio || GetEffectiveVolume() <= 0)
+            // It is NOT baked in for a zero effective volume any more (#1103). ":no-audio" is a
+            // permanent property of the Media: a clip created while the volume happened to be 0 -
+            // a slider at zero, or a DtRH dive holding the external mute - could never make a sound
+            // again, however far the user pushed the slider back up mid-video, and if the mute
+            // state was stale the silence lasted for every video until the app restarted. Mute and
+            // volume are applied through the PLAYER below instead, which a live change can reach.
+            // The cost is the beat between Play() and the aout coming up, where a zero-volume clip
+            // can blip; the Playing handler is the first moment the volume can actually land.
+            if (!withAudio)
             {
                 media.AddOption(":no-audio");
             }
@@ -3556,7 +3590,15 @@ namespace ConditioningControlPanel.Services
                     // with no aout) and the video starts at 100% regardless of the slider. Only
                     // this re-apply lands the Video Volume slider (matches
                     // DualMonitorVideoService/MiniPlayerWindow).
-                    try { mediaPlayer!.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    // Mute follows the CURRENT effective volume rather than being forced off: the
+                    // silence is now the player's state, not the media's, so a later unmute (dive
+                    // released, slider dragged back up) reaches this same live player (#1103).
+                    try
+                    {
+                        var eff = GetEffectiveVolume();
+                        mediaPlayer!.Mute = eff <= 0;
+                        mediaPlayer.Volume = eff;
+                    }
                     catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
 
                     // Anything heavier than a property set goes off the LibVLC event thread.
@@ -3576,8 +3618,14 @@ namespace ConditioningControlPanel.Services
             // LibVLC auto-selects the first audio track once the media is parsed.
             if (withAudio)
             {
-                mediaPlayer.Mute = false;
-                mediaPlayer.Volume = GetEffectiveVolume();
+                var effective = GetEffectiveVolume();
+                mediaPlayer.Mute = effective <= 0;
+                mediaPlayer.Volume = effective;
+                // WHY this video is as loud as it is, in one line (#1103). A "no audio" report used
+                // to be unable to tell a zeroed slider from a stale DtRH dive mute - the same
+                // silence, opposite fixes - because nothing ever logged which one was in force.
+                App.Logger?.Information("VideoService: effective video volume {Vol}% (mute={Mute}) - origin: {Origin}",
+                    effective, effective <= 0, DescribeVolumeOrigin());
                 // REQUESTED values only. No aout exists this early, so this line says nothing about
                 // audibility - it read "Volume=99, Mute=false" on both #707 and #708, which were
                 // dead silent. RouteAndProbeAudio logs the RESOLVED routing once the aout is live;
