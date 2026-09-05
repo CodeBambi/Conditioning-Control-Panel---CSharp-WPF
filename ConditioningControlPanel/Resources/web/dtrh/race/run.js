@@ -35,6 +35,7 @@ import { createInput } from './input.js';
 import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
 import { createSpeedFx } from './speed.js';
 import { createRaceAudio } from './audio.js';
+import { resultTier, resultsCamera, preRollCamera } from './intro.js';
 
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE = 72;   // 1.6 read as ALMOST spam: the next lane over qualified
 // effect lives are cocktail.js CATEGORIES (scaled by the pop's durationMult); a glitch re-pop wobbles
@@ -97,6 +98,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
   let W = null;                       // the world: everything that is rebuilt on "again"
   let raf = 0, last = 0, lastBeat = 0, payoutResolve = null;
+  let camOverride = null;                // fn(camera, dt, w, camOut) -> false when done (intro.js cameras)
   // last ~1 s of kart {d,x,h} for the ALMOST on a miss: a fixed ring, no per-frame objects
   const TRAIL_N = 70, trail = [];
   for (let i = 0; i < TRAIL_N; i++) trail.push({ d: 0, x: 0, h: 0, ok: false });
@@ -397,6 +399,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (S.running && !S.paused && !S.hostPaused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
     }
+    if (camOverride && camOverride(camera, dt, W, camOut) === false) camOverride = null;
     pixel.render(scene, camera);
   }
 
@@ -426,11 +429,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     send({ type: 'run-ended', ...summary });
     sfx('surface', 0.8);
     audio.duck(true, 'end');
+    setCameraOverride(resultsCamera({ tier: resultTier(st.banked + st.score, S.bestAtStart, summary.personalBest), reducedMotion }));   // she turns to face the card
     const payout = await waitPayout(PAYOUT_WAIT_MS);
     if (S.disposed) return;
     const shown = { ...summary };
     if (payout && payout.finalXp != null) shown.title = `the tea party · +${Math.round(payout.finalXp)} xp` + (payout.sparksEarned ? ` · ${payout.sparksEarned} sparks` : '');
-    const pick = await hud.showEnd(shown);
+    const pick = await hud.showEnd(shown, { beside: true });
     if (S.disposed) return;
     if (pick === 'again') again(); else exit();
   }
@@ -440,7 +444,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     resetRunState(runSeed);
     W = build(runSeed);
     S.started = false;
-    start();
+    setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
+    hud.countdown().then(start);
   }
   function exit() {
     send({ type: 'exit' });
@@ -461,6 +466,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (!W) W = build(S.seed);
     S.started = true; S.running = true; S.ended = false;
     S.bestAtStart = W.score.state.best;
+    camOverride = null;
     S.room = W.dresser.applyRoom(W.fx, W.layout.roomAtDepth(0), 0.2);   // the gate 9 m in shows the banner
     W.kart.setMood('calm');
     send({ type: 'run-started', seed: S.seed });
@@ -486,7 +492,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   W = build(seed);
   resetRunState(seed);
   raf = requestAnimationFrame(frame);
-  return { start, setPaused, dispose };
+  function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
+  return { start, setPaused, dispose, setCameraOverride };
 }
 
 // self-check: node --check is the bar; everything touches the DOM inside createRace.
