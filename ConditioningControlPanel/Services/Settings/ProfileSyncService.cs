@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -1648,18 +1648,26 @@ namespace ConditioningControlPanel.Services
                         }
                         else if (v2Result?.SkillPoints.HasValue == true)
                         {
-                            // Take max of server/local — skill points only increase (level-ups, bubble
-                            // pops) and are NEVER reset by seasons (policy: the balance is permanent,
-                            // and since the Descent so is the tree it buys), so the higher value is
-                            // always correct.
-                            // This also shields the balance from an older server that still zeroes
-                            // skill_points at rollover.
-                            var maxPoints = Math.Max(v2Result.SkillPoints.Value, settings.SkillPoints);
-                            if (maxPoints != settings.SkillPoints)
+                            // ADOPT THE SERVER'S BALANCE. It is the only side that sees the whole
+                            // story: it AWARDS from the level delta and the bubble delta carried up
+                            // by this very sync, and it DEBITS at the skill tree and now at the Back
+                            // Room cage. A max-merge was safe while nothing could ever go down; with
+                            // a debit in the picture it resurrects spent points the first time a
+                            // second desk syncs its older, higher number, which would mean chips
+                            // bought for free.
+                            // An offline level-up is still not lost. The award for it is computed
+                            // server-side FROM the level this same request just carried up, so the
+                            // number being adopted here already contains it.
+                            // Seasons still never reset the balance (policy: it is permanent, and
+                            // since the Descent so is the tree it buys) - that rule now lives with
+                            // the server, and force_skills_reset above stays the one path that
+                            // deliberately rewrites the balance from outside.
+                            var serverPoints = Math.Max(0, v2Result.SkillPoints.Value);
+                            if (serverPoints != settings.SkillPoints)
                             {
-                                App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — taking max ({Max})",
-                                    v2Result.SkillPoints.Value, settings.SkillPoints, maxPoints);
-                                settings.SkillPoints = maxPoints;
+                                App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} - adopting the server's",
+                                    v2Result.SkillPoints.Value, settings.SkillPoints);
+                                settings.SkillPoints = serverPoints;
                                 App.Settings?.Save();
                             }
                         }
@@ -2962,7 +2970,10 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Merge skill tree data - take max of server/local (skill points only increase)
+            // Merge skill tree data - take max of server/local (skill points only increase).
+            // LEGACY PATH ONLY: the v2 sync above ADOPTS the server's balance instead, because that
+            // is the side that debits the tree and the Back Room cage. This older endpoint knows
+            // about no debit at all, so max is still the right answer down here.
             if (cloudProfile.SkillPoints.HasValue)
             {
                 var maxPoints = Math.Max(cloudProfile.SkillPoints.Value, settings.SkillPoints);
