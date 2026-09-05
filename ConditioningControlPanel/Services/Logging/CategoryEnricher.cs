@@ -18,6 +18,11 @@ namespace ConditioningControlPanel.Services.Logging
     /// literal from the call site, so the same string instance comes back every time. The cache is
     /// bounded and cleared wholesale when it fills, which cannot happen with a fixed set of call
     /// sites but can if someone builds templates by concatenation.</para>
+    ///
+    /// <para>The one template shape the text alone cannot answer is a tag passed as a PARAMETER
+    /// (<c>"{Tag} blocked"</c>). Those are rendered through <see cref="LiteralMessage"/> - the same
+    /// renderer the formatter uses, so the column and the line can never disagree - and are not
+    /// cached, because the answer belongs to the event rather than the template.</para>
     /// </summary>
     public sealed class CategoryEnricher : ILogEventEnricher
     {
@@ -35,11 +40,20 @@ namespace ConditioningControlPanel.Services.Logging
             var text = logEvent.MessageTemplate?.Text;
             if (string.IsNullOrEmpty(text)) return;
 
-            if (!_cache.TryGetValue(text!, out var cat))
+            string cat;
+            if (text![0] == '{')
             {
-                cat = Derive(text!);
+                // The tag is a PARAMETER, not literal text: Log.Warning("{Tag} blocked", "[BARK]").
+                // The template alone reads as "{Tag} blocked" and derives App, so render the line
+                // the way the formatter will - strings literal, no quotes - and read the tag off
+                // that. Not cached: unlike a template, the answer varies per event.
+                cat = Derive(LiteralMessage.Render(logEvent));
+            }
+            else if (!_cache.TryGetValue(text, out cat!))
+            {
+                cat = Derive(text);
                 if (_cache.Count >= CacheCap) _cache.Clear();
-                _cache[text!] = cat;
+                _cache[text] = cat;
             }
 
             logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty(PropertyName, cat));
