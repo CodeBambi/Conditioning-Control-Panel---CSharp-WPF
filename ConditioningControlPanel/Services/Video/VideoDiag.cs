@@ -276,8 +276,21 @@ namespace ConditioningControlPanel.Services
                         _headerDate = today;
                         sw.WriteLine($"==== {today} (local, UTC{DateTime.Now:zzz}) ====");
                     }
+                    // Redact on the way to disk. This file bypasses Serilog entirely, so none of
+                    // the pipeline's redaction reaches it, and its callers hand it raw paths -
+                    // UiHangWatchdog writes the dump path and the log folder verbatim. video-diag
+                    // is attached to bug reports like any other log, so "C:\Users\<name>\..." in it
+                    // is the same leak the session file was fixed for.
+                    //
+                    // Here rather than in Log(): Log() is called from the UI thread and from
+                    // LibVLC's native callback threads while the UI may already be wedged, and the
+                    // redactor's assets-root rule does a Directory.Exists that can block on an
+                    // unplugged drive. On this thread - the writer's own, which is what keeps the
+                    // trace alive during a freeze - that cost is paid where it is safe to pay it.
+                    // The redactor itself is regex-only: no locks, no Serilog, no shared state
+                    // beyond the cached roots.
                     while (_queue.TryDequeue(out var line))
-                        sw.WriteLine(line);
+                        sw.WriteLine(Services.Logging.LogRedactor.Redact(line));
                     int dropped = Interlocked.Exchange(ref _dropped, 0);
                     if (dropped > 0) sw.WriteLine($"(diag queue overflow — {dropped} line(s) dropped)");
                     sw.Flush();

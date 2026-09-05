@@ -1699,6 +1699,18 @@ namespace ConditioningControlPanel
             {
                 var ex = args.ExceptionObject as Exception;
                 LogCrashDetails("DOMAIN", ex);
+
+                // Last chance to close the session file: the runtime is about to tear the process
+                // down and ProcessExit does not run for an unhandled exception, so without this
+                // the log of the run that CRASHED is the one with no end line. Guarded on
+                // IsTerminating, and deliberately NOT done in the dispatcher or task handlers -
+                // both of those mark the exception handled and the app keeps running, where
+                // writing the footer would close the sinks under a live session.
+                if (args.IsTerminating)
+                {
+                    try { Services.Logging.LogPipeline.WriteSessionFooter(); }
+                    catch { /* swallow: nothing useful is left to report it to */ }
+                }
             };
             TaskScheduler.UnobservedTaskException += (s, args) =>
             {
@@ -4953,7 +4965,16 @@ Application State:
             SecureAuthTokenStore.ClearMemoryCache();
             SecureApiKeyStore.ClearMemoryCache();
 
-            // Close and flush the logger
+            // Close the session file and write its "== end:" line. This has to happen HERE rather
+            // than only from the pipeline's ProcessExit hook, because OnExit finishes with
+            // TerminateProcess (see the comment at the bottom of this method), which skips
+            // ProcessExit handlers entirely - so every ordinary close was ending with no footer at
+            // all. Idempotent: the ProcessExit hook and the unhandled-exception path can still call
+            // it, and whichever arrives first is the one that writes.
+            Services.Logging.LogPipeline.WriteSessionFooter();
+
+            // Close and flush the logger (WriteSessionFooter has already done this; harmless and
+            // kept so the shutdown reads the same whether or not the pipeline was ever built).
             Log.CloseAndFlush();
 
             // Dispose show-window signal

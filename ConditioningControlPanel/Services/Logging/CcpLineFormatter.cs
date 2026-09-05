@@ -77,12 +77,12 @@ namespace ConditioningControlPanel.Services.Logging
             return "App";
         }
 
-        private static string Render(LogEvent e)
-        {
-            using var sw = new StringWriter(CultureInfo.InvariantCulture);
-            e.RenderMessage(sw);
-            return sw.ToString();
-        }
+        /// <summary>
+        /// The message, with string parameters written literally. NOT
+        /// <see cref="LogEvent.RenderMessage(TextWriter, System.IFormatProvider)"/>: that quotes
+        /// every string scalar. See <see cref="LiteralMessage"/>.
+        /// </summary>
+        private static string Render(LogEvent e) => LiteralMessage.Render(e);
 
         /// <summary>
         /// How many characters of the message repeat the category column. Only an EXACT repeat is

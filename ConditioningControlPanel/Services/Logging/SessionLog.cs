@@ -59,20 +59,47 @@ namespace ConditioningControlPanel.Services.Logging
             return path;
         }
 
+        /// <summary>At most this many swallow-site lines under the footer, and none at all beyond
+        /// that: a truncated top-five tells a reader less than the count already did.</summary>
+        public const int MaxSwallowSites = 5;
+
         /// <summary>
         /// The closing line. Written after the sinks are closed, because the file sink holds the
         /// handle while it is alive.
+        ///
+        /// <para><c>swallowed=</c> is the session's <see cref="Diag.SwallowCount"/>: exceptions the
+        /// app deliberately ignored. It belongs here precisely because those stop being logged once
+        /// a site passes its per-site budget, so the footer is the only place a run ever says
+        /// "there were four hundred of these" - a number that is often the first sign of a real
+        /// fault behind an empty-looking log.</para>
+        ///
+        /// <para><paramref name="swallowSummary"/> is the busiest sites, newline separated, written
+        /// one line each and only while the list stays short.</para>
         /// </summary>
-        public static void WriteFooter(string logsDir, string sessionId, TimeSpan uptime, int warnings, int errors, int suppressed)
+        public static void WriteFooter(string logsDir, string sessionId, TimeSpan uptime, int warnings, int errors, int suppressed,
+            int swallowed = 0, string? swallowSummary = null)
         {
             try
             {
-                var line = string.Format(CultureInfo.InvariantCulture,
-                    "== end: uptime {0:h\\:mm\\:ss} warn={1} err={2} suppressed={3} ==",
-                    uptime, warnings, errors, suppressed);
-                File.AppendAllText(Path.Combine(logsDir, FileName(sessionId)), line + Environment.NewLine, Encoding.UTF8);
+                var sb = new StringBuilder(256);
+                sb.AppendFormat(CultureInfo.InvariantCulture,
+                    "== end: uptime {0:h\\:mm\\:ss} warn={1} err={2} suppressed={3} swallowed={4} ==",
+                    uptime, warnings, errors, suppressed, swallowed);
+                sb.Append(Environment.NewLine);
+
+                foreach (var site in SummaryLines(swallowSummary))
+                    sb.Append("   swallowed at ").Append(site).Append(Environment.NewLine);
+
+                File.AppendAllText(Path.Combine(logsDir, FileName(sessionId)), sb.ToString(), Encoding.UTF8);
             }
             catch { /* swallow: shutdown is best effort */ }
+        }
+
+        private static string[] SummaryLines(string? summary)
+        {
+            if (string.IsNullOrWhiteSpace(summary)) return Array.Empty<string>();
+            var lines = summary!.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return lines.Length > 0 && lines.Length <= MaxSwallowSites ? lines : Array.Empty<string>();
         }
 
         /// <summary>

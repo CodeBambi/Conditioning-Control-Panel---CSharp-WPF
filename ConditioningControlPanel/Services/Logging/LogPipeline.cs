@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.IO;
 using Serilog;
 using Serilog.Core;
@@ -34,8 +35,7 @@ namespace ConditioningControlPanel.Services.Logging
         private static CountingSink? _counters;
         private static string? _logsDir;
         private static bool _footerHooked;
-        private static bool _footerWritten;
-        private static readonly object FooterGate = new();
+        private static int _footerWritten;
 
         /// <summary>
         /// Where the header's <c>lang=</c> and <c>mod=</c> come from. A seam because the logger is
@@ -161,9 +161,12 @@ namespace ConditioningControlPanel.Services.Logging
         }
 
         /// <summary>
-        /// The footer is written from ProcessExit rather than App.OnExit: OnExit does not run when
-        /// the app is closed by a taskbar kill or a restart-for-update, and those sessions are
-        /// precisely the ones whose end we want recorded.
+        /// ProcessExit is the BACKUP hook, not the only one. It covers the exits App.OnExit never
+        /// sees - a taskbar kill, a restart-for-update - but it does NOT cover the ordinary one:
+        /// App.OnExit ends in TerminateProcess, which skips ProcessExit handlers and finalizers by
+        /// design (see the comment there; it is what stopped WPF's DirectWriteForwarder crashing on
+        /// close). So every clean exit used to end with no footer at all. App.OnExit now calls
+        /// <see cref="WriteSessionFooter"/> itself, and this stays for the other paths.
         /// </summary>
         private static void HookFooter()
         {
@@ -174,28 +177,44 @@ namespace ConditioningControlPanel.Services.Logging
         }
 
         /// <summary>
-        /// Close the sinks and write the last line. Idempotent - whichever of ProcessExit and
-        /// App.OnExit gets there first wins, and the second is a no-op.
+        /// Where the footer's <c>swallowed=</c> comes from. A seam so the pipeline does not reach
+        /// into app-wide state, and so a test can supply its own numbers without touching the
+        /// process-wide counter in <see cref="Diag"/>.
+        /// </summary>
+        internal static Func<(int Count, string Summary)> SwallowProvider { get; set; } = DefaultSwallow;
+
+        private static (int, string) DefaultSwallow()
+        {
+            try { return (Diag.SwallowCount, Diag.SwallowSummary(SessionLog.MaxSwallowSites)); }
+            catch { return (0, string.Empty); /* swallow: a footer number is not worth an exit crash */ }
+        }
+
+        /// <summary>
+        /// Close the sinks and write the last line. Idempotent, and cheaply so: App.OnExit,
+        /// ProcessExit and the crash path can all reach it, and only the first one writes.
         /// </summary>
         public static void WriteSessionFooter()
         {
-            lock (FooterGate)
-            {
-                if (_footerWritten) return;
-                _footerWritten = true;
-            }
+            if (Interlocked.Exchange(ref _footerWritten, 1) != 0) return;
 
             int warn = _counters?.Warnings ?? 0;
             int err = _counters?.Errors ?? 0;
             int suppressed = _throttle?.TotalSuppressed ?? 0;
             var dir = _logsDir;
+            var (swallowed, swallowSites) = SafeSwallow();
 
             // Sinks first: the file sink holds the handle, and the throttle's flush can still add
             // suppression summaries that belong above the footer.
             Shutdown();
 
             if (!string.IsNullOrEmpty(dir))
-                SessionLog.WriteFooter(dir!, SessionId, Uptime(), warn, err, suppressed);
+                SessionLog.WriteFooter(dir!, SessionId, Uptime(), warn, err, suppressed, swallowed, swallowSites);
+        }
+
+        private static (int, string) SafeSwallow()
+        {
+            try { return SwallowProvider(); }
+            catch { return (0, string.Empty); /* swallow */ }
         }
 
         /// <summary>

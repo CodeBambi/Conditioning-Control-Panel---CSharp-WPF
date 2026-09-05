@@ -103,11 +103,43 @@ public class SessionLogTests : IDisposable
     public void Footer_StatesWhatTheRunCost()
     {
         var path = SessionLog.Prepare(_dir, "20260904-101112", "6.9.2", "en", "none");
-        SessionLog.WriteFooter(_dir, "20260904-101112", TimeSpan.FromSeconds(3725), warnings: 4, errors: 2, suppressed: 380);
+        SessionLog.WriteFooter(_dir, "20260904-101112", TimeSpan.FromSeconds(3725),
+            warnings: 4, errors: 2, suppressed: 380, swallowed: 91);
 
         var last = File.ReadAllLines(path)[^1];
-        // "warn=0 err=0" on the last line answers a support thread without opening the file.
-        Assert.Equal("== end: uptime 1:02:05 warn=4 err=2 suppressed=380 ==", last);
+        // "warn=0 err=0" on the last line answers a support thread without opening the file, and
+        // "swallowed=" is the only place the deliberately-ignored exceptions are ever counted: past
+        // their per-site budget they stop being logged at all.
+        Assert.Equal("== end: uptime 1:02:05 warn=4 err=2 suppressed=380 swallowed=91 ==", last);
+    }
+
+    [Fact]
+    public void Footer_ListsTheBusiestSwallowSites_WhileTheListIsShort()
+    {
+        var path = SessionLog.Prepare(_dir, "20260904-101113", "6.9.2", "en", "none");
+        SessionLog.WriteFooter(_dir, "20260904-101113", TimeSpan.FromSeconds(60),
+            warnings: 0, errors: 0, suppressed: 0, swallowed: 12,
+            swallowSummary: "VideoService.cs:412 9\nApp.xaml.cs:1204 3");
+
+        var lines = File.ReadAllLines(path);
+        Assert.Contains("swallowed=12", lines[^3]);
+        Assert.Equal("   swallowed at VideoService.cs:412 9", lines[^2]);
+        Assert.Equal("   swallowed at App.xaml.cs:1204 3", lines[^1]);
+    }
+
+    [Fact]
+    public void Footer_DropsTheSiteListRatherThanTruncateIt()
+    {
+        var path = SessionLog.Prepare(_dir, "20260904-101114", "6.9.2", "en", "none");
+        var many = string.Join("\n", Enumerable.Range(0, SessionLog.MaxSwallowSites + 1).Select(i => $"F{i}.cs:1 {i}"));
+        SessionLog.WriteFooter(_dir, "20260904-101114", TimeSpan.FromSeconds(60),
+            warnings: 0, errors: 0, suppressed: 0, swallowed: 99, swallowSummary: many);
+
+        // A truncated top-five tells a reader less than the count already did, so the footer stays
+        // one line.
+        var lines = File.ReadAllLines(path);
+        Assert.Contains("swallowed=99", lines[^1]);
+        Assert.DoesNotContain(lines, l => l.Contains("swallowed at"));
     }
 
     [Fact]
