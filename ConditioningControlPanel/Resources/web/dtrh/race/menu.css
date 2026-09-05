@@ -1,0 +1,108 @@
+/* race/menu.css - the main menu of The Caucus Race (.rm-*). Scoped under #race-root.
+ * Same pixel look as the HUD: hard plates, stepped shadows, Poppins, lowercase.
+ * The left column is DOM; the right side is a hole the stage shows through.
+ * THE BOUNCE on press (Law VIII, inside 100 ms), THE GLOW on focus, springs never linear tweens (Law XI). */
+
+#race-root .rm-root {
+  position: fixed; inset: 0; z-index: 25;
+  display: grid; grid-template-columns: minmax(300px, 38%) 1fr;
+  font-family: var(--rh-font, 'Poppins', 'Segoe UI', system-ui, sans-serif);
+  color: #fff1f8; text-transform: lowercase; user-select: none;
+  pointer-events: auto;
+}
+#race-root .rm-root[hidden] { display: none; }
+#race-root .rm-root.is-in .rm-col { animation: rmIn 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+
+#race-root .race-hud.is-lobby .rh-chrome { display: none; }   /* the run's score / speed plates stay out of the menu and the intro */
+
+/* ---- the column ---- */
+#race-root .rm-col {
+  display: flex; flex-direction: column; gap: 14px; justify-content: center;
+  padding: 6vh 28px 6vh 5vw; min-width: 0;
+  background: linear-gradient(90deg, rgba(18, 11, 36, 0.92) 0%, rgba(18, 11, 36, 0.86) 78%, rgba(18, 11, 36, 0) 100%);
+}
+#race-root .rm-title {
+  font-size: clamp(30px, 4.6vw, 62px); font-weight: 800; line-height: 0.95; letter-spacing: -0.02em;
+  color: #fff; text-shadow: 0 3px 0 #b5177c, 0 6px 0 #4a0a35, 0 0 22px rgba(255, 105, 180, 0.55);
+}
+#race-root .rm-tag { font-size: 15px; font-weight: 600; color: #ffb6dc; letter-spacing: 0.08em; margin-bottom: 10px; }
+#race-root .rm-foot { font-size: 12px; color: rgba(255, 214, 234, 0.55); margin-top: 8px; }
+
+/* ---- verbs ---- */
+#race-root .rm-list { display: flex; flex-direction: column; gap: 8px; }
+#race-root .rm-btn {
+  position: relative; text-align: left; font: inherit; font-size: 22px; font-weight: 700;
+  padding: 10px 18px 10px 34px; border: 0; cursor: pointer;
+  color: #fff; background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 105, 180, 0.35);
+  transition: transform 0.09s cubic-bezier(0.2, 1.4, 0.4, 1), background 0.12s, box-shadow 0.12s;
+}
+#race-root .rm-btn::before { content: '›'; position: absolute; left: 14px; top: 50%; transform: translateY(-55%); color: var(--pink, #ff69b4); opacity: 0; transition: opacity 0.1s, transform 0.12s; }
+#race-root .rm-btn.is-focus { background: rgba(255, 105, 180, 0.18); box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4), 0 0 18px rgba(255, 105, 180, 0.45); transform: translateX(4px); }
+#race-root .rm-btn.is-focus::before { opacity: 1; transform: translateY(-55%) translateX(2px); }
+#race-root .rm-btn:active, #race-root .rm-btn.is-hit { animation: rmBounce 0.28s cubic-bezier(0.2, 1.6, 0.4, 1); }
+
+/* ---- panels: options + how to drive, opened in place ---- */
+#race-root .rm-panel { display: flex; flex-direction: column; gap: 6px; }
+#race-root .rm-panel[hidden] { display: none; }
+#race-root .rm-h { margin: 0 0 6px; font-size: 18px; font-weight: 800; color: var(--pink, #ff69b4); letter-spacing: 0.04em; }
+#race-root .rm-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px;
+  padding: 8px 14px; cursor: pointer; font-size: 17px; font-weight: 600;
+  background: rgba(255, 255, 255, 0.04); box-shadow: 0 0 0 2px #2b1b3f;
+  transition: transform 0.09s cubic-bezier(0.2, 1.4, 0.4, 1), background 0.12s, box-shadow 0.12s;
+}
+#race-root .rm-row.is-focus { background: rgba(255, 105, 180, 0.16); box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4); transform: translateX(4px); }
+#race-root .rm-row.is-hit { animation: rmBounce 0.28s cubic-bezier(0.2, 1.6, 0.4, 1); }
+#race-root .rm-row.is-dim { opacity: 0.45; }
+#race-root .rm-row-val { color: #ffd6ea; font-weight: 800; font-variant-numeric: tabular-nums; }
+#race-root .rm-row.is-focus .rm-row-val::before { content: '‹ '; color: var(--pink, #ff69b4); }
+#race-root .rm-row.is-focus .rm-row-val::after { content: ' ›'; color: var(--pink, #ff69b4); }
+#race-root .rm-row[data-id="back"] .rm-row-val::before, #race-root .rm-row[data-id="back"] .rm-row-val::after { content: none; }
+#race-root .rm-row-hint { grid-column: 1 / -1; font-size: 11px; font-weight: 500; color: rgba(255, 214, 234, 0.6); }
+#race-root .rm-seed {
+  font: inherit; font-size: 16px; font-weight: 700; color: #fff; width: 160px; padding: 6px 10px;
+  background: #1d1230; border: 0; box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 105, 180, 0.5); outline: 0;
+}
+#race-root .rm-seed[hidden] { display: none; }
+#race-root .rm-seed:focus { box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4), 0 0 14px rgba(255, 105, 180, 0.45); }
+#race-root .rm-key { display: grid; grid-template-columns: 120px 1fr; align-items: center; column-gap: 12px; font-size: 14px; }
+#race-root .rm-key kbd {
+  font: inherit; font-size: 12px; font-weight: 800; text-align: center; padding: 4px 8px;
+  color: #fff; background: #2b1b3f; box-shadow: 0 2px 0 #b5177c, 0 0 0 2px #120b24;
+}
+#race-root .rm-key span { color: #ffd6ea; }
+#race-root .rm-hint { font-size: 12px; color: rgba(255, 214, 234, 0.6); margin-top: 6px; }
+
+/* ---- the stage hole + nameplate ---- */
+#race-root .rm-stage { position: relative; min-width: 0; }
+#race-root .rm-plate {
+  position: absolute; left: 50%; bottom: 7vh; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px; background: rgba(18, 11, 36, 0.82);
+  box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px rgba(255, 105, 180, 0.55);
+}
+#race-root .rm-name { font-size: 18px; font-weight: 800; text-transform: none; letter-spacing: 0.12em; color: #fff; }
+#race-root .rm-arrow {
+  font: inherit; font-size: 22px; font-weight: 800; line-height: 1; width: 30px; height: 30px; padding: 0; border: 0;
+  color: var(--pink, #ff69b4); background: rgba(255, 255, 255, 0.06); cursor: pointer;
+  box-shadow: 0 0 0 2px #2b1b3f;
+}
+#race-root .rm-arrow[aria-disabled="true"] { opacity: 0.3; cursor: default; }
+
+@keyframes rmIn { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+@keyframes rmBounce { 0% { transform: translateX(4px) scale(1); } 35% { transform: translateX(4px) scale(0.96); } 100% { transform: translateX(4px) scale(1); } }
+
+@media (max-width: 720px) {
+  #race-root .rm-root { grid-template-columns: 1fr; }
+  #race-root .rm-col { padding: 4vh 22px; background: linear-gradient(180deg, rgba(18, 11, 36, 0.94) 0%, rgba(18, 11, 36, 0.86) 70%, rgba(18, 11, 36, 0) 100%); }
+  #race-root .rm-stage { display: none; }
+}
+
+/* Law VI: nobody is held by a transition. System preference or the menu's own switch. */
+@media (prefers-reduced-motion: reduce) {
+  #race-root .rm-root.is-in .rm-col, #race-root .rm-btn.is-hit, #race-root .rm-row.is-hit, #race-root .rm-btn:active { animation: none; }
+  #race-root .rm-btn, #race-root .rm-row { transition: none; }
+}
+#race-root .rm-root[data-motion="on"] .rm-col, #race-root .rm-root[data-motion="on"] .is-hit, #race-root .rm-root[data-motion="on"] .rm-btn:active { animation: none; }
+#race-root .rm-root[data-motion="on"] .rm-btn, #race-root .rm-root[data-motion="on"] .rm-row { transition: none; }
