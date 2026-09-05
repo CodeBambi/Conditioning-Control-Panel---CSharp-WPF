@@ -418,7 +418,7 @@ namespace ConditioningControlPanel.Services
 
             try { App.Awareness?.Stop(); } catch (Exception ex) { App.Logger?.Warning(ex, "WindowAwareness: v2 observer failed to stop"); }
 
-            App.Logger?.Information("WindowAwareness: Stopped monitoring");
+            App.Logger?.Debug("WindowAwareness: Stopped monitoring");
         }
 
         /// <summary>

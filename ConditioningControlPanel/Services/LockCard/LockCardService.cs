@@ -134,7 +134,7 @@ namespace ConditioningControlPanel.Services
             _timer?.Stop();
             _timer = null;
             
-            App.Logger?.Information("LockCardService stopped");
+            App.Logger?.Debug("LockCardService stopped");
         }
 
         private void Timer_Tick(object? sender, EventArgs e)

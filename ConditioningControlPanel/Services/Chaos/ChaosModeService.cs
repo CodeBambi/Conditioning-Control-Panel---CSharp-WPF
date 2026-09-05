@@ -849,7 +849,7 @@ public sealed class ChaosModeService
             long staticDecodes = App.Flash?.StaticDecodes ?? 0;
 
             if (App.Settings?.Current?.ChaosMemTelemetry == true)
-                App.Logger?.Information(
+                App.Logger?.Debug(
                     "[CHAOSMEM] {Phase} t={Elapsed:F0}s ws={Ws}MB priv={Priv}MB managed={Managed}MB native~={Native}MB peakNative={Peak}MB bubbles={Bubbles} gifDecodes={Gif} staticDecodes={Static} skiaFx={Skia}",
                     phase, elapsed, wsMb, privMb, managedMb, nativeMb, _peakNativeMb, bubbles,
                     gifDecodes, staticDecodes, App.Settings?.Current?.ChaosSkiaFxEnabled);
@@ -891,7 +891,7 @@ public sealed class ChaosModeService
                 if (App.Settings?.Current?.ChaosMemTelemetry == true)
                 {
                     _hitchCount++;
-                    App.Logger?.Information("[CHAOSHITCH] frame gap {Gap:F0}ms bubbles={Bubbles} (#{N} this run)",
+                    App.Logger?.Debug("[CHAOSHITCH] frame gap {Gap:F0}ms bubbles={Bubbles} (#{N} this run)",
                         gapMs, App.Bubbles?.ActiveBubbles ?? 0, _hitchCount);
                 }
             }

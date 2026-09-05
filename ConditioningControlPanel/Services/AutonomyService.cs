@@ -540,7 +540,7 @@ namespace ConditioningControlPanel.Services
 
             try { EnabledChanged?.Invoke(this, false); } catch { }
 
-            App.Logger?.Information("AutonomyService: Stopped");
+            App.Logger?.Debug("AutonomyService: Stopped");
         }
 
         /// <summary>
@@ -550,7 +550,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void CancelActivePulses()
         {
-            App.Logger?.Information("AutonomyService: CancelActivePulses called");
+            App.Logger?.Debug("AutonomyService: CancelActivePulses called");
 
             var settings = App.Settings?.Current;
             if (settings == null) return;
@@ -808,7 +808,7 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue?.IsBusy == true);
             };
             _heartbeatTimer.Start();
-            App.Logger?.Information("AutonomyService: Heartbeat timer started (logs every 30s)");
+            App.Logger?.Debug("AutonomyService: Heartbeat timer started (logs every 30s)");
         }
 
         /// <summary>

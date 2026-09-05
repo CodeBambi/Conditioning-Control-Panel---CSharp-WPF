@@ -95,7 +95,7 @@ namespace ConditioningControlPanel.Services
             };
             _pollTimer.Tick += async (_, _) => await RefreshAsync();
             _pollTimer.Start();
-            App.Logger?.Information("[AvailableSubjects] polling started");
+            App.Logger?.Debug("[AvailableSubjects] polling started");
         }
 
         /// <summary>

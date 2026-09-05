@@ -54,11 +54,11 @@ if (dom.title) dom.title.textContent = PRODUCT_NAME;
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (e) => {
     const src = e.filename ? ` @ ${String(e.filename).split('/').pop()}:${e.lineno}` : '';
-    shim.log('error: ' + (e.message || 'script error') + src);
+    shim.log('error', 'error: ' + (e.message || 'script error') + src);
   });
   window.addEventListener('unhandledrejection', (e) => {
     const r = e.reason;
-    shim.log('promise: ' + ((r && (r.message || r.stack || r)) || 'unknown'));
+    shim.log('error', 'promise: ' + ((r && (r.message || r.stack || r)) || 'unknown'));
   });
   // Render-layer diagnostics (effects.js emits these instead of holding the shim).
   window.addEventListener('intake-log', (e) => {
@@ -440,7 +440,7 @@ shim.onBoot(async (config) => {
     disposePauseIfAny();   // `pause` is scoped to the try; reach it via its handle
     safeCall(subliminals, 'dispose'); subliminals = null;
     teardownCounter();
-    shim.log('boot/run failed: ' + (err && (err.stack || err.message) || err));
+    shim.log('error', 'boot/run failed: ' + (err && (err.stack || err.message) || err));
     shim.bootError(String(err && err.message || err));
     if (dom.loader) dom.loader.hidden = true;
     if (dom.stage) dom.stage.innerHTML = `<div class="intake-fatal">Something went wrong starting ${PRODUCT_NAME}.</div>`;

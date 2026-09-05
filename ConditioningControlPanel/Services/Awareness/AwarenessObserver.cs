@@ -358,7 +358,7 @@ namespace ConditioningControlPanel.Services.Awareness
             try { _ledger.NoteFocusEnd(_clock()); } catch { }
             _ledger.Stop();
             ResetTransientState();
-            App.Logger?.Information("AwarenessObserver: stopped");
+            App.Logger?.Debug("AwarenessObserver: stopped");
         }
 
         /// <inheritdoc />

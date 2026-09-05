@@ -1976,7 +1976,7 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                App.Logger?.Information(
+                App.Logger?.Debug(
                     "{Tag} blocked trigger={Trigger} rule={Rule} class={Class} priority={Priority} reason={Reason}",
                     tag, trigger, rule.Id, rule.Class, rule.Priority, decision.Reason);
             }

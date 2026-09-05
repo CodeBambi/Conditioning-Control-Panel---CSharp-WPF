@@ -193,7 +193,7 @@ public class BlinkTrainerService : IDisposable
             IsRunning = false;
             StartedAt = null;
             Duration = null;
-            App.Logger?.Information("BlinkTrainer: stopped");
+            App.Logger?.Debug("BlinkTrainer: stopped");
         }
         try { StateChanged?.Invoke(); } catch { }
     }

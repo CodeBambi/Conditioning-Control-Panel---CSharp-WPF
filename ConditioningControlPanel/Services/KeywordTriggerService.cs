@@ -210,7 +210,7 @@ namespace ConditioningControlPanel.Services
         public KeywordTriggerService()
         {
             _audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sub_audio");
-            App.Logger?.Information("KeywordTriggerService initialized");
+            App.Logger?.Debug("KeywordTriggerService initialized");
         }
 
         #endregion
@@ -231,7 +231,7 @@ namespace ConditioningControlPanel.Services
 
             _isActive = true;
             _buffer.Clear();
-            App.Logger?.Information("KeywordTriggerService started");
+            App.Logger?.Debug("KeywordTriggerService started");
         }
 
         /// <summary>
@@ -243,7 +243,7 @@ namespace ConditioningControlPanel.Services
             _isActive = false;
             _buffer.Clear();
             StopTriggerAudio();
-            App.Logger?.Information("KeywordTriggerService stopped");
+            App.Logger?.Debug("KeywordTriggerService stopped");
         }
 
         /// <summary>
