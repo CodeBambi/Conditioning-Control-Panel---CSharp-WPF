@@ -20,53 +20,52 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.9.1";
+        public const string AppVersion = "6.9.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.1 - The Spiral
+        public const string CurrentPatchNotes = @"v6.9.2 - The Spiral pt. 2
 
-this is the big one. on September 1st the Descent ceremony ran and the monthly wipe is gone forever. from here on your level, your XP and your hours are yours for good. this is the version that carries you into that world, and i wanted it to feel special. it does :3
+a fix wave for the things you told us about after the Spiral, plus a few Arcademy asks from the suggestions forum that were too good to leave sitting. nothing here touches your progress. it stays yours :3
 
-THE ARCADEMY
-- the campus takes center stage. classes that are secretly little games, a prize counter, your own locker, report cards, the works. wander around, get graded, get conditioned.
-- EMI runs the halls. she deals commentary, hands out hints in Daily Trigger, and cameos in Impulse Control when you least expect her.
-- your Sparks wallet follows you around the whole campus, and it now tells you WHY it refused a purchase instead of just refusing.
-- faster on phones, prettier in portrait, and the flash guard slider finally says which way is gentler.
+THE SPIRAL, NOW ON THE WEB
+- OWNER LINE: the spiral visualization on cclabs.app goes here (what it shows, where to find it).
 
-EMI'S DESK
-- EMI got out of the school. summon her onto your desktop: a little ring on the edge of your screen opens into her CRT glass and she just hangs out. reacts to what the app is doing to you. picks up props. lives her life.
-- we wrote her a whole handbook together. Ask EMI anything about the app and she answers, in all 9 languages. it is the new guide and she is very proud of it.
-- new users get a proper first contact from her now instead of silence.
+VIDEOS BEHAVE AGAIN
+- silent mandatory videos are fixed. the app was reading your master volume as the video volume, baked ""no audio"" into the clip and never let go. mute is the player's state now, not the media's.
+- no more black 2 to 3 seconds between clips, and no more videos that never draw a frame. the old clip's stop could wedge and the next one started on top of it. it waits its turn now.
+- popped video bubbles actually launch a video again. a latched trigger guard was eating three out of four.
+- ""no videos found"" says WHY (empty folder, filters too tight, pack not downloaded) and stops stacking a new box on every trigger.
+- a remote ""play hypnotube"" while the Arcademy is open lands on a surface you can actually see.
 
-EVERYWHERE AT ONCE
-- one account, everywhere. desktop, the web at cclabs.app, and now your phone. XP, wallet, presence, profile, it all connects.
-- the CCP Mobile public beta is live! grab the APK here: https://github.com/CodeBambi/CCP-Mobile-Releases/releases/latest
+FLASHES AND AUDIO
+- flash voicelines stop looping the same clip. the pool now respects the phrase library toggles and sees both content roots, so the one file that shadowed everything is gone.
+- 100% fade no longer spikes the frame time. the unified renderer was paying a full-screen present for every fade frame.
+- the flash ""Size"" slider was the centre keep-out slider wearing the wrong label. it says what it does now, and the real size and opacity live on the Visuals card.
 
-THE DESCENT
-- the wipe is gone. nothing clears any more, and levels and hours carry forward from here on.
-- the season recap card only shows if a reset actually happened to you, the countdown is honest and stands down when it is over, and if a stray reset order ever reaches the app after the Descent, the app refuses it. your progress does not roll back because a server hiccuped.
+CAMERA, GAZE AND COMPANION
+- turning the camera off no longer freezes the app. the stop runs off the UI thread.
+- the Focus Gaze switch shows your setting, not whether the engine happens to be running.
+- companion roster cards show each companion's XP mechanic again (hover the card).
+- the AI companion's ""play audio"" effect stops claiming it played something when it did not.
+- switching mods repaints the Studio rack in the right colours instead of the previous mod's.
 
-NEW MOD: INFECTION CONTROL
-- a sixth mod joins the shelf, created by Miss Jenny. Nurse Amber runs the ward with over 330 freshly voiced lines: barks, mantra takeovers, her own flash voicelines, and her voice all the way down the Rabbit Hole.
-- her own spiral, her own colors, and she comments on nearly everything you do.
-- like the other built-ins the audio arrives as a downloadable pack so the installer stays lean.
+THE ARCADEMY (from the suggestions forum)
+- the Tardy Slip: streak protection sold at the Prize Counter. hold up to two, they burn themselves on a missed night, and the Rake will upsell you one when you are holding none.
+- share your report card as an image. anonymous by default, name and ID are an opt-in toggle.
+- the Time Capsule: first exhibit in the trophy case, sealed until 30 nights of attendance.
+- the Bugle's comics are finally drawn. all six.
+- EMI at her desk wears whatever outfit the Locker armed.
+- the Front Gate: a way back to CC Labs from the web campus, and the classroom door sign stays inside the frame on phones.
 
-AND SOME FIXES
-- the updater now upgrades the copy you are actually running, the fade slider actually fades, escape always escapes when it should, muted means muted, tooltips are readable again, ghost mode stops freezing, and the menus behave.
-- full nerd changelog in the pull requests, numbers 380 through 445.
+UNDER THE HOOD
+- logs were rebuilt. one file per run with a header and footer, a tenth of the noise, personal content redacted at write time instead of at upload, and a flight recorder that keeps the debug trail in memory and only writes it when something breaks. the bug button sends the session file so we see the run that hurt, not yesterday's.
+- age moderation catches spelled-out, mixed leet and zero-padded numbers.
+- the Deeper editor stops fighting the playhead while you scrub the mini timeline.
 
-6.9.1 HOTFIXES (the day after)
-- the ceremony's two doors fit on screen at high display scaling, and ""not tonight"" stops re-asking for the session.
-- your profile card shows which door you picked, with the +10% on the XP numbers if you cycled.
-- the board notice, the Spiral help card and EMI's barks all agree now: nothing was wiped and nothing resets.
-- bubbles have their own ""stare to pop"" switch on the bubble page.
-- a headset play/pause tap no longer ends a strict lock video.
-- a failed update download gets a proper box and a manual download button, and the exe carries its real version number.
-- flash audio unducks after a stop, reveal in explorer works with spaces, customize and privacy are hidden on other people's cards, OCR text stays out of the logs, and the single-digit age bypass is closed.
-- full nerd changelog in pull requests 451 through 475.";
+full nerd changelog in pull requests 639 through 648, 782 through 799 and 824 through 838.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
