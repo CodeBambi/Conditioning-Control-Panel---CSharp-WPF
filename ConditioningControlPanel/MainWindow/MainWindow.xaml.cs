@@ -2321,7 +2321,17 @@ namespace ConditioningControlPanel
                 res["AccentTintedBgHover"] = tintedBgHover;
                 res["AccentMidGradient"] = midGradient;
 
-                // === ALSO UPDATE BRUSH RESOURCES (in case any are frozen from initial load) ===
+                // === ALSO UPDATE BRUSH RESOURCES - LOAD-BEARING, DO NOT DELETE ===
+                // Resources/Theme/Brushes.xaml declares each of these as a SolidColorBrush whose
+                // Color is a DynamicResource on the key just above, which reads like the block
+                // below is redundant. It is not. A DynamicResource on a Freezable that lives in a
+                // ResourceDictionary resolves ONCE, when the dictionary instantiates it; the brush
+                // has no InheritanceContext to re-resolve through, so a later write to the Color
+                // key never reaches it (verified: writing the Color into either the top-level
+                // Application.Resources or the merged dictionary that owns the key leaves the
+                // brush on its seed colour). Overwriting the brush entry is what actually repaints
+                // every {DynamicResource *Brush} consumer, and it is also the restore path for
+                // MainWindow.Lab.cs ApplyLockdownTheme, which shadows four of these keys.
                 res["PinkBrush"] = new SolidColorBrush(accent);
                 res["DarkPinkBrush"] = new SolidColorBrush(dark);
                 res["PinkButtonHoveredBrush"] = new SolidColorBrush(light);
@@ -3507,9 +3517,12 @@ namespace ConditioningControlPanel
             ApplyModFeatureNames();
             if (App.Mods != null)
             {
+                // Also queues the Background stale-surface sweep, which is where the Studio
+                // rack's repaint lives now - see RefreshModAwareSurfaces in MainWindow.UiUpdates.cs.
+                // The rack used to have its own ModChanged subscription right here, which ran
+                // BEFORE the palette handler below and painted the rack's state dots from the
+                // OUTGOING mod's PinkBrush (ccp-bugs#1100).
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
-                // The Studio rack's row captions are mod-aware too (Phase 4).
-                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(() => StudioTab?.RepaintModAwareChrome());
                 // Re-render the Remote Control QR code in the new mod's accent color
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(() =>
                 {
