@@ -38,7 +38,33 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private readonly object _audioLock = new();
 
+        // ---------------------------------------------------------------------------------
+        //  RANDOM ONSET (#general 2026-08-31: "i wish it kicked on randomly not as soon as
+        //  i press start"). Standalone start ONLY - sessions and the autonomy trigger own
+        //  their own timing and never come through here.
+        // ---------------------------------------------------------------------------------
+        private readonly DispatcherTimer _onsetTimer;
+        private bool _onsetPending;
+        private DateTime _onsetDueUtc;
+
         public bool IsRunning => _isRunning;
+
+        /// <summary>
+        /// True while a random onset is armed: Brain Drain is enabled and the user has pressed
+        /// Start, but BOTH halves are deliberately withheld until the wait runs out. OverlayService
+        /// reads this so the screen blur waits too - delaying only the audio would give the game
+        /// away the instant the blur landed.
+        /// </summary>
+        public bool OnsetPending => _onsetPending;
+
+        /// <summary>Whole minutes still to wait, for the panel's armed readout. 0 when nothing is armed.</summary>
+        public int OnsetMinutesRemaining => _onsetPending
+            ? Math.Max(1, (int)Math.Ceiling((_onsetDueUtc - DateTime.UtcNow).TotalMinutes))
+            : 0;
+
+        /// <summary>Raised on the UI thread when the armed state changes, so the panel can repaint.</summary>
+        public event EventHandler? OnsetStateChanged;
+
         public int AudioFileCount => _audioFiles?.Length ?? 0;
 
         /// <summary>
@@ -132,6 +158,11 @@ namespace ConditioningControlPanel.Services
             _timer = new DispatcherTimer();
             _timer.Tick += Timer_Tick;
 
+            // Built here, on the UI thread, for the same reason _timer is: a DispatcherTimer
+            // binds to whichever dispatcher created it.
+            _onsetTimer = new DispatcherTimer();
+            _onsetTimer.Tick += OnsetTimer_Tick;
+
             LoadAudioFiles();
         }
 
@@ -214,6 +245,10 @@ namespace ConditioningControlPanel.Services
         
         public void Start()
         {
+            // A random onset is armed and still counting down: the wait IS the feature. The tick
+            // clears the flag and calls back in here when it is done.
+            if (_onsetPending) return;
+
             if (!App.Settings.Current.BrainDrainEnabled)
             {
                 App.Logger?.Debug("BrainDrain: Not enabled in settings");
@@ -245,6 +280,11 @@ namespace ConditioningControlPanel.Services
 
         public void Stop()
         {
+            // Cancel an armed-but-not-yet-fired onset FIRST: while it is pending _isRunning is
+            // still false, so the "no session" early return further down would skip it and leave
+            // a timer ticking after the feature was stopped.
+            CancelRandomOnset();
+
             var wasRunning = _isRunning;
             _isRunning = false;
 
@@ -458,6 +498,94 @@ namespace ConditioningControlPanel.Services
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Arm the random onset if the user configured one, and report whether Brain Drain is now
+        /// WAITING (so the caller knows not to start it yet).
+        ///
+        /// <para>Called from <c>MainWindow.StartEngine</c> BEFORE OverlayService starts, because
+        /// the blur half asks <see cref="OnsetPending"/> at its own start. Idempotent: a second
+        /// call while one is already armed keeps the first wait.</para>
+        /// </summary>
+        public bool ArmRandomOnset()
+        {
+            if (_onsetPending) return true;
+            if (_isRunning) return false;
+
+            var s = App.Settings?.Current;
+            if (s == null || !s.BrainDrainEnabled) return false;
+
+            var max = s.BrainDrainRandomStartMaxMinutes;
+            if (max < 1) return false;
+
+            var minutes = _random.Next(1, max + 1);
+            _onsetPending = true;
+            _onsetDueUtc = DateTime.UtcNow.AddMinutes(minutes);
+
+            DispatcherHelper.RunOnUI(() =>
+            {
+                if (System.Windows.Application.Current?.Dispatcher == null) return;
+                try
+                {
+                    _onsetTimer.Stop();
+                    _onsetTimer.Interval = TimeSpan.FromMinutes(minutes);
+                    _onsetTimer.Start();
+                }
+                catch (Exception ex) { App.Logger?.Warning(ex, "BrainDrain: could not arm random onset"); }
+            });
+
+            App.Logger?.Information("BrainDrain: random onset armed, waiting {Minutes} min", minutes);
+            RaiseOnsetStateChanged();
+            return true;
+        }
+
+        /// <summary>
+        /// Drop a pending onset without starting anything. Called by <see cref="Stop"/> (so the
+        /// panic key and a plain Stop both kill it) and by SessionEngine, which owns Brain Drain's
+        /// timing for the length of a session.
+        /// </summary>
+        public void CancelRandomOnset()
+        {
+            if (!_onsetPending) return;
+            _onsetPending = false;
+
+            DispatcherHelper.RunOnUI(() =>
+            {
+                if (System.Windows.Application.Current?.Dispatcher == null) return;
+                try { _onsetTimer.Stop(); } catch { }
+            });
+
+            App.Logger?.Information("BrainDrain: pending random onset cancelled");
+            RaiseOnsetStateChanged();
+        }
+
+        private void OnsetTimer_Tick(object? sender, EventArgs e)
+        {
+            if (System.Windows.Application.Current?.Dispatcher == null) return;
+            try { _onsetTimer.Stop(); } catch { }
+            if (!_onsetPending) return;
+
+            _onsetPending = false;
+            RaiseOnsetStateChanged();
+
+            App.Logger?.Information("BrainDrain: random onset elapsed, kicking in now");
+            try { Start(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BrainDrain: onset start failed"); }
+
+            // The blur half needs no nudge from here: OverlayService's 500ms reconciler re-reads
+            // OnsetPending on its next tick and raises the overlay itself.
+        }
+
+        private void RaiseOnsetStateChanged()
+        {
+            var handler = OnsetStateChanged;
+            if (handler == null) return;
+            DispatcherHelper.RunOnUI(() =>
+            {
+                if (System.Windows.Application.Current?.Dispatcher == null) return;
+                try { handler(this, EventArgs.Empty); } catch { }
+            });
         }
 
         public void Dispose()

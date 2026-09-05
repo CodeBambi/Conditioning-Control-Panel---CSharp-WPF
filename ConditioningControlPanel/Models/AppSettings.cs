@@ -4532,6 +4532,22 @@ namespace ConditioningControlPanel.Models
             set { _brainDrainMeltEnabled = value; OnPropertyChanged(); }
         }
 
+        private int _brainDrainRandomStartMaxMinutes = 0; // 0 = off (the default)
+        /// <summary>
+        /// Random onset for the STANDALONE Brain Drain start, in minutes. 0 (the default) means
+        /// "kick in the moment the user presses Start", which is what it has always done.
+        /// Anything higher arms it instead: both halves stay withheld for a random wait between
+        /// 1 minute and this value, then Brain Drain starts on its own.
+        /// Asked for in #general on 2026-08-31 ("i wish it kicked on randomly not as soon as i
+        /// press start"). Sessions and the autonomy trigger own their own timing and ignore this.
+        /// </summary>
+        [JsonProperty]
+        public int BrainDrainRandomStartMaxMinutes
+        {
+            get => _brainDrainRandomStartMaxMinutes;
+            set { _brainDrainRandomStartMaxMinutes = Math.Clamp(value, 0, 30); OnPropertyChanged(); }
+        }
+
         private bool _allowOverlayCapture = false;
         /// <summary>
         /// Opt-in: let the Brain Drain screen effect appear in screenshots, recordings and screen
