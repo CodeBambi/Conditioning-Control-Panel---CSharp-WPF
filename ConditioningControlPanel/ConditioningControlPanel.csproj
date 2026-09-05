@@ -17,7 +17,14 @@
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
+    <!-- Self-contained packaging is a PUBLISH-only concern. A plain "dotnet build" of the
+         solution pulls in the non-self-contained Tests project, and a non-self-contained
+         executable cannot reference a self-contained one: this surfaces as NETSDK1151 on the
+         .NET 10 SDK, and as MSB3030 (cannot copy singlefilehost.exe) on some setups. Default
+         off for build/run; the shipping build turns it on via -p:CcpPublish=true
+         (build-installer.bat). An explicit self-contained flag on a publish still overrides it. -->
+    <CcpPublish Condition="'$(CcpPublish)' == ''">false</CcpPublish>
+    <SelfContained>$(CcpPublish)</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     
