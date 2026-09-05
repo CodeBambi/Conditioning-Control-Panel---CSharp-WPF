@@ -151,6 +151,12 @@ of truth.)
 - User data in `%LOCALAPPDATA%/ConditioningControlPanel/` (`App.UserDataPath`, via `SpecialFolder.LocalApplicationData`)
 - Patreon features gated by `App.Patreon?.HasPremiumAccess` or `App.Patreon?.HasAiAccess`
 
+### Logging policy
+- **No new empty catch.** Use `Diag.Swallowed(ex)` (`Services/Diag.cs`, namespace `ConditioningControlPanel`), or a typed catch of an expected exception with a `// swallow: reason` comment on the closing brace. `Diag.Swallowed` logs one Warning the first time a site fires, Debug for the next nine, then only counts, so it is safe in render loops and timer ticks. Pass a short `note:` when the no-op is deliberate: `Diag.Swallowed(ex, "window tearing down")`.
+- **No content in logs at any level.** No screen text, chat text, spoken lines, URLs beyond the host, profile JSON, display names, or Discord ids. IDs, counts, enums, and status codes only. This applies to Debug too: Debug lines sit in the in-memory flight recorder and ship with bug reports.
+- **Prefix new log messages with `[Category]`**, and send noisy periodic lines to Debug so they reach the flight recorder instead of the file.
+- **Never log absolute paths.** The redactor rewrites them to `%DATA%`/`%APP%`/`~`, so a logged path is noise at best and PII at worst.
+
 ### UI Architecture
 - Dark theme with pink/purple accent colors (#FF69B4, #252542, #1A1A2E)
 - Custom styles in MainWindow.xaml Resources section
