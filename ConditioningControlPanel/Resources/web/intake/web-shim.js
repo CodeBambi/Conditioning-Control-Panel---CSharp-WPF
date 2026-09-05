@@ -86,9 +86,16 @@ export function send(msg) {
   } catch (_e) { /* host gone */ }
 }
 
-export function log(msg) {
+/**
+ * Host log passthrough. `level` is optional and defaults to 'debug' - `log(msg)` or
+ * `log(level, msg)`, matching the arcademy bridge. The host files 'info' and above; 'debug'
+ * still reaches the flight recorder and is dumped with any crash, hang or bug report, it just
+ * stops being written to disk on every run. Say 'warn'/'error' for anything worth a triage read.
+ */
+export function log(level, msg) {
+  if (msg === undefined) { msg = level; level = 'debug'; }
   const s = String(msg).slice(0, 400);
-  if (isHosted) send({ type: 'log', msg: s });
+  if (isHosted) send({ type: 'log', level: String(level), msg: s });
   else if (typeof console !== 'undefined') console.log('[intake]', s);
 }
 

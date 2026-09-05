@@ -614,8 +614,8 @@ namespace ConditioningControlPanel
             Activate();
             FocusInput();
 
-            App.Logger?.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}, Monitors: {Count}",
-                _phrase, _requiredRepeats, _strictMode, _voiceMode, _allWindows.Count);
+            App.Logger?.Information("Lock Card shown - PhraseChars: {Chars}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}, Monitors: {Count}",
+                (_phrase ?? "").Length, _requiredRepeats, _strictMode, _voiceMode, _allWindows.Count);
 
             // Begin the spoken-solve listen loop on the primary monitor.
             if (_voiceMode) StartVoiceSolve();

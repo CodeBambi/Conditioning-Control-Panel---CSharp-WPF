@@ -752,7 +752,11 @@ internal static class DtrhHostService
         if (disp == null) return;
         disp.BeginInvoke(() =>
         {
-            try { App.Video?.SetExternalMute(on); }
+            // Apply the CURRENT flag, not the value captured when this was queued (#1103). The
+            // teardown below releases the mute synchronously, so a mute queued just before it
+            // would otherwise land afterwards and leave every video for the rest of the process
+            // silent - with nothing in the log to say why.
+            try { App.Video?.SetExternalMute(_diveMuted); }
             catch (Exception ex) { App.Logger?.Debug("DtrhHost.ApplyDiveMute: {E}", ex.Message); }
         });
     }
@@ -1000,8 +1004,12 @@ internal static class DtrhHostService
         try { Haptics.DtrhHapticDirector.OnClosed(); } catch (Exception ex) { Diag.Swallowed(ex); }
         // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
         if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch (Exception ex) { Diag.Swallowed(ex); } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch (Exception ex) { Diag.Swallowed(ex); } }
-        // ...and never leave every video silent because the dive ended while muted.
-        if (_diveMuted) { _diveMuted = false; try { App.Video?.SetExternalMute(false); } catch (Exception ex) { Diag.Swallowed(ex); } }
+        // ...and never leave every video silent because the dive ended while muted. Unconditional
+        // (#1103): the _diveMuted flag and the VideoService's own mute could get out of step - a
+        // mute applied while Application.Current was already gone set the flag and nothing else,
+        // and this gate then skipped the only release there was, muting every video until restart.
+        _diveMuted = false;
+        try { App.Video?.SetExternalMute(false); } catch (Exception ex) { Diag.Swallowed(ex); }
         try { _meta?.FlushSave(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (_runActive && !_testMode)
         {

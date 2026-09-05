@@ -26,6 +26,8 @@ namespace ConditioningControlPanel.Services
         private double _volume = 0.5; // 50% default volume
         
         private string[]? _audioFiles;
+        // "no clips installed" is the shipped default; say it once a session, not once a scan.
+        private static bool _loggedNoAudio;
         private WaveOutEvent? _waveOut;
         private AudioFileReader? _audioReader;
         /// <summary>Bumped by every one-shot trigger and by StopCurrentAudio. A build that finishes
@@ -172,7 +174,7 @@ namespace ConditioningControlPanel.Services
 
                 var audioFolderPath = AudioFolderPath;
 
-                App.Logger?.Information("MindWipe: Looking for audio files in {Path} (and legacy {Legacy})",
+                App.Logger?.Debug("MindWipe: Looking for audio files in {Path} (and legacy {Legacy})",
                     audioFolderPath, LegacyAudioFolderPath);
                 
                 // Create the advertised folder so it exists to be found; the legacy folder is
@@ -191,7 +193,13 @@ namespace ConditioningControlPanel.Services
                 
                 if (_audioFiles.Length == 0)
                 {
-                    App.Logger?.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", audioFolderPath);
+                    // Normal state for anyone who never dropped clips in, so it is not a warning and
+                    // it is not worth repeating: Information, once per session.
+                    if (!_loggedNoAudio)
+                    {
+                        _loggedNoAudio = true;
+                        App.Logger?.Information("MindWipe: no .mp3/.wav/.ogg files in {Path} - the feature stays idle", audioFolderPath);
+                    }
                 }
                 else
                 {
@@ -286,7 +294,7 @@ namespace ConditioningControlPanel.Services
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
 
-            App.Logger?.Information("MindWipe: Stopped");
+            App.Logger?.Debug("MindWipe: Stopped");
         }
         
         public void UpdateSettings(double frequencyPerHour, double volume)
@@ -711,7 +719,7 @@ namespace ConditioningControlPanel.Services
             DisposePlayerA();
             DisposePlayerB();
 
-            App.Logger?.Information("MindWipe: Loop stopped");
+            App.Logger?.Debug("MindWipe: Loop stopped");
         }
         
         private void Timer_Tick(object? sender, EventArgs e)

@@ -1400,7 +1400,7 @@ internal static class ArcademyHostService
                 catch (Exception ex)
                 {
                     // A phrase whose clip cannot be resolved is a TEXT row, never a missing row.
-                    App.Logger?.Debug("ArcademyHost.BuildTriggers({Text}): {E}", text, ex.Message);
+                    App.Logger?.Debug("ArcademyHost.BuildTriggers: clip resolve failed for a {Chars}-char phrase: {E}", (text ?? "").Length, ex.Message);
                     url = null;
                 }
             }

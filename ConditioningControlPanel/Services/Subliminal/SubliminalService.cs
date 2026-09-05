@@ -157,7 +157,7 @@ namespace ConditioningControlPanel.Services
 
             StopAudio();
 
-            App.Logger?.Information("SubliminalService stopped");
+            App.Logger?.Debug("SubliminalService stopped");
         }
 
         /// <summary>

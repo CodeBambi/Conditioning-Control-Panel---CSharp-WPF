@@ -1512,15 +1512,13 @@ namespace ConditioningControlPanel
                 try { Directory.CreateDirectory(logPath); } catch { }
             }
 
-            Logger = new LoggerConfiguration()
-                .MinimumLevel.Information() // Security: Changed from Debug to avoid exposing sensitive data in logs
-                .WriteTo.File(Path.Combine(logPath, "app-.log"),
-                    rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 7,
-                    // Force a disk flush each second so the LAST lines survive a hard process death
-                    // (a native OOM kills the process with no managed unwind — see chaos OOM telemetry).
-                    flushToDiskInterval: TimeSpan.FromSeconds(1))
-                .CreateLogger();
+            // Everything about HOW a line is produced - the format, the category column, redaction,
+            // the size cap - now lives in Services/Logging/LogPipeline.cs. The floor is still
+            // Information (the "Security: changed from Debug" decision stands), but it is a switch
+            // rather than a constant, and redaction means Debug no longer implies exposure.
+            // --verbose or CCP_LOG_VERBOSE=1 puts Debug on disk for one run, for support.
+            Logger = Services.Logging.LogPipeline.Build(
+                logPath, Services.Logging.LogPipeline.VerboseRequested(e.Args));
 
             // The STATIC Serilog sink. Around 350 call sites across the app (every EmiDesk file,
             // plus Descent, Haptics, V2Auth, LocalizationManager) `using Serilog;` and write through
@@ -1535,6 +1533,22 @@ namespace ConditioningControlPanel
             // working-set baseline anchors the chaos OOM telemetry.
             Logger.Information("Application starting v{Version} | workingSet {WS}MB",
                 Services.UpdateService.AppVersion, Environment.WorkingSet / (1024 * 1024));
+
+            // "App ready in N ms", measured to the first IDLE dispatcher frame - the moment the
+            // window is actually usable, not the moment OnStartup returns. Startup regressions have
+            // shipped unnoticed because nothing in the log ever said how long startup took. The
+            // line also carries lang/mod, which the session header cannot: the logger is built
+            // here, and Settings does not exist until two hundred lines further down.
+            try
+            {
+                Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+                    new Action(() => Services.Logging.LogPipeline.LogAppReady()));
+            }
+            catch (Exception exReady)
+            {
+                Logger.Debug("[Startup] ready-timer hook failed: {Msg}", exReady.Message);
+            }
 
             // Rotate crash.log so a bug report only carries crashes from THIS build. The log is
             // append-only, so without this it accumulates months of old crashes and the reporter
@@ -1685,6 +1699,18 @@ namespace ConditioningControlPanel
             {
                 var ex = args.ExceptionObject as Exception;
                 LogCrashDetails("DOMAIN", ex);
+
+                // Last chance to close the session file: the runtime is about to tear the process
+                // down and ProcessExit does not run for an unhandled exception, so without this
+                // the log of the run that CRASHED is the one with no end line. Guarded on
+                // IsTerminating, and deliberately NOT done in the dispatcher or task handlers -
+                // both of those mark the exception handled and the app keeps running, where
+                // writing the footer would close the sinks under a live session.
+                if (args.IsTerminating)
+                {
+                    try { Services.Logging.LogPipeline.WriteSessionFooter(); }
+                    catch { /* swallow: nothing useful is left to report it to */ }
+                }
             };
             TaskScheduler.UnobservedTaskException += (s, args) =>
             {
@@ -1710,6 +1736,9 @@ namespace ConditioningControlPanel
             // Create user assets directories in LocalAppData (persists across updates)
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "images"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "videos"));
+            // AI "audio" effects play from assets/audio. Without the folder the scan finds
+            // nothing and the command silently no-ops, so scaffold it like the rest (#1120).
+            Directory.CreateDirectory(Path.Combine(UserAssetsPath, "audio"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "mindwipe"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
@@ -4385,7 +4414,17 @@ Application State:
 - Dispatcher Shutdown: {(Current?.Dispatcher?.HasShutdownStarted ?? true)}
 ================================================================================
 ";
-                File.AppendAllText(crashLogPath, crashInfo);
+                // Redact BEFORE the text touches the disk. crash.log is the one file users open
+                // by hand and paste into Discord, and it carried the full "C:\Users\<name>" of
+                // every frame in the stack plus whatever ids and paths the exception message
+                // happened to quote. LogScrubber only cleaned that up at bug-report upload time,
+                // which is far too late for a file that is already sitting in the logs folder.
+                File.AppendAllText(crashLogPath, Services.Logging.LogRedactor.Redact(crashInfo));
+
+                // The stack says where it died; the flight recorder says what led there. Dump the
+                // ring next to the crash so the report carries the minutes BEFORE it, which is the
+                // half every freeze/black-video report has been missing.
+                Services.Logging.FlightRecorderSink.DumpIfActive("crash");
             }
             catch
             {
@@ -4664,7 +4703,7 @@ Application State:
 
         /// <summary>
         /// Ensures a configured custom assets folder and its standard subfolders
-        /// (images/videos/wallpapers) exist. The default UserAssetsPath subdirs are
+        /// (images/videos/audio/wallpapers) exist. The default UserAssetsPath subdirs are
         /// created unconditionally at startup, but a custom path is only known after
         /// settings load — and if its folder is missing, EffectiveAssetsPath silently
         /// falls back to the default location, sending imports/extractions to the wrong
@@ -4680,6 +4719,8 @@ Application State:
                 // CreateDirectory creates the parent customPath too if absent.
                 Directory.CreateDirectory(Path.Combine(customPath, "images"));
                 Directory.CreateDirectory(Path.Combine(customPath, "videos"));
+                // Same reason as the default scaffold: AI audio effects read assets/audio (#1120).
+                Directory.CreateDirectory(Path.Combine(customPath, "audio"));
                 Directory.CreateDirectory(Path.Combine(customPath, "wallpapers"));
                 Logger?.Information("Ensured custom assets directories at {Path}", customPath);
             }
@@ -4929,7 +4970,16 @@ Application State:
             SecureAuthTokenStore.ClearMemoryCache();
             SecureApiKeyStore.ClearMemoryCache();
 
-            // Close and flush the logger
+            // Close the session file and write its "== end:" line. This has to happen HERE rather
+            // than only from the pipeline's ProcessExit hook, because OnExit finishes with
+            // TerminateProcess (see the comment at the bottom of this method), which skips
+            // ProcessExit handlers entirely - so every ordinary close was ending with no footer at
+            // all. Idempotent: the ProcessExit hook and the unhandled-exception path can still call
+            // it, and whichever arrives first is the one that writes.
+            Services.Logging.LogPipeline.WriteSessionFooter();
+
+            // Close and flush the logger (WriteSessionFooter has already done this; harmless and
+            // kept so the shutdown reads the same whether or not the pipeline was ever built).
             Log.CloseAndFlush();
 
             // Dispose show-window signal

@@ -216,6 +216,25 @@ public class ModAwareSurfaceSweepTests
     }
 
     // =====================================================================================
+    //  the Studio rack
+    // =====================================================================================
+
+    [Fact]
+    public void TheStudioRackRepaintsFromTheSweepAndNotFromItsOwnModChangedHook()
+    {
+        // ccp-bugs#1100. RepaintModAwareChrome calls RefreshDots, which reads PinkBrush through
+        // TryFindResource. Its own ModChanged subscription sat AHEAD of the palette handler in
+        // MainWindow.xaml.cs, so the rack's lit state dots (and their glow) were painted from the
+        // OUTGOING mod's accent and stayed there until an unrelated settings write repainted them.
+        // The sweep's Background priority is by construction after every ModChanged handler.
+        Assert.Contains("SweepStep(() => StudioTab?.RepaintModAwareChrome(), \"studio rack\");",
+                        SweepBody(), StringComparison.Ordinal);
+
+        Assert.DoesNotContain("StudioTab?.RepaintModAwareChrome())",
+                              AppFile("MainWindow", "MainWindow.xaml.cs"), StringComparison.Ordinal);
+    }
+
+    // =====================================================================================
     //  the faucet handle
     // =====================================================================================
 

@@ -152,8 +152,8 @@ namespace ConditioningControlPanel
                     Giggle(reaction);
                 }
 
-                App.Logger?.Debug("Awareness reaction for {DisplayName} ({Category}): {Reaction}",
-                    displayName, e.Category, reaction);
+                App.Logger?.Debug("Awareness reaction fired ({Category}, app {AppChars} chars, line {Chars} chars)",
+                    e.Category, (displayName ?? "").Length, (reaction ?? "").Length);
             }
             catch (Exception ex)
             {
@@ -263,8 +263,8 @@ namespace ConditioningControlPanel
                 else
                     Giggle(reaction);
 
-                App.Logger?.Debug("Still-on reaction for {DisplayName} ({Duration}, useServiceOnly={UseService}): {Reaction}",
-                    displayName, duration, useServiceNameOnly, reaction);
+                App.Logger?.Debug("Still-on reaction fired ({Duration}, useServiceOnly={UseService}, app {AppChars} chars, line {Chars} chars)",
+                    duration, useServiceNameOnly, (displayName ?? "").Length, (reaction ?? "").Length);
             }
             catch (Exception ex)
             {
@@ -302,7 +302,7 @@ namespace ConditioningControlPanel
                 if (doubleBounce) PlayDoubleBounce();
                 GigglePriority(text, aiGenerated: true);
 
-                App.Logger?.Debug("Awareness v2 line delivered (rare={Rare}): {Text}", doubleBounce, text);
+                App.Logger?.Debug("Awareness v2 line delivered (rare={Rare}, {Chars} chars)", doubleBounce, (text ?? "").Length);
             }
             catch (Exception ex)
             {
@@ -447,7 +447,7 @@ namespace ConditioningControlPanel
             // (audio will play but text won't show - prevents text/audio desync)
             if (_isGiggling)
             {
-                App.Logger?.Debug("Flash audio speech skipped (bubble showing): {Text}", e.Text);
+                App.Logger?.Debug("Flash audio speech skipped, bubble showing ({Chars} chars)", (e.Text ?? "").Length);
                 return;
             }
 
@@ -464,7 +464,7 @@ namespace ConditioningControlPanel
                 // Show immediately WITHOUT playing sound (FlashService already plays the audio)
                 ShowGiggle(e.Text, playSound: false, source: SpeechSource.Preset);
 
-                App.Logger?.Debug("Flash audio speech: {Text}", e.Text);
+                App.Logger?.Debug("Flash audio speech ({Chars} chars)", (e.Text ?? "").Length);
             });
         }
 

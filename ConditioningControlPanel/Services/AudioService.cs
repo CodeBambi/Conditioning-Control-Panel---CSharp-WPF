@@ -470,7 +470,7 @@ namespace ConditioningControlPanel.Services
                 // Check for crash recovery - restore volumes if app was killed while ducked
                 RecoverFromCrash();
 
-                App.Logger?.Information("Audio service initialized with ducking support");
+                App.Logger?.Debug("Audio service initialized with ducking support");
             }
             catch (Exception ex)
             {

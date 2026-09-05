@@ -23,6 +23,7 @@ using NAudio.Wave;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Services.Logging;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
@@ -286,6 +287,16 @@ namespace ConditioningControlPanel
 
             // The header preset dropdown is mod-renamed per item, plus an accent "Save as New" row.
             SweepStep(RefreshPresetsDropdown, "presets dropdown");
+
+            // The Studio rack's captions, art, door icon and accent-mixed chrome. This used to be
+            // its own ModChanged subscription in MainWindow.xaml.cs, wired AHEAD of the palette
+            // handler, so RefreshDots read PinkBrush while it still held the outgoing mod's accent
+            // and the rack's lit state dots (plus their glow) stayed on the old colour until some
+            // unrelated settings write repainted them - ccp-bugs#1100. Riding the sweep is the fix:
+            // Background priority is by construction after every ModChanged handler, palette
+            // included. It rides the LanguageChanged caller too, which is correct - the rack's row
+            // captions are the same mod-aware names a language switch changes.
+            SweepStep(() => StudioTab?.RepaintModAwareChrome(), "studio rack");
 
             // ---- on screen only: these tabs rebuild themselves on their next show ----
 
@@ -2603,8 +2614,8 @@ namespace ConditioningControlPanel
                 // Disconnect all network services
                 DisconnectNetworkServices();
 
-                App.Logger?.Information("Offline mode enabled with username '{Username}'",
-                    App.Settings.Current.OfflineUsername);
+                App.Logger?.Information("Offline mode enabled with a local username ({Chars} chars)",
+                    App.Settings.Current.OfflineUsername?.Length ?? 0);
             }
             else
             {
@@ -2757,7 +2768,7 @@ namespace ConditioningControlPanel
                                 ? "https://bambicloud.com/"
                                 : "https://hypnotube.com/";
                             _browser.Navigate(url);
-                            App.Logger?.Information("Browser reloaded after exiting offline mode: {Url}", url);
+                            App.Logger?.Information("Browser reloaded after exiting offline mode: {Host}", UrlLog.Host(url));
                         }
                         catch (Exception ex)
                         {

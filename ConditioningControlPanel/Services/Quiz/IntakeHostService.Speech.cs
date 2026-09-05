@@ -110,7 +110,7 @@ namespace ConditioningControlPanel.Services.Quiz
                 _speechCts = cts;
                 _speechId = id;
             }
-            App.Logger?.Information("IntakeHostService: speech-start #{Id} target='{Phrase}'", id, phrase);
+            App.Logger?.Information("IntakeHostService: speech-start #{Id} ({Chars}-char target)", id, (phrase ?? "").Length);
             _ = Task.Run(() => RunSpeechLoopAsync(id, phrase, cts.Token));
         }
 
@@ -206,8 +206,8 @@ namespace ConditioningControlPanel.Services.Quiz
 
                     if (res.Matched)
                     {
-                        App.Logger?.Information("IntakeHostService: speech #{Id} matched '{Phrase}' (score={S:0.00}, conf={C:0.00})",
-                            id, phrase, res.Score, res.Confidence);
+                        App.Logger?.Information("IntakeHostService: speech #{Id} matched ({Chars} chars, score={S:0.00}, conf={C:0.00})",
+                            id, (phrase ?? "").Length, res.Score, res.Confidence);
                         PostSpeechEvent(id, "final", new { matched = true, transcript = res.Transcript, score = res.Score, loudEnough = res.LoudEnough });
                         return;
                     }
@@ -222,8 +222,8 @@ namespace ConditioningControlPanel.Services.Quiz
                     {
                         misses++;
                         silent = 0;
-                        App.Logger?.Information("IntakeHostService: speech #{Id} miss — heard '{Heard}' (score={S:0.00}, loud={L})",
-                            id, res.Transcript, res.Score, res.LoudEnough);
+                        App.Logger?.Information("IntakeHostService: speech #{Id} miss — {Chars} chars heard (score={S:0.00}, loud={L})",
+                            id, (res.Transcript ?? "").Length, res.Score, res.LoudEnough);
                         PostSpeechEvent(id, "final", new { matched = false, transcript = res.Transcript, score = res.Score, loudEnough = res.LoudEnough });
                         // A beat between windows so the page's "almost" can land before the mic reopens.
                         try { await Task.Delay(350, ct).ConfigureAwait(false); } catch (OperationCanceledException) { return; }

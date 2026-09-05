@@ -131,7 +131,7 @@ namespace ConditioningControlPanel.Services
         {
             if (_disposed) return;
             _disposed = true;
-            App.Logger?.Information("FocusGameService: disposed");
+            App.Logger?.Debug("FocusGameService: disposed");
         }
     }
 }

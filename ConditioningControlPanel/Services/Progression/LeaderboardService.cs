@@ -69,7 +69,7 @@ public class LeaderboardService : IDisposable
         _refreshTimer.Tick += async (s, e) => await RefreshAsync();
         _refreshTimer.Start();
 
-        App.Logger?.Information("LeaderboardService initialized with 30-minute auto-refresh");
+        App.Logger?.Debug("LeaderboardService initialized with 30-minute auto-refresh");
     }
 
     /// <summary>
@@ -134,7 +134,7 @@ public class LeaderboardService : IDisposable
                 LastRefreshTime = DateTime.Now;
                 LastRefreshError = null;
 
-                App.Logger?.Information("Leaderboard refreshed: {Count} entries, {Total} total users, {Online} online, sorted by {SortBy}",
+                App.Logger?.Debug("Leaderboard refreshed: {Count} entries, {Total} total users, {Online} online, sorted by {SortBy}",
                     Entries.Count, TotalUsers, OnlineUsers, sortBy);
 
                 LeaderboardUpdated?.Invoke(this, EventArgs.Empty);

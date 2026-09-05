@@ -741,7 +741,11 @@ namespace ConditioningControlPanel
                     var result = System.Text.Json.JsonSerializer.Deserialize<MarqueeResponse>(json);
                     var newMessage = result?.message;
 
-                    if (!string.IsNullOrWhiteSpace(newMessage) && newMessage != _currentMarqueeMessage)
+                    // The animation stores an UPPERCASED copy in _currentMarqueeMessage, so the old
+                    // comparison against it never matched for a mixed-case server message: the same
+                    // marquee was re-logged and the animation restarted on every 30-minute poll.
+                    // Compare against the raw value we last accepted instead.
+                    if (!string.IsNullOrWhiteSpace(newMessage) && newMessage != App.Settings.Current.MarqueeMessage)
                     {
                         App.Logger?.Information("Marquee message updated from server: {Message}", newMessage);
                         App.Settings.Current.MarqueeMessage = newMessage;

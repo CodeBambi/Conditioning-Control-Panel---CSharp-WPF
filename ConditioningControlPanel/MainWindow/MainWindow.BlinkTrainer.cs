@@ -314,7 +314,10 @@ namespace ConditioningControlPanel
 
             if (svc.IsRunning)
             {
-                svc.Stop();
+                // Teardown joins the capture thread (up to 5s) and disposes the
+                // ONNX sessions, so it never runs on the UI thread (BUG-BRR252E2RM).
+                try { await svc.StopAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ToggleWebcamTrackingAsync: StopAsync threw"); }
                 RefreshBlinkTrainerTrackerButton();
                 if (announce)
                     App.Notifications?.Show(Loc.Get("camera_shortcut_toast_stopped"),
@@ -1428,7 +1431,7 @@ namespace ConditioningControlPanel
                 App.ApplyCalibrationScreenPlacement(recalDlg);
                 recalDlg.ShowDialog();
 
-                if (startedHere) svc.Stop();
+                if (startedHere) await svc.StopAsync();
                 RefreshBlinkTrainerWebcamColumn();
             }
             catch (Exception ex)

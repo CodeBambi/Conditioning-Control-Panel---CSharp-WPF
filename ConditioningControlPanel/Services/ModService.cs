@@ -31,6 +31,11 @@ namespace ConditioningControlPanel.Services
     {
         private static readonly ILogger? _log = App.Logger;
 
+        /// <summary>Built-ins that adopted a bundled asset package, for the one startup summary line.
+        /// Interlocked: a downloaded pack finishes extracting on a background thread, so this is
+        /// still being incremented after the constructor has already logged its summary.</summary>
+        private int _builtInsRegistered;
+
         private ModPackage _activeMod;
         private readonly ModPackage _baseMod; // Always CCP Default — neutral fallback for missing fields
         private readonly Dictionary<string, ModPackage> _installedMods = new(StringComparer.OrdinalIgnoreCase);
@@ -113,6 +118,11 @@ namespace ConditioningControlPanel.Services
 
             // Load user-installed mods from disk
             LoadInstalledMods();
+
+            // One line for the whole roll-call. Each built-in used to file its own Information
+            // line naming an absolute extract path, so a stock install spent six identical lines
+            // per launch saying nothing had changed. The per-mod detail is still at Debug.
+            _log?.Information("Registered {Count} built-in mod(s) with bundled assets", _builtInsRegistered);
 
             // Default to base mod until Initialize is called
             _activeMod = _baseMod;
@@ -2125,7 +2135,8 @@ namespace ConditioningControlPanel.Services
                     }
                     // Keep the in-code manifest authoritative; only adopt the assets.
                     AdoptBuiltInPackage(builtInId, new ModPackage(codeManifest, extractDir, isBuiltIn: true));
-                    _log?.Information("Registered resource mod {BuiltInId} with assets at {Path}", builtInId, extractDir);
+                    System.Threading.Interlocked.Increment(ref _builtInsRegistered);
+                    _log?.Debug("Registered resource mod {BuiltInId} with assets at {Path}", builtInId, extractDir);
                     return true;
                 }
 
@@ -2157,7 +2168,8 @@ namespace ConditioningControlPanel.Services
                 manifest.Id = builtInId;
 
                 AdoptBuiltInPackage(builtInId, new ModPackage(manifest, extractDir, isBuiltIn: true));
-                _log?.Information("Registered bundled built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
+                System.Threading.Interlocked.Increment(ref _builtInsRegistered);
+                _log?.Debug("Registered bundled built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
                 return true;
             }
             catch (Exception ex)

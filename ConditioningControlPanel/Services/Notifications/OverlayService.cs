@@ -530,7 +530,7 @@ public class OverlayService : IDisposable
             App.Logger?.Error(ex, "Error during OverlayService Stop");
         }
 
-        App.Logger?.Information("OverlayService stopped");
+        App.Logger?.Debug("OverlayService stopped");
     }
 
     public void RefreshOverlays()

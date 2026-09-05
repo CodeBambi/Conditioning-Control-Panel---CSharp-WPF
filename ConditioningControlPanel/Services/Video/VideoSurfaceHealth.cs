@@ -91,12 +91,21 @@ namespace ConditioningControlPanel.Services
         /// A mirror always may: the clip keeps playing while it retries, so a second grace window
         /// costs the user nothing. The audio-bearing surface may too, as soon as it has siblings -
         /// that is the multi-monitor headline report, where a primary that missed its window used to
-        /// skip the clip on the spot with no recovery rung at all. A LONE primary may not: it is the
-        /// only surface on the rig, a dead primary ends the clip either way, and the rung would be
-        /// nothing but 8 extra seconds of black for the single-monitor majority.
+        /// skip the clip on the spot with no recovery rung at all.
+        ///
+        /// A LONE primary now gets the same single rung (#1121). It used to be withheld to keep the
+        /// single-monitor majority at an ~8s skip instead of ~16s, but that rig is exactly where the
+        /// "black for a couple of seconds and then the video was over" reports come from: the ONE
+        /// surface that could have recovered was the one surface denied a re-Play(). The cost is
+        /// bounded to one extra grace window on a rig whose decoder really is dead; the win is every
+        /// run where it was merely late, which is the common case now that a wedged Stop() from the
+        /// previous clip can still be holding the instance when this one starts.
+        ///
+        /// Zero armed surfaces still means no rung: that is a watch being judged before it was
+        /// registered, and there is nothing there to re-Play.
         /// </summary>
         internal static bool AllowsFrameRetry(bool primarySurface, int armedSurfaces)
-            => !primarySurface || armedSurfaces > 1;
+            => !primarySurface || armedSurfaces > 0;
 
         /// <summary>
         /// Whether a dead surface should take the whole clip with it. This is the #1015/#1035 fix in

@@ -722,7 +722,12 @@ namespace ConditioningControlPanel.Views.Deeper
 
             if (svc.IsRunning)
             {
-                svc.Stop();
+                // Off the UI thread: the teardown joins the capture thread for up
+                // to 5s and then disposes the capture graph and the ONNX sessions
+                // (BUG-BRR252E2RM - the panel looked hung after turning the camera
+                // off, and had to be killed from Task Manager).
+                try { await svc.StopAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "EnhancementPlayer: webcam StopAsync threw"); }
                 return;
             }
 
@@ -1441,7 +1446,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     || !IsAllowedPlayerHost(uri))
                 {
                     e.Cancel = true;
-                    App.Logger?.Debug("EnhancementPlayer: blocked nav to {Url}", e.Uri);
+                    App.Logger?.Debug("EnhancementPlayer: blocked nav to {Host}", Services.Logging.UrlLog.Host(e.Uri));
                 }
             }
             catch

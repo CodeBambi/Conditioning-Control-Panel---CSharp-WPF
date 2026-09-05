@@ -453,14 +453,22 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void WebcamActivePill_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private async void WebcamActivePill_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             // Click is the panic-stop affordance. Stops every consumer that
             // shares App.Webcam — Webcam Triggers, Focus Gaze, Blink Trainer,
             // Gaze Minigame all release together when the service stops.
             try { App.GazeFocus?.Stop(); } catch { }
             try { App.BlinkTrainer?.Stop(); } catch { }
-            try { App.Webcam?.Stop(); } catch { }
+            // Awaited, never called inline: the webcam teardown joins the capture
+            // thread (up to 5s) and disposes the ONNX sessions, which locked the
+            // UI thread solid on a wedged driver (BUG-BRR252E2RM).
+            try
+            {
+                var svc = App.Webcam;
+                if (svc != null) await svc.StopAsync();
+            }
+            catch (Exception ex) { App.Logger?.Debug("WebcamActivePill_Click stop failed: {Error}", ex.Message); }
         }
 
         internal async void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
@@ -474,9 +482,9 @@ namespace ConditioningControlPanel
 
             if (svc.IsRunning)
             {
-                svc.Stop();
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
                 AppendWebcamDebugLog("Stop requested.");
+                await StopWebcamOffUiThreadAsync(svc);
                 RefreshBlinkTrainerTrackerButton();
                 return;
             }
@@ -537,6 +545,23 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "MainWindow: webcam Start() threw on worker thread");
                 AppendWebcamDebugLog($"Start() threw: {ex.Message}");
                 return false;
+            }
+        }
+
+        // Mirror of the above for teardown. Stop() joins the capture thread for
+        // up to 5s and then disposes the capture graph plus three ONNX sessions;
+        // run on the UI thread that is a multi-second freeze on any camera whose
+        // driver is slow to release (BUG-BRR252E2RM).
+        private async Task StopWebcamOffUiThreadAsync(WebcamTrackingService svc)
+        {
+            try
+            {
+                await svc.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "MainWindow: webcam Stop() threw on worker thread");
+                AppendWebcamDebugLog($"Stop() threw: {ex.Message}");
             }
         }
 
@@ -756,7 +781,7 @@ namespace ConditioningControlPanel
             // Only auto-stop if calibration was the only reason it's running.
             if (startedHere && result != true)
             {
-                svc.Stop();
+                await StopWebcamOffUiThreadAsync(svc);
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
             }
 
@@ -789,29 +814,61 @@ namespace ConditioningControlPanel
             // runs, leaving Webcam.Dispose uncalled and the camera lit.
             Closing += (_, _) => App.GazeFocus?.Stop();
 
-            App.GazeFocus.OnActiveChanged += active =>
+            App.GazeFocus.OnActiveChanged += _ =>
             {
-                // Service may stop itself (e.g., webcam death) — keep the
-                // toggle visually in sync without re-entering the handler.
+                // #1116: the RUNNING state moves on its own (camera off, tracking
+                // lost, service stops itself) and must never touch the switch -
+                // the switch is the user's intent. Only the status line follows
+                // the engine, so the toggle no longer looks self-flipping.
                 if (!Dispatcher.CheckAccess())
                 {
-                    Dispatcher.BeginInvoke(() => SyncFocusGazeToggle(active));
+                    Dispatcher.BeginInvoke(RefreshFocusGazeStatus);
                     return;
                 }
-                SyncFocusGazeToggle(active);
+                RefreshFocusGazeStatus();
             };
+
+            // Restore the saved intent. MasterEnabled only makes the engine
+            // WANTED - EvaluateDesiredState still holds it back until the camera
+            // is running, calibrated and consented, and the status line says which.
+            var enabled = App.Settings?.Current?.FocusGazeEnabled == true;
+            SyncFocusGazeToggle(enabled);
+            if (enabled) App.GazeFocus.MasterEnabled = true;
         }
 
         // PHASE 6: every LabTab.* accessor below became PlayTab.*. There is exactly ONE Focus Gaze
         // switch in the app (Play door, Eyes zone) and this is the code that reads and writes it.
-        private void SyncFocusGazeToggle(bool active)
+        // #1116: the argument is the ENABLED setting (user intent), never GazeFocusService.IsActive.
+        private void SyncFocusGazeToggle(bool enabled)
         {
+            if (App.Settings?.Current != null) App.Settings.Current.FocusGazeEnabled = enabled;
             if (PlayTab?.ChkPlayFocusGaze == null) return;
-            if (PlayTab.ChkPlayFocusGaze.IsChecked == active) return;
-            _focusGazeSyncing = true;
-            try { PlayTab.ChkPlayFocusGaze.IsChecked = active; }
-            finally { _focusGazeSyncing = false; }
-            if (PlayTab.TxtPlayFocusGazeStatus != null && !active) PlayTab.TxtPlayFocusGazeStatus.Text = "";
+            if (PlayTab.ChkPlayFocusGaze.IsChecked != enabled)
+            {
+                _focusGazeSyncing = true;
+                try { PlayTab.ChkPlayFocusGaze.IsChecked = enabled; }
+                finally { _focusGazeSyncing = false; }
+            }
+            RefreshFocusGazeStatus();
+        }
+
+        /// <summary>
+        /// Writes the status line under the Focus Gaze switch. The switch says
+        /// ENABLED, this says RUNNING - they are different things (#1116).
+        /// Callers that have a more specific message (consent, calibration,
+        /// webcam failure) set it AFTER SyncFocusGazeToggle, so theirs wins.
+        /// </summary>
+        private void RefreshFocusGazeStatus()
+        {
+            if (PlayTab?.TxtPlayFocusGazeStatus == null) return;
+            if (App.Settings?.Current?.FocusGazeEnabled != true)
+            {
+                PlayTab.TxtPlayFocusGazeStatus.Text = "";
+                return;
+            }
+            PlayTab.TxtPlayFocusGazeStatus.Text = App.GazeFocus?.IsActive == true
+                ? Loc.Get("label_focus_gaze_active")
+                : Loc.Get("label_focus_gaze_waiting");
         }
 
         internal async void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
@@ -877,7 +934,8 @@ namespace ConditioningControlPanel
                 App.GazeFocus.MasterEnabled = true;
                 if (App.GazeFocus.IsActive)
                 {
-                    if (PlayTab.TxtPlayFocusGazeStatus != null) PlayTab.TxtPlayFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_active");
+                    // Persist the intent and let the status line report the engine.
+                    SyncFocusGazeToggle(true);
                 }
                 else
                 {
@@ -900,7 +958,7 @@ namespace ConditioningControlPanel
                 // per-feature gaze toggle (Flash pop / linger, Video click) is
                 // still on — those are self-sufficient now.
                 App.GazeFocus.MasterEnabled = false;
-                if (PlayTab.TxtPlayFocusGazeStatus != null) PlayTab.TxtPlayFocusGazeStatus.Text = "";
+                SyncFocusGazeToggle(false);
             }
         }
 
@@ -1051,7 +1109,7 @@ namespace ConditioningControlPanel
             if (svc.Calibration == null)
             {
                 AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first.");
-                if (startedHere) { svc.Stop(); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
+                if (startedHere) { await StopWebcamOffUiThreadAsync(svc); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
                 return;
             }
 
@@ -1066,7 +1124,7 @@ namespace ConditioningControlPanel
             // leave it running.
             if (startedHere)
             {
-                svc.Stop();
+                await StopWebcamOffUiThreadAsync(svc);
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
             }
         }
@@ -1108,7 +1166,7 @@ namespace ConditioningControlPanel
             if (svc.Calibration == null)
             {
                 AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.");
-                if (startedHere) { svc.Stop(); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
+                if (startedHere) { await StopWebcamOffUiThreadAsync(svc); AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking"; }
                 return;
             }
 
@@ -1122,7 +1180,7 @@ namespace ConditioningControlPanel
 
             if (startedHere)
             {
-                svc.Stop();
+                await StopWebcamOffUiThreadAsync(svc);
                 AppSettingsTab.BtnWebcamDebugStart.Content = "Start tracking";
             }
 

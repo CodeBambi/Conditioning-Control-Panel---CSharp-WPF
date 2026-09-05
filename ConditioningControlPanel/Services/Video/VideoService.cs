@@ -165,6 +165,20 @@ namespace ConditioningControlPanel.Services
         // it treats the player as wedged and quarantines it. Only a real wedge should ever spend a
         // retire from the per-session budget.
         private const int StopStragglerGraceMs = 4000;
+        // Stop() tasks from the LAST teardown that were still running when CloseAll returned, plus
+        // the instance they belong to. The vmem/blur path deliberately never waits for them on the
+        // dispatcher and the VideoView path gives up after ~4.5s, so the NEXT video can start while
+        // a previous Stop() is still inside native code. A Play() that overlaps a wedged Stop() on
+        // the same instance never presents a frame: "fullscreen goes black for 2-3 seconds and then
+        // the video counts as watched" (#1121).
+        private static volatile Task[]? _pendingStopTasks;
+        private static LibVLC? _pendingStopOwner;
+        // How long the next video waits (pumping) for those stragglers before it abandons the owning
+        // instance and builds its players on a fresh one.
+        private const int PendingStopWaitMs = 2000;
+        // The "no videos found" guidance dialog is a per-LAUNCH one-off (#1124). Every trigger used
+        // to raise its own modal, so a long session stacked dozens of them on the dispatcher.
+        private static int _noVideosDialogShown;
 
 #if DEBUG
         // Fault injection for the wedge cluster (#765/#766/#767). Set CCP_FAULT_WEDGE_STOP=1 and the
@@ -838,7 +852,7 @@ namespace ConditioningControlPanel.Services
                         if (outputs != null)
                         {
                             var names = string.Join(", ", outputs.Select(o => $"{o.Name} ({o.Description})"));
-                            App.Logger?.Information("LibVLC available aout modules: {Outputs}", names);
+                            App.Logger?.Debug("LibVLC available aout modules: {Outputs}", names);
                         }
                     }
                     catch (Exception aoutEx)
@@ -1430,7 +1444,12 @@ namespace ConditioningControlPanel.Services
         /// and the play path force-unmutes, so folding this into GetEffectiveVolume is the
         /// one place that covers every site at once - play-time AND live slider drags.
         /// </summary>
-        private static volatile bool _externalMute;
+        ///
+        /// INSTANCE, not static (#1103). As a static it outlived the VideoService that owned it: a
+        /// dive torn down on an unusual path left it set and every video for the rest of the process
+        /// was created silent, with nothing in the log to say why. Per-instance, a service restart
+        /// clears it, and the only writer is the DtRH host.
+        private volatile bool _externalMute;
 
         /// <summary>Silence (or release) every video for an external owner. Applies live.
         /// MUST be released on teardown - see DtrhHostService.DisposeAll.</summary>
@@ -1451,6 +1470,23 @@ namespace ConditioningControlPanel.Services
             var master = App.Settings.Current.MasterVolume;
             var video = App.Settings.Current.VideoVolume;
             return (int)((master / 100.0) * (video / 100.0) * 100);
+        }
+
+        /// <summary>
+        /// Where the current effective volume comes from, for the one play-time log line (#1103).
+        /// "The video had no sound" reports used to carry nothing that separated "the user's slider
+        /// is at zero" from "a DtRH dive left the external mute set", which are the same silence
+        /// with completely different fixes. Audio ducking is named here only to rule it out: Duck()
+        /// lowers OTHER apps, never this player.
+        /// </summary>
+        private string DescribeVolumeOrigin()
+        {
+            var master = App.Settings.Current.MasterVolume;
+            var video = App.Settings.Current.VideoVolume;
+            if (_externalMute) return $"DtRH dive external mute (user setting is master {master}%, video {video}%)";
+            if (master <= 0) return "user setting: master volume is 0";
+            if (video <= 0) return "user setting: video volume is 0";
+            return $"user setting (master {master}%, video {video}%)";
         }
 
         /// <summary>
@@ -1519,7 +1555,11 @@ namespace ConditioningControlPanel.Services
                     // drags: player.Mute reads true while no audio output exists yet (transient),
                     // so the primary player got skipped. Volume and Mute are independent in
                     // LibVLC - setting Volume never unmutes, and no-audio secondaries ignore it.
+                    // Mute is driven from the same number (#1103): silence is the PLAYER's state
+                    // now, so a drag back up has to clear it or the video stays silent for the rest
+                    // of the clip. Secondaries carry :no-audio and ignore both.
                     player.Volume = effectiveVolume;
+                    player.Mute = effectiveVolume <= 0;
                 }
                 catch (Exception ex)
                 {
@@ -1638,7 +1678,7 @@ namespace ConditioningControlPanel.Services
             // CompleteIfCurrent never clears a claim that isn't ours.
             App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
 
-            App.Logger?.Information("VideoService stopped");
+            App.Logger?.Debug("VideoService stopped");
         }
 
         private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
@@ -2211,6 +2251,15 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
+                // One dialog per app launch (#1124). A trigger fires every couple of minutes, so a
+                // 33-minute session used to stack dozens of identical modals - each one blocking
+                // this call and pumping a nested message loop on the dispatcher.
+                if (Interlocked.Exchange(ref _noVideosDialogShown, 1) != 0)
+                {
+                    App.Logger?.Information("VideoService: still no videos in {Path}; the guidance dialog was already shown this launch", _videosPath);
+                    return;
+                }
+
                 // Build helpful error message
                 var activePackCount = App.ContentPacks?.GetActivePackIds()?.Count ?? 0;
                 var installedPackCount = App.ContentPacks?.InstalledPacks?.Count ?? 0;
@@ -2228,13 +2277,25 @@ namespace ConditioningControlPanel.Services
 
                 message += Loc.Get("video_add_files_hint");
 
-                System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
+                // Posted, not called: MessageBox.Show blocks its caller and pumps a nested message
+                // loop, and this caller is the trigger path. It returns immediately now and the box
+                // opens on the dispatcher's own time (#1124).
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
 
-                // AFTER the box closes, never before: MessageBox.Show runs a nested message pump,
-                // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
-                // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
-                // budget, shared with the flash/wallpaper/first-run dead ends.
-                App.OfferRemoteMediaSource("videos");
+                        // AFTER the box closes, never before: MessageBox.Show runs a nested message pump,
+                        // so the coaching card's Normal-priority BeginInvoke would be dispatched while the
+                        // box is still up and stack a window on a modal. App keeps the one-offer-per-launch
+                        // budget, shared with the flash/wallpaper/first-run dead ends.
+                        App.OfferRemoteMediaSource("videos");
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("VideoService: no-videos dialog failed: {Error}", ex.Message); }
+                }));
                 return;
             }
 
@@ -2481,7 +2542,7 @@ namespace ConditioningControlPanel.Services
                         secondaries.Count, allScreens.Count);
                 }
 
-                App.Logger?.Information("Playing URL via LibVLC on {Count} screen(s): {Url}", _windows.Count, url);
+                App.Logger?.Information("Playing URL via LibVLC on {Count} screen(s), host {Host}", _windows.Count, Logging.UrlLog.Host(url));
             });
         }
 
@@ -2628,10 +2689,10 @@ namespace ConditioningControlPanel.Services
             // Create media from URL — disposed after Play() (LibVLC ref-counts internally)
             using var media = new Media(_libVLC!, url, FromType.FromLocation);
             // Secondaries skip audio decoding entirely — prevents a parallel WASAPI session
-            // from opening on the same MMDevice and racing the primary's mixer state. Also
-            // skip it when audio is deactivated (effective volume 0), else the async Play()
-            // lets the video blip at 100% before the volume set below lands (see file path).
-            if (!withAudio || GetEffectiveVolume() <= 0) media.AddOption(":no-audio");
+            // from opening on the same MMDevice and racing the primary's mixer state. A zero
+            // effective volume no longer bakes it in: that made the silence permanent for the
+            // whole clip, mute state included (#1103, see the file path for the full note).
+            if (!withAudio) media.AddOption(":no-audio");
 
             // Subscribed BEFORE Play(): a fast start raises Playing inside Play() itself, and this
             // handler owns everything that needs a live aout - the volume re-apply (the set after
@@ -2641,7 +2702,12 @@ namespace ConditioningControlPanel.Services
                 int audioRouted = 0; // Playing can fire again after a seek/restart - route once
                 mediaPlayer.Playing += (s, e) =>
                 {
-                    try { mediaPlayer.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    try
+                    {
+                        var eff = GetEffectiveVolume();
+                        mediaPlayer.Mute = eff <= 0;
+                        mediaPlayer.Volume = eff;
+                    }
                     catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: URL volume apply on Playing failed"); }
 
                     if (System.Threading.Interlocked.Exchange(ref audioRouted, 1) == 0)
@@ -2653,8 +2719,11 @@ namespace ConditioningControlPanel.Services
 
             if (withAudio)
             {
-                mediaPlayer.Mute = false;
-                mediaPlayer.Volume = GetEffectiveVolume();
+                var effective = GetEffectiveVolume();
+                mediaPlayer.Mute = effective <= 0;
+                mediaPlayer.Volume = effective;
+                App.Logger?.Information("VideoService: effective URL video volume {Vol}% (mute={Mute}) - origin: {Origin}",
+                    effective, effective <= 0, DescribeVolumeOrigin());
             }
 
             return win;
@@ -2920,6 +2989,12 @@ namespace ConditioningControlPanel.Services
                 // startup latency before frames roll is negligible against a minutes-long cap.
                 StartMaxLengthCapTimer();
                 VideoDiag.Log("VIDEO", $"safety + max-length timers armed +{showSw.ElapsedMilliseconds}ms");
+
+                // A previous teardown's Stop() may still be inside native code right now (#1121):
+                // the vmem/blur path hands its stop tasks straight to the async quarantine without
+                // ever waiting on the dispatcher. Building this video's players on an instance whose
+                // last Stop() has not returned is how a clip ends up black for its whole run.
+                AwaitPendingStops();
 
                 // Ensure LibVLC is initialized (deferred from startup for faster launch).
                 // #616-#623 NOTE: this call runs ON THE UI THREAD and takes _libVLCLock, which a
@@ -3503,15 +3578,15 @@ namespace ConditioningControlPanel.Services
             // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
             // a second WASAPI session on the same MMDevice; Windows collapsed both into one
             // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
-            // Also skip it when audio is deactivated (effective volume 0): Play() is async, so
-            // the Volume=0 set below no-ops until the aout exists and the video would start at
-            // 100% for a beat before the Playing handler cuts it — the audible blip a
-            // "deactivated audio" user hears. :no-audio never decodes audio, so nothing blips.
-            // Same reasoning covers a muted player (dive master-mute or a zeroed slider): it has to
-            // start SILENT, and killing audio at the media level is the only way to beat the aout.
-            // Trade-off: un-muting mid-video won't restore sound - fine for the mandatory dive
-            // video, and any later playback opens a fresh Media that re-evaluates this.
-            if (!withAudio || GetEffectiveVolume() <= 0)
+            // It is NOT baked in for a zero effective volume any more (#1103). ":no-audio" is a
+            // permanent property of the Media: a clip created while the volume happened to be 0 -
+            // a slider at zero, or a DtRH dive holding the external mute - could never make a sound
+            // again, however far the user pushed the slider back up mid-video, and if the mute
+            // state was stale the silence lasted for every video until the app restarted. Mute and
+            // volume are applied through the PLAYER below instead, which a live change can reach.
+            // The cost is the beat between Play() and the aout coming up, where a zero-volume clip
+            // can blip; the Playing handler is the first moment the volume can actually land.
+            if (!withAudio)
             {
                 media.AddOption(":no-audio");
             }
@@ -3539,7 +3614,15 @@ namespace ConditioningControlPanel.Services
                     // with no aout) and the video starts at 100% regardless of the slider. Only
                     // this re-apply lands the Video Volume slider (matches
                     // DualMonitorVideoService/MiniPlayerWindow).
-                    try { mediaPlayer!.Mute = false; mediaPlayer.Volume = GetEffectiveVolume(); }
+                    // Mute follows the CURRENT effective volume rather than being forced off: the
+                    // silence is now the player's state, not the media's, so a later unmute (dive
+                    // released, slider dragged back up) reaches this same live player (#1103).
+                    try
+                    {
+                        var eff = GetEffectiveVolume();
+                        mediaPlayer!.Mute = eff <= 0;
+                        mediaPlayer.Volume = eff;
+                    }
                     catch (Exception ex) { App.Logger?.Debug(ex, "VideoService: volume apply on Playing failed"); }
 
                     // Anything heavier than a property set goes off the LibVLC event thread.
@@ -3559,8 +3642,14 @@ namespace ConditioningControlPanel.Services
             // LibVLC auto-selects the first audio track once the media is parsed.
             if (withAudio)
             {
-                mediaPlayer.Mute = false;
-                mediaPlayer.Volume = GetEffectiveVolume();
+                var effective = GetEffectiveVolume();
+                mediaPlayer.Mute = effective <= 0;
+                mediaPlayer.Volume = effective;
+                // WHY this video is as loud as it is, in one line (#1103). A "no audio" report used
+                // to be unable to tell a zeroed slider from a stale DtRH dive mute - the same
+                // silence, opposite fixes - because nothing ever logged which one was in force.
+                App.Logger?.Information("VideoService: effective video volume {Vol}% (mute={Mute}) - origin: {Origin}",
+                    effective, effective <= 0, DescribeVolumeOrigin());
                 // REQUESTED values only. No aout exists this early, so this line says nothing about
                 // audibility - it read "Volume=99, Mute=false" on both #707 and #708, which were
                 // dead silent. RouteAndProbeAudio logs the RESOLVED routing once the aout is live;
@@ -3778,9 +3867,10 @@ namespace ConditioningControlPanel.Services
         ///     fallback safety timer (black and silent for minutes, un-closable in strict mode). The
         ///     retry only moves that skip from ~8s to ~16s, and buys back the runs where the decoder
         ///     was merely slow to come up while three screens spun up at once.
-        ///   * on a SINGLE-surface rig (the majority) the primary is the only surface and gets NO retry
-        ///     rung at all, so that path skips at exactly the ~8s the released build does. The rung is
-        ///     decided by the RIG, not by the role: a lone primary has no siblings to be starved by.
+        ///   * a LONE primary gets that one rung too, as of #1121. Denying it was what left the
+        ///     single-monitor majority with no recovery of any kind: the one surface that could have
+        ///     come back was the one surface not allowed to try. Worst case it costs one more grace
+        ///     window before the same skip.
         ///
         /// See VideoSurfaceHealth.DecideFrameWatchdog / ShouldAbortClip for both rules in pure form.
         /// </summary>
@@ -3816,11 +3906,11 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     bool tornDown = !_videoPlaying || _isCleaningUp || gen != _teardownGeneration;
-                    // How many surfaces this clip armed. The retry rung is decided by the RIG, not by
-                    // the role (see the ladder note above): a mirror always gets its second chance, and
-                    // so does the audio-bearing surface as soon as it has siblings. A lone primary —
-                    // the single-monitor majority — gets none, which keeps that path's ~8s skip exactly
-                    // where the released build has it.
+                    // How many surfaces this clip armed. Every armed surface now gets its one second
+                    // chance (see the ladder note above and AllowsFrameRetry): a mirror because the
+                    // clip keeps playing while it retries, the audio-bearing surface because a skip
+                    // is otherwise the only outcome - including on the single-monitor rig, which is
+                    // where the #1121 reports come from. Zero armed surfaces still gets none.
                     int armed;
                     lock (_blurFrameWatchLock) { armed = _blurWatches.Count; }
                     switch (VideoSurfaceHealth.DecideFrameWatchdog(tornDown, _gracePaused, surface.HasRendered, watch.RetryUsed,
@@ -3868,7 +3958,7 @@ namespace ConditioningControlPanel.Services
                             VideoSurfaceHealth.Report("libvlc", monitor, primary, -1,
                                 watch.RetryUsed
                                     ? $"no frame within {VoutGraceMs}ms, and none after one retry"
-                                    : $"no frame within {VoutGraceMs}ms, no retry rung on a single-surface rig");
+                                    : $"no frame within {VoutGraceMs}ms, no retry rung available for this surface");
                             if (!VideoSurfaceHealth.ShouldAbortClip(total, dead, primaryDead))
                             {
                                 App.Logger?.Warning("VideoService: giving up on the blurred surface {Surface} ({Dead}/{Total} dead) - the clip keeps playing on the live screen(s)",
@@ -5397,8 +5487,8 @@ namespace ConditioningControlPanel.Services
                     try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
 
-                App.Logger?.Debug("Spawning attention target: '{Text}' on {ScreenCount} screen(s) ({Spawned}/{Total})",
-                    text, screens.Length, _spawned, _total);
+                App.Logger?.Debug("Spawning attention target ({Chars} chars) on {ScreenCount} screen(s) ({Spawned}/{Total})",
+                    (text ?? "").Length, screens.Length, _spawned, _total);
 
                 foreach (var screen in screens)
                 {
@@ -7085,7 +7175,15 @@ namespace ConditioningControlPanel.Services
             // "the panic key did nothing". Every phase is timestamped so the next report tells us
             // which phase the teardown died in instead of just going quiet.
             var closeSw = System.Diagnostics.Stopwatch.StartNew();
-            VideoDiag.Log("CLOSE", $"CloseAll begin (synchronous={synchronous}, windows={_windows.Count})");
+            // A teardown with no windows open is the common case (every panic press, every engine
+            // stop, every session end funnels here) and it produced the same four CLOSE lines as a
+            // real teardown - four lines of "nothing happened" per event, in the one trace whose
+            // whole value is a short readable timeline. Trace the phases only when there is
+            // actually a window to take down; the wedge/straggler/skip lines below stay
+            // unconditional because those only fire when something IS wrong.
+            bool traceClose = _windows.Count > 0;
+            if (traceClose)
+                VideoDiag.Log("CLOSE", $"CloseAll begin (synchronous={synchronous}, windows={_windows.Count})");
             lock (_cleanupLock)
             {
                 if (_isCleaningUp)
@@ -7125,7 +7223,12 @@ namespace ConditioningControlPanel.Services
 
                 lock (_targets)
                 {
-                    App.Logger?.Information("ATTENTION: CloseAll() called - destroying {Count} targets", _targets.Count);
+                    // Destroying nothing is the normal case and was logged at Information on every
+                    // single teardown; only a real destroy is worth a line on disk.
+                    if (_targets.Count > 0)
+                        App.Logger?.Information("ATTENTION: CloseAll() destroying {Count} target(s)", _targets.Count);
+                    else
+                        App.Logger?.Debug("ATTENTION: CloseAll() called - no targets to destroy");
                     foreach (var t in _targets.ToList()) t.Destroy();
                     _targets.Clear();
                 }
@@ -7182,6 +7285,11 @@ namespace ConditioningControlPanel.Services
                 // Snapshot the instance these players belong to, so the (possibly delayed) retire below
                 // can never condemn a FRESH instance that a vout-retry has since built.
                 var owningLibVLC = _libVLC;
+                // Hand the stop tasks to the NEXT video (#1121). Whatever this method decides below -
+                // wait for them, or skip the wait entirely on the vmem path - a straggler that
+                // outlives the teardown must not have the next Play() built on top of it.
+                _pendingStopTasks = stopPairs.Select(p => p.task).ToArray();
+                _pendingStopOwner = owningLibVLC;
 
                 // The waits below exist for ONE reason: detaching a VideoView/HwndHost from a player
                 // that is still presenting is the historic multi-monitor crash (see the detach comment
@@ -7251,7 +7359,8 @@ namespace ConditioningControlPanel.Services
                 // Now detach MediaPlayers from VideoViews (safe since players are stopped and we waited).
                 // Detaching an HwndHost surface from a player that is still presenting is the
                 // historical multi-monitor freeze; if the trace stops here, that is what happened.
-                VideoDiag.Log("CLOSE", $"detaching VideoViews at +{closeSw.ElapsedMilliseconds}ms");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"detaching VideoViews at +{closeSw.ElapsedMilliseconds}ms");
                 var windowsCopy = _windows.ToList();
                 foreach (var w in windowsCopy)
                 {
@@ -7284,7 +7393,8 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Close video windows AFTER media players are stopped and detached
-                VideoDiag.Log("CLOSE", $"closing {_windows.Count} video window(s) at +{closeSw.ElapsedMilliseconds}ms");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"closing {_windows.Count} video window(s) at +{closeSw.ElapsedMilliseconds}ms");
                 foreach (var w in _windows.ToList())
                 {
                     try
@@ -7448,7 +7558,51 @@ namespace ConditioningControlPanel.Services
 
                 // Total UI-thread block for this teardown. Anything past ~1s here is the app being
                 // unresponsive to the user (and to the low-level keyboard hook) — #616-#623.
-                VideoDiag.Log("CLOSE", $"CloseAll end after {closeSw.ElapsedMilliseconds}ms of UI-thread time");
+                if (traceClose)
+                    VideoDiag.Log("CLOSE", $"CloseAll end after {closeSw.ElapsedMilliseconds}ms of UI-thread time");
+            }
+        }
+
+        /// <summary>
+        /// Wait for the PREVIOUS teardown's Stop() tasks before this video builds any player (#1121).
+        /// Pumping, so the dispatcher keeps draining exactly as it does during CloseAll's own waits,
+        /// and bounded at <see cref="PendingStopWaitMs"/>.
+        ///
+        /// A Stop() that is still inside native code owns the audio output and the decoder of the
+        /// instance it was created from. Play() on that same instance comes back "playing", presents
+        /// no frame, and the clip is skipped a couple of seconds later with nothing but black on
+        /// screen. If the straggler outlives the wait we do not fight it: the instance is retired
+        /// (quarantined forever - a wedged native call is still inside it, so it is never disposed)
+        /// and EnsureLibVLCInitialized builds a fresh one for this video.
+        /// </summary>
+        private void AwaitPendingStops()
+        {
+            var pending = _pendingStopTasks;
+            var owner = _pendingStopOwner;
+            _pendingStopTasks = null;
+            _pendingStopOwner = null;
+            if (pending == null || pending.Length == 0) return;
+            if (pending.All(t => t.IsCompleted)) return;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            VideoDiag.Log("VIDEO", $"pre-roll: {pending.Count(t => !t.IsCompleted)} previous Stop() task(s) still running - waiting up to {PendingStopWaitMs}ms");
+            while (sw.ElapsedMilliseconds < PendingStopWaitMs && pending.Any(t => !t.IsCompleted))
+                WaitWithMessagePump(100);
+
+            bool wedged = pending.Any(t => !t.IsCompleted);
+            // One line per overrun, at Warning, carrying the elapsed ms: a report that contains it
+            // says the black screen came from the previous teardown rather than from this clip.
+            App.Logger?.Warning(
+                "VideoService: the previous video's Stop() overran into this one by {Ms}ms - {Outcome} (#1121)",
+                sw.ElapsedMilliseconds,
+                wedged ? "still running, abandoning it and starting this video on a fresh LibVLC instance" : "it finished, playback continues on the same instance");
+            VideoDiag.Log("VIDEO", $"pre-roll: previous Stop() overran {sw.ElapsedMilliseconds}ms, stillRunning={wedged}");
+
+            if (wedged)
+            {
+                // fromCurrentPlayback:false - the clip these players belonged to is already down, so
+                // there is no sibling decoding on this instance to protect.
+                RetireSharedLibVLC(owner, "the previous video's Stop() was still running when the next video started", fromCurrentPlayback: false);
             }
         }
 
@@ -7857,9 +8011,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Refills both video queues (regular and pack videos).
         /// </summary>
+        /// <summary>
+        /// Containers the local video walk accepts. Everything here is something LibVLC demuxes and
+        /// the browser engine either plays or hands back to LibVLC, so the cost of a wide list is a
+        /// clip that fails at play time; the cost of a narrow one is a folder that silently scans to
+        /// zero videos and a "no videos" dialog on a folder that visibly has some (#1124).
+        /// </summary>
+        internal static readonly string[] SupportedVideoExtensions =
+        {
+            ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm",
+            ".m4v", ".mpg", ".mpeg", ".flv", ".ts"
+        };
+
+        /// <summary>Extension gate of the local video walk, case-insensitive. Pure, so it is unit
+        /// tested (VideoExtensionFilterTests) rather than only exercised through a disk scan.</summary>
+        internal static bool IsSupportedVideoExtension(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            var ext = Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext)) return false;
+            return SupportedVideoExtensions.Contains(ext.ToLowerInvariant());
+        }
+
         private void RefillVideoQueues()
         {
-            var validExtensions = new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
 
             // Remote injection point. A refill is the moment the pipeline admits it needs more
             // material, so it is where the remote buffer gets topped up too - but ONLY as a
@@ -7873,22 +8048,29 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Debug("VideoService: Scanning for videos in {Path}", _videosPath);
 
-            // Load regular videos
+            // Load regular videos.
+            // The counters below are the #1124 funnel: a Release log used to say nothing at all
+            // about WHY a folder full of files scanned to zero videos, because every step here was
+            // Debug-only. One Information line at the end reports the whole ladder.
+            int seen = 0, keptExt = 0, keptSecurity = 0;
+            bool folderMissing = false;
             var files = new List<string>();
             if (Directory.Exists(_videosPath))
             {
                 // Scan subfolders to support user-organized categories
                 var allFiles = Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories);
+                seen = allFiles.Length;
                 App.Logger?.Debug("VideoService: Found {Count} total files in videos folder", allFiles.Length);
 
                 foreach (var file in allFiles)
                 {
                     var ext = Path.GetExtension(file).ToLowerInvariant();
-                    if (!validExtensions.Contains(ext))
+                    if (!IsSupportedVideoExtension(file))
                     {
                         App.Logger?.Debug("VideoService: Skipping non-video file: {Path} (ext: {Ext})", file, ext);
                         continue;
                     }
+                    keptExt++;
 
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
@@ -7911,14 +8093,17 @@ namespace ConditioningControlPanel.Services
                     }
 
                     files.Add(file);
+                    keptSecurity++;
                 }
             }
             else
             {
+                folderMissing = true;
                 App.Logger?.Warning("VideoService: Videos directory does not exist: {Path}", _videosPath);
             }
 
             App.Logger?.Debug("VideoService: {Count} videos passed security checks", files.Count);
+            int keptEnabled = files.Count;
 
             // Filter out disabled assets (blacklist approach).
             // Normalize for case-insensitive, separator-agnostic comparison so saved
@@ -7943,6 +8128,7 @@ namespace ConditioningControlPanel.Services
                 }).ToList();
                 App.Logger?.Debug("VideoService: {Before} -> {After} after disabled filter", beforeCount, files.Count);
             }
+            keptEnabled = files.Count;
 
             // Duration filter (Phase 5). Best-effort: videos with no cached
             // duration are included and parsed lazily — they'll get filtered
@@ -7986,6 +8172,28 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService: {Before} -> {After} after duration filter [{Min}s, {Max}s]",
                     beforeDur, files.Count, minSec, maxSec);
             }
+            int keptDuration = files.Count;
+
+            // The #1124 funnel line. Information, not Debug: the report that needs it is a Release
+            // log from a user whose folder "has videos" and whose app says it has none, and until
+            // now that log carried the final count and nothing about the ladder that produced it.
+            // The path goes through the same scrubber as every other logged path.
+            var drops = new (int Count, string Reason)[]
+            {
+                (seen - keptExt, $"extension filter ({seen - keptExt} file(s); supported: {string.Join(" ", SupportedVideoExtensions)})"),
+                (keptExt - keptSecurity, $"path/name security checks ({keptExt - keptSecurity} file(s))"),
+                (keptSecurity - keptEnabled, $"the user's disabled-assets list ({keptSecurity - keptEnabled} file(s))"),
+                (keptEnabled - keptDuration, $"duration filter ({keptEnabled - keptDuration} file(s); min {minSec}s max {maxSec}s)")
+            };
+            var worstDrop = drops.OrderByDescending(d => d.Count).First();
+            string biggestDrop =
+                folderMissing ? "the videos folder does not exist"
+                : seen == 0 ? "the folder is empty"
+                : worstDrop.Count <= 0 ? "nothing was dropped"
+                : worstDrop.Reason;
+            App.Logger?.Information(
+                "VideoService: refill funnel for {Path} - {Seen} file(s) seen, {Ext} kept by extension, {Sec} after path/name checks, {Enabled} after the disabled list, {Dur} after the duration filter. Biggest drop: {Drop}",
+                _videosPath, seen, keptExt, keptSecurity, keptEnabled, keptDuration, biggestDrop);
 
             // Shuffle using Fisher-Yates algorithm for reliable randomization
             ShuffleList(files);
@@ -8455,7 +8663,7 @@ namespace ConditioningControlPanel.Services
                 };
 
                 _win.Show();
-                App.Logger?.Debug("Attention target window created: '{Text}' size {W}x{H}", text, w, h);
+                App.Logger?.Debug("Attention target window created ({Chars} chars) size {W}x{H}", (text ?? "").Length, w, h);
             }
             catch (Exception ex)
             {
