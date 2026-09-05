@@ -54,6 +54,17 @@ namespace ConditioningControlPanel.Services.Logging
         private readonly Dictionary<string, Entry> _keys = new(StringComparer.Ordinal);
         private readonly object _gate = new();
         private bool _disposed;
+        private int _totalSuppressed;
+
+        /// <summary>
+        /// Lines this session dropped as repeats. The session footer reports it, because a run that
+        /// suppressed 40,000 lines is a very different run from one that suppressed none - and the
+        /// per-template summaries scattered through the file do not add themselves up.
+        /// </summary>
+        public int TotalSuppressed
+        {
+            get { lock (_gate) { return _totalSuppressed; } }
+        }
 
         public ThrottlingSink(ILogEventSink inner) => _inner = inner;
 
@@ -96,7 +107,7 @@ namespace ConditioningControlPanel.Services.Logging
                     entry.Level = logEvent.Level;
                     entry.Count++;
                     pass = entry.Count <= BurstLimit;
-                    if (!pass) entry.Suppressed++;
+                    if (!pass) { entry.Suppressed++; _totalSuppressed++; }
                 }
             }
             catch

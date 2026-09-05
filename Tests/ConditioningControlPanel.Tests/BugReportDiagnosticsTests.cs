@@ -299,4 +299,36 @@ public class BugReportDiagnosticsTests
         Assert.Equal(filled, BugReportService.TidyEmptyTokenPlaceholder(filled));
         Assert.Equal(string.Empty, BugReportService.TidyEmptyTokenPlaceholder(null));
     }
+
+    // ------------------------------------------------------------------
+    // Session-file format: the tag moved into the category column.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void MarkerLines_AreFoundInBothLogFormats()
+    {
+        // The session format lifts "[RES]" out of the message and renders it as a padded category
+        // column, so the old exact-tag markers would have quietly matched NOTHING from the day it
+        // shipped - and a returning user still has old app-*.log files in the old spelling.
+        var lines = new List<string>
+        {
+            "12:00:01.100 INF [Res          ] user=100 gdi=200",
+            "12:00:02.100 ERR [Watchdog     ] UI thread unresponsive for 5s",
+            "12:00:03.100 INF [Blur         ] vmem surface rebuilt",
+            "2026-07-24 12:00:04 INF [RES] user=101 gdi=201",
+            "12:00:05.100 INF [Reset        ] session counters cleared",
+            "12:00:06.100 INF [Session      ] resumed",
+        };
+
+        var result = BugReportService.BuildSampledDiagnostics(lines);
+
+        Assert.Contains("user=100 gdi=200", result);
+        Assert.Contains("UI thread unresponsive", result);
+        Assert.Contains("vmem surface rebuilt", result);
+        Assert.Contains("user=101 gdi=201", result);
+        // "[Res" without the trailing space would swallow [Reset], which 20 unrelated call sites
+        // write - and those would crowd the retained matches out with noise.
+        Assert.DoesNotContain("session counters cleared", result);
+        Assert.DoesNotContain("[Session", result);
+    }
 }

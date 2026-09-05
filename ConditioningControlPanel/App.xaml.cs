@@ -1534,6 +1534,22 @@ namespace ConditioningControlPanel
             Logger.Information("Application starting v{Version} | workingSet {WS}MB",
                 Services.UpdateService.AppVersion, Environment.WorkingSet / (1024 * 1024));
 
+            // "App ready in N ms", measured to the first IDLE dispatcher frame - the moment the
+            // window is actually usable, not the moment OnStartup returns. Startup regressions have
+            // shipped unnoticed because nothing in the log ever said how long startup took. The
+            // line also carries lang/mod, which the session header cannot: the logger is built
+            // here, and Settings does not exist until two hundred lines further down.
+            try
+            {
+                Dispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+                    new Action(() => Services.Logging.LogPipeline.LogAppReady()));
+            }
+            catch (Exception exReady)
+            {
+                Logger.Debug("[Startup] ready-timer hook failed: {Msg}", exReady.Message);
+            }
+
             // Rotate crash.log so a bug report only carries crashes from THIS build. The log is
             // append-only, so without this it accumulates months of old crashes and the reporter
             // ships them all (the last 120KB), burying the real failure and polluting triage.
