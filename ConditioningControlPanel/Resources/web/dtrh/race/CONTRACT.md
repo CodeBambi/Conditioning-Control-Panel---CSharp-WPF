@@ -225,7 +225,8 @@ below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own sta
 
 ### `race/run.js` + `raceBoot.js` + `race.html` (PR 5, integration)
 ```js
-export function createRace({ root, bridge, media, settings, seed }) -> { start(), setPaused(b), dispose() }
+export function createRace({ root, bridge, media, settings, seed }) ->
+  { start(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera }
 ```
 Composes everything: renderer, `createSpine`, `createTunnel(layout)` from `engine/tunnel.js`,
 `createFx` from `engine/fx.js`, `createRoomDresser`, `createBubbleField`, `createKart`,
@@ -291,6 +292,32 @@ null from either function always means the same thing: keep the voxel fallback.
 fixture that mounts around the quad (`frame` + `frameY`, the authored opening centre). Wall props
 are centred on their mounting plate and keep it by merging it in; shoulder props and extras move to
 `PROP_X` and are mirrored on x because `shoulderMatrix` is left handed like `roadMatrix`.
+
+### `race/menu.js` + `race/intro.js` (pass five, the front door)
+```js
+createMenu({ root, renderer, pixel, audio, settings, log }) -> { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose(), live }, dispose() }
+createIntro({ stage, hud, audio, reducedMotion, log }) -> { play(): Promise, skip(), update(dt), render(), dispose() }
+cameraWhip(sec) / resultsCamera({ tier, reducedMotion }) / preRollCamera() -> fn(camera, dt, w, camOut), `false` when done
+resultTier(total, best, personalBest) -> 0..4 (the face index)
+```
+- Boot order: splash (a 1 s title flash) -> menu (the resting state) -> `race` -> intro on the menu stage -> run under the
+  camera whip. `?autostart=1` skips menu and intro (the headless checks depend on it), `?intro=0` skips the intro only,
+  `?scene=intro` boots straight into the intro. `surface` from the menu sends the same `exit` + `exit-done` the End screen does.
+- The stage is a second `THREE.Scene` drawn by the race's renderer + pixelizer through `race.setStage(s)`: while set,
+  `frame()` calls `s.update(dt)` + `s.render()` and the world is not drawn. `setStage(null)` retextures the world for any
+  pixel block the menu changed. No second canvas.
+- Camera overrides run in `frame()` after `step()`, so they work while the run is stopped (results) and while it drives
+  (the whip). `start()` clears the override; the boot installs the whip after `start()`.
+- `w.kart.emiModel()`, `w.kart.emiReady(cb)`, `w.kart.setFace(i)` are the kart's contract for the run's EMI; every call
+  is guarded for null (the stage carries its own clone with its own glass material, so the two faces never fight).
+- Options persist under the single localStorage key `race.options` (`pixel, music, sfx, motion, seed, seedValue`), not in
+  `engine/settings.js`. Precedence for the block: `?pixel` > `race.options.pixel` > host `settings.pixel` > `PIXEL_DEFAULT`.
+  The seed rule (daily / random / custom) sets `settings.seedLock`, which `again` honours; a change in the menu calls `reseed`.
+- Music / sfx sliders store their values and call `audio.setLevels({ music, sfx })` when audio.js grows one; until then
+  the rows are dimmed with a note. Reduced motion from the menu drives the stage and the intro at once, the run on the next launch.
+- props.glb (`podium`, `kart_cup`, `kart_saucer`, `floor_tile`, `gantry`) dresses the stage when it resolves; lathe
+  placeholders otherwise. `emi.glb`'s `EMI_glass` carries the atlas as `emissiveTexture` only, so the stage sets the face
+  on `emissiveMap` (and `map` when present); gltf.js `setFace` shifts whichever of the two the material carries.
 
 ## Host protocol (bridge.js, Protocol v1)
 

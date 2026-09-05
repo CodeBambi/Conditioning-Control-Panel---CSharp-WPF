@@ -99,6 +99,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   let W = null;                       // the world: everything that is rebuilt on "again"
   let raf = 0, last = 0, lastBeat = 0, payoutResolve = null;
   let camOverride = null;                // fn(camera, dt, w, camOut) -> false when done (intro.js cameras)
+  let stage = null;                      // { update(dt), render() } drawn INSTEAD of the world while set (menu, intro)
   // last ~1 s of kart {d,x,h} for the ALMOST on a miss: a fixed ring, no per-frame objects
   const TRAIL_N = 70, trail = [];
   for (let i = 0; i < TRAIL_N; i++) trail.push({ d: 0, x: 0, h: 0, ok: false });
@@ -395,6 +396,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (now - lastBeat > HEARTBEAT_MS) { lastBeat = now; send({ type: 'heartbeat', t: now }); }
     const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 0;
     last = now;
+    if (stage) { try { stage.update(dt); stage.render(); } catch (e) { bridge.log && bridge.log('race stage: ' + (e && e.stack || e)); } return; }
     if (!W) return;
     if (S.running && !S.paused && !S.hostPaused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
@@ -438,12 +440,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (S.disposed) return;
     if (pick === 'again') again(); else exit();
   }
+  /** Rebuild the world on a new seed (again, or the menu changing the seed rule). settings.seedLock pins again to one track. */
+  function reseed(runSeed) { teardown(); resetRunState(runSeed); W = build(runSeed); S.started = false; }
   function again() {
-    teardown();
-    const runSeed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
-    resetRunState(runSeed);
-    W = build(runSeed);
-    S.started = false;
+    reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
     hud.countdown().then(start);
   }
@@ -493,7 +493,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   resetRunState(seed);
   raf = requestAnimationFrame(frame);
   function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
-  return { start, setPaused, dispose, setCameraOverride };
+  function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block
+  return { start, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera };
 }
 
 // self-check: node --check is the bar; everything touches the DOM inside createRace.
