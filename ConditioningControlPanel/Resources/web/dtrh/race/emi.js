@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import { loadPack, setFace as packSetFace, preparePixel, FACES } from './gltf.js';
+import { createPoseLayer } from './emiPoses.js';
 
 const PINK = 0xff69b4, GOLD = 0xF2C14E, PALE = 0xB3C7FF, PORCELAIN = 0xF6E7C8;
 const BREATH_SEC = 3.9;      // the one breath on screen (Law III)
@@ -190,6 +191,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
 
   // ---- the glb: loaded once, mounted in the same seat, primitive freed ----
   let G = null;                     // { root, ant0, ant1, ant2, ballpiv, caseNode, ballMats, glassMats, rest }
+  let poses = null;                 // race/emiPoses.js, built with the model
   let dead = false;
   const readyCbs = [], owned = [];  // owned = the materials this rig cloned or made, freed with it
   const seat = new THREE.Group();   // the mount point: the seat, the scale, the breath and the steer lean
@@ -237,6 +239,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     body.remove(emi); disposeTree(emi);
     ballpiv.add(beadLight);
     seat.add(screenLight); screenLight.position.set(0, GLOW_Y, GLOW_Z);
+    poses = createPoseLayer(root);
     if (pixel) preparePixel(root, pixel);
     setFaceFrame(0);
     for (const cb of readyCbs.splice(0)) { try { cb(root); } catch (e) { /* a listener never breaks the rig */ } }
@@ -263,8 +266,8 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   }
   function onReady(cb) { if (typeof cb !== 'function') return; if (G) cb(G.root); else readyCbs.push(cb); }
   function model() { return G ? G.root : null; }
-  /** The pose layer lands in the next commit; kart.js and the menus can already call this. */
-  function pose() { return false; }
+  /** Race events pose her body (race/emiPoses.js). No model yet, nothing to pose. */
+  function pose(name, opts) { return poses ? poses.set(name, opts || {}) : false; }
 
   function emitFrom(obj, lx, ly, lz, ctx, pool, ttl, size, spread, upSpeed, backSpeed) {
     _p.set(lx, ly, lz); obj.localToWorld(_p);
@@ -275,10 +278,13 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   function update(dt, ctx) {
     dt = Math.min(dt, 0.05);
     const t = ctx.t || 0, m = mood;
+    // the clamp and the kerbed landing carry their own fraught; the run brain's own value still wins
+    // whenever it is higher, so a stack of effects is never talked down by a pose
+    const fr = poses ? Math.max(fraught, poses.fraught) : fraught;
     const wind = Math.max(0, Math.min(1, (ctx.speedNorm - 0.55) / 0.45)) * 0.8 + (ctx.airborne ? 0.5 : 0);
-    const antTarget = m.antX - Math.min(1, wind) * m.wind + (fraught > 0.4 ? 0.25 * fraught : 0);
-    const kinkXT = m.kinkX + 1.7 * fraught * (m === MOODS.fraught ? 0.3 : 1);
-    const hush = ctx.airborne || m.sway === 0 ? 0 : m.sway * (1 - 0.6 * fraught);
+    const antTarget = m.antX - Math.min(1, wind) * m.wind + (fr > 0.4 ? 0.25 * fr : 0);
+    const kinkXT = m.kinkX + 1.7 * fr * (m === MOODS.fraught ? 0.3 : 1);
+    const hush = ctx.airborne || m.sway === 0 ? 0 : m.sway * (1 - 0.6 * fr);
     const sway = hush * 0.14 * Math.sin(t * (Math.PI * 2) / BREATH_SEC);
     // one set of springs, two bodies to hang them on: the glb's authored pivots or the primitive's
     const antX = sAnt.step(antTarget, dt, m.w, m.zeta);
@@ -298,7 +304,8 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
       kink.rotation.set(kinkX, 0, kinkZ);
       bead.scale.setScalar(beadScale);
     }
-    beadTarget.setHex(m.bead); if (m !== MOODS.jackpot) beadTarget.lerp(_c.setHex(PALE), fraught);
+    if (poses) poses.update(dt, ctx);        // the body, on top of the mood the antenna just took
+    beadTarget.setHex(m.bead); if (m !== MOODS.jackpot) beadTarget.lerp(_c.setHex(PALE), fr);
     const glow = m === MOODS.jackpot ? 1.4 : 0.9;
     for (const bm of G ? G.ballMats : [beadMat]) {
       bm.color.lerp(beadTarget, Math.min(1, dt * 6));
@@ -327,7 +334,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
 
     // sweat off the bead and the CRT's top corners; a Bambi-scale anime sweat, not a rain
     if (!reducedMotion) {
-      const rate = fraught > 0.3 || m === MOODS.fraught ? 4 + 6 * Math.max(fraught, m === MOODS.fraught ? 0.5 : 0) : 0;
+      const rate = fr > 0.3 || m === MOODS.fraught ? 4 + 6 * Math.max(fr, m === MOODS.fraught ? 0.5 : 0) : 0;
       sweatAcc += dt * rate;
       while (sweatAcc >= 1) {
         sweatAcc -= 1;

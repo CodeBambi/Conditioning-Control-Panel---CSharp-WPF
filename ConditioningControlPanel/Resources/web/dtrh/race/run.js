@@ -176,11 +176,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (p.id === 'lucky') w.items.roll(w.score.state.mult);
     if (p.id === 'golden') {
       w.score.jackpot(S.jackpotBias > 1 ? 'major' : 'minor');
-      sfx('golden_pop', 0.9); shake.shake(0.35, 240); poke('jackpot', 1.4);
+      sfx('golden_pop', 0.9); shake.shake(0.35, 240); poke('jackpot', 1.4); w.kart.pose('cheer');
     }
   }
   function onPop(w, p) {
-    w.kart.pulseTarget();
+    w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (p.kind === 'treat') return treat(w, p);
     if (S.parasol) { S.parasol = false; hud.toast('parasol', 'item'); return treat(w, p); }
     // THE MIX: one live effect per category, each with its own re-pop rule (cocktail.js); 'held' scores as a treat
@@ -206,6 +206,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const label = (KIND_BY_ID[p.id] || {}).label || p.id;
     const slot = mix.live(r.category);
     const holdMult = slot && CATEGORIES[r.category].scaled ? clamp(slot.sec / CATEGORIES[r.category].sec, 0.1, 10) : durationMult;
+    w.kart.pose('clamp', { hold: clamp(slot ? slot.sec : 1.2, 0.6, 4) });   // she rides the pour out
     switch (r.category) {
       case 'strobe':
         fire(p, strength, durationMult); w.kart.applySlow(0.92, 2.0);
@@ -284,7 +285,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function onItem(w, e) {
     switch (e.type) {
       case 'itemArm': sfx('ui_click', 0.4); break;
-      case 'itemUse': sfx('tunnel_powerup_collect', 0.7); poke('smug', 0.8); break;
+      case 'itemUse': sfx('tunnel_powerup_collect', 0.7); poke('smug', 0.8); w.kart.pose('throw'); break;
       case 'timeScale': S.timeScale = e.value; sfx('time_slow_in', 0.8); break;
       case 'magnet': S.magnet = true; w.field.setReach(2.2); w.kart.setReach(2.2); break;
       case 'multBoost': w.score.boostMult(e.mult, e.sec); break;
@@ -306,12 +307,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const TURBO = ['', 'mini turbo', 'super turbo', 'ultra turbo'];
   function onKart(w, e) {
     switch (e.type) {
-      case 'driftTier': sfx('ui_click', 0.3 + 0.15 * e.tier); break;
-      case 'driftBoost': hud.toast(TURBO[e.tier] || 'turbo', 'pop'); sfx('tunnel_powerup_collect', 0.5 + 0.15 * e.tier); if (e.tier >= 2) shake.shake(0.12 * e.tier, 160); poke(e.tier >= 3 ? 'smug' : 'streamed', 1.0); break;
-      case 'trick': { const g = w.score.trick(e.points, e.name); hud.toast(`${e.name} +${g}`, 'pop'); sfx('chain_pop', 0.8); poke('smug', 0.6); break; }
-      case 'landing': if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost'); if (e.clean) sfx('surface', 0.5); } break;
-      case 'inverted': w.score.setInverted(e.on); if (e.on) { hud.toast('upside down', 'effect'); poke('shock', 0.8); } break;
-      case 'lap': { const r = w.score.lap(e.sec); hud.toast(`lap ${r.text}`, 'item'); if (r.pb && r.prevBest > 0) { hud.toast('pb!', 'jackpot'); sfx('pb_fanfare', 0.9); poke('jackpot', 1.5); } break; }
+      case 'driftTier': sfx('ui_click', 0.3 + 0.15 * e.tier); w.kart.pose('drift', { side: w.kart.state.steer > 0 ? 1 : -1, tier: e.tier }); break;
+      case 'driftBoost': hud.toast(TURBO[e.tier] || 'turbo', 'pop'); sfx('tunnel_powerup_collect', 0.5 + 0.15 * e.tier); if (e.tier >= 2) shake.shake(0.12 * e.tier, 160); poke(e.tier >= 3 ? 'smug' : 'streamed', 1.0); w.kart.pose('boost'); break;
+      case 'trick': { const g = w.score.trick(e.points, e.name); hud.toast(`${e.name} +${g}`, 'pop'); sfx('chain_pop', 0.8); poke('smug', 0.6); w.kart.pose('air'); break; }
+      case 'landing': w.kart.pose(e.clean ? 'landing' : 'landingKerb'); if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost'); if (e.clean) sfx('surface', 0.5); } break;
+      case 'inverted': w.score.setInverted(e.on); w.kart.pose(e.on ? 'tuck' : 'cruise'); if (e.on) { hud.toast('upside down', 'effect'); poke('shock', 0.8); } break;
+      case 'lap': { const r = w.score.lap(e.sec); hud.toast(`lap ${r.text}`, 'item'); if (r.pb && r.prevBest > 0) { hud.toast('pb!', 'jackpot'); sfx('pb_fanfare', 0.9); poke('jackpot', 1.5); w.kart.pose('cheer'); } break; }
       case 'split': w.score.pace(e.frac, e.sec); break;
     }
   }
@@ -346,7 +347,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
     // track features crossed this frame
     for (const f of lay.featuresBetween(prevD, ks.d)) {
-      if (f.type === 'boost' && !ks.airborne && Math.abs(f.x - ks.x) <= 1.2) { k.applyBoost(1.6); sfx('tunnel_powerup_collect', 0.8); shake.shake(0.25, 200); poke('streamed', 1.2); }
+      if (f.type === 'boost' && !ks.airborne && Math.abs(f.x - ks.x) <= 1.2) { k.applyBoost(1.6); sfx('tunnel_powerup_collect', 0.8); shake.shake(0.25, 200); poke('streamed', 1.2); k.pose('boost'); }
       else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2 && w.dresser.breakItemBox(f)) { shake.shake(0.2, 120); if (w.items.roll(w.score.state.mult)) sfx('ui_click', 0.5); }
       else if (f.type === 'gate') enterRoom(w, f.room);
     }
