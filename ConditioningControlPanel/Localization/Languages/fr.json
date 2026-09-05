@@ -2140,7 +2140,7 @@
   "msg_skill_permanent_note": "★ Permanent : chaque talent que tu achètes est à toi et le reste, et plus rien ne viendra te le reprendre~",
   "label_prestige": "Prestige",
   "label_prestige_rank": "Rang {0}",
-  "tooltip_prestige": "Tous les points étincelle que tu as dépensés en talents, additionnés pour de bon, alors le nombre ne va que dans un sens~",
+  "tooltip_prestige": "Chaque point de paillettes que tu as dépensé en compétences, additionné pour de bon, si bien que le nombre ne va que dans un sens, et si tu rends une compétence puis la rachètes, ce second achat compte aussi~",
   "dialog_purchase_enhancement": "Acheter un Talent",
   "msg_purchase_skill": "Acheter '{0}' pour {1} {2} ?\n\n{3}\n\n{4}",
   "dialog_purchase_failed": "Échec de l'Achat",
@@ -4949,5 +4949,16 @@
   "label_gaze_interaction": "Interaction par le regard",
   "label_stare_to_pop": "Fixer pour éclater",
   "tooltip_bubble_gaze_pop": "Regardez une bulle pendant environ 1 seconde pour la faire éclater, sans cliquer. Ne concerne que les bulles ; les flashs ont leur propre interrupteur sur la page Flashes.",
-  "label_gaze_needs_calibration": "Nécessite la webcam active et le suivi oculaire calibré. Configurez-le dans Play, Regard Focalisé."
+  "label_gaze_needs_calibration": "Nécessite la webcam active et le suivi oculaire calibré. Configurez-le dans Play, Regard Focalisé.",
+  "dialog_refund_enhancement": "Rendre une compétence",
+  "msg_refund_skill": "Rendre « {0} » ? Elle t'a coûté {1}, tu récupères {2} {3}, et elle retourne dans l'arbre, prête à être rachetée quand tu voudras~",
+  "msg_refund_skill_note": "✦ La racheter compte de nouveau pour ton Prestige, et c'est précisément pour ça que la moitié des paillettes seulement revient, parce qu'une fille qui pourrait défaire un achat gratuitement n'aurait plus jamais rien à mériter~",
+  "dialog_refund_failed": "Impossible de la rendre",
+  "label_skill_refund_hint": "✦ Tu peux la rendre pour {0} {1} dès que tu as envie d'un autre build~",
+  "label_skill_refund_locked_branch": "🔒 Quelque chose plus loin dans la branche repose dessus, alors rends cela d'abord et celle-ci se libérera~",
+  "label_skill_refund_never": "💗 Celle-ci t'a glissé un petit extra le jour de l'achat, alors elle reste avec toi pour toujours~",
+  "skill_err_cannot_refund": "Celle-là ne peut pas être rendue pour l'instant, ma belle~",
+  "skill_err_refund_login_required": "Tu dois être connectée pour rendre une compétence.",
+  "skill_err_refund_not_ready": "Rendre des compétences n'est pas encore activé, alors garde-la pour l'instant et elle t'attendra après la prochaine mise à jour~",
+  "skill_err_refund_signed_out": "Ta session a expiré. Ouvre ⚙️ {0} → Compte et reconnecte-toi pour rendre une compétence."
 }

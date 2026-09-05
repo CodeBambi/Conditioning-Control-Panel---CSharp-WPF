@@ -32,6 +32,14 @@ public class SkillTreeService : IDisposable
     public event EventHandler<string>? SkillUnlocked;
 
     /// <summary>
+    /// Event fired when a skill is handed back through the voluntary respec. Deliberately its own
+    /// event rather than a flag on <see cref="SkillUnlocked"/>: every listener that celebrates an
+    /// unlock would otherwise have to learn to stay quiet for a refund, and one of them forgetting
+    /// means the app throws a party for a purchase being undone.
+    /// </summary>
+    public event EventHandler<string>? SkillRefunded;
+
+    /// <summary>
     /// Event fired when Pink Rush activates
     /// </summary>
     public event EventHandler? PinkRushStarted;
@@ -175,6 +183,105 @@ public class SkillTreeService : IDisposable
                 break;
         }
     }
+
+    #region Voluntary respec
+
+    /// <summary>
+    /// The points a hand-back pays out for this skill, which is half its price rounded down. Shown
+    /// on the confirmation so the number the player agrees to is the number the server pays.
+    /// </summary>
+    public int GetRefundValue(string skillId) => SkillRespec.RefundFor(skillId);
+
+    /// <summary>
+    /// Why this skill cannot be handed back, or <see cref="SkillRefundBlock.None"/> when it can.
+    /// The rules themselves live in <see cref="SkillRespec"/> and are pure; this only supplies the
+    /// player's owned set and the one piece of state the rules cannot see, which is whether the
+    /// server has told us this session that it does not know how to refund anything yet.
+    /// </summary>
+    public SkillRefundBlock GetRefundBlock(string skillId)
+    {
+        var settings = App.Settings?.Current;
+        if (settings == null) return SkillRefundBlock.NotOwned;
+        return SkillRespec.Evaluate(skillId, settings.UnlockedSkills ?? new List<string>());
+    }
+
+    /// <summary>
+    /// Whether the tree should offer to hand this skill back. False while the respec endpoint is
+    /// unreachable, so a build that somehow ships ahead of the server stops offering the button
+    /// after the first honest refusal instead of inviting the same disappointment on every node.
+    /// </summary>
+    public bool CanRefundSkill(string skillId) =>
+        App.ProfileSync?.SkillRespecUnavailable != true &&
+        GetRefundBlock(skillId) == SkillRefundBlock.None;
+
+    /// <summary>
+    /// Hand a purchased skill back, refunding half its price, so that buying it again later feeds
+    /// Prestige the way the monthly re-buy used to.
+    ///
+    /// <para>Server-authoritative for exactly the reasons purchases are: the balance and the owned
+    /// list live on the account, and a client that could hand itself points would be handing
+    /// itself Prestige. The client sends nothing but who it is and which skill, the server prices
+    /// the refund from its own catalogue, and the answer replaces the local state rather than
+    /// merging into it. See <see cref="SkillRespec.ResolveOwnedAfterRefund"/> for why that one
+    /// direction is allowed to subtract and what it insists on before it does.</para>
+    ///
+    /// <para>Lifetime points spent is <b>not</b> reduced. Prestige is a record of what has been
+    /// spent over a lifetime, it only ever climbs, and a refund does not un-spend history: the
+    /// whole point is that the next purchase adds to it again.</para>
+    /// </summary>
+    public async Task<(bool Success, string? Error)> RefundSkillAsync(string skillId)
+    {
+        var settings = App.Settings?.Current;
+        if (settings == null) return (false, Loc.Get("skill_err_settings_unavailable"));
+
+        var skill = SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
+        if (skill == null) return (false, Loc.Get("skill_err_unknown"));
+
+        if (GetRefundBlock(skillId) != SkillRefundBlock.None)
+            return (false, Loc.Get("skill_err_cannot_refund"));
+
+        var unifiedId = settings.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId) || App.ProfileSync == null)
+            return (false, Loc.Get("skill_err_refund_login_required"));
+
+        var (success, error) = await App.ProfileSync.RefundSkillAsync(skillId);
+        if (!success)
+            return (false, error);
+
+        // The server has already rewritten SkillPoints and UnlockedSkills through ProfileSync.
+        // What is left is the live machinery the purchase switched on, which nothing else knows
+        // to switch off.
+        RevokeSkillEffects(skillId);
+
+        App.Logger?.Information(
+            "Skill handed back: {SkillId} for {Refund} of {Cost} points, {Remaining} remaining",
+            skillId, SkillRespec.RefundFor(skill), skill.Cost, settings.SkillPoints);
+
+        SkillRefunded?.Invoke(this, skillId);
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Undo the local-only side of <see cref="ApplySkillEffects"/> for a skill just handed back.
+    ///
+    /// <para>This is the mirror of the season-reset teardown that PR #467 removed, brought back
+    /// deliberately narrower: that one ran on a server flag and could strip a tree nobody asked it
+    /// to touch, whereas this runs on one skill the player confirmed by name. Skills that mint a
+    /// consumable never reach here at all because they are not refundable in the first place, so
+    /// there is nothing in this method that can take a streak shield or a streak fix away.</para>
+    /// </summary>
+    private void RevokeSkillEffects(string skillId)
+    {
+        switch (skillId)
+        {
+            case "pink_rush":
+                _pinkRushCheckTimer.Stop();
+                if (App.Settings?.Current?.PinkRushActive == true) EndPinkRush();
+                break;
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// Check if a specific skill is unlocked.

@@ -3747,6 +3747,174 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Set once the respec endpoint has answered "I have never heard of that", which is what an
+        /// older proxy looks like from here. Session-scoped and never persisted: a deploy landing
+        /// while the app is open should not need a settings file edited to be believed, and a
+        /// restart is a cheap enough retry that a stale "off" cannot outlive the day.
+        ///
+        /// <para>The skill tree reads this to stop offering the hand-back affordance. It exists
+        /// because the desktop half of the respec and the server half are two repositories and can
+        /// reach users in either order; if the client arrives first, one node gives one honest
+        /// refusal and the tree then goes quiet, rather than dangling a button on every owned skill
+        /// that cannot possibly work.</para>
+        /// </summary>
+        public bool SkillRespecUnavailable { get; private set; }
+
+        /// <summary>
+        /// Hand a purchased skill back via the server-authoritative refund endpoint, which prices
+        /// the refund itself, credits the points, and drops the skill from the account.
+        ///
+        /// <para><b>Contract.</b> <c>POST /v2/user/refund-skill</c> with
+        /// <c>{ unified_id, skill_id }</c>. The client deliberately does not send a points balance
+        /// or a refund amount the way <see cref="PurchaseSkillAsync"/> sends its balance for
+        /// reconciliation: this is the one call that pays a player, and a payout a client can name
+        /// is a payout a client can inflate. The server answers
+        /// <c>{ success, error, skill_points, unlocked_skills, lifetime_points_spent }</c> with the
+        /// post-refund totals, prices the refund at half the catalogue cost rounded down, and must
+        /// refuse a skill another owned skill depends on. <c>lifetime_points_spent</c> is never
+        /// lowered by a refund; Prestige is a record of spending, and the point of the whole
+        /// feature is that buying the skill again adds to it a second time.</para>
+        ///
+        /// <para>Returns (success, error). On success local SkillPoints and UnlockedSkills are
+        /// replaced from the response.</para>
+        /// </summary>
+        public async Task<(bool success, string? error)> RefundSkillAsync(string skillId)
+        {
+            var settings = App.Settings?.Current;
+            var unifiedId = settings?.UnifiedId;
+            if (settings == null || string.IsNullOrEmpty(unifiedId))
+            {
+                return (false, Localization.Loc.Get("skill_err_refund_login_required"));
+            }
+
+            try
+            {
+                var requestBody = JsonConvert.SerializeObject(new
+                {
+                    unified_id = unifiedId,
+                    skill_id = skillId
+                });
+
+                var response = await PostRefundSkillAsync(requestBody);
+                var json = await response.Content.ReadAsStringAsync();
+
+                // One retry after a genuine auth recovery, exactly as the purchase path does — and
+                // only after a genuine one, so a dead token is not spent twice to reach the same 401.
+                if (!response.IsSuccessStatusCode &&
+                    await HandleUnauthorizedAsync(response) &&
+                    !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+                {
+                    App.Logger?.Information("Skill refund: retrying after auth token recovery");
+                    response = await PostRefundSkillAsync(requestBody);
+                    json = await response.Content.ReadAsStringAsync();
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // A proxy that predates the respec answers 404 or 405 for the route itself, and
+                    // 501 if it has been stubbed. None of those is the user's fault or something a
+                    // retry fixes, so the tree stops asking for the rest of the session.
+                    if (response.StatusCode == HttpStatusCode.NotFound ||
+                        response.StatusCode == HttpStatusCode.MethodNotAllowed ||
+                        response.StatusCode == HttpStatusCode.NotImplemented)
+                    {
+                        SkillRespecUnavailable = true;
+                        App.Logger?.Warning("Skill refund unavailable: server answered {Status} for /v2/user/refund-skill",
+                            response.StatusCode);
+                        return (false, Localization.Loc.Get("skill_err_refund_not_ready"));
+                    }
+
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        App.Logger?.Warning("Skill refund failed: auth token invalid/missing after recovery attempt");
+                        var settingsDoorName = Localization.Loc.Get("nav_door_settings");
+                        return (false, Localization.Loc.GetF("skill_err_refund_signed_out", settingsDoorName));
+                    }
+
+                    string errorMsg;
+                    try
+                    {
+                        var errorResult = JsonConvert.DeserializeObject<RefundSkillResponse>(json);
+                        errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                    }
+                    catch
+                    {
+                        errorMsg = $"Server error: {response.StatusCode}";
+                    }
+                    App.Logger?.Warning("Skill refund failed: {Error}", errorMsg);
+                    return (false, errorMsg);
+                }
+
+                var result = JsonConvert.DeserializeObject<RefundSkillResponse>(json);
+                if (result == null)
+                    return (false, "Invalid server response");
+
+                if (!result.Success)
+                {
+                    App.Logger?.Warning("Skill refund rejected: {Error}", result.Error);
+                    return (false, result.Error ?? Localization.Loc.Get("skill_err_cannot_refund"));
+                }
+
+                // The only subtraction in the app. It applies solely when the server's own list has
+                // proven the skill is gone from it, so a stale or truncated response can cost the
+                // player nothing but this one attempt.
+                var owned = Models.SkillRespec.ResolveOwnedAfterRefund(
+                    result.UnlockedSkills, skillId, settings.UnlockedSkills);
+                if (owned == null)
+                {
+                    App.Logger?.Warning(
+                        "Skill refund answered success but its skill list still holds {SkillId}; local tree left untouched",
+                        skillId);
+                    return (false, Localization.Loc.Get("skill_err_cannot_refund"));
+                }
+
+                settings.UnlockedSkills = owned;
+                if (result.SkillPoints.HasValue)
+                    settings.SkillPoints = result.SkillPoints.Value;
+
+                // Lifetime spend is only ever adopted upward, and a refund does not lower it. Buying
+                // the skill again is what moves Prestige, through the ordinary purchase path.
+                if (result.LifetimePointsSpent.HasValue)
+                    App.Achievements?.ReconcileLifetimePointsSpent(result.LifetimePointsSpent.Value);
+
+                App.Settings?.Save();
+
+                // The promised figure is logged beside the server's own, because the confirmation
+                // dialog quoted the client's arithmetic and a quiet disagreement between the two
+                // catalogues is exactly the sort of thing that only ever shows up in a support log.
+                var promised = Models.SkillRespec.RefundFor(skillId);
+                if (result.RefundedPoints.HasValue && result.RefundedPoints.Value != promised)
+                {
+                    App.Logger?.Warning(
+                        "Skill refund paid {Paid} for {SkillId} but the dialog promised {Promised}; catalogues disagree",
+                        result.RefundedPoints.Value, skillId, promised);
+                }
+
+                App.Logger?.Information("Skill handed back via server: {SkillId}, paid {Paid}, {Points} points now held",
+                    skillId, result.RefundedPoints ?? promised, settings.SkillPoints);
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Skill refund request failed");
+                return (false, "Connection failed. Please check your internet connection.");
+            }
+        }
+
+        /// <summary>
+        /// One POST to the refund route. Split out because the retry needs a second
+        /// <see cref="HttpRequestMessage"/> (a sent one cannot be re-sent) and building it twice by
+        /// hand is how the two copies drift apart.
+        /// </summary>
+        private Task<HttpResponseMessage> PostRefundSkillAsync(string requestBody)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/refund-skill");
+            AddAuthHeader(request);
+            request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+            return _httpClient.SendAsync(request);
+        }
+
+        /// <summary>
         /// Change the user's display name via server-side validation.
         /// Name must be unique (case-insensitive). Case-only changes are allowed.
         /// </summary>
@@ -5024,6 +5192,34 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("lifetime_points_spent")]
             public long? LifetimePointsSpent { get; set; }
+        }
+
+        /// <summary>
+        /// The refund route's answer. Same shape as <see cref="PurchaseSkillResponse"/> and kept as
+        /// its own type anyway: the two calls move points in opposite directions, and sharing a
+        /// model is how a future field meant for one of them silently starts being read by the
+        /// other. <c>refunded_points</c> is the server's own statement of what it paid, logged and
+        /// compared against what the confirmation dialog promised.
+        /// </summary>
+        private class RefundSkillResponse
+        {
+            [JsonProperty("success")]
+            public bool Success { get; set; }
+
+            [JsonProperty("error")]
+            public string? Error { get; set; }
+
+            [JsonProperty("skill_points")]
+            public int? SkillPoints { get; set; }
+
+            [JsonProperty("unlocked_skills")]
+            public List<string>? UnlockedSkills { get; set; }
+
+            [JsonProperty("lifetime_points_spent")]
+            public long? LifetimePointsSpent { get; set; }
+
+            [JsonProperty("refunded_points")]
+            public int? RefundedPoints { get; set; }
         }
 
         private class ChangeDisplayNameResponse

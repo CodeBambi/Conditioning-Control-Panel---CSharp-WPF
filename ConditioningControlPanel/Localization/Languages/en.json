@@ -3138,7 +3138,7 @@
   "msg_skill_permanent_note": "★ Permanent: every skill you buy is yours to keep, and there's nothing coming along to take it back~",
   "label_prestige": "Prestige",
   "label_prestige_rank": "Rank {0}",
-  "tooltip_prestige": "Every sparkle point you've ever spent on skills, counted up for good, so the number only ever goes one way~",
+  "tooltip_prestige": "Every sparkle point you've ever spent on skills, counted up for good, so the number only ever goes one way, and when you hand a skill back and buy it again that second purchase counts toward it too~",
   "dialog_purchase_enhancement": "Purchase Skill",
   "msg_purchase_skill": "Purchase '{0}' for {1} {2}?\n\n{3}\n\n{4}",
   "dialog_purchase_failed": "Purchase Failed",
@@ -5524,5 +5524,16 @@
   "label_gaze_interaction": "Gaze interaction",
   "label_stare_to_pop": "Stare to pop",
   "tooltip_bubble_gaze_pop": "Look at a bubble for about 1 second to pop it, no clicking. Covers bubbles only; flashes have their own switch on the Flashes page.",
-  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze."
+  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze.",
+  "dialog_refund_enhancement": "Hand a Skill Back",
+  "msg_refund_skill": "Hand '{0}' back? It cost you {1}, you'll get {2} {3} returned, and the skill goes back on the tree ready to buy again whenever you'd like~",
+  "msg_refund_skill_note": "✦ Buying it again counts toward your Prestige all over again, and that's exactly why only half the sparkles come home, because a girl who could undo a purchase for free would never have to earn a thing~",
+  "dialog_refund_failed": "Couldn't Hand It Back",
+  "label_skill_refund_hint": "✦ Yours to hand back for {0} {1} whenever you fancy a different build~",
+  "label_skill_refund_locked_branch": "🔒 Something further along this branch is built on top of it, so hand that one back first and this one frees up~",
+  "label_skill_refund_never": "💗 This one slipped you a little extra the day you bought it, so it stays put for keeps~",
+  "skill_err_cannot_refund": "That one can't be handed back right now, sweetie~",
+  "skill_err_refund_login_required": "You'll need to be logged in to hand a skill back.",
+  "skill_err_refund_not_ready": "Handing skills back isn't switched on yet, so hold onto that one for now and it'll be waiting for you after the next update~",
+  "skill_err_refund_signed_out": "Your session has expired. Open ⚙️ {0} → Account and sign in again to hand a skill back."
 }
