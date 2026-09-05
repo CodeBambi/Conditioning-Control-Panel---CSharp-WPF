@@ -120,7 +120,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 // Bark hook: an enhancement was applied to the current page. Identify it by name
                 // (enhancements have no id/slug field — name is the stable human key authors match on).
                 try { App.Bark?.NotifyEnhancementApplied(match.Name); } catch { /* never break playback for a bark */ }
-                App.Logger?.Information("BrowserEnhancementBridge: bound {Name} for {Url}", match.Name, UrlSafety.RedactUrl(url));
+                App.Logger?.Information("BrowserEnhancementBridge: bound {Name} for {Host}", match.Name, Logging.UrlLog.Host(url));
             }
             catch (Exception ex)
             {

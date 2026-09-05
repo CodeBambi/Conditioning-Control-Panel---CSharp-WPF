@@ -1577,7 +1577,10 @@ namespace ConditioningControlPanel.Services
                         }
                         await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
-                        App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);
+                        // Status + size only: the error body echoes fields from the profile we
+                        // just posted, and logs get pasted into Discord support threads.
+                        App.Logger?.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)",
+                            (int)v2Response.StatusCode, error?.Length ?? 0);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
                         // Settle a deferred streak break only on a DEFINITIVE rejection (4xx) —
                         // retrying cannot change those answers. A 5xx is transient like the 429
@@ -1596,12 +1599,20 @@ namespace ConditioningControlPanel.Services
                     PendingCosmeticsClear = false;
 
                     var v2Json = await v2Response.Content.ReadAsStringAsync();
-                    App.Logger?.Information("V2 Profile synced successfully: {Response}", v2Json);
+                    // The response is the user's whole profile (~2.7 KB of JSON, and 11% of every
+                    // log file we ever received). Size here; the fields we actually act on are
+                    // summarised at Debug once the payload is deserialised, just below.
+                    App.Logger?.Information("V2 Profile synced successfully ({Bytes} bytes)", v2Json?.Length ?? 0);
 
                     // Check for server-side flags in V2 sync response
                     try
                     {
                         var v2Result = JsonConvert.DeserializeObject<V2SyncResponse>(v2Json);
+                        App.Logger?.Debug(
+                            "V2 Sync response: ok={Success} sp={SkillPoints} skills={SkillCount} xp={TotalXp} mins={Minutes} cosmetics={HasCosmetics} webXp={HasWebXp}",
+                            v2Result?.Success, v2Result?.SkillPoints, v2Result?.UnlockedSkills?.Count ?? 0,
+                            v2Result?.TotalXpEarned, v2Result?.TotalConditioningMinutes,
+                            v2Result?.Cosmetics != null, v2Result?.WebXp != null);
                         if (v2Result?.ResetWeeklyQuest == true)
                         {
                             App.Logger?.Information("V2 Sync: Server requested weekly quest reset");

@@ -1962,17 +1962,20 @@ namespace ConditioningControlPanel.Services
         private void LogDecision(string trigger, BarkRule rule, GateDecision decision)
         {
             var pool = ResolvePool(rule);
-            string preview = decision.VariantIndex >= 0 && decision.VariantIndex < pool.Count
-                ? Truncate(pool[decision.VariantIndex].Text, 48)
-                : "(n/a)";
+            // Length, not the line. The bark text is the companion talking to the user and is
+            // the sort of thing that ends up pasted into a support thread; rule + variant index
+            // identify the line exactly for anyone with the pack in front of them.
+            int lineChars = decision.VariantIndex >= 0 && decision.VariantIndex < pool.Count
+                ? (pool[decision.VariantIndex].Text ?? "").Length
+                : -1;
             string tag = DryRun ? "[BARK dry-run]" : "[BARK]";
 
             if (decision.WouldFire)
             {
                 string verb = DryRun ? "WOULD FIRE" : "FIRE";
                 App.Logger?.Information(
-                    "{Tag} {Verb} trigger={Trigger} rule={Rule} class={Class} mood={Mood} priority={Priority} variant#={Idx} line=\"{Preview}\"",
-                    tag, verb, trigger, rule.Id, rule.Class, rule.Mood, rule.Priority, decision.VariantIndex, preview);
+                    "{Tag} {Verb} trigger={Trigger} rule={Rule} class={Class} mood={Mood} priority={Priority} variant#={Idx} lineChars={Chars}",
+                    tag, verb, trigger, rule.Id, rule.Class, rule.Mood, rule.Priority, decision.VariantIndex, lineChars);
             }
             else
             {
@@ -1981,8 +1984,5 @@ namespace ConditioningControlPanel.Services
                     tag, trigger, rule.Id, rule.Class, rule.Priority, decision.Reason);
             }
         }
-
-        private static string Truncate(string s, int n) =>
-            string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s.Substring(0, n) + "…");
     }
 }

@@ -23,6 +23,7 @@ using NAudio.Wave;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Services.Logging;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
@@ -2603,8 +2604,8 @@ namespace ConditioningControlPanel
                 // Disconnect all network services
                 DisconnectNetworkServices();
 
-                App.Logger?.Information("Offline mode enabled with username '{Username}'",
-                    App.Settings.Current.OfflineUsername);
+                App.Logger?.Information("Offline mode enabled with a local username ({Chars} chars)",
+                    App.Settings.Current.OfflineUsername?.Length ?? 0);
             }
             else
             {
@@ -2757,7 +2758,7 @@ namespace ConditioningControlPanel
                                 ? "https://bambicloud.com/"
                                 : "https://hypnotube.com/";
                             _browser.Navigate(url);
-                            App.Logger?.Information("Browser reloaded after exiting offline mode: {Url}", url);
+                            App.Logger?.Information("Browser reloaded after exiting offline mode: {Host}", UrlLog.Host(url));
                         }
                         catch (Exception ex)
                         {

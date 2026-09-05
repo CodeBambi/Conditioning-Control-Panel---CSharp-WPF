@@ -87,7 +87,7 @@ public class DiscordRichPresenceService : IDisposable
 
             _client.OnReady += (sender, e) =>
             {
-                App.Logger?.Information("Discord RPC connected: {Username}", e.User.Username);
+                App.Logger?.Information("Discord RPC connected");
             };
 
             _client.OnError += (sender, e) =>
