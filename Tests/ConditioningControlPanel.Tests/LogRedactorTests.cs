@@ -86,6 +86,22 @@ public class LogRedactorTests
     }
 
     [Fact]
+    public void VideoDiagLines_AreRedactedLikeAnyOther()
+    {
+        // video-diag.log bypasses Serilog entirely - it is written by VideoDiag's own thread so it
+        // survives a UI freeze - and UiHangWatchdog hands it raw paths: the hang dump it just wrote
+        // and the folder it wrote it to. The file is attached to bug reports like any other log, so
+        // it gets the same rules; VideoDiag now runs each line through here on the way to disk.
+        Assert.Equal(@"14:02:11.402 [t9] HANG: wrote %DATA%\logs\hang.txt",
+            LogRedactor.Redact(@"14:02:11.402 [t9] HANG: wrote " + Data + @"\logs\hang.txt"));
+
+        // A path under some OTHER app's LocalAppData is not a known root, so it falls through to
+        // the home-directory rule and still loses the user name.
+        Assert.Equal(@"HANG: wrote ~\AppData\Local\X\logs\hang.txt",
+            LogRedactor.Redact(@"HANG: wrote C:\Users\PC\AppData\Local\X\logs\hang.txt"));
+    }
+
+    [Fact]
     public void OrdinaryLines_ArePassedThroughUnchanged()
     {
         // The cheap pre-filter is the whole reason this is affordable per line: a line with no
