@@ -34,7 +34,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { loadPack, preparePixel, toInstanceGeometry } from './gltf.js';
+import { loadPack, preparePixel, toInstanceGeometry, flattenRig } from './gltf.js';
 import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 
 export const OPTIONS_KEY = 'race.options';
@@ -165,6 +165,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   loadPack(character.glb, { log }).then((pack) => {
     if (disposed) return;
     const model = pack.scene.clone(true);
+    flattenRig(model, pack.animations);       // one draw per pivot and material, the face glass kept apart
     model.traverse((o) => {
       if (!o.isMesh) return;
       const fix = (m) => {

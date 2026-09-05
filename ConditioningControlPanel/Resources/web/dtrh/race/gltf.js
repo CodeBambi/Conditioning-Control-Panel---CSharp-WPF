@@ -22,6 +22,7 @@
  *   toInstanceGeometry(node) -> BufferGeometry    roomProps-shaped, ready for
  *                                                 InstancedMesh + Lambert
  *   setFace(model, index) / FACES
+ *   flattenRig(root, animations, { keep })   one draw per pivot + material
  *   preparePixel(model, pixel)
  *   disposePack(url)
  *
@@ -215,6 +216,83 @@ function normalizeColor(g) {
   const arr = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) { arr[i * 3] = src.getX(i); arr[i * 3 + 1] = src.getY(i); arr[i * 3 + 2] = src.getZ(i); }
   g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+}
+
+// ---- rig flatten: one draw per animated node and material -------------------------------
+
+/**
+ * Bake a rig down to one mesh per (animated pivot, material). A Blender export arrives as one
+ * mesh per part (emi.glb: 69 primitives, so 69 draw calls per EMI on screen); only the nodes a
+ * clip drives ever move, so every static part under a pivot can share one buffer with its
+ * siblings of the same material and still animate right. Rules:
+ *   - the pivot set = every node any clip in `animations` targets, plus `root` and `keep`
+ *   - a mesh whose material carries a texture stays as it is (the face glass and its atlas)
+ *   - a mesh named in `keep`, or that is itself a pivot, stays as it is
+ *   - the merged mesh hangs off the first contributor's parent (static under the pivot by
+ *     construction), so names like EMI_case / ball keep resolving to a node that holds geometry
+ *   - outline hulls keep their winding; mirrored bakes of everything else are re-wound
+ * Returns { before, after }: mesh counts. Safe to call twice (the second pass finds nothing).
+ */
+export function flattenRig(root, animations = [], { keep = [] } = {}) {
+  const out = { before: 0, after: 0 };
+  if (!root || !root.traverse) return out;
+  const pivots = new Set(keep);
+  for (const clip of animations || []) for (const t of clip.tracks || []) {
+    const name = THREE.PropertyBinding.parseTrackName(t.name).nodeName;
+    if (name) pivots.add(name);
+  }
+  const isPivot = (o) => o === root || pivots.has(o.name);
+  const pivotOf = (o) => { let p = o.parent; while (p && p !== root && !isPivot(p)) p = p.parent; return p || root; };
+  root.updateWorldMatrix(true, true);
+  const groups = new Map();                   // pivot -> Map(material -> { host, name, parts, nonIndexed })
+  const dead = [];
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes || !o.geometry.attributes.position) return;
+    if (o.visible === false || isPivot(o) || Array.isArray(o.material) || !o.material) return;
+    if (MAP_KEYS.some((k) => o.material[k])) return;
+    const pivot = pivotOf(o);
+    const host = o.parent || pivot;
+    let byMat = groups.get(pivot);
+    if (!byMat) groups.set(pivot, (byMat = new Map()));
+    let part = byMat.get(o.material);
+    if (!part) byMat.set(o.material, (part = { host, name: o.name, parts: [], nonIndexed: false, shadow: o.castShadow }));
+    const g = o.geometry.clone();
+    for (const key of Object.keys(g.attributes)) if (key !== 'position' && key !== 'normal') g.deleteAttribute(key);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    _inv.copy(part.host.matrixWorld).invert();
+    _mat.multiplyMatrices(_inv, o.matrixWorld);
+    g.applyMatrix4(_mat);
+    if (_mat.determinant() < 0 && !isOutline(o.material)) flipWinding(g);
+    g.morphAttributes = {};
+    g.clearGroups();
+    if (!g.index) part.nonIndexed = true;
+    part.parts.push(g);
+    dead.push(o);
+  });
+  out.before = dead.length;
+  for (const byMat of groups.values()) for (const [material, part] of byMat) {
+    const ready = part.nonIndexed ? part.parts.map((g) => (g.index ? g.toNonIndexed() : g)) : part.parts;
+    const merged = ready.length === 1 ? ready[0] : mergeGeometries(ready, false);
+    for (const g of ready) if (g !== merged && !part.parts.includes(g)) g.dispose();
+    for (const g of part.parts) if (g !== merged) g.dispose();
+    if (!merged) continue;
+    merged.computeBoundingSphere();
+    const m = new THREE.Mesh(merged, material);
+    m.name = part.name;
+    m.castShadow = part.shadow;
+    part.host.add(m);
+    out.after++;
+  }
+  for (const o of dead) {
+    if (o.children.length) {                  // a mesh with children becomes a plain node, kids kept
+      const g = new THREE.Group();
+      g.name = o.name; g.position.copy(o.position); g.quaternion.copy(o.quaternion); g.scale.copy(o.scale);
+      while (o.children.length) g.add(o.children[0]);
+      o.parent.add(g);
+    }
+    o.removeFromParent();
+  }
+  return out;
 }
 
 // ---- the face atlas ---------------------------------------------------------------------

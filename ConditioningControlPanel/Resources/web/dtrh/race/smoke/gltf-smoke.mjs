@@ -36,7 +36,7 @@ registerHooks({
 });
 
 const THREE = await import('three');
-const { makePack, toInstanceGeometry, setFace, preparePixel, disposePack, FACES } = await import('../gltf.js');
+const { makePack, toInstanceGeometry, setFace, preparePixel, flattenRig, disposePack, FACES } = await import('../gltf.js');
 const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 
 // ---- the tiny assert kit ----------------------------------------------------------------
@@ -187,6 +187,38 @@ const plain = Array.from(toInstanceGeometry(mirroredHull('body')).index.array);
 const hull = Array.from(toInstanceGeometry(mirroredHull('outline')).index.array);
 ok(hull.join() === src.join(), 'an `outline` material keeps its winding, mirror or not');
 ok(plain[0] === src[2] && plain[2] === src[0], 'a mirrored ordinary mesh is re-wound');
+
+// ---- flattenRig --------------------------------------------------------------------------
+// scene: kart_cup (the clip target) holds cup_body (`body`) + cup_handle (`outline`), item_cube
+// stands alone. A second `body` box is added 1 m along x so the pivot has something to merge:
+// 4 meshes -> 3 (cup_body + twin fold into one, handle and cube stay).
+{
+  const rig = pack.scene.clone(true);
+  const cupBefore = rig.getObjectByName('kart_cup');
+  const twin = cupBefore.getObjectByName('cup_body').clone(); twin.name = 'cup_twin'; twin.position.x += 1; cupBefore.add(twin);
+  const meshesBefore = []; rig.traverse((o) => { if (o.isMesh) meshesBefore.push(o); });
+  const pos0 = cupBefore.getObjectByName('cup_body').position.clone(); pos0.x += 0.5;   // merged centre sits between the two
+  const r = flattenRig(rig, pack.animations);
+  ok(r.before === meshesBefore.length, 'flattenRig visits every mesh (' + r.before + ')');
+  const meshesAfter = []; rig.traverse((o) => { if (o.isMesh) meshesAfter.push(o); });
+  ok(meshesAfter.length === r.after && r.after < r.before, 'flattenRig leaves fewer meshes (' + r.before + ' -> ' + r.after + ')');
+  const cup = rig.getObjectByName('kart_cup');
+  ok(cup === cupBefore, 'the clip target node survives untouched');
+  const byMat = new Map(); cup.traverse((o) => { if (o.isMesh) byMat.set(o.material.name, o); });
+  ok(byMat.size === cup.children.filter((c) => c.isMesh).length, 'one mesh per material under the pivot (' + [...byMat.keys()].join(',') + ')');
+  const body = byMat.get('body');
+  ok(body && body.geometry.attributes.position && !body.geometry.attributes.color, 'merged geometry keeps position/normal only');
+  body.geometry.computeBoundingBox();
+  const c = body.geometry.boundingBox.getCenter(new THREE.Vector3());
+  ok(near(c.x, pos0.x, 1e-3) && near(c.y, pos0.y, 1e-3) && near(c.z, pos0.z, 1e-3), 'the child offsets are baked into the pivot frame');
+  ok(rig.getObjectByName('cup_body') === body, 'the merged mesh keeps the first contributor name');
+  const again = flattenRig(rig, pack.animations);
+  ok(again.before === meshesAfter.length && again.after === meshesAfter.length, 'a second pass is a no-op in mesh count');
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.DataTexture(new Uint8Array(4), 1, 1) }));
+  glass.name = 'EMI_glass'; rig.add(glass);
+  flattenRig(rig, pack.animations);
+  ok(glass.parent === rig, 'a textured mesh is left alone');
+}
 
 // ---- setFace -------------------------------------------------------------------------------
 const tex = new THREE.DataTexture(new Uint8Array(FACES.length * 4 * 4), FACES.length * 4, 4);
