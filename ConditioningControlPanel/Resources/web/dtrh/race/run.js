@@ -122,7 +122,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const fx = createFx({ scene, layout, tunnelMat: tunnel.material, particleFog: false });
     const dresser = createRoomDresser({ scene, layout });
     const walls = createWalls({ scene, layout, media, renderer, camera, rng });
-    const kart = createKart({ scene, layout, reducedMotion });
+    const kart = createKart({ scene, layout, reducedMotion, pixel });
     const score = createScore();
     const getRoom = () => {
       const r = roomById(layout.roomAtDepth(kart.state.d));

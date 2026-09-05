@@ -77,11 +77,16 @@ function makeTierSparks(scene, n) {
 }
 
 /**
- * createKart({ scene, layout, reducedMotion }) -> kart
+ * createKart({ scene, layout, reducedMotion, pixel }) -> kart
  * kart.update(dt, input, layout)  input = { steer:-1..1, accel:0..1, brake:0..1, drift:bool }
  * kart.camera(out)                out = { pos: Vector3, look: Vector3, up?: Vector3, roll: number }
+ * kart.emiModel()                 the mounted EMI glb root, or null while it is still loading
+ * kart.emiReady(cb)               cb(root) once she is mounted (immediately if she already is)
+ * kart.setFace(i)                 atlas frame 0..4 on the glass (menus and results; unseen in race)
+ * kart.pose(name, opts)           the pose layer (race/emiPoses.js)
+ * `pixel` is race/pixel.js, passed down so the glb's textures join the pixel pass on arrival.
  */
-export function createKart({ scene, layout, reducedMotion = false }) {
+export function createKart({ scene, layout, reducedMotion = false, pixel = null }) {
   const state = {
     d: 0, x: 0, h: 0, vh: 0, speed: KART_BASE_SPEED, steer: 0, drift: false, airborne: false,
     boostSec: 0, slowMult: 1, slowSec: 0, lap: 0,
@@ -89,7 +94,7 @@ export function createKart({ scene, layout, reducedMotion = false }) {
     inverted: false, roll: 0, trick: null, trickStreak: 0,
     lapSec: 0, lapsTimed: 0,
   };
-  const rig = createEmiRig({ scene, reducedMotion });
+  const rig = createEmiRig({ scene, reducedMotion, pixel });
   const group = rig.group;
   group.scale.setScalar(KART_SCALE);
   scene.add(group);
@@ -393,7 +398,9 @@ export function createKart({ scene, layout, reducedMotion = false }) {
   }
 
   return { state, update, applyBoost, applySlow, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
-    pulseTarget, setReach, onEvent, dispose };
+    pulseTarget, setReach, onEvent, dispose,
+    emiModel: () => rig.model(), emiReady: (cb) => rig.onReady(cb),
+    setFace: (i) => rig.setFace(i), pose: (name, opts) => rig.pose(name, opts) };
 }
 
 // self-check: node --check is the bar; the stub-layout drift/ramp/lap tests live in the pass-three
