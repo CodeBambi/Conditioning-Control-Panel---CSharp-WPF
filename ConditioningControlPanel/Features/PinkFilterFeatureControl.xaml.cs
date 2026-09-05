@@ -67,6 +67,10 @@ namespace ConditioningControlPanel.Features
                 ChkEnable.IsChecked = s.PinkFilterEnabled;
                 SliderOpacity.Value = s.PinkFilterOpacity;
                 TxtOpacity.Text = $"{s.PinkFilterOpacity}%";
+                ChkBreathe.IsChecked = s.PinkFilterBreathe;
+                SliderBreatheSpeed.Value = s.PinkFilterBreatheSeconds;
+                TxtBreatheSpeed.Text = $"{s.PinkFilterBreatheSeconds}s";
+                UpdateBreatheRow();
                 UpdateSwatch();
                 PopulateMonitors();
             }
@@ -78,6 +82,8 @@ namespace ConditioningControlPanel.Features
             if (e.PropertyName == nameof(Models.AppSettings.PinkFilterEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.PinkFilterOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.PinkFilterColor) ||
+                e.PropertyName == nameof(Models.AppSettings.PinkFilterBreathe) ||
+                e.PropertyName == nameof(Models.AppSettings.PinkFilterBreatheSeconds) ||
                 e.PropertyName == nameof(Models.AppSettings.PinkFilterTargetMonitor))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
@@ -106,6 +112,40 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
             try { App.Overlay?.RefreshOverlays(); }
             catch (Exception ex) { App.Logger?.Warning(ex, "PinkFilter opacity: RefreshOverlays failed"); }
+        }
+
+        // ── Breathe (suggestions thread 1537106473534885938) ──────────────
+
+        /// <summary>The speed slider only means anything while breathe is on, so it rides the
+        /// toggle rather than sitting there greyed out.</summary>
+        private void UpdateBreatheRow()
+        {
+            BreatheSpeedRow.Visibility = (ChkBreathe.IsChecked ?? false)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void ChkBreathe_Changed(object sender, RoutedEventArgs e)
+        {
+            UpdateBreatheRow();
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.PinkFilterBreathe = ChkBreathe.IsChecked ?? false;
+            App.Settings?.Save();
+            App.Overlay?.RefreshPinkBreathe();
+        }
+
+        private void SliderBreatheSpeed_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtBreatheSpeed.Text = $"{v}s";
+            s.PinkFilterBreatheSeconds = v;
+            App.Settings?.Save();
+            App.Overlay?.RefreshPinkBreathe();
         }
 
         // ── Display monitor picker (#639) ─────────────────────────────────

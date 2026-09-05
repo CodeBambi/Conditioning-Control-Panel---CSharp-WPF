@@ -88,6 +88,41 @@
 
                             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
+                            <!-- Breathe (suggestions thread 1537106473534885938). The speed row hides
+                                 with the toggle off, the way the mosaic timer row does on the feed. -->
+                            <Grid Height="36" Background="Transparent" ToolTip="{loc:Str tooltip_pink_filter_breathe}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_pink_filter_breathe}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkBreathe"
+                                          feat:SessionLock.Owned="True"
+                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                          Checked="ChkBreathe_Changed" Unchecked="ChkBreathe_Changed"/>
+                            </Grid>
+
+                            <Grid x:Name="BreatheSpeedRow" Height="36" Background="Transparent"
+                                  Visibility="Collapsed" ToolTip="{loc:Str tooltip_pink_filter_breathe_speed}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_pink_filter_breathe_speed}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <Slider Grid.Column="1" x:Name="SliderBreatheSpeed" Minimum="4" Maximum="12" Value="6"
+                                        TickFrequency="1" IsSnapToTickEnabled="True"
+                                        feat:SessionLock.Owned="True" VerticalAlignment="Center" Margin="14,0"
+                                        ValueChanged="SliderBreatheSpeed_Changed"/>
+                                <TextBlock Grid.Column="2" x:Name="TxtBreatheSpeed" Text="6s" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="13" FontWeight="Bold"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
+
                             <Grid Height="40" Background="Transparent" ToolTip="{loc:Str tooltip_pink_filter_color}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
