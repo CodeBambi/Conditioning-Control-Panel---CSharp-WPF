@@ -805,6 +805,12 @@ bridge.on('init', guard('init', (m) => {
     return;
   }
   initMsg = m;
+  /* THE STORE-BUILD FLAG, copied onto the window before anything downstream is
+   * imported. `core/storesafe.js` is the reader and games/* are the callers; a
+   * host that never sets the field (the desktop, the web build, Android) leaves
+   * this undefined, which reads as false, which is the full school. */
+  try { window.__ccpStoreSafe = !!(m.platform && m.platform.storeSafe); }
+  catch (e) { /* noop - a page with no window is a page with no games */ }
   directGame = directLaunchKey(m);
   dressDirectLaunch();            // THE DIRECT LAUNCH: name the room on the splash
   bridge.markInitialized();       // flush anything the page queued pre-init
