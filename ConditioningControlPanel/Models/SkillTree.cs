@@ -401,9 +401,9 @@ public class SkillDefinition
             Tier = 5,
             Cost = 8,
             IsSecret = true,
-            SecretRequirementDesc = "Reach level 50 in any season",
+            SecretRequirementDesc = "Reach level 50 in any month",
             FlavorText = "Your dedication is FOREVER. Lifetime stats that never reset... you've always been a bimbo~",
-            Description = "Shows lifetime stats across all seasons",
+            Description = "Shows lifetime stats across every month you've ever put in",
             EffectType = SkillEffectType.LifetimeStats,
             EffectValue = 0
         },
@@ -428,13 +428,13 @@ public class SkillDefinition
         new()
         {
             Id = "season_rewind",
-            Name = "Season Rewind",
+            Name = "Monthly Rewind",
             Icon = "⏪💭",
             Tier = 6,
             Cost = 250,
             PrerequisiteId = "ditzy_data_pro",
             FlavorText = "Wanna see how much emptier you got since last month? The graphs remember even when you don't~",
-            Description = "Season-over-season comparison of your past seasons",
+            Description = "Month-over-month comparison of every month you've already put in",
             EffectType = SkillEffectType.StatDisplay,
             EffectValue = 0
         },
@@ -447,7 +447,7 @@ public class SkillDefinition
             Cost = 350,
             PrerequisiteId = "season_rewind",
             FlavorText = "Every record you break makes the old you SO jealous. Keep beating her~",
-            Description = "Personal best timeline: all-time records plus each season's peaks",
+            Description = "Personal best timeline: all-time records plus each month's peaks",
             EffectType = SkillEffectType.StatDisplay,
             EffectValue = 0
         },
@@ -460,7 +460,7 @@ public class SkillDefinition
             Cost = 500,
             PrerequisiteId = "bestie_records",
             FlavorText = "A full report on exactly which toys melted you the most. For science! Giggle.",
-            Description = "Per-feature usage breakdown, this season and lifetime",
+            Description = "Per-feature usage breakdown, this month and lifetime",
             EffectType = SkillEffectType.StatDisplay,
             EffectValue = 0
         },
@@ -473,7 +473,7 @@ public class SkillDefinition
             Cost = 1000,
             PrerequisiteId = "brain_drain_report",
             FlavorText = "You looked at ALL the numbers and understood, like, none of them. Certified!!",
-            Description = "Capstone: Prestige history per season plus a certified badge on your tree",
+            Description = "Capstone: Prestige history month by month plus a certified badge on your tree",
             EffectType = SkillEffectType.StatDisplay,
             EffectValue = 0
         }

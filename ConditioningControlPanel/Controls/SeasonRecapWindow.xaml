@@ -1,7 +1,7 @@
 <Window x:Class="ConditioningControlPanel.Controls.SeasonRecapWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Season Recap"
+        Title="Monthly Recap"
         SizeToContent="WidthAndHeight"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
