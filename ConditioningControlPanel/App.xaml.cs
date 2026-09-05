@@ -4385,7 +4385,12 @@ Application State:
 - Dispatcher Shutdown: {(Current?.Dispatcher?.HasShutdownStarted ?? true)}
 ================================================================================
 ";
-                File.AppendAllText(crashLogPath, crashInfo);
+                // Redact BEFORE the text touches the disk. crash.log is the one file users open
+                // by hand and paste into Discord, and it carried the full "C:\Users\<name>" of
+                // every frame in the stack plus whatever ids and paths the exception message
+                // happened to quote. LogScrubber only cleaned that up at bug-report upload time,
+                // which is far too late for a file that is already sitting in the logs folder.
+                File.AppendAllText(crashLogPath, Services.Logging.LogRedactor.Redact(crashInfo));
             }
             catch
             {
