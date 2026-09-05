@@ -203,6 +203,64 @@ namespace ConditioningControlPanel.Services
             public bool IsActive { get; set; }
         }
 
+        /// <summary>One side of a /v2/auth/merge-provider answer: enough to name it in a prompt.</summary>
+        public class MergeProviderSide
+        {
+            [JsonProperty("unified_id")]
+            public string? UnifiedId { get; set; }
+
+            [JsonProperty("display_name")]
+            public string? DisplayName { get; set; }
+
+            [JsonProperty("level")]
+            public int Level { get; set; }
+
+            [JsonProperty("patreon_tier")]
+            public int PatreonTier { get; set; }
+        }
+
+        /// <summary>Result of /v2/auth/merge-provider (see <see cref="MergeProviderAsync"/>).</summary>
+        public class MergeProviderResponse
+        {
+            [JsonProperty("success")]
+            public bool Success { get; set; }
+
+            [JsonProperty("dry_run")]
+            public bool DryRun { get; set; }
+
+            /// <summary>The provider already resolves to this session's record; nothing to merge.</summary>
+            [JsonProperty("already_same")]
+            public bool AlreadySame { get; set; }
+
+            [JsonProperty("already_merged")]
+            public bool AlreadyMerged { get; set; }
+
+            [JsonProperty("merge_id")]
+            public string? MergeId { get; set; }
+
+            [JsonProperty("support_id")]
+            public string? SupportId { get; set; }
+
+            /// <summary>This session's record (kept).</summary>
+            [JsonProperty("canonical")]
+            public MergeProviderSide? Canonical { get; set; }
+
+            /// <summary>The record the provider index pointed at (folded in, then archived).</summary>
+            [JsonProperty("loser")]
+            public MergeProviderSide? Loser { get; set; }
+
+            /// <summary>Human sentence on failure: the server's <c>message</c> when it sent one, else its <c>error</c> code.</summary>
+            [JsonProperty("error")]
+            public string? Error { get; set; }
+
+            /// <summary>The server's machine-readable <c>error</c> code on failure (e.g. <c>loser_has_other_identities</c>).</summary>
+            [JsonIgnore]
+            public string? ErrorCode { get; set; }
+
+            [JsonIgnore]
+            public int StatusCode { get; set; }
+        }
+
         public class LinkResponse
         {
             [JsonProperty("success")]
@@ -471,6 +529,70 @@ namespace ConditioningControlPanel.Services
             {
                 Log.Error(ex, "[V2Auth] Link provider failed");
                 return new LinkResponse { Success = false, Error = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Fold the record a provider's sign-in currently resolves to INTO this session's record
+        /// (the split-identity repair, see <see cref="SplitIdentityService"/>). The server proves
+        /// both halves itself: our session token for <paramref name="unifiedId"/>, the live
+        /// <paramref name="accessToken"/> for the provider. <paramref name="dryRun"/> writes nothing
+        /// and answers with both records' names and levels, which is what the prompt is built from.
+        /// </summary>
+        /// <param name="unifiedId">This session's unified id (kept)</param>
+        /// <param name="provider">"discord" or "patreon"</param>
+        /// <param name="accessToken">OAuth access token for the provider</param>
+        /// <param name="dryRun">Probe only; nothing is written</param>
+        public async Task<MergeProviderResponse> MergeProviderAsync(string unifiedId, string provider, string accessToken, bool dryRun)
+        {
+            try
+            {
+                var payload = new JObject
+                {
+                    ["unified_id"] = unifiedId,
+                    ["provider"] = provider,
+                    ["access_token"] = accessToken,
+                    ["dry_run"] = dryRun
+                };
+
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/auth/merge-provider")
+                {
+                    Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json")
+                };
+                AddAuthHeader(request);
+                var response = await _http.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+
+                Log.Debug("[V2Auth] Merge-provider ({Mode}) response: {Json}", dryRun ? "dry run" : "commit", RedactSensitiveFields(json));
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    string? code = null, message = null;
+                    try
+                    {
+                        var obj = JObject.Parse(json);
+                        code = obj["error"]?.ToString();
+                        message = obj["message"]?.ToString();
+                    }
+                    catch { /* non-JSON body; the status code is all we have */ }
+                    return new MergeProviderResponse
+                    {
+                        Success = false,
+                        StatusCode = (int)response.StatusCode,
+                        ErrorCode = code,
+                        Error = message ?? code ?? $"HTTP {(int)response.StatusCode}"
+                    };
+                }
+
+                var parsed = JsonConvert.DeserializeObject<MergeProviderResponse>(json)
+                    ?? new MergeProviderResponse { Success = false, Error = "Invalid response" };
+                parsed.StatusCode = (int)response.StatusCode;
+                return parsed;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[V2Auth] Merge provider failed");
+                return new MergeProviderResponse { Success = false, Error = ex.Message };
             }
         }
 

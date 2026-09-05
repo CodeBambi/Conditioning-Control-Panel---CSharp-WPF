@@ -511,6 +511,7 @@ namespace ConditioningControlPanel.Services
                             "REFUSING the re-issued auth token (it belongs to the other record). " +
                             "This account pair likely needs a server-side merge.",
                             user.UnifiedId, localUnifiedId);
+                        SplitIdentityService.NoteMismatch("discord", user.UnifiedId, localUnifiedId);
                     }
                     else
                     {

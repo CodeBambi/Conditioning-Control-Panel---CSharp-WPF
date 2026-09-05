@@ -616,6 +616,7 @@ namespace ConditioningControlPanel.Services
                             "REFUSING the re-issued auth token (it belongs to the other record). " +
                             "This account pair likely needs a server-side merge.",
                             subscription.UnifiedId, localUnifiedId);
+                        SplitIdentityService.NoteMismatch("patreon", subscription.UnifiedId, localUnifiedId);
                     }
                     else
                     {
