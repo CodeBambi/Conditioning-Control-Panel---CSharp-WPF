@@ -155,13 +155,11 @@ namespace ConditioningControlPanel
 
             foreach (var feature in features)
             {
-                // Brain Drain is a dead feature in sessions — its runtime apply path in
-                // SessionEngine is fully commented out (it never did anything when a session
-                // ran), so hide it from the creator palette to stop users adding a no-op block
-                // (bug #430). The definition itself stays so any legacy session that already
-                // has a brain_drain item still resolves/loads without a null lookup.
-                if (feature.Id == "brain_drain") continue;
-
+                // Brain Drain used to be skipped here: its SessionEngine apply path was fully
+                // commented out, so a block dropped on the timeline did nothing at all (#430).
+                // The engine now honours BrainDrainEnabled / start minute / intensity ramp again
+                // and the visual half's rework has shipped, so the palette offers it once more
+                // (#1147).
                 var panel = GetCategoryPanel(feature.Category);
                 if (panel == null) continue;
 
