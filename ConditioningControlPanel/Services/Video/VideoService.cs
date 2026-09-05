@@ -165,6 +165,17 @@ namespace ConditioningControlPanel.Services
         // it treats the player as wedged and quarantines it. Only a real wedge should ever spend a
         // retire from the per-session budget.
         private const int StopStragglerGraceMs = 4000;
+        // Stop() tasks from the LAST teardown that were still running when CloseAll returned, plus
+        // the instance they belong to. The vmem/blur path deliberately never waits for them on the
+        // dispatcher and the VideoView path gives up after ~4.5s, so the NEXT video can start while
+        // a previous Stop() is still inside native code. A Play() that overlaps a wedged Stop() on
+        // the same instance never presents a frame: "fullscreen goes black for 2-3 seconds and then
+        // the video counts as watched" (#1121).
+        private static volatile Task[]? _pendingStopTasks;
+        private static LibVLC? _pendingStopOwner;
+        // How long the next video waits (pumping) for those stragglers before it abandons the owning
+        // instance and builds its players on a fresh one.
+        private const int PendingStopWaitMs = 2000;
 
 #if DEBUG
         // Fault injection for the wedge cluster (#765/#766/#767). Set CCP_FAULT_WEDGE_STOP=1 and the
@@ -2921,6 +2932,12 @@ namespace ConditioningControlPanel.Services
                 StartMaxLengthCapTimer();
                 VideoDiag.Log("VIDEO", $"safety + max-length timers armed +{showSw.ElapsedMilliseconds}ms");
 
+                // A previous teardown's Stop() may still be inside native code right now (#1121):
+                // the vmem/blur path hands its stop tasks straight to the async quarantine without
+                // ever waiting on the dispatcher. Building this video's players on an instance whose
+                // last Stop() has not returned is how a clip ends up black for its whole run.
+                AwaitPendingStops();
+
                 // Ensure LibVLC is initialized (deferred from startup for faster launch).
                 // #616-#623 NOTE: this call runs ON THE UI THREAD and takes _libVLCLock, which a
                 // background rebuild (RetireSharedLibVLC's Task.Run) can hold for the whole duration
@@ -3778,9 +3795,10 @@ namespace ConditioningControlPanel.Services
         ///     fallback safety timer (black and silent for minutes, un-closable in strict mode). The
         ///     retry only moves that skip from ~8s to ~16s, and buys back the runs where the decoder
         ///     was merely slow to come up while three screens spun up at once.
-        ///   * on a SINGLE-surface rig (the majority) the primary is the only surface and gets NO retry
-        ///     rung at all, so that path skips at exactly the ~8s the released build does. The rung is
-        ///     decided by the RIG, not by the role: a lone primary has no siblings to be starved by.
+        ///   * a LONE primary gets that one rung too, as of #1121. Denying it was what left the
+        ///     single-monitor majority with no recovery of any kind: the one surface that could have
+        ///     come back was the one surface not allowed to try. Worst case it costs one more grace
+        ///     window before the same skip.
         ///
         /// See VideoSurfaceHealth.DecideFrameWatchdog / ShouldAbortClip for both rules in pure form.
         /// </summary>
@@ -3816,11 +3834,11 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     bool tornDown = !_videoPlaying || _isCleaningUp || gen != _teardownGeneration;
-                    // How many surfaces this clip armed. The retry rung is decided by the RIG, not by
-                    // the role (see the ladder note above): a mirror always gets its second chance, and
-                    // so does the audio-bearing surface as soon as it has siblings. A lone primary —
-                    // the single-monitor majority — gets none, which keeps that path's ~8s skip exactly
-                    // where the released build has it.
+                    // How many surfaces this clip armed. Every armed surface now gets its one second
+                    // chance (see the ladder note above and AllowsFrameRetry): a mirror because the
+                    // clip keeps playing while it retries, the audio-bearing surface because a skip
+                    // is otherwise the only outcome - including on the single-monitor rig, which is
+                    // where the #1121 reports come from. Zero armed surfaces still gets none.
                     int armed;
                     lock (_blurFrameWatchLock) { armed = _blurWatches.Count; }
                     switch (VideoSurfaceHealth.DecideFrameWatchdog(tornDown, _gracePaused, surface.HasRendered, watch.RetryUsed,
@@ -3868,7 +3886,7 @@ namespace ConditioningControlPanel.Services
                             VideoSurfaceHealth.Report("libvlc", monitor, primary, -1,
                                 watch.RetryUsed
                                     ? $"no frame within {VoutGraceMs}ms, and none after one retry"
-                                    : $"no frame within {VoutGraceMs}ms, no retry rung on a single-surface rig");
+                                    : $"no frame within {VoutGraceMs}ms, no retry rung available for this surface");
                             if (!VideoSurfaceHealth.ShouldAbortClip(total, dead, primaryDead))
                             {
                                 App.Logger?.Warning("VideoService: giving up on the blurred surface {Surface} ({Dead}/{Total} dead) - the clip keeps playing on the live screen(s)",
@@ -7195,6 +7213,11 @@ namespace ConditioningControlPanel.Services
                 // Snapshot the instance these players belong to, so the (possibly delayed) retire below
                 // can never condemn a FRESH instance that a vout-retry has since built.
                 var owningLibVLC = _libVLC;
+                // Hand the stop tasks to the NEXT video (#1121). Whatever this method decides below -
+                // wait for them, or skip the wait entirely on the vmem path - a straggler that
+                // outlives the teardown must not have the next Play() built on top of it.
+                _pendingStopTasks = stopPairs.Select(p => p.task).ToArray();
+                _pendingStopOwner = owningLibVLC;
 
                 // The waits below exist for ONE reason: detaching a VideoView/HwndHost from a player
                 // that is still presenting is the historic multi-monitor crash (see the detach comment
@@ -7465,6 +7488,49 @@ namespace ConditioningControlPanel.Services
                 // unresponsive to the user (and to the low-level keyboard hook) — #616-#623.
                 if (traceClose)
                     VideoDiag.Log("CLOSE", $"CloseAll end after {closeSw.ElapsedMilliseconds}ms of UI-thread time");
+            }
+        }
+
+        /// <summary>
+        /// Wait for the PREVIOUS teardown's Stop() tasks before this video builds any player (#1121).
+        /// Pumping, so the dispatcher keeps draining exactly as it does during CloseAll's own waits,
+        /// and bounded at <see cref="PendingStopWaitMs"/>.
+        ///
+        /// A Stop() that is still inside native code owns the audio output and the decoder of the
+        /// instance it was created from. Play() on that same instance comes back "playing", presents
+        /// no frame, and the clip is skipped a couple of seconds later with nothing but black on
+        /// screen. If the straggler outlives the wait we do not fight it: the instance is retired
+        /// (quarantined forever - a wedged native call is still inside it, so it is never disposed)
+        /// and EnsureLibVLCInitialized builds a fresh one for this video.
+        /// </summary>
+        private void AwaitPendingStops()
+        {
+            var pending = _pendingStopTasks;
+            var owner = _pendingStopOwner;
+            _pendingStopTasks = null;
+            _pendingStopOwner = null;
+            if (pending == null || pending.Length == 0) return;
+            if (pending.All(t => t.IsCompleted)) return;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            VideoDiag.Log("VIDEO", $"pre-roll: {pending.Count(t => !t.IsCompleted)} previous Stop() task(s) still running - waiting up to {PendingStopWaitMs}ms");
+            while (sw.ElapsedMilliseconds < PendingStopWaitMs && pending.Any(t => !t.IsCompleted))
+                WaitWithMessagePump(100);
+
+            bool wedged = pending.Any(t => !t.IsCompleted);
+            // One line per overrun, at Warning, carrying the elapsed ms: a report that contains it
+            // says the black screen came from the previous teardown rather than from this clip.
+            App.Logger?.Warning(
+                "VideoService: the previous video's Stop() overran into this one by {Ms}ms - {Outcome} (#1121)",
+                sw.ElapsedMilliseconds,
+                wedged ? "still running, abandoning it and starting this video on a fresh LibVLC instance" : "it finished, playback continues on the same instance");
+            VideoDiag.Log("VIDEO", $"pre-roll: previous Stop() overran {sw.ElapsedMilliseconds}ms, stillRunning={wedged}");
+
+            if (wedged)
+            {
+                // fromCurrentPlayback:false - the clip these players belonged to is already down, so
+                // there is no sibling decoding on this instance to protect.
+                RetireSharedLibVLC(owner, "the previous video's Stop() was still running when the next video started", fromCurrentPlayback: false);
             }
         }
 

@@ -96,12 +96,13 @@ public class MultiMonitorVideoSurfaceTests
     }
 
     [Fact]
-    public void RetryRung_ALonePrimaryGetsNone()
+    public void RetryRung_ALonePrimaryAlsoGetsOne()
     {
-        // The single-monitor majority: nothing else is competing for the decoder, the clip ends
-        // either way, and the rung would be 8 extra seconds of black screen for everyone.
-        Assert.False(AllowsFrameRetry(primarySurface: true, armedSurfaces: 1));
-        // Defensive: a watch judged before it was registered must not read softer than "lone".
+        // #1121: the single-monitor rig used to be the one rig with no recovery at all - the only
+        // surface it has was the only surface denied a re-Play(), so a decoder that came up late
+        // meant a black screen and a skipped clip. One rung, worst case one more grace window.
+        Assert.True(AllowsFrameRetry(primarySurface: true, armedSurfaces: 1));
+        // Defensive: a watch judged before it was registered has nothing to re-Play.
         Assert.False(AllowsFrameRetry(primarySurface: true, armedSurfaces: 0));
     }
 
@@ -151,15 +152,17 @@ public class MultiMonitorVideoSurfaceTests
     }
 
     [Fact]
-    public void SingleMonitorRig_BehavesExactlyLikeTheReleasedBuild()
+    public void SingleMonitorRig_GetsOneRetryAndThenStillAborts()
     {
-        // One screen means one surface and it IS the primary: no retry rung, first missed window ->
-        // GiveUp -> abort. Same ~8s skip the released build does, no added latency. Driven through
-        // AllowsFrameRetry so the rig rule and the ladder cannot drift apart.
+        // One screen means one surface and it IS the primary. #1121 gives it the same single rung
+        // every other surface has: first missed window -> Retry, second -> GiveUp -> abort. Driven
+        // through AllowsFrameRetry so the rig rule and the ladder cannot drift apart.
         bool allowed = AllowsFrameRetry(primarySurface: true, armedSurfaces: 1);
-        Assert.False(allowed);
-        Assert.Equal(FrameWatchdogAction.GiveUp,
+        Assert.True(allowed);
+        Assert.Equal(FrameWatchdogAction.Retry,
             DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: false, retryAllowed: allowed));
+        Assert.Equal(FrameWatchdogAction.GiveUp,
+            DecideFrameWatchdog(tornDown: false, gracePaused: false, hasRendered: false, retryUsed: true, retryAllowed: allowed));
         Assert.True(ShouldAbortClip(totalSurfaces: 1, deadSurfaces: 1, primarySurfaceDead: true));
     }
 
