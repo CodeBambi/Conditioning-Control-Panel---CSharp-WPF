@@ -113,6 +113,9 @@ namespace ConditioningControlPanel.Services
         // pool that predates the user's latest selection — see PruneDeselectedFromPools.
         private int _poolDisabledStamp = -1;
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
+        // Last flash voice-line pool size written to the log, so BuildVoiceLinePool only speaks up
+        // when the number CHANGES (#1099). Guarded by _lockObj, like _soundQueue.
+        private int _lastLoggedVoicePoolCount = -1;
         private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
         private readonly object _lockObj = new();
         private FlashWindow[] _windowsSnapshot = Array.Empty<FlashWindow>(); // Reusable snapshot for heartbeat
@@ -3724,7 +3727,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (_soundQueue.Count == 0)
                 {
-                    var files = GetMediaFiles(SoundsPath, new[] { ".mp3", ".wav", ".ogg" });
+                    var files = BuildVoiceLinePool();
                     if (files.Count == 0) return null;
 
                     // Performance: Shuffle and enqueue all at once
@@ -3733,6 +3736,60 @@ namespace ConditioningControlPanel.Services
 
                 return _soundQueue.Count > 0 ? _soundQueue.Dequeue() : null; // Performance: O(1) instead of O(n)
             }
+        }
+
+        /// <summary>
+        /// The clips a flash may speak (#1099).
+        ///
+        /// <para>Starts from the same list the phrase library shows,
+        /// <see cref="CompanionPhraseService.GetEnabledVoiceLineFiles"/> - the UNION of the bundled
+        /// install dir and the downloaded content pack, already minus the lines the user disabled or
+        /// removed there. Then adds whatever the folder scan finds that the library cannot see: clips
+        /// a user dropped into category subfolders (the scan is recursive, the library is top-level
+        /// only) and packaged-mod folders. Those extras get filtered by the same removed/disabled
+        /// ids, so a line deleted in the library stays deleted wherever it lives.</para>
+        ///
+        /// <para>Until this, the flash path called <see cref="GetMediaFiles"/> on
+        /// <see cref="SoundsPath"/> alone: it honoured no phrase-library toggle at all, and it saw
+        /// only ONE of the two content roots, because <c>ContentLocator.ResolveDirectory</c> stops at
+        /// the first root that exists rather than merging them. That is both halves of the report - a
+        /// reporter deleted the line in the phrase library and still heard it on every flash, and the
+        /// pool that actually played could be a fraction of the list the library showed, small enough
+        /// that one clip came back on every single flash.</para>
+        ///
+        /// <para>Mirrors <c>AvatarTubeWindow.GetRandomVoiceLinePath</c>, which has always taken the
+        /// filtered list with an unfiltered fallback. Caller holds <see cref="_lockObj"/>.</para>
+        /// </summary>
+        private List<string> BuildVoiceLinePool()
+        {
+            var pool = App.CompanionPhrases?.GetEnabledVoiceLineFiles() ?? new List<string>();
+            var libraryCount = pool.Count;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in pool) seen.Add(Path.GetFileName(file));
+
+            var settings = App.Settings?.Current;
+            foreach (var file in GetMediaFiles(SoundsPath, new[] { ".mp3", ".wav", ".ogg" }))
+            {
+                if (!seen.Add(Path.GetFileName(file))) continue;
+                var id = CompanionPhraseService.VoiceLineId(file);
+                if (settings?.RemovedPhraseIds?.Contains(id) == true) continue;
+                if (settings?.DisabledPhraseIds?.Contains(id) == true) continue;
+                pool.Add(file);
+            }
+
+            // Says out loud how much variety a flash actually has. A pool of 1 is the shape of
+            // "she says the same line every time", and is invisible from the outside otherwise.
+            // Only on a CHANGE: an empty pool rebuilds on every flash, and this would be spam.
+            if (pool.Count != _lastLoggedVoicePoolCount)
+            {
+                _lastLoggedVoicePoolCount = pool.Count;
+                App.Logger?.Information(
+                    "FlashService: flash voice-line pool = {Count} clip(s) ({LibraryCount} from the phrase library) in {Folder}",
+                    pool.Count, libraryCount, SoundsPath);
+            }
+
+            return pool;
         }
 
         /// <summary>
