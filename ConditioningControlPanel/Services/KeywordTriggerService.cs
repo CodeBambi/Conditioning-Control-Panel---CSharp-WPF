@@ -1729,7 +1729,7 @@ namespace ConditioningControlPanel.Services
                     {
                         if (attempt >= 16)   // 16 x 750ms = give up after ~12s of nonstop talking
                         {
-                            App.Logger?.Debug("Awareness comment dropped - companion busy: {Line}", line);
+                            App.Logger?.Debug("Awareness comment dropped - companion busy ({Chars} chars)", (line ?? "").Length);
                             return;
                         }
                         var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };

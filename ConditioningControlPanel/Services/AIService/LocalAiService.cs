@@ -515,7 +515,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                 if (status != 200)
                 {
-                    App.Logger?.Warning("LocalAiService.SendAsync: Ollama returned HTTP {Status}: {Body}", status, body);
+                    App.Logger?.Warning("LocalAiService.SendAsync: Ollama returned HTTP {Status} (body {Bytes} bytes)", status, body?.Length ?? 0);
                     Meter(AiMeter.OutcomeError);
                     // Diagnostics are not model output and must never wear the AI badge, but they are
                     // the single most useful thing we can show ("Ollama isn't running — start it").
@@ -525,7 +525,7 @@ namespace ConditioningControlPanel.Services.AIService
                 var content = ExtractContent(body);
                 if (string.IsNullOrEmpty(content))
                 {
-                    App.Logger?.Warning("LocalAiService.SendAsync: empty content in 200 response: {Body}", Truncate(body, 300));
+                    App.Logger?.Warning("LocalAiService.SendAsync: empty content in 200 response (body {Bytes} bytes)", body?.Length ?? 0);
                     Meter(AiMeter.OutcomeEmpty);
                     return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
                 }
@@ -816,7 +816,7 @@ namespace ConditioningControlPanel.Services.AIService
 
                 if (status != 200)
                 {
-                    App.Logger?.Warning("LocalAiService: Ollama returned HTTP {Status}: {Body}", status, body);
+                    App.Logger?.Warning("LocalAiService: Ollama returned HTTP {Status} (body {Bytes} bytes)", status, body?.Length ?? 0);
                     // Roll back the user turn so we don't poison history with an unanswered turn.
                     // (Automated reactions never appended to _messages, so there's nothing to undo.)
                     if (isUser && _messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
@@ -827,7 +827,7 @@ namespace ConditioningControlPanel.Services.AIService
                 var content = ExtractContent(body);
                 if (string.IsNullOrEmpty(content))
                 {
-                    App.Logger?.Warning("LocalAiService: empty content in 200 response: {Body}", Truncate(body, 300));
+                    App.Logger?.Warning("LocalAiService: empty content in 200 response (body {Bytes} bytes)", body?.Length ?? 0);
                     if (isUser && _messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                     Meter(AiMeter.OutcomeEmpty);
                     return GetFallbackResponse();

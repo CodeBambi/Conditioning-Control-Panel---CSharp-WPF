@@ -2,6 +2,8 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 
+using ConditioningControlPanel.Services.Logging;
+
 namespace ConditioningControlPanel.Helpers
 {
     /// <summary>
@@ -33,7 +35,7 @@ namespace ConditioningControlPanel.Helpers
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "ShellExecute failed to open {Url}; trying fallbacks", url);
+                App.Logger?.Warning(ex, "ShellExecute failed to open {Host}; trying fallbacks", UrlLog.Host(url));
             }
 
             // 2. explorer.exe <url> — explorer resolves the default browser itself.
@@ -45,7 +47,7 @@ namespace ConditioningControlPanel.Helpers
             // 4. rundll32 url.dll,FileProtocolHandler <url>
             if (TryStart("rundll32.exe", $"url.dll,FileProtocolHandler {url}")) return true;
 
-            App.Logger?.Error("All browser-launch strategies failed for {Url}", url);
+            App.Logger?.Error("All browser-launch strategies failed for {Host}", UrlLog.Host(url));
             return false;
         }
 

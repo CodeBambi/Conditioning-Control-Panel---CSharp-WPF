@@ -6,6 +6,8 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.ViewModels;
 
+using ConditioningControlPanel.Services.Logging;
+
 namespace ConditioningControlPanel.Controls
 {
     /// <summary>
@@ -88,7 +90,7 @@ namespace ConditioningControlPanel.Controls
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "SeasonRecap: failed to open URL {Url}", url);
+                App.Logger?.Warning(ex, "SeasonRecap: failed to open URL on {Host}", UrlLog.Host(url));
                 return false;
             }
         }

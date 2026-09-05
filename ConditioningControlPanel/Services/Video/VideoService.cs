@@ -2481,7 +2481,7 @@ namespace ConditioningControlPanel.Services
                         secondaries.Count, allScreens.Count);
                 }
 
-                App.Logger?.Information("Playing URL via LibVLC on {Count} screen(s): {Url}", _windows.Count, url);
+                App.Logger?.Information("Playing URL via LibVLC on {Count} screen(s), host {Host}", _windows.Count, Logging.UrlLog.Host(url));
             });
         }
 
@@ -5397,8 +5397,8 @@ namespace ConditioningControlPanel.Services
                     try { App.Haptics!.ToyInput.ButtonPressed -= h; } catch { }
                 }
 
-                App.Logger?.Debug("Spawning attention target: '{Text}' on {ScreenCount} screen(s) ({Spawned}/{Total})",
-                    text, screens.Length, _spawned, _total);
+                App.Logger?.Debug("Spawning attention target ({Chars} chars) on {ScreenCount} screen(s) ({Spawned}/{Total})",
+                    (text ?? "").Length, screens.Length, _spawned, _total);
 
                 foreach (var screen in screens)
                 {
@@ -8471,7 +8471,7 @@ namespace ConditioningControlPanel.Services
                 };
 
                 _win.Show();
-                App.Logger?.Debug("Attention target window created: '{Text}' size {W}x{H}", text, w, h);
+                App.Logger?.Debug("Attention target window created ({Chars} chars) size {W}x{H}", (text ?? "").Length, w, h);
             }
             catch (Exception ex)
             {

@@ -593,7 +593,9 @@ namespace ConditioningControlPanel.Services
                 // Debug: Log what we're seeing
                 if (!string.IsNullOrEmpty(windowTitle) && windowTitle != _lastWindowTitle)
                 {
-                    App.Logger?.Debug("WindowAwareness: Active window = '{Title}'", windowTitle);
+                    // Never the title itself. This is whatever the user has on screen right
+                    // now - browser tab titles, document names - and it changes on every switch.
+                    App.Logger?.Debug("WindowAwareness: Active window changed ({Chars} chars of title)", windowTitle.Length);
                 }
 
                 // Check for idle (same window for too long)

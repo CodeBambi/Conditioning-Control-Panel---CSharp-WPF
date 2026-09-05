@@ -303,8 +303,8 @@ namespace ConditioningControlPanel.Services.Deeper
 
                     if (ct.IsCancellationRequested) break;
 
-                    App.Logger?.Debug("SpeakPromptSession: heard '{Heard}' matched={M} score={S:0.00} loud={L} timedOut={T} unavail={U}",
-                        res.Transcript, res.Matched, res.Score, res.LoudEnough, res.TimedOut, res.Unavailable);
+                    App.Logger?.Debug("SpeakPromptSession: heard {Chars} chars matched={M} score={S:0.00} loud={L} timedOut={T} unavail={U}",
+                        (res.Transcript ?? "").Length, res.Matched, res.Score, res.LoudEnough, res.TimedOut, res.Unavailable);
 
                     if (res.Unavailable)
                     {
@@ -319,7 +319,7 @@ namespace ConditioningControlPanel.Services.Deeper
                         _reps++;
                         FlashFeedback(_correctMsg);
                         Giggle(_correctMsg);
-                        App.Logger?.Information("SpeakPromptSession: correct ({Reps}/{Need}) heard '{Heard}'", _reps, _requiredReps, res.Transcript);
+                        App.Logger?.Information("SpeakPromptSession: correct ({Reps}/{Need}, {Chars} chars heard)", _reps, _requiredReps, (res.Transcript ?? "").Length);
                         if (_reps >= _requiredReps) break;
                         await Task.Delay(600, ct).ConfigureAwait(false);
                     }

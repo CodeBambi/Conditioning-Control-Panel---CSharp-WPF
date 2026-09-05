@@ -835,7 +835,7 @@ namespace ConditioningControlPanel.Services
                     }
                     if (response.StatusCode == HttpStatusCode.NotFound)
                     {
-                        App.Logger?.Warning("ReleaseContentService: pack asset 404 for {Pack} at {Url}", info.Id, url);
+                        App.Logger?.Warning("ReleaseContentService: pack asset 404 for {Pack} at {Host}", info.Id, Logging.UrlLog.Host(url));
                         return false;
                     }
                     if (response.StatusCode != HttpStatusCode.OK && response.StatusCode != HttpStatusCode.PartialContent)

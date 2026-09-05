@@ -152,8 +152,8 @@ namespace ConditioningControlPanel
                     Giggle(reaction);
                 }
 
-                App.Logger?.Debug("Awareness reaction for {DisplayName} ({Category}): {Reaction}",
-                    displayName, e.Category, reaction);
+                App.Logger?.Debug("Awareness reaction fired ({Category}, app {AppChars} chars, line {Chars} chars)",
+                    e.Category, (displayName ?? "").Length, (reaction ?? "").Length);
             }
             catch (Exception ex)
             {
@@ -263,8 +263,8 @@ namespace ConditioningControlPanel
                 else
                     Giggle(reaction);
 
-                App.Logger?.Debug("Still-on reaction for {DisplayName} ({Duration}, useServiceOnly={UseService}): {Reaction}",
-                    displayName, duration, useServiceNameOnly, reaction);
+                App.Logger?.Debug("Still-on reaction fired ({Duration}, useServiceOnly={UseService}, app {AppChars} chars, line {Chars} chars)",
+                    duration, useServiceNameOnly, (displayName ?? "").Length, (reaction ?? "").Length);
             }
             catch (Exception ex)
             {
