@@ -924,12 +924,12 @@ namespace ConditioningControlPanel.Services
                 if (best == null)
                 {
                     App.Logger?.Information(
-                        "AutonomyService: voice command no-match (heard '{Heard}', best {Score:0.00})", heard, bestScore);
+                        "AutonomyService: voice command no-match ({Chars} chars heard, best {Score:0.00})", (heard ?? "").Length, bestScore);
                     return VoiceCmdOutcome.NoMatch;
                 }
 
-                App.Logger?.Information("AutonomyService: voice command '{Name}' (heard '{Heard}', score {Score:0.00})",
-                    best.Name, heard, bestScore);
+                App.Logger?.Information("AutonomyService: voice command '{Name}' ({Chars} chars heard, score {Score:0.00})",
+                    best.Name, (heard ?? "").Length, bestScore);
 
                 // Explicit "give me a mantra" -> let the funnel run the Spoken-Mantra flow.
                 if (best.IsMantra) return VoiceCmdOutcome.Mantra;

@@ -262,8 +262,8 @@ internal sealed class ChaosWebViewHost : IDisposable
         if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
 
         _ = InitWebAsync();
-        App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Url}",
-            _opts.LogTag, _opts.InputEnabled, _isFullscreen, _opts.StartUrl);
+        App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Host}",
+            _opts.LogTag, _opts.InputEnabled, _isFullscreen, Services.Logging.UrlLog.Host(_opts.StartUrl));
     }
 
     /// <summary>Lay the window out as borderless-fullscreen or a normal titled window.</summary>
@@ -1290,7 +1290,7 @@ internal sealed class ChaosWebViewHost : IDisposable
         if (IsAllowedNavigationHost(e.Uri, _opts.PrimaryHost)) return;
         foreach (var host in _opts.AdditionalNavigationHosts)
             if (IsAllowedNavigationHost(e.Uri, host)) return;
-        App.Logger?.Debug("{Tag}: blocked navigation to {Uri}", _opts.LogTag, e.Uri);
+        App.Logger?.Debug("{Tag}: blocked navigation to {Host}", _opts.LogTag, Services.Logging.UrlLog.Host(e.Uri));
         e.Cancel = true;
     }
 

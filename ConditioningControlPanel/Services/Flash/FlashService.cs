@@ -3409,7 +3409,7 @@ namespace ConditioningControlPanel.Services
             catch (OperationCanceledException) { return null; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: remote still {Url} failed to load: {Error}", url, ex.Message);
+                App.Logger?.Debug("FlashService: remote still from {Host} failed to load: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 return null;
             }
         }
@@ -3480,7 +3480,7 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("FlashService: remote GIF {Url} frame decode failed, falling back to still: {Error}", url, ex.Message);
+                    App.Logger?.Debug("FlashService: remote GIF from {Host} frame decode failed, falling back to still: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 }
                 finally { try { if (stream.CanSeek) stream.Position = 0; } catch { } }
             }
@@ -3523,7 +3523,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: WIC could not decode remote still {Url}: {Error}", url, ex.Message);
+                App.Logger?.Debug("FlashService: WIC could not decode remote still from {Host}: {Error}", Logging.UrlLog.Host(url), ex.Message);
             }
 
             // WEBP IS WHY THIS FALLBACK EXISTS. Scrolller's stills are mostly webp (the largest
@@ -3566,7 +3566,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning("FlashService: Skia could not decode remote still {Url}: {Error}", url, ex.Message);
+                App.Logger?.Warning("FlashService: Skia could not decode remote still from {Host}: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 return null;
             }
         }
@@ -3654,7 +3654,7 @@ namespace ConditioningControlPanel.Services
             catch (OperationCanceledException) { return null; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("FlashService: chaos overlay could not load remote still {Url}: {Error}", url, ex.Message);
+                App.Logger?.Debug("FlashService: chaos overlay could not load remote still from {Host}: {Error}", Logging.UrlLog.Host(url), ex.Message);
                 return null;
             }
         }

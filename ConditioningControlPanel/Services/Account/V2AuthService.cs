@@ -246,7 +246,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/discord", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Discord auth response: {Json}", RedactSensitiveFields(json));
+                Log.Debug("[V2Auth] Discord auth response ({Bytes} bytes)", json?.Length ?? 0);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -289,7 +289,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/patreon", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Patreon auth response: {Json}", RedactSensitiveFields(json));
+                Log.Debug("[V2Auth] Patreon auth response ({Bytes} bytes)", json?.Length ?? 0);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -334,7 +334,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/substar", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] SubscribeStar auth response: {Json}", RedactSensitiveFields(json));
+                Log.Debug("[V2Auth] SubscribeStar auth response ({Bytes} bytes)", json?.Length ?? 0);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -372,7 +372,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/register", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Register response: {Json}", RedactSensitiveFields(json));
+                Log.Debug("[V2Auth] Register response ({Bytes} bytes)", json?.Length ?? 0);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -409,7 +409,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/login", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Login response: {Json}", RedactSensitiveFields(json));
+                Log.Debug("[V2Auth] Login response ({Bytes} bytes)", json?.Length ?? 0);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -454,7 +454,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Link response: {Json}", RedactSensitiveFields(json));
+                Log.Debug("[V2Auth] Link response ({Bytes} bytes)", json?.Length ?? 0);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -510,8 +510,8 @@ namespace ConditioningControlPanel.Services
                     // erroring out with a fat body would write that whole body into
                     // the log once a minute for as long as the Trainer Card is open.
                     // The status plus the first 200 chars is all triage ever needs.
-                    Log.Warning("[V2Auth] Get profile failed: {Status} {Body}",
-                        (int)response.StatusCode, TruncateForLog(json));
+                    Log.Warning("[V2Auth] Get profile failed: {Status} (body {Bytes} bytes)",
+                        (int)response.StatusCode, json?.Length ?? 0);
                     return null;
                 }
 

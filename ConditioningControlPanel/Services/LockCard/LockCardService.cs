@@ -244,7 +244,7 @@ namespace ConditioningControlPanel.Services
                             // as the active LockCard, so re-enqueuing would hold the slot with nothing on
                             // screen until the 5-min stuck backstop, and could bounce indefinitely. Give up
                             // after this single re-defer and release the slot so the queue keeps moving.
-                            App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay ({Blocker} is open). Dropping after one re-defer. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.Logger?.Warning("LockCardService: Deferred lock card still blocked on replay ({Blocker} is open). Dropping after one re-defer. Phrase chars: {Chars}", blocker, (phraseSnippet ?? "").Length);
                             // CompleteIfCurrent, not Complete: if the card blocking us is the one
                             // holding the slot, a type-blind Complete would release SOMEONE ELSE's
                             // live claim and dequeue the next interaction over their open window.
@@ -252,7 +252,7 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case BlockedCardAction.Defer:
-                            App.Logger?.Warning("LockCardService: {Blocker} is already open. Deferring this lock card to the interaction queue. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.Logger?.Warning("LockCardService: {Blocker} is already open. Deferring this lock card to the interaction queue. Phrase chars: {Chars}", blocker, (phraseSnippet ?? "").Length);
                             App.InteractionQueue?.TryStart(
                                 InteractionQueueService.InteractionType.LockCard,
                                 () => ShowLockCard(customPhrase, customRepeats, customStrict, isTest, isDeferredReplay: true),
@@ -260,7 +260,7 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case BlockedCardAction.DropNoQueue:
-                            App.Logger?.Warning("LockCardService: {Blocker} is already open and no interaction queue is available to defer to. Dropping. Phrase: {Phrase}", blocker, phraseSnippet);
+                            App.Logger?.Warning("LockCardService: {Blocker} is already open and no interaction queue is available to defer to. Dropping. Phrase chars: {Chars}", blocker, (phraseSnippet ?? "").Length);
                             break;
                     }
                     return;
@@ -317,7 +317,7 @@ namespace ConditioningControlPanel.Services
 
                     _lastShown = DateTime.Now;
 
-                    App.Logger?.Information("Lock Card shown on all monitors - Phrase: {Phrase}", phrase);
+                    App.Logger?.Information("Lock Card shown on all monitors - Phrase chars: {Chars}", (phrase ?? "").Length);
                 }
                 catch (Exception ex)
                 {

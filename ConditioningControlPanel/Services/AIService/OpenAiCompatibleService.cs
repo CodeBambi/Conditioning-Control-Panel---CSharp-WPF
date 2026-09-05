@@ -129,7 +129,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed))
             {
-                App.Logger?.Warning("OpenAiCompatibleService: invalid endpoint '{Endpoint}', falling back to OpenAI base", raw);
+                App.Logger?.Warning("OpenAiCompatibleService: invalid endpoint ({Chars} chars), falling back to OpenAI base", (raw ?? "").Length);
                 return new Uri("https://api.openai.com/v1/");
             }
 
@@ -474,7 +474,7 @@ namespace ConditioningControlPanel.Services.AIService
                     };
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-                    App.Logger?.Debug("OpenAiCompatibleService: request to {Url} (attempt {Attempt})", request.RequestUri, attempt + 1);
+                    App.Logger?.Debug("OpenAiCompatibleService: request to {Host} (attempt {Attempt})", Logging.UrlLog.Host(request.RequestUri), attempt + 1);
 
                     using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                     var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -490,10 +490,12 @@ namespace ConditioningControlPanel.Services.AIService
                             continue;
                         }
 
-                        App.Logger?.Warning("OpenAiCompatibleService: HTTP {Status} from {Endpoint}: {Body}",
+                        // Host + size. A bring-your-own endpoint can carry the key in the URL,
+                        // and the error body of a chat completion often quotes the prompt back.
+                        App.Logger?.Warning("OpenAiCompatibleService: HTTP {Status} from {Host} (body {Bytes} bytes)",
                             status,
-                            endpointUri,
-                            json);
+                            Logging.UrlLog.Host(endpointUri),
+                            json?.Length ?? 0);
                         Meter(AiMeter.OutcomeError);
                         return null;
                     }
