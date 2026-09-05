@@ -1424,6 +1424,10 @@ namespace ConditioningControlPanel.Services
                     achievementProgress?.TotalVideoMinutes ?? 0,
                     achievementProgress?.TotalLockCardsCompleted ?? 0);
 
+                // Spiral rail: bank the last few seconds of feature use into today's day-log
+                // entry before either body below reads it (a local write, no network).
+                App.FeatureDayLog?.Flush();
+
                 // Use V2 sync if user has unified_id (new v5.5 system)
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
@@ -1467,6 +1471,9 @@ namespace ConditioningControlPanel.Services
                             // Spiral W1: the same days, but with the quest ids that filled them.
                             // Rides beside the dates and gets the same union merge coming back.
                             ["quest_completion_log"] = BuildQuestCompletionLogPayload(questProgress),
+                            // Spiral rail: which features were used on which day. Server-side
+                            // only; nothing comes back down for it (see BuildFeatureDayLogPayload).
+                            ["feature_day_log"] = BuildFeatureDayLogPayload(),
                             ["total_daily_quests_completed"] = questProgress?.TotalDailyQuestsCompleted ?? 0,
                             ["total_weekly_quests_completed"] = questProgress?.TotalWeeklyQuestsCompleted ?? 0,
                             ["total_xp_from_quests"] = questProgress?.TotalXPFromQuests ?? 0,
@@ -1874,6 +1881,9 @@ namespace ConditioningControlPanel.Services
                                 App.Achievements?.Progress?.SyncCurrentStreak();
                                 App.Settings?.Save();
                                 App.Achievements?.Save();
+                                // Same rule as the legacy path: a lifted lifetime counter is
+                                // another device's history, not today's use.
+                                App.FeatureDayLog?.Rebaseline("v2 cloud merge");
                             }
                         }
 
@@ -2289,6 +2299,7 @@ namespace ConditioningControlPanel.Services
                         ["quest_completion_dates"] = legacyQuestProgress?.DailyQuestCompletionDates?
                             .Select(d => d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).ToList() ?? new List<string>(),
                         ["quest_completion_log"] = BuildQuestCompletionLogPayload(legacyQuestProgress),
+                        ["feature_day_log"] = BuildFeatureDayLogPayload(),
                         ["total_daily_quests_completed"] = legacyQuestProgress?.TotalDailyQuestsCompleted ?? 0,
                         ["total_weekly_quests_completed"] = legacyQuestProgress?.TotalWeeklyQuestsCompleted ?? 0,
                         ["total_xp_from_quests"] = legacyQuestProgress?.TotalXPFromQuests ?? 0
@@ -3069,6 +3080,9 @@ namespace ConditioningControlPanel.Services
             {
                 App.Settings?.Save();
                 achievements?.Save();
+                // A take-higher merge just lifted lifetime counters to what another device
+                // banked. That gain is not today's: move the day log's baseline past it.
+                App.FeatureDayLog?.Rebaseline("legacy cloud merge");
             }
 
             // Handle force_streak_override for legacy path (profile includes the flag)
@@ -3174,6 +3188,29 @@ namespace ConditioningControlPanel.Services
                 .Reverse()
                 .Select(e => new Dictionary<string, string> { ["d"] = e.D, ["q"] = e.Q })
                 .ToList();
+        }
+
+        /// <summary>Newest days the feature day log may carry over the wire (same cap as the quest log).</summary>
+        private const int FeatureDayLogWireCap = 400;
+
+        /// <summary>
+        /// Spiral rail: the outbound stats.feature_day_log. Each day is <c>d</c> plus only the
+        /// counters above zero; days with nothing in them are left out. Like quest_completion_log
+        /// it is NOT a stat: the server lifts it off the payload before the stats merge, and no
+        /// cloud-to-local path here reads it back (the day log is built from the local lifetime
+        /// counters, so there is nothing to pull down).
+        /// </summary>
+        private static List<Dictionary<string, object>> BuildFeatureDayLogPayload()
+        {
+            try
+            {
+                return App.FeatureDayLog?.BuildWirePayload(FeatureDayLogWireCap) ?? new List<Dictionary<string, object>>();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "[FeatureDayLog] wire payload failed, sending none");
+                return new List<Dictionary<string, object>>();
+            }
         }
 
         /// <summary>

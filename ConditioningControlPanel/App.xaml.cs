@@ -474,6 +474,9 @@ namespace ConditioningControlPanel
         private static bool _engineCrashRecovered;
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
+        /// <summary>Spiral rail: per-day feature use, snapshotted off the lifetime counters
+        /// (see FeatureDayLogService). Null only if its construction failed.</summary>
+        public static FeatureDayLogService? FeatureDayLog { get; private set; }
         /// <summary>Weekly free-tier pass for the Graded Intake (see IntakePassService).</summary>
         public static IntakePassService IntakePass { get; private set; } = null!;
         /// <summary>The ? box's daily free premium feature (see DailyFreeService).</summary>
@@ -1979,6 +1982,10 @@ namespace ConditioningControlPanel
                 // When server definitions change, re-check quests (regenerates if definition was removed)
                 Quests?.CheckAndGenerateQuests();
             };
+            // Spiral rail day log. Needs Achievements and Settings (both up by now); reads them on
+            // a 60 s timer and on sync, never hooks a feature. Its loss must not cost the launch.
+            try { FeatureDayLog = new FeatureDayLogService(); }
+            catch (Exception exDayLog) { Logger?.Warning(exDayLog, "[FeatureDayLog] service construction failed; per-day feature use is not recorded this run"); }
             // Intake onboarding. Both are cheap and synchronous (the pass reads AppSettings; the
             // punch card loads one small json), and both must exist before MainWindow paints the
             // Exclusives gate or the Dashboard tile. Neither may touch App.Notifications from its
@@ -4902,6 +4909,8 @@ Application State:
             try { BouncingText?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "BouncingText dispose failed"); }
             try { MindWipe?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "MindWipe dispose failed"); }
             try { BrainDrain?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "BrainDrain dispose failed"); }
+            // Before the achievement flush: the day log's last tick reads the counters that flush writes.
+            try { FeatureDayLog?.Dispose(); } catch (Exception ex) { Logger?.Debug(ex, "FeatureDayLog flush on shutdown failed"); }
             try { Achievements?.Dispose(); } catch (Exception ex) { Logger?.Error(ex, "Achievement progress flush on shutdown FAILED"); }
             // Before WindowAwareness: its Dispose runs Stop(), which also stops the observer — and the
             // observer's own Stop is what closes the open visit and flushes the ledger to disk.
