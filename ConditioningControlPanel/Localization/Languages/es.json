@@ -393,6 +393,8 @@
   "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparencia de las imágenes flash.\r\nMenor = más transparente, 100% = completamente sólido.",
   "setting_avoid_screen_center": "Evitar el centro de la pantalla",
   "tooltip_keep_flash_images_out_of_a_square_in_the_midd": "Mantiene las imágenes flash fuera de un cuadrado en el centro de cada pantalla.\r\nIdeal para jugar: nada tapa tu punto de mira. El control ajusta el tamaño del cuadro (% del lado más corto de la pantalla).",
+  "setting_center_zone": "Zona libre central",
+  "tooltip_center_zone": "Qué parte del centro de la pantalla evitan las imágenes flash cuando “Evitar el centro de la pantalla” está activado. El tamaño de los flashes está en la pestaña “Visuales”.",
   "tooltip_fade_in_out_animation_speed_0_instant_appear": "Velocidad de animación de aparición/desaparición.\r\n0% = aparición/desaparición instantánea.\r\n100% = desvanecimiento suave y lento.",
   "setting_fade": "Fundido",
   "tooltip_how_long_images_stay_on_screen_only_used_when": "Cuánto tiempo permanecen las imágenes en pantalla.\r\nSolo se usa cuando el audio está desactivado.",
