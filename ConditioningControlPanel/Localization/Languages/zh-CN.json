@@ -3423,6 +3423,7 @@
   "label_focus_gaze_description": "注视泡泡或闪图1秒即可戳破",
   "label_focus_gaze_consent_required": "需要摄像头同意",
   "label_focus_gaze_active": "活跃——注视和悬停",
+  "label_focus_gaze_waiting": "已开启 - 正在等待摄像头",
   "label_focus_gaze_calibrate_first": "请先校准摄像头（Deeper标签页→摄像头设置→校准）",
   "label_focus_gaze_webcam_failed_format": "无法启动摄像头（状态：{0}）",
   "btn_open": "打开",

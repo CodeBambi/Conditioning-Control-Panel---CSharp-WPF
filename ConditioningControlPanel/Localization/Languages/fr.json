@@ -3590,6 +3590,7 @@
   "label_focus_gaze_description": "Fixe une bulle ou un flash pendant 1s pour l'éclater.",
   "label_focus_gaze_consent_required": "Le consentement caméra est requis.",
   "label_focus_gaze_active": "Actif — regarde et fixe.",
+  "label_focus_gaze_waiting": "Active - en attente de la camera.",
   "label_focus_gaze_calibrate_first": "Étalonne d'abord la webcam (onglet Deeper → Configuration Webcam → Étalonner).",
   "label_focus_gaze_webcam_failed_format": "Impossible de démarrer la webcam (état : {0}).",
   "btn_open": "Ouvrir",

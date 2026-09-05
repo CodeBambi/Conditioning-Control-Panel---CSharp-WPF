@@ -2236,6 +2236,20 @@ namespace ConditioningControlPanel.Models
             set { _bubbleGazePopEnabled = value; OnPropertyChanged(); }
         }
 
+        // FocusGazeEnabled is the persisted INTENT behind the Play door's
+        // "Focus Gaze" switch (GazeFocusService.MasterEnabled). It is not the
+        // same thing as GazeFocusService.IsActive: the engine pauses whenever
+        // the camera is down, uncalibrated or unconsented, and until v6.9.1 the
+        // switch mirrored IsActive, so it dropped and popped back on its own and
+        // never survived a restart (#1116). The switch now reads this flag and
+        // the status line underneath says whether the engine is actually running.
+        private bool _focusGazeEnabled;
+        public bool FocusGazeEnabled
+        {
+            get => _focusGazeEnabled;
+            set { _focusGazeEnabled = value; OnPropertyChanged(); }
+        }
+
         // VideoGazeClickEnabled gates the gaze-dwell shortcut for the video
         // attention minigame (look at a FloatingText target long enough to
         // fire its onHit callback, same as a mouse click).
