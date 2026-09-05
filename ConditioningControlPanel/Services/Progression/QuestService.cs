@@ -566,7 +566,9 @@ public class QuestService : IDisposable
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
         var hasPremium = App.Patreon?.HasPremiumAccess == true;
-        var availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: true);
+        // Cached, so dealing all three seats enumerates devices once (ccp-bugs#1151).
+        var hasCamera = QuestHardwareGate.Shared.HasCamera();
+        var availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: true, hasCamera);
 
         // THE WINDOW MUST NEVER STARVE THE PLAYER. If a date window emptied the pool,
         // fall back to the undated pool rather than leaving the day questless: an event
@@ -574,7 +576,7 @@ public class QuestService : IDisposable
         // with it. See IsQuestInDateWindow.
         if (availableQuests.Count == 0)
         {
-            availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: false);
+            availableQuests = FilterDailyRollPool(questPool, excludeIds, hasPremium, DateTime.Today, applyDateWindow: false, hasCamera);
         }
 
         // LAST RESORT: three slots can drain a pool that one slot never could (a low-level
@@ -586,7 +588,7 @@ public class QuestService : IDisposable
             // Through the same helper, with the exclusions dropped rather than the predicates.
             // Hand-rolling this filter is how a Remote quest gets onto the board: it is the one
             // path that never sees IsRollableAsDaily unless it goes through here.
-            availableQuests = FilterDailyRollPool(questPool, (ICollection<string>?)null, hasPremium, DateTime.Today, applyDateWindow: false);
+            availableQuests = FilterDailyRollPool(questPool, (ICollection<string>?)null, hasPremium, DateTime.Today, applyDateWindow: false, hasCamera);
         }
 
         if (availableQuests.Count == 0) return null;
@@ -622,21 +624,23 @@ public class QuestService : IDisposable
 
         // Use remote quests from QuestDefinitionService if available, fall back to embedded
         var questPool = App.QuestDefinitions?.GetWeeklyQuests() ?? QuestDefinition.WeeklyQuests.ToList();
-        var availableQuests = questPool
+        // Same hardware gate as the daily roll (ccp-bugs#1151): no webcam, no blink weekly.
+        var hasCamera = QuestHardwareGate.Shared.HasCamera();
+        var availableQuests = QuestHardwareGate.GateOrFallBack(questPool
             .Where(q => q.Id != excludeId)
             .Where(q => IsQuestAvailableForLevel(q.Category))
             .Where(IsQuestAvailableForTier)
             .Where(IsQuestInDateWindow)
-            .ToList();
+            .ToList(), hasCamera);
 
         // Same starvation guard as the daily generator — see the note there.
         if (availableQuests.Count == 0)
         {
-            availableQuests = questPool
+            availableQuests = QuestHardwareGate.GateOrFallBack(questPool
                 .Where(q => q.Id != excludeId)
                 .Where(q => IsQuestAvailableForLevel(q.Category))
                 .Where(IsQuestAvailableForTier)
-                .ToList();
+                .ToList(), hasCamera);
         }
 
         if (availableQuests.Count == 0) return;
@@ -773,11 +777,11 @@ public class QuestService : IDisposable
     /// </summary>
     internal static List<QuestDefinition> FilterDailyRollPool(
         IEnumerable<QuestDefinition> pool, string? excludeId, bool hasPremium,
-        DateTime today, bool applyDateWindow)
+        DateTime today, bool applyDateWindow, bool hasCamera = true)
         => FilterDailyRollPool(
             pool,
             string.IsNullOrEmpty(excludeId) ? null : new[] { excludeId },
-            hasPremium, today, applyDateWindow);
+            hasPremium, today, applyDateWindow, hasCamera);
 
     /// <summary>
     /// Set-excluding form, for the three-up daily board. Each seat has to roll against every id
@@ -789,15 +793,18 @@ public class QuestService : IDisposable
     /// </summary>
     internal static List<QuestDefinition> FilterDailyRollPool(
         IEnumerable<QuestDefinition> pool, ICollection<string>? excludeIds, bool hasPremium,
-        DateTime today, bool applyDateWindow)
+        DateTime today, bool applyDateWindow, bool hasCamera = true)
     {
-        return pool
+        var filtered = pool
             .Where(q => excludeIds == null || !excludeIds.Contains(q.Id))
             .Where(q => IsQuestAvailableForLevel(q.Category))
             .Where(q => IsQuestAvailableForTier(q, hasPremium))
             .Where(IsRollableAsDaily)
             .Where(q => !applyDateWindow || IsQuestInDateWindow(q.ActiveFrom, q.ActiveUntil, today))
             .ToList();
+        // LAST predicate, and the first one dropped when the pool runs dry: a machine with no
+        // webcam must not be dealt a blink quest (ccp-bugs#1151) but must still be dealt a quest.
+        return QuestHardwareGate.GateOrFallBack(filtered, hasCamera);
     }
 
     /// <summary>
