@@ -258,6 +258,10 @@
   <ItemGroup>
     <!-- App icon -->
     <Resource Include="Resources\app.ico" />
+    <!-- The neutral taskbar/tray face for Settings > General > "Discreet app icon".
+         Resource (not Content) so the pack:// URI in Services/DiscreetIcon.cs resolves
+         in the single-file build, exactly like app.ico above. -->
+    <Resource Include="Resources\app_discreet.ico" />
     <Resource Include="Resources\february.png" />
     <Resource Include="Resources\february_drone.png" />
     <Resource Include="Resources\logo.png" />

@@ -105,6 +105,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
                 Set(ChkAutoRun, s.AutoStartEngine);
                 Set(ChkVidLaunch, s.ForceVideoOnLaunch);
                 Set(ChkEnableDeeper, s.EnableDeeper);
+                Set(ChkDiscreetIcon, s.DiscreetAppIcon);
 
                 static void Set(CheckBox box, bool value)
                 {
@@ -191,6 +192,27 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             s.ForceVideoOnLaunch = want;
             App.Settings?.Save();
             App.Logger?.Information("Force video on launch set to {Enabled} (Settings/General)", want);
+        }
+
+        // =====================================================================================
+        //  discreet app icon - local write (see the "window & tray" panel)
+        // =====================================================================================
+
+        /// <summary>
+        /// Swaps the taskbar / alt-tab / tray identity for a neutral one straight away, so the
+        /// user sees it land. Compares before writing, like its neighbours, so
+        /// OnSectionShown's re-seed is not mistaken for a user edit.
+        /// </summary>
+        private void ChkDiscreetIcon_Changed(object sender, RoutedEventArgs e)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var want = ChkDiscreetIcon.IsChecked ?? false;
+            if (s.DiscreetAppIcon == want) return;
+            s.DiscreetAppIcon = want;
+            App.Settings?.Save();
+            (Main ?? App.MainWindowRef)?.ApplyDiscreetIconSetting();
+            App.Logger?.Information("Discreet app icon set to {Enabled} (Settings/General)", want);
         }
 
         // =====================================================================================

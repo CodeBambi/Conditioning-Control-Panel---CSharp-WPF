@@ -251,10 +251,11 @@
         </Border>
 
         <!-- ========================== window & tray ========================== -->
-        <!-- Read-only by design. ✕ minimises to the tray and always has; there is no
-             AppSettings property behind it, and Phase 2 does not invent one. Saying so
-             here is the fix for "the app won't close" - it is the app's most-reported
-             non-bug, which is exactly why this description stays VISIBLE. -->
+        <!-- The tray EXPLAINER is read-only by design. ✕ minimises to the tray and always
+             has; there is no AppSettings property behind it, and Phase 2 does not invent one.
+             Saying so here is the fix for "the app won't close" - it is the app's most-reported
+             non-bug, which is exactly why this description stays VISIBLE. The discreet-icon
+             toggle underneath it is a real setting and the only control in this panel. -->
         <Border Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
                 BorderBrush="{StaticResource SectionHueGeneralBorderBrush}">
             <Grid>
@@ -271,6 +272,27 @@
                     </StackPanel>
                     <TextBlock Text="{loc:Str set2_general_tray_body}" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+
+                    <!-- Discreet app icon. Lives in this panel because it is exactly the
+                         window/tray contract: it changes what the taskbar, alt-tab and the
+                         tray show, and nothing else. The shortcut icon comes from the
+                         installer and is out of reach from here - the tooltip says so. -->
+                    <Grid MinHeight="34" Margin="0,10,0,0" ToolTip="{loc:Str tooltip_discreet_app_icon}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,14,0" VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource SettingLabel}"
+                                       Text="{loc:Str setting_discreet_app_icon}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{loc:Str setting_discreet_app_icon_hint}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="1" x:Name="ChkDiscreetIcon" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                  Checked="ChkDiscreetIcon_Changed" Unchecked="ChkDiscreetIcon_Changed"/>
+                    </Grid>
                 </StackPanel>
             </Grid>
         </Border>

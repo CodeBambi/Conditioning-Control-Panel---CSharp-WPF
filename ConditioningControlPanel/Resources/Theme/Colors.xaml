@@ -3,6 +3,10 @@
 
     <!-- Colors (central source) -->
     <Color x:Key="PinkColor">#FFFF69B4</Color>
+    <!-- Text/glyph colour to put ON the accent. Black or white, whichever wins the WCAG
+         contrast test against the live accent - rewritten by MainWindow.RefreshThemeAwareElements
+         on every mod switch (Services/AccentContrast.cs). Seed = the answer for #FF69B4. -->
+    <Color x:Key="AccentForeground">#FF000000</Color>
     <Color x:Key="DarkPink">#FFFF1493</Color>
     <Color x:Key="PanelBg">#FF1C1C35</Color>
     <Color x:Key="PanelBgTransparent">#C01C1C35</Color>

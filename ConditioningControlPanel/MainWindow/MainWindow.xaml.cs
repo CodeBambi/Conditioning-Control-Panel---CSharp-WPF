@@ -330,6 +330,8 @@ namespace ConditioningControlPanel
 
             // Initialize tray icon
             _trayIcon = new TrayIconService(this);
+            // "Discreet app icon" (Settings > General): taskbar / alt-tab identity + tray.
+            Services.DiscreetIcon.Apply(this, _trayIcon);
             // Let the bark system observe tray-driven events (e.g. "wake Bambi").
             App.Bark?.AttachTray(_trayIcon);
             _trayIcon.OnExitRequested += () =>
@@ -2209,6 +2211,12 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Re-applies the "Discreet app icon" setting to this window and the tray. Called on
+        /// startup and every time the Settings toggle moves, so the swap is immediate.
+        /// </summary>
+        internal void ApplyDiscreetIconSetting() => Services.DiscreetIcon.Apply(this, _trayIcon);
+
+        /// <summary>
         /// Refreshes UI elements that need manual updates when theme changes.
         /// Updates Application.Current.Resources Color and Brush entries so all
         /// DynamicResource bindings across the app auto-update.
@@ -2309,6 +2317,10 @@ namespace ConditioningControlPanel
 
                 // === UPDATE COLOR RESOURCES (drives DynamicResource brushes in Brushes.xaml) ===
                 res["PinkColor"] = accent;
+                // Text that sits ON the accent (badges, the tube's own-message chat rows). A mod
+                // accent is author-supplied, so "white, always" is a coin flip on readability.
+                var accentForeground = Services.AccentContrast.BestForeground(accent);
+                res["AccentForeground"] = accentForeground;
                 res["DarkPink"] = dark;
                 res["PinkButtonHovered"] = light;
                 res["TransparentPink"] = transparent30;
@@ -2333,6 +2345,7 @@ namespace ConditioningControlPanel
                 // every {DynamicResource *Brush} consumer, and it is also the restore path for
                 // MainWindow.Lab.cs ApplyLockdownTheme, which shadows four of these keys.
                 res["PinkBrush"] = new SolidColorBrush(accent);
+                res["AccentForegroundBrush"] = new SolidColorBrush(accentForeground);
                 res["DarkPinkBrush"] = new SolidColorBrush(dark);
                 res["PinkButtonHoveredBrush"] = new SolidColorBrush(light);
                 res["TransparentPinkBrush"] = new SolidColorBrush(transparent30);

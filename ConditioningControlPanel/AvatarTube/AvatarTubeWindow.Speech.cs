@@ -632,63 +632,109 @@ namespace ConditioningControlPanel
             }
         }
 
-        // ── Speech bubble background (per-mod) ────────────────────────────────
-        // Mirrors the XAML BubbleGradient (PatreonDarkPurple #FF8E44AD → DarkerBg #FF121220). The
-        // sissy variant drops the fill alpha so the bubble reads more transparent (the user found the
-        // sissy bubble hard to read); the border + pink text keep full opacity so legibility improves.
+        // ── Speech bubble + tube accent (per-mod) ───────────────────────
+        // The bubble used to be a FIXED purple gradient (#8E44AD → #121220) with the mod accent as
+        // the text on top of it, plus one hardcoded exception for sissy. That is why Infection
+        // Control was unreadable (beebee, #tier-2 2026-09-02): its accent #2855F0 is a deep blue
+        // and scores about 1.4:1 on a dark purple. Both halves are per-mod now — the fill is the
+        // accent mixed down into the dark, and the text is the accent lifted only as far as it
+        // takes to clear WCAG AA on that fill (Services/AccentContrast.cs). No mod is special-cased.
         private const double SissyBubbleAlpha = 0.70; // tunable: sissy bubble fill opacity
 
-        // Sissy's mod accent is a muted purple that goes muddy on the now-transparent fill; give the
-        // text a brighter, higher-contrast tone so it pops. Other mods keep their accent (PinkBrush).
-        private static readonly Brush SissyTextBrush = FreezeBrush(Color.FromRgb(0xFF, 0x9C, 0xE8)); // bright candy pink
+        /// <summary>The dark the bubble fades into. The old gradient's tail, unchanged.</summary>
+        private static readonly Color BubbleDark = Color.FromRgb(0x12, 0x12, 0x20);
 
-        private static Brush FreezeBrush(Color c)
-        {
-            var b = new SolidColorBrush(c);
-            b.Freeze();
-            return b;
-        }
+        /// <summary>How much accent survives in the bubble's top stop. Higher = louder mod colour.</summary>
+        private const double BubbleAccentMix = 0.30;
 
-        private static Brush? _defaultBubbleBrush;
-        private static Brush? _sissyBubbleBrush;
+        private static string? _bubbleCacheKey;
+        private static Brush? _bubbleFill;
+        private static Brush? _bubbleFillSoft;
+        private static Brush? _bubbleText;
 
-        private static LinearGradientBrush BuildBubbleBrush(byte alpha)
+        /// <summary>The active mod's accent, or the app pink when it does not set one.</summary>
+        private static Color TubeAccentColor() =>
+            AccentContrast.Parse(App.Mods?.GetAccentColorHex(), Color.FromRgb(0xFF, 0x69, 0xB4));
+
+        private static LinearGradientBrush BuildBubbleBrush(Color top, byte alpha)
         {
             var b = new LinearGradientBrush
             {
                 StartPoint = new Point(0, 0),
                 EndPoint = new Point(1, 1),
             };
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, 0x8E, 0x44, 0xAD), 0));
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, 0x12, 0x12, 0x20), 1));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, top.R, top.G, top.B), 0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, BubbleDark.R, BubbleDark.G, BubbleDark.B), 1));
             b.Freeze();
             return b;
         }
 
+        /// <summary>Rebuilds the cached bubble brushes when (and only when) the accent moved.</summary>
+        private static void EnsureBubbleBrushes()
+        {
+            var accent = TubeAccentColor();
+            var key = accent.ToString();
+            if (_bubbleCacheKey == key && _bubbleFill != null) return;
+
+            var top = AccentContrast.Blend(accent, BubbleDark, 1.0 - BubbleAccentMix);
+            _bubbleFill = BuildBubbleBrush(top, 0xFF);
+            _bubbleFillSoft = BuildBubbleBrush(top, (byte)Math.Round(SissyBubbleAlpha * 255));
+            var text = new SolidColorBrush(AccentContrast.ReadableOn(accent, top));
+            text.Freeze();
+            _bubbleText = text;
+            _bubbleCacheKey = key;
+        }
+
         /// <summary>
-        /// Applies per-mod speech-bubble styling. In sissy mod the fill is the more-transparent variant
-        /// and the text uses a brighter high-contrast color so it pops; other mods keep the opaque fill
-        /// and their accent (PinkBrush) text. Cheap and idempotent — called every time the bubble is
-        /// shown, so it always reflects the current mod without mod-change wiring.
+        /// Applies per-mod speech-bubble styling. Sissy keeps its more-transparent fill (its bubble
+        /// was reported hard to read the other way); the colours themselves are the same per-mod
+        /// derivation for every mod. Cheap and idempotent — called every time the bubble is shown
+        /// and from <see cref="ApplyTubeAccent"/> on a mod switch.
         /// </summary>
         private void ApplyBubbleBackgroundForMod()
         {
             try
             {
-                _defaultBubbleBrush ??= BuildBubbleBrush(0xFF);
-                _sissyBubbleBrush ??= BuildBubbleBrush((byte)Math.Round(SissyBubbleAlpha * 255));
+                EnsureBubbleBrushes();
 
                 var id = App.Mods?.ActiveModId ?? "";
                 bool isSissy = id.IndexOf("sissy", StringComparison.OrdinalIgnoreCase) >= 0;
-                SpeechBubble.Background = isSissy ? _sissyBubbleBrush : _defaultBubbleBrush;
-
-                // Sissy → brighter text; otherwise restore the mod-accent dynamic resource (PinkBrush).
-                if (isSissy)
-                    TxtSpeech.Foreground = SissyTextBrush;
-                else
-                    TxtSpeech.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "PinkBrush");
+                var fill = isSissy ? _bubbleFillSoft : _bubbleFill;
+                if (fill != null) SpeechBubble.Background = fill;
+                if (_bubbleText != null) TxtSpeech.Foreground = _bubbleText;
             }
             catch { /* non-fatal — keep whatever brush is set */ }
+        }
+
+        /// <summary>
+        /// Repaints the two tube surfaces that hold a literal COLOUR instead of a DynamicResource:
+        /// the speech bubble and the portrait mist. Everything else in the tube already rides
+        /// PinkBrush / PinkColor, which MainWindow rewrites from the mod accent on every switch.
+        /// Called at construction and from OnModChanged.
+        /// </summary>
+        internal void ApplyTubeAccent()
+        {
+            try
+            {
+                ApplyBubbleBackgroundForMod();
+
+                if (MistOverlay == null) return;
+                var accent = TubeAccentColor();
+                var core = AccentContrast.Blend(accent, Colors.White, 0.35);
+                var mist = new RadialGradientBrush
+                {
+                    GradientOrigin = new Point(0.5, 0.45),
+                    Center = new Point(0.5, 0.45),
+                    RadiusX = 0.6,
+                    RadiusY = 0.72,
+                };
+                mist.GradientStops.Add(new GradientStop(Color.FromArgb(0xFF, core.R, core.G, core.B), 0.0));
+                mist.GradientStops.Add(new GradientStop(Color.FromArgb(0x66, accent.R, accent.G, accent.B), 0.45));
+                mist.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, accent.R, accent.G, accent.B), 1.0));
+                mist.Freeze();
+                MistOverlay.Fill = mist;
+            }
+            catch (Exception ex) { App.Logger?.Debug("ApplyTubeAccent: {E}", ex.Message); }
         }
 
         // ── "She's listening" indicator ───────────────────────────────────────
