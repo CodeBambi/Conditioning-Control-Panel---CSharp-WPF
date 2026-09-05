@@ -162,6 +162,7 @@ namespace ConditioningControlPanel.Features
                 ChkTriggers.IsChecked = s.BubbleTriggersEnabled;
                 TriggerOptionsPanel.Visibility = s.BubbleTriggersEnabled
                     ? Visibility.Visible : Visibility.Collapsed;
+                ChkDisguise.IsChecked = s.BubbleDisguiseEnabled;
                 SliderTriggerChance.Value = s.BubbleTriggerChance;
                 TxtTriggerChance.Text = $"{s.BubbleTriggerChance}%";
                 var ids = s.BubbleTriggerVariants ?? new System.Collections.Generic.List<string>();
@@ -187,10 +188,25 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.BubbleGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggersEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerChance) ||
+                e.PropertyName == nameof(Models.AppSettings.BubbleDisguiseEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BubbleTriggerVariants))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
+        }
+
+        /// <summary>
+        /// Disguise the trigger bubbles (suggestion thread 1526803967177134170). Read at SPAWN, so
+        /// bubbles already drifting keep the look they were born with and the field changes over
+        /// naturally rather than blinking; nothing needs restarting.
+        /// </summary>
+        private void ChkDisguise_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.BubbleDisguiseEnabled = ChkDisguise.IsChecked ?? false;
+            App.Settings?.Save();
         }
 
         private void ChkEnable_Changed(object sender, RoutedEventArgs e)
