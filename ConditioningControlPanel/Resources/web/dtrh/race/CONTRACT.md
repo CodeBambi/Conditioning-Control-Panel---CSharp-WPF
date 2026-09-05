@@ -151,6 +151,9 @@ kart.dispose()
 `retexture(scene)` pass, so the rig walks them through `preparePixel` when the model mounts. EMI is
 the Blender glb from the moment `emi.glb` resolves; the primitive CRT is the fallback and rides on
 if it never does.
+The cup and the saucer come from `props.glb` (`kart_cup`, `kart_saucer`) on the same terms: the
+lathe cup, its rim torus, the handle tube, the saucer cylinder and its rim are the fallback, and
+the tea disc, the pink saucer mark, `cupLight`, the seat and `TEA_Y` are shared by both paths.
 Speed: cruise `KART_BASE_SPEED`, cap `KART_MAX_SPEED`, floor `KART_MIN_SPEED`. Ramps: when
 `layout.rampAt(d)` matches the lip, give `vh` an upward impulse scaled by speed; `GRAVITY` pulls
 back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `ROAD_HALF_W`

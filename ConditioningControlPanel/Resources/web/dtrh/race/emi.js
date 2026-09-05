@@ -10,8 +10,13 @@
 // THE MODEL. The primitive CRT below is now only the fallback. On creation the rig asks gltf.js for
 // race/assets/emi.glb (the Blender hard-surface EMI); the moment it lands the primitive group comes
 // off the graph and is freed, and the glb clone takes the same seat in the cup. Until then, and for
-// good if the load fails, the primitive rides. Everything else (saucer, cup, handle, tea, cupLight,
-// sweat, sparks) is untouched and the MOODS table drives the glb's own pivots instead.
+// good if the load fails, the primitive rides. Everything else (tea, cupLight, sweat, sparks) is
+// untouched and the MOODS table drives the glb's own pivots instead.
+//
+// THE CROCKERY. The same deal for the cup and the saucer: race/assets/props.glb ships kart_cup
+// (lathe, glaze rim and handle in one node) and kart_saucer, and they take over from the
+// LatheGeometry cup, its rim torus, the handle tube, the saucer cylinder and its rim the moment
+// the pack lands. Needs feat/race-b4-props-glb underneath for the file itself.
 
 import * as THREE from 'three';
 import { loadPack, setFace as packSetFace, preparePixel, FACES } from './gltf.js';
@@ -21,6 +26,11 @@ const PINK = 0xff69b4, GOLD = 0xF2C14E, PALE = 0xB3C7FF, PORCELAIN = 0xF6E7C8;
 const BREATH_SEC = 3.9;      // the one breath on screen (Law III)
 const SWEAT_N = 28, SPARK_N = 32;
 const EMI_GLB = '/dtrh/race/assets/emi.glb';
+const PROPS_GLB = '/dtrh/race/assets/props.glb';
+// props.glb, measured off the node bboxes (assets/PROPS.md): the saucer stands 0.125 tall to the
+// top of its glaze band, the cup is 0.695 to its rim with the band at 0.645..0.690, handle on +x.
+// The cup sits CUP_Y above the saucer base, the way the JS rig always sat it.
+const CUP_Y = 0.09, SAUCER_TOP = 0.125, CUP_RIM_TOP = 0.695;
 const OUTLINE = 'outline';   // the inverted hull's material name (gltf.js header, assets/README.md)
 // The glb is metres, sole centre at the origin, +Z forward, case top at 1.00 m. 0.64 puts the case
 // at the old 1.25-scaled CRT's 0.525 m; with the sole on the tea (y 0.66) the case bottom lands at
@@ -140,7 +150,9 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   // ---- the tea: a plain tinted liquid disc, nothing drawn in it. It takes the room's colour
   // (the scene fog hue, which fx grades per room) and ripples a little. EMI faces forward, away
   // from the camera, so there is no face to reflect and none is ever painted here.
-  const TEA_R = 0.46, TEA_Y = 0.66;
+  // the tea sits the same 0.11 under the rim it always did, now measured off the glb cup's node
+  // bbox: CUP_Y + CUP_RIM_TOP is the rim at 0.785, so the surface lands at 0.675.
+  const TEA_R = 0.46, TEA_Y = CUP_Y + CUP_RIM_TOP - 0.11;
   const teaMat = new THREE.MeshStandardMaterial({ color: 0xC94A9A, emissive: 0x3c1630, roughness: 0.12, metalness: 0.25, transparent: true, opacity: 0.9 });
   const tea = new THREE.Mesh(new THREE.CircleGeometry(TEA_R + 0.01, 32), teaMat);
   tea.rotation.set(-Math.PI / 2, 0, Math.PI); tea.position.y = TEA_Y; body.add(tea);
@@ -191,6 +203,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
 
   // ---- the glb: loaded once, mounted in the same seat, primitive freed ----
   let G = null;                     // { root, ant0, ant1, ant2, ballpiv, caseNode, ballMats, glassMats, rest }
+  let P = null;                     // { cup, dish }: the props.glb crockery once it lands
   let poses = null;                 // race/emiPoses.js, built with the model
   let dead = false;
   const readyCbs = [], owned = [];  // owned = the materials this rig cloned or made, freed with it
@@ -215,15 +228,21 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     });
   }
 
+  // the inverted hulls: a lit standard material reads grey, so every pack's outline meshes take
+  // this one flat near-black, front faces only (the hull is already wound inside out)
+  const black = new THREE.MeshBasicMaterial({ name: OUTLINE, color: 0x07060f, side: THREE.FrontSide });
+  owned.push(black);
+  const blackOutline = (node) => node.traverse((o) => { if (o.isMesh && isOutline(o)) o.material = black; });
+  /** Take a primitive off the graph and free its geometry. Its material may be shared, so that is
+   *  left to dispose() (the ones that go unshared are pushed onto `owned` at the call site). */
+  const retire = (m) => { if (m.parent) m.parent.remove(m); if (m.geometry) m.geometry.dispose(); };
+
   function mountGlb(pack) {
     if (dead || G) return;
     const root = pack.clone('EMI_root');
     const ant0 = root && root.getObjectByName('ant0'), ballpiv = root && root.getObjectByName('ballpiv');
     if (!root || !ant0 || !ballpiv) return;         // a pack without the contract pivots: the primitive stays
-    // the inverted hulls: a lit standard material reads grey, so they all take one flat near-black
-    const black = new THREE.MeshBasicMaterial({ name: OUTLINE, color: 0x07060f, side: THREE.FrontSide });
-    owned.push(black);
-    root.traverse((o) => { if (o.isMesh && isOutline(o)) o.material = black; });
+    blackOutline(root);
     const ballMats = [], glassMats = [];
     ownMaterials(root.getObjectByName('ball') || ballpiv, ballMats);
     ownMaterials(root.getObjectByName('EMI_glass'), glassMats);
@@ -264,6 +283,26 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     }
     return hit;
   }
+  /** The crockery. kart_cup carries the lathe, the glaze rim and the handle in one node, kart_saucer
+   *  the dish and its rim band, so five primitives come off for two clones. The tea disc, the pink
+   *  saucer mark, cupLight, the seat and every y this rig quotes are untouched: the glb heights are
+   *  the ones those numbers were measured against. */
+  function mountProps(pack) {
+    if (dead || P) return;
+    const cup = pack.clone('kart_cup'), dish = pack.clone('kart_saucer');
+    if (!cup || !dish) return;                      // a pack without the crockery: the primitives stay
+    blackOutline(cup); blackOutline(dish);
+    P = { cup, dish };
+    retire(sc); retire(saucerRim);                  // pinkGlow still dresses the mark, so it lives on
+    saucer.add(dish);
+    saucerMark.position.y = SAUCER_TOP + 0.01;      // back on top of the new glaze band
+    retire(cupMesh); retire(rim); retire(handle);
+    owned.push(cupMat, porcelain);                  // nothing on the graph wears these two now
+    cup.position.y = CUP_Y;
+    body.add(cup);
+    if (pixel) { preparePixel(cup, pixel); preparePixel(dish, pixel); }
+  }
+
   function onReady(cb) { if (typeof cb !== 'function') return; if (G) cb(G.root); else readyCbs.push(cb); }
   function model() { return G ? G.root : null; }
   /** Race events pose her body (race/emiPoses.js). No model yet, nothing to pose. */
@@ -363,6 +402,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     // the glb clone shares the cached pack's geometry and textures, so it comes off the graph before
     // the blanket teardown and only the materials this rig made are freed. The pack stays cached.
     if (G) { seat.remove(G.root); body.remove(seat); G = null; }
+    if (P) { body.remove(P.cup); saucer.remove(P.dish); P = null; }
     for (const m of owned.splice(0)) m.dispose();
     readyCbs.length = 0;
     scene.remove(sweat.mesh); scene.remove(sparks.mesh);
@@ -370,6 +410,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   }
 
   loadPack(EMI_GLB).then(mountGlb).catch(() => { /* no pack, no swap: the primitive EMI rides on */ });
+  loadPack(PROPS_GLB).then(mountProps).catch(() => { /* no pack, no swap: the JS crockery rides on */ });
 
   return { group, update, setMood, setFraught, squash, dispose, onReady, model, setFace: setFaceFrame, pose };
 }
