@@ -207,7 +207,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     e.Effects = DragDropEffects.Copy;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
             e.Handled = true;
         }
 
@@ -466,7 +466,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 };
                 _promotedClearTimer.Start();
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void BtnCreateNewEnhancement_Click(object sender, RoutedEventArgs e)
@@ -691,7 +691,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_videoSource != null)
             {
-                try { _videoSource.Pause(); _videoSource.Seek(0); } catch { }
+                try { _videoSource.Pause(); _videoSource.Seek(0); } catch (Exception ex) { Diag.Swallowed(ex); }
                 BtnPlayPause.Content = "▶";
                 TxtCurrent.Text = "0:00";
                 TxtStatus.Text = Loc.Get("deeper_player_status_stopped");
@@ -838,7 +838,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             var svc = App.Webcam;
             if (svc == null || _onWebcamStateChanged == null) return;
-            try { svc.OnTrackingStateChanged -= _onWebcamStateChanged; } catch { }
+            try { svc.OnTrackingStateChanged -= _onWebcamStateChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
             _onWebcamStateChanged = null;
         }
 
@@ -932,7 +932,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (totalSec <= 0) totalSec = _miniTotalSeconds;
                 TxtMiniTimelineReadout.Text = $"{FormatTime(curSec)} / {FormatTime(totalSec)}";
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // -- Waveform render + scrub ------------------------------------------
@@ -1185,7 +1185,7 @@ namespace ConditioningControlPanel.Views.Deeper
             var src = _videoSource;
             _host.Bind(src,
                 attach: () => src?.Attach(),
-                detach: () => { try { src?.Detach(); } catch { } });
+                detach: () => { try { src?.Detach(); } catch (Exception ex) { Diag.Swallowed(ex); } });
         }
 
         // Single hardened WebView2 init for the Player. Mirrors
@@ -1400,16 +1400,16 @@ namespace ConditioningControlPanel.Views.Deeper
                     // the flag, but Close() left the window alive.
                     if (_isVideoFullscreen || _videoFullscreenWindow != null)
                     {
-                        Dispatcher.BeginInvoke(() => { try { ExitVideoFullscreen(); } catch { } });
+                        Dispatcher.BeginInvoke(() => { try { ExitVideoFullscreen(); } catch (Exception ex) { Diag.Swallowed(ex); } });
                     }
                 }
                 else if (msg == "ccp_zoom_in")
                 {
-                    Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(+0.10); } catch { } });
+                    Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(+0.10); } catch (Exception ex) { Diag.Swallowed(ex); } });
                 }
                 else if (msg == "ccp_zoom_out")
                 {
-                    Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(-0.10); } catch { } });
+                    Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(-0.10); } catch (Exception ex) { Diag.Swallowed(ex); } });
                 }
             }
             catch (Exception ex)
@@ -1642,7 +1642,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (!_isVideoFullscreen) return;
                     if (_isPlayerDualMonitorActive)
                     {
-                        try { App.ScreenMirror?.DisableMirror(); } catch { }
+                        try { App.ScreenMirror?.DisableMirror(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         _isPlayerDualMonitorActive = false;
                     }
                     ExitVideoFullscreen();
@@ -1701,7 +1701,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         hadFsSubscription = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Find which monitor this Player is currently on so the fullscreen
                 // window lands on the same screen the user was looking at.
@@ -1769,18 +1769,18 @@ namespace ConditioningControlPanel.Views.Deeper
                 EventHandler deactivatedHandler = (_, _) =>
                 {
                     try { if (_videoFullscreenWindow != null) _videoFullscreenWindow.Topmost = false; }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 };
                 EventHandler activatedHandler = (_, _) =>
                 {
                     try { if (_videoFullscreenWindow != null) _videoFullscreenWindow.Topmost = true; }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                     // Re-taking the claim re-raises this window to the FRONT of the topmost band,
                     // which is exactly what buried the pink tint / spiral / flashes for the rest of
                     // the run (#1041/#1051/#1052). Put them straight back on top instead of waiting
                     // out the reconcile tick.
                     try { App.Overlay?.RequestForcedZOrderReassert(); }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 };
 
                 EventHandler? closedHandler = null;
@@ -1798,18 +1798,18 @@ namespace ConditioningControlPanel.Views.Deeper
                         App.Logger?.Debug("EnhancementPlayer: WebView re-parent on close failed: {Error}", ex.Message);
                     }
 
-                    try { built!.KeyDown -= keyHandler; } catch { }
-                    try { built!.Closing -= closingHandler; } catch { }
-                    try { built!.Deactivated -= deactivatedHandler; } catch { }
-                    try { built!.Activated -= activatedHandler; } catch { }
-                    try { built!.Closed -= closedHandler!; } catch { }
+                    try { built!.KeyDown -= keyHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { built!.Closing -= closingHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { built!.Deactivated -= deactivatedHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { built!.Activated -= activatedHandler; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { built!.Closed -= closedHandler!; } catch (Exception ex) { Diag.Swallowed(ex); }
 
                     _videoFullscreenWindow = null;
                     // Release the z-order registration on the window's OWN teardown too, so a close
                     // that did not come through ExitVideoFullscreen can't strand the forced-tick
                     // flag on (SetFullscreenBrowserActive is idempotent per owner).
                     try { App.Overlay?.SetFullscreenBrowserActive(built, false); }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
 
                     // After reparent the underlying Chromium HWND is in a state
                     // where the page no longer receives input events (mouse
@@ -1818,8 +1818,8 @@ namespace ConditioningControlPanel.Views.Deeper
                     // inner HWND back up so the HT page is scrollable on
                     // return. Mouse.Capture(null) clears any stuck capture
                     // from the fullscreen click sequence.
-                    try { Mouse.Capture(null); } catch { }
-                    try { VideoBrowser?.Focus(); } catch { }
+                    try { Mouse.Capture(null); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { VideoBrowser?.Focus(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 };
 
                 built.KeyDown += keyHandler;
@@ -1843,7 +1843,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // user can always exit our WPF "forced fullscreen" by
                 // double-clicking the video, regardless of page state.
                 try { FireScript("window._ccpForcedFs = true;"); }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 // Commit state only after reparent is fully in place.
                 _isVideoFullscreen = true;
@@ -1861,11 +1861,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     if (built != null)
                     {
-                        try { built.Content = null; } catch { }
-                        try { built.Close(); } catch { }
+                        try { built.Content = null; } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                        try { built.Close(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                     }
                 }
-                catch { }
+                catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 _videoFullscreenWindow = null;
                 SafeRestoreVideoBrowserToPane();
                 try
@@ -1876,7 +1876,7 @@ namespace ConditioningControlPanel.Views.Deeper
                             "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
                     }
                 }
-                catch { }
+                catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
                 // _isVideoFullscreen never flipped, so no further unwind.
             }
             finally
@@ -1888,7 +1888,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         if (VideoBrowser?.CoreWebView2 != null)
                             VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _fsTransitionInFlight = false;
             }
@@ -1929,7 +1929,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     t => { _ = t.Exception; },
                     TaskContinuationOptions.OnlyOnFaulted);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void ExitVideoFullscreen()
@@ -1951,7 +1951,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         hadFsSubscription = true;
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
 
                 _isVideoFullscreen = false;
                 // Clear the JS flag and best-effort exit any HTML5 fullscreen
@@ -1965,11 +1965,11 @@ namespace ConditioningControlPanel.Views.Deeper
                             "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
                     }
                 }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
                 if (_videoFullscreenWindow != null)
                 {
                     try { App.Overlay?.SetFullscreenBrowserActive(_videoFullscreenWindow, false); }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                     try { _videoFullscreenWindow.Close(); }
                     catch (Exception ex) { App.Logger?.Debug("EnhancementPlayer: fullscreen window close failed: {Error}", ex.Message); }
                 }
@@ -1977,7 +1977,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 // the fullscreen window was up, so re-seat everything one last time now that the
                 // forced-tick flag is off.
                 try { App.Overlay?.RequestForcedZOrderReassert(); }
-                catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
                 App.Logger?.Information("EnhancementPlayer: exited fullscreen");
             }
             catch (Exception ex)
@@ -1993,7 +1993,7 @@ namespace ConditioningControlPanel.Views.Deeper
                         if (VideoBrowser?.CoreWebView2 != null)
                             VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
                     }
-                    catch { }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _fsTransitionInFlight = false;
             }
@@ -2031,7 +2031,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (Dispatcher.CheckAccess()) IngestActionLine(line);
                 else Dispatcher.BeginInvoke(() => IngestActionLine(line));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void OnHostDiagnostic(string line)
@@ -2041,7 +2041,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (Dispatcher.CheckAccess()) IngestDiagnosticLine(line);
                 else Dispatcher.BeginInvoke(() => IngestDiagnosticLine(line));
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void OnHostLoadFailed(string reason)
@@ -2058,7 +2058,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (Dispatcher.CheckAccess()) Apply();
                 else Dispatcher.BeginInvoke(Apply);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         // -- Cleanup -----------------------------------------------------------
@@ -2074,14 +2074,14 @@ namespace ConditioningControlPanel.Views.Deeper
             // means an early throw (e.g. ScreenMirror NRE) skips _uiTimer.Stop
             // and leaves dead delegates pinned on the App.* singletons. Stop
             // the tick timer first so no UI work is queued onto a dying window.
-            try { _uiTimer?.Stop(); } catch { }
-            try { if (_uiTimer != null) _uiTimer.Tick -= UiTimer_Tick; } catch { }
+            try { _uiTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { if (_uiTimer != null) _uiTimer.Tick -= UiTimer_Tick; } catch (Exception ex) { Diag.Swallowed(ex); }
             _uiTimer = null;
 
             // DispatcherTimer is rooted by the Dispatcher while running; if the
             // banner is mid-display when the window closes, the timer's lambda
             // captures `this` and briefly pins the window until the 6s tick.
-            try { _promotedClearTimer?.Stop(); } catch { }
+            try { _promotedClearTimer?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _promotedClearTimer = null;
 
             // Exit fullscreen synchronously so the reparent-on-Closed lambda
@@ -2089,7 +2089,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // Check the window reference too — a partial prior exit can leave
             // the borderless host alive with the flag already cleared, and
             // skipping cleanup here would orphan it past the player's death.
-            try { if (_isVideoFullscreen || _videoFullscreenWindow != null) ExitVideoFullscreen(); } catch { }
+            try { if (_isVideoFullscreen || _videoFullscreenWindow != null) ExitVideoFullscreen(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Safety net: ExitVideoFullscreen() early-returns while a fullscreen transition
             // is in flight (_fsTransitionInFlight) — and EnterVideoFullscreen pumps the
@@ -2105,29 +2105,29 @@ namespace ConditioningControlPanel.Views.Deeper
                 catch (Exception ex) { App.Logger?.Debug("EnhancementPlayer: forced fullscreen window close failed: {Error}", ex.Message); }
                 _videoFullscreenWindow = null;
                 _isVideoFullscreen = false;
-                try { SafeRestoreVideoBrowserToPane(); } catch { }
+                try { SafeRestoreVideoBrowserToPane(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
 
             try
             {
                 if (_isPlayerDualMonitorActive)
                 {
-                    try { App.ScreenMirror?.DisableMirror(); } catch { }
+                    try { App.ScreenMirror?.DisableMirror(); } catch (Exception ex) { Diag.Swallowed(ex); }
                     _isPlayerDualMonitorActive = false;
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             // Unsubscribe singleton-service events. Each in its own try so a
             // throw on one (e.g. _player already disposed) doesn't strand the
             // others as dead delegates on the app-lifetime singletons.
-            try { _player.Loaded -= OnPlayerLoaded; } catch { }
-            try { _player.Ended -= OnPlayerEnded; } catch { }
-            try { _host.Loaded -= OnHostLoaded; } catch { }
-            try { _host.LoadFailed -= OnHostLoadFailed; } catch { }
-            try { _host.ActionLogged -= OnHostActionLogged; } catch { }
-            try { _host.Diagnostic -= OnHostDiagnostic; } catch { }
-            try { UnsubscribeWebcamStateForButton(); } catch { }
+            try { _player.Loaded -= OnPlayerLoaded; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _player.Ended -= OnPlayerEnded; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _host.Loaded -= OnHostLoaded; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _host.LoadFailed -= OnHostLoadFailed; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _host.ActionLogged -= OnHostActionLogged; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _host.Diagnostic -= OnHostDiagnostic; } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { UnsubscribeWebcamStateForButton(); } catch (Exception ex) { Diag.Swallowed(ex); }
             // If THIS player session turned the webcam on (via the pre-play
             // prompt), turn it off on the way out so we leave the system the
             // way we found it. Webcams the user had running before opening
@@ -2138,8 +2138,8 @@ namespace ConditioningControlPanel.Views.Deeper
                     App.Webcam.Stop();
             }
             catch (Exception ex) { App.Logger?.Debug("Player webcam auto-stop failed: {Error}", ex.Message); }
-            try { UnbindEngineIfRunning(); } catch { }
-            try { _player.Stop(); } catch { }
+            try { UnbindEngineIfRunning(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { _player.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             try
             {
@@ -2151,17 +2151,17 @@ namespace ConditioningControlPanel.Views.Deeper
                 var cw = VideoBrowser?.CoreWebView2;
                 if (cw != null)
                 {
-                    try { cw.NavigationStarting -= OnVideoNavStarting; } catch { }
-                    try { cw.NavigationCompleted -= OnVideoNavCompleted; } catch { }
-                    try { cw.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged; } catch { }
-                    try { cw.WebMessageReceived -= OnVideoWebMessageReceived; } catch { }
+                    try { cw.NavigationStarting -= OnVideoNavStarting; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { cw.NavigationCompleted -= OnVideoNavCompleted; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { cw.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged; } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { cw.WebMessageReceived -= OnVideoWebMessageReceived; } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
-            try { _videoSource?.Dispose(); } catch { }
+            try { _videoSource?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
             _videoSource = null;
-            try { VideoBrowser?.Dispose(); } catch { }
+            try { VideoBrowser?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private static string FormatTime(double seconds)
