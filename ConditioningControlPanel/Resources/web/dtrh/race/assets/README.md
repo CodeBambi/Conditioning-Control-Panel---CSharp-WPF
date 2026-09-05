@@ -81,10 +81,16 @@ on its first and last frame, so a crossfade never inherits a stray arm from the 
 | name | length | loop | what moves |
 |---|---|---|---|
 | `idle` | 4.0 s | yes, seamless | one breath on root scale/position, lazy weight shift, antenna sway a beat behind, bead pulse |
-| `wave` | 2.0 s | no | shoulderR flies up with overshoot, four waggles, comes down; antenna perks, bead swells |
+| `wave` | 2.0 s | no | shoulderR swings out and up about the forward axis, a little back, thumb to the camera, the arm stretching 2x and the shoulder shrugging 9 cm up the case side so the hand rises above the case top; four waggles above and beside the top corner; comes down. Antenna perks, bead swells |
 | `hop` | 1.6 s | no | anticipation squash, launch stretch, apex, landing squash with overshoot; antenna whips, arms flare, toes point |
-| `peek` | 2.0 s | no | root tilts toward the camera with a curious roll, holds a beat, antenna leans in after, settles |
-| `drum` | 2.4 s | no | both hands tap an invisible rim in front of her in alternation, she rocks toward each hit, antenna nods |
+| `peek` | 2.0 s | no | root tilts 16 degrees toward the camera with a curious roll and leans in 5 cm, holds a beat, antenna leans in after, settles |
+| `drum` | 2.4 s | no | both hands, held out clear of the case sides, tap an invisible rim in front of her in alternation; she rocks toward each hit, antenna nods |
+
+Every clip is checked from the character-select camera, glTF (0, 0.9, 3.2) looking at
+(0, 0.55, 0): `verify_glb.py --cam menu` (the default) renders the stills from it. The
+shoulder pivot sits at 0.49 m and the arm reaches 0.29 m, so a rotation alone tops out at
+0.78 m; the wave gets the hand above the 1.0 m case top with a 2x cartoon stretch along the
+arm and a 9 cm shrug of the shoulder (`WAVE_STRETCH`, `WAVE_LIFT` in `export_glb.py`).
 
 No face frame is baked into any clip; the runtime picks one (the character-select menu, the
 race moods). The old `MOODS` table in `race/emi.js` drove antenna pivots directly; the same
@@ -102,4 +108,5 @@ The mirror of those scripts lives in `tools/blender/emi/` (`build_hs.py --game 1
 Blender 5.2.1 portable at `C:\Tools\blender\`, Python with Pillow + fontTools for the atlas.
 Launch the .cmd detached (Blender hangs a foreground shell) and poll the log for `ALLDONE`.
 `verify_glb.py` prints the node list, animation lengths, triangle count, bounding box and the
-glass UV range, then renders the turntable and one still per clip into `out/verify/`.
+glass UV range, then renders the turntable (studio angle) and one still per clip (menu camera) into
+`out/verify/`.

@@ -8,7 +8,7 @@
 # button; meshes EMI_case, EMI_glass; material 'outline' = the inverted hull. Keys land on the
 # pivots and the root only. No face frame is baked; the runtime slides the atlas.
 import bpy, math, os, sys, shutil
-from mathutils import Vector
+from mathutils import Vector, Matrix, Euler
 
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 def arg(name, default=None):
@@ -62,8 +62,8 @@ def rest(frame):
     key('ant1', frame, rot=(0, 0, 0))
     key('ant2', frame, rot=(0, 0, 0))
     key('ballpiv', frame, scale=(1, 1, 1))
-    key('shoulderL', frame, rot=(0, 0, 0))
-    key('shoulderR', frame, rot=(0, 0, 0))
+    key('shoulderL', frame, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1))
+    key('shoulderR', frame, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1))
     key('footL', frame, rot=(0, 0, 0))
     key('footR', frame, rot=(0, 0, 0))
 
@@ -98,6 +98,23 @@ def sh(frame, l=None, r=None):
     if r is not None:
         key('shoulderR', frame, rot=r)
 
+_arm_prev = {}
+def arm(side, frame, out, back=0.0, twist=0.0, stretch=1.0, lift=0.0):
+    """One arm as out (degrees from hanging, swung outward about the forward axis), back (degrees
+    swung behind her), twist (degrees about the arm's own axis, + turns the thumb toward the
+    camera), stretch (cartoon scale along the arm) and lift (metres the shoulder shrugs up the
+    case side). Composed as back * out * twist and handed to key() as an XYZ Euler picked nearest
+    the previous key so the curve never wraps."""
+    sx = 1 if side == 'R' else -1
+    m = (Matrix.Rotation(math.radians(back), 3, 'X') @ Matrix.Rotation(math.radians(-sx * out), 3, 'Y')
+         @ Matrix.Rotation(math.radians(sx * twist), 3, 'Z'))
+    name = 'shoulder' + side
+    prev = _arm_prev.get(name) or Euler(REST[name][1], 'XYZ')
+    e = m.to_euler('XYZ', prev)
+    _arm_prev[name] = e
+    key(name, frame, loc=(0, 0, lift), rot=[math.degrees(e[i] - REST[name][1][i]) for i in range(3)],
+        scale=(1, 1, stretch))
+
 # ---------------------------------------------------------------- idle: 4.0 s seamless loop
 # one breath per loop (Law III: the one breath on screen), a lazy weight shift, the antenna
 # swaying a beat behind, the bead pulsing once. Ends equal the start with flat tangents.
@@ -115,25 +132,37 @@ sh(L / 2, (0, 1.5, 0))
 end_clip(act, L)
 
 # ---------------------------------------------------------------- wave: 2.0 s
-# the right-hand-side arm (shoulderR, +X) flies up with a little overshoot, four waggles, comes
-# down; she leans into it, the antenna perks back and the bead swells.
+# the right-hand-side arm (shoulderR, +X) swings OUT and UP beside the case about the forward
+# axis, a little back, thumb turned to the camera; four waggles with the hand above the case's
+# top corner; comes down. She leans into it, the antenna perks back and the bead swells.
+# The shoulder pivot sits at 0.49 m and the arm reaches 0.29 m, so a rotation alone tops out
+# at 0.78 m against the 1.0 m case top. The hand gets above the case by a cartoon stretch
+# along the arm (WAVE_STRETCH) and a shrug of the shoulder up the case side (WAVE_LIFT): at
+# 165 degrees out the hand bottom meets the case top line and the waggle sweeps the mitten
+# above and beside the corner. Both are single constants to dial.
+WAVE_STRETCH, WAVE_LIFT = 2.0, 0.09
 act = begin_clip('wave')
 L = 2.0 * FPS
 rest(0); rest(L)
-key('shoulderR', 8, rot=(0, -144, 0))
-key('shoulderR', 12, rot=(0, -136, 0))
-key('shoulderR', 16, rot=(-6, -124, 0)); key('shoulderR', 21, rot=(6, -148, 0))
-key('shoulderR', 26, rot=(-6, -124, 0)); key('shoulderR', 31, rot=(6, -148, 0))
-key('shoulderR', 36, rot=(0, -126, 0)); key('shoulderR', 42, rot=(0, -136, 0))
-key('shoulderR', 52, rot=(0, -20, 0))
-key('shoulderL', 12, rot=(0, 8, 0)); key('shoulderL', 42, rot=(0, 8, 0))
+_arm_prev.clear()
+arm('R', 5, out=6, back=-8, stretch=0.94)                                    # anticipation: a dip inward
+arm('R', 11, out=172, back=12, twist=60, stretch=WAVE_STRETCH * 1.06, lift=WAVE_LIFT * 1.15)   # fly-up, overshoot
+arm('R', 15, out=160, back=10, twist=60, stretch=WAVE_STRETCH, lift=WAVE_LIFT)
+arm('R', 20, out=178, back=10, twist=60, stretch=WAVE_STRETCH, lift=WAVE_LIFT)   # waggle above the corner
+arm('R', 25, out=148, back=10, twist=60, stretch=WAVE_STRETCH, lift=WAVE_LIFT)
+arm('R', 30, out=178, back=10, twist=60, stretch=WAVE_STRETCH, lift=WAVE_LIFT)
+arm('R', 35, out=148, back=10, twist=60, stretch=WAVE_STRETCH, lift=WAVE_LIFT)
+arm('R', 40, out=168, back=10, twist=60, stretch=WAVE_STRETCH, lift=WAVE_LIFT)
+arm('R', 46, out=148, back=6, twist=40, stretch=1.5, lift=WAVE_LIFT * 0.5)
+arm('R', 54, out=30, back=0, twist=6, stretch=1.0, lift=0.0)                 # down
+key('shoulderL', 12, rot=(0, 10, 0)); key('shoulderL', 42, rot=(0, 10, 0))
 key('ant0', 10, rot=(-16, 0, 0), scale=(1, 1, 1.10)); key('ant0', 40, rot=(-14, 0, 0), scale=(1, 1, 1.08))
 key('ant1', 12, rot=(-10, 0, 0)); key('ant1', 42, rot=(-8, 0, 0))
 key('ant2', 14, rot=(-6, 0, 0)); key('ant2', 44, rot=(-5, 0, 0))
 key('ballpiv', 12, scale=(1.15, 1.15, 1.15)); key('ballpiv', 40, scale=(1.10, 1.10, 1.10))
 key('EMI_root', 6, loc=(0, 0, 0.02), scale=(1.02, 1.02, 0.97))
-key('EMI_root', 12, loc=(0, 0, 0), scale=(1, 1, 1), rot=(0, 4, 0))
-key('EMI_root', 44, rot=(0, 3, 0))
+key('EMI_root', 12, loc=(0, 0, 0), scale=(1, 1, 1), rot=(0, 5, 0))
+key('EMI_root', 44, rot=(0, 4, 0))
 end_clip(act, L)
 
 # ---------------------------------------------------------------- hop: 1.6 s
@@ -169,9 +198,9 @@ end_clip(act, L)
 act = begin_clip('peek')
 L = 2.0 * FPS
 rest(0); rest(L)
-key('EMI_root', 14, rot=(13, 5, 0), loc=(0, -0.03, -0.01))
-key('EMI_root', 22, rot=(11, 6, 0))
-key('EMI_root', 38, rot=(11, 6, 0), loc=(0, -0.03, -0.01))
+key('EMI_root', 14, rot=(16, 7, 0), loc=(0, -0.05, -0.012))
+key('EMI_root', 22, rot=(14, 8, 0))
+key('EMI_root', 38, rot=(14, 8, 0), loc=(0, -0.05, -0.012))
 key('EMI_root', 50, rot=(-2, -1, 0), loc=(0, 0.004, 0))
 key('ant0', 18, rot=(22, 0, 0), scale=(1, 1, 1.06)); key('ant0', 40, rot=(18, 0, 0), scale=(1, 1, 1.04)); key('ant0', 52, rot=(-4, 0, 0), scale=(1, 1, 1))
 key('ant1', 21, rot=(16, 3, 0)); key('ant1', 42, rot=(12, 3, 0)); key('ant1', 54, rot=(-3, 0, 0))
@@ -186,10 +215,10 @@ end_clip(act, L)
 act = begin_clip('drum')
 L = 2.4 * FPS
 rest(0); rest(L)
-UP, HIT, RAISE = -66, -52, -74
+UP, HIT, RAISE = -70, -58, -78
 hitsL = [12, 24, 36, 48, 60]
 hitsR = [18, 30, 42, 54, 66]
-for side, hits, y in (('shoulderL', hitsL, 8), ('shoulderR', hitsR, -8)):
+for side, hits, y in (('shoulderL', hitsL, 24), ('shoulderR', hitsR, -24)):
     key(side, 8, rot=(UP, y, 0))
     for h in hits:
         key(side, h, rot=(HIT, y, 0))

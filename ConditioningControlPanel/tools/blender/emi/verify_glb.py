@@ -17,6 +17,7 @@ OUT = arg('--out', os.path.join(os.path.dirname(os.path.abspath(GLB or '.')), 'v
 RES = int(arg('--res', '768')); PIX = int(arg('--pix', '5')); FRAMES = int(arg('--frames', '48'))
 STILL = int(arg('--still', '1024')); STILLPIX = int(arg('--stillpix', '6'))
 FPS = int(arg('--fps', '30')); NORENDER = arg('--norender', '0') == '1'
+CAM = arg('--cam', 'menu')        # stills: 'menu' = the race's character-select camera, 'studio' = the approved angle
 if not GLB:
     raise SystemExit('usage: verify_glb.py -- --glb X.glb --out DIR')
 os.makedirs(OUT, exist_ok=True)
@@ -39,7 +40,7 @@ missing = [n for n in CONTRACT if n not in bpy.data.objects]
 print('CONTRACT_NODES', 'OK' if not missing else 'MISSING %s' % missing)
 print('CONTRACT_MATERIAL_outline', 'OK' if 'outline' in bpy.data.materials else 'MISSING',
       sorted(m.name for m in bpy.data.materials))
-STRAY = [n for n in ('cutter', 'floor', 'target', 'cam', 'key', 'fill', 'rim', 'glow') if n in bpy.data.objects]
+STRAY = [n for n in ('cutter', 'floor', 'target', 'cam', 'mcam', 'mtarget', 'key', 'fill', 'rim', 'glow') if n in bpy.data.objects]
 print('STRAY_NODES', STRAY or 'none')
 
 def chain(o):
@@ -165,6 +166,15 @@ cam = bpy.data.objects.new('cam', cam_d); cam.location = studio_pos(0, -16.8, 4.
 scene.collection.objects.link(cam)
 c = cam.constraints.new('TRACK_TO'); c.target = target; c.track_axis = 'TRACK_NEGATIVE_Z'; c.up_axis = 'UP_Y'
 scene.camera = cam
+# The race's menu camera: glTF (0, 0.9, 3.2) looking at (0, 0.55, 0), straight on and a little
+# above eye line, here in Blender axes with a 40 degree vertical field of view.
+mtarget = bpy.data.objects.new('mtarget', None); scene.collection.objects.link(mtarget)
+mtarget.location = (0, 0, 0.55)
+mcam_d = bpy.data.cameras.new('mcam'); mcam_d.sensor_fit = 'VERTICAL'; mcam_d.lens_unit = 'FOV'
+mcam_d.angle = math.radians(40)
+mcam = bpy.data.objects.new('mcam', mcam_d); mcam.location = (0, -3.2, 0.9)
+scene.collection.objects.link(mcam)
+c = mcam.constraints.new('TRACK_TO'); c.target = mtarget; c.track_axis = 'TRACK_NEGATIVE_Z'; c.up_axis = 'UP_Y'
 
 def solo(clip):
     """Play one imported clip: its NLA track alone, everything else muted, no active action."""
@@ -196,19 +206,24 @@ def render(path, res, pix):
     bpy.ops.render.render(write_still=True)
     print('RENDERED', path, flush=True)
 
-# stills: clip, its most expressive frame, the atlas frame, rig yaw, camera lift (m).
-# -28 is the approved emi_hs_idle.png angle; the wave turns the other way so the waving arm
-# (shoulderR, at +X) faces the camera, and the hop lifts the frame so the bead stays in shot.
-STILLS = [('idle', 60, 0, -28, 0.0), ('wave', 21, 1, 28, 0.0), ('hop', 22, 2, -28, 0.14),
+# stills: clip, its most expressive frame, the atlas frame, studio rig yaw, studio camera lift (m).
+# With --cam menu (the default) every still comes from the fixed menu camera at rig yaw 0, which
+# is the view the clips must read from. With --cam studio, -28 is the approved emi_hs_idle.png
+# angle; the wave turns the other way so the waving arm (shoulderR, +X) faces the camera, and
+# the hop lifts the frame so the bead stays in shot.
+STILLS = [('idle', 60, 0, -28, 0.0), ('wave', 22, 1, 28, 0.0), ('hop', 22, 2, -28, 0.14),
           ('peek', 22, 3, -28, 0.0), ('drum', 24, 4, -28, 0.0)]
 cam_home, target_home = cam.location.copy(), target.location.copy()
 for clip, frame, face, yaw, lift in STILLS:
     solo(clip); face_frame(face)
-    rig.rotation_euler = (0, 0, math.radians(yaw))
-    cam.location = cam_home + Vector((0, 0, lift)); target.location = target_home + Vector((0, 0, lift))
+    if CAM == 'menu':
+        scene.camera = mcam; rig.rotation_euler = (0, 0, 0)
+    else:
+        scene.camera = cam; rig.rotation_euler = (0, 0, math.radians(yaw))
+        cam.location = cam_home + Vector((0, 0, lift)); target.location = target_home + Vector((0, 0, lift))
     scene.frame_set(frame)
     render(os.path.join(OUT, 'emi_game_%s.png' % clip), STILL, STILLPIX)
-cam.location, target.location = cam_home, target_home
+scene.camera = cam; cam.location, target.location = cam_home, target_home
 
 # turntable: idle plays, atlas frame 0, the rig turns a full circle the way the approved one did
 solo('idle'); face_frame(0)
