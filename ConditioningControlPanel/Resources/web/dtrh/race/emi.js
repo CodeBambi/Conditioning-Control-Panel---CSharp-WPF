@@ -19,7 +19,7 @@
 // the pack lands. Needs feat/race-b4-props-glb underneath for the file itself.
 
 import * as THREE from 'three';
-import { loadPack, setFace as packSetFace, preparePixel, flattenRig, FACES } from './gltf.js';
+import { loadPack, setFace as packSetFace, preparePixel, flattenRig, faceFrames } from './gltf.js';
 import { createPoseLayer } from './emiPoses.js';
 import { SAUCER_R } from './consts.js';
 
@@ -301,15 +301,15 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   function setFaceFrame(i) {
     if (!G) return false;
     if (packSetFace(G.root, i)) return true;
-    const n = Math.min(FACES.length - 1, Math.max(0, i | 0));
     let hit = false;
     for (const m of G.glassMats) {
       const tex = m && m.emissiveMap;
       if (!tex) continue;
+      const n = faceFrames(tex);          // the strip that loaded, not the one the glb shipped
       tex.wrapS = THREE.RepeatWrapping;
       tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
       tex.generateMipmaps = false;
-      tex.offset.x = n / FACES.length;
+      tex.offset.x = Math.min(n - 1, Math.max(0, i | 0)) / n;
       tex.needsUpdate = true; hit = true;
     }
     return hit;

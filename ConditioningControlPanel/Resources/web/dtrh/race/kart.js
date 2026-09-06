@@ -126,7 +126,7 @@ function makeTierSparks(scene, n) {
  * kart.camera(out)                out = { pos: Vector3, look: Vector3, up?: Vector3, roll: number }
  * kart.emiModel()                 the mounted EMI glb root, or null while it is still loading
  * kart.emiReady(cb)               cb(root) once she is mounted (immediately if she already is)
- * kart.setFace(i)                 atlas frame 0..4 on the glass (menus and results; unseen in race)
+ * kart.setFace(i)                 atlas frame 0..6 on the glass (menus and results; unseen in race)
  * kart.pose(name, opts)           the pose layer (race/emiPoses.js)
  * `pixel` is race/pixel.js, passed down so the glb's textures join the pixel pass on arrival.
  */
