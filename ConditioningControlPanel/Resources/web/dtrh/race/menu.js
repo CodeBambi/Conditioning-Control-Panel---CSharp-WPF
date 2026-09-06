@@ -355,6 +355,8 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const el = (tag, cls, parent, text) => { const d = document.createElement(tag); d.className = cls; if (text != null) d.textContent = text; parent.appendChild(d); return d; };
   const hit = (node, cls) => { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); };
   const canLevels = !!(audio && typeof audio.setLevels === 'function');
+  const ui = (n, v) => { try { if (audio && audio.ui) audio.ui(n, v); } catch (e) { /* audio gone */ } };   // the menu blips (race/audio.js)
+  const theme = (on) => { try { if (audio && audio.menu) audio.menu(on); } catch (e) { /* audio gone */ } };
 
   const layer = el('div', 'rm-root', root); layer.hidden = true; layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-label', 'racing thoughts');
   const col = el('div', 'rm-col', layer);
@@ -389,8 +391,8 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   function setPixel(n) { pixel.setBlock(n); pixel.retexture(stage.scene); options.pixel = pixel.block; }
   const ROWS = [
     { id: 'pixel', label: 'pixel block', get: () => (pixel.block ? `${pixel.block} px` : 'off'), move: (d) => setPixel(cyc(PIXEL_STEPS, pixel.block, d)) },
-    { id: 'music', label: 'music', get: () => pct(options.music), move: (d) => step('music', d * 0.1), dim: !canLevels, hint: 'wired in the audio pass' },
-    { id: 'sfx', label: 'sfx', get: () => pct(options.sfx), move: (d) => step('sfx', d * 0.1), dim: !canLevels, hint: 'wired in the audio pass' },
+    { id: 'music', label: 'music', get: () => pct(options.music), move: (d) => step('music', d * 0.1), dim: !canLevels },
+    { id: 'sfx', label: 'sfx', get: () => pct(options.sfx), move: (d) => step('sfx', d * 0.1), dim: !canLevels },
     { id: 'motion', label: 'reduced motion', get: () => options.motion, move: (d) => { options.motion = cyc(MOTIONS, options.motion, d); stage.setReduced(reduced()); layer.dataset.motion = options.motion; }, hint: 'stage and intro now, the run on the next launch' },
     { id: 'seed', label: 'seed', get: () => (options.seed === 'custom' ? `custom ${options.seedValue}` : options.seed), move: (d) => { options.seed = cyc(SEEDS, options.seed, d); seedIn.hidden = options.seed !== 'custom'; }, press: () => { if (options.seed === 'custom') seedIn.focus(); } },
     { id: 'back', label: 'back', get: () => '', press: () => open('main') },
@@ -414,7 +416,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
     b.addEventListener('click', () => { idx.main = i; act('press'); });
-    b.addEventListener('pointerenter', () => { idx.main = i; refresh(); });
+    b.addEventListener('pointerenter', () => { idx.main = i; ui('tick'); refresh(); });
     return b;
   });
   const verbEl = (id) => verbEls[VERBS.findIndex(([v]) => v === id)];
@@ -458,7 +460,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   let panel = 'main', shown = false, disposed = false, viewHeld = false;
   const idx = { main: 0, options: 0 };
   function open(p) { panel = p; list.hidden = p !== 'main'; optPanel.hidden = p !== 'options'; howPanel.hidden = p !== 'how'; if (p === 'options') idx.options = 0; refresh(); if (p !== 'options') seedIn.blur(); }
-  function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); refresh(); }
+  function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); ui('tick'); refresh(); }
   function refresh() {
     verbEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'main' && i === idx.main));
     ROWS.forEach((r, i) => { const v = r.get(); if (r.valEl.textContent !== v) r.valEl.textContent = v; rowEls[i].classList.toggle('is-focus', panel === 'options' && i === idx.options); });
@@ -467,20 +469,20 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   function act(what) {
     if (!shown || disposed) return;
     if (panel === 'main') {
-      if (what === 'up' || what === 'down') { idx.main = stepVerb(idx.main, what === 'up' ? -1 : 1); refresh(); return; }
+      if (what === 'up' || what === 'down') { idx.main = stepVerb(idx.main, what === 'up' ? -1 : 1); ui('tick'); refresh(); return; }
       if (what !== 'press') return;
       const id = VERBS[idx.main][0];
       if (verbEls[idx.main].hidden) return;
-      hit(verbEls[idx.main], 'is-hit');
+      hit(verbEls[idx.main], 'is-hit'); ui('pick');
       if (id === 'options' || id === 'how') open(id); else pick(id);
       return;
     }
-    if (what === 'back') { open('main'); return; }
+    if (what === 'back') { ui('back'); open('main'); return; }
     if (panel === 'how') { if (what === 'press') open('main'); return; }
     const r = ROWS[idx.options];
     if (what === 'up' || what === 'down') { focusRow(idx.options + (what === 'up' ? -1 : 1)); return; }
-    if ((what === 'left' || what === 'right') && r.move) { r.move(what === 'left' ? -1 : 1); hit(rowEls[idx.options], 'is-hit'); }
-    else if (what === 'press') { if (r.press) r.press(); else if (r.move) r.move(1); hit(rowEls[idx.options], 'is-hit'); }
+    if ((what === 'left' || what === 'right') && r.move) { r.move(what === 'left' ? -1 : 1); ui('step', r.id === 'music' || r.id === 'sfx' ? options[r.id] : 0.5); hit(rowEls[idx.options], 'is-hit'); }
+    else if (what === 'press') { if (r.press) r.press(); else if (r.move) r.move(1); ui(r.id === 'back' ? 'back' : 'pick'); hit(rowEls[idx.options], 'is-hit'); }
     saveOptions(options); refresh();
   }
   const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Enter: 'press', Space: 'press', Escape: 'back', Backspace: 'back' };
@@ -516,7 +518,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     options, stage: { update(dt) { if (shown) pollPad(dt); stage.update(dt); }, render: stage.render, dispose: stage.dispose, live: stage },
     onPick(cb) { if (typeof cb === 'function') picks.push(cb); },
     setTrack, get track() { return trackState; },
-    show() { shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu'); open('main'); onResize(); hit(layer, 'is-in'); },
+    show() { shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu'); open('main'); onResize(); hit(layer, 'is-in'); theme(true); },
     hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); },
     /** Park the stage the way the column parks it, with the menu hidden: race/cards.js uses the same
      *  layout, so hide() sending her back to the middle of the frame would only be a jump and a jump
