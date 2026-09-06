@@ -338,7 +338,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   // ---- how to drive ----
   el('h3', 'rm-h', howPanel, 'how to drive');
-  for (const [k, v] of [['arrows / wasd', 'steer, throttle, brake'], ['shift', 'drift (hold, let go for turbo)'], ['e', 'use the item'], ['p', 'pixel look'], ['m', 'mute'], ['esc', 'the brake'], ['pad', 'stick steers, rt goes, a drifts, x item, start brakes']]) {
+  for (const [k, v] of [['arrows / wasd', 'steer, throttle, brake'], ['shift', 'drift (hold, let go for turbo)'], ['space', 'jump (time it at a ramp for big air)'], ['e', 'use the item'], ['p', 'pixel look'], ['m', 'mute'], ['esc', 'the brake'], ['pad', 'stick steers, rt goes, a drifts, b jumps, x item, start brakes']]) {
     const row = el('div', 'rm-key', howPanel); el('kbd', '', row, k); el('span', '', row, v);
   }
   el('div', 'rm-hint', howPanel, 'nothing is lost. you cannot fail. esc or enter goes back.');

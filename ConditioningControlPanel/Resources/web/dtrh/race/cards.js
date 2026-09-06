@@ -46,7 +46,7 @@ export const CARDS = [
   },
   {
     head: 'the road',
-    line: 'the road is built from your own pictures. steer with the arrows, drift with shift, pop what you can reach. nothing here can be lost. it can only be missed.',
+    line: 'the road is built from your own pictures. steer with the arrows, drift with shift, jump with space, pop what you can reach. nothing here can be lost. it can only be missed.',
   },
   {
     head: 'the track',

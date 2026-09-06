@@ -105,7 +105,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
     flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: 72, fovBoost: 0, gates: 0, room: null,
-    wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
+    wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
     trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,
   };
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
@@ -168,7 +168,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function resetRunState(runSeed) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
       jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
-      wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
+      wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
       trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     setFlip(false); trailClear();
     mix.reset(); S.wobble = 0; clearMixChrome();
@@ -414,6 +414,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'landing': w.kart.pose(e.clean ? 'landing' : 'landingKerb'); if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost'); if (e.clean) sfx('surface', 0.5); } break;
       case 'inverted': w.score.setInverted(e.on); w.kart.pose(e.on ? 'tuck' : 'cruise'); if (e.on) { hud.toast('upside down', 'effect'); poke('shock', 0.8); } break;
       case 'lap': { const r = w.score.lap(e.sec); hud.toast(`lap ${r.text}`, 'item'); if (r.pb && r.prevBest > 0) { hud.toast('pb!', 'jackpot'); sfx('pb_fanfare', 0.9); poke('jackpot', 1.5); w.kart.pose('cheer'); } break; }
+      case 'jump': w.kart.pose('air', { hold: e.big ? 0.7 : 0.3 }); if (e.big) { hud.toast('big air', 'pop'); sfx('tunnel_powerup_collect', 0.6); poke('streamed', 0.9); } break;
       case 'split': w.score.pace(e.frac, e.sec); break;
     }
   }
@@ -460,7 +461,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2 && w.dresser.breakItemBox(f)) { shake.shake(0.2, 120); if (w.items.roll(w.score.state.mult)) sfx('ui_click', 0.5); }
       else if (f.type === 'gate') enterRoom(w, ts && ts.act ? ts.act.room : f.room, ts && ts.act ? ts.act.name : null);
     }
-    if (S.wasAirborne && !ks.airborne) { shake.shake(0.8, 300); poke('smug', 0.7); }
+    if (ks.airborne) S.airH = Math.max(S.airH, ks.h);
+    if (S.wasAirborne && !ks.airborne) {                        // the jolt is the flight's: a 1.1 m jump is not a ramp
+      shake.shake(0.8 * clamp(S.airH / 2.5, 0.3, 1), 300); poke('smug', 0.7); S.airH = 0;
+    }
     S.wasAirborne = ks.airborne;
     for (const n of w.score.drainNotes()) { hud.toast(n.text, n.kind); if (n.mood) poke(n.mood, 1.2); if (n.sfx) sfx(n.sfx, 0.9); }   // upside down, full circle, hot lap
 
@@ -576,6 +580,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (S.started || S.disposed) return;
     if (!W) W = build(S.seed);
     S.started = true; S.running = true; S.ended = false;
+    input.flush();          // a space that closed the last introduction card is not a jump on frame one
     S.bestAtStart = W.score.state.best;
     camOverride = null;
     S.room = W.dresser.applyRoom(W.fx, W.layout.roomAtDepth(0), 0.2);   // the gate 9 m in shows the banner

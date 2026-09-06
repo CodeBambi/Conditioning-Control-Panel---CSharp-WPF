@@ -9,6 +9,7 @@
 //   { type:'driftBoost', tier, sec }  drift released with a charge: that many seconds of boost
 //   { type:'scrub', sec }             the road edge has been scrubbed for WALL_SCRUB_SEC (speed eases off a touch)
 //   { type:'trick', name, points, streak }   a ramp trick was thrown (one per launch): 'spin left' | 'spin right' | 'backflip'
+//   { type:'jump', big }             the jump key: a hop of the kart's own. big = the press took a ramp lip with it
 //   { type:'landing', clean, trick, streak } touched down; clean = not on the kerb; a clean trick landing boosts
 //   { type:'inverted', on }           roll past 120 degrees (inside THE BIG WHEEL) began / ended; state.inverted mirrors it
 //   { type:'lap', lap, sec }          the Tea Garden gate crossed again: a timed lap (the first crossing only starts the clock)
@@ -48,6 +49,14 @@ const DRIFT_SNAP = 1.6;       // m/s of counter-steer kick when a drift lets go 
 const WALL_SOFT = 0.7;        // metres from the road edge where the soft wall starts easing you back
 const WALL_SCRUB_MULT = 0.9;  // speed target while scrubbing the edge past WALL_SCRUB_SEC; the floor still holds
 const HOP_SEC = 0.28, HOP_H = 0.3;      // the drift-press hop: cosmetic, the pop box never leaves the road
+// The jump key (space / pad B, race/input.js). Unlike the drift hop this is real height: state.h
+// rises, so the pop box rises with it and anything hung in the air is reachable.
+const JUMP_H = 1.1;                     // metres. A ramp launches 3..4, so the jump reads clearly smaller
+const JUMP_RAMP_M = 4;                  // press within this many metres of a ramp lip and that launch is boosted
+const JUMP_RAMP_SEC = 0.12;             // ...or this soon after the lip already fired
+const JUMP_RAMP_SCALE = 1.3;            // the boosted launch goes this much higher
+const JUMP_RAMP_BOOST = 0.5;            // seconds of speed that come with it
+const JUMP_ARM_SEC = 0.35;              // how long a press stays armed for the lip it was aimed at
 const TRICK_SEC = 0.62;                 // one full rotation of the cup (spin about up, backflip about right)
 const TRICK_POINTS = { spin: 150, flip: 250 };
 const TRICK_STREAK_MAX = 4;             // consecutive clean trick landings scale trick points by 1 + 0.5 * streak
@@ -147,6 +156,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   let vx = 0, lean = 0, pitch = 0, elapsed = 0, lastRampD = -1, driftSide = 1, camReady = false, camX = 0, camH = 0;
   let camBoost = 0, steerS = 0, hopT = 0, scrubSec = 0, sparkAcc = 0, driftWas = false;
   let airWas = false, steerWas = 0, trickArmed = false, trickKind = null, trickDir = 1, trickT = 1;
+  let jumpArm = 0, jumpPending = false, jumpBoostD = -1, launchT = -1e4;
   let gateLay = null, gateD = 0, lapTimed = false, lapMark = 0;
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
   const ctx = { t: 0, up: _up, right: _right, tangent: _fwd, speedNorm: 0, airborne: false, steerVel: 0, drift: false, driftSide: 1, driftTier: 0, lean: 0 };
@@ -162,9 +172,52 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   function launch(ramp) {
     const height = Math.max(0.5, +ramp.height || 2.4);
     const scale = clamp(state.speed / KART_BASE_SPEED, 0.7, 1.3);   // faster = higher, never a fail
-    state.vh = Math.sqrt(2 * GRAVITY * height * scale);
+    // a jump press aimed at this lip (stepJump armed it) takes the launch up a third, once per ramp
+    const big = jumpArm > 0 && Math.abs(ramp.d - jumpBoostD) > 0.01;
+    state.vh = Math.sqrt(2 * GRAVITY * height * scale * (big ? JUMP_RAMP_SCALE : 1));
     state.airborne = true;
     lastRampD = ramp.d;
+    launchT = elapsed;
+    if (big) {
+      jumpBoostD = ramp.d; jumpArm = 0; jumpPending = false;
+      applyBoost(JUMP_RAMP_BOOST);
+      emit({ type: 'jump', big: true });
+    }
+  }
+
+  /** The next ramp lip within `m` metres down the road, or null. */
+  function rampAhead(lay, m) {
+    const feats = lay && lay.featuresBetween ? lay.featuresBetween(state.d, state.d + m) : null;
+    if (feats) for (const f of feats) if (f.type === 'ramp') return f;
+    return null;
+  }
+
+  /** The jump key. input.jump is one frame per press (race/input.js), so this fires once. On the road
+   *  it is a hop of the kart's own; aimed at a ramp lip, or thrown in the moment after one fired, it
+   *  takes that launch higher and adds a little speed instead. Tricks arm the same way a ramp arms
+   *  them, so a drift press mid-jump still backflips. There is no fail state: a mistimed press is a
+   *  plain jump, or a plain ramp launch, and never nothing. */
+  function stepJump(dt, inp, lay) {
+    if (jumpArm > 0) {
+      jumpArm = Math.max(0, jumpArm - dt);
+      if (jumpArm === 0 && jumpPending) { jumpPending = false; emit({ type: 'jump', big: false }); }
+    }
+    if (!inp.jump) return;
+    if (state.airborne) {                                            // no double jump
+      if (elapsed - launchT <= JUMP_RAMP_SEC && Math.abs(lastRampD - jumpBoostD) > 0.01) {
+        state.vh *= Math.sqrt(JUMP_RAMP_SCALE);
+        jumpBoostD = lastRampD; jumpArm = 0; jumpPending = false;
+        applyBoost(JUMP_RAMP_BOOST);
+        emit({ type: 'jump', big: true });
+      }
+      return;
+    }
+    state.vh = Math.sqrt(2 * GRAVITY * JUMP_H);
+    state.airborne = true;
+    const near = rampAhead(lay, JUMP_RAMP_M);
+    // the hop happens either way; the lip, if it comes, launches boosted out of it (stepRamps)
+    if (near && Math.abs(near.d - jumpBoostD) > 0.01) { jumpArm = JUMP_ARM_SEC; jumpPending = true; }
+    else emit({ type: 'jump', big: false });
   }
 
   function stepSpeed(dt, input) {
@@ -242,9 +295,10 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   }
 
   function stepRamps(dt, lay, prevD) {
-    if (!state.airborne) {
+    // an armed jump press still takes the lip: the hop it just made must not swallow the launch
+    if (!state.airborne || jumpArm > 0) {
       const here = lay.rampAt ? lay.rampAt(state.d) : null;
-      if (!here) lastRampD = -1;                                        // past the air line: re-arm for next lap
+      if (!here && !state.airborne) lastRampD = -1;                     // past the air line: re-arm for next lap
       let hit = null;
       const feats = lay.featuresBetween ? lay.featuresBetween(prevD, state.d) : null;
       if (feats) for (const f of feats) if (f.type === 'ramp' && Math.abs(f.d - lastRampD) > 0.01) { hit = f; break; }
@@ -398,7 +452,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     lay = lay || layout;
     dt = clamp(+dt || 0, 0, 0.1);
     input = input || {};
-    const inp = { steer: +input.steer || 0, accel: clamp(+input.accel || 0, 0, 1), brake: clamp(+input.brake || 0, 0, 1), drift: !!input.drift };
+    const inp = { steer: +input.steer || 0, accel: clamp(+input.accel || 0, 0, 1), brake: clamp(+input.brake || 0, 0, 1), drift: !!input.drift, jump: !!input.jump };
     elapsed += dt;
     if (pulse > 0) pulse = Math.max(0, pulse - pulse * ease(7, dt) - 0.2 * dt);
     const driftPress = inp.drift && !driftWas;
@@ -409,6 +463,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     if (d >= lay.totalDepth) state.lap += 1;
     d = lay.wrap(d);
     state.d = d;
+    stepJump(dt, inp, lay);
     stepRamps(dt, lay, prevD);
     stepTricks(dt, inp, driftPress);
     stepLaps(dt, lay, prevD);
