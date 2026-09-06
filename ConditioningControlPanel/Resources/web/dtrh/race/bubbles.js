@@ -9,7 +9,8 @@
  * wobbles), rain (falls from the ceiling, rests, fizzles). Pops are pass-
  * through against the kart box; a pop plays the DtRH pop/chime in-page
  * (engine/audioBus) and throws a few sparkle shards, the WPF BubbleService way.
- * Sprite textures come from the two locally mapped hosts (never remote media).
+ * Sprite textures come from the two locally mapped hosts (never remote media). Every sprite
+ * (bubbles and shards) sits on pixel.js's CRISP_LAYER: full resolution over the blocky world.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -17,6 +18,7 @@ import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, TREATS
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
 import { makeSfxPlayer } from '../engine/audioBus.js';
 import { getLevel } from '../engine/audioLevels.js';
+import { CRISP_LAYER } from './pixel.js';
 
 export { BUBBLE_KINDS };
 
@@ -28,10 +30,11 @@ const BURST_SFX = 'Burst.mp3';
 const CAP = 160;              // live bubbles, recycled farthest-first when full
 const SHARD_CAP = 64;
 const LANE_STEP = 3.2;        // metres between bubbles in a lane line
-const VIEW_AHEAD = 150;       // sprites beyond this are hidden, not freed
+const VIEW_AHEAD = 110;       // sprites beyond this are hidden, not freed (every visible sprite is a draw call,
+                              // and past ~80 m the world has folded into fog anyway)
 const MISS_BEHIND = 6;        // a treat this far behind the kart unpopped = miss
 const DROP_BEHIND = 12;       // freed once this far behind
-const PASS_FADE_M = 2.4;      // metres behind the pop box over which a passed bubble fades away
+const PASS_FADE_M = 1.6;      // metres behind the pop box over which a passed bubble fades away (before it balloons into the seat)
 const RAIN_FALL = 4, RAIN_REST = 2, RAIN_FIZZLE = 0.5;
 const POP_ANIM = 0.14;
 const PRISM_REACH = 8;        // prism chain-pops neighbours within this many metres
@@ -55,6 +58,7 @@ function makeDotTex() {
 
 export function createBubbleField({ scene, layout, media, getIntensity, getRoom, getElapsed, onTexture }) {
   void media;   // reserved: flash media is drawn by payloadFx at pop time, never here
+  void onTexture;   // see the loader below: crisp-layer sprites keep their own filters
   const T = layout.totalDepth;
   /** Signed depth from `from` to `d`, folded into (-T/2, T/2] so the start line is nothing special. */
   const relD = (d, from) => { let r = (d - from) % T; if (r > T / 2) r -= T; else if (r <= -T / 2) r += T; return r; };
@@ -77,7 +81,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     loader.load(k.sprite, (tex) => {
       if (disposed) { tex.dispose(); return; }
       tex.colorSpace = THREE.SRGBColorSpace;
-      if (onTexture) { try { onTexture(tex); } catch (e) { /* the look never breaks the field */ } }
+      // onTexture (the pixel look's nearest-filter hook) is accepted for the contract but no longer
+      // applied: the sprites draw on the crisp layer at full resolution and keep their own filters
       texOf[k.id] = tex;
       for (const s of pool) if (s.alive && s.kindId === k.id) { s.mat.map = tex; s.mat.needsUpdate = true; }
     }, undefined, () => { /* keep the dot */ });
@@ -91,7 +96,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   for (let i = 0; i < CAP; i++) {
     const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, opacity: 1 });
     const sprite = new THREE.Sprite(mat);
-    sprite.visible = false;
+    sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
     pool.push({ sprite, mat, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
       x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false });
@@ -100,7 +105,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   for (let i = 0; i < SHARD_CAP; i++) {
     const mat = new THREE.SpriteMaterial({ map: dotTex, transparent: true, depthWrite: false, opacity: 0 });
     const sprite = new THREE.Sprite(mat);
-    sprite.visible = false;
+    sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
     shards.push({ sprite, mat, alive: false, age: 0, life: 0.5, p0: new THREE.Vector3(), r: null, u: null, vr: 0, vu: 0, size: 0.2 });
   }
@@ -113,7 +118,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
 
   function freeSlot(s) { if (!s.alive) return; s.alive = false; s.sprite.visible = false; liveCount--; }
   function takeSlot() {
-    let s = pool.find((p) => !p.alive);
+    let s = null;
+    for (let i = 0; i < pool.length; i++) if (!pool[i].alive) { s = pool[i]; break; }
     if (!s) {   // full: recycle the bubble farthest from the kart
       let far = -1;
       for (const p of pool) { const a = Math.abs(relD(p.d, lastKartD)); if (a > far) { far = a; s = p; } }
@@ -213,12 +219,21 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
 
   // ---- pop -----------------------------------------------------------------
   const _r = new THREE.Vector3(), _u = new THREE.Vector3();
+  // burst frames come from a fixed ring (no per-pop allocation): one right/up pair per burst,
+  // shared by its shards; 16 pairs outlive any shard (life <= 0.6 s, 64 shards, 7..12 per burst)
+  const DIR_RING = 16, dirRing = [];
+  for (let i = 0; i < DIR_RING; i++) dirRing.push({ r: new THREE.Vector3(), u: new THREE.Vector3() });
+  let dirNext = 0, shardNext = 0;
   function burst(s, golden) {
     const f = layout.frameAtDepth(s.d);
-    const dirs = { r: f.right.clone(), u: f.up.clone() };   // one pair per burst, shared by its shards
+    const dirs = dirRing[dirNext]; dirNext = (dirNext + 1) % DIR_RING;
+    dirs.r.copy(f.right); dirs.u.copy(f.up);
     const n = golden ? 12 : 7;
     for (let i = 0; i < n; i++) {
-      const sh = shards.find((p) => !p.alive) || shards[(Math.random() * SHARD_CAP) | 0];
+      // next free shard scanning from where the last burst stopped; a full ring steals the oldest slot
+      let sh = null;
+      for (let j = 0; j < SHARD_CAP; j++) { const c = shards[(shardNext + j) % SHARD_CAP]; if (!c.alive) { sh = c; shardNext = (shardNext + j + 1) % SHARD_CAP; break; } }
+      if (!sh) { sh = shards[shardNext]; shardNext = (shardNext + 1) % SHARD_CAP; }
       const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
       const v = rand(2.2, 4.6) * (golden ? 1.3 : 1);
       sh.alive = true; sh.age = 0; sh.life = rand(0.35, 0.6);

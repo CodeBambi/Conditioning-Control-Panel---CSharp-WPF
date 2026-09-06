@@ -56,8 +56,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   // ---- renderer / scene / camera (engine/scene.js pattern, pitch-demo look) ----
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, alpha: false, powerPreference: 'high-performance' });
-  // the big-pixel look: low internal resolution, nearest upscale; host settings.pixel / ?pixel=N override, 0 = off
-  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? PIXEL_DEFAULT : settings.pixel });
+  // the big-pixel look: the world at low resolution, bubbles + wall media crisp on top (race/pixel.js);
+  // host settings.pixel / ?pixel=N override, 0 = off; draw-call stats go to the host log every ~5 s
+  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? PIXEL_DEFAULT : settings.pixel, log: (m) => { if (bridge.log) bridge.log(m); } });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12261f);
@@ -109,8 +110,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const tunnel = createTunnel(layout);
     Q.tubeSegMult = segBase;
     const u = tunnel.material.uniforms;
-    u.uRings.value = Math.round(layout.totalDepth / 8);
-    u.uSpiralTurns.value = Math.round(layout.totalDepth / 22);
+    u.uRings.value = Math.round(layout.totalDepth / 12);        // a ring every 12 m (the descent's 8 m tangles at the far end)
+    u.uSpiralTurns.value = Math.round(layout.totalDepth / 36);  // and a lazier spiral, so the tube ends in a point, not a knot
     scene.add(tunnel.mesh);
     const fx = createFx({ scene, layout, tunnelMat: tunnel.material, particleFog: false });
     const dresser = createRoomDresser({ scene, layout });
@@ -369,7 +370,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (S.running && !S.paused && !S.hostPaused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
     }
-    renderer.render(scene, camera);
+    pixel.render(scene, camera);
   }
 
   // ---- brake / end / again / exit ----

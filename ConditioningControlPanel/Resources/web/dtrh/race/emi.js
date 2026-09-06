@@ -1,8 +1,9 @@
 // race/emi.js - The Caucus Race: the teacup rig with EMI riding in it, seen from behind.
 // Visual half of CONTRACT.md "race/kart.js (PR 3)": saucer + cup + handle + tea surface, EMI as a
 // CRT body with vents, two glove arms on the rim, a bead antenna with the six mood poses, pooled
-// sweat drops, drift sparks, and the tea reflection. Canon lock: her face is ONLY a text emoticon
-// drawn on a canvas and mirrored in the tea. No drawn face, no generated face, no mouthed words.
+// sweat drops, drift sparks, and a plain disc of tea. Canon lock: EMI faces forward, away from the
+// camera, so no face is ever visible. No drawn face, no reflection of one, no generated face, no
+// mouthed words. The moods live in the antenna and the bead alone.
 // Ported from the approved pitch demo (C:\wt-race-ref\pitch-demo.html) into ESM; poses now blend
 // on a spring (House Book Law XI), never a linear tween, and always return to the breath.
 
@@ -13,14 +14,15 @@ const BREATH_SEC = 3.9;      // the one breath on screen (Law III)
 const SWEAT_N = 28, SPARK_N = 32;
 
 /** Antenna poses per mood. antX pitches the whole stem (negative = streamed back), kinkX/Z bend
- *  the joint, wind = how much speed is allowed to stream the stem, w = spring speed (rad/s). */
+ *  the joint, wind = how much speed is allowed to stream the stem, w = spring speed (rad/s).
+ *  There is no face field on purpose: the antenna is the whole expression. */
 export const MOODS = {
-  calm:     { face: 'o_o', antX: 0,    kinkX: 0,    kinkZ: 0,    bead: PINK, scale: 1,   sway: 1,   wind: 1,   w: 8,  zeta: 0.65 },
-  streamed: { face: ':3',  antX: -1.0, kinkX: -0.3, kinkZ: 0,    bead: PINK, scale: 1,   sway: 0,   wind: 1,   w: 14, zeta: 0.7 },
-  fraught:  { face: ';_;', antX: 0.25, kinkX: 1.4,  kinkZ: 0,    bead: PALE, scale: 0.9, sway: 0.4, wind: 0.3, w: 10, zeta: 0.6 },
-  smug:     { face: '^_^', antX: 0,    kinkX: 0,    kinkZ: 0.55, bead: PINK, scale: 1,   sway: 1,   wind: 0.6, w: 7,  zeta: 0.6 },
-  shock:    { face: '>_<', antX: 0.1,  kinkX: 0,    kinkZ: 0,    bead: PINK, scale: 1.6, sway: 0,   wind: 0,   w: 22, zeta: 0.45 },
-  jackpot:  { face: '$_$', antX: 0,    kinkX: 0,    kinkZ: 0.2,  bead: GOLD, scale: 1.3, sway: 1,   wind: 0.6, w: 12, zeta: 0.5 },
+  calm:     { antX: 0,    kinkX: 0,    kinkZ: 0,    bead: PINK, scale: 1,   sway: 1,   wind: 1,   w: 8,  zeta: 0.65 },
+  streamed: { antX: -1.0, kinkX: -0.3, kinkZ: 0,    bead: PINK, scale: 1,   sway: 0,   wind: 1,   w: 14, zeta: 0.7 },
+  fraught:  { antX: 0.25, kinkX: 1.4,  kinkZ: 0,    bead: PALE, scale: 0.9, sway: 0.4, wind: 0.3, w: 10, zeta: 0.6 },
+  smug:     { antX: 0,    kinkX: 0,    kinkZ: 0.55, bead: PINK, scale: 1,   sway: 1,   wind: 0.6, w: 7,  zeta: 0.6 },
+  shock:    { antX: 0.1,  kinkX: 0,    kinkZ: 0,    bead: PINK, scale: 1.6, sway: 0,   wind: 0,   w: 22, zeta: 0.45 },
+  jackpot:  { antX: 0,    kinkX: 0,    kinkZ: 0.2,  bead: GOLD, scale: 1.3, sway: 1,   wind: 0.6, w: 12, zeta: 0.5 },
 };
 
 /** Damped spring toward a target; zeta < 1 overshoots a little, which is the point. */
@@ -108,40 +110,17 @@ export function createEmiRig({ scene, reducedMotion = false }) {
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.53, 0.025, 8, 48), pinkGlow); rim.rotation.x = Math.PI / 2; rim.position.y = 0.75; body.add(rim);
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.045, 10, 24, Math.PI), porcelain); handle.position.set(0.62, 0.42, 0); handle.rotation.z = -Math.PI / 2; body.add(handle);
 
-  // ---- the tea: the only mirror she has. Her face shows in it, reversed. ----
-  // The chase camera sits low and ~6 m back, so a flat surface is a sliver. The reflection is the
-  // NEAR half of the tea only: it pivots at the near rim and leans up toward EMI (the tea looks up
-  // at you), which turns the band between the rim and her body toward the camera. The far half
-  // stays flat under her. The emoticon is drawn in that band; canvas bottom = the near (camera) side.
-  const TEA_PX = 128, TEA_TILT = 0.5, TEA_R = 0.46;   // rad: near edge at the rim, chord lifted
-  const teaCanvas = document.createElement('canvas'); teaCanvas.width = teaCanvas.height = TEA_PX;
-  const teaTex = new THREE.CanvasTexture(teaCanvas); teaTex.magFilter = THREE.NearestFilter; teaTex.minFilter = THREE.LinearFilter;
-  let faceDrawn = '';
-  function drawTea(face) {
-    if (face === faceDrawn) return; faceDrawn = face;
-    const g = teaCanvas.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0);
-    const c = TEA_PX / 2;
-    g.fillStyle = '#B23282'; g.fillRect(0, 0, TEA_PX, TEA_PX);
-    const rg = g.createRadialGradient(c, c * 1.4, 6, c, c * 1.4, c * 1.1); rg.addColorStop(0, 'rgba(255,140,200,.6)'); rg.addColorStop(1, 'rgba(120,20,80,.3)');
-    g.fillStyle = rg; g.fillRect(0, 0, TEA_PX, TEA_PX);
-    g.translate(TEA_PX, 0); g.scale(-1, 1);                    // mirrored: it is a reflection
-    g.font = '700 ' + (face.length > 4 ? 22 : 34) + 'px "Noto Sans Mono", "JetBrains Mono", Consolas, monospace';
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.lineWidth = 5; g.strokeStyle = 'rgba(70,10,50,.85)'; g.strokeText(face, c, c * 1.44);
-    g.fillStyle = '#FFE3F3'; g.fillText(face, c, c * 1.44);
-    teaTex.needsUpdate = true;
-  }
-  drawTea(MOODS.calm.face);
-  const teaTilt = new THREE.Group(); teaTilt.position.set(0, 0.69, -TEA_R); teaTilt.rotation.x = -TEA_TILT; body.add(teaTilt);
-  // geometry y < 0 is the canvas bottom = the near half (thetaStart PI); the partial circle keeps full-disc UVs
-  const reflection = new THREE.Mesh(new THREE.CircleGeometry(TEA_R, 32, Math.PI, Math.PI), new THREE.MeshBasicMaterial({ map: teaTex, side: THREE.DoubleSide }));
-  reflection.rotation.set(-Math.PI / 2, 0, Math.PI); reflection.position.set(0, 0, TEA_R); teaTilt.add(reflection);
-  const teaMat = new THREE.MeshStandardMaterial({ color: 0xC94A9A, roughness: 0.15, metalness: 0.2, transparent: true, opacity: 0.35 });
+  // ---- the tea: a plain tinted liquid disc, nothing drawn in it. It takes the room's colour
+  // (the scene fog hue, which fx grades per room) and ripples a little. EMI faces forward, away
+  // from the camera, so there is no face to reflect and none is ever painted here.
+  const TEA_R = 0.46, TEA_Y = 0.66;
+  const teaMat = new THREE.MeshStandardMaterial({ color: 0xC94A9A, emissive: 0x3c1630, roughness: 0.12, metalness: 0.25, transparent: true, opacity: 0.9 });
   const tea = new THREE.Mesh(new THREE.CircleGeometry(TEA_R + 0.01, 32), teaMat);
-  tea.rotation.set(-Math.PI / 2, 0, Math.PI); tea.position.y = 0.66; body.add(tea);
+  tea.rotation.set(-Math.PI / 2, 0, Math.PI); tea.position.y = TEA_Y; body.add(tea);
+  const teaTarget = new THREE.Color(0xC94A9A), teaHsl = { h: 0, s: 0, l: 0 };
 
   // ---- EMI: a living pixel CRT seen from behind, gripping the rim ----
-  // she sits a little forward in the cup so the near band of tea is wide enough to hold her face
+  // she sits a little forward in the cup, hands on the far rim
   const EMI_Z = 0.12;
   const emi = new THREE.Group(); emi.position.set(0, 0.82, EMI_Z); emi.scale.setScalar(1.25); body.add(emi);
   const crt = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, 0.34), navy); emi.add(crt);
@@ -172,7 +151,7 @@ export function createEmiRig({ scene, reducedMotion = false }) {
   scene.add(sweat.mesh); scene.add(sparks.mesh);
 
   // ---- state ----
-  let mood = MOODS.calm, fraught = 0, sweatAcc = 0, sparkAcc = 0, blinkAt = 0;
+  let mood = MOODS.calm, fraught = 0, sweatAcc = 0, sparkAcc = 0;
   const sAnt = new Spring(0), sKinkX = new Spring(0), sKinkZ = new Spring(0), sBead = new Spring(1), sSquash = new Spring(0);
   const beadTarget = new THREE.Color(PINK);
 
@@ -202,12 +181,17 @@ export function createEmiRig({ scene, reducedMotion = false }) {
     beadMat.emissiveIntensity = m === MOODS.jackpot ? 1.4 : 0.9;
     screenMat.opacity = 0.6 + 0.25 * Math.sin(t * 4);
 
-    // the tea swirls and leans up a touch more the faster the cup goes; the face in it is text and nothing else
-    tea.rotation.z = reflection.rotation.z = Math.PI + Math.sin(t * 1.3) * 0.05;
-    teaTilt.rotation.x = -(TEA_TILT + 0.1 * Math.max(0, ctx.speedNorm - 0.65) / 0.35);
-    let face = fraught > 0.6 && (m === MOODS.calm || m === MOODS.smug) ? MOODS.fraught.face : m.face;
-    if (face === MOODS.calm.face) { if (t > blinkAt) blinkAt = t + 5.2; else if (t > blinkAt - 0.11) face = '-_-'; }
-    drawTea(face);
+    // the tea swirls, bobs and settles lower at speed; its colour follows the room (fog hue) with a
+    // floor on saturation and lightness so it always reads as a liquid, never as a hole in the cup
+    tea.rotation.z = Math.PI + Math.sin(t * 1.3) * 0.05;
+    tea.position.y = TEA_Y + 0.006 * Math.sin(t * 2.7) - 0.02 * Math.max(0, ctx.speedNorm - 0.65) / 0.35;
+    tea.scale.set(1 + 0.02 * Math.sin(t * 1.9), 1 + 0.02 * Math.cos(t * 2.3), 1);
+    if (scene.fog && scene.fog.color) {
+      scene.fog.color.getHSL(teaHsl);
+      teaTarget.setHSL(teaHsl.h, Math.max(0.3, teaHsl.s), 0.42);
+      teaMat.color.lerp(teaTarget, Math.min(1, dt * 1.5));
+      teaMat.emissive.copy(teaMat.color).multiplyScalar(0.28);
+    }
 
     // landing squash with overshoot (Law XI)
     const sq = sSquash.step(0, dt, 9, 0.45);
