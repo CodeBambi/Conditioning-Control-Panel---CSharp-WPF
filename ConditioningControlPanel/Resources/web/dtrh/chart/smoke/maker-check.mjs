@@ -20,6 +20,7 @@ import {
   placeAll, placeHit, recipeFor, resetIds, slide, snapshotState,
 } from '../maker/model.js';
 import { BIN_SEC, countRuns, chantRuns, energyFromPeaks, generate, readWords, roadLine } from '../maker/generate.js';
+import { ASPECT_H, ASPECT_W, HINT, PREVIEW_URL, WAIT_MS, canDraw, fitBox } from '../maker/preview.js';
 import { normalizeChart } from '../../race/chart.js';
 import { cueFor } from '../../race/cues.js';
 
@@ -213,14 +214,35 @@ const rc2 = normalizeChart(JSON.parse(JSON.stringify(buildChart({ ...full, bubs:
 eq(rc2.events.filter((e) => e.hand === true).length, moved.length, 'a second run keeps every hand moved bubble');
 ok(rc2.events.some((e) => e.hand === true && Math.abs(e.t - moved[0].t) < 1e-6), 'exactly where the hand left it');
 
-/* ---- 8. the modules keep their promises ---------------------------------- */
+/* ---- 8. the preview row: the url, the letterbox, the way out -------------- */
+ok(PREVIEW_URL.startsWith('../race.html?'), 'the preview points at the race beside the maker');
+for (const bit of ['bridge=parent', 'autostart=1', 'pixel=0', 'intro=0', 'music=0']) {
+  ok(PREVIEW_URL.includes(bit), 'the preview url carries ' + bit);
+}
+eq(ASPECT_W / ASPECT_H, 16 / 9, 'the frame letterboxes at 16:9');
+const wideRow = fitBox(1000, 300);
+eq(wideRow.h, 292, 'a wide short row is capped by its height');
+ok(wideRow.w / wideRow.h > 1.77 && wideRow.w / wideRow.h < 1.79, 'and keeps the shape');
+const tallRow = fitBox(400, 900);
+eq(tallRow.w, 392, 'a narrow tall row is capped by its width');
+eq(fitBox(0, 0).w, 0, 'a row with no room asks for no frame');
+eq(fitBox(4, 4).h, 0, 'and neither does one smaller than its own padding');
+ok(WAIT_MS > 8000, 'the frame gets longer than an edit to boot a whole world');
+ok(canDraw(() => ({ getContext: () => null })) === false, 'no webgl, no preview');
+ok(canDraw(() => ({ getContext: (n) => (n === 'webgl2' ? {} : null) })) === true, 'webgl2 is enough');
+ok(canDraw(() => { throw new Error('blocked'); }) === false, 'a browser that throws at us is a no as well');
+eq(HINT, 'what the run looks like', 'the gutter says what the row is');
+
+/* ---- 9. the modules keep their promises ---------------------------------- */
 const src = (f) => readFileSync(join(MAKER, f), 'utf8');
 ok(!/getComputedStyle/.test(src('timeline.js')), 'nothing reads layout inside the draw loop');
 ok(!/decodeAudioData/.test(src('app.js')), 'the decode stays in audio.js, and the buffer never leaves it');
 ok(/peaks/.test(src('audio.js')), 'audio.js keeps the peaks');
 ok(/fetch\(/.test(src('words.js')) && !/fetch\(/.test(src('audio.js')), 'the audio is read off disk, never uploaded');
 ok(!/document\.|window\./.test(src('generate.js')), 'generate.js is pure: it never reaches for the page');
-for (const f of ['model.js', 'audio.js', 'words.js', 'timeline.js', 'app.js', 'pick.js', 'save.js', 'generate.js']) {
+ok(typeof PREVIEW_URL === 'string' && PREVIEW_URL.length > 0, 'preview.js loads with no page at all: node just imported it');
+ok(/postMessage/.test(src('preview.js')) && !/fetch\(/.test(src('preview.js')), 'the preview talks to its frame and to nothing else');
+for (const f of ['model.js', 'audio.js', 'words.js', 'timeline.js', 'app.js', 'pick.js', 'save.js', 'generate.js', 'preview.js']) {
   ok(src(f).startsWith('/* ====='), f + ' says what it is at the top');
 }
 

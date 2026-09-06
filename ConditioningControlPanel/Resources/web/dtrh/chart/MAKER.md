@@ -18,6 +18,7 @@ the author plays it and slides what is off.
 | `maker/timeline.js` | the three lines, the ruler, the waveform, the playhead |
 | `maker/pick.js` | picking, sliding, walls, the effect grid, undo |
 | `maker/save.js` | the chart file it writes, and the autosave that survives a reload |
+| `maker/preview.js` | the race in the bottom row: the frame, the bridge, the letterbox |
 | `smoke/maker-check.mjs` | the pure half under node: placement, clamping, the export shape |
 
 Shared, never copied: `editor/audio.js` (`peaksFromChannels`, `hashFile`),
@@ -45,6 +46,8 @@ Shared, never copied: `editor/audio.js` (`peaksFromChannels`, `hashFile`),
    you left off** instead, with **generate again** beside it, which puts every trigger back
    on its recipe and replaces what was saved. The card is the only modal here; while it is
    up it owns the keyboard, and everything under it keeps working the moment it goes.
+6. Generating fills the bottom line with the run itself and it stays there. Play and the
+   kart drives the track under the words; scrub and it jumps with you.
 
 ## The pieces
 
@@ -82,6 +85,26 @@ words, and writes the three things `race/chart.js` schedules and `race/cues.js` 
 
 The road draws on the bubbles line as small faint dots, one per event, under everything the
 hand can grab. They are not pickable and never will be: they belong to the algorithm.
+
+## The preview (`maker/preview.js`)
+
+The fifth line under the words is `race.html` in an iframe, on the bridge the race
+itself answers under `?bridge=parent` (`raceBoot.js`, THE PREVIEW BRIDGE): the maker posts
+`chart` 300 ms behind every edit, `clock` four times a second while the file plays and on
+every play or pause, and `seek` the moment the author scrubs. The frame answers once with
+`race-ready`. Same origin both ways, nothing else is listened to.
+
+- **One sound source.** The frame runs `?music=0`, so the only thing playing is the
+  maker's own `<audio>`. The race keeps its own effects.
+- **Nothing until there is something to watch.** The row is empty until the first
+  generation, so an empty page never boots a 3D world.
+- **Watch only.** A transparent sheet sits over the frame and the frame is `tabindex="-1"`,
+  so a click lands on the maker and `space` never stops meaning play. **pop out** opens the
+  same track in a tab, on its own clock, for anyone who wants to drive it.
+- **Letterboxed.** `fitBox` gives the biggest 16:9 box that fits the row, centred, dark
+  around it. It follows the row through a `ResizeObserver`.
+- **No WebGL, no preview.** The row says `no preview here` and everything above it carries
+  on, the same if the frame never answers within 24 s.
 
 ## Picking and sliding
 
@@ -140,7 +163,9 @@ in a draw path.
 placement spacing, the min gap clamp, `alike`, the recipe catalogue, the exported chart
 through `normalizeChart`, and the road: the length of the energy curve, the percentile that
 keeps a quiet file readable, every event kind present, every road event through `cueFor`,
-and a second run leaving the hand moved bubbles exactly where they were. `chart/smoke/tokens-check.mjs` holds the 13 px floor in
+and a second run leaving the hand moved bubbles exactly where they were. The preview's pure
+half is there too: the frame's url, the letterbox at every shape of row, and the WebGL
+question answered three ways. `chart/smoke/tokens-check.mjs` holds the 13 px floor in
 `maker.css` and the house rules over every file under `chart/`.
 
 `chart/words/` is where the aligned transcripts live. It is gitignored and excluded from

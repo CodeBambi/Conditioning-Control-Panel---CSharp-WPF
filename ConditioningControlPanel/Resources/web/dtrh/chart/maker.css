@@ -43,6 +43,7 @@ a { color: var(--violet); }
 
 #lines { display: grid; grid-template-columns: var(--gutter) 1fr 240px; grid-template-rows: 28px 150px 150px 64px 1fr; position: relative; min-height: 0; overflow: hidden; }
 .g { background: var(--panel); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; justify-content: center; }
+.g[hidden] { display: none; }            /* display: flex above outruns the browser's [hidden] */
 .g b { font: 800 19px/1.1 var(--display); }
 .g span { color: var(--dim); font-size: 13px; }
 .row { position: relative; border-bottom: 1px solid var(--line); overflow: hidden; background: var(--ink); }
@@ -105,6 +106,14 @@ canvas { display: block; width: 100%; height: 100%; }
 .gap b { font: 800 17px var(--display); }
 .gap .v { font: 800 20px var(--display); color: var(--pink); font-variant-numeric: tabular-nums; min-width: 52px; text-align: center; }
 .startover { font-size: 13px; margin-left: auto; }
+
+/* the race in the bottom row: letterboxed, centred, watch only */
+.row.preview { background: #07070f; display: grid; place-items: center; }
+.pvbox { position: relative; background: #000; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.pvframe { display: block; width: 100%; height: 100%; border: 0; background: #000; }
+.pvguard { position: absolute; inset: 0; cursor: default; }
+.pvnote { position: absolute; margin: 0; color: var(--dim); font-size: 15px; text-align: center; padding: 0 16px; }
+#pvg .small { margin-top: 6px; align-self: flex-start; }
 
 /* the one card in the tool: what to do with the file that just landed */
 #ask { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 24; width: 420px; max-width: calc(100% - 280px);

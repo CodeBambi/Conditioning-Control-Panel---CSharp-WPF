@@ -9,6 +9,7 @@
 
 import { loadAudio, createPlayer, isAudioFile } from './audio.js';
 import * as pick from './pick.js';
+import * as preview from './preview.js';
 import * as save from './save.js';
 import { findWords, hashNote, isWords, scan } from './words.js';
 import { generate, roadLine } from './generate.js';
@@ -28,6 +29,7 @@ export const state = {
 
 const player = createPlayer();
 let statusTimer = 0;
+let pv = null;                          // the race in the bottom row, once there is a road
 
 /* ---- the status line ----------------------------------------------------- */
 
@@ -121,7 +123,7 @@ export function renderPanel() {
 export function bar() { $('what').textContent = pickLine(state); }
 
 /** Every edit goes through here: draw it, then let the autosave catch up. */
-export function render() { tl.render(); save.touch(); }
+export function render() { tl.render(); save.touch(); if (pv) pv.onEdit(); }
 
 export function setGap(v) {
   state.minGap = Number(clamp(v, MIN_GAP_LO, MIN_GAP_HI).toFixed(1));
@@ -141,6 +143,7 @@ export function generateRoad(quiet = false) {
     peaks: state.peaks, perSec: state.perSec, durationSec: state.durationSec,
     words: state.words, hits: state.hits, setById: state.setById,
   });
+  if (pv) pv.ensure();                   // the first road is what turns the preview on
   render();
   if (!quiet) status(roadLine(state.road.counts));
   return state.road;
@@ -279,6 +282,7 @@ function loop() {
     lastT = t;
     if (playing && tl.shouldFollow(t)) tl.follow(t);
     tl.moveHead(t);
+    if (pv) pv.clock(t, playing);         // the frame's own clock is 4 Hz, not per frame
   }
   requestAnimationFrame(loop);
 }
@@ -287,11 +291,14 @@ function loop() {
 
 function playLabel() {
   $('play').innerHTML = (player.playing ? '⏸ pause' : '▶ play') + ' <kbd>space</kbd>';
+  if (pv) pv.clock(player.time, player.playing);   // play and pause are news the frame wants now
 }
 
 export function seekTo(t) {
-  player.seek(clamp(t, 0, state.durationSec || 0));
+  const at = clamp(t, 0, state.durationSec || 0);
+  player.seek(at);
   lastT = -1;
+  if (pv) pv.seek(at, player.playing);
 }
 
 function init() {
@@ -356,6 +363,8 @@ function init() {
   };
   pick.install(shared);
   save.install(shared);
+  pv = preview.install(shared);
+  if (state.road) pv.ensure();            // a restored track already has a road to watch
   requestAnimationFrame(loop);
 }
 
@@ -363,4 +372,4 @@ init();
 
 /* the headless checks drive the page through this, exactly as a hand would. */
 window.trackMaker = { state, tl, player, pick, save, status, replaceSet, renderPanel, seekTo, bar, startOver,
-  generateRoad, card, RECIPE_BY_ID };
+  generateRoad, card, preview: () => pv, RECIPE_BY_ID };
