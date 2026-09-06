@@ -12,6 +12,7 @@ the author plays it and slides what is off.
 | `maker.html` | the whole page: a top bar, three lines under one ruler, a side panel, a bottom bar |
 | `maker.css` | the look. Its own tokens, shared with nothing. Nothing on the page is under 13 px |
 | `maker/model.js` | pure: recipes, placement, the min gap clamp, the pick line, the chart it writes |
+| `maker/generate.js` | pure: the road. the energy curve, the acts, the analyzer events |
 | `maker/audio.js` | decode once, keep the peaks, drop the buffer, play through an `<audio>` |
 | `maker/words.js` | find the words file, read it, run `maker/triggers.js detect` over the catalogue |
 | `maker/timeline.js` | the three lines, the ruler, the waveform, the playhead |
@@ -38,6 +39,12 @@ Shared, never copied: `editor/audio.js` (`peaksFromChannels`, `hashFile`),
 4. A ticked set places its recipe at every hit, first bubble at `word - 0.15 s`, spaced
    `max(min gap, recipe gap)`. Changing a recipe or a tick re-places that trigger from
    scratch, hand moved bubbles of it included, and the status line says so.
+5. Then the one card in the tool: the track name, `m:ss, N trigger words in M sets`, and
+   **generate the track**. `start empty` (or `esc`) places the recipes and nothing else,
+   the way it worked before M5. A track this machine already saved offers **pick up where
+   you left off** instead, with **generate again** beside it, which puts every trigger back
+   on its recipe and replaces what was saved. The card is the only modal here; while it is
+   up it owns the keyboard, and everything under it keeps working the moment it goes.
 
 ## The pieces
 
@@ -49,6 +56,32 @@ Shared, never copied: `editor/audio.js` (`peaksFromChannels`, `hashFile`),
 - Six canned recipes, the whole choice there is: shimmer (`S F S F S F wall:melt`), drain
   (`BD BD wall:blackout`), blink (`wall:blink`), snap (`F wall:snap`), triple (`S S S`),
   pink wash (`pink pink wall:flash`).
+
+## The road (`maker/generate.js`)
+
+The recipes are the hand cues; the road is everything between them, and without it a twelve
+minute file is empty tarmac. `generate` reads the peaks already in memory and the aligned
+words, and writes the three things `race/chart.js` schedules and `race/cues.js` spends:
+
+1. `energy`, one 0..1 number per 0.5 s, RMS-ish off the min/max peaks, divided by the 92nd
+   percentile of the file rather than by its loudest moment, so one clap cannot flatten it.
+2. `word` at every trigger the maker heard (label = the set, conf from the words), then the
+   structure words, then any clear word over three letters, thinned to one per 2.2 s.
+3. `drop` on a run of `DROP_WORDS` (`now` only right after a countdown), merged 8 s apart.
+4. `count` on a run of three spoken numbers or more, `n`, `of` and `last` filled in.
+5. `chant` on a phrase said 3+ times inside 20 s on a beat of 5 s or tighter.
+6. `build` / `peak` / `release` off the smoothed curve: a rise of 0.18 over 4 s or more into
+   a local max, and the fall back to half of it. One set per 20 s at most.
+7. `silence` on any gap over 4 s with nothing said in it.
+8. `acts` in 20 s windows, scored on where the structure words, the triggers, the chants and
+   the drops fall: induction, deepening, triggers, mantra, wake, free. A window that scores
+   nothing keeps the room it was in, short runs fold into the one before them.
+9. Nothing it writes is stamped `hand`, so the density knob thins the road and never the
+   recipes, and a second run replaces the road with every hand moved bubble left alone.
+10. `generate` in the top bar, or `g`, does that second run. The status line counts it.
+
+The road draws on the bubbles line as small faint dots, one per event, under everything the
+hand can grab. They are not pickable and never will be: they belong to the algorithm.
 
 ## Picking and sliding
 
@@ -84,6 +117,10 @@ and `race/cues.js` runs (see `race/CHART.md`):
   `sure: true`, and `run.js` plays the frame effect with them.
 - `source` = `{ name, hash, durationSec, sampleRate: 16000 }`, so the chart says which file
   it was written against.
+- once the track has been generated: `energy`, `binSec`, `acts` and the road's own events in
+  the same `events` list, sorted by time, plus
+  `analysis: { energy: 'maker', words: 'whisper', generatedAt }`. The road goes into the
+  autosave too, so picking up where you left off brings it back.
 
 The working state also autosaves to `localStorage` under `trackmaker:<audio hash>` and comes
 back when the same mp3 is picked again (`picked up where you left off`). `start over` in the
@@ -100,8 +137,10 @@ in a draw path.
 ## Checks
 
 `node chart/smoke/maker-check.mjs` from `Resources/web/dtrh` covers the pure half:
-placement spacing, the min gap clamp, `alike`, the recipe catalogue, and the exported
-chart through `normalizeChart`. `chart/smoke/tokens-check.mjs` holds the 13 px floor in
+placement spacing, the min gap clamp, `alike`, the recipe catalogue, the exported chart
+through `normalizeChart`, and the road: the length of the energy curve, the percentile that
+keeps a quiet file readable, every event kind present, every road event through `cueFor`,
+and a second run leaving the hand moved bubbles exactly where they were. `chart/smoke/tokens-check.mjs` holds the 13 px floor in
 `maker.css` and the house rules over every file under `chart/`.
 
 `chart/words/` is where the aligned transcripts live. It is gitignored and excluded from

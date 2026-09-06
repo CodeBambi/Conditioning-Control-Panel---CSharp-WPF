@@ -28,6 +28,7 @@ button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 button.primary { background: var(--pink); color: #1a0a14; border-color: var(--pink); }
 button.small { padding: 4px 10px; font-size: 14px; }
 button[disabled] { opacity: .45; cursor: default; }
+button[hidden] { display: none; }        /* display: inline-flex above outruns the browser's [hidden] */
 kbd { font: 700 13px var(--body); background: #0d0c18; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--dim); }
 a { color: var(--violet); }
 
@@ -71,6 +72,15 @@ canvas { display: block; width: 100%; height: 100%; }
 .bub.sel { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,210,90,.35); z-index: 3; }
 .bub:hover { filter: brightness(1.15); }
 
+/* the road: what generate.js placed, faint, under the bubbles, nobody's to drag */
+.road { position: absolute; bottom: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); opacity: .45; transform: translateX(-50%); pointer-events: none; }
+.road.drop, .road.count { background: var(--gold); opacity: .7; height: 11px; border-radius: 4px; }
+.road.chant { background: var(--pink); opacity: .6; }
+.road.build, .road.peak, .road.release { background: var(--mint); opacity: .6; }
+.road.silence { background: #4a4870; opacity: .8; width: 11px; }
+.g .key { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.g .key .road { position: static; transform: none; opacity: .55; }
+
 .tag { position: absolute; transform: translateX(-50%); padding: 5px 10px; border-radius: 999px; font: 700 15px var(--body); background: #2a2646; color: var(--text); border: 2px solid transparent; cursor: grab; user-select: none; white-space: nowrap; }
 .tag::after { content: ""; position: absolute; left: 50%; top: -12px; width: 2px; height: 12px; background: var(--dim); opacity: .6; }
 .tag.sel { border-color: var(--gold); }
@@ -95,6 +105,17 @@ canvas { display: block; width: 100%; height: 100%; }
 .gap b { font: 800 17px var(--display); }
 .gap .v { font: 800 20px var(--display); color: var(--pink); font-variant-numeric: tabular-nums; min-width: 52px; text-align: center; }
 .startover { font-size: 13px; margin-left: auto; }
+
+/* the one card in the tool: what to do with the file that just landed */
+#ask { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 24; width: 420px; max-width: calc(100% - 280px);
+  background: var(--panel); border: 2px solid var(--pink); border-radius: 18px; padding: 22px; text-align: center;
+  box-shadow: 0 18px 60px rgba(0,0,0,.7); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+#ask[hidden] { display: none; }
+#ask h2 { font: 800 24px/1.2 var(--display); margin: 0; overflow-wrap: anywhere; }
+#ask p { color: var(--dim); font-size: 15px; margin: 0; }
+#ask p.warn { color: var(--gold); font-size: 13px; }
+#ask button { font-size: 18px; padding: 12px 20px; }
+#ask #askskip { font-size: 14px; }
 
 /* the effect grid */
 #fx { position: absolute; z-index: 20; background: var(--panel); border: 2px solid var(--gold); border-radius: 16px; padding: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.6); width: 372px; }

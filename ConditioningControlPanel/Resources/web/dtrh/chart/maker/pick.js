@@ -200,6 +200,7 @@ function removePick() {
 
 function onKey(ev) {
   if (ev.target && /^(INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
+  if (api.modal && api.modal()) return;             // the card is up: it owns the keyboard
   const ctrl = ev.ctrlKey || ev.metaKey;
   if (ctrl && ev.code === 'KeyZ' && !ev.shiftKey) { ev.preventDefault(); return undo(); }
   if (ctrl && (ev.code === 'KeyY' || (ev.code === 'KeyZ' && ev.shiftKey))) { ev.preventDefault(); return redo(); }
