@@ -545,6 +545,14 @@
       $(MSBuildProjectDirectory)\Resources\web\arcademy\emi\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html
     </ArcademyHarnessExcludeAbs>
+    <!-- Track Maker transcripts (Resources\web\dtrh\chart\words\*.words.json, see
+         chart\MAKER.md). An author's own aligned transcripts of their own audio,
+         hundreds of KB each and meaningless without it. Gitignored, so a clean clone
+         has none; excluded here AND from the CopyContentAfterPublish WebFiles glob,
+         so a build on the machine that HAS them never carries them into the output
+         or the installer. -->
+    <ChartWordsExclude>Resources\web\dtrh\chart\words\**\*</ChartWordsExclude>
+    <ChartWordsExcludeAbs>$(MSBuildProjectDirectory)\Resources\web\dtrh\chart\words\**\*</ChartWordsExcludeAbs>
   </PropertyGroup>
 
   <ItemGroup>
@@ -575,6 +583,7 @@
     <Content Include="Resources\web\**\*"
              Exclude="Resources\web\**\CLAUDE.md;Resources\web\**\CAPTCHA_*.md;Resources\web\**\BUILD_PLAN.md;
                       $(ArcademyHarnessExclude);
+                      $(ChartWordsExclude);
                       $(ContentPackWebExclude)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -659,7 +668,8 @@
       <WebFiles Include="$(ProjectDir)Resources\web\**\*"
                 Exclude="$(ProjectDir)Resources\web\**\CLAUDE.md;$(ProjectDir)Resources\web\**\CAPTCHA_*.md;$(ProjectDir)Resources\web\**\BUILD_PLAN.md;
                          $(ContentPackWebExcludeAbs);
-                         $(ArcademyHarnessExcludeAbs)" />
+                         $(ArcademyHarnessExcludeAbs);
+                         $(ChartWordsExcludeAbs)" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />

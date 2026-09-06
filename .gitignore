@@ -199,3 +199,9 @@ marketing/
 
 # Release-notes drafts (the text lives in the GitHub release body; keep the file local)
 notes-v*.txt
+
+# Track Maker transcripts (ConditioningControlPanel/Resources/web/dtrh/chart/words/).
+# Aligned *.words.json for the mp3s an author works on: someone's session audio turned
+# into text, several hundred KB each, and useless to anyone without the audio. Local
+# only, and excluded from the csproj too so a build never carries them either.
+ConditioningControlPanel/Resources/web/dtrh/chart/words/
