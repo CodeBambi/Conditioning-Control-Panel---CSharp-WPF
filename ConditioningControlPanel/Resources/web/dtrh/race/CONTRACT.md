@@ -546,6 +546,40 @@ The menu's `your media` panel goes: heading, the count line, the pickers, the tw
 empty `.rm-media-more` node (`menu.mediaSlot`) and `back`. The online-feed group builds into that
 node, so it lands under the pickers and `back` stays the last row a thumb or an arrow reaches.
 
+### The online feed (web only)
+
+`race/feedGroup.js` builds into `menu.mediaSlot`, and ONLY when the host ships `mediaControls: true`
+**and** a non-empty `remoteCatalog`. The desktop ships neither, so on the desktop the group does not
+exist and neither key below is ever posted.
+
+Page -> host: `set-setting {key, value}`
+
+| Key | Value | Meaning |
+| --- | --- | --- |
+| `media.remoteConsent` | `bool` | open or close the gate. Consent gates the NETWORK, not the disk: with it off the feed fetches nothing at all and the player's own picked files are untouched |
+| `media.niches` | `string[]` | the WHOLE selection, never a delta. The host sanitises to known catalog ids, de-duplicates, keeps order, and REFUSES an empty result, echoing the stored list unchanged |
+
+Host -> page: `setting {key, value}` carrying **what is stored**. Every row paints `pending` from the
+press until its echo lands, so a refusal snaps the row back to the truth rather than lying about it.
+Because `media.niches` is one key for the whole list, ticking any niche paints every niche row
+pending until the one echo lands.
+
+Extra `init.settings` keys that feed the group, all absent on the desktop:
+
+| Key | Meaning |
+| --- | --- |
+| `remoteCatalog` | `[{id, label}]` - the niches to paint. No catalog, no group |
+| `niches` | `string[]` - which of them are on right now |
+| `remoteConsent` | `bool` - the gate as stored |
+| `remoteMediaRatio` | `0..1` - the share of DOM draws that should prefer remote rows |
+
+The group asks for no manifest. The host rebuilds and re-posts one after a setting lands, and
+`raceBoot`'s `manifest` handler hands it to `hostMedia` whenever it arrives - the pool is mutable and
+`game/payloadFx.js` holds the same object - so a feed switched on with the menu open is on the walls
+of the very next run with nothing re-created. Remote rows carry an `online<pct>:` name marker and are
+split out by the url's ORIGIN, so they reach the DOM layer and never a WebGL texture.
+`race/smoke/remote-feed-check.mjs` holds both properties down.
+
 The browser host lives in the site repo at `scripts/race-web-ext/`; its `RACE-MEDIA-CONTRACT.md` is
 the other half of this table and owns the source-registry seam remote media plugs into.
 

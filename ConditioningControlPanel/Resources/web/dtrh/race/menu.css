@@ -116,8 +116,20 @@
    has to stay under the thumb that just left it. */
 #race-root .rm-media-btn.is-pending { opacity: 0.55; pointer-events: none; }
 #race-root .rm-media-count { font-size: 13px; color: #ffd6ea; letter-spacing: 0.02em; margin: 0 0 6px 2px; }
-/* the online feed group's mount point (PR C3). Nothing in it yet, so it takes no room. */
+/* the online feed group's mount point. Empty on a host that ships no catalog, so it takes no room. */
 #race-root .rm-media-more:empty { display: none; }
+/* ---- the online feed group inside that mount point (race/feedGroup.js) ----
+   A group heading is smaller than the panel's own, so the panel still reads as one list with a rule
+   through it rather than as two panels stacked. */
+#race-root .rm-media-more { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; }
+#race-root .rm-feed-h { margin: 12px 0 2px; font-size: 15px; border-top: 2px solid rgba(255, 105, 180, 0.28); padding-top: 10px; align-self: stretch; }
+#race-root .rm-feed-line { margin-top: 0; margin-bottom: 4px; max-width: 42ch; line-height: 1.45; }
+#race-root .rm-feed-sub { margin-top: 8px; margin-bottom: 2px; color: rgba(255, 214, 234, 0.75); font-weight: 700; letter-spacing: 0.06em; }
+#race-root .rm-feed-btn { display: flex; gap: 10px; align-items: baseline; }
+#race-root .rm-feed-val { color: #ffd6ea; font-weight: 800; letter-spacing: 0.06em; }
+/* the niches only mean anything while the feed is on. Dimmed, never disabled: picking ahead of
+   consent is a real thing to want and it costs no network. */
+#race-root .rm-feed-btn.is-off .rm-feed-label, #race-root .rm-feed-btn.is-off .rm-feed-val { opacity: 0.5; }
 
 /* ---- the track plate: a file in hand, or the host still reading it ---- */
 #race-root .rm-track {
@@ -274,6 +286,10 @@
   #race-root .rm-how-back { font-size: 15px; padding: 6px 14px 6px 28px; margin-top: 4px; }
   #race-root .rm-media-btn { font-size: 15px; padding: 6px 14px 6px 28px; }
   #race-root .rm-media-count { font-size: 11px; margin-bottom: 3px; }
+  #race-root .rm-media-more { gap: 2px; }
+  #race-root .rm-feed-h { margin-top: 8px; padding-top: 6px; font-size: 13px; }
+  #race-root .rm-feed-line { line-height: 1.35; }
+  #race-root .rm-feed-sub { margin-top: 5px; }
   #race-root .rm-h { margin-bottom: 2px; font-size: 16px; }
   #race-root .rm-row { padding: 5px 12px; font-size: 15px; }
   #race-root .rm-row-hint, #race-root .rm-hint { font-size: 10px; margin-top: 2px; }

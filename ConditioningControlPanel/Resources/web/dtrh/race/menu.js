@@ -82,6 +82,7 @@ import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES 
 import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 import { createMenuFlashes } from './menuFlashes.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
+import { createFeedGroup } from './feedGroup.js';
 
 export const OPTIONS_KEY = 'race.options';
 export const PROPS_URL = '/dtrh/race/assets/props.glb';
@@ -541,10 +542,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     if (pendingEl) { pendingEl.classList.remove('is-pending'); pendingEl = null; }
   }
   function setPending(node) { clearPending(); pendingEl = node; node.classList.add('is-pending'); pendingTimer = setTimeout(clearPending, ECHO_WAIT_MS); }
-  // The spot the ONLINE FEED group goes in (PR C3): its own heading, its consent row and its niche
-  // rows, built into this node so they sit under the pickers and above `back`, which stays the last
-  // thing a thumb or an arrow reaches. Empty until then - one div, no layout, no cost.
-  let mediaMore = null;
+  // The spot the ONLINE FEED group goes in: its own heading, its consent row and its niche rows,
+  // built into this node so they sit under the pickers and above `back`, which stays the last
+  // thing a thumb or an arrow reaches. Empty on a host that ships no `remoteCatalog` - one div, no
+  // layout, no cost.
+  let mediaMore = null, feed = null;
   if (webMedia) {
     el('h3', 'rm-h', mediaPanel, 'your media');
     countEl = el('div', 'rm-media-count rh-num', mediaPanel, mediaLine()); countEl.setAttribute('aria-live', 'polite');
@@ -558,6 +560,22 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     el('div', 'rm-hint', mediaPanel, 'nothing is uploaded. your files stay in this tab and go when you close it.');
     el('div', 'rm-hint', mediaPanel, 'the walls take them on your next run.');
     mediaMore = el('div', 'rm-media-more', mediaPanel);
+    // ---- the online feed, when the host ships a catalog to paint ----
+    // race/feedGroup.js builds its heading, its consent row and its niche rows into `mediaMore` and
+    // hands back rows in MEDIA_ROWS' own shape. They are spliced in ABOVE `back`, so the DOM order
+    // and the walk order stay the same one list. A host with no `remoteCatalog` (every C# host)
+    // returns null here and the panel is exactly what it was.
+    feed = createFeedGroup({ slot: mediaMore, settings, post, ui });
+    if (feed) {
+      const at = Math.max(0, MEDIA_ROWS.length - 1);
+      MEDIA_ROWS.splice(at, 0, ...feed.rows);
+      mediaEls.splice(at, 0, ...feed.els);
+      feed.els.forEach((b, i) => {
+        const at2 = at + i;
+        b.addEventListener('click', (e) => { e.stopPropagation(); idx.media = at2; act('press'); });
+        b.addEventListener('pointerenter', () => { idx.media = at2; ui('tick'); refresh(); });
+      });
+    }
     mediaPanel.appendChild(mediaEls[mediaEls.length - 1]);   // `back` was built with the rest: put it last again
   }
 
@@ -660,6 +678,13 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     verbEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'main' && i === idx.main));
     ROWS.forEach((r, i) => { const v = r.get(); if (r.valEl.textContent !== v) r.valEl.textContent = v; rowEls[i].classList.toggle('is-focus', panel === 'options' && i === idx.options); });
     mediaEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'media' && i === idx.media));
+    if (feed) feed.paint();   // equality-guarded, like the options rows above
+    // The feed's niche rows make this panel taller than the column, which scrolls (menu.css
+    // .rm-col). A pad or an arrow walking past the fold has to bring the row with it; `nearest` is
+    // a no-op while the row is already on screen, so a finger scrolling by hand is left alone.
+    if (panel === 'media' && mediaEls[idx.media]) {
+      try { mediaEls[idx.media].scrollIntoView({ block: 'nearest' }); } catch (e) { /* jsdom, old webview */ }
+    }
   }
   function pick(id) { for (const cb of picks) { try { cb(id); } catch (e) { /* a listener never breaks the menu */ } } }
   function act(what) {
@@ -772,8 +797,14 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       pile.active = !!m.active;
       if (countEl) countEl.textContent = mediaLine();
     },
-    /** The host's `setting` echo. Contract law: only this takes the pending paint back off. */
-    settingEcho(m) { if (m && typeof m.key === 'string' && m.key.indexOf('media.') === 0) clearPending(); },
+    /** The host's `setting` echo. Contract law: only this takes the pending paint back off. The
+     *  online feed owns two of the keys and its rows paint their own pending, so it gets first
+     *  refusal; anything else it does not own falls through to the pickers'. */
+    settingEcho(m) {
+      if (!m || typeof m.key !== 'string') return;
+      if (feed && feed.settingEcho(m)) { refresh(); return; }
+      if (m.key.indexOf('media.') === 0) clearPending();
+    },
     /** Where PR C3 builds its `online feed` group: inside the media panel, under the pickers and
      *  above `back`. null on the desktop, where the panel is never built. */
     get mediaSlot() { return mediaMore; },
@@ -800,6 +831,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       if (disposed) return;
       disposed = true; shown = false;
       clearPending();
+      if (feed) feed.dispose();
       window.removeEventListener('keydown', onKey); unbindResize();
       stage.dispose(); layer.remove();
     },
