@@ -431,6 +431,10 @@ export function createRaceHud(root) {
       line('popped', fmt(s.popped || 0));
       line('laps', fmt(s.laps || 0));
       line('time', fmtDur(s.durationSec || 0));
+      if (s.trackName) {   // a charted run: the file, and how many of its words the player met
+        line('track', String(s.trackName).replace(/\.[a-z0-9]{2,4}$/i, '').slice(0, 28));
+        if (s.countable > 0) line('taken', `${fmt(s.taken || 0)} of ${fmt(s.countable)}`);
+      }
       if (endResolve) settleEnd('exit');
       end.classList.add('is-on');
       return new Promise((res) => { endResolve = res; });

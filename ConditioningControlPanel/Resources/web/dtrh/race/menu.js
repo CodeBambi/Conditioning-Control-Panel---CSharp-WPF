@@ -3,7 +3,8 @@
  *
  *   createMenu({ root, renderer, pixel, audio, settings, log }) ->
  *     { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose() }, dispose() }
- *   onPick yields 'race' | 'surface'.
+ *   onPick yields 'race' | 'track' | 'clear' | 'surface'; setTrack(state | null) drives the track plate
+ *   (CHART.md: the host's track-progress and the chart that lands).
  *
  * Two halves. LEFT is a DOM column (menu.css, .rm-*): the title, the tagline,
  * four verbs (race / options / how to drive / surface), options opening in
@@ -267,6 +268,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const list = el('div', 'rm-list', col); list.setAttribute('role', 'menu');
   const optPanel = el('div', 'rm-panel rm-options', col); optPanel.hidden = true;
   const howPanel = el('div', 'rm-panel rm-how', col); howPanel.hidden = true;
+  // ---- the track plate: what the host is doing with the file, then what it found ----
+  const trackEl = el('div', 'rm-track', col); trackEl.hidden = true; trackEl.setAttribute('aria-live', 'polite');
+  const trackName = el('div', 'rm-track-name', trackEl, '');
+  const trackBar = el('div', 'rm-track-bar', trackEl); const trackFill = el('i', '', trackBar);
+  const trackCap = el('div', 'rm-track-cap', trackEl, '');
   el('div', 'rm-foot', col, 'arrows move · enter picks · esc back · p pixels · m mute');
   const stageEl = el('div', 'rm-stage', layer);
   const plate = el('div', 'rm-plate', stageEl);
@@ -307,14 +313,51 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   seedIn.addEventListener('input', () => { const v = Number(seedIn.value); if (isFinite(v) && v > 0) { options.seedValue = v >>> 0; refresh(); } });
   seedIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); seedIn.blur(); } e.stopPropagation(); });
 
-  // ---- the four verbs ----
-  const VERBS = [['race', 'race'], ['options', 'options'], ['how', 'how to drive'], ['surface', 'surface']];
+  // ---- the verbs. `track` only under a host (the file dialog is its), `clear` only once a file is in ----
+  const canTrack = !!settings.trackPick;
+  const VERBS = [['race', 'race'], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['how', 'how to drive'], ['surface', 'surface']];
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
     b.addEventListener('click', () => { idx.main = i; act('press'); });
     b.addEventListener('pointerenter', () => { idx.main = i; refresh(); });
     return b;
   });
+  const verbEl = (id) => verbEls[VERBS.findIndex(([v]) => v === id)];
+  verbEl('track').hidden = !canTrack; verbEl('clear').hidden = true;
+  const stepVerb = (from, dir) => {   // the next visible verb in that direction, wrapping
+    let i = from;
+    for (let k = 0; k < VERBS.length; k++) { i = (i + dir + VERBS.length) % VERBS.length; if (!verbEls[i].hidden) return i; }
+    return from;
+  };
+  const STAGE_CAP = { picking: 'pick a file', decode: 'reading the file', energy: 'feeling the pulse', words: 'listening for the words', cancelled: '', error: '' };
+  let trackState = null;
+  /**
+   * setTrack(state | null): the plate and the verbs follow the host. state = { stage, pct, name,
+   * durationSec, countable, partial, message }; stage 'ready' is a chart in hand (partial while the
+   * words are still landing). Null clears the plate and the verbs read as the seeded run again.
+   */
+  function setTrack(state) {
+    trackState = state && state.stage ? state : null;
+    const st = trackState, ready = !!st && st.stage === 'ready';
+    trackEl.hidden = !st || st.stage === 'cancelled';
+    trackEl.classList.toggle('is-ready', ready); trackEl.classList.toggle('is-error', !!st && st.stage === 'error');
+    trackEl.classList.toggle('is-busy', !!st && !ready && st.stage !== 'error');
+    if (st) {
+      trackName.textContent = st.name || (st.stage === 'picking' ? 'a track' : '');
+      const pct = ready ? 1 : clamp(Number(st.pct) || 0, 0, 1);
+      trackFill.style.width = `${Math.round(pct * 100)}%`;
+      if (ready) {
+        const mins = Math.max(1, Math.round((Number(st.durationSec) || 0) / 60));
+        const n = Number(st.countable) || 0;
+        trackCap.textContent = st.partial ? `${mins} min · still listening for the words` : `${mins} min · ${n ? `${n} to take` : 'nothing spoken, the pulse drives'}`;
+      } else trackCap.textContent = st.stage === 'error' ? (st.message || 'the track would not load') : (STAGE_CAP[st.stage] || st.stage);
+    }
+    verbEl('race').textContent = ready ? 'race the track' : 'race';
+    verbEl('track').textContent = ready ? 'another track' : 'load a track';
+    verbEl('clear').hidden = !ready;
+    if (verbEls[idx.main].hidden) idx.main = stepVerb(idx.main, 1);
+    refresh();
+  }
 
   // ---- navigation: one focus index per panel, every input path lands on act() ----
   let panel = 'main', shown = false, disposed = false;
@@ -329,9 +372,10 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   function act(what) {
     if (!shown || disposed) return;
     if (panel === 'main') {
-      if (what === 'up' || what === 'down') { idx.main = (idx.main + (what === 'up' ? -1 : 1) + VERBS.length) % VERBS.length; refresh(); return; }
+      if (what === 'up' || what === 'down') { idx.main = stepVerb(idx.main, what === 'up' ? -1 : 1); refresh(); return; }
       if (what !== 'press') return;
       const id = VERBS[idx.main][0];
+      if (verbEls[idx.main].hidden) return;
       hit(verbEls[idx.main], 'is-hit');
       if (id === 'options' || id === 'how') open(id); else pick(id);
       return;
@@ -373,6 +417,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const menu = {
     options, stage: { update(dt) { if (shown) pollPad(dt); stage.update(dt); }, render: stage.render, dispose: stage.dispose, live: stage },
     onPick(cb) { if (typeof cb === 'function') picks.push(cb); },
+    setTrack, get track() { return trackState; },
     show() { shown = true; layer.hidden = false; stage.setMode('menu'); open('main'); onResize(); hit(layer, 'is-in'); },
     hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); },
     refresh,
