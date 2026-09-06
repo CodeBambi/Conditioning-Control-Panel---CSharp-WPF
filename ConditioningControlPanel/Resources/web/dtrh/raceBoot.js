@@ -33,7 +33,7 @@
  * reading range after that time and is a screenshot aid for the pickup card;
  * `?panel=howto` opens the menu on the key card (race/menu.js); `?music=N`
  * (0..1, 0 = silent music) beats the saved music slider the same way and
- * `?bridge=parent` is the Chart Room preview (armParentBridge below).
+ * `?bridge=parent` is the Track Maker preview (armParentBridge below).
  *
  * `?back=<same-origin path>` is WHERE THE MENU'S `surface` VERB GOES when there
  * is no host to hand the page back to. Hosted, `surface` posts exit + exit-done
@@ -76,7 +76,7 @@ function resolveBack() {
   return null;
 }
 const standaloneExit = hosted ? null : resolveBack();
-/** The Chart Room embeds this page and drives the clock itself (armParentBridge below). */
+/** The Track Maker embeds this page and drives the clock itself (armParentBridge below). */
 const toParent = params.get('bridge') === 'parent' && window.parent && window.parent !== window;
 const host = hosted ? bridge : {
   on: bridge.on,

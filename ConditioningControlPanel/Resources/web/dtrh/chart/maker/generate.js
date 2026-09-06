@@ -17,10 +17,9 @@
  * recipes sit on top as hand cues and the density knob leaves them alone while
  * it thins the road. Re-running this replaces the road and never the recipes.
  *
- * CARVE-OUT: the canonical copy of this file lives on the Track Maker chain
- * (feat/race-m5-generate and up). This copy exists so the web build can import
- * the road generator from app main before the maker itself lands; keep it byte
- * for byte in step with the chain and fix bugs there first.
+ * This file landed on main ahead of the rest of the maker (PR #873) so the web
+ * build could import the road generator early; the maker in this folder is now
+ * the one and only copy.
  * ==========================================================================*/
 
 import { DROP_WORDS, STRUCTURE_WORDS } from '../../race/chart.js';
