@@ -27,42 +27,42 @@ import { biomeById } from '../game/biomes.js';
 // bubbleBias multiplies bubbles.js kind weights; ambient names a fieldFx particle field.
 export const ROOMS = [
   { id: 'teagarden', name: 'The Tea Garden', tagline: 'nothing here fights you', biome: 'mirrorlake',
-    colors: { road: 0x1e3a30, edge: 0xf6e7c8, prop: 0xffb6d9, fog: 0x12261f, banner: 0x5fa98a },
+    colors: { road: 0x2f6e50, edge: 0xf6e7c8, prop: 0xffb6d9, fog: 0x12261f, banner: 0x5fa98a },
     propKind: 'teacup', loud: false,
     bubbleBias: { treat: 1.4, golden: 0.8, lucky: 1.2, flash: 0.5, subliminal: 0.5, video: 0 },
     ambient: { kind: 'petals', colors: [[255, 182, 217], [191, 235, 216], [246, 231, 200]] } },
   { id: 'toybox', name: 'The Toybox', tagline: 'the floor bounces. so do you', biome: 'toybox',
-    colors: { road: 0x1f1b52, edge: 0xffd23f, prop: 0xffd23f, fog: 0x14103a, banner: 0x6c63d8 },
+    colors: { road: 0x33307f, edge: 0xffd23f, prop: 0xffd23f, fog: 0x14103a, banner: 0x6c63d8 },
     propKind: 'block', loud: true, propAlt: [0xff4d6d, 0x3a86ff],
     bubbleBias: { treat: 1.2, prism: 1.5, flash: 1.3, glitch: 0.6 },
     ambient: { kind: 'confetti', colors: [[255, 77, 109], [255, 210, 63], [58, 134, 255]] } },
   { id: 'casino', name: "The Fool's Casino", tagline: 'the wheel always pays. eventually', biome: 'casino',
-    colors: { road: 0x3a0716, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x0b0508, banner: 0xa3122e },
+    colors: { road: 0x5c1128, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x0b0508, banner: 0xa3122e },
     propKind: 'chip', loud: true, propAlt: [0xa3122e],
     bubbleBias: { golden: 2.0, lucky: 2.0, glitch: 1.3, treat: 0.9 },
     ambient: { kind: 'coins', colors: [[242, 193, 78], [255, 240, 160]] } },
   { id: 'undertow', name: 'The Undertow', tagline: 'the lane drifts. let it', biome: 'undertow',
-    colors: { road: 0x0a2540, edge: 0x7fe7f0, prop: 0x1fa9b5, fog: 0x06202a, banner: 0x2a8fa8 },
+    colors: { road: 0x15446c, edge: 0x7fe7f0, prop: 0x1fa9b5, fog: 0x06202a, banner: 0x2a8fa8 },
     propKind: 'kelp', loud: false,
     bubbleBias: { treat: 1.0, spiral: 1.4, braindrain: 1.3, freeze: 1.2 },
     ambient: { kind: 'bubbles', colors: [[127, 231, 240], [159, 200, 255]] } },
   { id: 'mirrors', name: 'The Hall of Mirrors', tagline: 'the picture flips. your hand does not', biome: 'mirrors',
-    colors: { road: 0x2b2b33, edge: 0x5be7d8, prop: 0xdde3f0, fog: 0x1a1e2c, banner: 0x9aa3c8 },
+    colors: { road: 0x44454f, edge: 0x5be7d8, prop: 0xdde3f0, fog: 0x1a1e2c, banner: 0x9aa3c8 },
     propKind: 'mirror', loud: false,
     bubbleBias: { prism: 1.6, glitch: 1.5, spiral: 1.2, flash: 1.2 },
     ambient: { kind: 'glints', colors: [[221, 227, 240], [91, 231, 216]] } },
   { id: 'chapel', name: 'The Pink Chapel', tagline: 'the spiral pins itself here', biome: 'chapel',
-    colors: { road: 0x4a1030, edge: 0xf2c14e, prop: 0xffffff, fog: 0x2a0820, banner: 0xe23c9c },
+    colors: { road: 0x6c1c4c, edge: 0xf2c14e, prop: 0xffffff, fog: 0x2a0820, banner: 0xe23c9c },
     propKind: 'candle', loud: true,
     bubbleBias: { subliminal: 1.8, spiral: 1.5, pink: 1.4 },
     ambient: { kind: 'motes', colors: [[255, 214, 150], [255, 105, 180]] } },
   { id: 'greyward', name: 'The Grey Ward', tagline: 'the only pink left is the treats', biome: 'greyward',
-    colors: { road: 0x3c4043, edge: 0x9aa0a6, prop: 0x9aa0a6, fog: 0x2b2b33, banner: 0xff69b4 },
+    colors: { road: 0x555a5e, edge: 0x9aa0a6, prop: 0x9aa0a6, fog: 0x2b2b33, banner: 0xff69b4 },
     propKind: 'cot', loud: false,
     bubbleBias: { treat: 0.8, pink: 1.6, braindrain: 1.4, freeze: 1.2 },
     ambient: { kind: 'ash', colors: [[154, 160, 166], [221, 227, 240]] } },
   { id: 'coronation', name: 'The Coronation', tagline: 'the run remembers. so will you', biome: 'coronation',
-    colors: { road: 0x4a1030, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x3a0716, banner: 0x7a0f2b },
+    colors: { road: 0x661838, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x3a0716, banner: 0x7a0f2b },
     propKind: 'crown', loud: true,
     bubbleBias: { golden: 1.5, video: 1.6, gifrain: 1.4, pink: 1.2 },
     ambient: { kind: 'goldleaf', colors: [[242, 193, 78], [255, 105, 180]] } },
@@ -106,7 +106,7 @@ function propShapes(kind) {
   }
 }
 
-/** A porcelain wedge: flat road-wide triangle rising to `hgt` at the lip (local +z = forward). */
+/** A road-wide wedge rising to `hgt` at the lip (local +z = forward), uv'd for the tile texture. */
 function wedgeGeometry(halfW, len, hgt) {
   const a = [-halfW, 0, -len], b = [halfW, 0, -len], c = [halfW, hgt, 0], d = [-halfW, hgt, 0];
   const c0 = [halfW, 0, 0], d0 = [-halfW, 0, 0];
@@ -116,19 +116,67 @@ function wedgeGeometry(halfW, len, hgt) {
     ...tri(d, c, c0), ...tri(d, c0, d0),      // the lip face
     ...tri(b, c0, c), ...tri(a, d, d0),        // the sides
   ]);
+  const uv = new Float32Array(pos.length / 3 * 2);
+  for (let i = 0; i < pos.length / 3; i++) { uv[i * 2] = (pos[i * 3] / (halfW * 2)) + 0.5; uv[i * 2 + 1] = pos[i * 3 + 2] / 2; }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.computeVertexNormals();
   return g;
 }
 
-function canvasTex(w, h, draw) {
+/** Canvas -> chunky pixel texture: nearest filtering, no mipmaps (big texels are the look). */
+export function pixelTex(w, h, draw, opts = {}) {
   if (typeof document === 'undefined') return null;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  draw(ctx, w, h);
   const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  t.wrapS = t.wrapT = opts.clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace;
   return t;
+}
+
+// ---- the road tile sheet ---------------------------------------------------------
+// 16 texels per metre. One sheet spans the whole road profile across (kerb, face, road,
+// face, kerb = 7 m = 112 px) and 2 m along (32 px), repeating with depth. The ALPHA channel
+// is a tint mask, not transparency: 0.5 = multiply by the vertex colour (room tint),
+// 1.0 = keep the texel's own colour (white chequers, the cream centre dash).
+const TEXEL = 16, ROAD_W_PX = 112, ROAD_L_PX = 32, KERB_PX = 10, KERB_H = 0.16;
+const KERB_OUT = ROAD_W_PX / TEXEL / 2;            // 3.5 m: outer edge of the kerb top
+const KERB_IN = KERB_OUT - KERB_PX / TEXEL;        // 2.875 m: the kerb face
+function roadSheet(rng) {
+  return pixelTex(ROAD_W_PX, ROAD_L_PX, (c, w, h) => {
+    // every put() clears first: stacked half-alpha fills would composite to 0.75 and lose the mask
+    const put = (x, y, pw, ph, l, a = 0.5) => { c.clearRect(x, y, pw, ph); c.fillStyle = `rgba(${l},${l},${l},${a})`; c.fillRect(x, y, pw, ph); };
+    put(0, 0, w, h, 215);
+    for (let y = 0; y < h; y += TEXEL) for (let x = w / 2 - TEXEL * 3; x < w; x += TEXEL) {   // 1 m tiles, two tones
+      put(x, y, TEXEL, TEXEL, (((x / TEXEL) + (y / TEXEL)) & 1) ? 232 : 208);
+    }
+    for (let x = w / 2 - TEXEL * 3; x < w; x += TEXEL) put(x, 0, 1, h, 150);                  // 1 px grout grid
+    for (let y = 0; y < h; y += TEXEL) put(0, y, w, 1, 150);
+    for (let i = 0; i < 26; i++) {                                                            // worn specks
+      put(KERB_PX + 2 + Math.floor(rng() * (w - KERB_PX * 2 - 6)), Math.floor(rng() * h), 2, 2, rng() < 0.5 ? 175 : 245);
+    }
+    for (let y = 0; y < h; y += 8) {                                                          // kerb chequers, 0.5 m
+      const lit = (y / 8) & 1;
+      put(0, y, KERB_PX, 8, 255, lit ? 1 : 0.5); put(w - KERB_PX, y, KERB_PX, 8, 255, lit ? 1 : 0.5);
+      put(KERB_PX, y, 1, 8, lit ? 70 : 255); put(w - KERB_PX - 1, y, 1, 8, lit ? 70 : 255);    // the kerb face column
+    }
+    c.clearRect(w / 2 - 2, 0, 4, TEXEL); c.fillStyle = 'rgba(246,231,200,1)'; c.fillRect(w / 2 - 2, 0, 4, TEXEL);   // centre dash 1 m on, 1 m off
+  });
+}
+/** MeshBasicMaterial whose vertex colour tints only the texels flagged by the sheet's alpha. */
+function tintMaskMaterial(map, extra = {}) {
+  const m = new THREE.MeshBasicMaterial({ map, vertexColors: true, side: THREE.DoubleSide, ...extra });
+  m.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <map_fragment>', 'vec4 tx = texture2D(map, vMapUv); diffuseColor.rgb *= tx.rgb * mix(vColor, vec3(1.0), step(0.75, tx.a));')
+      .replace('#include <color_fragment>', '');
+  };
+  return m;
 }
 
 // ---- the dresser -----------------------------------------------------------------
@@ -176,28 +224,33 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     return out.setPosition(layout.toWorld(d, x, h, _p));
   }
 
-  // ---- road ribbon + edge lines ---------------------------------------------------
-  {
-    const STEP = 1.0, n = Math.ceil(total / STEP);
-    const pos = new Float32Array((n + 1) * 6), col = new Float32Array((n + 1) * 6), uv = new Float32Array((n + 1) * 4);
+  // ---- road ribbon: kerb top, kerb face, road, face, kerb; one draw call ---------------
+  // Columns are (x, h, u, colourKey). Zero-width columns split the profile so the vertical
+  // kerb faces get their own texel column and a hard colour edge.
+  const COLS = [
+    [-KERB_OUT, KERB_H, 0, 'edge'], [-KERB_IN, KERB_H, KERB_PX / ROAD_W_PX, 'edge'],
+    [-KERB_IN, KERB_H, (KERB_PX + 0.5) / ROAD_W_PX, 'edge'], [-KERB_IN, 0, (KERB_PX + 0.5) / ROAD_W_PX, 'edge'],
+    [-KERB_IN, 0, (KERB_PX + 1) / ROAD_W_PX, 'road'], [KERB_IN, 0, 1 - (KERB_PX + 1) / ROAD_W_PX, 'road'],
+    [KERB_IN, 0, 1 - (KERB_PX + 0.5) / ROAD_W_PX, 'edge'], [KERB_IN, KERB_H, 1 - (KERB_PX + 0.5) / ROAD_W_PX, 'edge'],
+    [KERB_IN, KERB_H, 1 - KERB_PX / ROAD_W_PX, 'edge'], [KERB_OUT, KERB_H, 1, 'edge'],
+  ];
+  const QUADS = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
+  const road = (() => {
+    const STEP = 1.0, n = Math.ceil(total / STEP), C = COLS.length;
+    const pos = new Float32Array((n + 1) * C * 3), col = new Float32Array((n + 1) * C * 3), uv = new Float32Array((n + 1) * C * 2);
     const idx = [];
-    const epos = new Float32Array(n * 12), ecol = new Float32Array(n * 12);
     for (let i = 0; i <= n; i++) {
       const d = Math.min(i * STEP, total);
-      layout.toWorld(d, -ROAD_HALF_W, 0.02, _p).toArray(pos, i * 6);
-      layout.toWorld(d, ROAD_HALF_W, 0.02, _q).toArray(pos, i * 6 + 3);
-      roomColorAt(d, 'road', _c); _c.toArray(col, i * 6); _c.toArray(col, i * 6 + 3);
-      uv[i * 4] = d / 6; uv[i * 4 + 1] = 0; uv[i * 4 + 2] = d / 6; uv[i * 4 + 3] = 1;
-      if (i < n) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-      if (i < n) {   // edge line segments: this sample to the next, both sides
-        const d2 = Math.min((i + 1) * STEP, total);
-        roomColorAt(d, 'edge', _c);
-        for (let side = 0; side < 2; side++) {
-          const x = (side ? 1 : -1) * (ROAD_HALF_W + 0.06), o = i * 12 + side * 6;
-          layout.toWorld(d, x, 0.05, _p).toArray(epos, o);
-          layout.toWorld(d2, x, 0.05, _q).toArray(epos, o + 3);
-          _c.toArray(ecol, o); _c.toArray(ecol, o + 3);
-        }
+      roomColorAt(d, 'road', _c); roomColorAt(d, 'edge', _c2);
+      for (let k = 0; k < C; k++) {
+        const [x, h, u, key] = COLS[k], o = i * C + k;
+        layout.toWorld(d, x, h, _p).toArray(pos, o * 3);
+        (key === 'road' ? _c : _c2).toArray(col, o * 3);
+        uv[o * 2] = u; uv[o * 2 + 1] = d / (ROAD_L_PX / TEXEL);
+      }
+      if (i < n) for (const [a, b] of QUADS) {
+        const p0 = i * C + a, p1 = i * C + b, p2 = p0 + C, p3 = p1 + C;
+        idx.push(p0, p1, p2, p1, p3, p2);
       }
     }
     const g = track(new THREE.BufferGeometry());
@@ -205,62 +258,74 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     g.setIndex(idx);
-    const roadTex = canvasTex(256, 128, (c, w, h) => {
-      c.fillStyle = '#d9d9d9'; c.fillRect(0, 0, w, h);
-      for (let x = 0; x < w; x += 32) {   // kerb ticks, alternating
-        const lit = ((x / 32) % 2) === 0;
-        c.fillStyle = lit ? '#ffffff' : '#9a9a9a'; c.fillRect(x, 0, 32, 9);
-        c.fillStyle = lit ? '#9a9a9a' : '#ffffff'; c.fillRect(x, h - 9, 32, 9);
-      }
-      c.fillStyle = '#ffffff'; for (let x = 0; x < w; x += 64) c.fillRect(x, h / 2 - 1, 30, 2);
-    });
-    if (roadTex) texes.push(roadTex);
-    const road = new THREE.Mesh(g, mat(new THREE.MeshBasicMaterial({ map: roadTex, vertexColors: true, side: THREE.DoubleSide })));
-    road.name = 'race-road'; road.frustumCulled = false; group.add(road);
-    const eg = track(new THREE.BufferGeometry());
-    eg.setAttribute('position', new THREE.BufferAttribute(epos, 3));
-    eg.setAttribute('color', new THREE.BufferAttribute(ecol, 3));
-    const edges = new THREE.LineSegments(eg, mat(new THREE.LineBasicMaterial({ vertexColors: true })));
-    edges.name = 'race-road-edges'; edges.frustumCulled = false; group.add(edges);
-  }
+    const sheet = roadSheet(makeRng(0x0ad));
+    if (sheet) texes.push(sheet);
+    const mesh = new THREE.Mesh(g, mat(sheet ? tintMaskMaterial(sheet) : new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+    mesh.name = 'race-road'; mesh.frustumCulled = false; group.add(mesh);
+    return mesh;
+  })();
 
-  // ---- ramps: wedge + pink lip + gold air line; boost pads; sugar cubes -----------
+  // ---- ramps: tiled wedge + pink lip + gold air cubes; boost pads; sugar cubes ---------
   const feats = layout.chunks.flatMap((c) => c.features);
   const ramps = feats.filter((f) => f.type === 'ramp');
   const pads = feats.filter((f) => f.type === 'boost');
   const cubes = feats.filter((f) => f.type === 'itembox');
-  const porcelain = mat(new THREE.MeshLambertMaterial({ color: 0xf6e7c8 }));
+  const wedgeTex = pixelTex(32, 32, (c, w, h) => {
+    c.fillStyle = '#d8d8d8'; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 8) for (let x = 0; x < w; x += 8) { c.fillStyle = (((x + y) / 8) & 1) ? '#e8e8e8' : '#cfcfcf'; c.fillRect(x, y, 8, 8); }
+    c.fillStyle = '#8a8a8a'; for (let x = 0; x < w; x += 8) c.fillRect(x, 0, 1, h); for (let y = 0; y < h; y += 8) c.fillRect(0, y, w, 1);
+  });
+  if (wedgeTex) texes.push(wedgeTex);
+  const wedgeMat = mat(new THREE.MeshLambertMaterial({ map: wedgeTex, color: wedgeTex ? 0xffffff : 0xf6e7c8 }));
   const pinkGlow = mat(new THREE.MeshLambertMaterial({ color: 0xff69b4, emissive: 0xff69b4, emissiveIntensity: 0.9 }));
   const gold = mat(new THREE.MeshLambertMaterial({ color: 0xf2c14e, emissive: 0xf2c14e, emissiveIntensity: 0.6 }));
-  const AIR_DOTS = 6;
-  const wedges = new THREE.InstancedMesh(track(wedgeGeometry(ROAD_HALF_W, 4, 0.8)), porcelain, Math.max(1, ramps.length));
-  const lips = new THREE.InstancedMesh(track(new THREE.BoxGeometry(ROAD_HALF_W * 2 + 0.1, 0.08, 0.14)), pinkGlow, Math.max(1, ramps.length));
-  const airDots = new THREE.InstancedMesh(track(new THREE.SphereGeometry(0.22, 12, 10)), gold, Math.max(1, ramps.length * AIR_DOTS));
+  // the air line is marked by PAIRS of gold cubes either side of the arc (never on the camera seat)
+  const AIR_DOTS = 10, AIR_X = 2.4;
+  const wedges = new THREE.InstancedMesh(track(wedgeGeometry(KERB_OUT, 4, 0.8)), wedgeMat, Math.max(1, ramps.length));
+  const lips = new THREE.InstancedMesh(track(new THREE.BoxGeometry(KERB_OUT * 2 + 0.1, 0.2, 0.3)), pinkGlow, Math.max(1, ramps.length));
+  const airDots = new THREE.InstancedMesh(track(new THREE.BoxGeometry(0.3, 0.3, 0.3)), gold, Math.max(1, ramps.length * AIR_DOTS));
   ramps.forEach((r, i) => {
     wedges.setMatrixAt(i, roadMatrix(r.d, 0, 0.01, 0, 1, _m));
-    lips.setMatrixAt(i, roadMatrix(r.d, 0, 0.82, 0, 1, _m));
+    wedges.setColorAt(i, roomColorAt(r.d, 'road', _c).lerp(_c2.set(0xffffff), 0.45));
+    lips.setMatrixAt(i, roadMatrix(r.d, 0, 0.85, 0, 1, _m));
     for (let k = 0; k < AIR_DOTS; k++) {
-      const prog = (k + 1) / (AIR_DOTS + 1);
-      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(r.d + prog * r.airLen, 0, 0.5 + r.height * Math.sin(Math.PI * prog), 0, 1, _m));
+      const prog = (Math.floor(k / 2) + 1) / (AIR_DOTS / 2 + 1), side = k & 1 ? AIR_X : -AIR_X;
+      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(r.d + prog * r.airLen, side, 0.5 + r.height * Math.sin(Math.PI * prog), prog * 2, 1, _m));
     }
   });
   wedges.count = ramps.length; lips.count = ramps.length; airDots.count = ramps.length * AIR_DOTS;
-  const padTex = canvasTex(64, 64, (c, w, h) => {
-    c.fillStyle = '#0e2e33'; c.fillRect(0, 0, w, h);
-    c.strokeStyle = '#5be7d8'; c.lineWidth = 7; c.lineCap = 'round';
-    for (let y = -16; y < h + 16; y += 22) { c.beginPath(); c.moveTo(6, y + 14); c.lineTo(w / 2, y); c.lineTo(w - 6, y + 14); c.stroke(); }
+  // boost pad: full lane width, 3 m long, chevrons that run forward (texture offset), cyan glow
+  const PAD_W = 2.4, PAD_L = 3.0;
+  const padTex = pixelTex(24, 30, (c, w, h) => {
+    c.fillStyle = '#0b2a30'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#5be7d8';
+    for (let y0 = -10; y0 < h + 10; y0 += 10) {         // chevrons pointing to canvas-bottom (= forward)
+      for (let x = 0; x < w / 2; x++) { const y = y0 + Math.floor(x * 0.55); c.fillRect(x, y, 1, 3); c.fillRect(w - 1 - x, y, 1, 3); }
+    }
+    c.fillStyle = '#9ff7ee'; c.fillRect(0, 0, 1, h); c.fillRect(w - 1, 0, 1, h);
   });
-  if (padTex) { padTex.repeat.set(1, 2); texes.push(padTex); }
-  const padMat = mat(new THREE.MeshBasicMaterial({ map: padTex, color: padTex ? 0xffffff : 0x5be7d8, transparent: true, opacity: 0.95 }));
-  const padGeo = track(new THREE.PlaneGeometry(ROAD_HALF_W * 1.5, 2.6).rotateX(-Math.PI / 2));
+  if (padTex) texes.push(padTex);
+  const padMat = mat(new THREE.MeshBasicMaterial({ map: padTex, color: padTex ? 0xffffff : 0x5be7d8 }));
+  const padGeo = track(new THREE.PlaneGeometry(PAD_W, PAD_L).rotateX(-Math.PI / 2));
   const padMesh = new THREE.InstancedMesh(padGeo, padMat, Math.max(1, pads.length));
   pads.forEach((p, i) => padMesh.setMatrixAt(i, roadMatrix(p.d, p.x, 0.03, 0, 1, _m)));
   padMesh.count = pads.length;
-  const cubeMat = mat(new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xf2c14e, emissiveIntensity: 0.4 }));
-  const cubeMesh = new THREE.InstancedMesh(track(new THREE.BoxGeometry(0.55, 0.55, 0.55)), cubeMat, Math.max(1, cubes.length));
-  cubes.forEach((c, i) => cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, 0.7, 0, 1, _m)));
+  // sugar cube: 1.2 m, pixel "?" on every face, bobbing + turning, gold glow
+  const cubeTex = pixelTex(16, 16, (c, w, h) => {
+    c.fillStyle = '#fff6ea'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#e9d9c4'; c.fillRect(0, 0, w, 1); c.fillRect(0, 0, 1, h); c.fillRect(0, h - 1, w, 1); c.fillRect(w - 1, 0, 1, h);
+    c.fillStyle = '#e23c9c';
+    const Q = ['.####.', '##..##', '....##', '...##.', '..##..', '......', '..##..', '..##..'];
+    Q.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#') c.fillRect(5 + x, 3 + y, 1, 1); }));
+  });
+  if (cubeTex) texes.push(cubeTex);
+  const cubeMat = mat(new THREE.MeshLambertMaterial({ map: cubeTex, color: 0xffffff, emissive: 0xf2c14e, emissiveIntensity: 0.25 }));
+  const CUBE = 1.2;
+  const cubeMesh = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), cubeMat, Math.max(1, cubes.length));
+  cubes.forEach((c, i) => cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75, 0, 1, _m)));
   cubeMesh.count = cubes.length;
   for (const m of [wedges, lips, airDots, padMesh, cubeMesh]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
+  if (wedges.instanceColor) wedges.instanceColor.needsUpdate = true;
 
   // ---- per-room wall props ----------------------------------------------------------
   const roomSets = [];   // { id, d0, d1, meshes:[{mesh, sway?, base:[...], phase:[...], d:[...]}] }
@@ -352,10 +417,14 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     let dirty = false;
     cubes.forEach((c, i) => {
       if (wrapDist(c.d, d) > ANIM) return;
-      cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, 0.7 + 0.08 * Math.sin(t * 2 + i), t * 1.1 + i, 1, _m));
+      cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75 + 0.18 * Math.sin(t * 2 + i), t * 1.1 + i, 1, _m));
       dirty = true;
     });
     if (dirty) cubeMesh.instanceMatrix.needsUpdate = true;
+    cubeMat.emissiveIntensity = 0.25 + 0.2 * (0.5 + 0.5 * Math.sin(t * 3));
+    if (padTex) padTex.offset.y = (t * 1.6) % 1;          // the chevrons run forward
+    padMat.color.setScalar(0.85 + 0.15 * Math.sin(t * 6));
+    pinkGlow.emissiveIntensity = 0.7 + 0.3 * Math.sin(t * 4);
   }
 
   /** Hand the room's biome style to fx.applyRegionGrade. Returns the room spec. */
