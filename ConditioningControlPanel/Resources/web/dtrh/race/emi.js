@@ -31,6 +31,22 @@ const PROPS_GLB = '/dtrh/race/assets/props.glb';
 // top of its glaze band, the cup is 0.695 to its rim with the band at 0.645..0.690, handle on +x.
 // The cup sits CUP_Y above the saucer base, the way the JS rig always sat it.
 const CUP_Y = 0.09, SAUCER_TOP = 0.125, CUP_RIM_TOP = 0.695;
+/** The saucer's outer radius in rig units (kart_saucer is 1.90 across, the JS dish 0.95 too).
+ *  kart.js needs it to know how much air a pitch costs. */
+export const SAUCER_R = 0.95;
+// THE CUP TIPS, THE SAUCER DOES NOT. kart.js hands its steer lean over as `ctx.lean` now instead
+// of rolling the whole kart about the forward axis: the group rides ON the road, so a banked
+// saucer put its outer edge sin(lean) * 0.95 * KART_SCALE under the surface, 0.84 m under it at a
+// drift lean. A saucer slides, it does not bank. So `body` alone turns, about the cup's foot on
+// the dish (CUP_PIVOT_Y), lifted by sin(tip) * CUP_FOOT_R so the low half of the foot kisses the
+// dish instead of cutting into it, and slid CUP_SLIDE * sin(tip) toward the outside of the turn so
+// the lean still reads as g-force. CUP_TIP_MAX saturates the angle (tanh, so small leans are one
+// for one and only the big ones are held back): the lift keeps the foot honest at any angle, but
+// the handle bows out to x 0.86 and reaches the road on its own at about 45 degrees, and a cup
+// tipped that far on a flat saucer reads as falling off it. At the 21 degree cap the foot clears
+// the road by 0.13 m, the handle by 0.24 m, and the cup rises 0.15 m off the dish at full lock.
+// This is geometry, not a transition, so reduced motion keeps every bit of it.
+const CUP_FOOT_R = 0.3, CUP_PIVOT_Y = CUP_Y, CUP_TIP_MAX = 0.38, CUP_SLIDE = 0.07;
 const OUTLINE = 'outline';   // the inverted hull's material name (gltf.js header, assets/README.md)
 // The glb is metres, sole centre at the origin, +Z forward, case top at 1.00 m. 0.64 puts the case
 // at the old 1.25-scaled CRT's 0.525 m; with the sole on the tea (y 0.66) the case bottom lands at
@@ -114,7 +130,7 @@ function ventTexture() {
 /**
  * createEmiRig({ scene, reducedMotion, pixel }) ->
  *   { group, update(dt, ctx), setMood, setFraught, squash, dispose, onReady(cb), model(), setFace(i), pose(name, opts) }
- * ctx = { t, up, right, tangent, speedNorm, airborne, steerVel, drift, driftSide }  (world-space frame)
+ * ctx = { t, up, right, tangent, speedNorm, airborne, steerVel, drift, driftSide, lean }  (world-space frame)
  * `group` is the whole rig; the caller positions and orients it. Particles are added to `scene`.
  * `pixel` is race/pixel.js: the glb's textures arrive after the run's one retexture(scene) pass, so
  * they go through preparePixel on mount. `model()` is the glb root once it lands, else null.
@@ -375,6 +391,15 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     const sq = sSquash.step(0, dt, 9, 0.45);
     root.scale.set(1 + sq * 0.18, 1 - sq * 0.28, 1 + sq * 0.18);
     saucer.rotation.y += (0.7 + ctx.speedNorm * 2.5) * dt;
+
+    // the steer lean: the cup tips on the dish, the saucer stays flat on the road (see CUP_TIP_MAX
+    // above). Turning about the foot and lifting by sin(tip) * CUP_FOOT_R puts the low half of the
+    // foot on the dish at every angle, so nothing here can reach the road however hard the turn.
+    const tip = CUP_TIP_MAX * Math.tanh((ctx.lean || 0) / CUP_TIP_MAX);
+    const ts = Math.sin(tip), tc = Math.cos(tip);
+    body.rotation.z = tip;
+    body.position.x = (CUP_PIVOT_Y + CUP_SLIDE) * ts;      // hold the foot, then slide it outward
+    body.position.y = CUP_PIVOT_Y * (1 - tc) + Math.abs(ts) * CUP_FOOT_R;
 
     // sweat off the bead and the CRT's top corners; a Bambi-scale anime sweat, not a rain
     if (!reducedMotion) {
