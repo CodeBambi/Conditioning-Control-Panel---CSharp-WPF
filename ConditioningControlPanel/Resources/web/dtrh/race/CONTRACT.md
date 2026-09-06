@@ -241,6 +241,10 @@ pop scores as a treat. Live category sets match `RECIPES` (first row whose `need
 run.js maps a served recipe to `score.boostMult` (never below x1), a toast, a mood poke and, for
 `marquee` rows, the banner. Durations for effects live in `CATEGORIES`, not run.js.
 
+### `race/gltf.js` (pass four, the Blender packs)
+
+`loadPack`, `toInstanceGeometry`, `setFace`/`FACES`, `preparePixel`, `disposePack` for `race/assets/emi.glb` + `props.glb`; the node names, clip names and the linear colour rule live in that file header, `byName` returns null for anything missing and the voxel kit stays the fallback.
+
 ## Host protocol (bridge.js, Protocol v1)
 
 Page -> host (`bridge.send(type, data)`): `ready` (announceReady), `heartbeat`, `pong`, `sfx {name, scale}`,
