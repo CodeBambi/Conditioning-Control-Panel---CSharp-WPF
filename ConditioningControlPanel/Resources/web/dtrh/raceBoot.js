@@ -57,7 +57,7 @@ const media = createHostMediaSource();
 const rollSeed = () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
 let initMsg = null, haveManifest = false, race = null, menu = null, booted = false, started = false, exiting = false;
 let settings = {}, seed = 0;
-let trackProgress = null, startTrackClock = null, trackTimer = 0, trackAudio = null;
+let trackProgress = null, trackReady = null, errorTimer = 0, startTrackClock = null, trackTimer = 0, trackAudio = null;
 
 const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
 function fail(err) {
@@ -96,24 +96,35 @@ bridge.on('exit-request', surface);
 bridge.on('track-chart', (m) => {
   if (!race || !m || !m.chart) return;
   try { (race.track && started) ? race.replaceTrack(m.chart) : race.setTrack(m.chart); }
-  catch (err) { host.log('track-chart: ' + ((err && err.message) || err)); trackError(String((err && err.message) || err)); }
+  catch (err) { host.log('track-chart: ' + ((err && err.message) || err)); trackError(String((err && err.message) || err)); return; }
+  const t = race.track, st = race.trackStats ? race.trackStats() : null;
+  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial } : null;
+  plate(trackReady);
 });
 bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });
 bridge.on('track-ended', () => { if (race) race.trackEnded(); });
 bridge.on('track-error', (m) => trackError((m && m.message) || 'the track would not load'));
-bridge.on('track-progress', (m) => {   // the menu's progress plate is PR c7; hold it for that
+bridge.on('track-progress', (m) => {
   trackProgress = m || null;
   host.log(`track-progress: ${(m && m.stage) || '?'} ${Math.round(((m && m.pct) || 0) * 100)}% ${(m && m.name) || ''}`);
+  if (!m) return;
+  // a cancelled dialog leaves whatever was loaded before in place; any other stage is the host at work
+  plate(m.stage === 'cancelled' ? trackReady : { stage: m.stage, pct: m.pct, name: m.name });
 });
+/** The menu's plate, when there is a menu to show it on (the run has the toast instead). */
+function plate(state) { try { if (menu && !started) menu.setTrack(state); } catch (e) { host.log('plate: ' + e); } }
 function trackError(message) {
   host.log('track-error: ' + message);
   try { if (race && race.hud) race.hud.toast(String(message).slice(0, 60).toLowerCase(), 'effect'); } catch (e) { /* no hud yet */ }
+  plate({ stage: 'error', message: String(message).slice(0, 80).toLowerCase() });
+  errorTimer = setTimeout(() => plate(trackReady), 4000);
 }
 /** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes through run.js). */
 function surface() {
   if (exiting) return;
   exiting = true;
   stopTrackClock();
+  if (errorTimer) clearTimeout(errorTimer);
   try { if (menu) menu.dispose(); } catch (e) { host.log('menu dispose: ' + e); }
   try { if (race) race.dispose(); } catch (e) { host.log('exit dispose: ' + e); }
   host.send({ type: 'exit' });
@@ -145,6 +156,7 @@ async function boot() {
     settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
     settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // for the audio pass; audio.js reads masterVolume today
     settings.seedLock = seedFromOptions(opts);
+    settings.trackPick = hosted;   // the file dialog is the host's; standalone loads a track off the query string
     seed = settings.seedLock != null ? settings.seedLock : rollSeed();
     note('the road is drawing');
     race = createRace({ root, bridge: host, media, settings, seed });
@@ -154,7 +166,13 @@ async function boot() {
     if (params.get('autostart') === '1') { startRun(false); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
     menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log });
-    menu.onPick((id) => { if (id === 'race') startRun(true); else if (id === 'surface') surface(); });
+    menu.onPick((id) => {
+      if (id === 'race') startRun(true);
+      else if (id === 'surface') surface();
+      else if (id === 'track') { plate({ stage: 'picking' }); host.send({ type: 'track-pick' }); }
+      else if (id === 'clear') { host.send({ type: 'track-cancel' }); race.setTrack(null); trackReady = null; plate(null); }
+    });
+    if (trackReady) plate(trackReady); else if (trackProgress && trackProgress.stage !== 'cancelled') plate(trackProgress);
     menu.seedCheck = () => {   // the menu may have changed the seed rule: rebuild the world once, before the intro
       const lock = seedFromOptions(menu.options);
       if (lock === settings.seedLock) return;
@@ -184,6 +202,8 @@ async function standaloneTrack() {
     if (want === 'demo') chart = mod.demoChart({ durationSec: Number(params.get('dur')) || 240 });
     else chart = mod.normalizeChart(await (await fetch(want)).json());
     race.setTrack(chart);
+    const st = race.trackStats ? race.trackStats() : null;
+    trackReady = { stage: 'ready', name: chart.source.name, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false };
   } catch (err) {
     trackError('chart: ' + ((err && err.message) || err));
     return;

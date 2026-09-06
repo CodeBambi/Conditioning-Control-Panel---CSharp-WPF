@@ -543,7 +543,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const payout = await waitPayout(PAYOUT_WAIT_MS);
     if (S.disposed) return;
     const shown = { ...summary };
-    if (payout && payout.finalXp != null) shown.title = `the tea party · +${Math.round(payout.finalXp)} xp` + (payout.sparksEarned ? ` · ${payout.sparksEarned} sparks` : '');
+    if (track && track.countable > 0) shown.title = `you took ${track.taken} of ${track.countable}`;   // a charted run is scored by the words it met
+    if (payout && payout.finalXp != null) shown.title = (shown.title || 'the tea party') + ` · +${Math.round(payout.finalXp)} xp` + (payout.sparksEarned ? ` · ${payout.sparksEarned} sparks` : '');
     const pick = await hud.showEnd(shown, { beside: true });
     if (S.disposed) return;
     if (pick === 'again') again(); else exit();
@@ -608,7 +609,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => TR.replace(chart), trackClock: (t, playing) => TR.clock(t, playing),
-    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); },
+    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(),
     get track() { return TR.track; } };
 }
 
