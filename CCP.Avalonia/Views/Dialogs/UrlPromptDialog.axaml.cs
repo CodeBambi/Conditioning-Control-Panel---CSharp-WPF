@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -32,7 +33,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             var text = url.Text?.Trim();
             var error = this.FindControl<TextBlock>("TxtError")!;
 
-            if (string.IsNullOrWhiteSpace(text))
+            if (!Uri.TryCreate(text, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
             {
                 error.Text = Loc.Get("deeper_url_prompt_invalid");
                 error.IsVisible = true;
