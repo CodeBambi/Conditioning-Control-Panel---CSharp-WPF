@@ -393,7 +393,7 @@ are centred on their mounting plate and keep it by merging it in; shoulder props
 
 ### `race/menu.js` + `race/intro.js` (pass five, the front door)
 ```js
-createMenu({ root, renderer, pixel, audio, settings, log }) -> { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose(), live }, dispose() }
+createMenu({ root, renderer, pixel, audio, settings, log }) -> { show(), hide(), onPick(cb), options, hideVerb(id), stage: { update(dt), render(), dispose(), live }, dispose() }
 createIntro({ stage, hud, audio, reducedMotion, log }) -> { play(): Promise, skip(), update(dt), render(), dispose() }
 cameraWhip(sec) / resultsCamera({ tier, reducedMotion }) / preRollCamera() -> fn(camera, dt, w, camOut), `false` when done
 resultTier(total, best, personalBest) -> 0..4 (the face index)
@@ -401,6 +401,15 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
 - Boot order: splash (a 1 s title flash) -> menu (the resting state) -> `race` -> intro on the menu stage -> run under the
   camera whip. `?autostart=1` skips menu and intro (the headless checks depend on it), `?intro=0` skips the intro only,
   `?scene=intro` boots straight into the intro. `surface` from the menu sends the same `exit` + `exit-done` the End screen does.
+- `surface` UNHOSTED: nothing takes the window away in a plain browser, so raceBoot picks a destination once at load.
+  `?back=<path>` wins when it resolves same origin, then a same-origin `document.referrer` (`history.back()`), and with
+  neither the boot calls `menu.hideVerb('surface')` so the verb is not on the list at all. Cross-origin values are ignored:
+  the switch is never an open redirect. `?panel=howto` (or `options`) opens the menu on that panel, a screenshot aid.
+- TOUCH: every keyboard path has a target under it. The key card carries a `back` row and a tap off the panel closes it;
+  each value row wears real `‹` / `›` buttons around the number, so music and sfx come DOWN by touch as well as up (a
+  whole-row press still steps up, the way the pad does). `.rm-col` / `.rc-col` scroll inside themselves and pad off
+  `env(safe-area-inset-*)`; `@media (max-height: 480px)` packs the seven verbs into a 390 px landscape phone and
+  `@media (pointer: coarse)` puts every verb, value arrow and roster arrow on a 44 px target.
 - The stage is a second `THREE.Scene` drawn by the race's renderer + pixelizer through `race.setStage(s)`: while set,
   `frame()` calls `s.update(dt)` + `s.render()` and the world is not drawn. `setStage(null)` retextures the world for any
   pixel block the menu changed. No second canvas.
