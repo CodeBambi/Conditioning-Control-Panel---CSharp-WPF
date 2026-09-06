@@ -287,6 +287,11 @@ export function geoSize(geo) -> { w, h, d, cy }
 `rooms.js` and `roomProps.js` dress from this one handle, so the pack is fetched and parsed once. A
 null from either function always means the same thing: keep the voxel fallback.
 
+`roomProps.js` names a pack node per `ROOM_PROPS` slot (`node`) and, for the four screen rooms, the
+fixture that mounts around the quad (`frame` + `frameY`, the authored opening centre). Wall props
+are centred on their mounting plate and keep it by merging it in; shoulder props and extras move to
+`PROP_X` and are mirrored on x because `shoulderMatrix` is left handed like `roadMatrix`.
+
 ## Host protocol (bridge.js, Protocol v1)
 
 Page -> host (`bridge.send(type, data)`): `ready` (announceReady), `heartbeat`, `pong`, `sfx {name, scale}`,

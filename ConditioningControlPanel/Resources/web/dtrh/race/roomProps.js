@@ -22,17 +22,26 @@
  * shared meshes (step blocks, risers) = 21 for the eight rooms. Rooms out of view
  * are hidden; animation touches only instances within ANIM metres of the kart.
  *
+ * The Blender pack (race/assets/props.glb, one node per ROOM_PROPS slot) takes the vignettes
+ * over once it resolves: geometry only, one InstancedMesh per prop as before, every placement,
+ * riser, mounting plate and anim untouched. A missing pack or a missing node leaves that prop
+ * on its voxel `parts`, so the kit below is still the fallback and still the spec.
+ *
  * createRoomProps({ scene, group, layout, spans, specOf, rng }) -> { update(d, t), dispose }
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RADIUS, ROAD_DROP } from './consts.js';
+import { propPack, packGeo, geoSize } from './propPack.js';
 
 const SH_X = 3.5;                                               // shoulder origin: the kerb's outer edge, road level
 const SH_H = 0;
 const STEP = { w: 1.05, h: 0.6, l: 0.9, in: 0.45 };             // plinth beside the kerb: overlaps it by `in`, runs
                                                                 // out into the wall (the tube hides the rest)
 const WALL_INSET = 0.06;
+const PLATE = { w: 1.7, h: 1.1, d: 0.06, y: 0.4 };              // mounting plate behind every wall prop
+const PROP_X = 0.3;                                             // the step block centres its prop area here
 const ANIM = 90;                                                // metres: instances nearer than this animate
 const VIEW = 160;                                               // metres: rooms farther than this are hidden
 const TAU = Math.PI * 2;
@@ -87,6 +96,8 @@ const box = (s, p, c, r) => ({ s, p, c, r });
 // Each room: wall (flush, mid band), shoulder (on a step block), optional extra (on the
 // shoulder too), and where the risers (steam, bubbles, sparks) come from.
 // anim: bounce | bob | tumble | sway | flicker | glint | none. screen: unlit canvas quad.
+// node: the props.glb node that replaces `parts` when the pack lands. frame + frameY: the pack
+// fixture that mounts AROUND a screen quad, moved so its authored opening centre sits on the quad.
 const CREAM = 0xf6e7c8, PINK = 0xffb6d9, GOLD = 0xf2c14e, WHITE = 0xffffff;
 function teacupPair() {
   const cup = (x, c) => [
@@ -98,57 +109,60 @@ function teacupPair() {
 }
 const ROOM_PROPS = {
   teagarden: {
-    wall: { parts: teacupPair(), every: 13, risers: [[-0.4, 0.5, 0.25], [0.4, 0.5, 0.25]], riserColor: WHITE },
-    shoulder: { every: 22, gateOnly: false, parts: [
+    wall: { node: 'teagarden_wall', parts: teacupPair(), every: 13, risers: [[-0.4, 0.5, 0.25], [0.4, 0.5, 0.25]], riserColor: WHITE },
+    shoulder: { node: 'teagarden_shoulder', every: 22, gateOnly: false, parts: [
       box([0.5, 0.42, 0.5], [0.3, 0.21, 0.1], PINK), box([0.3, 0.08, 0.3], [0.3, 0.46, 0.1], CREAM), box([0.1, 0.1, 0.1], [0.3, 0.55, 0.1], CREAM),
       box([0.12, 0.12, 0.22], [0.3, 0.3, 0.44], PINK), box([0.08, 0.24, 0.06], [0.3, 0.26, -0.2], PINK),
       box([0.16, 0.16, 0.16], [0.16, 0.08, -0.32], WHITE), box([0.16, 0.16, 0.16], [0.42, 0.08, -0.34], WHITE), box([0.16, 0.16, 0.16], [0.29, 0.24, -0.33], WHITE)] },
   },
   toybox: {
-    wall: { every: 14, parts: [box([1.3, 0.08, 0.5], [0, 0, 0.25], 0x8a5a3a), box([0.34, 0.34, 0.34], [-0.42, 0.21, 0.25], 0xff4d6d),
+    wall: { node: 'toybox_wall', every: 14, parts: [box([1.3, 0.08, 0.5], [0, 0, 0.25], 0x8a5a3a), box([0.34, 0.34, 0.34], [-0.42, 0.21, 0.25], 0xff4d6d),
       box([0.34, 0.34, 0.34], [0, 0.21, 0.25], 0xffd23f), box([0.34, 0.34, 0.34], [0.42, 0.21, 0.25], 0x3a86ff), box([0.26, 0.26, 0.26], [0, 0.51, 0.25], PINK)] },
-    shoulder: { every: 16, anim: 'bounce', parts: [box([0.4, 0.4, 0.4], [0.3, 0.2, 0], 0xff4d6d), box([0.36, 0.36, 0.36], [0.32, 0.58, 0.04], 0xffd23f), box([0.3, 0.3, 0.3], [0.28, 0.91, -0.02], 0x3a86ff)] },
-    extra: { every: 34, anim: 'bob', parts: [box([0.5, 0.5, 0.5], [0.3, 0.25, 0], 0x3a86ff), box([0.5, 0.06, 0.5], [0.3, 0.6, -0.24], 0xffd23f, [-0.9, 0, 0]),
+    shoulder: { node: 'toybox_shoulder', every: 16, anim: 'bounce', parts: [box([0.4, 0.4, 0.4], [0.3, 0.2, 0], 0xff4d6d), box([0.36, 0.36, 0.36], [0.32, 0.58, 0.04], 0xffd23f), box([0.3, 0.3, 0.3], [0.28, 0.91, -0.02], 0x3a86ff)] },
+    extra: { node: 'toybox_extra', every: 34, anim: 'bob', parts: [box([0.5, 0.5, 0.5], [0.3, 0.25, 0], 0x3a86ff), box([0.5, 0.06, 0.5], [0.3, 0.6, -0.24], 0xffd23f, [-0.9, 0, 0]),
       box([0.22, 0.05, 0.22], [0.3, 0.62, 0], 0xffd23f), box([0.18, 0.05, 0.18], [0.3, 0.76, 0], 0xffd23f), box([0.22, 0.05, 0.22], [0.3, 0.9, 0], 0xffd23f), box([0.28, 0.28, 0.28], [0.3, 1.1, 0], PINK)] },
   },
   casino: {
-    wall: { every: 12, screen: 'neon', size: [1.6, 0.8] },
-    shoulder: { every: 14, risers: [[0.3, 0.5, 0]], riserColor: GOLD, parts: (() => {
+    wall: { frame: 'casino_sign', frameY: 0.5, every: 12, screen: 'neon', size: [1.6, 0.8] },
+    shoulder: { node: 'casino_shoulder', every: 14, risers: [[0.3, 0.5, 0]], riserColor: GOLD, parts: (() => {
       const out = []; const stack = (x, z, n, cols) => { for (let i = 0; i < n; i++) out.push(box([0.34, 0.06, 0.34], [x, 0.03 + i * 0.065, z], cols[i % cols.length])); };
       stack(0.2, -0.2, 6, [0xa3122e, WHITE]); stack(0.42, 0.18, 4, [GOLD, 0x1a1a2e]); stack(0.16, 0.24, 3, [WHITE, 0xa3122e]); return out; })() },
-    extra: { every: 30, anim: 'tumble', parts: [box([0.36, 0.36, 0.36], [0.3, 0.4, 0], WHITE),
+    extra: { node: 'casino_extra', nodePivotY: 0.18, every: 30, anim: 'tumble', parts: [box([0.36, 0.36, 0.36], [0.3, 0.4, 0], WHITE),
       box([0.07, 0.07, 0.02], [0.3, 0.4, 0.18], 0x1a1a2e), box([0.07, 0.07, 0.02], [0.2, 0.5, 0.18], 0x1a1a2e), box([0.07, 0.07, 0.02], [0.4, 0.3, 0.18], 0x1a1a2e),
       box([0.02, 0.07, 0.07], [0.48, 0.4, 0], 0x1a1a2e), box([0.07, 0.02, 0.07], [0.3, 0.58, 0.08], 0x1a1a2e), box([0.07, 0.02, 0.07], [0.3, 0.58, -0.08], 0x1a1a2e)] },
   },
   undertow: {
-    wall: { every: 13, screen: 'porthole', size: [1.2, 1.2] },
-    shoulder: { every: 9, anim: 'sway', risers: [[0.3, 2.3, 0]], riserColor: 0x7fe7f0, parts: [
+    wall: { frame: 'undertow_porthole', frameY: 0.78, every: 13, screen: 'porthole', size: [1.2, 1.2] },
+    shoulder: { node: 'undertow_shoulder', every: 11, anim: 'sway', risers: [[0.3, 2.3, 0]], riserColor: 0x7fe7f0, parts: [
       box([0.3, 0.5, 0.14], [0.3, 0.25, 0], 0x1fa9b5), box([0.26, 0.5, 0.12], [0.3, 0.75, 0.05], 0x27b8a0), box([0.2, 0.5, 0.1], [0.3, 1.25, 0], 0x1fa9b5),
       box([0.14, 0.4, 0.08], [0.3, 1.7, -0.04], 0x5be7d8), box([0.16, 0.3, 0.06], [0.14, 0.9, 0.1], 0x27b8a0), box([0.16, 0.3, 0.06], [0.46, 1.3, -0.1], 0x27b8a0)] },
   },
   mirrors: {
-    wall: { every: 10, anim: 'glint', parts: [box([1.2, 1.7, 0.08], [0, 0, 0.04], 0x4a4f66), box([1.04, 1.54, 0.06], [0, 0, 0.08], 0xdde3f0)] },
-    shoulder: { every: 18, parts: [box([0.32, 0.6, 0.05], [0.24, 0.3, 0.1], 0xdde3f0, [0, 0.4, 0.15]), box([0.26, 0.44, 0.05], [0.42, 0.22, -0.2], 0xc9d3ea, [0, -0.7, -0.1]),
+    wall: { node: 'mirrors_wall', every: 12, anim: 'glint', parts: [box([1.2, 1.7, 0.08], [0, 0, 0.04], 0x4a4f66), box([1.04, 1.54, 0.06], [0, 0, 0.08], 0xdde3f0)] },
+    shoulder: { node: 'mirrors_shoulder', every: 18, parts: [box([0.32, 0.6, 0.05], [0.24, 0.3, 0.1], 0xdde3f0, [0, 0.4, 0.15]), box([0.26, 0.44, 0.05], [0.42, 0.22, -0.2], 0xc9d3ea, [0, -0.7, -0.1]),
       box([0.2, 0.3, 0.05], [0.16, 0.15, -0.3], 0x5be7d8, [0, 1.2, 0.25])] },
   },
   chapel: {
-    wall: { every: 12, screen: 'glass', size: [1.2, 1.6] },
-    shoulder: { every: 10, anim: 'flicker', risers: [[0.3, 0.9, 0]], riserColor: 0xffd696, parts: [
+    wall: { frame: 'chapel_frame', frameY: 0.9, every: 12, screen: 'glass', size: [1.2, 1.6] },
+    shoulder: { node: 'chapel_shoulder', every: 12, anim: 'flicker', risers: [[0.3, 0.9, 0]], riserColor: 0xffd696, parts: [
       box([0.14, 0.5, 0.14], [0.18, 0.25, -0.2], WHITE), box([0.14, 0.7, 0.14], [0.36, 0.35, 0.05], WHITE), box([0.14, 0.6, 0.14], [0.2, 0.3, 0.26], WHITE),
       box([0.1, 0.14, 0.1], [0.18, 0.57, -0.2], GOLD), box([0.1, 0.14, 0.1], [0.36, 0.77, 0.05], GOLD), box([0.1, 0.14, 0.1], [0.2, 0.67, 0.26], GOLD),
       box([0.5, 0.06, 0.7], [0.3, 0.03, 0], 0xe23c9c)] },
   },
   greyward: {
-    wall: { every: 11, screen: 'fluoro', size: [1.6, 0.4] },
-    shoulder: { every: 15, parts: [box([0.54, 0.08, 0.9], [0.3, 0.22, 0], 0x6d7278), box([0.5, 0.14, 0.9], [0.3, 0.33, 0], 0xdde3f0), box([0.2, 0.08, 0.3], [0.3, 0.44, -0.28], WHITE),
-      box([0.06, 0.18, 0.06], [0.08, 0.09, -0.4], 0x6d7278), box([0.06, 0.18, 0.06], [0.52, 0.09, -0.4], 0x6d7278), box([0.06, 0.18, 0.06], [0.08, 0.09, 0.4], 0x6d7278), box([0.06, 0.18, 0.06], [0.52, 0.09, 0.4], 0x6d7278),
-      box([0.05, 1.4, 0.05], [0.3, 0.7, 0.6], 0x9aa0a6), box([0.3, 0.04, 0.04], [0.3, 1.4, 0.6], 0x9aa0a6), box([0.16, 0.24, 0.08], [0.42, 1.26, 0.6], 0xbfd7e0)] },
+    wall: { frame: 'greyward_fluoro', frameY: 0.3, every: 11, screen: 'fluoro', size: [1.6, 0.4] },
+    shoulder: { node: 'greyward_shoulder', every: 15, parts: [box([0.54, 0.08, 0.9], [0.3, 0.22, 0], 0x6d7278), box([0.5, 0.14, 0.9], [0.3, 0.33, 0], 0xdde3f0), box([0.2, 0.08, 0.3], [0.3, 0.44, -0.28], WHITE),
+      box([0.06, 0.18, 0.06], [0.08, 0.09, -0.4], 0x6d7278), box([0.06, 0.18, 0.06], [0.52, 0.09, -0.4], 0x6d7278), box([0.06, 0.18, 0.06], [0.08, 0.09, 0.4], 0x6d7278), box([0.06, 0.18, 0.06], [0.52, 0.09, 0.4], 0x6d7278)] },
+    // the drip stand used to hang off the gurney; the pack ships it as its own node, so it is a
+    // prop of its own on both paths and the ward gets a second silhouette down the shoulder
+    extra: { node: 'greyward_iv', every: 19, parts: [box([0.05, 1.4, 0.05], [0.3, 0.7, 0], 0x9aa0a6),
+      box([0.3, 0.04, 0.04], [0.42, 1.4, 0], 0x9aa0a6), box([0.16, 0.24, 0.08], [0.54, 1.26, 0], 0xbfd7e0), box([0.34, 0.05, 0.34], [0.3, 0.02, 0], 0x6d7278)] },
   },
   coronation: {
-    wall: { every: 12, parts: [box([0.9, 2.2, 0.06], [0, -0.2, 0.03], 0x7a0f2b), box([1.2, 0.08, 0.08], [0, 0.95, 0.06], GOLD), box([0.9, 0.12, 0.02], [0, 0.3, 0.07], GOLD),
+    wall: { node: 'coronation_wall', every: 12, parts: [box([0.9, 2.2, 0.06], [0, -0.2, 0.03], 0x7a0f2b), box([1.2, 0.08, 0.08], [0, 0.95, 0.06], GOLD), box([0.9, 0.12, 0.02], [0, 0.3, 0.07], GOLD),
       box([0.14, 0.14, 0.04], [-0.2, -0.4, 0.07], GOLD), box([0.14, 0.14, 0.04], [0, -0.4, 0.07], GOLD), box([0.14, 0.14, 0.04], [0.2, -0.4, 0.07], GOLD), box([0.5, 0.1, 0.04], [0, -0.55, 0.07], GOLD)] },
-    shoulder: { every: 14, parts: [box([0.56, 0.12, 0.56], [0.3, 0.06, 0], CREAM), box([0.44, 2.0, 0.44], [0.3, 1.0, 0], 0xe9dcc0), box([0.6, 0.16, 0.6], [0.3, 2.08, 0], GOLD)] },
-    extra: { every: 14, anim: 'spin', onShoulderTop: 2.16, risers: [[0.3, 0.5, 0]], riserColor: PINK, parts: [
+    shoulder: { node: 'coronation_shoulder', every: 14, parts: [box([0.56, 0.12, 0.56], [0.3, 0.06, 0], CREAM), box([0.44, 2.0, 0.44], [0.3, 1.0, 0], 0xe9dcc0), box([0.6, 0.16, 0.6], [0.3, 2.08, 0], GOLD)] },
+    extra: { node: 'coronation_extra', nodeLift: 0.08, every: 14, anim: 'spin', onShoulderTop: 2.16, risers: [[0.3, 0.5, 0]], riserColor: PINK, parts: [
       box([0.5, 0.1, 0.06], [0.3, 0.05, 0.22], GOLD), box([0.5, 0.1, 0.06], [0.3, 0.05, -0.22], GOLD), box([0.06, 0.1, 0.5], [0.08, 0.05, 0], GOLD), box([0.06, 0.1, 0.5], [0.52, 0.05, 0], GOLD),
       box([0.08, 0.16, 0.08], [0.08, 0.16, 0.22], GOLD), box([0.08, 0.16, 0.08], [0.52, 0.16, 0.22], GOLD), box([0.08, 0.16, 0.08], [0.08, 0.16, -0.22], GOLD), box([0.08, 0.16, 0.08], [0.52, 0.16, -0.22], GOLD),
       box([0.1, 0.1, 0.1], [0.3, 0.22, 0.22], 0xe23c9c)] },
@@ -220,7 +234,8 @@ export function createRoomProps({ scene, group, layout, spans, specOf, rng }) {
   const riserGeo = voxel([box([0.18, 0.18, 0.18], [0, 0, 0], WHITE)]); geos.push(riserGeo);
   const stepList = [], riserList = [];                     // { m: Matrix4, color }  /  { base: Matrix4, phase, d, color }
 
-  const roomSets = [];   // { d0, d1, meshes: [{ mesh, base:[], phase:[], d:[], anim, mat, screen }] }
+  const plateParts = (color) => [box([PLATE.w, PLATE.h, PLATE.d], [0, PLATE.y, -PLATE.d / 2], color)];
+  const roomSets = [];   // { d0, d1, meshes: [{ mesh, base:[], phase:[], d:[], anim, mat, screen, cfg, kind, pivot }] }
   for (const span of spans) {
     const spec = specOf(span.id), def = ROOM_PROPS[span.id] || ROOM_PROPS.teagarden;
     const chunks = layout.chunks.filter((c) => c.room === span.id && c.kind !== 'loop');
@@ -251,13 +266,13 @@ export function createRoomProps({ scene, group, layout, spans, specOf, rng }) {
       } else {
         // wall props get a mounting plate behind them so they read as fixed to the wall
         // even where the room's grade paints the tube near-black (Tea Garden)
-        const plate = kind === 'wall' ? [box([1.7, 1.1, 0.06], [0, 0.4, -0.03], stepColor)] : [];
-        geo = voxel([...plate, ...cfg.parts]); material = lambert;
+        geo = voxel([...(kind === 'wall' ? plateParts(stepColor) : []), ...cfg.parts]); material = lambert;
       }
       geos.push(geo);
       const list = place();
       const mesh = new THREE.InstancedMesh(geo, material, Math.max(1, list.length));
-      const entry = { mesh, base: [], phase: [], d: [], anim: cfg.anim || 'none', mat: material, screen: cfg.screen || null };
+      const entry = { mesh, base: [], phase: [], d: [], anim: cfg.anim || 'none', mat: material, screen: cfg.screen || null,
+        cfg, kind, pivot: 0.4, plateColor: stepColor };
       list.forEach((it, i) => {
         mesh.setMatrixAt(i, it.m);
         entry.base.push(it.m.clone()); entry.phase.push(rng() * TAU); entry.d.push(it.d);
@@ -294,6 +309,59 @@ export function createRoomProps({ scene, group, layout, spans, specOf, rng }) {
   risers.count = riserList.length; risers.frustumCulled = false; risers.name = 'race-prop-risers';
   for (const m of [steps, risers]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; group.add(m); meshes.push(m); }
 
+  // ---- the Blender pack dresses the vignettes (race/assets/props.glb) ------------------------
+  // Geometry only: the InstancedMesh, its matrices, its risers and its anim all stay, so a prop
+  // swaps in place. The pack authors every node base-centre on the ground with the front on +z,
+  // which is not where the voxel kit put its origin, so each kind gets its own fix:
+  //   wall      centred on the mounting plate band (the plate is merged back in, one draw call)
+  //   shoulder  moved to PROP_X, the middle of the step block; extras the same, plus nodeLift
+  //   frames    moved down by the authored opening centre so the opening rings the screen quad
+  // shoulderMatrix builds a LEFT handed basis (see rooms.js roadMatrix), so shoulder geometry is
+  // mirrored on x to keep its winding and its outline hull right. wallMatrix is right handed.
+  let dead = false;
+  function swapGeo(pack, e) {
+    const cfg = e.cfg, wall = e.kind === 'wall';
+    const geo = packGeo(pack, cfg.node, wall ? null : [PROP_X, cfg.nodeLift || 0, 0], wall ? 1 : -1);
+    if (!geo) return;
+    if (wall) geo.translate(0, PLATE.y - geoSize(geo).cy, 0);
+    const out = wall ? withPlate(geo, e.plateColor) : geo;
+    out.computeBoundingSphere();
+    geos.push(out);
+    e.mesh.geometry = out;
+    if (cfg.nodePivotY != null) e.pivot = cfg.nodePivotY;
+  }
+  /** Keep the wall plate behind a swapped prop by merging it in, so the prop is still one call. */
+  function withPlate(geo, color) {
+    let plate = voxel(plateParts(color));
+    plate.deleteAttribute('uv');
+    if (!geo.index) plate = plate.toNonIndexed();
+    const merged = mergeGeometries([plate, geo], false);
+    plate.dispose();
+    if (!merged) return geo;
+    geo.dispose();
+    return merged;
+  }
+  /** The pack fixture that mounts around a screen quad: same placements, its own draw call. */
+  function addFrame(pack, set, e) {
+    const geo = packGeo(pack, e.cfg.frame, [0, -e.cfg.frameY, 0]);
+    if (!geo) return;
+    geos.push(geo);
+    const mesh = new THREE.InstancedMesh(geo, lambert, Math.max(1, e.base.length));
+    e.base.forEach((m, i) => mesh.setMatrixAt(i, m));
+    mesh.count = e.base.length; mesh.frustumCulled = false; mesh.instanceMatrix.needsUpdate = true;
+    mesh.name = `${e.mesh.name}-frame`;
+    group.add(mesh); meshes.push(mesh);
+    set.meshes.push({ mesh, base: e.base, phase: e.phase, d: e.d, anim: 'none', mat: lambert, screen: null,
+      cfg: {}, kind: 'frame', pivot: 0.4, plateColor: e.plateColor });
+  }
+  propPack().then((pack) => {
+    if (!pack || dead) return;
+    for (const set of roomSets) for (const e of set.meshes.slice()) {
+      if (e.cfg.frame) addFrame(pack, set, e);
+      else if (e.cfg.node) swapGeo(pack, e);
+    }
+  });
+
   // ---- runtime ------------------------------------------------------------------------------
   const _sc = new THREE.Vector3();
   function update(d, t) {
@@ -315,7 +383,7 @@ export function createRoomProps({ scene, group, layout, spans, specOf, rng }) {
             case 'bounce': _m.copy(e.base[i]).multiply(_t.makeTranslation(0, Math.abs(Math.sin(t * 3.2 + ph)) * 0.18, 0)); break;
             case 'bob': _m.copy(e.base[i]).multiply(_t.makeTranslation(0.3, 0.06 + 0.06 * Math.sin(t * 2.4 + ph), 0)).multiply(_r.makeRotationY(t * 1.2 + ph)).multiply(_t.makeTranslation(-0.3, 0, 0)); break;
             case 'spin': _m.copy(e.base[i]).multiply(_t.makeTranslation(0.3, 0, 0)).multiply(_r.makeRotationY(t * 0.9 + ph)).multiply(_t.makeTranslation(-0.3, 0, 0)); break;
-            case 'tumble': _m.copy(e.base[i]).multiply(_t.makeTranslation(0.3, 0.4, 0)).multiply(_r.makeRotationFromEuler(_eul.set(t * 1.7 + ph, t * 1.1, ph))).multiply(_t.makeTranslation(-0.3, -0.4, 0)); break;
+            case 'tumble': _m.copy(e.base[i]).multiply(_t.makeTranslation(PROP_X, e.pivot, 0)).multiply(_r.makeRotationFromEuler(_eul.set(t * 1.7 + ph, t * 1.1, ph))).multiply(_t.makeTranslation(-PROP_X, -e.pivot, 0)); break;
             case 'sway': _m.copy(e.base[i]).multiply(_t.makeTranslation(0.3, 0, 0)).multiply(_r.makeRotationFromEuler(_eul.set(0.16 * Math.sin(t * 1.1 + ph), 0, 0.2 * Math.sin(t * 1.4 + ph)))).multiply(_t.makeTranslation(-0.3, 0, 0)); break;
             case 'flicker': e.mesh.setColorAt(i, _c.setScalar(0.85 + 0.25 * Math.abs(Math.sin(t * 13 + ph) * Math.sin(t * 5 + ph * 2)))); dirtyColor = true; continue;
             case 'glint': { const k = ((t * 0.35 + ph / TAU) % 1); const g = k < 0.12 ? 1 + 2.4 * Math.sin(k / 0.12 * Math.PI) : 1; e.mesh.setColorAt(i, _c.setScalar(g)); dirtyColor = true; continue; }
@@ -339,6 +407,7 @@ export function createRoomProps({ scene, group, layout, spans, specOf, rng }) {
   }
 
   function dispose() {
+    dead = true;
     for (const m of meshes) { group.remove(m); m.dispose(); }
     for (const g of geos) g.dispose();
     for (const m of mats) m.dispose();
