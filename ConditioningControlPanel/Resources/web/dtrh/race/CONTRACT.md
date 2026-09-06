@@ -221,6 +221,23 @@ As built (PR 5 reality notes):
   items) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
 - Extra `run-ended` fields: `nearMisses`, `personalBest`. `exit` is followed by `exit-done` once torn down.
 
+### `race/cocktail.js` (pass three, THE MIX)
+```js
+import { createCocktail, CATEGORIES, RECIPES } from './cocktail.js';
+const mix = createCocktail({ now });   // pure state, no DOM, no scoring
+mix.add(kindId, { durationMult }) -> { action, category, kindId, charges, depth, recipe, prevKindId, reason }
+mix.tick(dt) -> events        // pulse (burst | roll), decay, expire, recipeEnd
+mix.state() -> { live: [{ category, kindId, glyph, label, charges, max, depth, sec, total, frac }], recipe, video, load }
+```
+Replaces pass two's "one screen effect at a time". Every effect kind carries a `category` in
+`bubbleKinds.js`; one live effect per category with its own rule for a re-pop: `strobe` (flash)
+stacks to 5 charges that decay one at a time, `tint` (pink) extends and deepens to 2, `overlay`
+(spiral / braindrain) replaces, `corruption` (glitch) refreshes, `cards` (subliminal / gif rain)
+add to 4, `freeze` and `video` are solo (`video` holds everything else). `action: 'held'` means the
+pop scores as a treat. Live category sets match `RECIPES` (first row whose `needs` are all live);
+run.js maps a served recipe to `score.boostMult` (never below x1), a toast, a mood poke and, for
+`marquee` rows, the banner. Durations for effects live in `CATEGORIES`, not run.js.
+
 ## Host protocol (bridge.js, Protocol v1)
 
 Page -> host (`bridge.send(type, data)`): `ready` (announceReady), `heartbeat`, `pong`, `sfx {name, scale}`,
