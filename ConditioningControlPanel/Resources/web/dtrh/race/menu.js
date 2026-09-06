@@ -18,9 +18,11 @@
  * clip is the one breath on screen (Law III); every 3..6 s a wave / hop /
  * drum plays on a 0.3 s crossfade and settles back; a peek fires when the
  * pointer crosses into her half (6 s gap). The face swaps with the clip:
- * idle ^_^ 0, wave :3 1, hop >_< 2, peek o_o 3, drum $_$ 4. The atlas also
- * carries the starry 5 and the spiral 6; no clip claims them here. Reduced
- * motion: idle only, no one-shots, no crossfade pops.
+ * idle ^_^ 0, wave :3 1, hop >_< 2, peek o_o 3, drum $_$ 4, and race/menuFlashes.js
+ * borrows starry 5 and spiral 6 for the idle show it runs on the same stage:
+ * every 8..13 s a flash pops in the air around her and she turns to look at
+ * it, over the idle clip and never instead of it. Reduced motion: idle only,
+ * no one-shots, no flashes, no crossfade pops.
  *
  * Screenshot aid: `?face=N` pins the stage face at atlas frame N, so one frame
  * can be shot on its own while the clips keep running.
@@ -50,6 +52,7 @@
 import * as THREE from 'three';
 import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
 import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
+import { createMenuFlashes } from './menuFlashes.js';
 
 export const OPTIONS_KEY = 'race.options';
 export const PROPS_URL = '/dtrh/race/assets/props.glb';
@@ -232,6 +235,13 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   const emi = { root: new THREE.Group(), model: null, mixer: null, actions: {}, busy: null, face: -1, ready: [],
     nextAt: BEAT_MIN + Math.random() * (BEAT_MAX - BEAT_MIN), lastPeek: -PEEK_GAP };
   emi.root.position.set(0, PODIUM_H, 0); scene.add(emi.root);
+  // the idle show: flashes pop around her and she looks at them (race/menuFlashes.js). A flash beat
+  // pushes the one-shot beat back so a wave never lands mid-glance; `ctx` is one object, reused.
+  const flashCtx = { t: 0, mode: 'menu', reduced: false, busy: null };
+  const flashes = createMenuFlashes({
+    scene, emiRoot: emi.root, baseY: PODIUM_H, faces: character.faces, setFace: (i) => face(i), log,
+    holdBeat: (sec) => { emi.nextAt = Math.max(emi.nextAt, t + sec); },
+  });
   loadPack(character.glb, { log }).then((pack) => {
     if (disposed) return;
     const model = pack.scene.clone(true);
@@ -265,6 +275,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     }
     mixer.addEventListener('finished', (e) => { if (e.action !== emi.actions.idle) settle(e.action); });
     face(character.faces.idle);
+    flashes.attach(model, pack.animations);
     for (const cb of emi.ready) { try { cb(model); } catch (err) { /* a listener never breaks the stage */ } }
     emi.ready.length = 0;
     if (log) log(`[menu] ${character.id} on stage: ${Object.keys(emi.actions).join(' ')}`);
@@ -287,6 +298,8 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   function play(k, { fade = FADE, timeScale = 1 } = {}) {
     const a = emi.actions[k], idle = emi.actions.idle;
     if (!a || a === idle) return false;
+    flashes.release();          // a one-shot or a peek takes her: the glance goes home the same way it would have
+
     if (emi.busy && emi.actions[emi.busy] !== a) emi.actions[emi.busy].fadeOut(0.1);
     a.reset().setEffectiveTimeScale(timeScale).setEffectiveWeight(1).play();
     if (idle) idle.crossFadeTo(a, reduced ? 0 : fade, false);
@@ -298,9 +311,12 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   function rippleTea() { ripple.scale.setScalar(1); ripple.material.opacity = 0.9; }
 
   function update(dt) {
+    if (flashes.frozen) return;   // the `?freeze` screenshot aid holds the whole stage on one frame
     t += dt;
     if (emi.mixer) emi.mixer.update(dt);
-    if (mode === 'menu' && !reduced && !emi.busy && t >= emi.nextAt) play(ONE_SHOTS[Math.floor(Math.random() * ONE_SHOTS.length)]);
+    if (mode === 'menu' && !reduced && !emi.busy && !flashes.pending && t >= emi.nextAt) play(ONE_SHOTS[Math.floor(Math.random() * ONE_SHOTS.length)]);
+    flashCtx.t = t; flashCtx.mode = mode; flashCtx.reduced = reduced; flashCtx.busy = emi.busy;
+    flashes.update(dt, flashCtx);   // after the mixer: the antenna offset rides on top of the clip
     sky.offset.x += dt * 0.004;    // scenery drifts; EMI is the one breath (Law III)
     driftBubbles(dt);
     if (ripple.material.opacity > 0) { ripple.scale.addScalar(dt * 4); ripple.material.opacity = Math.max(0, ripple.material.opacity - dt * 1.6); }
@@ -317,6 +333,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   function dispose() {
     if (disposed) return;
     disposed = true;
+    flashes.dispose();
     if (emi.mixer) emi.mixer.stopAllAction();
     for (const x of own) { try { x.dispose(); } catch (e) { /* shared or gone */ } }
     scene.clear();
