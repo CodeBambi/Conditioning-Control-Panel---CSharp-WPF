@@ -41,8 +41,11 @@
  * no one-shots, no flashes, no crossfade pops.
  *
  * Screenshot aid: `?face=N` pins the stage face at atlas frame N, so one frame
- * can be shot on its own while the clips keep running. `?panel=howto` (and
- * `?panel=options`) opens the menu on that panel, the way `?card=N` opens a card.
+ * can be shot on its own while the clips keep running. `?clip=NAME` pins one
+ * clip (wave / hop / peek / drum) on loop instead of the random 3..6 s beat, so
+ * a one-shot pose can be shot without waiting for it to come round (the flash
+ * idle show stands down with it, so nothing turns her mid-pose). `?panel=howto`
+ * (and `?panel=options`) opens the menu on that panel, the way `?card=N` opens a card.
  *
  * Props: race/assets/props.glb (podium, kart_cup, kart_saucer, floor_tile)
  * dresses the stage when it resolves; otherwise the lathe cup from the old
@@ -136,6 +139,15 @@ const FACE_PIN = (() => {
     if (v === null || v === '' || !Number.isFinite(+v)) return -1;
     return clamp(+v | 0, 0, FACES.length - 1);
   } catch (e) { return -1; }              // no location (a node import), no pin
+})();
+/** Screenshot aid: `?clip=NAME` pins one of the roster clips on loop (the random beat and the
+ *  pointer peek both stand down), so a one-shot pose can be shot without waiting for it to come
+ *  round. null = the idle show runs the way it always does. */
+const CLIP_PIN = (() => {
+  try {
+    const v = (new URLSearchParams(location.search).get('clip') || '').toLowerCase();
+    return v && v !== 'idle' ? v : null;
+  } catch (e) { return null; }           // no location (a node import), no pin
 })();
 /** Screenshot aid: `?panel=howto | options | media` opens the menu on that panel instead of the verbs. */
 const PANEL_PIN = (() => {
@@ -339,9 +351,18 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
       if (k === 'idle') { a.setLoop(THREE.LoopRepeat, Infinity); a.play(); }
       else { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
     }
+    // the `?clip=` aid: that one clip loops on its own, over an idle held at weight 0
+    const pinned = CLIP_PIN ? emi.actions[CLIP_PIN] : null;
+    if (pinned && pinned !== emi.actions.idle) {
+      if (emi.actions.idle) emi.actions.idle.setEffectiveWeight(0);
+      pinned.setLoop(THREE.LoopRepeat, Infinity); pinned.clampWhenFinished = false;
+      pinned.reset().setEffectiveWeight(1).play();
+    }
     mixer.addEventListener('finished', (e) => { if (e.action !== emi.actions.idle) settle(e.action); });
-    face(character.faces.idle);
-    flashes.attach(model, pack.animations);
+    face(pinned && character.faces[CLIP_PIN] != null ? character.faces[CLIP_PIN] : character.faces.idle);
+    // a pinned clip is a screenshot, not the idle show: the flashes never arm, so nothing turns her
+    // body or swaps her face out from under the pose being shot
+    if (!pinned) flashes.attach(model, pack.animations);
     for (const cb of emi.ready) { try { cb(model); } catch (err) { /* a listener never breaks the stage */ } }
     emi.ready.length = 0;
     if (log) log(`[menu] ${character.id} on stage: ${Object.keys(emi.actions).join(' ')}`);
@@ -373,14 +394,14 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     if (character.faces[k] != null) face(character.faces[k]);
     return true;
   }
-  function peek() { if (reduced || mode !== 'menu' || emi.busy || t - emi.lastPeek < PEEK_GAP) return; emi.lastPeek = t; play('peek'); }
+  function peek() { if (CLIP_PIN || reduced || mode !== 'menu' || emi.busy || t - emi.lastPeek < PEEK_GAP) return; emi.lastPeek = t; play('peek'); }
   function rippleTea() { ripple.scale.setScalar(1); ripple.material.opacity = 0.9; }
 
   function update(dt) {
     if (flashes.frozen) return;   // the `?freeze` screenshot aid holds the whole stage on one frame
     t += dt;
     if (emi.mixer) emi.mixer.update(dt);
-    if (mode === 'menu' && !reduced && !emi.busy && !flashes.pending && t >= emi.nextAt) play(ONE_SHOTS[Math.floor(Math.random() * ONE_SHOTS.length)]);
+    if (!CLIP_PIN && mode === 'menu' && !reduced && !emi.busy && !flashes.pending && t >= emi.nextAt) play(ONE_SHOTS[Math.floor(Math.random() * ONE_SHOTS.length)]);
     flashCtx.t = t; flashCtx.mode = mode; flashCtx.reduced = reduced; flashCtx.busy = emi.busy;
     flashes.update(dt, flashCtx);   // after the mixer: the antenna offset rides on top of the clip
     sky.offset.x += dt * 0.004;    // scenery drifts; EMI is the one breath (Law III)
