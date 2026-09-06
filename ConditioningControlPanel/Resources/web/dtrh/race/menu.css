@@ -97,6 +97,12 @@
 }
 #race-root .rm-key span { color: #ffd6ea; }
 #race-root .rm-hint { font-size: 12px; color: rgba(255, 214, 234, 0.6); margin-top: 6px; }
+/* the how-to card is two halves on a phone (a thumb, then keys and a pad): this labels them */
+#race-root .rm-sub {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.1em; margin: 8px 0 2px;
+  color: rgba(255, 214, 234, 0.55);
+}
+#race-root .rm-sub:first-of-type { margin-top: 2px; }
 /* the key card's own way out, for the hand that has no esc key */
 #race-root .rm-how-back { font-size: 17px; padding: 8px 16px 8px 30px; margin-top: 8px; align-self: flex-start; }
 #race-root .rm-btn[hidden] { display: none; }
@@ -230,6 +236,7 @@
   #race-root .rm-row { padding: 5px 12px; font-size: 15px; }
   #race-root .rm-row-hint, #race-root .rm-hint { font-size: 10px; margin-top: 2px; }
   #race-root .rm-key { grid-template-columns: 104px 1fr; font-size: 12px; }
+  #race-root .rm-sub { font-size: 10px; margin: 4px 0 0; }
   #race-root .rm-panel { gap: 4px; }
   #race-root .rm-track { margin-top: 8px; padding: 6px 12px; }
   #race-root .rm-plate { bottom: calc(10px + var(--rm-sa-b)); }

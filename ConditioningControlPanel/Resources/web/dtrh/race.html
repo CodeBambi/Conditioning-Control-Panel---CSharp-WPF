@@ -20,7 +20,9 @@
     <style>
       /* the root is the screen-shake target (game/screenShake.js transforms it); the canvas alone
          takes the mirror flip, so the two never share one style.transform */
-      #race-root { position: fixed; inset: 0; overflow: hidden; background: #12261f; }
+      /* touch-action here as well as on body: a double tap over the menu or the cards is
+         a jump or a pick, never an iOS zoom the player has no way back out of on a phone */
+      #race-root { position: fixed; inset: 0; overflow: hidden; background: #12261f; touch-action: manipulation; }
       #race-root > canvas { display: block; width: 100%; height: 100%; }
       /* boot splash, z30: a 1 s title flash above the HUD chrome (z3), the payload layers (z4 / z9) and the menu (z25); the menu is the resting state */
       .race-splash {

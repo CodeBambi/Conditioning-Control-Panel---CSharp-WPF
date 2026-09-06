@@ -7,12 +7,14 @@
  * jsdom-free on purpose: the DOM this needs is four methods wide, so it is stubbed
  * here (elements, classList, listeners, MutationObserver, a window with location /
  * navigator / matchMedia) and synthetic pointer events are dispatched straight at
- * the layer touch.js built. Date.now is driven by hand so a 180 ms hold costs no
- * wall clock. Nothing here proves the FEEL of the steering: that is the owner's,
+ * the layer touch.js built. Date.now is driven by hand so a hold costs no wall
+ * clock. Sections 5b and 5c walk the two rules the iPhone pass added: the double
+ * tap on either half, and the TouchEvent floor that still lands a tap when the
+ * pointerup never arrives. Nothing here proves the FEEL of the steering: that is the owner's,
  * on a real phone, with real thumbs.
  * ==========================================================================*/
 
-import { createTouch, wantsTouch, steerFromDx, STEER_LOCK_PX, STEER_DEAD_PX, TAP_MS, TAP_PX } from '../touch.js';
+import { createTouch, wantsTouch, steerFromDx, STEER_LOCK_PX, STEER_DEAD_PX, TAP_MS, TAP_PX, DOUBLE_TAP_MS } from '../touch.js';
 import { createInput } from '../input.js';
 
 let fails = 0;
@@ -185,6 +187,126 @@ const built = (() => {
   L.fire('pointerdown', { pointerId: 5, clientX: X, clientY: 300 });
   L.fire('pointercancel', { pointerId: 5, clientX: X, clientY: 300 });
   ok(t.read().jump === false, 'a cancelled press (a call, a system gesture) is no press at all');
+}
+
+/* ---- 5b. the double tap: two taps, either half, one jump ---------------- */
+{
+  const { t } = built;
+  const L = t.el, R = 700, LX = 100;
+  t.flush(); tick(500);
+  L.fire('pointerdown', { pointerId: 40, clientX: LX, clientY: 300 });
+  tick(60); L.fire('pointerup', { pointerId: 40, clientX: LX, clientY: 300 });
+  ok(t.read().jump === false, 'one tap on the wheel side is still not a jump');
+  tick(120);
+  L.fire('pointerdown', { pointerId: 41, clientX: LX, clientY: 300 });
+  tick(60); L.fire('pointerup', { pointerId: 41, clientX: LX, clientY: 300 });
+  ok(t.read().jump === true, 'two taps inside ' + DOUBLE_TAP_MS + ' ms are one jump, wheel side and all');
+
+  t.flush(); tick(500);
+  L.fire('pointerdown', { pointerId: 42, clientX: LX, clientY: 300 });
+  tick(60); L.fire('pointerup', { pointerId: 42, clientX: LX, clientY: 300 });
+  t.read();
+  tick(DOUBLE_TAP_MS + 40);
+  L.fire('pointerdown', { pointerId: 43, clientX: LX, clientY: 300 });
+  tick(60); L.fire('pointerup', { pointerId: 43, clientX: LX, clientY: 300 });
+  ok(t.read().jump === false, 'two taps further apart than that are two taps, not a jump');
+
+  t.flush(); tick(500);
+  L.fire('pointerdown', { pointerId: 44, clientX: R, clientY: 300 });
+  tick(60); L.fire('pointerup', { pointerId: 44, clientX: R, clientY: 300 });
+  ok(t.read().jump === true, 'a single tap on the right half still jumps on its own');
+  tick(100);
+  L.fire('pointerdown', { pointerId: 45, clientX: LX, clientY: 300 });
+  tick(60); L.fire('pointerup', { pointerId: 45, clientX: LX, clientY: 300 });
+  ok(t.read().jump === true, 'and a pair may cross the halves: right then left is still a jump');
+
+  t.flush(); tick(500);
+  for (const id of [46, 47]) {
+    L.fire('pointerdown', { pointerId: id, clientX: LX, clientY: 300 });
+    L.fire('pointermove', { pointerId: id, clientX: LX + STEER_LOCK_PX, clientY: 300 });
+    tick(60); L.fire('pointerup', { pointerId: id, clientX: LX + STEER_LOCK_PX, clientY: 300 });
+  }
+  ok(t.read().jump === false, 'two corners in a row are two corners, never a jump');
+}
+
+/* ---- 5c. the TouchEvent floor: the lift iOS may swallow ------------------ */
+{
+  const { t } = built;
+  const L = t.el, R = 700;
+  const tc = (id, x, y) => ({ identifier: id, clientX: x, clientY: y });
+
+  t.flush(); tick(500);
+  L.fire('touchstart', { changedTouches: [tc(1, R, 300)], touches: [tc(1, R, 300)] });
+  L.fire('pointerdown', { pointerId: 50, clientX: R, clientY: 300 });
+  tick(60);
+  L.fire('pointercancel', { pointerId: 50, clientX: R, clientY: 300 });
+  ok(t.read().jump === false, 'a cancelled pointer is still no press of its own');
+  L.fire('touchend', { changedTouches: [tc(1, R, 300)], touches: [] });
+  ok(t.read().jump === true, 'but the touchend behind it is the lift, so the tap lands anyway');
+
+  t.flush(); tick(500);
+  L.fire('touchstart', { changedTouches: [tc(2, R, 300)], touches: [tc(2, R, 300)] });
+  L.fire('pointerdown', { pointerId: 51, clientX: R, clientY: 300 });
+  tick(60);
+  L.fire('pointerup', { pointerId: 51, clientX: R, clientY: 300 });
+  L.fire('touchend', { changedTouches: [tc(2, R, 300)], touches: [] });
+  ok(t.read().jump === true, 'a pointerup and the touchend behind it are one lift');
+  ok(t.read().jump === false, 'counted exactly once, never twice');
+
+  t.flush(); tick(500);
+  L.fire('touchstart', { changedTouches: [tc(3, R, 300)], touches: [tc(3, R, 300)] });
+  L.fire('pointerdown', { pointerId: 52, clientX: R, clientY: 300 });
+  tick(TAP_MS);
+  ok(t.read().drift === true, 'a held thumb still drifts');
+  L.fire('touchend', { changedTouches: [tc(3, R, 300)], touches: [] });
+  ok(t.read().drift === false, 'and nothing on the glass ends it, even with the pointerup lost');
+
+  // the strand: the right thumb goes while the LEFT one is still steering, so the glass is
+  // never empty. Asking per half is the only way that held id ever comes back.
+  t.flush(); tick(500);
+  L.fire('touchstart', { changedTouches: [tc(4, 100, 300)], touches: [tc(4, 100, 300)] });
+  L.fire('pointerdown', { pointerId: 53, clientX: 100, clientY: 300 });
+  L.fire('touchstart', { changedTouches: [tc(5, R, 300)], touches: [tc(4, 100, 300), tc(5, R, 300)] });
+  L.fire('pointerdown', { pointerId: 54, clientX: R, clientY: 300 });
+  tick(TAP_MS);
+  ok(t.read().drift === true, 'two thumbs down: the right one is drifting');
+  L.fire('touchend', { changedTouches: [tc(5, R, 300)], touches: [tc(4, 100, 300)] });   // pointerup swallowed
+  ok(t.read().drift === false, 'the right thumb lifting ends the drift even with a thumb still steering');
+  L.fire('pointerdown', { pointerId: 55, clientX: R, clientY: 300 });
+  tick(60);
+  L.fire('pointerup', { pointerId: 55, clientX: R, clientY: 300 });
+  ok(t.read().jump === true, 'and the next tap on that half still jumps: nothing was left holding the slot');
+}
+
+/* ---- 5d. the buttons keep their own presses ----------------------------- */
+{
+  const { t } = built;
+  const L = t.el, R = 700;
+  const use = L.children.find((c) => c.attrs['aria-label'] === 'use item');
+  const tc = (id, x, y, target) => ({ identifier: id, clientX: x, clientY: y, target });
+
+  // two fingers in ONE touchstart: e.target is only the first of them, so the button test
+  // has to be asked of each touch or the finger on `use` becomes a tap under it
+  t.flush(); tick(500);
+  L.fire('touchstart', { changedTouches: [tc(6, R, 300), tc(7, R, 700, use)], touches: [tc(6, R, 300), tc(7, R, 700, use)] });
+  tick(60);
+  L.fire('touchend', { changedTouches: [tc(7, R, 700, use)], touches: [tc(6, R, 300)] });
+  ok(t.read().jump === false, 'a finger on the use button is the button\'s, never a tap on the road under it');
+  L.fire('touchend', { changedTouches: [tc(6, R, 300)], touches: [] });
+  ok(t.read().jump === true, 'while the finger beside it on the road still lands its tap');
+
+  // and double tapping `use` spends the item twice, never a jump
+  t.flush(); tick(500);
+  const acts = built.acts; acts.length = 0;
+  for (let i = 0; i < 2; i++) {
+    L.fire('touchstart', { changedTouches: [tc(8 + i, R, 700, use)], touches: [tc(8 + i, R, 700, use)], target: use });
+    use.fire('pointerdown', { pointerId: 60 + i });
+    tick(60);
+    L.fire('touchend', { changedTouches: [tc(8 + i, R, 700, use)], touches: [] });
+    tick(100);
+  }
+  ok(acts.join(',') === 'item,item', 'double tapping use spends the item twice');
+  ok(t.read().jump === false, 'and never jumps while doing it');
 }
 
 /* ---- 6. both thumbs at once --------------------------------------------- */
