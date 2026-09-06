@@ -107,6 +107,15 @@
 #race-root .rm-how-back { font-size: 17px; padding: 8px 16px 8px 30px; margin-top: 8px; align-self: flex-start; }
 #race-root .rm-btn[hidden] { display: none; }
 
+/* ---- your media (web only): the pickers, and what is in the tab right now ---- */
+#race-root .rm-media-btn { font-size: 17px; padding: 8px 16px 8px 30px; align-self: flex-start; }
+/* posted, waiting on the host's `setting` echo. Dimmed and un-pressable, never hidden: the button
+   has to stay under the thumb that just left it. */
+#race-root .rm-media-btn.is-pending { opacity: 0.55; pointer-events: none; }
+#race-root .rm-media-count { font-size: 13px; color: #ffd6ea; letter-spacing: 0.02em; margin: 0 0 6px 2px; }
+/* the online feed group's mount point (PR C3). Nothing in it yet, so it takes no room. */
+#race-root .rm-media-more:empty { display: none; }
+
 /* ---- the track plate: a file in hand, or the host still reading it ---- */
 #race-root .rm-track {
   margin-top: 14px; padding: 10px 14px; background: rgba(18, 11, 36, 0.82);
@@ -232,6 +241,8 @@
   #race-root .rm-list { gap: 4px; }
   #race-root .rm-btn { font-size: 16px; padding: 6px 14px 6px 28px; }
   #race-root .rm-how-back { font-size: 15px; padding: 6px 14px 6px 28px; margin-top: 4px; }
+  #race-root .rm-media-btn { font-size: 15px; padding: 6px 14px 6px 28px; }
+  #race-root .rm-media-count { font-size: 11px; margin-bottom: 3px; }
   #race-root .rm-h { margin-bottom: 2px; font-size: 16px; }
   #race-root .rm-row { padding: 5px 12px; font-size: 15px; }
   #race-root .rm-row-hint, #race-root .rm-hint { font-size: 10px; margin-top: 2px; }

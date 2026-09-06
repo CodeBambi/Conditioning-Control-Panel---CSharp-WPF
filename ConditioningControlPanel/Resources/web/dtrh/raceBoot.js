@@ -15,8 +15,21 @@
  * the menu is the same exit the End screen takes.
  *
  * Host messages owned here: init, manifest, favorites, ping, exit-request,
- * fullscreen (run.js owns pause + payout-result). Sent here: pong, boot-error,
- * fullscreen-set, exit + exit-done on a host exit-request or a menu surface.
+ * fullscreen, local-media, setting (run.js owns pause + payout-result). Sent
+ * here: pong, boot-error, fullscreen-set, exit + exit-done on a host
+ * exit-request or a menu surface. A `manifest` that lands AFTER boot is honoured
+ * the same way the first one is: hostMedia swaps its pool, so a pile loaded from
+ * the menu is on the walls of the very next run.
+ *
+ * HOST CAPABILITIES on `init.settings`. `bridge.isHosted` says a host is on the
+ * other end, never which services it has. The browser host (cclabs-web
+ * scripts/race-web-ext) is a real transport with no C# behind it, so three keys
+ * say what it cannot do, all of them absent (and so unchanged) on the desktop:
+ * `trackPick: false` takes the file-dialog verb off the menu, `canSurface:
+ * false` takes `surface` off when there is nowhere to go, and `hostSfx: false`
+ * (read by race/audio.js) plays the eleven host cues in page instead of posting
+ * `sfx` frames nothing answers. `mediaControls: true` is the fourth: it turns on
+ * the menu's `your media` panel.
  *
  * STANDALONE DEV MODE (no WebView2): `bridge.isHosted` is false, so `init` is
  * synthesised (masterVolume 60, reducedMotion from matchMedia, empty manifest)
@@ -44,7 +57,8 @@
  *
  * TRACK CHARTS (CHART.md): the host posts track-progress / track-chart /
  * track-clock / track-ended / track-error and this file hands them to the run.
- * Standalone there is no host, so `?chart=demo&dur=240` builds the demo chart and
+ * With no host - or under one that says `trackPick: false`, which is the browser
+ * host - `?chart=demo&dur=240` builds the demo chart and
  * `?chart=<url>` fetches one; `?audio=<url>` plays an <audio> element and its
  * currentTime is the clock, and without it the clock is wall time. Either way the
  * page ticks race.trackClock on the host's own 250 ms cadence.
@@ -89,6 +103,8 @@ const waitEl = document.getElementById('race-wait');
 const media = createHostMediaSource();
 const rollSeed = () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
 let initMsg = null, haveManifest = false, race = null, menu = null, booted = false, started = false, exiting = false;
+let localMedia = null;              // the last `local-media` push, replayed into the menu on boot
+const settingEchoes = [];           // `setting` echoes that landed before there was a menu to paint
 let settings = {}, seed = 0;
 let trackProgress = null, trackReady = null, errorTimer = 0, startTrackClock = null, trackTimer = 0, trackAudio = null;
 
@@ -128,6 +144,15 @@ if (mode.hardBlock || !mode.canTry3d) {
 bridge.on('init', (m) => { initMsg = m; maybeBoot(); });
 bridge.on('manifest', (m) => { try { media.setManifest(m); } catch (e) { host.log('manifest: ' + e); } haveManifest = true; maybeBoot(); });
 bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } catch (e) { host.log('favorites: ' + e); } });
+// The media panel's two frames (race/menu.js "YOUR MEDIA"). Both can land before the menu exists -
+// the pickers are only reachable from the menu, but the host pushes the pile it already holds on
+// `ready` - so the last count is remembered and the echoes are queued, and boot() hands both over
+// the moment createMenu returns. After that they go straight through.
+bridge.on('local-media', (m) => { localMedia = m; if (menu) { try { menu.setLocalMedia(m); } catch (e) { host.log('local-media: ' + e); } } });
+bridge.on('setting', (m) => {
+  if (!menu) { if (settingEchoes.length < 24) settingEchoes.push(m); return; }
+  try { menu.settingEcho(m); } catch (e) { host.log('setting: ' + e); }
+});
 bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
 bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
 bridge.on('exit-request', surface);
@@ -198,7 +223,11 @@ async function boot() {
     settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
     settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // audio.js reads masterVolume; the two sliders go in through setLevels below
     settings.seedLock = seedFromOptions(opts);
-    settings.trackPick = hosted;   // the file dialog is the host's; standalone loads a track off the query string
+    // The file dialog is the host's; standalone loads a track off the query string. A host may also
+    // say `trackPick: false` in its init: the browser host (cclabs-web scripts/race-web-ext) is
+    // hosted in every way the bridge can see and has no file dialog to open, and a verb that answers
+    // nothing is worse than no verb at all.
+    settings.trackPick = hosted && settings.trackPick !== false;
     seed = settings.seedLock != null ? settings.seedLock : rollSeed();
     note('the road is drawing');
     race = createRace({ root, bridge: host, media, settings, seed });
@@ -209,8 +238,12 @@ async function boot() {
     await standaloneTrack();
     if (params.get('autostart') === '1') { startRun(false); debugItemBox(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
-    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log });
-    if (!hosted && !standaloneExit) { menu.hideVerb('surface'); host.log('surface hidden: no host and no ?back='); }
+    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send });
+    if (localMedia) { try { menu.setLocalMedia(localMedia); } catch (e) { host.log('local-media: ' + e); } }
+    while (settingEchoes.length) { try { menu.settingEcho(settingEchoes.shift()); } catch (e) { host.log('setting: ' + e); } }
+    // Nowhere to surface to: no host and no `?back=`, or a host that says outright it cannot take
+    // the window away (the browser host with neither a same-origin ?back= nor a same-origin referrer).
+    if ((!hosted && !standaloneExit) || settings.canSurface === false) { menu.hideVerb('surface'); host.log('surface hidden: nowhere to go'); }
     menu.onPick((id) => {
       if (id === 'race') startRun(true);
       else if (id === 'surface') surface();
@@ -241,7 +274,11 @@ async function boot() {
  */
 async function standaloneTrack() {
   const want = params.get('chart');
-  if (hosted || !want || !race) return;
+  // `settings.trackPick` is the resolved answer to "can this host open a file dialog", which is not
+  // the same question as `hosted`: the browser host (cclabs-web scripts/race-web-ext) is hosted and
+  // cannot, so the query-string chart road stays open under it exactly as it is with no host at all.
+  // A desktop host resolves it true and owns track loading outright, so nothing changes there.
+  if (settings.trackPick || !want || !race) return;
   let chart = null;
   try {
     const mod = await import('./race/chart.js');

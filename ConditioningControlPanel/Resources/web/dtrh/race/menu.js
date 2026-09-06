@@ -1,14 +1,24 @@
 /* ============================================================================
  * race/menu.js - the main menu and the character stage of Racing Thoughts.
  *
- *   createMenu({ root, renderer, pixel, audio, settings, log }) ->
+ *   createMenu({ root, renderer, pixel, audio, settings, log, send }) ->
  *     { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose() }, dispose() }
  *   onPick yields 'race' | 'track' | 'clear' | 'story' | 'surface'; setTrack(state | null) drives the
  *   track plate (CHART.md: the host's track-progress and the chart that lands). refreshView() parks
  *   the stage where the column would park it even while the menu is hidden (race/cards.js borrows it).
+ *   setLocalMedia(frame) and settingEcho(frame) feed the media panel below; `send` is the only way out
+ *   to the host from in here, and only that panel uses it.
+ *
+ * YOUR MEDIA (web only). `settings.mediaControls === true` adds a `your media` verb and a panel of
+ * pickers: the browser host has no library of its own to enumerate, so the player hands it one. Each
+ * button posts `set-setting {key:'media.pickLocal' | 'media.clearLocal', value}` INSIDE the click's
+ * own turn (a file picker opens only while the tap's activation is alive) and paints pending until
+ * the host's `setting` echo lands. The count line follows the host's `local-media` push. On the
+ * desktop that flag is absent, the verb is hidden, the panel is never built and no media key is ever
+ * posted.
  *
  * Two halves. LEFT is a DOM column (menu.css, .rm-*): the title, the tagline,
- * the verbs (race / load a track / just the road / options / how to drive /
+ * the verbs (race / load a track / just the road / options / your media / how to drive /
  * the story / surface), options and the key card opening in place. `the story`
  * replays the four introduction cards of race/cards.js. RIGHT is the stage: a second THREE.Scene drawn through
  * the race's own renderer + pixelizer (no second canvas) by a menu camera
@@ -110,13 +120,16 @@ const FACE_PIN = (() => {
     return clamp(+v | 0, 0, FACES.length - 1);
   } catch (e) { return -1; }              // no location (a node import), no pin
 })();
-/** Screenshot aid: `?panel=howto | options` opens the menu on that panel instead of the verbs. */
+/** Screenshot aid: `?panel=howto | options | media` opens the menu on that panel instead of the verbs. */
 const PANEL_PIN = (() => {
   try {
     const v = (new URLSearchParams(location.search).get('panel') || '').toLowerCase();
-    return v === 'howto' || v === 'how' ? 'how' : v === 'options' ? 'options' : null;
+    return v === 'howto' || v === 'how' ? 'how' : v === 'options' ? 'options' : v === 'media' ? 'media' : null;
   } catch (e) { return null; }           // no location (a node import), no pin
 })();
+/** A media button paints pending until its `setting` echo lands. This is how long it waits for one
+ *  before giving up: a host that never answers must not leave a button dead on the screen. */
+const ECHO_WAIT_MS = 6000;
 
 // ---- options ------------------------------------------------------------------------------
 export function loadOptions() {
@@ -377,7 +390,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
 }
 
 // ---- the menu ------------------------------------------------------------------------------------
-export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null }) {
+export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null, send = null }) {
   const options = loadOptions();
   const systemReduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const reduced = () => wantsReducedMotion(options, settings.reducedMotion != null ? settings.reducedMotion : systemReduced);
@@ -388,6 +401,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const canLevels = !!(audio && typeof audio.setLevels === 'function');
   const ui = (n, v) => { try { if (audio && audio.ui) audio.ui(n, v); } catch (e) { /* audio gone */ } };   // the menu blips (race/audio.js)
   const theme = (on) => { try { if (audio && audio.menu) audio.menu(on); } catch (e) { /* audio gone */ } };
+  const post = (m) => { try { if (send) send(m); } catch (e) { /* host gone */ } };
 
   const layer = el('div', 'rm-root', root); layer.hidden = true; layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-label', 'racing thoughts');
   const col = el('div', 'rm-col', layer);
@@ -395,6 +409,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   el('div', 'rm-tag', col, 'steer. pop. never stop.');
   const list = el('div', 'rm-list', col); list.setAttribute('role', 'menu');
   const optPanel = el('div', 'rm-panel rm-options', col); optPanel.hidden = true;
+  const mediaPanel = el('div', 'rm-panel rm-media', col); mediaPanel.hidden = true;
   const howPanel = el('div', 'rm-panel rm-how', col); howPanel.hidden = true;
   // ---- the track plate: what the host is doing with the file, then what it found ----
   const trackEl = el('div', 'rm-track', col); trackEl.hidden = true; trackEl.setAttribute('aria-live', 'polite');
@@ -433,6 +448,53 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   // the way out for a finger: the keyboard has esc and enter, a phone has this row and the backdrop
   const howBack = el('button', 'rm-btn rm-how-back', howPanel, 'back'); howBack.type = 'button'; howBack.setAttribute('role', 'menuitem');
   howBack.addEventListener('click', (e) => { e.stopPropagation(); ui('back'); hit(howBack, 'is-hit'); open('main'); });
+
+  // ---- your media: the pickers, the count, and the promise under them ----
+  // Only a host that says `mediaControls` can serve this. The desktop never does, so nothing here is
+  // built there and no media key can be posted. Every button is one `set-setting`, posted in the
+  // click's own turn so the file picker still has the tap's activation to open on.
+  const webMedia = settings.mediaControls === true;
+  const pile = { images: 0, videos: 0, skipped: 0, active: false, folder: true, ...(settings.localMedia || {}) };
+  const MEDIA_ROWS = [
+    { id: 'gallery', label: 'add from your photos', key: 'media.pickLocal', value: 'gallery' },
+    { id: 'zip', label: 'add a zip', key: 'media.pickLocal', value: 'zip' },
+    { id: 'folder', label: 'add a folder', key: 'media.pickLocal', value: 'folder', off: pile.folder === false },
+    { id: 'clear', label: 'forget them', key: 'media.clearLocal', value: true },
+    { id: 'back', label: 'back', press: () => open('main') },
+  ].filter((r) => !r.off);
+  const plural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  function mediaLine() {
+    if (!pile.images && !pile.videos) return pile.skipped ? `nothing here yet · ${pile.skipped} skipped` : 'nothing here yet';
+    const bits = [];
+    if (pile.images) bits.push(plural(pile.images, 'image'));
+    if (pile.videos) bits.push(plural(pile.videos, 'video'));
+    return `${bits.join(' and ')} kept in this tab${pile.skipped ? ` · ${pile.skipped} skipped` : ''}`;
+  }
+  let countEl = null, mediaEls = [], pendingEl = null, pendingTimer = 0;
+  function clearPending() {
+    if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = 0; }
+    if (pendingEl) { pendingEl.classList.remove('is-pending'); pendingEl = null; }
+  }
+  function setPending(node) { clearPending(); pendingEl = node; node.classList.add('is-pending'); pendingTimer = setTimeout(clearPending, ECHO_WAIT_MS); }
+  // The spot the ONLINE FEED group goes in (PR C3): its own heading, its consent row and its niche
+  // rows, built into this node so they sit under the pickers and above `back`, which stays the last
+  // thing a thumb or an arrow reaches. Empty until then - one div, no layout, no cost.
+  let mediaMore = null;
+  if (webMedia) {
+    el('h3', 'rm-h', mediaPanel, 'your media');
+    countEl = el('div', 'rm-media-count rh-num', mediaPanel, mediaLine()); countEl.setAttribute('aria-live', 'polite');
+    mediaEls = MEDIA_ROWS.map((r, i) => {
+      const b = el('button', 'rm-btn rm-media-btn', mediaPanel, r.label); b.type = 'button';
+      b.dataset.id = r.id; b.setAttribute('role', 'menuitem');
+      b.addEventListener('click', (e) => { e.stopPropagation(); idx.media = i; act('press'); });
+      b.addEventListener('pointerenter', () => { idx.media = i; ui('tick'); refresh(); });
+      return b;
+    });
+    el('div', 'rm-hint', mediaPanel, 'nothing is uploaded. your files stay in this tab and go when you close it.');
+    el('div', 'rm-hint', mediaPanel, 'the walls take them on your next run.');
+    mediaMore = el('div', 'rm-media-more', mediaPanel);
+    mediaPanel.appendChild(mediaEls[mediaEls.length - 1]);   // `back` was built with the rest: put it last again
+  }
 
   // ---- options: each row is a value with left / right and a press ----
   const pct = (v) => `${Math.round(v * 100)}%`;
@@ -475,7 +537,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   // ---- the verbs. `track` only under a host (the file dialog is its), `clear` only once a file is in ----
   const canTrack = !!settings.trackPick;
-  const VERBS = [['race', 'race'], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
+  const VERBS = [['race', 'race'], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['media', 'your media'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
     b.addEventListener('click', (e) => { e.stopPropagation(); idx.main = i; act('press'); });
@@ -483,7 +545,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     return b;
   });
   const verbEl = (id) => verbEls[VERBS.findIndex(([v]) => v === id)];
-  verbEl('track').hidden = !canTrack; verbEl('clear').hidden = true;
+  verbEl('track').hidden = !canTrack; verbEl('clear').hidden = true; verbEl('media').hidden = !webMedia;
   const stepVerb = (from, dir) => {   // the next visible verb in that direction, wrapping
     let i = from;
     for (let k = 0; k < VERBS.length; k++) { i = (i + dir + VERBS.length) % VERBS.length; if (!verbEls[i].hidden) return i; }
@@ -521,12 +583,17 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   // ---- navigation: one focus index per panel, every input path lands on act() ----
   let panel = 'main', shown = false, disposed = false, viewHeld = false;
-  const idx = { main: 0, options: 0 };
-  function open(p) { panel = p; list.hidden = p !== 'main'; optPanel.hidden = p !== 'options'; howPanel.hidden = p !== 'how'; if (p === 'options') idx.options = 0; refresh(); if (p !== 'options') seedIn.blur(); }
+  const idx = { main: 0, options: 0, media: 0 };
+  function open(p) {
+    panel = p; list.hidden = p !== 'main'; optPanel.hidden = p !== 'options'; mediaPanel.hidden = p !== 'media'; howPanel.hidden = p !== 'how';
+    if (p === 'options') idx.options = 0; if (p === 'media') idx.media = 0;
+    refresh(); if (p !== 'options') seedIn.blur();
+  }
   function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); ui('tick'); refresh(); }
   function refresh() {
     verbEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'main' && i === idx.main));
     ROWS.forEach((r, i) => { const v = r.get(); if (r.valEl.textContent !== v) r.valEl.textContent = v; rowEls[i].classList.toggle('is-focus', panel === 'options' && i === idx.options); });
+    mediaEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'media' && i === idx.media));
   }
   function pick(id) { for (const cb of picks) { try { cb(id); } catch (e) { /* a listener never breaks the menu */ } } }
   function act(what) {
@@ -537,11 +604,23 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       const id = VERBS[idx.main][0];
       if (verbEls[idx.main].hidden) return;
       hit(verbEls[idx.main], 'is-hit'); ui('pick');
-      if (id === 'options' || id === 'how') open(id); else pick(id);
+      if (id === 'options' || id === 'how' || id === 'media') open(id); else pick(id);
       return;
     }
     if (what === 'back') { ui('back'); open('main'); return; }
     if (panel === 'how') { if (what === 'press') open('main'); return; }
+    if (panel === 'media') {
+      if (what === 'up' || what === 'down') { idx.media = clamp(idx.media + (what === 'up' ? -1 : 1), 0, MEDIA_ROWS.length - 1); ui('tick'); refresh(); return; }
+      if (what !== 'press') return;
+      const r = MEDIA_ROWS[idx.media], node = mediaEls[idx.media];
+      hit(node, 'is-hit'); ui(r.id === 'back' ? 'back' : 'pick');
+      if (r.press) { r.press(); return; }
+      // the post goes out here, with nothing awaited in front of it: a picker only opens while the
+      // tap that got us here still counts as a gesture. The echo takes the pending paint back off.
+      setPending(node);
+      post({ type: 'set-setting', key: r.key, value: r.value });
+      return;
+    }
     const r = ROWS[idx.options];
     if (what === 'up' || what === 'down') { focusRow(idx.options + (what === 'up' ? -1 : 1)); return; }
     if ((what === 'left' || what === 'right') && r.move) { r.move(what === 'left' ? -1 : 1); ui('step', r.id === 'music' || r.id === 'sfx' ? options[r.id] : 0.5); hit(rowEls[idx.options], 'is-hit'); }
@@ -579,7 +658,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const onPointer = (e) => { if (shown && e.clientX > window.innerWidth * 0.5) stage.emi.peek(); };
   // the backdrop closes the key card. Every verb and every row stops its own click, so the only
   // clicks that reach the layer are the ones that landed on nothing.
-  const onBackdrop = (e) => { if (shown && panel === 'how' && !howPanel.contains(e.target)) { ui('back'); open('main'); } };
+  const onBackdrop = (e) => {
+    if (!shown) return;
+    if (panel === 'how' && !howPanel.contains(e.target)) { ui('back'); open('main'); }
+    else if (panel === 'media' && !mediaPanel.contains(e.target)) { ui('back'); open('main'); }
+  };
   layer.addEventListener('click', onBackdrop);
   window.addEventListener('keydown', onKey);
   const unbindResize = bindViewportResize(onResize);
@@ -590,6 +673,18 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     options, stage: { update(dt) { if (shown) pollPad(dt); stage.update(dt); }, render: stage.render, dispose: stage.dispose, live: stage },
     onPick(cb) { if (typeof cb === 'function') picks.push(cb); },
     setTrack, get track() { return trackState; },
+    /** The host's `local-media` push: {images, videos, skipped, active}. Repaints the count line. */
+    setLocalMedia(m) {
+      if (!m) return;
+      for (const k of ['images', 'videos', 'skipped']) if (typeof m[k] === 'number') pile[k] = m[k] | 0;
+      pile.active = !!m.active;
+      if (countEl) countEl.textContent = mediaLine();
+    },
+    /** The host's `setting` echo. Contract law: only this takes the pending paint back off. */
+    settingEcho(m) { if (m && typeof m.key === 'string' && m.key.indexOf('media.') === 0) clearPending(); },
+    /** Where PR C3 builds its `online feed` group: inside the media panel, under the pickers and
+     *  above `back`. null on the desktop, where the panel is never built. */
+    get mediaSlot() { return mediaMore; },
     /** hideVerb(id): take a verb off the list for good. raceBoot hides `surface` when the page is not
      *  hosted and has nowhere to surface to, so nobody taps their way to a blank screen. */
     hideVerb(id) {
@@ -598,7 +693,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       if (verbEls[idx.main].hidden) idx.main = stepVerb(idx.main, 1);
       refresh();
     },
-    show() { shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu'); open(PANEL_PIN || 'main'); onResize(); hit(layer, 'is-in'); theme(true); },
+    show() {
+      shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu');
+      open(PANEL_PIN === 'media' && !webMedia ? 'main' : (PANEL_PIN || 'main'));
+      onResize(); hit(layer, 'is-in'); theme(true);
+    },
     hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); },
     /** Park the stage the way the column parks it, with the menu hidden: race/cards.js uses the same
      *  layout, so hide() sending her back to the middle of the frame would only be a jump and a jump
@@ -608,6 +707,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     dispose() {
       if (disposed) return;
       disposed = true; shown = false;
+      clearPending();
       window.removeEventListener('keydown', onKey); unbindResize();
       stage.dispose(); layer.remove();
     },
