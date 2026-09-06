@@ -325,10 +325,26 @@ As built (PR 5 reality notes):
   (z25), the cards (z26) and the splash (z30), so every card still takes the tap first. Left `STEER_SIDE`
   (55%) of the width steers by horizontal drag from the touch-down point (`STEER_DEAD_PX` 6 dead,
   `STEER_LOCK_PX` 72 to full lock, zero on release, a ring-and-dot thumb pad while held); the rest of the
-  width taps (under `TAP_MS` 180 and `TAP_PX` 12 of travel) for one jump press and holds for drift.
+  width taps (under `TAP_MS` 220 and `TAP_PX` 14 of travel) for one jump press and holds for drift.
+  A DOUBLE TAP is a jump on EITHER half: two taps inside `DOUBLE_TAP_MS` (320), so a thumb already
+  mid-corner still has one. `TAP_ECHO_MS` (60) folds a lift reported twice into one tap. A press that
+  lands on a button is never a tap, so double tapping `use` spends the item twice and never jumps.
   Accel is never touched: nothing pressed is cruise, and there is no brake pedal on glass. Three buttons
   fire existing actions through `input.onAction`: pause (`'brake'`), mute (`'mute'`) and a use button
-  (`'item'`) that only appears while `.rh-item` carries `is-held`. Pointer Events only, never TouchEvent.
+  (`'item'`) that only appears while `.rh-item` carries `is-held`. Pointer Events drive steer and drift;
+  TouchEvent is a FLOOR under them, never a second scheme: `touchstart` preventDefault takes the gesture
+  away from WebKit (without it Safari cancels our pointers to run its own and no tap ever lands), a
+  `touchend` that looks like a tap raises the same tap, and the fingers still on the glass at a
+  `touchend` end any held id they do not account for (per half, so a right thumb lifting while a left
+  one steers still ends its drift) so a swallowed `pointerup` cannot strand one. `pointerup` /
+  `pointercancel` are heard on the window as well as the layer, and ONLY the wheel pointer is captured:
+  the jump hand is not, because `setPointerCapture` is one of the things WebKit hands back as a
+  `pointercancel` and an `inset: 0` layer had nowhere to lose that finger to anyway. `#race-root` carries
+  `touch-action: manipulation` (the layer itself `none`), so a double tap is a jump or a pick, never an
+  iOS zoom. None of this is verified on a real iPhone: `race/smoke/touch-check.mjs` walks the logic only.
+- The how-to card (`race/menu.js`) leads with the THUMB rows on a touchable page and keeps the keys and
+  the pad below them, and `race/hud.js` drops the `E` badge from the item hint there: an empty slot reads
+  `no item yet`, a full one `<name> tap to use`.
 - Space (pad B) is the jump: `read().jump` is true for exactly the frame of a fresh press, never on hold,
   and `kart.stepJump` turns it into 1.1 m of real height (`state.h`, so the pop box goes up with it).
   A press within 4 m of a ramp lip, or inside 0.12 s of one firing, boosts that launch by 1.3 and hands

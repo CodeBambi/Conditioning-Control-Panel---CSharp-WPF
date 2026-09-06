@@ -355,6 +355,8 @@
 .race-hud .rh-touch {
   position: fixed; inset: 0; z-index: 12; touch-action: none; overscroll-behavior: none;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  /* the long-press callout is a gesture too: iOS cancels the pointer under it to raise one */
+  -webkit-touch-callout: none;
 }
 /* the thumb pad: a ring at the touch-down point, a dot that rides the drag */
 .race-hud .rt-pad {

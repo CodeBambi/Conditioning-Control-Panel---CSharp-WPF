@@ -15,6 +15,8 @@
  * pad and its pause / mute / use buttons) on a touchable page. It rides BELOW
  * the screens at z20, so a card still takes the tap first and nothing here has
  * to cooperate. The item button watches this file's `is-held` class on the slot.
+ * On a touchable page the item hint drops the `E` badge: an empty slot reads
+ * `no item yet` with nothing after it, and a full one reads `<name> tap to use`.
  * Copy is DtRH voice: lowercase, short.
  *
  * THE PICKUP (pass f3): a cube gives its item a card of its own, centre of the
@@ -30,6 +32,11 @@
  * ==========================================================================*/
 
 import { COMBO_HOLD_SEC, MULT_LADDER, KART_MAX_SPEED, KART_BASE_SPEED } from './consts.js';
+import { wantsTouch } from './touch.js';
+
+/** A phone has no E key, so the item hint must not point at one. Same test race/touch.js
+ *  uses to decide whether to build the layer at all, `?touch=1` / `?touch=0` included. */
+const TOUCH = wantsTouch();
 
 const FLICK_MS = 450;
 const TOAST_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400, recipe: 1700 };
@@ -118,8 +125,9 @@ export function createRaceHud(root) {
   const itemName = el('rh-item-name', item, 'no item yet');
   const itemKey = document.createElement('span');
   itemKey.className = 'rh-item-key';
-  itemKey.textContent = 'E';
-  itemName.appendChild(itemKey);
+  // on glass the badge is an instruction, not a key, and an empty slot has nothing to tap
+  itemKey.textContent = TOUCH ? 'tap to use' : 'E';
+  if (!TOUCH) itemName.appendChild(itemKey);
 
   // THE PICKUP: the item's own card. No per-item art ships, so the tile IS the picture: the room
   // colour, a soft glow and the glyph big. It rides in the chrome, so a freeze or a tape covers it.
@@ -361,7 +369,8 @@ export function createRaceHud(root) {
     item(glyph, name) {
       itemBox.textContent = glyph == null ? '·' : String(glyph);
       itemName.firstChild.textContent = (name || (glyph == null ? 'no item yet' : '')).toLowerCase();
-      itemName.appendChild(itemKey);
+      if (!TOUCH || glyph != null) itemName.appendChild(itemKey);
+      else if (itemKey.parentNode) itemKey.parentNode.removeChild(itemKey);
       item.classList.toggle('is-armed', glyph != null);
       item.classList.toggle('is-rolling', glyph === '?');
       if (glyph == null) item.classList.remove('is-held', 'is-inbound');

@@ -50,6 +50,9 @@
  * 100 ms (Law VIII): THE BOUNCE on the button, THE GLOW on focus.
  *
  * A FINGER CAN REACH EVERYTHING. There is no key card and no pad on a phone, so
+ * `how to drive` opens on a THUMB card (drag the left side, double tap to jump,
+ * hold the right side to drift, the use button, pause and sound) with the keys
+ * and the pad kept below it, and
  * every path a key takes has a target under it: `how to drive` carries its own
  * back row and a tap anywhere off the panel closes it, and each value row wears
  * a real left and right button around the number, so music and sfx go DOWN by
@@ -58,6 +61,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { wantsTouch } from './touch.js';
 import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
 import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 import { createMenuFlashes } from './menuFlashes.js';
@@ -404,7 +408,24 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   for (const a of [arrowL, arrowR]) { a.type = 'button'; const off = ROSTER.length === 1; a.disabled = off; a.setAttribute('aria-disabled', String(off)); a.title = off ? 'one racer for now' : 'next racer'; }
 
   // ---- how to drive ----
+  // A phone has no keys and no pad, so on glass the THUMB rows come first and say what
+  // the layer race/touch.js builds actually does. Same test that layer uses, `?touch=1`
+  // and `?touch=0` included, so the headless shot can ask for either card.
   el('h3', 'rm-h', howPanel, 'how to drive');
+  if (wantsTouch()) {
+    el('div', 'rm-sub', howPanel, 'with a thumb');
+    for (const [k, v] of [
+      ['left side', 'drag it. wherever your thumb lands is the wheel.'],
+      ['double tap', 'jump. two quick taps, anywhere on the glass.'],
+      ['right side', 'hold to drift, let go for turbo. one tap there jumps too.'],
+      ['use', 'the round button by the gauge spends your item.'],
+      ['ii / sound', 'pause and mute, top right.'],
+    ]) {
+      const row = el('div', 'rm-key', howPanel); el('kbd', '', row, k); el('span', '', row, v);
+    }
+    el('div', 'rm-row-hint', howPanel, 'you are always going. there is no pedal on glass.');
+    el('div', 'rm-sub', howPanel, 'or keys and a pad');
+  }
   for (const [k, v] of [['arrows / wasd', 'steer, throttle, brake'], ['shift', 'drift (hold, let go for turbo)'], ['space', 'jump (time it at a ramp for big air)'], ['e', 'use the item'], ['p', 'pixel look'], ['m', 'mute'], ['esc', 'the brake'], ['pad', 'stick steers, rt goes, a drifts, b jumps, x item, start brakes']]) {
     const row = el('div', 'rm-key', howPanel); el('kbd', '', row, k); el('span', '', row, v);
   }
