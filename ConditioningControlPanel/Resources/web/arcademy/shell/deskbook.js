@@ -209,7 +209,7 @@ export const BOOK = Object.freeze({
         }),
         Object.freeze({
           head: '105 The Pool, The Deep End',
-          body: "Swipe, or use the arrows, and every tile on the board slides that way at once. Two matching tiles meet and sink one depth. Keep your heaviest tile in a corner and never swipe away from that corner unless there's nothing else, and there is almost always something else. A locked board isn't a loss, the depth you reached is banked and the water turns fresh. The ladder ends at the eleventh depth and the class holds you there if you make it. Free swim starts at the ladder and never stamps, so that's the place to practise the corner thing.",
+          body: "Swipe, or use the arrows, and every tile on the board slides that way at once. Two matching tiles meet and sink one depth. Keep your heaviest tile in a corner and never swipe away from that corner unless there's nothing else, and there is almost always something else. A locked board isn't a loss, the depth you reached is earned and the water turns fresh. The ladder ends at the eleventh depth and the class holds you there if you make it. Free swim starts at the ladder and never stamps, so that's the place to practise the corner thing.",
         }),
         Object.freeze({
           head: '201 Sort',
@@ -229,7 +229,7 @@ export const BOOK = Object.freeze({
         }),
         Object.freeze({
           head: '302 Composure',
-          body: "Tap a piece beside the gap and it slides in. Arrows, WASD and swipes do the same. A piece that reaches its own place locks with a snap, and it can still be slid, so don't panic when a locked piece moves. The room will bury the board in wash and you keep sliding anyway, because the picture underneath never moved. Finish a picture and the next one deals. The bell ends the class, not the solve, so a half-finished picture at the bell is fine, the solves you banked are what count.",
+          body: "Tap a piece beside the gap and it slides in. Arrows, WASD and swipes do the same. A piece that reaches its own place locks with a snap, and it can still be slid, so don't panic when a locked piece moves. The room will bury the board in wash and you keep sliding anyway, because the picture underneath never moved. Finish a picture and the next one deals. The bell ends the class, not the solve, so a half-finished picture at the bell is fine, the solves you earned are what count.",
         }),
         /* ------------------------------------------------ the back page */
         Object.freeze({

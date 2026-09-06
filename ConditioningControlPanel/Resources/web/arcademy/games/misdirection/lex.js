@@ -24,9 +24,9 @@ export const MD_LEX = Object.freeze({
 
   /* ---- setting rows (manifest.settings) -------------------------------- */
   md_stake_mode: 'Stake prompt',
-  md_stake_mode_hint: 'Ask after every win, or always bank / always ride without the prompt.',
+  md_stake_mode_hint: 'Ask after every win, or always keep / always ride without the prompt.',
   md_stake_mode_ask: 'Ask',
-  md_stake_mode_bank: 'Always bank',
+  md_stake_mode_bank: 'Always keep',
   md_stake_mode_ride: 'Always ride',
   md_shell_skin: 'Shell skin',
   md_shell_skin_hint: 'Themed shells, plain shapes, or high-contrast rims that stay readable.',
@@ -52,7 +52,7 @@ export const MD_LEX = Object.freeze({
   md_howto_watch: 'One shell lifts. What is under it is the only thing you are tracking.',
   md_howto_shuffle: 'They slide and trade places. The room will do its best to blind you.',
   md_howto_pick: 'Point at the shell you followed. Four seconds, every round.',
-  md_howto_stake: 'Right? Bank the pot, or ride it double into a dirtier shuffle.',
+  md_howto_stake: 'Right? Keep the pot, or ride it double into a dirtier shuffle.',
   md_howto_go: 'Open the table',
   /** {keys} = the bound pick keys, e.g. "1 2 3 4 5". */
   md_howto_keys: 'Keys {keys} pick a shell.',
@@ -71,21 +71,21 @@ export const MD_LEX = Object.freeze({
   md_bell_warn: 'Twenty seconds.',
   md_bell_line: 'The bell. Hands off the table.',
   md_retake: 'Retake',
-  md_voided_line: 'That round is off the books. Your bank is safe.',
+  md_voided_line: 'That round is off the books. Your total is safe.',
 
   /* ---- the stake prompt (.g-md-stake - real buttons, honest) ------------ */
-  md_stake_line: 'Bank it, or ride it double or nothing?',
-  md_bank: 'Bank',
+  md_stake_line: 'Keep it, or ride it double or nothing?',
+  md_bank: 'Keep',
   md_ride: 'Ride',
-  md_banked_line: 'Banked. Nothing takes that back.',
+  md_banked_line: 'Earned. Nothing takes that back.',
   md_ride_line: 'Riding. The table gets dirtier.',
   md_ride_cap_line: 'Five deep. The house pays out and the table resets.',
-  md_bust_line: 'The pot goes back to the house. Your bank is untouched.',
-  md_auto_bank_line: 'Banked for you.',
+  md_bust_line: 'The pot goes back to the house. Your total is untouched.',
+  md_auto_bank_line: 'Earned for you.',
   md_auto_ride_line: 'Riding for you.',
 
   /* ---- stamps + ceremonies (Deck II) ------------------------------------ */
-  md_stamp_bank: 'BANKED',
+  md_stamp_bank: 'EARNED',
   md_stamp_bell: 'BELL',
   md_stamp_blind: 'EYES OPEN',
   md_jackpot: 'JACKPOT',
@@ -102,14 +102,14 @@ export const MD_LEX = Object.freeze({
 
   /* ---- the end card (.g-md-end) ---------------------------------------- */
   md_end_title: 'Table report',
-  md_end_banked: 'Banked',
+  md_end_banked: 'Earned',
   md_end_picks: 'Picks',
   md_end_latency: 'Average pick',
-  md_end_deepest: 'Deepest ride banked',
+  md_end_deepest: 'Deepest ride earned',
   md_end_rounds: 'Rounds',
   md_end_streak: 'Best streak',
   md_end_blind: 'Called through a blackout',
-  md_end_clean: 'You banked a round before your first miss.',
+  md_end_clean: 'You earned a round before your first miss.',
   md_end_yes: 'Yes',
   md_end_no: 'No',
 });

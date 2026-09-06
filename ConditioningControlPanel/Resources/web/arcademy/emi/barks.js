@@ -2226,7 +2226,7 @@ export const POOLS = Object.freeze({
     lines: [
       { t: "whole! look at it. don't scramble it. it's scrambling. no.", face: '(ಥ_ಥ)' },
       { t: "it's a picture again! it always was. now it's a whole one.", face: '*_*' },
-      { t: "banked. give me a second with it. ok. it's gone. bye.", face: ';_;' },
+      { t: "earned. give me a second with it. ok. it's gone. bye.", face: ';_;' },
       { t: "there it is. i'd hang that. i'd hang all of them.", face: '^___^' }
     ]
   },
@@ -2595,7 +2595,7 @@ export const POOLS = Object.freeze({
     on: 'game:de.resurface', when: ['inClass', 'gameIs:the_deep_end'], odds: 0.5,
     ceremony: false, priority: 10, maxPerClass: 2, cooldownMs: 20000,
     lines: [
-      { t: "up we come! the depth stays. banked. i banked it. yours.", face: '^_^' },
+      { t: "up we come! the depth stays. earned. i kept it. yours.", face: '^_^' },
       { t: "full board. that's not losing. that's full. fresh water!", face: '0_0' },
       { t: "draining. i love the draining sound. it means again.", face: '(◠‿◠)' },
       { t: "the water's coming back clean. so are you. metaphorically.", face: '._.' }
