@@ -155,7 +155,14 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   const send = (m) => { try { bridge && bridge.send && bridge.send(m); } catch (e) { /* host gone */ } };
   // WebView2 or a browser? Only a real host has the ccp.content mirror to retry a missing
   // clip against, and only a real host can play the HOST_SFX catalogue for us.
-  const hosted = !!(bridge && bridge.isHosted);
+  //
+  // `isHosted` alone is not that question any more. The web build installs a transport double so the
+  // page boots hosted (cclabs-web scripts/race-web-ext), and that host is JavaScript in this same
+  // tab: no ccp.content, no Resources/sounds/chaos. It says so with `hostSfx: false` in its init, and
+  // both roads below then take the unhosted branch, which is the one that works there - the eleven
+  // cues ship as ordinary files beside the page. The C# host never sets the key, so on the desktop it
+  // is undefined and this reads exactly as it always did.
+  const hosted = !!(bridge && bridge.isHosted) && settings.hostSfx !== false;
   const masterLevel = clamp((Number(settings.masterVolume) == null || isNaN(Number(settings.masterVolume)) ? 60 : Number(settings.masterVolume)) / 100, 0, 1);
   const levels = { music: 1, sfx: 1 };   // the two option sliders (menu.js persists them); setLevels moves them
   const buffers = new Map();     // key -> AudioBuffer | 'pending' | 'failed'

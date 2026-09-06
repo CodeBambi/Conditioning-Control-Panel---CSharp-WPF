@@ -492,6 +492,36 @@ Host -> page: `init {protocol, settings:{masterVolume, reducedMotion}, modId, mo
 `track-error {message}`. Standalone, `?chart=demo&dur=N` / `?chart=<url>` load a chart and
 `?audio=<url>` makes an `<audio>` element the clock (wall time without it).
 
+### The media surface (web only)
+
+The desktop host enumerates the user's preset and posts a `manifest`. A browser has no library to
+enumerate, so the player hands it one and the same `manifest` frame carries it. Extra frames:
+
+Page -> host: `set-setting {key, value}` with `key` `media.pickLocal` (`'gallery' | 'zip' | 'folder'`)
+or `media.clearLocal`. Posted from inside the click's own turn, because a file picker opens only
+while the tap's activation is alive.
+
+Host -> page: `setting {key, value}` (the echo; an action echoes `value: null`, and only the echo
+takes a button's pending paint back off), `local-media {images, videos, skipped, active}` after every
+ingest, a cancelled picker and a clear, plus a fresh `manifest` carrying the whole pile.
+
+Capability keys on `init.settings`, all absent (and so unchanged) on the desktop:
+
+| Key | Meaning |
+| --- | --- |
+| `mediaControls: true` | build the menu's `your media` panel. Strictly `true` or nothing renders |
+| `localMedia {images, videos, skipped, active, folder}` | the pile at boot; `folder:false` hides the folder button (iOS) |
+| `trackPick: false` | this host has no file dialog: take `load a track` off the menu, and leave the `?chart=` road open |
+| `canSurface: false` | this host cannot take the window away: take `surface` off |
+| `hostSfx: false` | this host cannot play `Resources/sounds/chaos`: play the vendored cue in page |
+
+The menu's `your media` panel goes: heading, the count line, the pickers, the two promises, then an
+empty `.rm-media-more` node (`menu.mediaSlot`) and `back`. The online-feed group builds into that
+node, so it lands under the pickers and `back` stays the last row a thumb or an arrow reaches.
+
+The browser host lives in the site repo at `scripts/race-web-ext/`; its `RACE-MEDIA-CONTRACT.md` is
+the other half of this table and owns the source-registry seam remote media plugs into.
+
 `sfx` names must exist in `Resources/sounds/chaos/*.mp3` (C# `ChaosSfx.Play(name, scale)`), e.g.
 `tunnel_powerup_collect`, `golden_pop`, `chain_pop`, `streak_milestone`, `pb_fanfare`,
 `rank_up`, `ui_click`, `ui_denied`, `surface`, `depth_change`, `time_slow_in`, `time_slow_out`.
