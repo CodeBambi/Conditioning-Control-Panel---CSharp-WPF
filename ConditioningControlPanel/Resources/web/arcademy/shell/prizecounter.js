@@ -52,8 +52,26 @@ import {
  * THE TABLE
  * -------------------------------------------------------------------------- */
 
-/** The two shop surfaces, in the order the room reads left to right. */
-export const SURFACES = Object.freeze(['t', 'k']);
+/** The shop's surfaces, top to bottom. CHIPS COME LAST because the Back Room
+ *  is last: you walk past the shelf and the case to reach it, and this is that
+ *  walk sat down. No chip rows in the catalog draws no third shelf, which is
+ *  the same nothing an empty token case has always drawn. */
+export const SURFACES = Object.freeze(['t', 'k', 'c']);
+
+/**
+ * WHICH SURFACE A ROW BELONGS TO, and this is the only place that decides.
+ * Eight callers each asked `row.cur === 'k' ? 'k' : 't'` in their own words,
+ * which was fine at two surfaces and quietly wrong at three - a chip row filed
+ * on the ticket shelf and priced with a stub. The old fallback is kept on
+ * purpose: a currency this build never heard of is a TICKET row, which is what
+ * all eight already assumed and the safest thing an unknown row can be.
+ * @param {*} row a catalog row, or anything at all
+ * @returns {'t'|'k'|'c'}
+ */
+export function curOf(row) {
+  const cur = row && row.cur;
+  return (cur === 'k' || cur === 'c') ? cur : 't';
+}
 
 /** How long a pressed row waits for the counter before it wakes back up. The
  *  host answers a prize-buy in the same tick it receives it, so six seconds is
@@ -100,9 +118,18 @@ export const HOLD_FROM = 1000;
  */
 export const HOLD_FROM_K = 2;
 
+/** The chip floor: the ticket floor's own reasoning in the Back Room's money.
+ *  A hundred chips is one Sparkle (BACKROOM-CONTRACT §1), so this is twenty-five
+ *  Sparkle of table time in one press - the same "a week of good nights should
+ *  not leave on one stray click". Nothing on the shelf reaches it yet; chip
+ *  rows arrive with the catalog wave, so re-audit it the day prices land. */
+export const HOLD_FROM_C = 2500;
+
 /** The floor this row has to clear to be worth holding down. */
 export function holdFloor(cur) {
-  return (cur === 'k') ? HOLD_FROM_K : HOLD_FROM;
+  if (cur === 'k') return HOLD_FROM_K;
+  if (cur === 'c') return HOLD_FROM_C;
+  return HOLD_FROM;
 }
 
 /**
@@ -113,6 +140,15 @@ export function holdFloor(cur) {
  * saves toward. The token case is dear by definition - there is no cheap token.
  */
 export const BEAT_DEAR_T = 200;
+/** The chip shelf's waist: five Sparkle. Enough that the row was saved toward,
+ *  not so much that only the top of the shelf ever gets the full party.
+ *  Re-audit with real prices, exactly like HOLD_FROM_C. */
+export const BEAT_DEAR_C = 500;
+
+/** The price a row has to clear on its own surface to be worth the full beat. */
+export function dearFloor(cur) {
+  return (cur === 'c') ? BEAT_DEAR_C : BEAT_DEAR_T;
+}
 export const BEAT_MS_SMALL = 1000;
 export const BEAT_MS_FULL = 1600;
 export const BEAT_MS_STILL = 1200;
@@ -144,18 +180,22 @@ export function shortfallBand(cost) {
  * night just because the ticket shelf is out of reach.
  *
  * @param {Array} catalog rows as the host sent them
- * @param {{t:number,k:number}} purse
+ * @param {{t:number,k:number,c:number}} purse
  * @returns {number} 0.2 .. 0.55
  */
 export function marqueeHeat(catalog, purse) {
   const rows = Array.isArray(catalog) ? catalog : [];
-  const have = { t: Number(purse && purse.t) || 0, k: Number(purse && purse.k) || 0 };
+  const have = {
+    t: Number(purse && purse.t) || 0,
+    k: Number(purse && purse.k) || 0,
+    c: Number(purse && purse.c) || 0,
+  };
   let best = 0;
   for (const cur of SURFACES) {
     let top = 0;      // the dearest row on this surface
     let reach = 0;    // the dearest one this purse covers
     for (const r of rows) {
-      if (!r || (r.cur === 'k' ? 'k' : 't') !== cur) continue;
+      if (!r || curOf(r) !== cur) continue;
       if (r.locked === true) continue;
       const cost = Math.max(0, Math.round(Number(r.cost) || 0));
       if (cost > top) top = cost;
@@ -592,8 +632,8 @@ export function createPrizeCounter(caps) {
   /* THE MOVES' OWN BOOKKEEPING, and every line of it is PRESENTATION. Not one
    * of these is a fact about the player, not one of them outlives a destroy,
    * and not one of them is ever read to decide what a purchase did. */
-  const chipEls = { t: null, k: null };   // the two wallet chips, re-seated each render
-  const chipNums = { t: null, k: null };  // the <b> inside each, for the bank's ticking
+  const chipEls = { t: null, k: null, c: null };   // the wallet chips, re-seated each render
+  const chipNums = { t: null, k: null, c: null };  // the <b> inside each, for the bank's ticking
   const holds = [];                       // live charge-hold handles, torn down each render
   let refreshTimer = null;                // a repaint waiting for a finger to lift
   let lastSig = '';                       // what the shelf on screen is painted FROM
@@ -607,9 +647,16 @@ export function createPrizeCounter(caps) {
   function readBalance() {
     try {
       const b = (typeof c.balance === 'function') ? c.balance() : null;
-      const tt = Number(b && b.t); const kk = Number(b && b.k);
-      return { t: Number.isFinite(tt) ? tt : 0, k: Number.isFinite(kk) ? kk : 0 };
-    } catch (e) { return { t: 0, k: 0 }; }
+      const tt = Number(b && b.t); const kk = Number(b && b.k); const cc = Number(b && b.c);
+      return {
+        t: Number.isFinite(tt) ? tt : 0,
+        k: Number.isFinite(kk) ? kk : 0,
+        /* A SHELL THAT PREDATES THE WING sends no `c` at all, and a purse that
+         * has never held a chip reads zero either way. Neither is an error and
+         * neither draws a third shelf - the CATALOG decides that. */
+        c: Number.isFinite(cc) ? cc : 0,
+      };
+    } catch (e) { return { t: 0, k: 0, c: 0 }; }
   }
 
   function readInv() {
@@ -654,7 +701,10 @@ export function createPrizeCounter(caps) {
    * "cheaper" than `60` on a ticket row in any sense a player would recognise.
    * The shelf is the everyday surface, so the shelf is where the room beckons,
    * and the case only gets the breath when nothing on the shelf is within
-   * reach at all.
+   * reach at all. CHIPS ARE LAST for the same reason one step further out: a
+   * chip is money that was won at a table rather than earned in a class, and a
+   * shop that beckons you toward the thing you gambled for before the thing you
+   * studied for is a shop with an opinion nobody asked it to have.
    */
   function cheapestAffordable(catalog) {
     let pick = null;
@@ -662,11 +712,11 @@ export function createPrizeCounter(caps) {
       let best = Infinity;
       for (const item of (catalog || [])) {
         if (!item || !item.sku) continue;
-        if ((item.cur === 'k' ? 'k' : 't') !== cur) continue;
+        if (curOf(item) !== cur) continue;
         if (item.locked === true) continue;
         if (isOwned(item)) continue;
         const cost = Math.max(0, Math.round(Number(item.cost) || 0));
-        const purse = (cur === 'k') ? wallet.k : wallet.t;
+        const purse = Number(wallet[cur]) || 0;
         if (purse < cost) continue;
         if (item.kind === 'consumable') {
           const cap = stackMaxFor(item.sku);
@@ -710,41 +760,58 @@ export function createPrizeCounter(caps) {
 
   /* ------------------------------------------------------------ the chrome */
 
+  /** The icon a currency wears: a drawn ticket stub, the token's mark, or the
+   *  Back Room's drawn disc. DRAWN, not typed - a third unicode mark would be a
+   *  third font risk on a page that may not fetch one (trap 2), and the stub
+   *  already proved that a shape in the stylesheet reads better than a glyph. */
+  function curIcon(cur) {
+    if (cur === 'k') return el('i', 'arc-tok', TOKEN_MARK);
+    if (cur === 'c') return el('i', 'arc-chipmark');
+    return el('i', 'arc-tick');
+  }
+
+  /** What a currency is called, in the school's own words. */
+  function curLabel(cur) {
+    if (cur === 'k') return t('wallet_tokens', 'Tokens');
+    if (cur === 'c') return t('wallet_chips', 'Chips');
+    return t('wallet_tickets', 'Tickets');
+  }
+
   /**
-   * A currency chip. Tickets get a drawn stub, tokens get the mark, and both
-   * carry the number FIRST because the number is the thing a player came to
-   * read. `cur` is 't' or 'k'.
+   * A currency chip. Tickets get a drawn stub, tokens get the mark, chips get
+   * the disc, and all three carry the number FIRST because the number is the
+   * thing a player came to read. `cur` is 't', 'k' or 'c'.
    */
   function chip(cur) {
     const box = el('span', 'pc-chip pc-chip-' + cur);
-    const ico = el('i', cur === 'k' ? 'arc-tok' : 'arc-tick', cur === 'k' ? TOKEN_MARK : null);
+    const ico = curIcon(cur);
     attr(ico, 'aria-hidden', 'true');
     box.appendChild(ico);
-    const num = el('b', 'pc-chip-n', String(cur === 'k' ? wallet.k : wallet.t));
+    const num = el('b', 'pc-chip-n', String(Number(wallet[cur]) || 0));
     box.appendChild(num);
-    box.appendChild(el('span', 'pc-chip-lbl', cur === 'k'
-      ? t('wallet_tokens', 'Tokens')
-      : t('wallet_tickets', 'Tickets')));
+    box.appendChild(el('span', 'pc-chip-lbl', curLabel(cur)));
     /* THE BANK spends FROM here, so the chip and its number are kept by hand.
      * They are re-seated on every render and read through thunks, so a repaint
      * landing mid-flight retargets the ticking instead of orphaning it. */
-    const key = (cur === 'k') ? 'k' : 't';
-    chipEls[key] = box;
-    chipNums[key] = num;
+    chipEls[cur] = box;
+    chipNums[cur] = num;
     return box;
   }
 
-  /** The price flag on a row. Tickets read as a plain count beside a stub;
-   *  tokens read as the contract's ◉N, which is short enough to sit on glass. */
+  /** The price flag on a row. Tickets read as a plain count beside a stub,
+   *  tokens read as the contract's ◉N, which is short enough to sit on glass,
+   *  and chips read as a count beside the disc - a chip price is a four-figure
+   *  number and a mark in front of it would only make it longer. */
   function priceTag(item) {
-    const flag = el('span', 'pc-price pc-price-' + (item.cur === 'k' ? 'k' : 't'));
+    const cur = curOf(item);
+    const flag = el('span', 'pc-price pc-price-' + cur);
     const cost = Math.max(0, Math.round(Number(item.cost) || 0));
-    if (item.cur === 'k') {
+    if (cur === 'k') {
       flag.appendChild(el('b', 'pc-price-n', TOKEN_MARK + String(cost)));
     } else {
-      const stub = el('i', 'arc-tick');
-      attr(stub, 'aria-hidden', 'true');
-      flag.appendChild(stub);
+      const mark = curIcon(cur);
+      attr(mark, 'aria-hidden', 'true');
+      flag.appendChild(mark);
       flag.appendChild(el('b', 'pc-price-n', String(cost)));
     }
     return flag;
@@ -851,7 +918,7 @@ export function createPrizeCounter(caps) {
     const cap = item.kind === 'consumable' ? stackMaxFor(item.sku) : 0;
     const locked = item.locked === true;
     const cost = Math.max(0, Math.round(Number(item.cost) || 0));
-    const purse = item.cur === 'k' ? wallet.k : wallet.t;
+    const purse = Number(wallet[curOf(item)]) || 0;
     const poor = !locked && !owned && purse < cost;
     const full = !!(cap && held >= cap);
     const short = cost - purse;
@@ -868,7 +935,7 @@ export function createPrizeCounter(caps) {
      * you look at it, and "you are twenty short" was always the truer one. */
     const almost = poor && short > 0 && short <= shortfallBand(cost);
 
-    let cls = 'pc-item pc-item-' + (item.cur === 'k' ? 'k' : 't');
+    let cls = 'pc-item pc-item-' + curOf(item);
     if (owned) cls += ' is-owned';
     if (locked) cls += ' is-locked';
     if (poor) cls += ' is-poor';
@@ -990,7 +1057,7 @@ export function createPrizeCounter(caps) {
       if (almost) ghostGold(rows.get(item.sku) || btn, { reduced: reduced(), lite: !!c.lite });
       propose(item);
     };
-    if (HOLD_TO_BUY && cost >= holdFloor(item.cur === 'k' ? 'k' : 't')) {
+    if (HOLD_TO_BUY && cost >= holdFloor(curOf(item))) {
       let h = null;
       try {
         h = chargeHold(btn, {
@@ -1036,7 +1103,7 @@ export function createPrizeCounter(caps) {
    * then pretended it had not.
    */
   function shelfSig() {
-    let s = wallet.t + '/' + wallet.k + '|' + (pending || '');
+    let s = wallet.t + '/' + wallet.k + '/' + wallet.c + '|' + (pending || '');
     try {
       const keys = Object.keys(inv || {}).sort();
       for (const k of keys) {
@@ -1088,15 +1155,27 @@ export function createPrizeCounter(caps) {
     }, 220);
   }
 
+  /** What each shelf is called and what it says under its own name. */
+  function surfaceWords(cur) {
+    if (cur === 'k') {
+      return [t('prize_case', 'Token Case'),
+        t('prize_case_hint', 'Tokens only. Your first S of the day drops one in the tray.')];
+    }
+    if (cur === 'c') {
+      return [t('prize_shelf_chips', 'The Back Room shelf'),
+        t('prize_shelf_chips_hint',
+          'Chips only. What you carried out of the Back Room buys these.')];
+    }
+    return [t('prize_shelf', 'Ticket Shelf'),
+      t('prize_shelf_hint', 'Every graded class pays tickets. This is where they go.')];
+  }
+
   function surface(cur, items) {
     const sect = el('section', 'pc-sect pc-sect-' + cur);
     const head = el('div', 'pc-sect-head');
-    head.appendChild(el('h3', 'pc-sect-title', cur === 'k'
-      ? t('prize_case', 'Token Case')
-      : t('prize_shelf', 'Ticket Shelf')));
-    head.appendChild(el('p', 'pc-sect-hint', cur === 'k'
-      ? t('prize_case_hint', 'Tokens only. Your first S of the day drops one in the tray.')
-      : t('prize_shelf_hint', 'Every graded class pays tickets. This is where they go.')));
+    const words = surfaceWords(cur);
+    head.appendChild(el('h3', 'pc-sect-title', words[0]));
+    head.appendChild(el('p', 'pc-sect-hint', words[1]));
     sect.appendChild(head);
 
     const goods = el('div', 'pc-goods');
@@ -1151,15 +1230,17 @@ export function createPrizeCounter(caps) {
      * bank's only use for this is knowing which digits to count down through on
      * the way there. If the two ever disagree the frame wins and the next
      * render says so. */
-    const before = { t: wallet.t, k: wallet.k };
+    const before = { t: wallet.t, k: wallet.k, c: wallet.c };
 
     /* The host's numbers win outright. A missing bag means "unchanged", never
      * "empty" - a refusal frame is allowed to carry only the reason. */
     if (r.wallet && typeof r.wallet === 'object') {
       const tt = Number(r.wallet.t); const kk = Number(r.wallet.k);
+      const cc = Number(r.wallet.c);
       wallet = {
         t: Number.isFinite(tt) ? tt : wallet.t,
         k: Number.isFinite(kk) ? kk : wallet.k,
+        c: Number.isFinite(cc) ? cc : wallet.c,
       };
     }
     if (r.inv && typeof r.inv === 'object') inv = r.inv;
@@ -1200,7 +1281,7 @@ export function createPrizeCounter(caps) {
       if (row) shiver(row, { reduced: red });
       if (String(r.reason || '') === 'poor') {
         const item = catalogRow(missed);
-        warmGlow(chipEls[(item && item.cur === 'k') ? 'k' : 't'], { reduced: red });
+        warmGlow(chipEls[curOf(item)], { reduced: red });
       }
     }
     return !!was && (!r.sku || r.sku === was);
@@ -1240,7 +1321,7 @@ export function createPrizeCounter(caps) {
    */
   function spendBank(sku, before) {
     const item = catalogRow(sku);
-    const cur = (item && item.cur === 'k') ? 'k' : 't';
+    const cur = curOf(item);
     const cost = Math.max(0, Math.round(Number(item && item.cost) || 0));
     const red = reduced();
 
@@ -1295,11 +1376,14 @@ export function createPrizeCounter(caps) {
    */
   function winChime(sku, hintCost) {
     const item = catalogRow(sku);
-    const cur = (item && item.cur === 'k') ? 'k' : 't';
+    const cur = curOf(item);
     const cost = Math.max(0, Math.round(Number(
       (item && item.cost) != null ? item.cost : hintCost) || 0));
     if (cur === 'k') { sfx('chime', 0.55, { pitch: 1.1225 }); return; }
-    sfx('chime', cost >= BEAT_DEAR_T ? 0.55 : 0.4);
+    /* A CHIP ROW IS NOT A TOKEN ROW. The third rung belongs to the day's one
+     * token and would be a lie over money that was won at a table, so chips
+     * take the shelf's own two-step ladder against their own waist. */
+    sfx('chime', cost >= dearFloor(cur) ? 0.55 : 0.4);
   }
 
   /* -------------------------------------------------------- THE TRAY BEAT */
@@ -1341,7 +1425,7 @@ export function createPrizeCounter(caps) {
    */
   function beatHold(cost, cur, still) {
     if (still) return BEAT_MS_STILL;
-    const dear = (cur === 'k') || (Number(cost) || 0) >= BEAT_DEAR_T;
+    const dear = (cur === 'k') || (Number(cost) || 0) >= dearFloor(cur);
     if (!dear || buys > BEAT_FULL_RUNS) return BEAT_MS_SMALL;
     return BEAT_MS_FULL;
   }
@@ -1351,7 +1435,7 @@ export function createPrizeCounter(caps) {
     clearBeat();
     const still = reduced();
     const item = catalogRow(sku);
-    const cur = (item && item.cur === 'k') ? 'k' : 't';
+    const cur = curOf(item);
     const cost = Math.max(0, Math.round(Number(item && item.cost) || 0));
     /* `is-lite` rides the BEAT rather than the root, because the beat does not
      * always hang off the root any more (see beatHost). The old
@@ -1431,8 +1515,7 @@ export function createPrizeCounter(caps) {
      * a charge-hold still holding a timer for a node that has left the document
      * is a ring that fills in the dark and fires into nothing. */
     dropHolds();
-    chipEls.t = null; chipEls.k = null;
-    chipNums.t = null; chipNums.k = null;
+    for (const cur of SURFACES) { chipEls[cur] = null; chipNums[cur] = null; }
     try { root.textContent = ''; } catch (e) { /* noop */ }
 
     /* THE SHELF IS READ FIRST NOW. Both of the room's new judgements - how hot
@@ -1472,6 +1555,12 @@ export function createPrizeCounter(caps) {
     purse.appendChild(label);
     purse.appendChild(chip('t'));
     purse.appendChild(chip('k'));
+    /* THE THIRD CHIP IS ALWAYS THERE, even at zero, and that is deliberate. A
+     * purse that hides an empty currency teaches a player that the currency
+     * does not exist; a purse that shows a zero teaches them there is somewhere
+     * they have not been yet. The two above it have always read zero on a first
+     * night for exactly the same reason. */
+    purse.appendChild(chip('c'));
     marquee.appendChild(purse);
     root.appendChild(marquee);
 
@@ -1487,7 +1576,7 @@ export function createPrizeCounter(caps) {
         'Shelf is bare tonight. Come back when the truck has been.')));
     } else {
       for (const cur of SURFACES) {
-        const items = catalog.filter((r) => (r.cur === 'k' ? 'k' : 't') === cur);
+        const items = catalog.filter((r) => curOf(r) === cur);
         if (items.length) root.appendChild(surface(cur, items));
       }
     }
@@ -1566,7 +1655,7 @@ export function createPrizeCounter(caps) {
     /** The last line the counter said (test seam). */
     get note() { return note; },
     /** What the room believes it can spend (test seam). Never authored here. */
-    get balance() { return { t: wallet.t, k: wallet.k }; },
+    get balance() { return { t: wallet.t, k: wallet.k, c: wallet.c }; },
     /** One painted row by sku, or null (test seam). */
     rowFor(sku) { return rows.get(sku) || null; },
     /** The tray beat currently on screen, or null (test seam). */
