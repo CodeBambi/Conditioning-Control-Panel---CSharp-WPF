@@ -255,7 +255,7 @@ namespace ConditioningControlPanel.Services.Speech
         /// <see cref="BuildRecognizer"/>; the full (non-lgraph) 0.22 model ignores grammar, so don't
         /// ship that one here.
         /// </summary>
-        private static string? ResolveModelDir()
+        internal static string? ResolveModelDir()
         {
             if (!Directory.Exists(ModelRoot)) return null;
 

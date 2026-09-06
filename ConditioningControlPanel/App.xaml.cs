@@ -2776,6 +2776,18 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // `--race-words <file>`: chart one audio file's spoken words and log every event, then
+            // quit. The word pass is the half of the track chart that needs real speech to judge,
+            // and no UI can show it better than a timestamped list can.
+            int wordsArg = Array.IndexOf(e.Args, "--race-words");
+            if (wordsArg >= 0)
+            {
+                if (wordsArg + 1 < e.Args.Length) Services.Race.TrackWordsDev.Run(e.Args[wordsArg + 1]);
+                else Logger?.Information("--race-words needs a file path");
+                Shutdown();
+                return;
+            }
+
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
             // window natively above main and ducks main out of the way at launch.
