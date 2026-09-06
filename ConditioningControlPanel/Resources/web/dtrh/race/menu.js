@@ -27,6 +27,13 @@
  * of the cached pack with its own glass material so the stage face and the
  * run's face never fight.
  *
+ * The BACKDROP is geometry, never an asset: a 32 m sky dome painted with a
+ * canvas gradient (plum overhead, a pink haze band on the eye line, the mist
+ * below), three oversized lathe cups sat far back as flat-shaded silhouettes
+ * and a dozen additive bubbles drifting up behind the stage. The scene fog is
+ * that same mist, so the checker dies in the haze instead of ending on a line.
+ * Reduced motion holds the bubbles still.
+ *
  * Options persist under ONE localStorage key, `race.options`, not through
  * engine/settings.js: that store is the dive's typed `sf-settings` row with a
  * fixed DEFAULTS table and a purchase ladder, and the race must not widen it.
@@ -66,6 +73,10 @@ export const CUP_AT = Object.freeze({ x: -2.05, y: 0, z: -1.15 });
 const CUP_PROFILE = [[0.001, 0], [0.28, 0], [0.34, 0.06], [0.44, 0.3], [0.52, 0.58], [0.55, 0.66], [0.5, 0.68], [0.47, 0.6], [0.4, 0.3], [0.3, 0.1], [0.001, 0.08]];
 const PODIUM_PROFILE = [[0.001, 0], [0.75, 0], [1.05, PODIUM_H - 0.05], [1.1, PODIUM_H], [1.1, PODIUM_H + 0.04], [0.98, PODIUM_H + 0.04], [0.98, PODIUM_H], [0.001, PODIUM_H]];
 const PINK = 0xff69b4, PORCELAIN = 0xf6e7c8, HAZE = 0x1b1232;
+// the backdrop. MIST is both the fog and the bottom of the sky, so the floor's edge has nowhere to show.
+const MIST = 0x3a1c4e, FOG_NEAR = 9, FOG_FAR = 21, SKY_R = 44, FAR_PLUM = 0x4a2464, FLOOR_W = 46, FLOOR_N = 21, BUBBLE_N = 12;
+// far shapes: [x, z, scale, yaw]. The same cup profile, blown up and sat on the floor behind the gantry.
+const FAR_CUPS = [[-15, -28, 6, 0.5], [14, -33, 7, -0.8], [-6.5, -37, 6.4, 2.1]];
 const PAD = { a: 0, b: 1, up: 12, down: 13, left: 14, right: 15 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -95,19 +106,28 @@ export function seedFromOptions(o, now = new Date()) {
 export function wantsReducedMotion(o, system) { return o.motion === 'on' ? true : o.motion === 'off' ? false : !!system; }
 
 // ---- textures the placeholders need ------------------------------------------------------------
-function checkerTexture(a, b) {
+function checkerTexture(a, b, repeat = 15) {
   const c = document.createElement('canvas'); c.width = c.height = 2;
   const g = c.getContext('2d'); g.fillStyle = a; g.fillRect(0, 0, 2, 2); g.fillStyle = b; g.fillRect(0, 0, 1, 1); g.fillRect(1, 1, 1, 1);
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(15, 15);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat);
   t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-function hazeTexture() {
-  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
-  const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, 128);
-  // the plane spans y -5..13 behind the stage: the pink band sits just above the floor's horizon (canvas y 0.55 = plane y ~ 3)
-  grad.addColorStop(0, '#120b24'); grad.addColorStop(0.42, '#2a1540'); grad.addColorStop(0.55, '#7a2f66'); grad.addColorStop(0.64, '#3a1c4e'); grad.addColorStop(1, '#1b1232');
-  g.fillStyle = grad; g.fillRect(0, 0, 64, 128);
+function skyTexture() {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 256;
+  const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, 256);
+  // the dome is a sphere: the top of the canvas is the zenith, the middle is the eye line, the bottom is the mist
+  grad.addColorStop(0, '#120b24'); grad.addColorStop(0.38, '#2c1544'); grad.addColorStop(0.452, '#5a2660');
+  grad.addColorStop(0.477, '#a04a86'); grad.addColorStop(0.495, '#6b2c63'); grad.addColorStop(0.5, '#3a1c4e'); grad.addColorStop(1, '#3a1c4e');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
+  g.globalCompositeOperation = 'lighter';
+  for (const [x, r, a] of [[18, 20, 0.40], [64, 13, 0.24], [106, 24, 0.34]]) {   // pink glows on the band, so the drift reads
+    const b = g.createRadialGradient(x, 122, 0, x, 122, r);
+    b.addColorStop(0, `rgba(255,105,180,${a})`); b.addColorStop(1, 'rgba(255,105,180,0)');
+    g.fillStyle = b; g.fillRect(x - r, 122 - r, r * 2, r * 2);
+  }
+  // below the eye line the dome is flat mist and nothing else: that is the colour the fog leaves the floor
+  g.globalCompositeOperation = 'source-over'; g.fillStyle = '#3a1c4e'; g.fillRect(0, 128, 128, 128);
   const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
@@ -116,7 +136,7 @@ function hazeTexture() {
 export function createStage({ renderer, pixel, reducedMotion = false, log = null, character = ROSTER[0] } = {}) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(HAZE);
-  scene.fog = new THREE.FogExp2(HAZE, 0.07);
+  scene.fog = new THREE.Fog(MIST, FOG_NEAR, FOG_FAR);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
   camera.position.set(0, 1.0, 4.4); camera.lookAt(0, 0.6, 0);   // pulled back from the brief's (0, 0.9, 3.2): at block 3 she filled the frame
   const view = { w: 1, h: 1, frac: 0.5 };
@@ -131,11 +151,36 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   const porcelain = keep(new THREE.MeshStandardMaterial({ color: PORCELAIN, roughness: 0.4, metalness: 0.05 }));
   const glow = keep(new THREE.MeshStandardMaterial({ color: PINK, emissive: PINK, emissiveIntensity: 1.1, roughness: 0.4 }));
 
-  // backdrop haze + checker floor (props.glb floor_tile replaces the floor)
-  const haze = keep(hazeTexture());
-  const back = new THREE.Mesh(keep(new THREE.PlaneGeometry(40, 18)), keep(new THREE.MeshBasicMaterial({ map: haze, fog: false, depthWrite: false })));
-  back.position.set(0, 4, -9); scene.add(back);
-  let floor = new THREE.Mesh(keep(new THREE.PlaneGeometry(30, 30)), keep(new THREE.MeshLambertMaterial({ map: keep(checkerTexture('#2b1f47', '#3a2a5e')) })));
+  // ---- the backdrop: one dome, three far shapes, one instanced field of bubbles ----
+  const sky = keep(skyTexture());
+  const dome = new THREE.Mesh(keep(new THREE.SphereGeometry(SKY_R, 20, 14)), keep(new THREE.MeshBasicMaterial({ map: sky, side: THREE.BackSide, fog: false })));
+  scene.add(dome);
+  const farMat = keep(new THREE.MeshLambertMaterial({ color: FAR_PLUM, flatShading: true, fog: false }));
+  const farGeo = keep(new THREE.LatheGeometry(CUP_PROFILE.map(([x, y]) => new THREE.Vector2(x, y)), 12));
+  for (const [fx, fz, fs, fr] of FAR_CUPS) {   // one geometry, one material: they read as shapes, never as detail
+    const m = new THREE.Mesh(farGeo, farMat);
+    m.position.set(fx, 0, fz); m.scale.setScalar(fs); m.rotation.y = fr; scene.add(m);
+  }
+  const bubMat = keep(new THREE.MeshBasicMaterial({ color: PINK, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  const bubbles = keep(new THREE.InstancedMesh(keep(new THREE.SphereGeometry(0.34, 6, 4)), bubMat, BUBBLE_N));
+  bubbles.frustumCulled = false; scene.add(bubbles);
+  const bub = [], _bm = new THREE.Matrix4(), _bs = new THREE.Vector3();
+  for (let i = 0; i < BUBBLE_N; i++) bub.push({ x: -13 + ((i * 5.3) % 26), y: 0.5 + ((i * 1.9) % 4.6), z: -8 - ((i * 3.7) % 15), s: 0.55 + ((i * 7) % 5) * 0.3, ph: i * 1.9, rise: 0.14 + ((i * 3) % 4) * 0.05 });
+  let bubDirty = true;
+  /** The bubbles rise and sway behind the stage. Reduced motion holds them where they are (Law III). */
+  function driftBubbles(dt) {
+    if (reduced && !bubDirty) return;
+    for (let i = 0; i < BUBBLE_N; i++) {
+      const b = bub[i];
+      if (!reduced) { b.y += dt * b.rise; if (b.y > 6.4) b.y = 0.4; }
+      _bm.makeTranslation(b.x + (reduced ? 0 : Math.sin(t * 0.45 + b.ph) * 0.55), b.y, b.z);
+      bubbles.setMatrixAt(i, _bm.scale(_bs.setScalar(b.s)));
+    }
+    bubbles.instanceMatrix.needsUpdate = true; bubDirty = false;
+  }
+  driftBubbles(0);
+  // the checker floor (props.glb floor_tile replaces it): wide enough that the fog eats it before its edge
+  let floor = new THREE.Mesh(keep(new THREE.PlaneGeometry(FLOOR_W, FLOOR_W)), keep(new THREE.MeshLambertMaterial({ map: keep(checkerTexture('#2b1f47', '#3a2a5e', FLOOR_W / 2)) })));
   floor.rotation.x = -Math.PI / 2; scene.add(floor);
   // the saucer podium she stands on
   const podium = new THREE.Group(); scene.add(podium);
@@ -161,9 +206,9 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     const tileGeo = pack.byName('floor_tile') ? toInstanceGeometry(pack.byName('floor_tile')) : null;
     if (tileGeo) {
       scene.remove(floor);
-      const n = 11, im = new THREE.InstancedMesh(keep(tileGeo), keep(new THREE.MeshLambertMaterial({ vertexColors: true })), n * n), m = new THREE.Matrix4();
+      const n = FLOOR_N, half = (n - 1) / 2, im = new THREE.InstancedMesh(keep(tileGeo), keep(new THREE.MeshLambertMaterial({ vertexColors: true })), n * n), m = new THREE.Matrix4();
       let i = 0;
-      for (let x = 0; x < n; x++) for (let z = 0; z < n; z++) im.setMatrixAt(i++, m.makeTranslation((x - 5) * 2, 0, (z - 5) * 2));
+      for (let x = 0; x < n; x++) for (let z = 0; z < n; z++) im.setMatrixAt(i++, m.makeTranslation((x - half) * 2, 0, (z - half) * 2));
       floor = im; scene.add(im);
     }
     pixel.retexture(scene);
@@ -235,7 +280,8 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     t += dt;
     if (emi.mixer) emi.mixer.update(dt);
     if (mode === 'menu' && !reduced && !emi.busy && t >= emi.nextAt) play(ONE_SHOTS[Math.floor(Math.random() * ONE_SHOTS.length)]);
-    haze.offset.x += dt * 0.004;   // scenery drifts; EMI is the one breath (Law III)
+    sky.offset.x += dt * 0.004;    // scenery drifts; EMI is the one breath (Law III)
+    driftBubbles(dt);
     if (ripple.material.opacity > 0) { ripple.scale.addScalar(dt * 4); ripple.material.opacity = Math.max(0, ripple.material.opacity - dt * 1.6); }
   }
   function render() { pixel.render(scene, camera); }
@@ -257,7 +303,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   return {
     scene, camera, podium, cup: { group: cup, body: cupBody, ripple: rippleTea },
     emi: { root: emi.root, play, face, peek, model: () => emi.model, busy: () => emi.busy, ready(cb) { if (emi.model) cb(emi.model); else emi.ready.push(cb); } },
-    update, render, resize, setViewFraction, setMode(m) { mode = m; }, setReduced(v) { reduced = !!v; }, dispose,
+    update, render, resize, setViewFraction, setMode(m) { mode = m; }, setReduced(v) { reduced = !!v; bubDirty = true; }, dispose,
   };
 }
 
