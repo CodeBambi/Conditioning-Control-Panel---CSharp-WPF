@@ -296,6 +296,9 @@ As built (PR 5 reality notes):
 - `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart, score,
   items) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
 - Extra `run-ended` fields: `nearMisses`, `personalBest`. `exit` is followed by `exit-done` once torn down.
+- Boot and reduced motion: `raceBoot.js` calls `detectMode({ reducedIs3d: true })`, so `prefers-reduced-motion: reduce`
+  boots the 3D race and only turns motion down through `settings.reducedMotion`; a boot error is reserved for a real
+  hard wall (no WebGL, no import maps).
 
 ### `race/cocktail.js` (pass three, THE MIX)
 ```js
