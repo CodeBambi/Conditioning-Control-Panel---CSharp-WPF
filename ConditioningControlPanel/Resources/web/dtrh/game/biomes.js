@@ -347,7 +347,7 @@ export const BIOMES_BY_ROOM = {
       profile: { density: 1.05, behavioral: 1.10, echo: 1.2, chaperone: 1.0, bound: 2.6, tease: 1.3 },
       wx: {},
       mech: 'contracts',
-      mechHint: 'every clean snap banks +2 🪙; signing a drifting contract pays 20 🪙 now — the balance comes due 45s later',
+      mechHint: 'every clean snap earns +2 🪙; signing a drifting contract pays 20 🪙 now — the balance comes due 45s later',
       // old iron gullet: the rings interlock into chain links on a slow pulse
       veinFx: { accent: 0xe65a6e, chain: 0.95, throb: 0.5 },
     },

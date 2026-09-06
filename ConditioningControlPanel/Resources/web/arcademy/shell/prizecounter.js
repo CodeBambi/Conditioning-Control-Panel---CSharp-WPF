@@ -182,12 +182,12 @@ export const REFUSALS = Object.freeze({
    * devices is mid-write on the same wallet. Neither is a refusal the player did
    * anything to earn, and in both cases nothing was charged - which is the half
    * worth saying out loud. Without these rows both fell to the unknown shrug. */
-  offline: ['prize_offline', 'The counter cannot reach the bank right now. Nothing was charged.'],
+  offline: ['prize_offline', 'The counter cannot reach the till right now. Nothing was charged.'],
   busy: ['prize_busy', 'Somebody is already at the drawer. Give it a second and ask again.'],
   /* The tier gate, told apart from the wire being down (2026-08-29): the bank
    * DID answer, and the answer was that this account cannot bank here yet.
    * Without this row the tier refusal wore the offline line. */
-  tier: ['prize_tier', 'The bank does not serve this account yet. Nothing was charged.'],
+  tier: ['prize_tier', 'The till does not serve this account yet. Nothing was charged.'],
 });
 
 /** The glyph each sku wears on its little drawn box. Text, not art: a sku the
