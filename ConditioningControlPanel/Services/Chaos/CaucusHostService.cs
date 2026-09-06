@@ -285,7 +285,8 @@ internal static class CaucusHostService
     }
 
     /// <summary>fire-payload {kind, strength, durationMult} -> the REAL desktop effects through
-    /// the shared factory. Video and audio only: every visual effect is in-world on the page.</summary>
+    /// the shared factory. Audio only now: every visual effect is in-world on the page, and the video
+    /// kind is dark at both ends (the page never spawns one, this refuses it if one ever asks).</summary>
     private static void FirePayload(JObject o)
     {
         try
@@ -293,10 +294,16 @@ internal static class CaucusHostService
             var kindStr = (string?)o["kind"];
             if (string.IsNullOrWhiteSpace(kindStr)) return;
 
-            EffectPayload payload;
+            // Video bubbles are dark (race/bubbleKinds.js spawn:false, 2026-09-06): a mandatory video
+            // has no business interrupting a lap, so refuse the message even if a page still asks.
             if (string.Equals(kindStr, "video", StringComparison.OrdinalIgnoreCase))
-                payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Video);
-            else if (string.Equals(kindStr, "audio", StringComparison.OrdinalIgnoreCase))
+            {
+                App.Logger?.Information("RaceHost: video payload refused, video bubbles are dark");
+                return;
+            }
+
+            EffectPayload payload;
+            if (string.Equals(kindStr, "audio", StringComparison.OrdinalIgnoreCase))
                 payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Audio);
             else
             {
