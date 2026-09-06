@@ -6,12 +6,29 @@
 // mouthed words. The moods live in the antenna and the bead alone.
 // Ported from the approved pitch demo (C:\wt-race-ref\pitch-demo.html) into ESM; poses now blend
 // on a spring (House Book Law XI), never a linear tween, and always return to the breath.
+//
+// THE MODEL. The primitive CRT below is now only the fallback. On creation the rig asks gltf.js for
+// race/assets/emi.glb (the Blender hard-surface EMI); the moment it lands the primitive group comes
+// off the graph and is freed, and the glb clone takes the same seat in the cup. Until then, and for
+// good if the load fails, the primitive rides. Everything else (saucer, cup, handle, tea, cupLight,
+// sweat, sparks) is untouched and the MOODS table drives the glb's own pivots instead.
 
 import * as THREE from 'three';
+import { loadPack, setFace as packSetFace, preparePixel, FACES } from './gltf.js';
 
 const PINK = 0xff69b4, GOLD = 0xF2C14E, PALE = 0xB3C7FF, PORCELAIN = 0xF6E7C8;
 const BREATH_SEC = 3.9;      // the one breath on screen (Law III)
 const SWEAT_N = 28, SPARK_N = 32;
+const EMI_GLB = '/dtrh/race/assets/emi.glb';
+const OUTLINE = 'outline';   // the inverted hull's material name (gltf.js header, assets/README.md)
+// The glb is metres, sole centre at the origin, +Z forward, case top at 1.00 m. 0.64 puts the case
+// at the old 1.25-scaled CRT's 0.525 m; with the sole on the tea (y 0.66) the case bottom lands at
+// 0.775, just clear of the cup rim at 0.75, so the legs stay in the cup and the case reads as before.
+const GLB_SCALE = 0.64;
+const GLB_SEAT_Z = 0.3;      // she stands ~0.21 behind her own origin, so this seat puts the case
+                             // centre at z ~0.09, where the primitive CRT's box sat
+const CASE_TOP = [0.36, 0.99, -0.2];   // EMI_case local: the top corner sweat comes off
+const GLOW_Y = 0.62, GLOW_Z = 0.9;     // the screen light, model local (0.58 m ahead of the glass)
 
 /** Antenna poses per mood. antX pitches the whole stem (negative = streamed back), kinkX/Z bend
  *  the joint, wind = how much speed is allowed to stream the stem, w = spring speed (rad/s).
@@ -81,11 +98,14 @@ function ventTexture() {
 }
 
 /**
- * createEmiRig({ scene, reducedMotion }) -> { group, update(dt, ctx), setMood, setFraught, squash, dispose }
+ * createEmiRig({ scene, reducedMotion, pixel }) ->
+ *   { group, update(dt, ctx), setMood, setFraught, squash, dispose, onReady(cb), model(), setFace(i), pose(name, opts) }
  * ctx = { t, up, right, tangent, speedNorm, airborne, steerVel, drift, driftSide }  (world-space frame)
  * `group` is the whole rig; the caller positions and orients it. Particles are added to `scene`.
+ * `pixel` is race/pixel.js: the glb's textures arrive after the run's one retexture(scene) pass, so
+ * they go through preparePixel on mount. `model()` is the glb root once it lands, else null.
  */
-export function createEmiRig({ scene, reducedMotion = false }) {
+export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   const group = new THREE.Group(); group.name = 'kart';
   const root = new THREE.Group(); group.add(root);          // squash scales this, not the frame
   const porcelain = new THREE.MeshStandardMaterial({ color: PORCELAIN, roughness: 0.35, metalness: 0.05 });
@@ -168,6 +188,84 @@ export function createEmiRig({ scene, reducedMotion = false }) {
   function setFraught(v) { fraught = Math.max(0, Math.min(1, +v || 0)); }
   function squash(amount) { sSquash.x = Math.max(sSquash.x, Math.min(1, amount)); sSquash.v = 0; }
 
+  // ---- the glb: loaded once, mounted in the same seat, primitive freed ----
+  let G = null;                     // { root, ant0, ant1, ant2, ballpiv, caseNode, ballMats, glassMats, rest }
+  let dead = false;
+  const readyCbs = [], owned = [];  // owned = the materials this rig cloned or made, freed with it
+  const seat = new THREE.Group();   // the mount point: the seat, the scale, the breath and the steer lean
+  seat.position.set(0, TEA_Y, GLB_SEAT_Z); seat.scale.setScalar(GLB_SCALE);
+
+  const matsOf = (o) => (Array.isArray(o.material) ? o.material : o.material ? [o.material] : []);
+  const isOutline = (o) => matsOf(o).some((m) => m && m.name === OUTLINE);
+  function disposeTree(node) {
+    node.traverse((n) => {
+      if (n.geometry) n.geometry.dispose();
+      for (const mt of matsOf(n)) { if (mt.map) mt.map.dispose(); mt.dispose(); }
+    });
+  }
+  /** Give a subtree its own copy of every non-outline material, so the moods never write to the
+   *  cached pack's materials (a second rig, or the next run, gets clean ones). */
+  function ownMaterials(node, into) {
+    if (!node) return;
+    node.traverse((o) => {
+      if (!o.isMesh || isOutline(o) || Array.isArray(o.material) || !o.material) return;
+      o.material = o.material.clone(); owned.push(o.material); into.push(o.material);
+    });
+  }
+
+  function mountGlb(pack) {
+    if (dead || G) return;
+    const root = pack.clone('EMI_root');
+    const ant0 = root && root.getObjectByName('ant0'), ballpiv = root && root.getObjectByName('ballpiv');
+    if (!root || !ant0 || !ballpiv) return;         // a pack without the contract pivots: the primitive stays
+    // the inverted hulls: a lit standard material reads grey, so they all take one flat near-black
+    const black = new THREE.MeshBasicMaterial({ name: OUTLINE, color: 0x07060f, side: THREE.FrontSide });
+    owned.push(black);
+    root.traverse((o) => { if (o.isMesh && isOutline(o)) o.material = black; });
+    const ballMats = [], glassMats = [];
+    ownMaterials(root.getObjectByName('ball') || ballpiv, ballMats);
+    ownMaterials(root.getObjectByName('EMI_glass'), glassMats);
+    const ant1 = root.getObjectByName('ant1'), ant2 = root.getObjectByName('ant2');
+    // the joints ship with a rest tilt: the moods are added on top of it, never instead of it
+    const rest = { a0x: ant0.rotation.x, a0z: ant0.rotation.z, a1x: 0, a1z: 0, a2x: 0 };
+    if (ant1) { rest.a1x = ant1.rotation.x; rest.a1z = ant1.rotation.z; }
+    if (ant2) rest.a2x = ant2.rotation.x;
+    G = { root, ant0, ant1, ant2, ballpiv, caseNode: root.getObjectByName('EMI_case') || root, ballMats, glassMats, rest };
+    seat.add(root); body.add(seat);
+    // the primitive stands down; its two lights move over to the model before it is freed
+    emi.remove(screenLight); bead.remove(beadLight);
+    body.remove(emi); disposeTree(emi);
+    ballpiv.add(beadLight);
+    seat.add(screenLight); screenLight.position.set(0, GLOW_Y, GLOW_Z);
+    if (pixel) preparePixel(root, pixel);
+    setFaceFrame(0);
+    for (const cb of readyCbs.splice(0)) { try { cb(root); } catch (e) { /* a listener never breaks the rig */ } }
+  }
+
+  /** Point the glass at one atlas frame. gltf.js setFace walks `map`; this pack carries the atlas on
+   *  `emissiveMap` (the screen is self lit), so that path is the fallback here. Returns whether a
+   *  frame was actually set, the same contract either way. */
+  function setFaceFrame(i) {
+    if (!G) return false;
+    if (packSetFace(G.root, i)) return true;
+    const n = Math.min(FACES.length - 1, Math.max(0, i | 0));
+    let hit = false;
+    for (const m of G.glassMats) {
+      const tex = m && m.emissiveMap;
+      if (!tex) continue;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+      tex.generateMipmaps = false;
+      tex.offset.x = n / FACES.length;
+      tex.needsUpdate = true; hit = true;
+    }
+    return hit;
+  }
+  function onReady(cb) { if (typeof cb !== 'function') return; if (G) cb(G.root); else readyCbs.push(cb); }
+  function model() { return G ? G.root : null; }
+  /** The pose layer lands in the next commit; kart.js and the menus can already call this. */
+  function pose() { return false; }
+
   function emitFrom(obj, lx, ly, lz, ctx, pool, ttl, size, spread, upSpeed, backSpeed) {
     _p.set(lx, ly, lz); obj.localToWorld(_p);
     _g.copy(ctx.up).multiplyScalar(upSpeed).addScaledVector(ctx.right, (Math.random() - 0.5) * spread).addScaledVector(ctx.tangent, backSpeed);
@@ -182,13 +280,33 @@ export function createEmiRig({ scene, reducedMotion = false }) {
     const kinkXT = m.kinkX + 1.7 * fraught * (m === MOODS.fraught ? 0.3 : 1);
     const hush = ctx.airborne || m.sway === 0 ? 0 : m.sway * (1 - 0.6 * fraught);
     const sway = hush * 0.14 * Math.sin(t * (Math.PI * 2) / BREATH_SEC);
-    antenna.rotation.set(sAnt.step(antTarget, dt, m.w, m.zeta), 0, sway - (ctx.steerVel || 0) * 0.06);
-    kink.rotation.set(sKinkX.step(kinkXT, dt, m.w, m.zeta), 0, sKinkZ.step(m.kinkZ, dt, m.w, m.zeta));
-    bead.scale.setScalar(Math.max(0.3, sBead.step(m.scale, dt, m.w, m.zeta)));
+    // one set of springs, two bodies to hang them on: the glb's authored pivots or the primitive's
+    const antX = sAnt.step(antTarget, dt, m.w, m.zeta);
+    const kinkX = sKinkX.step(kinkXT, dt, m.w, m.zeta), kinkZ = sKinkZ.step(m.kinkZ, dt, m.w, m.zeta);
+    const beadScale = Math.max(0.3, sBead.step(m.scale, dt, m.w, m.zeta));
+    const roll = sway - (ctx.steerVel || 0) * 0.06;
+    if (G) {
+      const r = G.rest;
+      G.ant0.rotation.set(r.a0x + antX, 0, r.a0z + roll);
+      if (G.ant1) G.ant1.rotation.set(r.a1x + kinkX, 0, r.a1z + kinkZ);
+      if (G.ant2) G.ant2.rotation.x = r.a2x + kinkX * 0.4;      // the tip carries a little of the kink
+      G.ballpiv.scale.setScalar(beadScale);
+      seat.position.y = TEA_Y + (reducedMotion ? 0 : 0.012 * Math.sin(t * (Math.PI * 2) / BREATH_SEC));
+      seat.rotation.z = -(ctx.steerVel || 0) * 0.012;           // the steer lean, on the whole body now
+    } else {
+      antenna.rotation.set(antX, 0, roll);
+      kink.rotation.set(kinkX, 0, kinkZ);
+      bead.scale.setScalar(beadScale);
+    }
     beadTarget.setHex(m.bead); if (m !== MOODS.jackpot) beadTarget.lerp(_c.setHex(PALE), fraught);
-    beadMat.color.lerp(beadTarget, Math.min(1, dt * 6)); beadMat.emissive.copy(beadMat.color); beadLight.color.copy(beadMat.color);
-    beadMat.emissiveIntensity = m === MOODS.jackpot ? 1.4 : 0.9;
-    screenMat.opacity = 0.6 + 0.25 * Math.sin(t * 4);
+    const glow = m === MOODS.jackpot ? 1.4 : 0.9;
+    for (const bm of G ? G.ballMats : [beadMat]) {
+      bm.color.lerp(beadTarget, Math.min(1, dt * 6));
+      bm.emissive.copy(bm.color); bm.emissiveIntensity = glow;
+      beadLight.color.copy(bm.color);
+    }
+    if (G) for (const gm of G.glassMats) gm.emissiveIntensity = 1.05 + 0.25 * Math.sin(t * 4);
+    else screenMat.opacity = 0.6 + 0.25 * Math.sin(t * 4);
 
     // the tea swirls, bobs and settles lower at speed; its colour follows the room (fog hue) with a
     // floor on saturation and lightness so it always reads as a liquid, never as a hole in the cup
@@ -213,8 +331,10 @@ export function createEmiRig({ scene, reducedMotion = false }) {
       sweatAcc += dt * rate;
       while (sweatAcc >= 1) {
         sweatAcc -= 1;
-        const src = Math.random() < 0.5 ? bead : crt, sd = Math.random() < 0.5 ? -1 : 1;
-        if (src === bead) emitFrom(bead, 0, 0, 0, ctx, sweat, 0.7, 1, 2.2, 1.4 + Math.random() * 1.2, -0.6);
+        // off the bead, or off a top corner of the case: the glb's own nodes once it is mounted
+        const sd = Math.random() < 0.5 ? -1 : 1;
+        if (Math.random() < 0.5) emitFrom(G ? G.ballpiv : bead, 0, 0, 0, ctx, sweat, 0.7, 1, 2.2, 1.4 + Math.random() * 1.2, -0.6);
+        else if (G) emitFrom(G.caseNode, sd * CASE_TOP[0], CASE_TOP[1], CASE_TOP[2], ctx, sweat, 0.7, 0.9, 2.6, 1.2 + Math.random(), -0.5);
         else emitFrom(crt, sd * 0.25, 0.21, 0, ctx, sweat, 0.7, 0.9, 2.6, 1.2 + Math.random(), -0.5);
       }
       const drifting = ctx.drift && !ctx.airborne ? 1 : 0;
@@ -232,13 +352,17 @@ export function createEmiRig({ scene, reducedMotion = false }) {
   }
 
   function dispose() {
+    dead = true;
+    // the glb clone shares the cached pack's geometry and textures, so it comes off the graph before
+    // the blanket teardown and only the materials this rig made are freed. The pack stays cached.
+    if (G) { seat.remove(G.root); body.remove(seat); G = null; }
+    for (const m of owned.splice(0)) m.dispose();
+    readyCbs.length = 0;
     scene.remove(sweat.mesh); scene.remove(sparks.mesh);
-    for (const o of [group, sweat.mesh, sparks.mesh]) o.traverse((n) => {
-      if (n.geometry) n.geometry.dispose();
-      const mats = Array.isArray(n.material) ? n.material : n.material ? [n.material] : [];
-      for (const mt of mats) { if (mt.map) mt.map.dispose(); mt.dispose(); }
-    });
+    for (const o of [group, sweat.mesh, sparks.mesh]) disposeTree(o);
   }
 
-  return { group, update, setMood, setFraught, squash, dispose };
+  loadPack(EMI_GLB).then(mountGlb).catch(() => { /* no pack, no swap: the primitive EMI rides on */ });
+
+  return { group, update, setMood, setFraught, squash, dispose, onReady, model, setFace: setFaceFrame, pose };
 }

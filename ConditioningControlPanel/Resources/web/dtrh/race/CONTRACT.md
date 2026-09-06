@@ -141,8 +141,16 @@ kart.setFraught(v)               // 0..1, drives sweat + antenna kink
 kart.camera(out)                 // out = { pos: Vector3, look: Vector3, up: Vector3, roll: number }; up follows the
                                  // transported frame (inverts through the loop); level + roll 0 under reducedMotion
 kart.group                       // THREE.Group (cup + EMI back view)
+kart.emiModel()                  // the mounted race/assets/emi.glb root, or null while it loads
+kart.emiReady(cb)                // cb(root) when she is mounted (fires at once if she already is)
+kart.setFace(i)                  // face atlas frame 0..4 (menus and results; never seen in race)
+kart.pose(name, opts)            // the pose layer, race/emiPoses.js
 kart.dispose()
 ```
+`createKart` also takes `pixel` (race/pixel.js): the glb's textures land after the run's one
+`retexture(scene)` pass, so the rig walks them through `preparePixel` when the model mounts. EMI is
+the Blender glb from the moment `emi.glb` resolves; the primitive CRT is the fallback and rides on
+if it never does.
 Speed: cruise `KART_BASE_SPEED`, cap `KART_MAX_SPEED`, floor `KART_MIN_SPEED`. Ramps: when
 `layout.rampAt(d)` matches the lip, give `vh` an upward impulse scaled by speed; `GRAVITY` pulls
 back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `ROAD_HALF_W`
