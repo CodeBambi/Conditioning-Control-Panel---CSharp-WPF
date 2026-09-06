@@ -180,6 +180,9 @@ hud.item(glyph | null, name)
 hud.toast(text, kind)                 // kind: 'pop' | 'almost' | 'jackpot' | 'bank' | 'item' | 'effect'
 hud.flicker()                         // Stat Flicker under glitch
 hud.setFraught(v)
+hud.mixer(state)                      // THE MIXER rail: state = cocktail.state(); chips per live category + the served recipe
+hud.strobe(charges)                   // white edge blink on a flash charge / roll
+hud.setTint(depth)                    // 0 | 1 | 2: the chrome goes pink with the wash
 hud.setPaused(bool) -> Promise<'resume' | 'end'>   // the Brake; resolves on the player's pick, or 'resume' on setPaused(false)
 hud.showEnd(summary) -> Promise<'again' | 'exit'>  // summary = { score, banked, bestCombo, popped, laps, durationSec, personalBest, title? }
 hud.dispose()

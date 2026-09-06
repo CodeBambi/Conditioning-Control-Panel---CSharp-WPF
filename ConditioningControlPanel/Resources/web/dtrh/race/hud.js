@@ -11,12 +11,17 @@
  * ticks the counter as they land). flicker() is the Stat Flicker: the face
  * lies for 450 ms, the ledger never does (Law I). The Brake and the End card
  * are the only pointer targets. Copy is DtRH voice: lowercase, short.
+ *
+ * Pass three: THE MIXER rail above the item slot shows the live ingredients
+ * of the mix (race/cocktail.js) as pixel chips with drain bars and charge
+ * pips, and the served recipe's name while one is live. strobe() is the
+ * white edge blink under a flash charge; setTint() pinks the chrome.
  * ==========================================================================*/
 
 import { COMBO_HOLD_SEC, MULT_LADDER, KART_MAX_SPEED, KART_BASE_SPEED } from './consts.js';
 
 const FLICK_MS = 450;
-const TOAST_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400 };
+const TOAST_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400, recipe: 1700 };
 /** Two "+N" pops inside this window merge into one counting toast ("+30 x3"). */
 const POP_MERGE_MS = 600;
 
@@ -117,6 +122,33 @@ export function createRaceHud(root) {
   let speedHot = false;
 
   const toasts = el('rh-toasts', chrome);
+  const strobeEl = el('rh-strobe', chrome);
+
+  // ---- THE MIXER: the live ingredients, one chip per category, above the item slot ----
+  const mixer = el('rh-mixer', chrome);
+  el('rh-mixer-label', mixer, 'the mix');
+  const mixRow = el('rh-mixer-row', mixer);
+  const mixRecipe = el('rh-mixer-recipe', mixer);
+  const mixRecipeName = el('rh-mixer-recipe-name', mixRecipe, '');
+  const mixRecipeBar = el('rh-mixer-recipe-bar', mixRecipe);
+  const mixRecipeFill = el('rh-mixer-recipe-fill', mixRecipeBar);
+  const chips = new Map();   // category -> { el, glyph, n, pips[], fill, charges, depth }
+  let lastRecipe = null;
+  function chipFor(slot) {
+    let c = chips.get(slot.category);
+    if (c) return c;
+    const node = el(`rh-chip rh-chip--${slot.category}`, mixRow);
+    const glyph = el('rh-chip-glyph', node, slot.glyph || '·');
+    const n = el('rh-chip-n rh-num', node, '');
+    const pipRow = el('rh-chip-pips', node);
+    const pips = [];
+    for (let i = 0; i < Math.min(5, slot.max || 1); i++) pips.push(el('rh-pip', pipRow));
+    const fill = el('rh-chip-fill', el('rh-chip-bar', node));
+    c = { el: node, glyph, n, pips, fill, charges: -1, depth: -1 };
+    chips.set(slot.category, c);
+    hit(node, 'is-in');
+    return c;
+  }
 
   // ---- score tween: a self-terminating rAF loop that only spins while a delta is open ----
   let scoreTarget = 0, scoreShown = 0, bankTarget = 0, bankShown = 0;
@@ -288,6 +320,51 @@ export function createRaceHud(root) {
       while (toasts.children.length > 3) toasts.firstChild.remove();
       const kill = later(() => { t.remove(); if (popRun.el === t) popRun.el = null; }, TOAST_HOLD[kind] + 60);
       if (gain) popRun = { el: t, at: now, sum: +gain[1], n: 1, kill };
+    },
+    /** THE MIXER: `state` is cocktail.state(): { live: [slot...], recipe }. Cheap to call every frame. */
+    mixer(state) {
+      const live = (state && state.live) || [];
+      const seen = new Set();
+      for (const slot of live) {
+        seen.add(slot.category);
+        const c = chipFor(slot);
+        if (c.charges !== slot.charges || c.depth !== slot.depth) {
+          c.n.textContent = slot.charges > 1 ? `x${slot.charges}` : (slot.depth > 1 ? `+${slot.depth - 1}` : '');
+          c.pips.forEach((p, i) => p.classList.toggle('is-lit', i < (slot.max > 1 ? Math.max(slot.charges, slot.depth) : 1)));
+          if (c.charges >= 0 && (slot.charges > c.charges || slot.depth > c.depth)) hit(c.el, 'is-bump');
+          c.charges = slot.charges; c.depth = slot.depth;
+        }
+        c.el.classList.toggle('is-max', slot.max > 1 && Math.max(slot.charges, slot.depth) >= slot.max);
+        c.fill.style.transform = `scaleX(${(slot.frac == null ? 1 : slot.frac).toFixed(3)})`;
+      }
+      for (const [cat, c] of chips) {
+        if (seen.has(cat)) continue;
+        chips.delete(cat);
+        c.el.classList.add('is-out');
+        later(() => c.el.remove(), reduced ? 0 : 260);
+      }
+      const rc = state && state.recipe;
+      const id = rc ? rc.id : null;
+      if (id !== lastRecipe) {
+        lastRecipe = id;
+        mixRecipe.classList.toggle('is-on', !!rc);
+        if (rc) { mixRecipeName.textContent = String(rc.name || '').toLowerCase(); hit(mixRecipe, 'is-served'); }
+      }
+      if (rc) mixRecipeFill.style.transform = `scaleX(${(rc.frac == null ? 1 : rc.frac).toFixed(3)})`;
+      mixer.classList.toggle('is-on', live.length > 0 || !!rc);
+    },
+    /** A flash charge landed or rolled: the white edge blinks, the strobe chip kicks. */
+    strobe(charges) {
+      hit(strobeEl, 'is-on');
+      const c = chips.get('strobe');
+      if (c) hit(c.glyph, 'is-kick');
+      strobeEl.style.setProperty('--rh-strobe', String(Math.min(1, 0.35 + 0.13 * (charges | 0)).toFixed(2)));
+    },
+    /** The tint depth (0 = none, 1, 2): the plates, the pill and the item box go pink with the wash. */
+    setTint(depth) {
+      depth = Math.max(0, Math.min(2, depth | 0));
+      chrome.classList.toggle('is-tint-1', depth === 1);
+      chrome.classList.toggle('is-tint-2', depth === 2);
     },
     flicker() {
       const lie = Math.floor(scoreShown * (1 + (Math.random() < 0.5 ? -1 : 1) * (0.03 + Math.random() * 0.06)));
