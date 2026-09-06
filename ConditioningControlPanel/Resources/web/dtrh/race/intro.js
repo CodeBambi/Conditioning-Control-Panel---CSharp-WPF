@@ -32,6 +32,10 @@ import { PODIUM_H, CUP_SCALE, PROPS_URL } from './menu.js';
 import { CAM_BACK, CAM_UP, CAM_LOOK_AHEAD, LANE_H } from './consts.js';
 
 const GANTRY_Z = -3.6, RIM_H = 0.75 * CUP_SCALE, PINK = 0xff69b4, CREAM = 0xf6e7c8;
+// The waddle ends at the podium's near edge, on the plate and facing the cup: the plate runs to
+// r 0.98 and her shoes are 0.22 wide, so 0.7 keeps both soles on porcelain. She hops the gap from
+// there; walking any further would put her over the rim with nothing under her feet.
+const STAND_R = 0.7;
 const FACE = { happy: 0, cat: 1, squint: 2, wide: 3, money: 4 };
 const T_HOP_IN = 2.6, T_SINK = 3.0, T_ROLL = 3.4, T_COUNT = 5.4;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -122,7 +126,8 @@ export function createIntro({ stage, hud, audio = null, reducedMotion = false, l
     const p = new Promise((res) => { resolveGo = res; });
     if (reducedMotion) { toLine(); return p; }
     phase = 0; t = 0;
-    walk.to(_v.set(cupHome.x + 0.95, PODIUM_H, cupHome.z + 0.35));
+    _m.set(cupHome.x, 0, cupHome.z).setLength(STAND_R);
+    walk.to(_v.set(_m.x, PODIUM_H, _m.z));
     emi.face(FACE.happy);
     if (emi.play('hop', { timeScale: 1.25 })) hops = 1;
     return p;

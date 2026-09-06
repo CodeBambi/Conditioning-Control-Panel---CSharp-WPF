@@ -52,10 +52,19 @@ const DEFAULTS = { pixel: PIXEL_DEFAULT, music: 0.8, sfx: 0.8, motion: 'system',
 const MOTIONS = ['system', 'on', 'off'], SEEDS = ['daily', 'random', 'custom'];
 const FACE_N = 5, GLASS = 'EMI_glass', FADE = 0.3, ONE_SHOTS = ['wave', 'hop', 'drum'];
 const BEAT_MIN = 3, BEAT_MAX = 6, PEEK_GAP = 6;
-export const PODIUM_H = 0.22, CUP_SCALE = 1.3;
-export const CUP_AT = Object.freeze({ x: -1.2, y: 0, z: 0.45 });
+// Stage metres, all of them read off props.glb so the placeholders and the real props agree.
+// `podium` is a saucer: a foot of radius 0.75 on the floor flaring to a rim of radius 1.10, whose
+// TOP PLATE is y 0.31 (the raised lip around it tops out at 0.35). PODIUM_H is that plate, the
+// height her soles stand at; the lathe fallback below is cut to the same silhouette, so she never
+// sinks into one podium and floats on the other.
+export const PODIUM_H = 0.31, CUP_SCALE = 1.3;
+// `kart_saucer` is 0.98 wide before CUP_SCALE, so the dish alone is wider than the podium plate: the
+// cup can only stand clear on the FLOOR, never half over the rim. Widest dish (r 1.27 at y 0.13)
+// against the podium's flare at that height (r 0.93) wants 2.20 between the two centres; CUP_AT is
+// 2.35 out, back and to her left so the menu column never swallows it.
+export const CUP_AT = Object.freeze({ x: -2.05, y: 0, z: -1.15 });
 const CUP_PROFILE = [[0.001, 0], [0.28, 0], [0.34, 0.06], [0.44, 0.3], [0.52, 0.58], [0.55, 0.66], [0.5, 0.68], [0.47, 0.6], [0.4, 0.3], [0.3, 0.1], [0.001, 0.08]];
-const PODIUM_PROFILE = [[0.001, 0], [1.25, 0], [1.32, 0.05], [1.2, 0.12], [1.02, 0.18], [0.98, PODIUM_H], [0.001, PODIUM_H]];
+const PODIUM_PROFILE = [[0.001, 0], [0.75, 0], [1.05, PODIUM_H - 0.05], [1.1, PODIUM_H], [1.1, PODIUM_H + 0.04], [0.98, PODIUM_H + 0.04], [0.98, PODIUM_H], [0.001, PODIUM_H]];
 const PINK = 0xff69b4, PORCELAIN = 0xf6e7c8, HAZE = 0x1b1232;
 const PAD = { a: 0, b: 1, up: 12, down: 13, left: 14, right: 15 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -131,7 +140,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   // the saucer podium she stands on
   const podium = new THREE.Group(); scene.add(podium);
   podium.add(lathe(PODIUM_PROFILE, porcelain, 48));
-  const pring = new THREE.Mesh(keep(new THREE.TorusGeometry(1.1, 0.03, 8, 64)), glow); pring.rotation.x = Math.PI / 2; pring.position.y = PODIUM_H + 0.005; podium.add(pring);
+  const pring = new THREE.Mesh(keep(new THREE.TorusGeometry(1.04, 0.03, 8, 64)), glow); pring.rotation.x = Math.PI / 2; pring.position.y = PODIUM_H + 0.045; podium.add(pring);
   // the cup BESIDE her: group keeps the place, body takes the squash and stretch
   const cup = new THREE.Group(); cup.position.set(CUP_AT.x, CUP_AT.y, CUP_AT.z); cup.scale.setScalar(CUP_SCALE); cup.rotation.y = -0.6; scene.add(cup);
   const cupBody = new THREE.Group(); cup.add(cupBody);
