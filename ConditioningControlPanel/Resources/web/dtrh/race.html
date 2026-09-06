@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>the caucus race</title>
+    <!-- race.html - The Caucus Race page. Implements CONTRACT.md "race/run.js + raceBoot.js + race.html".
+         Same import map as index.html: three.js from the fork's own vendored ESM, no bundler. -->
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./race/race.css">
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "/dtrh/vendor/three/three.module.min.js",
+        "three/addons/": "/dtrh/vendor/three/addons/"
+      }
+    }
+    </script>
+    <style>
+      /* the root is the screen-shake target (game/screenShake.js transforms it); the canvas alone
+         takes the mirror flip, so the two never share one style.transform */
+      #race-root { position: fixed; inset: 0; overflow: hidden; background: #12261f; }
+      #race-root > canvas { display: block; width: 100%; height: 100%; }
+      /* boot splash, z30: above the HUD chrome (z3) and every payload layer (z4 / z9), below the loader */
+      .race-splash {
+        position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: .6rem; text-align: center;
+        font-family: var(--rh-font); color: #fff; background: radial-gradient(ellipse at 50% 60%, rgba(18,38,31,.55), rgba(10,8,18,.92));
+        transition: opacity .5s ease-out; cursor: pointer;
+      }
+      .race-splash.is-off { opacity: 0; pointer-events: none; }
+      .race-splash .rs-cup { font-size: 3.2rem; line-height: 1; letter-spacing: .04em; color: #ffb6d9; }
+      .race-splash .rs-title { font-size: clamp(2rem, 6vw, 3.6rem); font-weight: 700; letter-spacing: .06em; color: #ff69b4; text-shadow: 0 0 24px rgba(255,105,180,.55); }
+      .race-splash .rs-sub { font-size: clamp(1rem, 2.4vw, 1.4rem); letter-spacing: .18em; color: #f6e7c8; }
+      .race-splash .rs-press { margin-top: 1.6rem; font-size: .95rem; letter-spacing: .22em; color: #fff; animation: rs-blink 1.6s ease-in-out infinite; }
+      .race-splash .rs-keys { font-size: .78rem; letter-spacing: .12em; color: rgba(255,255,255,.55); }
+      .race-splash .rs-wait { font-size: .78rem; letter-spacing: .12em; color: rgba(255,255,255,.4); min-height: 1.2em; }
+      @keyframes rs-blink { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .race-splash .rs-press { animation: none; } }
+    </style>
+</head>
+<body>
+    <div id="race-root">
+        <canvas id="sf-canvas" aria-hidden="true"></canvas>
+        <!-- payloadFx draws its .sf-pfx / .sf-pfx-front layers inside this one (styles.css: fixed, z10) -->
+        <div id="sf-hud" class="sf-hud"></div>
+        <!-- the race HUD chrome, Brake and End screens are built in here by race/hud.js -->
+        <div class="race-hud"></div>
+        <div id="race-splash" class="race-splash">
+            <div class="rs-cup" aria-hidden="true">(^_^)</div>
+            <div class="rs-title">the caucus race</div>
+            <div class="rs-sub">steer. pop. never stop.</div>
+            <div class="rs-press" id="race-press">press any key</div>
+            <div class="rs-keys">arrows or wasd steer · shift drift · e item · esc brake</div>
+            <div class="rs-wait" id="race-wait"></div>
+        </div>
+    </div>
+    <script type="module" src="./raceBoot.js"></script>
+</body>
+</html>
