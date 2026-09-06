@@ -232,6 +232,8 @@ hud.dispose()
 ```
 All HUD text is in the DtRH voice: lowercase, short, no em-dashes. `root` is the `.race-hud` div
 that `race.html` provides; `payloadFx` gets its own `.sf-hud` sibling so overlays never clip the HUD.
+Player-facing copy never says bank/banked: THE BANK reads as `kept` in the score block, the toast
+and the end card. Identifiers, event types and css classes keep `bank`.
 `.race-hud` must stay unpositioned (no `position`/`z-index` of its own): the chrome rides at z3,
 below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own stacking.
 
