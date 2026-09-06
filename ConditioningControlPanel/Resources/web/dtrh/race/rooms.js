@@ -309,13 +309,36 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   const shards = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE * 0.24, CUBE * 0.24, CUBE * 0.24)), cubeMat, SHARD_N);
   const shard = []; for (let i = 0; i < SHARD_N; i++) shard.push({ life: 0, age: 0, spin: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), g: new THREE.Vector3(), axis: new THREE.Vector3(0, 1, 0) });
   let shardCursor = 0, shardsLive = 0;
-  const flashMat = mat(new THREE.MeshBasicMaterial({ color: 0xffffff }));
-  const flashes = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), flashMat, FLASH_N);
-  const flash = []; for (let i = 0; i < FLASH_N; i++) flash.push({ life: 0, m: new THREE.Matrix4() });
+  // The break flash used to be a full-size CUBE of opaque white: it swelled past the box for a
+  // fifth of a second and read as a SECOND, empty white box standing beside the shards. A flash is
+  // light, not furniture, so it is now a billboard that always faces the seat, additive over the
+  // road and fading as it swells. It can never draw an edge, so it can never read as a box.
+  const flashTex = pixelTex(24, 24, (c, w, h) => {
+    c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+    const mid = (w - 1) / 2;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const r = Math.hypot(x - mid, y - mid) / mid;
+      const core = Math.max(0, 1 - r * 1.12);
+      const spoke = Math.max(0, 1 - Math.min(Math.abs(x - mid), Math.abs(y - mid)) / 1.6) * Math.max(0, 1 - r);
+      const k = Math.min(1, core * core + spoke * 0.8);
+      if (k <= 0.02) continue;
+      const v = Math.round(255 * k);
+      c.fillStyle = `rgb(${v},${v},${v})`; c.fillRect(x, y, 1, 1);
+    }
+  }, { clamp: true });
+  if (flashTex) texes.push(flashTex);
+  const flash = [];
+  for (let i = 0; i < FLASH_N; i++) {
+    const fm = mat(new THREE.SpriteMaterial({ map: flashTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const sprite = new THREE.Sprite(fm);
+    sprite.name = 'race-cube-flash'; sprite.visible = false; sprite.frustumCulled = false;
+    group.add(sprite);
+    flash.push({ life: 0, sprite, fm });
+  }
   let flashCursor = 0, flashesLive = 0;
   const _q = new THREE.Quaternion(), _up = new THREE.Vector3(), _hide = new THREE.Vector3(0, -999, 0);
   const hideAll = (mesh, n) => { for (let i = 0; i < n; i++) mesh.setMatrixAt(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); };
-  hideAll(shards, SHARD_N); hideAll(flashes, FLASH_N);
+  hideAll(shards, SHARD_N);
   let lastT = -1;
   /** Break the cube for feature f (or its index). Returns true when it was intact, false when
    *  it was already broken (the run brain hands out an item only on true). */
@@ -347,7 +370,7 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     }
     const fl = flash[flashCursor]; flashCursor = (flashCursor + 1) % FLASH_N;
     if (fl.life <= 0) flashesLive++;
-    fl.life = FLASH_SEC; roadMatrix(c.d, c.x, CUBE * 0.75, 0, 1, fl.m);
+    fl.life = FLASH_SEC; fl.sprite.position.copy(_p); fl.sprite.visible = true;
     return true;
   }
   function updateBreaks(t) {
@@ -367,20 +390,22 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
       if (shardKinds) for (const k of shardKinds) { k.mesh.visible = live > 0; k.mesh.instanceMatrix.needsUpdate = true; }
       else shards.instanceMatrix.needsUpdate = true;
     }
-    if (flashesLive > 0) {                  // the flash: a white cube on the spot that swells and vanishes
+    if (flashesLive > 0) {                  // the flash: a burst of light on the spot that swells and fades out
       let live = 0;
       for (let i = 0; i < FLASH_N; i++) {
         const fl = flash[i];
         if (fl.life <= 0) continue;
         fl.life -= dt;
-        if (fl.life <= 0) { flashes.setMatrixAt(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); continue; }
+        if (fl.life <= 0) { fl.sprite.visible = false; fl.fm.opacity = 0; continue; }
         live++;
-        flashes.setMatrixAt(i, _m.copy(fl.m).scale(_s.setScalar(1.15 + 0.9 * (1 - fl.life / FLASH_SEC))));
+        const u = fl.life / FLASH_SEC;       // 1 on the break, 0 as it goes
+        fl.fm.opacity = 0.9 * u;
+        fl.sprite.scale.setScalar(CUBE * (1.7 + 2.0 * (1 - u)));
       }
-      flashesLive = live; flashes.instanceMatrix.needsUpdate = true;
+      flashesLive = live;
     }
   }
-  for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards, flashes]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
+  for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
   if (wedges.instanceColor) wedges.instanceColor.needsUpdate = true;
 
   // ---- the Blender pack takes the furniture over (race/assets/props.glb) -----------------
@@ -562,7 +587,8 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
     for (const m of mats) m.dispose();
     for (const t of texes) t.dispose();
     props.dispose();
-    for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards, flashes]) m.dispose();
+    for (const fl of flash) group.remove(fl.sprite);
+    for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards]) m.dispose();
   }
 
   return { update, applyRoom, breakItemBox, dispose, group, spans, rooms: specs };

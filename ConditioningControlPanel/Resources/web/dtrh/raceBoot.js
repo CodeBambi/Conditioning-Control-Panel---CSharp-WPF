@@ -27,7 +27,8 @@
  * either they show once, gated on localStorage `race.cards`), and `?card=N`
  * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
- * the host init.
+ * the host init; `?itembox=ms` breaks the next sugar cube that comes into
+ * reading range after that time and is a screenshot aid for the pickup card.
  *
  * TRACK CHARTS (CHART.md): the host posts track-progress / track-chart /
  * track-clock / track-ended / track-error and this file hands them to the run.
@@ -167,7 +168,7 @@ async function boot() {
     note('');
     host.log(`race booted: seed ${seed} (${opts.seed}), tier ${mode.tier}, hosted ${hosted}, manifest ${haveManifest}`);
     await standaloneTrack();
-    if (params.get('autostart') === '1') { startRun(false); return; }
+    if (params.get('autostart') === '1') { startRun(false); debugItemBox(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
     menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log });
     menu.onPick((id) => {
@@ -235,6 +236,18 @@ async function standaloneTrack() {
 function stopTrackClock() {
   if (trackTimer) { clearInterval(trackTimer); trackTimer = 0; }
   if (trackAudio) { try { trackAudio.pause(); } catch (e) { /* already gone */ } }
+}
+
+/** `?itembox=<ms>`: the screenshot aid. Waits for the run, then retries until a cube is in range. */
+function debugItemBox() {
+  const at = Number(params.get('itembox'));
+  if (!(at > 0) || !race || !race.debugItemBox) return;
+  setTimeout(function tick() {
+    let hit = false;
+    try { hit = race.debugItemBox(); } catch (e) { host.log('itembox: ' + e); return; }
+    if (hit) host.log('itembox: broken at ' + Math.round(performance.now()) + ' ms');
+    else if (!exiting) setTimeout(tick, 90);
+  }, at);
 }
 
 function hideSplash() {

@@ -124,13 +124,32 @@
   opacity: 0.45; transition: opacity 0.25s;
 }
 .race-hud .rh-item.is-armed { opacity: 1; }
+/* while the pickup card is on its way the slot is still empty: it fills when the card lands in it */
+.race-hud .rh-item.is-inbound { opacity: 0.45; }
 .race-hud .rh-item-box {
+  position: relative;
   width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center;
   font-size: 1.6rem; font-weight: 900; color: #ffd6ea;
   background: rgba(255, 105, 180, 0.14); border: 2px solid rgba(255, 105, 180, 0.55);
   box-shadow: 0 0 0 rgba(255, 105, 180, 0); transition: box-shadow 0.3s;
 }
 .race-hud .rh-item.is-armed .rh-item-box { box-shadow: 0 0 18px rgba(255, 105, 180, 0.6); }
+.race-hud .rh-item.is-inbound .rh-item-box { color: transparent; box-shadow: 0 0 0 rgba(255, 105, 180, 0); }
+/* HELD: the item is in the slot and E will spend it. A brighter frame, a slow ring pulse (its own
+   pseudo element, so the landing bounce keeps the box's animation to itself) and the key hint lit. */
+.race-hud .rh-item.is-held { opacity: 1; }
+.race-hud .rh-item.is-held .rh-item-box {
+  color: #fff; border-color: rgba(255, 214, 234, 0.95); background: rgba(255, 105, 180, 0.26);
+  box-shadow: 0 0 26px rgba(255, 105, 180, 0.8);
+}
+.race-hud .rh-item.is-held .rh-item-box::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 16px;
+  border: 2px solid rgba(255, 214, 234, 0.9); animation: rhHold 1.7s ease-in-out infinite;
+}
+.race-hud .rh-item.is-held .rh-item-key {
+  color: #fff; border-color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 105, 180, 0.4); box-shadow: 0 0 12px rgba(255, 105, 180, 0.75);
+}
 .race-hud .rh-item.is-rolling .rh-item-box { animation: rhRoll 0.18s steps(2) infinite; }
 .race-hud .rh-item.is-bounce .rh-item-box { animation: rhBounce 0.36s cubic-bezier(0.2, 1.6, 0.4, 1); }
 .race-hud .rh-item-name { font-size: 0.82rem; font-weight: 700; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
@@ -138,6 +157,40 @@
   display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 0.66rem; font-weight: 800;
   border: 1px solid rgba(255, 255, 255, 0.5); color: rgba(255, 255, 255, 0.8); line-height: 1.4;
 }
+
+/* ---- THE PICKUP card: the item pops up near the cup, then slides into the slot ----
+   No per-item art ships with the game, so the tile IS the picture: the room colour, a soft glow
+   and the glyph big. The flight is one transform on the card, measured against the slot's live
+   rect in hud.js, so it lands right at any window size. */
+.race-hud .rh-pickup {
+  position: absolute; left: 50%; bottom: 47%; width: 172px; margin-left: -86px;
+  display: none; flex-direction: column; align-items: center; gap: 9px; text-align: center;
+  transition: transform 420ms cubic-bezier(0.32, 0.02, 0.2, 1), opacity 200ms linear 220ms;
+  will-change: transform;
+}
+.race-hud .rh-pickup.is-on { display: flex; }
+.race-hud .rh-pickup-tile {
+  position: relative; width: 116px; height: 116px; border-radius: 26px; display: grid; place-items: center;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.26) 40%, rgba(255, 255, 255, 0) 66%),
+    linear-gradient(158deg, color-mix(in srgb, var(--rh-room) 68%, #fff) 0%, color-mix(in srgb, var(--rh-room) 72%, #2a0f24) 100%);
+  border: 3px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 36px color-mix(in srgb, var(--rh-room) 65%, transparent), 0 14px 28px rgba(0, 0, 0, 0.45),
+    inset 0 2px 14px rgba(255, 255, 255, 0.32);
+}
+.race-hud .rh-pickup-glyph {
+  font-size: 3.4rem; line-height: 1; font-weight: 900; color: #fff;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.85), 0 3px 0 rgba(0, 0, 0, 0.22);
+}
+.race-hud .rh-pickup-name {
+  font-size: 0.9rem; font-weight: 800; letter-spacing: 0.13em; color: #fff;
+  text-shadow: 0 0 14px var(--rh-room), 0 2px 4px rgba(0, 0, 0, 0.85); transition: opacity 160ms linear;
+}
+.race-hud .rh-pickup.is-on .rh-pickup-tile { animation: rhPickIn 0.36s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-pickup.is-rolling .rh-pickup-glyph { animation: rhRoll 0.16s steps(2) infinite; }
+.race-hud .rh-pickup.is-flip .rh-pickup-tile { animation: rhPickPop 0.34s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-pickup.is-fly { opacity: 0; }
+.race-hud .rh-pickup.is-fly .rh-pickup-name { opacity: 0; transition: opacity 120ms linear; }
 
 /* ---- speed, bottom-right: the pace number, a fat gauge and a boost state ---- */
 .race-hud .rh-speed {
@@ -309,6 +362,9 @@
 @keyframes rhBeat { 0%, 100% { opacity: var(--rh-fraught); } 12% { opacity: calc(var(--rh-fraught) + 0.25); } 24% { opacity: var(--rh-fraught); } 36% { opacity: calc(var(--rh-fraught) + 0.15); } }
 @keyframes rhCardIn { from { opacity: 0; transform: translateY(12px) scale(0.96); } }
 @keyframes rhChipIn { 0% { opacity: 0; transform: translateY(8px) scale(0.6); } 100% { opacity: 1; transform: none; } }
+@keyframes rhPickIn { 0% { opacity: 0; transform: translateY(26px) scale(0.42); } 62% { opacity: 1; transform: translateY(0) scale(1.08); } 100% { transform: scale(1); } }
+@keyframes rhPickPop { 0% { transform: scale(0.74); } 45% { transform: scale(1.16); } 100% { transform: scale(1); } }
+@keyframes rhHold { 0%, 100% { opacity: 0.3; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.04); } }
 /* the End card beside her: no blur, the right half stays crisp for the results camera, the card slides in from the left */
 .race-hud .rh-screen.is-beside { place-items: center start; padding-left: 8vw; backdrop-filter: none; -webkit-backdrop-filter: none; background: linear-gradient(90deg, rgba(8, 4, 14, 0.82) 0%, rgba(8, 4, 14, 0.5) 46%, rgba(8, 4, 14, 0) 72%); }
 .race-hud .rh-screen.is-beside .rh-card { animation: rhCardSlide 0.42s cubic-bezier(0.2, 1.4, 0.4, 1); }
@@ -332,6 +388,10 @@
   .race-hud .rh-count.is-on { animation: rhFade 0.45s linear forwards; }
   .race-hud .rh-screen.is-beside .rh-card { animation: none; }
   .race-hud .rh-strobe.is-on, .race-hud .rh-chip.is-in, .race-hud .rh-chip.is-bump, .race-hud .rh-chip-glyph.is-kick, .race-hud .rh-mixer-recipe.is-served { animation: none; }
+  /* the pickup card never flies: it fades where it stands and the slot lights up at once */
+  .race-hud .rh-pickup { transition: opacity 0.14s linear; }
+  .race-hud .rh-pickup.is-on .rh-pickup-tile, .race-hud .rh-pickup.is-flip .rh-pickup-tile,
+  .race-hud .rh-pickup.is-rolling .rh-pickup-glyph, .race-hud .rh-item.is-held .rh-item-box::after { animation: none; }
   .race-hud .rh-toast--recipe { animation: rhFade var(--rh-hold, 1.7s) linear forwards; }
 }
 
