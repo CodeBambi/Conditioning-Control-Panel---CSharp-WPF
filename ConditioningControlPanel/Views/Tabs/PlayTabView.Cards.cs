@@ -47,6 +47,9 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnQuickStartChaos_Click(object sender, RoutedEventArgs e)
             => Owner?.BtnQuickStartChaos_Click(sender, e);
 
+        private void BtnStartRace_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnStartRace_Click(sender, e);
+
         // ---- TOGETHER --------------------------------------------------------------------
 
         private void BtnStartGoon_Click(object sender, RoutedEventArgs e)

@@ -312,6 +312,26 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Play tab, DtRH card -> "The Caucus Race": the kart run on the descent's media, hosted
+        /// as its own WebView2 window (CaucusHostService). Same tier-2 door as FALL IN, checked
+        /// here for the same reason: the card's lockband is decoration, the handler is the wall.
+        /// </summary>
+        internal void BtnStartRace_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!TierGate.DemandLab("Down the Rabbit Hole", "dtrh")) return;
+                Services.Chaos.CaucusHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartRace_Click failed");
+                MessageBox.Show("Couldn't start The Caucus Race:\n\n" + ex.Message, "The Caucus Race",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Exclusives → "For You" spotlight. Opens the TikTok-style feed window (WebView2).
         /// Reached through ShowTab("fyp"), which intercepts the key rather than switching tabs.
         /// The card itself never blocks, so premium is enforced here.
