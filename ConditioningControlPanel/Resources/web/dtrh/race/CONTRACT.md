@@ -268,8 +268,13 @@ through the `fire-payload` bridge message exactly like `chaosRun.js` does today.
 (pause + end screen). Run end sends `run-ended` (below).
 
 As built (PR 5 reality notes):
-- `race/input.js` is the single reader of keyboard + gamepad: `createInput() -> { read(), onAction(cb), dispose() }`,
-  `read()` = `{ steer, accel, brake, drift }` with `accel` defaulting to 1 when nothing is pressed.
+- `race/input.js` is the single reader of keyboard + gamepad: `createInput() -> { read(), onAction(cb), flush(), dispose() }`,
+  `read()` = `{ steer, accel, brake, drift, jump }` with `accel` defaulting to 1 when nothing is pressed.
+- Space (pad B) is the jump: `read().jump` is true for exactly the frame of a fresh press, never on hold,
+  and `kart.stepJump` turns it into 1.1 m of real height (`state.h`, so the pop box goes up with it).
+  A press within 4 m of a ramp lip, or inside 0.12 s of one firing, boosts that launch by 1.3 and hands
+  out 0.5 s of speed once per ramp, and emits `{ type:'jump', big:true }`. Space is also the cards' "next",
+  so `run.js start()` calls `input.flush()`. `?jump=<ms>` fires one synthetic press: a screenshot aid.
 - `bridge.isHosted` is a BOOLEAN export, not a function. `raceBoot.js` reads it to pick standalone dev mode
   (synthesised `init`, every would-be host message logged as `[race->host]`).
 - `run.js` registers the `pause` and `payout-result` bridge handlers itself; `raceBoot.js` owns `init`,
