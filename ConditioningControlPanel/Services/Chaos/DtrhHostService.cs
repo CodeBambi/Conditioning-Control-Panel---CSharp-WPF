@@ -79,8 +79,8 @@ internal static class DtrhHostService
         try
         {
             // EMI Desk: the ring learns from every open, not just its own cards.
-            try { App.EmiDesk?.NoteOpen("dtrh"); } catch { }
-            try { App.EmiDesk?.Fire("dtrhOpened", null); } catch { }
+            try { App.EmiDesk?.NoteOpen("dtrh"); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { App.EmiDesk?.Fire("dtrhOpened", null); } catch (Exception ex) { Diag.Swallowed(ex); }
             _emiOpenedUtc = DateTime.UtcNow;
 
             // The descent's audio (bubbles sfx, vn shared, drone bed) ships as the lazy audio-web
@@ -296,10 +296,10 @@ internal static class DtrhHostService
                 var diff = (string?)o["difficulty"] ?? "Gentle";
                 if (!_testMode)
                 {
-                    try { ChaosCrashSentinel.Mark($"mode=dtrh-web diff={diff}"); } catch { }
-                    try { App.Bark?.NotifyChaosRunStarted(diff); } catch { }
+                    try { ChaosCrashSentinel.Mark($"mode=dtrh-web diff={diff}"); } catch (Exception ex) { Diag.Swallowed(ex); }
+                    try { App.Bark?.NotifyChaosRunStarted(diff); } catch (Exception ex) { Diag.Swallowed(ex); }
                 }
-                try { Haptics.DtrhHapticDirector.OnRunStarted(); } catch { }
+                try { Haptics.DtrhHapticDirector.OnRunStarted(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 App.Logger?.Information("DtrhHost: run started (diff={D}, mode={M})", diff, (string?)o["mode"]);
                 break;
             }
@@ -309,13 +309,13 @@ internal static class DtrhHostService
             case "bark":
                 // Haptics tap FIRST: the moment happened whether or not a voice line plays
                 // over it (the vn-speaking gate below only guards the audio mix).
-                try { Haptics.DtrhHapticDirector.OnGameEvent(o); } catch { }
+                try { Haptics.DtrhHapticDirector.OnGameEvent(o); } catch (Exception ex) { Diag.Swallowed(ex); }
                 if (_vnSpeaking) break;   // don't let a bark talk over her VN line
                 RouteBark(o);
                 break;
             case "haptic-state":
                 // page's ~2s depth/melt feed for the haptic director's ambient floor
-                try { Haptics.DtrhHapticDirector.OnHapticState(o); } catch { }
+                try { Haptics.DtrhHapticDirector.OnHapticState(o); } catch (Exception ex) { Diag.Swallowed(ex); }
                 break;
             case "heartbeat":
                 _lastHeartbeatUtc = DateTime.UtcNow;
@@ -323,7 +323,7 @@ internal static class DtrhHostService
             case "asset-stats":
                 // per-asset engagement delta (weighted attention + paddle interactions);
                 // summed into dtrh_asset_stats.json for future media-selection features
-                try { DtrhAssetStatsStore.Merge(o); } catch { }
+                try { DtrhAssetStatsStore.Merge(o); } catch (Exception ex) { Diag.Swallowed(ex); }
                 break;
             case "loom-save":
             {
@@ -462,7 +462,7 @@ internal static class DtrhHostService
                 // one would deal a second classroom. Persist + rebroadcast so JS agrees.
                 ChaosMeta.State.ForceScriptedRun = false;
                 ChaosMeta.Save();
-                try { _meta?.Rebroadcast(); } catch { }
+                try { _meta?.Rebroadcast(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
             _host?.Post(new { type = "run-config", runConfig = BuildRunConfig(cfg) });
             App.Logger?.Information("DtrhHost: dealt run config (diff={D}, scripted={S})", cfg.Difficulty, scripted);
@@ -574,7 +574,7 @@ internal static class DtrhHostService
     private static void OnRunEnded(JObject o)
     {
         _runActive = false;
-        try { Haptics.DtrhHapticDirector.OnRunEnded(); } catch { }
+        try { Haptics.DtrhHapticDirector.OnRunEnded(); } catch (Exception ex) { Diag.Swallowed(ex); }
         ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
         try
         {
@@ -623,18 +623,18 @@ internal static class DtrhHostService
                     if (bubblesPopped > 0) App.Achievements?.TrackBubblesPopped(bubblesPopped);
                 }
                 catch (Exception ex) { App.Logger?.Debug("DtrhHost bubble credit: {E}", ex.Message); }
-                try { RevealService.Sync("run_end"); } catch { }
+                try { RevealService.Sync("run_end"); } catch (Exception ex) { Diag.Swallowed(ex); }
                 try
                 {
                     var nowRank = ChaosRanks.For(ChaosMeta.State.RunsCompleted);
                     if ((int)nowRank > ChaosMeta.State.LastRankSeen) rankUp = nowRank;
                 }
-                catch { }
-                try { App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff); } catch { }
-                try { ChaosCrashSentinel.Clear(); } catch { }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+                try { App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff); } catch (Exception ex) { Diag.Swallowed(ex); }
+                try { ChaosCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
                 // RevealService.Sync mutated pendingReveals BEHIND the bridge - push a fresh
                 // snapshot so the Warren's flash pass sees the new pendings on return.
-                try { _meta?.Rebroadcast(); } catch { }
+                try { _meta?.Rebroadcast(); } catch (Exception ex) { Diag.Swallowed(ex); }
             }
 
             // Local-only session telemetry: fold the host-measured natives + payout into the
@@ -765,7 +765,7 @@ internal static class DtrhHostService
     {
         if (on == _worldFrozen) return;
         _worldFrozen = on;
-        try { Haptics.DtrhHapticDirector.OnWorldFreeze(on); } catch { }
+        try { Haptics.DtrhHapticDirector.OnWorldFreeze(on); } catch (Exception ex) { Diag.Swallowed(ex); }
         var disp = Application.Current?.Dispatcher;
         if (disp == null) return;
         disp.BeginInvoke(() =>
@@ -811,13 +811,13 @@ internal static class DtrhHostService
                 _videoHooked = false;
             }
         }
-        catch { }
+        catch (Exception ex) { Diag.Swallowed(ex); }
     }
 
     private static void OnVideoStarted(object? sender, EventArgs e)
     {
         if (_runActive) _runVideosShown++;   // session telemetry: a video was shown this run
-        try { Haptics.DtrhHapticDirector.OnVideoCovering(true); } catch { }
+        try { Haptics.DtrhHapticDirector.OnVideoCovering(true); } catch (Exception ex) { Diag.Swallowed(ex); }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() => _host?.Post(new { type = "payload-state", kind = "video", on = true }));
@@ -856,7 +856,7 @@ internal static class DtrhHostService
 
     private static void OnVideoEnded(object? sender, EventArgs e)
     {
-        try { Haptics.DtrhHapticDirector.OnVideoCovering(false); } catch { }
+        try { Haptics.DtrhHapticDirector.OnVideoCovering(false); } catch (Exception ex) { Diag.Swallowed(ex); }
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() =>
@@ -933,7 +933,7 @@ internal static class DtrhHostService
 
     private static void StopHeartbeatWatch()
     {
-        try { _heartbeatWatch?.Stop(); } catch { }
+        try { _heartbeatWatch?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _heartbeatWatch = null;
     }
 
@@ -974,7 +974,7 @@ internal static class DtrhHostService
 
     private static void CancelExitWatchdog()
     {
-        try { _exitWatchdog?.Stop(); } catch { }
+        try { _exitWatchdog?.Stop(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _exitWatchdog = null;
     }
 
@@ -992,7 +992,7 @@ internal static class DtrhHostService
         {
             int emiMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiOpenedUtc).TotalMinutes);
             _emiOpenedUtc = DateTime.MinValue;
-            try { App.EmiDesk?.Fire("dtrhClosed", new { minutes = emiMinutes }); } catch { }
+            try { App.EmiDesk?.Fire("dtrhClosed", new { minutes = emiMinutes }); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         try
@@ -1001,24 +1001,24 @@ internal static class DtrhHostService
         StopHeartbeatWatch();
         HookVideoEvents(false);
         // Never leave the toy running after the window dies (crash, watchdog, clean exit alike).
-        try { Haptics.DtrhHapticDirector.OnClosed(); } catch { }
+        try { Haptics.DtrhHapticDirector.OnClosed(); } catch (Exception ex) { Diag.Swallowed(ex); }
         // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
-        if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch { } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
+        if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch (Exception ex) { Diag.Swallowed(ex); } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch (Exception ex) { Diag.Swallowed(ex); } }
         // ...and never leave every video silent because the dive ended while muted. Unconditional
         // (#1103): the _diveMuted flag and the VideoService's own mute could get out of step - a
         // mute applied while Application.Current was already gone set the flag and nothing else,
         // and this gate then skipped the only release there was, muting every video until restart.
         _diveMuted = false;
-        try { App.Video?.SetExternalMute(false); } catch { }
-        try { _meta?.FlushSave(); } catch { }
+        try { App.Video?.SetExternalMute(false); } catch (Exception ex) { Diag.Swallowed(ex); }
+        try { _meta?.FlushSave(); } catch (Exception ex) { Diag.Swallowed(ex); }
         if (_runActive && !_testMode)
         {
             // The window died mid-run (crash/force close): leave the sentinel armed only for
             // genuine process death; a deliberate close is a clean end.
-            try { ChaosCrashSentinel.Clear(); } catch { }
+            try { ChaosCrashSentinel.Clear(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
         _runActive = false;
-        try { _host?.Dispose(); } catch { }
+        try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         _host = null;
         _meta = null;
         _exiting = false;
@@ -1026,7 +1026,7 @@ internal static class DtrhHostService
         if (_minimizedMainWindow)
         {
             _minimizedMainWindow = false;
-            try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch { }
+            try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
         App.Logger?.Information("DtrhHostService: closed");
         }
@@ -1063,7 +1063,7 @@ internal static class DtrhHostService
                 if (pool != null)
                     foreach (var kv in pool) if (kv.Value) thoughts.Add(kv.Key);
             }
-            catch { }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             return new
             {
