@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { loadPack, setFace as packSetFace, preparePixel, flattenRig, faceFrames, atlasScale, forceAtlasSampler } from './gltf.js';
 import { createPoseLayer } from './emiPoses.js';
 import { SAUCER_R } from './consts.js';
+import { Q } from '../shared/quality.js';
 
 const PINK = 0xff69b4, GOLD = 0xF2C14E, PALE = 0xB3C7FF, PORCELAIN = 0xF6E7C8;
 const BREATH_SEC = 3.9;      // the one breath on screen (Law III)
@@ -215,6 +216,9 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   const bead = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), beadMat); bead.position.y = KINK_L + 0.01; kink.add(bead);
   const beadLight = new THREE.PointLight(PINK, 0.5, 2); bead.add(beadLight);
   const cupLight = new THREE.PointLight(PINK, 1.4, 14); cupLight.position.y = 1.2; group.add(cupLight);
+  // Q.leanLights (mobile): the screen and bead points stay in the rig (the glb mount moves them) but
+  // invisible, which three.js counts as absent; this cupLight is the one point light that tier keeps
+  screenLight.visible = beadLight.visible = !Q.leanLights;
 
   // ---- sweat (pale blue drops) and drift sparks, both world-space pools ----
   const sweat = makePool(SWEAT_N, new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshBasicMaterial({ color: 0xCFF6FF }));

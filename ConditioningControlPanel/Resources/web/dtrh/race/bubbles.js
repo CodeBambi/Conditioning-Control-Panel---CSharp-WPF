@@ -17,15 +17,15 @@ import * as THREE from 'three';
 import { CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, LANE_X_MAX, TREATS_ONLY_SEC } from './consts.js';
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
 import { CRISP_LAYER } from './pixel.js';
+import { Q } from '../shared/quality.js';
 
 export { BUBBLE_KINDS };
 
 
-const CAP = 160;              // live bubbles, recycled farthest-first when full
-const SHARD_CAP = 64;
+// CAP (live bubbles, recycled farthest-first when full), SHARD_CAP and VIEW_AHEAD (sprites beyond this are
+// hidden, not freed: every visible sprite is a draw call, and past ~80 m the world has folded into fog anyway)
+// are shared/quality.js knobs read when the field is built: desktop 160 / 64 / 110, the mobile tier 100 / 32 / 76.
 const LANE_STEP = 3.2;        // metres between bubbles in a lane line
-const VIEW_AHEAD = 110;       // sprites beyond this are hidden, not freed (every visible sprite is a draw call,
-                              // and past ~80 m the world has folded into fog anyway)
 const MISS_BEHIND = 6;        // a treat this far behind the kart unpopped = miss
 const DROP_BEHIND = 12;       // freed once this far behind
 const PASS_FADE_M = 1.6;      // metres behind the pop box over which a passed bubble fades away (before it balloons into the seat)
@@ -80,6 +80,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
 
   // ---- pools ---------------------------------------------------------------
+  const CAP = Q.bubbleCap || 160, SHARD_CAP = Q.bubbleShards || 64, VIEW_AHEAD = Q.bubbleViewAhead || 110;
   const group = new THREE.Group();
   group.name = 'race-bubbles';
   scene.add(group);

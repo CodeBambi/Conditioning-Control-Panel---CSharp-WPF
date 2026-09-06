@@ -124,6 +124,14 @@ Rooms: `teagarden, toybox, casino, undertow, mirrors, chapel, greyward, coronati
 carries `loud` (rollRoomOrder deals loud/soft alternately after the Tea Garden). `rooms` may be
 specs or ids. The dresser adds its own hemisphere + directional light (the props are Lambert; the
 tunnel shader ignores lights) and exposes `group`, `spans` (`{id, d0, d1}` per room) and `rooms`.
+Bubble budget: `Q.bubbleCap` / `Q.bubbleShards` / `Q.bubbleViewAhead` (desktop 160 / 64 / 110, mobile
+100 / 32 / 76) size the sprite pools and the hide-ahead distance when the field is built; the art, the
+spawn rules and the pop box are the same on both tiers.
+Light budget: desktop runs 7 lights (run.js ambient + cupLight, the dresser's hemisphere + sun, EMI's
+screen / bead / cup points). On the mobile tier `Q.leanLights` hides the sun, run.js's cupLight and
+EMI's screen + bead points (`visible = false`, which three.js counts as absent): the ambient, the
+hemisphere (the pink sky the props and the cup are painted for; a directional in its place reads
+purple and flat) and EMI's cupLight are that tier's whole bill. Desktop is untouched.
 A crossed cube hides, throws its splits and puts a BILLBOARD flash on its spot: never a solid mesh,
 which used to read as a second, empty white box standing beside the shards.
 Road furniture (item box and its twelve splits, boost pad, ramp lip, air marker) takes its geometry
@@ -173,6 +181,12 @@ Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
 | gifrain | effect | gifCascade | 25 | minIntensity 0.45 |
 | video | effect | video | 40 | DARK since 2026-09-06, never spawns (see below) |
 
+Spiral pops (`payloadFx.showSpiral`, untouched) take their url from `engine/loomSpirals.js`
+`pickSpiralUrl()`. On the mobile tier `Q.leanSpirals` has run.js narrow that module's bundled pool
+to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the other five are 2.2-5.3 MB) with
+`setBundledSpiralPool` and prefetch both in `prepare()` (while the intro plays; `start()` covers
+`?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full pool and the Descent
+never calls the setter.
 A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
 of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
 one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its
@@ -290,7 +304,7 @@ below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own sta
 ### `race/run.js` + `raceBoot.js` + `race.html` (PR 5, integration)
 ```js
 export function createRace({ root, bridge, media, settings, seed }) ->
-  { start(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera,
+  { start(), prepare(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera,
     setTrack(chart | null), replaceTrack(chart), trackClock(t, playing), trackEnded(), track }
 ```
 Track charts (PR c2, CHART.md): `setTrack` before `start()`; `replaceTrack` when the words pass lands
@@ -365,6 +379,10 @@ As built (PR 5 reality notes):
   never fight over one `style.transform`.
 - `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart, score,
   items) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
+- The world is not built under the menu. `createRace` only resets the run state; `race.prepare()` builds it
+  (raceBoot calls it once `race` is pressed, after `seedCheck`, before the intro plays) and warms the
+  renderer's programs, and `start()` builds it if nothing did (`?autostart=1`). `reseed` on a world that was
+  never built only resets state, so the menu changing the seed rule costs nothing until `race`.
 - Extra `run-ended` fields: `nearMisses`, `personalBest`. `exit` is followed by `exit-done` once torn down.
 - Boot and reduced motion: `raceBoot.js` calls `detectMode({ reducedIs3d: true })`, so `prefers-reduced-motion: reduce`
   boots the 3D race and only turns motion down through `settings.reducedMotion`; a boot error is reserved for a real

@@ -18,6 +18,27 @@ let spirals = [];   // [{ slug, url, params }]
 const BUNDLED_BASE = '/dtrh/assets/bubbles/effects/spirals/';
 export const BUNDLED_SPIRALS = ['sp1.gif', 'sp2.webp', 'sp3.gif', 'sp4.webp', 'sp5.gif', 'sp6.gif', 'sp7.gif']
   .map((f) => BUNDLED_BASE + f);
+// the two lightest of those (sp6.gif 123 KB, sp7.gif 721 KB; the other five weigh 2.2-5.3 MB each,
+// sizes on disk 2026-09): the pool a phone draws from once the race asks (setBundledSpiralPool)
+export const LEAN_SPIRALS = ['sp6.gif', 'sp7.gif'].map((f) => BUNDLED_BASE + f);
+let bundledPool = BUNDLED_SPIRALS;
+
+/** Opt-in: narrow the bundled pool every pickSpiralUrl() draws from (null / empty restores the whole
+ *  set). The race sets LEAN_SPIRALS on its mobile tier and prefetches them before the run, so a lap
+ *  never fetches a multi-megabyte gif mid-run; nothing else calls this and the Descent keeps the full
+ *  pool. The Loom's saved spirals are untouched by it. */
+export function setBundledSpiralPool(list) {
+  bundledPool = Array.isArray(list) && list.length ? list.slice() : BUNDLED_SPIRALS;
+}
+export function getBundledSpiralPool() { return bundledPool; }
+
+/** Warm the browser cache for a pool (one <img> per url, decoded off-thread); returns the urls asked
+ *  for. A page without a DOM (node) asks for nothing. */
+export function prefetchSpirals(list = bundledPool) {
+  if (typeof Image === 'undefined') return [];
+  for (const u of list) { try { const im = new Image(); im.decoding = 'async'; im.src = u; } catch (e) { /* a warm-up only */ } }
+  return list.slice();
+}
 
 export function setLoomSpirals(list) {
   spirals = Array.isArray(list) ? list.filter((s) => s && s.url) : [];
@@ -31,5 +52,5 @@ export function pickSpiralUrl() {
   if (spirals.length && Math.random() < 0.5) {
     return spirals[Math.floor(Math.random() * spirals.length)].url;
   }
-  return BUNDLED_SPIRALS[Math.floor(Math.random() * BUNDLED_SPIRALS.length)];
+  return bundledPool[Math.floor(Math.random() * bundledPool.length)];
 }

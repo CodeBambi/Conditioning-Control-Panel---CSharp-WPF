@@ -7,11 +7,18 @@
  *   audio.menu(on)               the menu theme: MENU_TRACK on the same chain, entered like a room
  *   audio.ui(name, value)        the menu blips: 'tick' | 'pick' | 'back' | 'step' | 'page'
  *   audio.setLevels({ music, sfx })  the two option sliders, live
+ *   audio.setRoute(roomIds | null)  the order the run crosses the rooms in (a chart's acts); null = the spans
  *   audio.duck(on, why)          'host' (native video) | 'brake' | 'end' | 'track'
  *                                'track' is the standing one: a loaded file (CHART.md) is the
  *                                soundtrack, so the OST and the bed sit under it until it is cleared
  *   audio.toggleMute() -> bool   M key; shared with the dive's master mute (shared/audioMute.js)
  *   audio.dispose()
+ *
+ * Resident music: at most TWO <audio> elements live at once, the room's track and
+ * the next room's (residentTracks, prefetched at the gate so it is buffered by the
+ * time its room comes). Every other track is released after its crossfade (element
+ * emptied, its file buffer with it) and re-enters next lap from where it left off
+ * (its position is parked). Nothing is fetched before the menu asks for its theme.
  *
  * Two doors. The hot, latency-bound beats (pops, chimes, ticks, thumps, the
  * bed) are WebAudio in this page on the dive's shared context (engine/audioBus)
@@ -150,6 +157,21 @@ export function rollPlaylist(rng, roomOrder, pools = ROOM_POOLS, dead = new Set(
   return out;
 }
 
+/** The tracks that stay resident once `roomId` plays: its own and the following room's in `route`
+ *  (the lap wraps), so at most two <audio> elements are ever buffered. Names, deduplicated; a room
+ *  outside `route` (the menu) keeps only what plays. `pos` is the route index the run is at when a
+ *  route visits a room twice (a chart's acts); it is checked against `roomId` before it is trusted. */
+export function residentTracks(playlist, route, roomId, pos = -1) {
+  const keep = new Set();
+  if (!playlist) return keep;
+  const cur = playlist[roomId];
+  if (cur) keep.add(cur);
+  const list = Array.isArray(route) ? route : [];
+  const i = pos >= 0 && list[pos] === roomId ? pos : list.indexOf(roomId);
+  if (i >= 0) { const nxt = playlist[list[(i + 1) % list.length]]; if (nxt) keep.add(nxt); }
+  return keep;
+}
+
 export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   const log = (m) => { try { bridge && bridge.log && bridge.log('[audio] ' + m); } catch (e) { /* host gone */ } };
   const send = (m) => { try { bridge && bridge.send && bridge.send(m); } catch (e) { /* host gone */ } };
@@ -176,8 +198,12 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   // music: the chain is duck -> lowpass (fraught / Undertow / tea time) -> highpass (Grey Ward) -> level -> master
   let musicDuck = null, musicLp = null, musicHp = null, musicLevelNode = null, elementMode = false;
   let standing = 1;   // the level update() eases the music back to: 1, or TRACK_DUCK while a track is loaded
-  const tracks = new Map();      // name -> { name, el, gain, bound, failed, vol, fadeTimer, pauseTimer }
-  const music = { cur: null, playlist: {}, dead: new Set(), duckTo: 1, duckWhy: null, lp: 20000, hp: 20, gesture: false, roomId: null, menu: false };
+  const tracks = new Map();      // name -> { name, el, gain, bound, failed, vol, fadeTimer, pauseTimer } (resident: at most two)
+  const parked = new Map();      // name -> seconds a released track resumes from next lap
+  const music = { cur: null, playlist: {}, dead: new Set(), duckTo: 1, duckWhy: null, lp: 20000, hp: 20, gesture: false, roomId: null, menu: false, route: null, pos: -1 };
+  // music.order (the dresser's spans) rolls the playlist; music.route is the order the run will actually cross
+  // the rooms in when a chart's acts set it (setRoute), else the spans: the "next room" prefetch reads the route
+  const routeOf = () => music.route || music.order;
 
   setDucked(true);               // bubbles.js's kind-blind pop steps aside (see header)
 
@@ -211,7 +237,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const el = new Audio();
     el.preload = 'auto'; el.loop = true; el.crossOrigin = 'anonymous';
     const first = audioUrl(OST_BASE + name + '.mp3');
-    const t = { name, el, gain: null, bound: false, failed: false, vol: 0, fadeTimer: 0, pauseTimer: 0, alt: hosted ? altAudioUrl(first) : null };
+    const t = { name, el, gain: null, src: null, bound: false, failed: false, vol: 0, fadeTimer: 0, pauseTimer: 0, alt: hosted ? altAudioUrl(first) : null, resumeAt: parked.get(name) || 0 };
     el.addEventListener('error', () => {
       if (t.alt) { const a = t.alt; t.alt = null; el.src = a; if (music.cur === t) el.play().catch(() => {}); return; }
       t.failed = true; music.dead.add(name);
@@ -231,7 +257,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     try {
       const src = ctx.createMediaElementSource(t.el);
       t.gain = ctx.createGain(); t.gain.gain.value = 0;
-      src.connect(t.gain); t.gain.connect(musicDuck);
+      src.connect(t.gain); t.gain.connect(musicDuck); t.src = src;
       t.el.volume = 1;
     } catch (e) { t.gain = null; elementMode = true; log('media element route failed, element volume mode: ' + e); }
   }
@@ -263,13 +289,28 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const next = trackFor(name);
     if (!next || next.failed) return;
     const prev = music.cur;
-    if (prev) { fade(prev, 0, CROSSFADE_SEC); clearTimeout(prev.pauseTimer); prev.pauseTimer = setTimeout(() => { if (music.cur !== prev) { try { prev.el.pause(); } catch (e) { /* ignore */ } } }, CROSSFADE_SEC * 1000 + 200); }
+    if (prev) {
+      fade(prev, 0, CROSSFADE_SEC); clearTimeout(prev.pauseTimer);
+      prev.pauseTimer = setTimeout(() => {   // paused after the ramp, and released unless it is the next room's
+        if (music.cur === prev) return;
+        try { prev.el.pause(); } catch (e) { /* ignore */ }
+        if (!residentTracks(music.playlist, routeOf(), music.roomId, music.pos).has(prev.name)) release(prev);
+      }, CROSSFADE_SEC * 1000 + 200);
+    }
     music.cur = next;
     clearTimeout(next.pauseTimer);
     bind(next);
     const spec = TRACK_BY_NAME[name];
-    if (next.el.paused && spec.start > 0 && next.el.currentTime < spec.start) { try { next.el.currentTime = spec.start; } catch (e) { /* not seekable yet */ } }
+    const at = Math.max(spec.start || 0, next.resumeAt || 0);   // a skipped intro, or where a released track left off
+    next.resumeAt = 0;
+    if (next.el.paused && at > 0 && next.el.currentTime < at) { try { next.el.currentTime = at; } catch (e) { /* not seekable yet */ } }
     startEl(next);
+    const route = routeOf() || [];
+    let pos = route.indexOf(roomId, music.pos + 1); if (pos < 0) pos = route.indexOf(roomId);   // forward first: a route may repeat a room
+    music.pos = pos;
+    const keep = residentTracks(music.playlist, route, roomId, pos);
+    for (const t of [...tracks.values()]) if (t !== next && t !== prev && !keep.has(t.name)) release(t);
+    for (const n of keep) if (n !== name && !music.dead.has(n) && !tracks.has(n)) trackFor(n);   // the next room's, buffering now
     fade(next, 1, prev ? CROSSFADE_SEC : 0.8);
     log('track ' + name + ' in (' + roomId + ')' + (prev ? ', ' + prev.name + ' out, crossfade ' + CROSSFADE_SEC + 's' : ''));
   }
@@ -352,9 +393,19 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     else if (music.cur) fade(music.cur, music.cur.vol, 0.4);
     if (bedBus && ctx) { try { bedBus.gain.setTargetAtTime(to < 1 ? 0 : 1, ctx.currentTime, to < 1 ? 0.1 : 0.4); } catch (e) { /* ignore */ } }
   }
+  /** Free a track's <audio> (its buffered file with it), parking its position for the next lap. Never the one playing. */
+  function release(t) {
+    if (!t || music.cur === t || tracks.get(t.name) !== t) return;
+    clearInterval(t.fadeTimer); clearTimeout(t.pauseTimer);
+    try { if (t.el.currentTime > 0) parked.set(t.name, t.el.currentTime); } catch (e) { /* ignore */ }
+    try { if (t.src) t.src.disconnect(); if (t.gain) t.gain.disconnect(); } catch (e) { /* ignore */ }
+    try { t.el.pause(); t.el.removeAttribute('src'); t.el.load(); } catch (e) { /* ignore */ }
+    tracks.delete(t.name);
+    log('track ' + t.name + ' released (' + tracks.size + ' resident)');
+  }
   function stopMusic() {
     for (const t of tracks.values()) { clearInterval(t.fadeTimer); clearTimeout(t.pauseTimer); try { t.el.pause(); t.el.removeAttribute('src'); t.el.load(); } catch (e) { /* ignore */ } }
-    tracks.clear(); music.cur = null; music.roomId = null;
+    tracks.clear(); parked.clear(); music.cur = null; music.roomId = null;
   }
   /** Fetch + decode one file under SFX_BASE, once. Resolves to the buffer, or null when the
    *  clip is not there. The second host is only worth a try when there IS one: in a browser
@@ -524,8 +575,13 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     music.order = Object.keys(ROOM_POOLS);
     try { if (world.dresser && world.dresser.spans) music.order = world.dresser.spans.map((s) => s.id); } catch (e) { /* default order */ }
     reroll();
-    music.roomId = null;
+    music.roomId = null; music.pos = -1;
     log('attached to world seed ' + music.seed + ', playlist ' + music.order.map((r) => r + ':' + (music.playlist[r] || '-')).join(' '));
+  }
+  /** The order the run will cross the rooms in (a chart's acts, from run.js setTrack); null = the dresser's spans. */
+  function setRoute(ids) {
+    music.route = Array.isArray(ids) && ids.length ? ids.slice() : null; music.pos = -1;
+    if (music.route) log('route ' + music.route.join(' > '));
   }
   function reroll() { music.playlist = rollPlaylist(makeRng(((music.seed | 0) ^ 0xa11d10) >>> 0), music.order || Object.keys(ROOM_POOLS), ROOM_POOLS, music.dead); }
   function update(dt, l) {
@@ -597,7 +653,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     master = null;
   }
 
-  return { sfx, ui, menu: menuMusic, setLevels, update, duck, toggleMute, dispose, _voices: voices, _music: music, _levels: levels };
+  return { sfx, ui, menu: menuMusic, setLevels, setRoute, update, duck, toggleMute, dispose, _voices: voices, _music: music, _levels: levels, _tracks: tracks };
 }
 
 // self-check: node --check is the bar; the pure parts (pitchSemis, chimeFor, pickVoiceToDrop)

@@ -24,6 +24,16 @@
  * curve and the acts; race/cues.js says what each spoken word is worth; everything
  * below only spends those on the world it already owns. Without a track not one
  * line of this changes: the seeded run is the else branch throughout.
+ *
+ * PERF (raceBoot `?perf=1`): `race.perf()` is one snapshot of the last frame,
+ * summed over the pixelizer's passes: draw calls, triangles, the programs the
+ * renderer holds, live geometries / textures, the biggest texture edge in the
+ * run scene, resident <audio> elements and the governor's device pixel ratio.
+ * The world is NOT built under the menu: `prepare()` (raceBoot calls it once
+ * "race" is pressed, before the intro) or the first `start()` builds it, and
+ * `reseed` under the menu only resets the run state. The menu never pays for
+ * the tunnel, the props' glb or the bubble textures, and the run's first frame
+ * does not compile the world's programs: prepare() warms them.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -31,6 +41,7 @@ import { Q } from '../shared/quality.js';
 import { createTunnel, FOG_DENSITY } from '../engine/tunnel.js';
 import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
+import { setBundledSpiralPool, prefetchSpirals, LEAN_SPIRALS } from '../engine/loomSpirals.js';
 import { createScreenShake } from '../game/screenShake.js';
 import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, makeRng } from './consts.js';
 import { createSpine } from './spine.js';
@@ -86,8 +97,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   scene.background = new THREE.Color(0x12261f);
   scene.fog = new THREE.FogExp2(0x12261f, FOG_DENSITY);
   const camera = new THREE.PerspectiveCamera(FOV_BASE, 1, 0.1, 400);
+  // Q.leanLights (mobile): the dresser's sun, EMI's screen / bead points and this cupLight are hidden
+  // (three.js does not count an invisible light); the ambient, the dresser's hemisphere (the pink sky the
+  // props and the cup are painted for) and EMI's own cupLight are that tier's whole light bill
   scene.add(new THREE.AmbientLight(0x8a70a8, 1.0));
   const cupLight = new THREE.PointLight(0xff69b4, 1.4, 14);
+  cupLight.visible = !Q.leanLights;
   scene.add(cupLight);
   // the vertical fov this window shape needs to hold FOV_BASE's 16:9 width of road; the per-frame
   // kick rides on top of it, and a resize slides S.fov by the same delta so the kick survives a flip
@@ -106,6 +121,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const hud = createRaceHud(hudRoot);
   const fxProxy = { pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
+  // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
+  // (warmFx) rather than 2-5 MB mid-lap; the desktop pool and the Loom's own spirals are untouched
+  setBundledSpiralPool(Q.leanSpirals ? LEAN_SPIRALS : null);
+  let fxWarm = false;
+  function warmFx() { if (fxWarm || !Q.leanSpirals) return; fxWarm = true; prefetchSpirals(LEAN_SPIRALS); }
   const lane = createMediaLane(sfHud);   // re-homes payload cards off the road
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
@@ -358,8 +378,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     trackSend('track-pause', { on: !!on });
   }
   /** Load a chart (null goes back to the seeded run). Call before start(), or live for an upgrade. */
+  // a chart's acts decide the room order at every gate (step: ts.act.room); the music prefetches by that route
+  const routeOf = (t) => { const acts = t && t.chart && Array.isArray(t.chart.acts) ? t.chart.acts : null; return acts ? acts.map((a) => a.room).filter((r, i, arr) => r && r !== arr[i - 1]) : null; };
   function setTrack(chart) {
     const t = TR.setTrack(chart);
+    audio.setRoute(routeOf(t));
     S.trackHold = 0; S.statsAt = 0;
     if (W) { W.field.setTracked(!!t); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
@@ -578,8 +601,17 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (S.disposed) return;
     if (pick === 'again') again(); else exit();
   }
-  /** Rebuild the world on a new seed (again, or the menu changing the seed rule). settings.seedLock pins again to one track. */
-  function reseed(runSeed) { teardown(); resetRunState(runSeed); W = build(runSeed); S.started = false; }
+  /** Rebuild the world on a new seed (again, or the menu changing the seed rule). settings.seedLock pins again to one track.
+   *  A world that was never built (the menu changing the rule before "race") stays unbuilt: prepare() / start() own that. */
+  function reseed(runSeed) { const had = !!W; teardown(); resetRunState(runSeed); if (had) W = build(runSeed); S.started = false; }
+  /** Build the world now (after "race" is pressed, before the intro) so neither the menu nor the run's first
+   *  frame pays for it; the renderer compiles the world's programs in the same breath. A no-op once built. */
+  function prepare() {
+    if (S.disposed || W) return;
+    warmFx();
+    W = build(S.seed);
+    try { renderer.compile(scene, camera); } catch (e) { /* a warm-up only: the first frame compiles what this missed */ }
+  }
   function again() {
     reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
@@ -602,7 +634,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   function start() {
     if (S.started || S.disposed) return;
-    if (!W) W = build(S.seed);
+    if (!W) { warmFx(); W = build(S.seed); }   // ?autostart=1 skipped prepare(): the warm-up rides the first seconds
     S.started = true; S.running = true; S.ended = false;
     input.flush();          // a space that closed the last introduction card is not a jump on frame one
     S.bestAtStart = W.score.state.best;
@@ -651,15 +683,35 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     return true;
   }
 
-  W = build(seed);
-  resetRunState(seed);
+  resetRunState(seed);          // the world waits for prepare() / start(): frame() draws the stage until then
   raf = requestAnimationFrame(frame);
   function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
+  /** One perf snapshot (the `?perf=1` aid). Never throws: a missing counter reads as -1. */
+  function perf() {
+    const info = renderer.info || {}, mem = info.memory || {}, st = pixel.stats || {};
+    let texMax = 0;
+    try {
+      scene.traverse((o) => {
+        const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+        for (const m of mats) for (const k of ['map', 'emissiveMap', 'alphaMap']) {
+          const im = m[k] && m[k].image;
+          if (im && im.width) texMax = Math.max(texMax, im.width, im.height || 0);
+        }
+      });
+    } catch (e) { texMax = -1; }
+    return {
+      calls: st.calls == null ? -1 : st.calls, triangles: st.triangles == null ? -1 : st.triangles, passes: st.passes || 0,
+      frameMs: st.frameMs || 0, programs: info.programs ? info.programs.length : -1,
+      geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
+      audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
+      world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
+    };
+  }
   function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block
-  return { start, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera,
+  return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
-    setTrack, replaceTrack: (chart) => TR.replace(chart), trackClock: (t, playing) => TR.clock(t, playing),
+    setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); }, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), debugItemBox,
     get track() { return TR.track; } };
 }
