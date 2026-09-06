@@ -77,8 +77,21 @@ map.repeat.x = 5 / 7;                        // gltf.js BAKED_FRAMES / FACES.len
 map.offset.x = frame / 7;                    // frame 0..6, gltf.js setFace does both
 ```
 
-If the png never arrives, the embedded five-frame strip stays and frames 5 and 6 clamp to 4:
-`gltf.js` `faceFrames(texture)` reads the width off the texture, never off `FACES`.
+**The strip is repainted into a padded texture on load.** `gltf.js` `padAtlasToPot` draws this
+png into a power of two 2048x256 canvas (top left, or bottom left when flipY is on, so the strip
+always lands at the uv origin) and hands the material a CanvasTexture instead. Two reasons, both
+of them phones: an `<img>` can have its decoded pixels dropped by mobile Safari between uploads,
+and the glass has no base map, so one blank emissive sample paints the whole screen white; and
+1064x137 is not a power of two, which puts RepeatWrapping and mipmaps out of bounds on any
+WebGL1 context. So repeat and offset are both multiplied by the pad scale (1064/2048, 137/256),
+which `gltf.js` `atlasScale(texture)` reads off `userData` and `setFace` applies: the numbers in
+the table above are still the frame indices, they just get squeezed. Sampling never leaves the
+strip, so the padded texture is ClampToEdge on both axes, and `setFace` never flags
+`needsUpdate` (an offset is a uniform, not pixels, and a version bump re-uploads the atlas).
+
+If the png never arrives, the embedded five-frame strip stays, gets padded the same way, and
+frames 5 and 6 clamp to 4: `gltf.js` `faceFrames(texture)` reads the width off the texture,
+never off `FACES`.
 
 The material ships with `emissiveMap` = atlas, `emissive` = white, `emissiveIntensity` = 1
 (the race renders with no tone mapping, so the pink is exact at 1.0; the AgX studio render

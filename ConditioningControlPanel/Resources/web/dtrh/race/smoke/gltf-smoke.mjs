@@ -36,7 +36,7 @@ registerHooks({
 });
 
 const THREE = await import('three');
-const { makePack, toInstanceGeometry, setFace, preparePixel, flattenRig, disposePack, FACES, faceFrames } = await import('../gltf.js');
+const { makePack, toInstanceGeometry, setFace, preparePixel, flattenRig, disposePack, FACES, faceFrames, atlasScale, forceAtlasSampler } = await import('../gltf.js');
 const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 
 // ---- the tiny assert kit ----------------------------------------------------------------
@@ -247,6 +247,41 @@ delete tex.userData.faceFrames;
 setFace(emi, 0);
 ok(setFace(new THREE.Group(), 1) === false, 'no EMI_glass, no throw, just false');
 ok(setFace(null, 1) === false, 'setFace(null) is false');
+
+// ---- the padded atlas ------------------------------------------------------------------------
+// padAtlasToPot needs a document, so node never takes that branch; what the smoke CAN hold is the
+// contract setFace reads off the far side of it. The live strip is 1064x137 in a 2048x256 canvas.
+ok(atlasScale(tex).x === 1 && atlasScale(tex).y === 1, 'a raw strip reports a 1,1 atlas scale');
+const SX = 1064 / 2048, SY = 137 / 256;
+tex.userData.atlasScale = { x: SX, y: SY };
+tex.userData.faceFrames = FACES.length;
+ok(atlasScale(tex).x === SX, 'a padded strip reports the scale it was padded by');
+for (let i = 0; i < FACES.length; i++) {
+  setFace(emi, i);
+  ok(near(tex.offset.x, (i / FACES.length) * SX), 'padded frame ' + i + ' sits at ' + i + '/7 squeezed into the pad');
+}
+setFace(emi, 99);
+ok(near(tex.offset.x, ((FACES.length - 1) / FACES.length) * SX), 'the clamp still lands on the last frame when padded');
+// the authored EMI_glass u span is 0.00066 .. 0.19934 over one baked frame, so with repeat.x
+// squeezed the same way the last window must stop inside the strip: never in the pad, and never
+// over a wrap seam, which is what lets the padded texture be ClampToEdge
+ok(0.19934 * (5 / FACES.length) * SX + tex.offset.x < SX, 'the last frame window stops inside the strip, not in the pad');
+// the pixel budget: setFace must never ask for a re-upload of the atlas
+tex.wrapS = THREE.ClampToEdgeWrapping;
+const ver = tex.version;
+setFace(emi, 3);
+ok(tex.version === ver, 'setFace never bumps the texture version (an offset is a uniform, not pixels)');
+ok(tex.wrapS === THREE.ClampToEdgeWrapping, 'setFace leaves a padded texture clamped');
+forceAtlasSampler(tex);
+ok(tex.wrapS === THREE.ClampToEdgeWrapping, 'forceAtlasSampler skips a padded texture');
+delete tex.userData.atlasScale;
+forceAtlasSampler(tex);
+ok(tex.wrapS === THREE.RepeatWrapping && tex.generateMipmaps === false, 'forceAtlasSampler fixes a raw strip');
+const ver2 = tex.version;
+forceAtlasSampler(tex);
+ok(tex.version === ver2, 'a sampler that is already right costs no second upload');
+delete tex.userData.faceFrames;
+setFace(emi, 0);
 
 // ---- preparePixel ----------------------------------------------------------------------------
 const seen = [];

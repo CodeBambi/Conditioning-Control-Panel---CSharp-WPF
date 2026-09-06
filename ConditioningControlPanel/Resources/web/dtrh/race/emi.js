@@ -19,7 +19,7 @@
 // the pack lands. Needs feat/race-b4-props-glb underneath for the file itself.
 
 import * as THREE from 'three';
-import { loadPack, setFace as packSetFace, preparePixel, flattenRig, faceFrames } from './gltf.js';
+import { loadPack, setFace as packSetFace, preparePixel, flattenRig, faceFrames, atlasScale, forceAtlasSampler } from './gltf.js';
 import { createPoseLayer } from './emiPoses.js';
 import { SAUCER_R } from './consts.js';
 
@@ -306,11 +306,10 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
       const tex = m && m.emissiveMap;
       if (!tex) continue;
       const n = faceFrames(tex);          // the strip that loaded, not the one the glb shipped
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
-      tex.generateMipmaps = false;
-      tex.offset.x = Math.min(n - 1, Math.max(0, i | 0)) / n;
-      tex.needsUpdate = true; hit = true;
+      forceAtlasSampler(tex);             // a raw strip only: a padded one already has its sampler
+      // offset is a uniform: flagging needsUpdate here would re-upload the atlas every face change
+      tex.offset.x = (Math.min(n - 1, Math.max(0, i | 0)) / n) * atlasScale(tex).x;
+      hit = true;
     }
     return hit;
   }
