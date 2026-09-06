@@ -27,6 +27,7 @@ import { createBubbleField } from './bubbles.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
+import { createMediaLane } from './mediaLane.js';
 import { createItems } from './items.js';
 import { createInput } from './input.js';
 import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
@@ -73,6 +74,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const hud = createRaceHud(hudRoot);
   const fxProxy = { pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
+  const lane = createMediaLane(sfHud);   // re-homes payload cards off the road
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
   const input = createInput();
@@ -368,7 +370,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     document.removeEventListener('visibilitychange', onVis);
     if (payoutResolve) payoutResolve(null);
     teardown();
-    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose();
+    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
     scene.clear(); renderer.dispose();
     setFlip(false);
   }

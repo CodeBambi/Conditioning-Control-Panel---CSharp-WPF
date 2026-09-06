@@ -7,65 +7,121 @@
  * video card in .sf-pfx-front z9) so a freeze or a tape always covers it. The
  * Brake and End screens are the only pointer targets and ride at z20.
  * The .race-hud root itself must stay unpositioned so its children own z-index.
+ *
+ * Second pass: every corner block anchors off --rh-inset (plus the notch
+ * insets) so nothing is flush to an edge; the MARQUEE moved off top-centre to
+ * a left ribbon; the numbers ride thin dark plates so they stay readable over
+ * the big-pixel render. The tail of this file caps the payloadFx full-screen
+ * overlays and styles the media lane (see race/mediaLane.js).
  * ==========================================================================*/
 
-.race-hud { position: static; font-family: var(--rh-font); color: #fff; --rh-room: #ff69b4; --rh-fraught: 0; }
+.race-hud {
+  position: static; font-family: var(--rh-font); color: #fff; --rh-room: #ff69b4; --rh-fraught: 0;
+  /* SAFE INSET: nothing in the chrome is ever flush to an edge, and the notch
+     insets stack on top of it. Every corner block anchors off these four. */
+  --rh-inset: clamp(16px, 2vw, 32px);
+  --rh-in-t: calc(var(--rh-inset) + env(safe-area-inset-top, 0px));
+  --rh-in-b: calc(var(--rh-inset) + env(safe-area-inset-bottom, 0px));
+  --rh-in-l: calc(var(--rh-inset) + env(safe-area-inset-left, 0px));
+  --rh-in-r: calc(var(--rh-inset) + env(safe-area-inset-right, 0px));
+}
 .race-hud * { box-sizing: border-box; }
 .race-hud .rh-chrome { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 .race-hud .rh-chrome * { pointer-events: none; }
 .race-hud .rh-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+/* a thin dark plate so numbers stay legible over the big-pixel render */
+.race-hud .rh-plate {
+  padding: 8px 12px 9px; border-radius: 12px;
+  background: linear-gradient(180deg, rgba(8, 4, 14, 0.52), rgba(8, 4, 14, 0.34));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
 
 /* ---- score, top-left: the honest number (Law I), the pill, the combo drain, the bank ---- */
 .race-hud .rh-score-wrap {
-  position: absolute; top: calc(1rem + env(safe-area-inset-top, 0px)); left: 1.2rem;
-  display: flex; flex-direction: column; gap: 4px;
+  position: absolute; top: var(--rh-in-t); left: var(--rh-in-l);
+  display: flex; flex-direction: column; gap: 4px; min-width: 190px; max-width: min(38vw, 340px);
   text-shadow: 0 0 12px rgba(255, 105, 180, 0.7), 0 2px 4px rgba(0, 0, 0, 0.85);
 }
 .race-hud .rh-label { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: lowercase; opacity: 0.6; }
-.race-hud .rh-score-row { display: flex; align-items: baseline; gap: 10px; }
-.race-hud .rh-score { font-size: 1.9rem; font-weight: 900; line-height: 1; transform-origin: left center; }
+.race-hud .rh-score-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.race-hud .rh-score { font-size: clamp(1.7rem, 3.4vw, 2.3rem); font-weight: 900; line-height: 1; transform-origin: left center; }
 .race-hud .rh-score.is-pop { animation: rhThud 0.34s cubic-bezier(0.2, 1.6, 0.4, 1); }
 .race-hud .rh-score.is-flick { animation: rhFlick 0.45s steps(3) both; color: #bfe9ff; }
 .race-hud .rh-mult {
-  display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.9rem; font-weight: 800;
+  position: relative; display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: 1rem; font-weight: 800;
   background: rgba(255, 105, 180, 0.22); border: 1px solid rgba(255, 105, 180, 0.7); color: #ffd6ea;
   transform-origin: center; transition: background 0.3s, border-color 0.3s, color 0.3s;
 }
+/* the rung ring: a shell that snaps out of the pill each time it climbs */
+.race-hud .rh-mult::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 999px;
+  border: 2px solid currentColor; opacity: 0; pointer-events: none;
+}
 .race-hud .rh-mult.is-gold { background: rgba(242, 193, 78, 0.28); border-color: #f2c14e; color: #fff0b8; box-shadow: 0 0 14px rgba(242, 193, 78, 0.6); }
 .race-hud .rh-mult.is-pulse { animation: rhPulse 0.42s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.race-hud .rh-mult.is-pulse::after { animation: rhRing 0.52s ease-out forwards; }
 .race-hud .rh-rungs { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
-.race-hud .rh-rung { width: 5px; height: 9px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); }
+.race-hud .rh-rung { width: 5px; height: 10px; border-radius: 2px; background: rgba(255, 255, 255, 0.18); transition: background 0.2s, box-shadow 0.2s; }
 .race-hud .rh-rung.is-lit { background: #ffd45e; box-shadow: 0 0 6px rgba(255, 212, 94, 0.9); }
-.race-hud .rh-combo-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; opacity: 0.85; min-height: 1rem; }
-.race-hud .rh-combo-bar { position: relative; width: 96px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
-.race-hud .rh-combo-fill { position: absolute; inset: 0; background: linear-gradient(90deg, #ff69b4, #ffd45e); transform-origin: left; transform: scaleX(0); }
+.race-hud .rh-combo-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; opacity: 0.9; min-height: 1rem; }
+.race-hud .rh-combo-bar {
+  position: relative; width: 128px; height: 7px; border-radius: 4px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.13); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.race-hud .rh-combo-fill {
+  position: absolute; inset: 0; border-radius: 4px;
+  background: linear-gradient(90deg, #ff69b4, #ffd45e);
+  box-shadow: 0 0 10px rgba(255, 150, 200, 0.65);
+  transform-origin: left; transform: scaleX(0);
+}
+/* the drain is the read: full at a pop, empty when the combo lets go */
 .race-hud .rh-combo-fill.is-draining { animation: rhDrain var(--rh-hold, 3s) linear forwards; }
-.race-hud .rh-combo-row.is-off { opacity: 0.35; }
+.race-hud .rh-combo-row.is-off { opacity: 0.4; }
+.race-hud .rh-next { font-size: 0.72rem; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.62); min-height: 1em; }
+.race-hud .rh-next.is-close { color: #ffd45e; text-shadow: 0 0 10px rgba(255, 212, 94, 0.7); }
+.race-hud .rh-next.is-top { color: #fff0b8; }
 .race-hud .rh-bank { font-size: 0.78rem; color: #ffe082; opacity: 0.85; }
 .race-hud .rh-bank.is-pop { animation: rhThud 0.34s cubic-bezier(0.2, 1.6, 0.4, 1); }
 
-/* ---- MARQUEE: the room banner, top-centre, bulbs chase by transform ---- */
+/* ---- MARQUEE: the room banner as a LEFT RIBBON under the score block.
+   It used to sit top-centre, which is exactly where payload cards land and
+   where the media lane's ceiling strip now runs, so the tagline got buried.
+   The ribbon rides in from the left edge; the bulbs still chase. ---- */
 .race-hud .rh-banner {
-  position: absolute; top: calc(4.2rem + env(safe-area-inset-top, 0px)); left: 50%;
-  transform: translate(-50%, -140%); opacity: 0; padding: 10px 26px; text-align: center;
-  border: 2px solid var(--rh-room); border-radius: 6px; background: rgba(8, 4, 14, 0.72);
+  /* hud.js re-measures this top from the score block on every gate; the value
+     here is only the pre-measure fallback */
+  position: absolute; left: 0; top: calc(var(--rh-in-t) + 140px);
+  transform: translateX(-104%); opacity: 0; padding: 9px 20px 10px calc(var(--rh-in-l) + 4px);
+  max-width: min(46vw, 420px); text-align: left;
+  border: 2px solid var(--rh-room); border-left: 0; border-radius: 0 8px 8px 0; background: rgba(8, 4, 14, 0.8);
   box-shadow: 0 0 24px color-mix(in srgb, var(--rh-room) 55%, transparent), inset 0 0 18px rgba(0, 0, 0, 0.6);
   transition: transform 0.55s cubic-bezier(0.2, 1.3, 0.4, 1), opacity 0.35s ease-out; overflow: hidden;
 }
-.race-hud .rh-banner.is-on { transform: translate(-50%, 0); opacity: 1; }
+.race-hud .rh-banner.is-on { transform: translateX(0); opacity: 1; }
 .race-hud .rh-banner::before, .race-hud .rh-banner::after {
   content: ''; position: absolute; left: 0; right: -24px; height: 6px;
   background: radial-gradient(circle at 3px 3px, var(--rh-room) 0 2px, transparent 2.6px) 0 0 / 12px 6px repeat-x;
   animation: rhChase 0.5s steps(2) infinite;
 }
 .race-hud .rh-banner::before { top: 2px; } .race-hud .rh-banner::after { bottom: 2px; }
-.race-hud .rh-banner-name { font-size: 1.4rem; font-weight: 900; letter-spacing: 0.18em; color: #fff; text-shadow: 0 0 16px var(--rh-room); }
-.race-hud .rh-banner-tag { font-size: 0.74rem; letter-spacing: 0.12em; opacity: 0.75; margin-top: 2px; }
+.race-hud .rh-banner-name {
+  font-size: clamp(1.05rem, 2.4vw, 1.35rem); font-weight: 900; letter-spacing: 0.16em; line-height: 1.15;
+  color: #fff; text-shadow: 0 0 16px var(--rh-room);
+  overflow-wrap: anywhere;
+}
+/* the tagline wraps to two lines before it ever clips; ellipsis is the last resort */
+.race-hud .rh-banner-tag {
+  font-size: 0.74rem; letter-spacing: 0.1em; opacity: 0.8; margin-top: 3px; line-height: 1.35;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
 
 /* ---- item slot, bottom-left: glyph, name, the E key that never moves (Law II) ---- */
 .race-hud .rh-item {
-  position: absolute; left: 1.2rem; bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
-  display: flex; align-items: center; gap: 10px; opacity: 0.45; transition: opacity 0.25s;
+  position: absolute; left: var(--rh-in-l); bottom: var(--rh-in-b);
+  display: flex; align-items: center; gap: 10px; max-width: min(44vw, 320px);
+  opacity: 0.45; transition: opacity 0.25s;
 }
 .race-hud .rh-item.is-armed { opacity: 1; }
 .race-hud .rh-item-box {
@@ -83,24 +139,47 @@
   border: 1px solid rgba(255, 255, 255, 0.5); color: rgba(255, 255, 255, 0.8); line-height: 1.4;
 }
 
-/* ---- speed, bottom-right: a thin gauge and the pace number ---- */
+/* ---- speed, bottom-right: the pace number, a fat gauge and a boost state ---- */
 .race-hud .rh-speed {
-  position: absolute; right: 1.2rem; bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
-  width: 160px; text-align: right; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  position: absolute; right: var(--rh-in-r); bottom: var(--rh-in-b);
+  width: clamp(170px, 19vw, 240px); text-align: right; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.race-hud .rh-speed-n { font-size: 1.1rem; font-weight: 800; }
-.race-hud .rh-speed-u { font-size: 0.66rem; opacity: 0.6; margin-left: 4px; }
-.race-hud .rh-speed-bar { height: 3px; margin-top: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
-.race-hud .rh-speed-fill { height: 100%; background: linear-gradient(90deg, #7fe7f0, #ff69b4); transform-origin: left; transition: transform 0.18s linear; }
+.race-hud .rh-speed-row { display: flex; align-items: baseline; justify-content: flex-end; gap: 2px; }
+.race-hud .rh-speed-n { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 900; line-height: 1; letter-spacing: 0.02em; }
+.race-hud .rh-speed-u { font-size: 0.7rem; opacity: 0.6; margin-left: 5px; letter-spacing: 0.1em; }
+.race-hud .rh-speed-bar {
+  position: relative; height: 8px; margin-top: 7px; border-radius: 5px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.13); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.race-hud .rh-speed-fill {
+  height: 100%; border-radius: 5px; background: linear-gradient(90deg, #7fe7f0, #ff69b4);
+  transform-origin: left; transition: transform 0.18s linear, background 0.2s, box-shadow 0.2s;
+}
+/* the cruise cap: past this notch the kart is on a boost, not on the throttle */
+.race-hud .rh-speed-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: rgba(255, 255, 255, 0.4); }
+.race-hud .rh-speed-tag {
+  margin-top: 5px; font-size: 0.66rem; font-weight: 900; letter-spacing: 0.28em; text-transform: uppercase;
+  color: #bff4ff; opacity: 0; transition: opacity 0.15s;
+}
+.race-hud .rh-speed.is-boost { border-color: rgba(127, 231, 240, 0.65); box-shadow: 0 0 22px rgba(127, 231, 240, 0.35), 0 6px 20px rgba(0, 0, 0, 0.35); }
+.race-hud .rh-speed.is-boost .rh-speed-n { color: #d8fbff; text-shadow: 0 0 18px rgba(127, 231, 240, 0.9), 0 1px 3px rgba(0, 0, 0, 0.8); }
+.race-hud .rh-speed.is-boost .rh-speed-fill { background: linear-gradient(90deg, #d8fbff, #7fe7f0 55%, #fff); box-shadow: 0 0 14px rgba(127, 231, 240, 0.95); }
+.race-hud .rh-speed.is-boost .rh-speed-tag { opacity: 1; animation: rhBoostTag 0.42s steps(2) infinite; }
 
 /* ---- toasts: one word at a time, mid-screen, each kind with its own motion ---- */
-.race-hud .rh-toasts { position: absolute; top: 30%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.race-hud .rh-toasts {
+  position: absolute; top: 34%; left: 26vw; right: 26vw;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
 .race-hud .rh-toast {
   font-weight: 900; letter-spacing: 0.1em; text-align: center; will-change: transform, opacity;
   text-shadow: 0 0 18px rgba(255, 105, 180, 0.8), 0 2px 4px rgba(0, 0, 0, 0.85);
   animation: rhToastPop var(--rh-hold, 1.2s) ease-out forwards;
 }
 .race-hud .rh-toast--pop { font-size: 1.1rem; color: #ffd6ea; }
+/* a merged run of pops ("+30 x3"): one toast, one spot, and it grows with the run */
+.race-hud .rh-toast--pop.is-run { font-size: 1.4rem; color: #fff0b8; text-shadow: 0 0 20px rgba(255, 212, 94, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); }
 .race-hud .rh-toast--almost { font-size: 1.5rem; color: #bfe9ff; animation: rhShiver 0.34s linear, rhToastPop 1.3s ease-out forwards; text-shadow: 0 0 18px rgba(150, 210, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); }
 .race-hud .rh-toast--jackpot { font-size: 2.4rem; color: #fff0b8; text-shadow: 0 0 26px rgba(242, 193, 78, 1), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.8s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
 .race-hud .rh-toast--bank { font-size: 1.3rem; color: #ffe082; text-shadow: 0 0 18px rgba(255, 200, 60, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhToastPop 1.6s ease-out forwards; }
@@ -152,6 +231,8 @@
 /* ---- motion ---- */
 @keyframes rhThud { 0% { transform: scale(1); } 20% { transform: scale(1.32); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
 @keyframes rhPulse { 0% { transform: scale(1); } 30% { transform: scale(1.4); } 100% { transform: scale(1); } }
+@keyframes rhRing { 0% { opacity: 0.95; transform: scale(1); } 100% { opacity: 0; transform: scale(1.85); } }
+@keyframes rhBoostTag { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 @keyframes rhBounce { 0% { transform: scale(1); } 25% { transform: scale(0.94); } 65% { transform: scale(1.12); } 100% { transform: scale(1); } }
 @keyframes rhDrain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @keyframes rhChase { from { transform: translateX(0); } to { transform: translateX(-12px); } }
@@ -168,10 +249,80 @@
 
 /* reduced motion: banners as 120 ms fades, no shiver, no roll, no chase, tokens land at once (Law VI) */
 @media (prefers-reduced-motion: reduce) {
-  .race-hud .rh-banner { transition: opacity 0.12s linear; transform: translate(-50%, 0); }
+  .race-hud .rh-banner { transition: opacity 0.12s linear; transform: translateX(0); }
   .race-hud .rh-banner::before, .race-hud .rh-banner::after,
+  .race-hud .rh-mult.is-pulse::after, .race-hud .rh-speed.is-boost .rh-speed-tag,
   .race-hud .rh-item.is-rolling .rh-item-box, .race-hud .rh-vignette.is-beat, .race-hud .rh-gold.is-on { animation: none; }
   .race-hud .rh-toast, .race-hud .rh-toast--almost, .race-hud .rh-toast--jackpot, .race-hud .rh-toast--item, .race-hud .rh-toast--effect { animation: rhFade var(--rh-hold, 1.2s) linear forwards; }
   .race-hud .rh-score.is-pop, .race-hud .rh-bank.is-pop, .race-hud .rh-mult.is-pulse, .race-hud .rh-item.is-bounce .rh-item-box, .race-hud .rh-score.is-flick, .race-hud .rh-pb, .race-hud .rh-card { animation: none; }
   .race-hud .rh-token { transition: opacity 0.12s; }
+}
+
+/* ============================================================================
+ * THE MEDIA LANE + THE OVERLAY CAP (race page only)
+ *
+ * These are the ONLY rules in this file that reach outside `.race-hud`. They
+ * are scoped to `#race-root`, the race page's own root, so nothing here can
+ * touch the tube in index.html. race.css also loads after styles.css, so an
+ * equal-specificity rule would already win; the id is belt and braces.
+ * ==========================================================================*/
+
+/* ---- the lane: race/mediaLane.js picks the lane, this owns the geometry ----
+   `!important` is load-bearing: payloadFx writes left/top inline on the card
+   (`img.style.left = (14 + Math.random()*72) + 'vw'`) and an inline
+   declaration outranks a normal rule. Replacing the animation also replaces
+   payloadFx's `sf-pfx-fall` full-height slide, and its `animationend` kill
+   handler still fires on ours, so the card is still cleaned up. */
+#race-root .rh-laned {
+  position: fixed !important;
+  left: var(--rh-lane-x, 11vw) !important;
+  top: var(--rh-lane-y, 44vh) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: var(--rh-lane-w, 20vw) !important;
+  max-height: var(--rh-lane-h, 30vh) !important;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%) !important;
+  animation: rhLaneIn var(--rh-lane-dur, 2600ms) ease-out forwards !important;
+}
+@keyframes rhLaneIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.82); }
+  10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+}
+/* the ceiling strip is a shallower box, so a tall card reads as a banner */
+#race-root .rh-lane-ceiling { border-radius: 8px; }
+
+/* ---- the overlay cap ----
+   The owner's second screenshot: a braindrain pop painted an opaque wash over
+   everything and the road was gone for seconds. payloadFx sets these element
+   opacities INLINE (up to 0.70), so we cannot cap them with `opacity` without
+   an `!important` that would also break the fade back to 0. `filter: opacity()`
+   multiplies instead: 0.70 * 0.78 = 0.55 at the peak, 0 * 0.78 = 0 at the end.
+   Flash washes are left alone: they are short by design. */
+#race-root .sf-pfx-spiral { filter: opacity(0.78); }
+#race-root .sf-pfx-pink { filter: opacity(0.7); }
+#race-root .sf-pfx-drain {
+  /* the drain was the worst of the three: an almost-black fill plus a 7px
+     backdrop blur. Lighter fill, half the blur, and a screen-friendly cap. */
+  background-color: rgba(12, 5, 20, 0.62);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  filter: opacity(0.86);
+}
+/* ROAD CUTOUT: a soft radial hole over the lower-centre road so the cup and the
+   cornering line stay readable under a sustained wash. Only on the two layers
+   that do not rotate; masking .sf-pfx-spiral would spin the hole with it. */
+#race-root .sf-pfx-drain, #race-root .sf-pfx-pink {
+  -webkit-mask-image: radial-gradient(ellipse 42% 40% at 50% 88%, transparent 0%, rgba(0, 0, 0, 0.55) 55%, #000 100%);
+  mask-image: radial-gradient(ellipse 42% 40% at 50% 88%, transparent 0%, rgba(0, 0, 0, 0.55) 55%, #000 100%);
+}
+/* the pinned spiral already carries its own mask and a 0.5 ceiling; leave it */
+
+@media (prefers-reduced-motion: reduce) {
+  #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
 }
