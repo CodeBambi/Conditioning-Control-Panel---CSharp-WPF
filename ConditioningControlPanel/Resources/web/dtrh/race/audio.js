@@ -4,6 +4,9 @@
  *   createRaceAudio({ bridge, hud, settings, input }) -> audio
  *   audio.sfx(name, scale)       the run's sfx() helper lands here: host legs + in-page beats
  *   audio.update(dt, live)       live = { world, run, kart }; once per step, after everything moved
+ *   audio.menu(on)               the menu theme: MENU_TRACK on the same chain, entered like a room
+ *   audio.ui(name, value)        the menu blips: 'tick' | 'pick' | 'back' | 'step' | 'page'
+ *   audio.setLevels({ music, sfx })  the two option sliders, live
  *   audio.duck(on, why)          'host' (native video) | 'brake' | 'end' | 'track'
  *                                'track' is the standing one: a loaded file (CHART.md) is the
  *                                soundtrack, so the OST and the bed sit under it until it is cleared
@@ -66,6 +69,11 @@ export function chimeFor(mult) {
   return { file: 'chime3', semis: clamp(Math.round((m - 4) * 1.5), 2, PITCH_CAP_SEMIS) };
 }
 
+/** A slider folded into a fixed base gain: 0..1 in, base * that out. A value that is not a number reads as 1. */
+export function levelGain(base, v) { const n = Number(v); return base * clamp(isFinite(n) ? n : 1, 0, 1); }
+/** The ui blip rate limit: true when `nowMs` is far enough past the last blip. */
+export function uiAllowed(nowMs, lastMs, gap = UI_GAP_MS) { return (nowMs - lastMs) >= gap; }
+
 /** Voice cap: the index of the quietest live voice (ties: the oldest). */
 export function pickVoiceToDrop(voices) {
   let at = -1, low = Infinity;
@@ -85,6 +93,12 @@ export const OST_BASE = '/arcademy/assets/sfx/';
 export const CROSSFADE_SEC = 1.5;
 export const MUSIC_LEVEL = 0.3;          // the OSTs sit at about -15.5 LUFS; this keeps them under the pops
 export const TRACK_DUCK = 0.12;          // where the OST sits under a loaded track: felt, never heard over her
+// The MENU. No new files: the tea garden's hub tune doubles as the menu theme, so the front door
+// and the first lap are one piece of music. Another theme is this one line.
+export const MENU_TRACK = 'ost_campus';
+export const MENU_ROOM = '__menu';       // the menu is just another room in the playlist, so it crossfades like one
+export const UI_GAP_MS = 45;             // a ui blip at most this often: key repeat on a slider must not machine-gun
+export const UI_NAMES = Object.freeze(['tick', 'pick', 'back', 'step', 'page']);
 export const TRACKS = Object.freeze([
   { name: 'ost_campus',          title: 'Star Byte Loop',     mood: 'soft', energy: 0.45, sec: 75,  start: 0 },
   { name: 'ost_deep_end',        title: 'Pixel Rush',         mood: 'loud', energy: 0.8,  sec: 77,  start: 0 },
@@ -133,6 +147,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   const log = (m) => { try { bridge && bridge.log && bridge.log('[audio] ' + m); } catch (e) { /* host gone */ } };
   const send = (m) => { try { bridge && bridge.send && bridge.send(m); } catch (e) { /* host gone */ } };
   const masterLevel = clamp((Number(settings.masterVolume) == null || isNaN(Number(settings.masterVolume)) ? 60 : Number(settings.masterVolume)) / 100, 0, 1);
+  const levels = { music: 1, sfx: 1 };   // the two option sliders (menu.js persists them); setLevels moves them
   const buffers = new Map();     // key -> AudioBuffer | 'pending' | 'failed'
   const voices = [];             // live one-shots: { src, gain, level, t0 }
   const live = { world: null, run: null, kart: null };   // what update() last saw (run/kart are live objects)
@@ -144,7 +159,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   let musicDuck = null, musicLp = null, musicHp = null, musicLevelNode = null, elementMode = false;
   let standing = 1;   // the level update() eases the music back to: 1, or TRACK_DUCK while a track is loaded
   const tracks = new Map();      // name -> { name, el, gain, bound, failed, vol, fadeTimer, pauseTimer }
-  const music = { cur: null, playlist: {}, dead: new Set(), duckTo: 1, duckWhy: null, lp: 20000, hp: 20, gesture: false, roomId: null };
+  const music = { cur: null, playlist: {}, dead: new Set(), duckTo: 1, duckWhy: null, lp: 20000, hp: 20, gesture: false, roomId: null, menu: false };
 
   setDucked(true);               // bubbles.js's kind-blind pop steps aside (see header)
 
@@ -156,11 +171,11 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     try {
       master = ctx.createGain(); master.gain.value = isMuted() ? 0 : masterLevel;
       master.connect(getMasterOut() || ctx.destination);
-      sfxBus = ctx.createGain(); sfxBus.gain.value = LEVELS.sfx; sfxBus.connect(master);
+      sfxBus = ctx.createGain(); sfxBus.gain.value = levelGain(LEVELS.sfx, levels.sfx); sfxBus.connect(master);
       musicDuck = ctx.createGain(); musicDuck.gain.value = 1;
       musicLp = ctx.createBiquadFilter(); musicLp.type = 'lowpass'; musicLp.frequency.value = 20000; musicLp.Q.value = 0.6;
       musicHp = ctx.createBiquadFilter(); musicHp.type = 'highpass'; musicHp.frequency.value = 20; musicHp.Q.value = 0.6;
-      musicLevelNode = ctx.createGain(); musicLevelNode.gain.value = MUSIC_LEVEL;
+      musicLevelNode = ctx.createGain(); musicLevelNode.gain.value = levelGain(MUSIC_LEVEL, levels.music);
       musicDuck.connect(musicLp); musicLp.connect(musicHp); musicHp.connect(musicLevelNode); musicLevelNode.connect(master);
       const n = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const data = n.getChannelData(0);
@@ -202,7 +217,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
       t.el.volume = 1;
     } catch (e) { t.gain = null; elementMode = true; log('media element route failed, element volume mode: ' + e); }
   }
-  const elVol = (t) => clamp(t.vol * MUSIC_LEVEL * music.duckTo * (isMuted() ? 0 : masterLevel), 0, 1);
+  const elVol = (t) => clamp(t.vol * levelGain(MUSIC_LEVEL, levels.music) * music.duckTo * (isMuted() ? 0 : masterLevel), 0, 1);
   function fade(t, to, sec) {
     t.vol = to;
     if (t.gain && ctx) {
@@ -240,6 +255,22 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     fade(next, 1, prev ? CROSSFADE_SEC : 0.8);
     log('track ' + name + ' in (' + roomId + ')' + (prev ? ', ' + prev.name + ' out, crossfade ' + CROSSFADE_SEC + 's' : ''));
   }
+  /**
+   * The menu theme. It is entered exactly like a room, so the ordinary CROSSFADE_SEC fade carries it
+   * in and the run's first room carries it out. menu(false) stops nothing on purpose: the first room
+   * fades over it, and when that room draws MENU_TRACK itself the tune simply plays on.
+   * Autoplay is the run's: a rejected play() arms the same pointer/key retry (startEl -> armGesture).
+   */
+  function menuMusic(on) {
+    if (disposed) return;
+    music.menu = !!on;
+    log('menu theme ' + (on ? MENU_TRACK + ' requested' : 'released, the run takes the music'));
+    if (!on) return;
+    music.playlist[MENU_ROOM] = MENU_TRACK;
+    music.roomId = MENU_ROOM;
+    enterTrack(MENU_ROOM);
+  }
+
   // ---- the speed bed + drift sparks: loops under the music, outside the voice cap ----
   // wind = lowpassed noise whose cutoff and gain follow speed (boost and air open it up);
   // hum = a triangle under 200 Hz that climbs with speed; sparks = highpassed noise that
@@ -418,6 +449,25 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   function gateSting() { play('chime2', { level: LEVELS.chime * 0.75, semis: -3 }); }
   function endSting() { arpeggio(LEVELS.chime, 0.13); play('chime3', { level: LEVELS.chime * 0.8, semis: 5, at: 0.5 }); }
 
+  // ---- the menu blips. No files: five little synth voices on the shared context, all through
+  // sfxBus, so the sfx slider owns them and mute silences them. `value` (0..1) only means anything
+  // to 'step', where the tick climbs an octave with the slider so the ear hears the number move.
+  let lastUiAt = -1e9;
+  function ui(name, value) {
+    if (disposed || isMuted() || UI_NAMES.indexOf(name) < 0) return;
+    const nowMs = performance.now();
+    if (!uiAllowed(nowMs, lastUiAt)) return;
+    lastUiAt = nowMs;
+    const n = Number(value), v = clamp(isFinite(n) ? n : 0.5, 0, 1);
+    switch (name) {
+      case 'tick': synth({ kind: 'triangle', f0: 1180, f1: 1130, sec: 0.035, level: 0.045 }); break;
+      case 'pick': synth({ kind: 'sine', f0: 660, f1: 652, sec: 0.07, level: 0.15 }); synth({ kind: 'sine', f0: 990, f1: 978, sec: 0.11, level: 0.12, at: 0.06 }); break;
+      case 'back': synth({ kind: 'sine', f0: 620, f1: 612, sec: 0.07, level: 0.13 }); synth({ kind: 'sine', f0: 415, f1: 408, sec: 0.12, level: 0.11, at: 0.06 }); break;
+      case 'step': synth({ kind: 'triangle', f0: 520 * Math.pow(2, v), f1: 512 * Math.pow(2, v), sec: 0.045, level: 0.075 }); break;
+      case 'page': synth({ kind: 'noise', sec: 0.16, level: 0.09, filter: { type: 'bandpass', f0: 2200, f1: 700 }, q: 1.1 }); synth({ kind: 'triangle', f0: 880, f1: 700, sec: 0.06, level: 0.05, at: 0.02 }); break;
+    }
+  }
+
   // ---- the host legs (run.js sfx(name, scale) lands here) ----
   function sfx(name, scale = 0.8) {
     if (!HOST_SFX.has(name)) { log('unknown host sfx dropped: ' + name); return; }
@@ -464,7 +514,22 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     bedUpdate(k);
   }
 
-  // ---- duck / mute / dispose ----
+  // ---- levels / duck / mute / dispose ----
+  /**
+   * The two option sliders, live under a moving slider. music multiplies MUSIC_LEVEL on the music
+   * chain's level node; sfx multiplies sfxBus, which every in-page one-shot and every ui blip rides.
+   * The HOST legs are deliberately untouched: those play on the host's own mixer at its own volume.
+   */
+  function setLevels(l) {
+    if (disposed || !l || typeof l !== 'object') return;
+    if (l.music != null) levels.music = clamp(Number(l.music) || 0, 0, 1);
+    if (l.sfx != null) levels.sfx = clamp(Number(l.sfx) || 0, 0, 1);
+    const ease = (node, to) => { if (!node || !ctx) return; try { node.gain.setTargetAtTime(to, ctx.currentTime, 0.05); } catch (e) { try { node.gain.value = to; } catch (e2) { /* ignore */ } } };
+    ease(musicLevelNode, levelGain(MUSIC_LEVEL, levels.music));
+    ease(sfxBus, levelGain(LEVELS.sfx, levels.sfx));
+    for (const t of tracks.values()) if (!t.gain) { try { t.el.volume = elVol(t); } catch (e) { /* ignore */ } }   // element-volume mode
+    log('levels applied: music ' + levels.music.toFixed(2) + ' sfx ' + levels.sfx.toFixed(2));
+  }
   function duck(on, why) {
     if (why === 'track') { standing = on ? TRACK_DUCK : 1; setDuck(standing, on ? 'track' : null); return; }
     if (why === 'brake') { if (on) play('pop', { level: 0.3, semis: -7 }); else play('pop2', { level: 0.24, semis: 3 }); }
@@ -496,7 +561,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     master = null;
   }
 
-  return { sfx, update, duck, toggleMute, dispose, _voices: voices, _music: music };
+  return { sfx, ui, menu: menuMusic, setLevels, update, duck, toggleMute, dispose, _voices: voices, _music: music, _levels: levels };
 }
 
 // self-check: node --check is the bar; the pure parts (pitchSemis, chimeFor, pickVoiceToDrop)

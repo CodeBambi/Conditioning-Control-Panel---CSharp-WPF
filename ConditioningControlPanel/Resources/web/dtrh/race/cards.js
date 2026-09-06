@@ -111,9 +111,10 @@ export function createCards({ root, audio = null, reducedMotion = false, log = n
   let live = false, disposed = false, raf = 0, resolve = null;
   const padWas = {};
 
-  function click() {
+  function click(name) {
     if (!audio) return;
-    try { audio.sfx('ui_click', 0.5); } catch (e) { /* muted or gone */ }
+    try { audio.sfx('ui_click', 0.5); } catch (e) { /* muted or gone */ }   // the host leg, silent outside pause today
+    try { if (audio.ui) audio.ui(name || 'page'); } catch (e) { /* muted or gone */ }
   }
 
   function draw(animate) {
@@ -153,7 +154,7 @@ export function createCards({ root, audio = null, reducedMotion = false, log = n
     const what = KEYMAP[e.code];
     if (!what) return;
     e.preventDefault();
-    if (what === 'end') { click(); end('skipped'); }
+    if (what === 'end') { click('back'); end('skipped'); }
     else go(what === 'next' ? 1 : -1);
   }
   function onPointer(e) { if (live && e.button === 0) go(1); }

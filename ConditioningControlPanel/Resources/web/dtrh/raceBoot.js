@@ -159,12 +159,14 @@ async function boot() {
     if (opts.pixel !== undefined) settings.pixel = opts.pixel;
     if (params.has('pixel') && params.get('pixel') !== '') settings.pixel = Number(params.get('pixel'));
     settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
-    settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // for the audio pass; audio.js reads masterVolume today
+    settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // audio.js reads masterVolume; the two sliders go in through setLevels below
     settings.seedLock = seedFromOptions(opts);
     settings.trackPick = hosted;   // the file dialog is the host's; standalone loads a track off the query string
     seed = settings.seedLock != null ? settings.seedLock : rollSeed();
     note('the road is drawing');
     race = createRace({ root, bridge: host, media, settings, seed });
+    // the persisted option sliders, before the first frame: the menu theme comes up at the right level
+    try { if (race.audio && race.audio.setLevels) race.audio.setLevels({ music: opts.music, sfx: opts.sfx }); } catch (e) { host.log('levels: ' + e); }
     note('');
     host.log(`race booted: seed ${seed} (${opts.seed}), tier ${mode.tier}, hosted ${hosted}, manifest ${haveManifest}`);
     await standaloneTrack();
@@ -288,6 +290,8 @@ async function startRun(withIntro) {
   hideSplash();
   try {
     if (menu) { menu.hide(); menu.seedCheck(); }
+    // the menu theme keeps playing: the run's first room crossfades over it (race/AUDIO.md)
+    try { if (race.audio && race.audio.menu) race.audio.menu(false); } catch (e) { /* audio gone */ }
     if (menu && withIntro && params.get('intro') !== '0') {
       const { createIntro, cameraWhip } = await import('./race/intro.js');
       const reducedMotion = menu.options.motion === 'on' || (menu.options.motion === 'system' && settings.reducedMotion);

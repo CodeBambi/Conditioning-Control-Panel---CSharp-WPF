@@ -43,6 +43,35 @@ adds +500 Hz / +0.03, airborne opens it another 400 Hz and +40%; **hum** = a tri
 noise above 4.5 kHz whose gain is re-rolled every frame between 0.03 and 0.075 while drifting
 on the ground, 0 otherwise (that is the crackle). Nothing here is built while muted.
 
+## The menu
+
+`audio.menu(on)`, `audio.ui(name, value)` and `audio.setLevels({ music, sfx })` are the front
+door's three. race/menu.js calls them; race/cards.js calls `ui`.
+
+- **The theme.** No new file: `MENU_TRACK` is `ost_campus` ("Star Byte Loop", the tea garden's own
+  hub tune), played through the SAME chain and the same `MUSIC_LEVEL` as the run. `menu(true)`
+  writes it into the playlist under the pseudo-room `MENU_ROOM` and enters it like any other room,
+  so the fade in and the fade out are the ordinary `CROSSFADE_SEC` 1.5 s. `menu(false)` (the boot
+  calls it as the run starts) stops nothing: the first room's track crossfades over the theme, and
+  when that room is the Tea Garden the same tune simply plays on. Options and the story cards keep
+  it: only `show()` turns it on, nothing turns it off. Autoplay is the run's rule, unchanged: a
+  rejected `play()` arms the pointer/key retry, a missing file marks the track dead and never
+  throws. `duck('track')` still pulls it to `TRACK_DUCK` under a loaded file, and `M` covers it.
+  A different theme is one line: `MENU_TRACK`.
+- **The blips.** Five synth voices, no files, all on the shared context through `sfxBus`:
+  `tick` (a triangle 1180 -> 1130 Hz, 35 ms, 0.045: hover and focus, very quiet), `pick` (sine 660
+  then 990 Hz at 60 ms, two notes up), `back` (sine 620 then 415 Hz, two notes down), `step` (a
+  triangle at 520 Hz doubling to 1040 across the slider, 45 ms, so the ear hears the number move)
+  and `page` (a bandpass noise sweep 2200 -> 700 Hz over 160 ms with a soft triangle on top: the
+  story card turning). The name set is closed; anything else is dropped. Every blip is rate
+  limited to one per `UI_GAP_MS` 45 ms, so holding an arrow on a slider ticks, it does not fire.
+- **The levels.** `setLevels({ music, sfx })` takes 0..1 each (menu.js persists them under
+  `race.options`, the boot applies them once before the first frame, and the slider applies them
+  live). `music` multiplies `MUSIC_LEVEL` on the music chain's level node; `sfx` multiplies
+  `sfxBus`, which every in-page one-shot and every blip rides. The host legs are NOT scaled: those
+  play on the host's own mixer at its own volume. The speed bed rides its own bus and follows the
+  master, not the sfx slider.
+
 ## Event map
 
 | beat | source | in-page (WebAudio) | host leg (`sfx` name) |
