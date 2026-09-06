@@ -4,22 +4,24 @@
  * Implements CONTRACT.md section "race/rooms.js": ROOMS (the eight room specs),
  * rollRoomOrder(seed) (Tea Garden first, then the rest dealt loud/soft/loud so the
  * contrast rule holds) and createRoomDresser({ scene, layout, rooms }) which builds
- * everything that sits on or around the road: the vertex-coloured road ribbon with
- * its edge lines, porcelain ramp wedges with pink lips and the gold dotted air line,
- * cyan boost pads, spinning sugar-cube item boxes, and one instanced prop set per
- * room around the tube walls. update(d) culls rooms out of sight and animates what
- * is near the kart; applyRoom(fx, roomId, fadeSec) hands the room's biome style to
+ * everything that sits on or around the road: the pixel-tiled road ribbon with its
+ * chequered kerbs and centre dash (one draw call, room-tinted through an alpha mask),
+ * tiled ramp wedges with a pink lip and gold air-line cubes, lane-wide boost pads
+ * with running chevrons, bobbing sugar-cube item boxes, and the diegetic props from
+ * race/roomProps.js. update(d) culls rooms out of sight and animates what is near
+ * the kart; applyRoom(fx, roomId, fadeSec) hands the room's biome style to
  * fx.applyRegionGrade; dispose() tears it all down.
  *
  * Every position goes through layout.toWorld(d, x, h) and every orientation through
- * layout.frameAtDepth(d). Draw calls: 7 for the furniture + 12 for the props (19).
+ * layout.frameAtDepth(d). Draw calls: 6 for the furniture + 21 for the props (27).
  * The dresser adds its own hemisphere + directional light so the Lambert props read
  * without run.js having to know about them.
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { RADIUS, ROAD_DROP, ROAD_HALF_W, ROOM_IDS, makeRng } from './consts.js';
+import { makeRng } from './consts.js';
 import { biomeById } from '../game/biomes.js';
+import { createRoomProps, pixelTex } from './roomProps.js';
 
 // ---- the eight rooms -------------------------------------------------------------
 // colors: road = ribbon tint, edge = kerb lines, prop = wall props, fog = the room's haze
@@ -81,31 +83,6 @@ export function rollRoomOrder(seed) {
   return out;
 }
 
-// ---- prop shape language per room ------------------------------------------------
-// orient: tumble = any rotation, stand = local +y points into the tube, face = local +z does.
-// follow: reuse the previous shape's placements (a flame sits on its candle).
-function propShapes(kind) {
-  switch (kind) {
-    case 'teacup': return [
-      { geo: new THREE.CylinderGeometry(0.36, 0.26, 0.4, 14, 1, true), n: 10, orient: 'tumble', side: THREE.DoubleSide },
-      { geo: new THREE.CapsuleGeometry(0.08, 0.5, 3, 8), n: 8, orient: 'tumble', squash: 0.35, color: 0xf6e7c8 }];
-    case 'block': return [{ geo: new THREE.BoxGeometry(0.7, 0.7, 0.7), n: 16, orient: 'tumble' }];
-    case 'chip': return [
-      { geo: new THREE.CylinderGeometry(0.4, 0.4, 0.1, 18), n: 12, orient: 'tumble' },
-      { geo: new THREE.BoxGeometry(0.5, 0.5, 0.5), n: 6, orient: 'tumble', color: 0xffffff }];
-    case 'kelp': return [{ geo: new THREE.PlaneGeometry(0.3, 1.8).translate(0, 0.9, 0), n: 16, orient: 'stand', side: THREE.DoubleSide, sway: true }];
-    case 'mirror': return [{ geo: new THREE.PlaneGeometry(1.1, 1.6), n: 12, orient: 'face', side: THREE.DoubleSide, shiny: true }];
-    case 'candle': return [
-      { geo: new THREE.CylinderGeometry(0.09, 0.11, 0.9, 8).translate(0, 0.45, 0), n: 14, orient: 'stand' },
-      { geo: new THREE.SphereGeometry(0.09, 8, 6).translate(0, 1.0, 0), n: 14, orient: 'stand', color: 0xf2c14e, glow: true, follow: true }];
-    case 'cot': return [{ geo: new THREE.BoxGeometry(0.9, 0.18, 1.9), n: 10, orient: 'stand' }];
-    case 'crown': return [
-      { geo: new THREE.TorusGeometry(0.34, 0.09, 8, 14), n: 10, orient: 'tumble' },
-      { geo: new THREE.CylinderGeometry(0.22, 0.26, 2.4, 10).translate(0, 1.2, 0), n: 8, orient: 'stand', color: 0x7a0f2b }];
-    default: return [{ geo: new THREE.SphereGeometry(0.4, 10, 8), n: 10, orient: 'tumble' }];
-  }
-}
-
 /** A road-wide wedge rising to `hgt` at the lip (local +z = forward), uv'd for the tile texture. */
 function wedgeGeometry(halfW, len, hgt) {
   const a = [-halfW, 0, -len], b = [halfW, 0, -len], c = [halfW, hgt, 0], d = [-halfW, hgt, 0];
@@ -123,20 +100,6 @@ function wedgeGeometry(halfW, len, hgt) {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.computeVertexNormals();
   return g;
-}
-
-/** Canvas -> chunky pixel texture: nearest filtering, no mipmaps (big texels are the look). */
-export function pixelTex(w, h, draw, opts = {}) {
-  if (typeof document === 'undefined') return null;
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  draw(ctx, w, h);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = opts.clamp ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
-  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
-  t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace;
-  return t;
 }
 
 // ---- the road tile sheet ---------------------------------------------------------
@@ -202,8 +165,8 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   const loopChunk = layout.chunks.find((c) => c.kind === 'loop');
   const inLoop = (d) => loopChunk && d >= loopChunk.d0 - 4 && d <= loopChunk.d1 + 4;
   const _c = new THREE.Color(), _c2 = new THREE.Color();
-  const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _m = new THREE.Matrix4(), _r = new THREE.Matrix4();
-  const _s = new THREE.Vector3(), _e = new THREE.Euler();
+  const _p = new THREE.Vector3(), _m = new THREE.Matrix4(), _r = new THREE.Matrix4();
+  const _s = new THREE.Vector3();
   const roomColorAt = (d, key, out) => {   // crossfade into the next room over its last 6%
     const w = layout.wrap(d);
     const i = spans.findIndex((s) => w >= s.d0 && w < s.d1);
@@ -327,60 +290,8 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   for (const m of [wedges, lips, airDots, padMesh, cubeMesh]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
   if (wedges.instanceColor) wedges.instanceColor.needsUpdate = true;
 
-  // ---- per-room wall props ----------------------------------------------------------
-  const roomSets = [];   // { id, d0, d1, meshes:[{mesh, sway?, base:[...], phase:[...], d:[...]}] }
-  for (const span of spans) {
-    const spec = specOf(span.id);
-    const chunksHere = layout.chunks.filter((c) => c.room === span.id && c.kind !== 'loop' && c.kind !== 'gate');
-    const set = { id: span.id, d0: span.d0, d1: span.d1, meshes: [] };
-    let prev = null;
-    for (const shape of propShapes(spec.propKind)) {
-      track(shape.geo);
-      const material = mat(shape.shiny
-        ? new THREE.MeshStandardMaterial({ color: shape.color || spec.colors.prop, metalness: 0.9, roughness: 0.15, side: shape.side || THREE.FrontSide })
-        : new THREE.MeshLambertMaterial({ color: shape.color || spec.colors.prop, side: shape.side || THREE.FrontSide,
-          emissive: shape.glow ? (shape.color || spec.colors.prop) : 0x000000, emissiveIntensity: shape.glow ? 1.0 : 0 }));
-      const count = shape.n * Math.max(1, chunksHere.length);
-      const mesh = new THREE.InstancedMesh(shape.geo, material, count);
-      const entry = { mesh, sway: !!shape.sway, base: [], phase: [], d: [], glow: !!shape.glow, mat: material };
-      let i = 0;
-      if (shape.follow && prev) {
-        for (; i < prev.base.length; i++) { mesh.setMatrixAt(i, prev.base[i]); entry.base.push(prev.base[i]); entry.phase.push(prev.phase[i]); entry.d.push(prev.d[i]); }
-      } else for (const ch of chunksHere) for (let k = 0; k < shape.n; k++, i++) {
-        const d = ch.d0 + 2 + rng() * (ch.d1 - ch.d0 - 4);
-        const phi = (rng() < 0.5 ? -1 : 1) * (0.12 + rng() * 0.58) * Math.PI;  // from the ceiling down to just above the kerb
-        const rad = RADIUS - 0.35 - rng() * 0.3;
-        const x = rad * Math.sin(phi), h = ROAD_DROP + rad * Math.cos(phi);
-        const f = layout.frameAtDepth(d);
-        layout.toWorld(d, x, h, _p);
-        const inward = layout.toWorld(d, 0, ROAD_DROP, _q).sub(_p).normalize();
-        const scale = 0.7 + rng() * 0.8;
-        if (shape.orient === 'tumble') {
-          _e.set(rng() * 6.28, rng() * 6.28, rng() * 6.28);
-          _m.makeRotationFromEuler(_e);
-        } else {
-          const side = new THREE.Vector3().crossVectors(inward, f.tangent).normalize();
-          if (shape.orient === 'stand') _m.makeBasis(side, inward, new THREE.Vector3().crossVectors(side, inward));
-          else _m.makeBasis(side, new THREE.Vector3().crossVectors(inward, side), inward);
-          _m.multiply(_r.makeRotationY(rng() * 6.28 * (shape.orient === 'stand' ? 1 : 0.08)));
-        }
-        _s.set(scale, scale, shape.squash ? scale * shape.squash : scale);
-        _m.scale(_s).setPosition(_p);
-        mesh.setMatrixAt(i, _m);
-        entry.base.push(_m.clone()); entry.phase.push(rng() * 6.28); entry.d.push(d);
-        if (spec.propAlt && !shape.color) mesh.setColorAt(i, _c.setHex(k % 3 === 0 ? spec.colors.prop : spec.propAlt[k % spec.propAlt.length]));
-      }
-      mesh.count = i;
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      mesh.frustumCulled = false;
-      mesh.name = 'race-props-' + span.id;
-      group.add(mesh);
-      set.meshes.push(entry);
-      prev = entry;
-    }
-    roomSets.push(set);
-  }
+  // ---- diegetic props: grounded, voxel, animated near the kart (race/roomProps.js) ------
+  const props = createRoomProps({ scene, group, layout, spans, specOf, rng });
 
   // ---- light so the Lambert props read (the tunnel shader ignores lights) ---------
   const hemi = new THREE.HemisphereLight(0xffd6ee, 0x1a1a2e, 1.1);
@@ -389,31 +300,12 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   scene.add(group);
 
   // ---- runtime ----------------------------------------------------------------------
-  const VIEW = 160;          // metres: rooms farther than this from the kart are hidden
-  const ANIM = 90;           // metres: props within this range animate
+  const ANIM = 90;           // metres: furniture within this range animates
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
   const t0 = now();
-  const _sw = new THREE.Matrix4();
   function update(d) {
     const t = now() - t0;
-    for (const set of roomSets) {
-      const w = layout.wrap(d);
-      const near = (w >= set.d0 - VIEW && w <= set.d1 + VIEW) || wrapDist(w, set.d0) < VIEW || wrapDist(w, set.d1) < VIEW;
-      for (const entry of set.meshes) {
-        entry.mesh.visible = near;
-        if (!near) continue;
-        if (entry.glow) entry.mat.emissiveIntensity = 0.85 + 0.15 * Math.sin(t * 9 + set.d0);
-        if (!entry.sway) continue;
-        let dirty = false;
-        for (let i = 0; i < entry.base.length; i++) {
-          if (wrapDist(entry.d[i], w) > ANIM) continue;
-          _sw.makeRotationZ(0.22 * Math.sin(t * 1.3 + entry.phase[i]));
-          entry.mesh.setMatrixAt(i, _m.copy(entry.base[i]).multiply(_sw));
-          dirty = true;
-        }
-        if (dirty) entry.mesh.instanceMatrix.needsUpdate = true;
-      }
-    }
+    props.update(d, t);
     let dirty = false;
     cubes.forEach((c, i) => {
       if (wrapDist(c.d, d) > ANIM) return;
@@ -440,9 +332,8 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     for (const g of geos) g.dispose();
     for (const m of mats) m.dispose();
     for (const t of texes) t.dispose();
-    for (const set of roomSets) for (const e of set.meshes) e.mesh.dispose();
+    props.dispose();
     for (const m of [wedges, lips, airDots, padMesh, cubeMesh]) m.dispose();
-    roomSets.length = 0;
   }
 
   return { update, applyRoom, dispose, group, spans, rooms: specs };
