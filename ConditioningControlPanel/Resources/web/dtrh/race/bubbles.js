@@ -13,7 +13,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H } from './consts.js';
+import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, TREATS_ONLY_SEC } from './consts.js';
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
 import { makeSfxPlayer } from '../engine/audioBus.js';
 import { getLevel } from '../engine/audioLevels.js';
@@ -27,11 +27,11 @@ const BURST_SFX = 'Burst.mp3';
 
 const CAP = 160;              // live bubbles, recycled farthest-first when full
 const SHARD_CAP = 64;
-const LANE_H = 0.9;
 const LANE_STEP = 3.2;        // metres between bubbles in a lane line
 const VIEW_AHEAD = 150;       // sprites beyond this are hidden, not freed
 const MISS_BEHIND = 6;        // a treat this far behind the kart unpopped = miss
 const DROP_BEHIND = 12;       // freed once this far behind
+const PASS_FADE_M = 2.4;      // metres behind the pop box over which a passed bubble fades away
 const RAIN_FALL = 4, RAIN_REST = 2, RAIN_FIZZLE = 0.5;
 const POP_ANIM = 0.14;
 const PRISM_REACH = 8;        // prism chain-pops neighbours within this many metres
@@ -53,13 +53,15 @@ function makeDotTex() {
   } catch (e) { return null; }
 }
 
-export function createBubbleField({ scene, layout, media, getIntensity, getRoom }) {
+export function createBubbleField({ scene, layout, media, getIntensity, getRoom, getElapsed, onTexture }) {
   void media;   // reserved: flash media is drawn by payloadFx at pop time, never here
   const T = layout.totalDepth;
   /** Signed depth from `from` to `d`, folded into (-T/2, T/2] so the start line is nothing special. */
   const relD = (d, from) => { let r = (d - from) % T; if (r > T / 2) r -= T; else if (r <= -T / 2) r += T; return r; };
   const intensity = () => clamp(getIntensity ? getIntensity() : 0, 0, 1);
   const roomBias = () => { const r = getRoom && getRoom(); return (r && r.bubbleBias) || null; };
+  /** 0 while the opening is treats only, then a ramp to 1 over the next minute. */
+  const effectGate = () => { const el = getElapsed ? getElapsed() : Infinity; return el < TREATS_ONLY_SEC ? 0 : clamp((el - TREATS_ONLY_SEC) / 60, 0.15, 1); };
 
   const audio = makeSfxPlayer();
   audio.preload([...POP_SFX, ...CHIME_SFX, BURST_SFX].map((f) => SFX_BASE + f));
@@ -75,6 +77,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
     loader.load(k.sprite, (tex) => {
       if (disposed) { tex.dispose(); return; }
       tex.colorSpace = THREE.SRGBColorSpace;
+      if (onTexture) { try { onTexture(tex); } catch (e) { /* the look never breaks the field */ } }
       texOf[k.id] = tex;
       for (const s of pool) if (s.alive && s.kindId === k.id) { s.mat.map = tex; s.mat.needsUpdate = true; }
     }, undefined, () => { /* keep the dot */ });
@@ -104,6 +107,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
   let liveCount = 0;
   let lastKartD = 0;
   let density = 1;
+  let reachX = POP_HIT_X, reachH = POP_HIT_H;   // the pop box, widened by the magnet item (setReach)
   const popCbs = [], missCbs = [];
   const emit = (cbs, ev) => { for (const cb of cbs) { try { cb(ev); } catch (e) { /* listener bug, not ours */ } } };
 
@@ -120,9 +124,11 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
   }
 
   const liveOf = (id) => { let n = 0; for (const p of pool) if (p.alive && p.kindId === id) n++; return n; };
-  /** Weighted kind roll: room bias, intensity gate, and a per-placement nudge. */
+  /** Weighted kind roll: room bias, intensity gate, the treats-only opening, and a per-placement nudge. */
   function roll(placement) {
+    const gate = effectGate();
     const extra = (k) => {
+      if (k.kind === 'effect' && gate < 1) { if (gate <= 0) return 0; return gate * (placement === 'rain' ? 0.5 : 1); }
       if (k.id === 'video' && liveOf('video') > 0) return 0;      // one video on the road at a time
       if (k.id === 'freeze' && liveOf('freeze') > 1) return 0;
       if (placement === 'air' && k.id === 'golden') return 3;     // gold favours the air line
@@ -151,13 +157,27 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
   const chunkRecs = [];
   const LANES = [-2.2, -1.1, 0, 1.1, 2.2];
 
+  /** The Tea Garden start straight: a run-up of three, a slow zigzag of treats the whole length,
+   *  a chevron (tip forward) every 4th beat, and one golden at the end. Readable at the first lap. */
+  function seedStartStraight(chunk) {
+    for (let i = 0; i < 3; i++) place('treat', 'lane', chunk.d0 - 8 + i * LANE_STEP, 0, LANE_H);
+    const n = Math.floor((chunk.d1 - chunk.d0 - 6) / LANE_STEP);
+    for (let i = 0; i < n; i++) {
+      const d = chunk.d0 + 2 + i * LANE_STEP, x = 1.6 * Math.sin(i * Math.PI / 8);
+      place('treat', 'lane', d, x, LANE_H);
+      if (i % 4 === 3) { place('treat', 'lane', d - 1.3, x - 1.3, LANE_H); place('treat', 'lane', d - 1.3, x + 1.3, LANE_H); }
+    }
+    place('golden', 'lane', chunk.d1 - 2.5, 0, LANE_H);
+  }
+
   /** Lane lines the kart can thread, ramp air lines, and a pair flanking each sugar cube. */
   function seedChunk(chunk) {
     if (!chunk || seeded.has(chunk.id)) return;
     seeded.add(chunk.id);
     chunkRecs.push({ id: chunk.id, d0: chunk.d0, d1: chunk.d1 });
     const len = Math.max(0, chunk.d1 - chunk.d0);
-    if (chunk.kind !== 'gate' && len > 8) {
+    if (chunk.id === 1 && chunk.room === 'teagarden' && chunk.kind === 'straight') seedStartStraight(chunk);
+    else if (chunk.kind !== 'gate' && len > 8) {
       const lines = Math.max(1, Math.round((len / 26) * density));
       for (let l = 0; l < lines; l++) {
         const count = 3 + ((Math.random() * 4) | 0);
@@ -268,12 +288,16 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
           if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d, x: s.x, h: s.h });
         }
         if (rel < -DROP_BEHIND && rel > -DROP_BEHIND - 40) { freeSlot(s); continue; }
-        if (Math.abs(rel) < POP_HIT_D && Math.abs(s.x - kart.x) < POP_HIT_X && Math.abs(s.h - kart.h) < POP_HIT_H) pop(s);
+        if (Math.abs(rel) < POP_HIT_D && Math.abs(s.x - kart.x) < reachX && Math.abs(s.h - kart.h) < reachH) pop(s);
       }
       s.sprite.visible = rel > -DROP_BEHIND && rel < VIEW_AHEAD;
       if (s.sprite.visible) {
         layout.toWorld(s.d, s.x, s.h, s.sprite.position);
-        s.sprite.scale.setScalar(s.size * s.scale);
+        // a bubble that slipped past the pop box fades and shrinks before it can balloon into the
+        // low chase camera (the seat is only ~6 m back)
+        const gone = s.popT < 0 && rel < -POP_HIT_D ? clamp(1 + (rel + POP_HIT_D) / PASS_FADE_M, 0, 1) : 1;
+        if (gone < 1) s.mat.opacity = Math.min(s.mat.opacity, gone);
+        s.sprite.scale.setScalar(s.size * s.scale * (0.6 + 0.4 * gone));
       }
     }
     for (const sh of shards) {
@@ -309,6 +333,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom 
     onPop(cb) { if (typeof cb === 'function') popCbs.push(cb); },
     onMiss(cb) { if (typeof cb === 'function') missCbs.push(cb); },
     setDensity(mult) { density = clamp(Number(mult) || 1, 0.25, 3); },
+    /** Magnet: widen the pop box (X and H) by mult; 1 restores it. */
+    setReach(mult) { const m = clamp(Number(mult) || 1, 0.5, 3); reachX = POP_HIT_X * m; reachH = POP_HIT_H * m; },
     get liveCount() { return liveCount; },
   };
 }

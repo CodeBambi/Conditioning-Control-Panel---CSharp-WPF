@@ -13,7 +13,8 @@
  * STANDALONE DEV MODE (no WebView2): `bridge.isHosted` is false, so `init` is
  * synthesised (masterVolume 60, reducedMotion from matchMedia, empty manifest)
  * and every would-be host message is logged to the console with a
- * `[race->host]` prefix. `?autostart=1` skips the splash.
+ * `[race->host]` prefix. `?autostart=1` skips the splash; `?pixel=N` (0 = off)
+ * overrides the pixel look, as does `settings.pixel` from the host init.
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
@@ -93,7 +94,8 @@ async function boot() {
   if (booted) return;
   booted = true;
   try {
-    const settings = (initMsg && initMsg.settings) || {};
+    const settings = { ...((initMsg && initMsg.settings) || {}) };
+    if (params.has('pixel') && params.get('pixel') !== '') settings.pixel = Number(params.get('pixel'));
     const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
     note('the road is drawing');
     const { createRace } = await import('./race/run.js');

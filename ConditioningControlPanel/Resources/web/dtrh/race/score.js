@@ -117,12 +117,15 @@ export function createScore() {
 if (typeof process !== 'undefined' && process.env && process.env.RACE_SELFCHECK) {
   const s = createScore(); const ev = [];
   s.onEvent((e) => ev.push(e.type));
+  // ladder [[0,1],[3,2],[8,3],[15,4],[25,6],[40,8]]: pops 1-2 at x1, 3-7 at x2, 8+ at x3
   for (let i = 0; i < 5; i++) s.pop(10, 'treat');
-  console.assert(s.state.combo === 5 && s.state.mult === 2 && s.state.score === 60, 'ladder x2 at 5');
+  console.assert(s.state.combo === 5 && s.state.mult === 2 && s.state.score === 80, 'ladder x2 at 3');
+  for (let i = 0; i < 3; i++) s.pop(10, 'treat');
+  console.assert(s.state.combo === 8 && s.state.mult === 3 && s.state.score === 80 + 20 + 20 + 30, 'ladder x3 at 8');
   s.tick(COMBO_HOLD_SEC + 0.01);
   console.assert(s.state.combo === 0 && s.state.mult === 1, 'combo lets go');
-  s.pop(15, 'flash'); console.assert(s.state.effects === 1 && s.state.treats === 5, 'kind tally');
-  const b = s.bank(); console.assert(b === 75 && s.state.score === 0 && s.state.banked === 75, 'bank');
+  s.pop(15, 'flash'); console.assert(s.state.effects === 1 && s.state.treats === 8, 'kind tally');
+  const b = s.bank(); console.assert(b === 165 && s.state.score === 0 && s.state.banked === 165, 'bank');
   console.assert(ev.includes('mult') && ev.includes('bank') && ev.includes('combo'), 'events');
   console.log('score.js self-check ok', s.state);
 }

@@ -19,7 +19,7 @@ import { createTunnel, FOG_DENSITY } from '../engine/tunnel.js';
 import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
 import { createScreenShake } from '../game/screenShake.js';
-import { INTENSITY_RAMP_SEC, KART_BASE_SPEED, makeRng } from './consts.js';
+import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, makeRng } from './consts.js';
 import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
@@ -29,9 +29,15 @@ import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
 import { createItems } from './items.js';
 import { createInput } from './input.js';
+import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
+import { createSpeedFx } from './speed.js';
 
-const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6;
-const EFFECT_SEC = { flash: 1.5, subliminal: 3, overlay: 6, glitch: 3, bambiFreeze: 1.6, gifCascade: 5, video: 9 };
+const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6, FOV_BASE = 72;
+// how long each payload paints over the road: scaled ones follow payloadFx's durationMult, fixed ones do not
+// (subliminal and bambiFreeze are fixed in payloadFx; the host's video length is its own, 9 s is the budget)
+const EFFECT_SEC = { flash: 2.6, overlay: 4.5, glitch: 4.5, gifCascade: 6 };
+const EFFECT_FIXED_SEC = { subliminal: 0.5, bambiFreeze: 1.7, video: 9 };
+const SPAWN_T0 = 2.5, RAIN_T0 = 20, EARLY_SLOW = 1.5;   // the opening drips slower (TREATS_ONLY_SEC)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
 
@@ -47,18 +53,19 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   // ---- renderer / scene / camera (engine/scene.js pattern, pitch-demo look) ----
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, alpha: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.maxDpr, 1.5));
+  // the big-pixel look: low internal resolution, nearest upscale; host settings.pixel / ?pixel=N override, 0 = off
+  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? PIXEL_DEFAULT : settings.pixel });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12261f);
   scene.fog = new THREE.FogExp2(0x12261f, FOG_DENSITY);
-  const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 400);
+  const camera = new THREE.PerspectiveCamera(FOV_BASE, 1, 0.1, 400);
   scene.add(new THREE.AmbientLight(0x8a70a8, 1.0));
   const cupLight = new THREE.PointLight(0xff69b4, 1.4, 14);
   scene.add(cupLight);
   function resize() {
     const w = root.clientWidth || window.innerWidth, h = root.clientHeight || window.innerHeight;
-    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    pixel.resize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize); resize();
 
@@ -69,6 +76,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
   const input = createInput();
+  const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
   const camOut = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
   const _v = new THREE.Vector3();
 
@@ -76,7 +84,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const S = {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
-    flip: false, spawnT: 1.5, rainT: 8, tunnelTime: 0, rush: 0, fov: 72, gates: 0, room: null,
+    flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: 72, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed,
   };
   let W = null;                       // the world: everything that is rebuilt on "again"
@@ -108,13 +116,14 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       if (!r || S.jackpotBias === 1) return r;
       return { ...r, bubbleBias: { ...r.bubbleBias, golden: (r.bubbleBias.golden == null ? 1 : r.bubbleBias.golden) * S.jackpotBias } };
     };
-    const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom });
+    const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
     const items = createItems({ kart, bubbles: field, score, fx, hud, payload: payloadFx, rng });
     const w = { layout, tunnel, fx, dresser, kart, score, field, items, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     score.onEvent((e) => onScore(w, e));
     items.onEvent((e) => onItem(w, e));
+    pixel.retexture(scene);
     return w;
   }
   function teardown() {
@@ -125,7 +134,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function resetRunState(runSeed) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
-      jackpotBias: 1, parasol: false, magnet: false, spawnT: 1.5, rainT: 8, rush: 0, gates: 0, room: null,
+      jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed });
     setFlip(false); trail.length = 0;
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.item(null, 'no item yet');
@@ -156,17 +165,20 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
   function onPop(w, p) {
+    w.kart.pulseTarget();
     if (p.kind === 'treat') return treat(w, p);
     if (S.parasol) { S.parasol = false; hud.toast('parasol', 'item'); return treat(w, p); }
+    // effect budget: one screen-level effect at a time (video included); the rest score as treats
+    if (S.effects.length > 0) { w.score.pop(p.points, 'treat'); hud.toast('held', 'effect'); return; }
     w.score.pop(p.points, p.id);
     const strength = Math.round(clamp(p.strength, 0, 1) * 100);
-    const durationMult = 0.6 + 0.6 * S.intensity;
+    const durationMult = 0.5 + 0.5 * S.intensity;
     if (p.payload === 'video') send({ type: 'fire-payload', kind: 'video', strength, durationMult });
     else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
-    w.kart.applySlow(0.85, 2.5);
+    w.kart.applySlow(0.92, 2.0);
     hud.toast((KIND_BY_ID[p.id] || {}).label || p.id, 'effect');
     if (p.payload === 'glitch') hud.flicker();
-    S.effects.push((EFFECT_SEC[p.payload] || 3) * durationMult);
+    S.effects.push(EFFECT_FIXED_SEC[p.payload] || (EFFECT_SEC[p.payload] || 3) * durationMult);
     shake.shake(p.payload === 'video' ? 0.9 : 0.5, 300);
     poke('shock', 0.9);
   }
@@ -193,7 +205,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'itemArm': sfx('ui_click', 0.4); break;
       case 'itemUse': sfx('tunnel_powerup_collect', 0.7); poke('smug', 0.8); break;
       case 'timeScale': S.timeScale = e.value; sfx('time_slow_in', 0.8); break;
-      case 'magnet': S.magnet = true; break;                       // no field API for the hit box yet (CONTRACT.md gap)
+      case 'magnet': S.magnet = true; w.field.setReach(2.2); w.kart.setReach(2.2); break;
       case 'multBoost': w.score.boostMult(e.mult, e.sec); break;
       case 'parasol': S.parasol = true; break;
       case 'flip': setFlip(true); break;
@@ -204,7 +216,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
         if (e.id === 'tea_time') { S.timeScale = 1; sfx('time_slow_out', 0.8); }
         else if (e.id === 'mirror') setFlip(false);
         else if (e.id === 'rabbit_foot') S.jackpotBias = 1;
-        else if (e.id === 'magnet') S.magnet = false;
+        else if (e.id === 'magnet') { S.magnet = false; w.field.setReach(1); w.kart.setReach(1); }
         break;
     }
   }
@@ -224,10 +236,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
     // bubbles: seed the chunks ahead, drip spawns, rain bursts
     for (const c of lay.chunks) { const rel = lay.wrap(c.d0 - ks.d + lay.totalDepth / 2) - lay.totalDepth / 2; if (rel > -20 && rel < 250) w.field.seedChunk(c); }
+    const early = S.elapsed < TREATS_ONLY_SEC ? EARLY_SLOW : 1;
     S.spawnT -= wdt;
-    if (S.spawnT <= 0) { w.field.spawnAhead(ks.d, 1 + Math.round(S.intensity * 2)); S.spawnT = 3.4 - 1.8 * S.intensity; }
+    if (S.spawnT <= 0) { w.field.spawnAhead(ks.d, 1 + Math.round(S.intensity * 2)); S.spawnT = (3.4 - 1.8 * S.intensity) * early; }
     S.rainT -= wdt;
-    if (S.rainT <= 0) { w.field.rain(ks.d, 3 + Math.round(S.intensity * 4)); S.rainT = (S.room && S.room.loud ? 9 : 14) * (1 - 0.5 * S.intensity); }
+    if (S.rainT <= 0) { w.field.rain(ks.d, 3 + Math.round(S.intensity * 4)); S.rainT = (S.room && S.room.loud ? 9 : 14) * (1 - 0.5 * S.intensity) * early; }
     w.field.update(wdt, S.t, ks);
 
     // track features crossed this frame
@@ -251,9 +264,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // camera + the cup light
     k.camera(camOut);
     camera.position.copy(camOut.pos); camera.up.copy(camOut.up); camera.lookAt(camOut.look);
-    const fovT = 72 + (ks.boostSec > 0 ? 6 : 0) - (S.timeScale < 1 ? 4 : 0);
-    if (Math.abs(fovT - S.fov) > 0.05) { S.fov += (fovT - S.fov) * Math.min(1, dt * 4); camera.fov = S.fov; camera.updateProjectionMatrix(); }
-    cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.2);
+    // FOV kick: boost snaps wide (to ~84) and eases back slowly; drift adds a smaller one; tea_time narrows
+    const boostT = ks.boostSec > 0 ? 1 : 0;
+    S.fovBoost += (boostT - S.fovBoost) * Math.min(1, dt * (boostT ? 9 : 2.2));
+    const fovT = FOV_BASE + (reducedMotion ? 5 : 12) * S.fovBoost + (ks.drift && !reducedMotion ? 3 : 0) - (S.timeScale < 1 ? 4 : 0);
+    if (Math.abs(fovT - S.fov) > 0.05) { S.fov += (fovT - S.fov) * Math.min(1, dt * 6); camera.fov = S.fov; camera.updateProjectionMatrix(); }
+    cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.6);
+    speedFx.update(dt, ks, lay);
 
     // EMI: calm cruise, streamed on boost, fraught under a stack, pokes on top
     if (S.moodHold > 0) { S.moodHold -= dt; if (S.moodHold <= 0) S.moodHeld = null; }
@@ -326,7 +343,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- host + input wiring ----
   bridge.on('pause', (m) => setPaused(!!(m && m.on)));
   bridge.on('payout-result', (m) => { if (payoutResolve) payoutResolve(m); });
-  input.onAction((a) => { if (a === 'item') { if (W && S.running && !S.paused) W.items.use(); } else if (a === 'brake') brake(); });
+  function cyclePixel() { pixel.cycle(); pixel.retexture(scene); hud.toast(pixel.label(), 'item'); }
+  input.onAction((a) => { if (a === 'item') { if (W && S.running && !S.paused) W.items.use(); } else if (a === 'brake') brake(); else if (a === 'pixel') cyclePixel(); });
   const onVis = () => { last = 0; };
   document.addEventListener('visibilitychange', onVis);
 
@@ -350,7 +368,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     document.removeEventListener('visibilitychange', onVis);
     if (payoutResolve) payoutResolve(null);
     teardown();
-    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose();
+    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose();
     scene.clear(); renderer.dispose();
     setFlip(false);
   }

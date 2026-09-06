@@ -20,24 +20,36 @@ export const KART_MAX_SPEED = 34;
 export const KART_MIN_SPEED = 8;
 export const GRAVITY = 18;
 
-// Pass-through pop box, metres, kart-centred.
+// Pass-through pop box, metres, kart-centred. Sized for the 1.35x cup (KART_SCALE below);
+// bubbles.js field.setReach(mult) widens X/H for the magnet item.
 export const POP_HIT_D = 1.4;
-export const POP_HIT_X = 1.0;
-export const POP_HIT_H = 1.1;
+export const POP_HIT_X = 1.15;
+export const POP_HIT_H = 1.25;
 
-/** Combo -> score multiplier ladder: [comboAtLeast, mult]. */
-export const MULT_LADDER = [[0, 1], [5, 2], [12, 3], [22, 4], [36, 6], [50, 8]];
+/** Height of a lane bubble above the road (bubbles.js), and where the pop ring sits (kart.js). */
+export const LANE_H = 0.9;
+
+/** Combo -> score multiplier ladder: [comboAtLeast, mult]. The first rung is three pops away. */
+export const MULT_LADDER = [[0, 1], [3, 2], [8, 3], [15, 4], [25, 6], [40, 8]];
 
 /** Seconds without a pop before the combo lets go. */
-export const COMBO_HOLD_SEC = 3.0;
+export const COMBO_HOLD_SEC = 4.0;
 
 /** Seconds for the run intensity to ramp from 0 to 1 (gates which bubble kinds may appear). */
 export const INTENSITY_RAMP_SEC = 360;
 
-/** Camera seat behind the cup, track space offsets. */
-export const CAM_BACK = 7.5;
-export const CAM_UP = 3.1;
-export const CAM_LOOK_AHEAD = 9;
+/** The opening is treats only: no effect bubble rolls before this, then they trickle in over the next minute. */
+export const TREATS_ONLY_SEC = 45;
+
+/** The cup + EMI rig scale (the pitch demo cup read tiny at the chase camera). */
+export const KART_SCALE = 1.35;
+
+/** Camera seat behind the cup, track space offsets: low and close, the road fills the frame. */
+export const CAM_BACK = 5.8;
+export const CAM_UP = 2.45;
+export const CAM_LOOK_AHEAD = 7;
+/** Extra metres of look-ahead at the speed cap (grows with speed so boost reads as reach). */
+export const CAM_LOOK_SPEED = 5;
 
 /** Room ids in canonical order; teagarden is always the start and the BANK. */
 export const ROOM_IDS = ['teagarden', 'toybox', 'casino', 'undertow', 'mirrors', 'chapel', 'greyward', 'coronation'];
