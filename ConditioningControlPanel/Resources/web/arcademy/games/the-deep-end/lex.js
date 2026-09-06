@@ -48,7 +48,7 @@ export const DE_LEX = Object.freeze({
   de_lifetime_new: 'A new lifetime depth.',
   de_strain: 'Almost. They strain toward each other.',
   de_exhale_line: 'Exhale. The room eases for ten seconds, and the next tile will fit.',
-  de_resurface_line: 'The board locked. The depth is banked. Fresh water.',
+  de_resurface_line: 'The board locked. The depth is earned. Fresh water.',
   de_silt_line: 'Silt. It slides, it never sinks, it never leaves.',
   de_bell_warn: 'Twenty seconds.',
   de_bell_line: 'The bell. Up you come.',
@@ -101,7 +101,7 @@ export const DE_LEX = Object.freeze({
   de_howto_title: 'Class rules',
   de_howto_swipe: 'Swipe, or use the arrows. Every tile on the board slides that way at once.',
   de_howto_merge: 'Two matching tiles meet and sink one depth. The room gets heavier as you go.',
-  de_howto_resurface: 'A locked board is not a loss. Your depth is banked and the water turns fresh.',
+  de_howto_resurface: 'A locked board is not a loss. Your depth is earned and the water turns fresh.',
   de_howto_ceiling: 'The ladder ends at the eleventh depth. Reach it and the class holds you there.',
   de_howto_go: 'Into the water',
 

@@ -4522,7 +4522,7 @@ export async function createShell({ init, bridge, dom, toast, log } = {}) {
     const f = streakFacts();
     if (!f) return null;
     const tpl = f.credited
-      ? t('rake_streak_credited', 'Attendance x{n} is banked for today already.')
+      ? t('rake_streak_credited', 'Attendance x{n} is earned for today already.')
       : t('rake_streak_cold', 'Attendance x{n} goes cold if today ends here.');
     return String(tpl).replace('{n}', String(f.n));
   }
