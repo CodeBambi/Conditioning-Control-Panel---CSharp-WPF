@@ -14,7 +14,7 @@
  *
  * Host messages owned here: init, manifest, favorites, ping, exit-request,
  * fullscreen (run.js owns pause + payout-result). Sent here: pong, boot-error,
- * fullscreen-set, exit + exit-done on a host exit-request or a menu surface.
+ * exit + exit-done on a host exit-request or a menu surface.
  *
  * STANDALONE DEV MODE (no WebView2): `bridge.isHosted` is false, so `init` is
  * synthesised (masterVolume 60, reducedMotion from matchMedia, empty manifest)
@@ -94,7 +94,7 @@ bridge.on('init', (m) => { initMsg = m; maybeBoot(); });
 bridge.on('manifest', (m) => { try { media.setManifest(m); } catch (e) { host.log('manifest: ' + e); } haveManifest = true; maybeBoot(); });
 bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } catch (e) { host.log('favorites: ' + e); } });
 bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
-bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
+bridge.on('fullscreen', () => { /* Acknowledgement only; no fullscreen UI to update. Never echo a command. */ });
 bridge.on('exit-request', surface);
 // ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
 bridge.on('track-chart', (m) => {
