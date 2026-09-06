@@ -29,6 +29,11 @@
  * summed over the pixelizer's passes: draw calls, triangles, the programs the
  * renderer holds, live geometries / textures, the biggest texture edge in the
  * run scene, resident <audio> elements and the governor's device pixel ratio.
+ * The world is NOT built under the menu: `prepare()` (raceBoot calls it once
+ * "race" is pressed, before the intro) or the first `start()` builds it, and
+ * `reseed` under the menu only resets the run state. The menu never pays for
+ * the tunnel, the props' glb or the bubble textures, and the run's first frame
+ * does not compile the world's programs: prepare() warms them.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -583,8 +588,16 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (S.disposed) return;
     if (pick === 'again') again(); else exit();
   }
-  /** Rebuild the world on a new seed (again, or the menu changing the seed rule). settings.seedLock pins again to one track. */
-  function reseed(runSeed) { teardown(); resetRunState(runSeed); W = build(runSeed); S.started = false; }
+  /** Rebuild the world on a new seed (again, or the menu changing the seed rule). settings.seedLock pins again to one track.
+   *  A world that was never built (the menu changing the rule before "race") stays unbuilt: prepare() / start() own that. */
+  function reseed(runSeed) { const had = !!W; teardown(); resetRunState(runSeed); if (had) W = build(runSeed); S.started = false; }
+  /** Build the world now (after "race" is pressed, before the intro) so neither the menu nor the run's first
+   *  frame pays for it; the renderer compiles the world's programs in the same breath. A no-op once built. */
+  function prepare() {
+    if (S.disposed || W) return;
+    W = build(S.seed);
+    try { renderer.compile(scene, camera); } catch (e) { /* a warm-up only: the first frame compiles what this missed */ }
+  }
   function again() {
     reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
@@ -656,8 +669,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     return true;
   }
 
-  W = build(seed);
-  resetRunState(seed);
+  resetRunState(seed);          // the world waits for prepare() / start(): frame() draws the stage until then
   raf = requestAnimationFrame(frame);
   function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
   /** One perf snapshot (the `?perf=1` aid). Never throws: a missing counter reads as -1. */
@@ -682,7 +694,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     };
   }
   function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block
-  return { start, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
+  return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => TR.replace(chart), trackClock: (t, playing) => TR.clock(t, playing),

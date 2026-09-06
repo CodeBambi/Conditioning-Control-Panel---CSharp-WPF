@@ -290,7 +290,7 @@ below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own sta
 ### `race/run.js` + `raceBoot.js` + `race.html` (PR 5, integration)
 ```js
 export function createRace({ root, bridge, media, settings, seed }) ->
-  { start(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera,
+  { start(), prepare(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera,
     setTrack(chart | null), replaceTrack(chart), trackClock(t, playing), trackEnded(), track }
 ```
 Track charts (PR c2, CHART.md): `setTrack` before `start()`; `replaceTrack` when the words pass lands
@@ -365,6 +365,10 @@ As built (PR 5 reality notes):
   never fight over one `style.transform`.
 - `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart, score,
   items) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
+- The world is not built under the menu. `createRace` only resets the run state; `race.prepare()` builds it
+  (raceBoot calls it once `race` is pressed, after `seedCheck`, before the intro plays) and warms the
+  renderer's programs, and `start()` builds it if nothing did (`?autostart=1`). `reseed` on a world that was
+  never built only resets state, so the menu changing the seed rule costs nothing until `race`.
 - Extra `run-ended` fields: `nearMisses`, `personalBest`. `exit` is followed by `exit-done` once torn down.
 - Boot and reduced motion: `raceBoot.js` calls `detectMode({ reducedIs3d: true })`, so `prefers-reduced-motion: reduce`
   boots the 3D race and only turns motion down through `settings.reducedMotion`; a boot error is reserved for a real

@@ -391,6 +391,7 @@ async function startRun(withIntro) {
   hideSplash();
   try {
     if (menu) { menu.hide(); menu.seedCheck(); }
+    if (race.prepare) race.prepare();   // the world is built here, not under the menu (race/CONTRACT.md); the intro's clock starts after
     // the menu theme keeps playing: the run's first room crossfades over it (race/AUDIO.md)
     try { if (race.audio && race.audio.menu) race.audio.menu(false); } catch (e) { /* audio gone */ }
     if (menu && withIntro && params.get('intro') !== '0') {
