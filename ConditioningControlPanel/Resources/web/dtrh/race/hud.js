@@ -12,9 +12,10 @@
  * lies for 450 ms, the ledger never does (Law I). The Brake and the End card
  * are the chrome's own pointer targets; since the touch pass they are no longer
  * the page's only ones, because race/touch.js adds .rh-touch at z12 (the thumb
- * pad, and its buttons in the sibling pass) on a touchable page. It rides BELOW
+ * pad and its pause / mute / use buttons) on a touchable page. It rides BELOW
  * the screens at z20, so a card still takes the tap first and nothing here has
- * to cooperate. Copy is DtRH voice: lowercase, short.
+ * to cooperate. The item button watches this file's `is-held` class on the slot.
+ * Copy is DtRH voice: lowercase, short.
  *
  * THE PICKUP (pass f3): a cube gives its item a card of its own, centre of the
  * view just above the cup. It rolls a `?` while items.js rolls, flips to the

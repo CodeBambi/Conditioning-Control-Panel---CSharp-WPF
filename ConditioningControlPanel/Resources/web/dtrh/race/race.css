@@ -351,7 +351,7 @@
    payload layers (z4 / z9) and BELOW the Brake and End screens (z20), the
    countdown (z21), the menu (z25), the cards (z26) and the splash (z30), so
    every card still takes the tap first. Left 55% steers, the rest jumps and
-   drifts; the pause / mute / use buttons are a sibling pass. */
+   drifts; the buttons ride the same --rh-in-* safe insets as the chrome. */
 .race-hud .rh-touch {
   position: fixed; inset: 0; z-index: 12; touch-action: none; overscroll-behavior: none;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
@@ -372,6 +372,32 @@
   background: rgba(255, 105, 180, 0.5); border: 2px solid rgba(255, 255, 255, 0.82);
   box-shadow: 0 0 16px rgba(255, 105, 180, 0.7);
 }
+/* the buttons: 48 px of glass minimum, lowercase, no image files */
+.race-hud .rt-btn {
+  position: absolute; min-width: 48px; min-height: 48px; padding: 0 12px; border-radius: 14px;
+  display: grid; place-items: center; cursor: pointer; font-family: inherit;
+  font-size: 0.86rem; font-weight: 900; letter-spacing: 0.1em; line-height: 1; color: #ffd6ea;
+  background: rgba(8, 4, 14, 0.58); border: 1px solid rgba(255, 105, 180, 0.55);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42);
+  transition: transform 0.12s, background 0.2s, opacity 0.2s;
+}
+.race-hud .rt-btn:active { transform: scale(0.94); background: rgba(255, 105, 180, 0.32); }
+.race-hud .rt-pause { top: var(--rh-in-t); right: var(--rh-in-r); font-size: 1.05rem; letter-spacing: 0.16em; }
+.race-hud .rt-mute { top: var(--rh-in-t); right: calc(var(--rh-in-r) + 58px); font-size: 0.66rem; }
+/* the item button clears the speed gauge (bottom-right) and only shows while the
+   slot is `is-held`; it pulses the way the slot's ring does, so they read as one thing */
+.race-hud .rt-item {
+  right: var(--rh-in-r); bottom: calc(var(--rh-in-b) + 78px);
+  min-width: 64px; min-height: 64px; border-radius: 18px; font-size: 0.78rem;
+  opacity: 0; pointer-events: none; border-color: rgba(255, 214, 234, 0.9); color: #fff;
+  background: rgba(255, 105, 180, 0.3);
+}
+.race-hud .rt-item.is-on { opacity: 1; pointer-events: auto; animation: rtPulse 1.7s ease-in-out infinite; }
+@keyframes rtPulse {
+  0%, 100% { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42), 0 0 0 rgba(255, 105, 180, 0); }
+  50% { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42), 0 0 24px rgba(255, 105, 180, 0.85); }
+}
+
 /* ---- motion ---- */
 @keyframes rhThud { 0% { transform: scale(1); } 20% { transform: scale(1.32); } 60% { transform: scale(0.92); } 100% { transform: scale(1); } }
 @keyframes rhPulse { 0% { transform: scale(1); } 30% { transform: scale(1.4); } 100% { transform: scale(1); } }
@@ -416,6 +442,7 @@
   .race-hud .rh-token { transition: opacity 0.12s; }
   .race-hud .rh-count.is-on { animation: rhFade 0.45s linear forwards; }
   .race-hud .rh-screen.is-beside .rh-card { animation: none; }
+  .race-hud .rt-item.is-on { animation: none; }
   .race-hud .rh-strobe.is-on, .race-hud .rh-chip.is-in, .race-hud .rh-chip.is-bump, .race-hud .rh-chip-glyph.is-kick, .race-hud .rh-mixer-recipe.is-served { animation: none; }
   /* the pickup card never flies: it fades where it stands and the slot lights up at once */
   .race-hud .rh-pickup { transition: opacity 0.14s linear; }

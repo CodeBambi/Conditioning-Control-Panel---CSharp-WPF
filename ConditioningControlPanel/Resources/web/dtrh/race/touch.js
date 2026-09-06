@@ -7,7 +7,7 @@
  * with the other two (max of magnitudes for steer, OR for drift, one press per
  * tap for jump). Left stays left.
  *
- *   createTouch({ root }) -> null on a mouse desktop, else
+ *   createTouch({ root, fire }) -> null on a mouse desktop, else
  *     { el, read(), flush(), dispose() }
  *   read() -> { steer:-1..1, drift:bool, jump:bool }   (jump is one frame, one tap)
  *
@@ -31,9 +31,10 @@
  *              exactly like Space. Anything longer or further is DRIFT, held
  *              for as long as the thumb stays down. Accel is untouched: nothing
  *              pressed is cruise, and a phone never needs the brake pedal.
- *   BUTTONS    pause, mute and use are a sibling pass (feat/race-w2b-touch-hud):
- *              they hang off this same layer and fire the ACTIONS input.js
- *              already routes, so nothing below has to change to take them.
+ *   BUTTONS    pause (fires 'brake', which opens the Brake screen and its own
+ *              tappable buttons), mute, and an item button that only appears
+ *              while the slot is `is-held`. 48 px minimum, anchored on the
+ *              existing --rh-in-* safe-area insets.
  *
  * Pointer Events only, never TouchEvent, and the pointer is captured so a drag
  * that wanders off the zone still belongs to the finger that started it.
@@ -74,7 +75,7 @@ export function wantsTouch(win) {
   catch (e) { return false; }
 }
 
-export function createTouch({ root = null, win = null, doc = null } = {}) {
+export function createTouch({ root = null, fire = () => {}, win = null, doc = null } = {}) {
   const w = win || (typeof window !== 'undefined' ? window : null);
   const d = doc || (w && w.document) || null;
   if (!root || !d || !wantsTouch(w)) return null;
@@ -91,6 +92,33 @@ export function createTouch({ root = null, win = null, doc = null } = {}) {
   const pad = mk('rt-pad', layer);
   mk('rt-ring', pad);
   const dot = mk('rt-dot', pad);
+
+  const button = (cls, glyph, label, action) => {
+    const b = d.createElement('button');
+    b.type = 'button';
+    b.className = 'rt-btn ' + cls;
+    b.textContent = glyph;
+    b.setAttribute('aria-label', label);
+    // pointerdown, not click: on glass the press IS the answer, and waiting for a
+    // synthesised click reads as a dropped tap.
+    b.addEventListener('pointerdown', (e) => { if (e.cancelable) e.preventDefault(); e.stopPropagation(); fire(action); });
+    layer.appendChild(b);
+    return b;
+  };
+  button('rt-pause', 'II', 'brake', 'brake');
+  button('rt-mute', 'sound', 'mute', 'mute');
+  const itemBtn = button('rt-item', 'use', 'use item', 'item');
+
+  // the item button only exists while there is something to spend: the slot already
+  // carries `is-held` (race/hud.js), so watch that rather than invent a second truth
+  const slot = root.querySelector('.rh-item');
+  const syncItem = () => itemBtn.classList.toggle('is-on', !!(slot && slot.classList.contains('is-held')));
+  let mo = null;
+  if (slot && w && typeof w.MutationObserver === 'function') {
+    mo = new w.MutationObserver(syncItem);
+    mo.observe(slot, { attributes: true, attributeFilter: ['class'] });
+  }
+  syncItem();
 
   const out = { steer: 0, drift: false, jump: false };
   let steerId = -1, steerX0 = 0, steer = 0;
@@ -109,6 +137,8 @@ export function createTouch({ root = null, win = null, doc = null } = {}) {
 
   function onDown(e) {
     if (disposed) return;
+    const t = e.target;
+    if (t && typeof t.closest === 'function' && t.closest('.rt-btn')) return;   // the buttons speak for themselves
     const p = at(e);
     if (p.x < p.w * STEER_SIDE) {
       if (steerId >= 0) return;
@@ -175,6 +205,7 @@ export function createTouch({ root = null, win = null, doc = null } = {}) {
     layer.removeEventListener('pointerup', onUp);
     layer.removeEventListener('pointercancel', onUp);
     layer.removeEventListener('contextmenu', noMenu);
+    if (mo) { try { mo.disconnect(); } catch (err) { /* observer already dead */ } mo = null; }
     if (layer.parentNode) layer.parentNode.removeChild(layer);
     flush();
   }
