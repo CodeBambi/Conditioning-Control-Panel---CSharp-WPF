@@ -18,8 +18,12 @@
  * clip is the one breath on screen (Law III); every 3..6 s a wave / hop /
  * drum plays on a 0.3 s crossfade and settles back; a peek fires when the
  * pointer crosses into her half (6 s gap). The face swaps with the clip:
- * idle ^_^ 0, wave :3 1, hop >_< 2, peek o_o 3, drum $_$ 4. Reduced motion:
- * idle only, no one-shots, no crossfade pops.
+ * idle ^_^ 0, wave :3 1, hop >_< 2, peek o_o 3, drum $_$ 4. The atlas also
+ * carries the starry 5 and the spiral 6; no clip claims them here. Reduced
+ * motion: idle only, no one-shots, no crossfade pops.
+ *
+ * Screenshot aid: `?face=N` pins the stage face at atlas frame N, so one frame
+ * can be shot on its own while the clips keep running.
  *
  * Props: race/assets/props.glb (podium, kart_cup, kart_saucer, floor_tile)
  * dresses the stage when it resolves; otherwise the lathe cup from the old
@@ -44,7 +48,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { loadPack, preparePixel, toInstanceGeometry, flattenRig } from './gltf.js';
+import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
 import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 
 export const OPTIONS_KEY = 'race.options';
@@ -53,11 +57,11 @@ export const PROPS_URL = '/dtrh/race/assets/props.glb';
 export const ROSTER = [
   { id: 'emi', name: 'E.M.I.', glb: '/dtrh/race/assets/emi.glb',
     clips: { idle: 'idle', wave: 'wave', hop: 'hop', peek: 'peek', drum: 'drum' },
-    faces: { idle: 0, wave: 1, hop: 2, peek: 3, drum: 4 } },
+    faces: { idle: 0, wave: 1, hop: 2, peek: 3, drum: 4, starry: 5, spiral: 6 } },
 ];
 const DEFAULTS = { pixel: PIXEL_DEFAULT, music: 0.8, sfx: 0.8, motion: 'system', seed: 'daily', seedValue: 7 };
 const MOTIONS = ['system', 'on', 'off'], SEEDS = ['daily', 'random', 'custom'];
-const FACE_N = 5, GLASS = 'EMI_glass', FADE = 0.3, ONE_SHOTS = ['wave', 'hop', 'drum'];
+const GLASS = 'EMI_glass', FADE = 0.3, ONE_SHOTS = ['wave', 'hop', 'drum'];
 const BEAT_MIN = 3, BEAT_MAX = 6, PEEK_GAP = 6;
 // Stage metres, all of them read off props.glb so the placeholders and the real props agree.
 // `podium` is a saucer: a foot of radius 0.75 on the floor flaring to a rim of radius 1.10, whose
@@ -79,6 +83,15 @@ const MIST = 0x3a1c4e, FOG_NEAR = 9, FOG_FAR = 21, SKY_R = 44, FAR_PLUM = 0x4a24
 const FAR_CUPS = [[-15, -28, 6, 0.5], [14, -33, 7, -0.8], [-6.5, -37, 6.4, 2.1]];
 const PAD = { a: 0, b: 1, up: 12, down: 13, left: 14, right: 15 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+/** Screenshot aid: `?face=N` pins the stage face so one atlas frame can be shot on its own.
+ *  -1 (no param, an empty one, or anything unparseable) means the clips drive the face. */
+const FACE_PIN = (() => {
+  try {
+    const v = new URLSearchParams(location.search).get('face');
+    if (v === null || v === '' || !Number.isFinite(+v)) return -1;
+    return clamp(+v | 0, 0, FACES.length - 1);
+  } catch (e) { return -1; }              // no location (a node import), no pin
+})();
 
 // ---- options ------------------------------------------------------------------------------
 export function loadOptions() {
@@ -216,7 +229,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   }).catch(() => { if (log) log('[menu] props.glb absent, placeholders stand'); });
 
   // ---- EMI: the pack clone, her own glass, the mixer ----
-  const emi = { root: new THREE.Group(), model: null, mixer: null, actions: {}, busy: null, face: -1, tex: [], ready: [],
+  const emi = { root: new THREE.Group(), model: null, mixer: null, actions: {}, busy: null, face: -1, ready: [],
     nextAt: BEAT_MIN + Math.random() * (BEAT_MAX - BEAT_MIN), lastPeek: -PEEK_GAP };
   emi.root.position.set(0, PODIUM_H, 0); scene.add(emi.root);
   loadPack(character.glb, { log }).then((pack) => {
@@ -229,10 +242,12 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
         if (!m) return m;
         if (m.name === 'outline') return keep(new THREE.MeshBasicMaterial({ color: 0x0a0814, side: THREE.FrontSide }));
         if (o.name !== GLASS) return m;
+        // the stage owns its glass: its own material AND its own copy of the atlas, so the frame
+        // it sits on never moves under the run's rig (which shares the cached pack's texture)
         const c = keep(m.clone());
         for (const k of ['map', 'emissiveMap']) if (c[k]) {
           const tx = keep(c[k].clone()); tx.wrapS = THREE.RepeatWrapping; tx.magFilter = tx.minFilter = THREE.NearestFilter; tx.generateMipmaps = false; tx.needsUpdate = true;
-          c[k] = tx; emi.tex.push(tx);
+          c[k] = tx;
         }
         return c;
       };
@@ -255,7 +270,13 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     if (log) log(`[menu] ${character.id} on stage: ${Object.keys(emi.actions).join(' ')}`);
   }).catch((e) => { if (log) log('[menu] emi.glb failed: ' + ((e && e.message) || e)); });
 
-  function face(i) { i = clamp(i | 0, 0, FACE_N - 1); if (i === emi.face) return; emi.face = i; for (const tx of emi.tex) tx.offset.x = i / FACE_N; }
+  // one hop through gltf.js setFace, so the frame count comes off the atlas that actually loaded
+  // (the glb's own strip is narrower than the live one) instead of being spelled out twice
+  function face(i) {
+    i = FACE_PIN >= 0 ? FACE_PIN : clamp(i | 0, 0, FACES.length - 1);
+    if (i === emi.face || !emi.model) return;
+    emi.face = i; setFace(emi.model, i);
+  }
   function settle(a) {
     const idle = emi.actions.idle;
     if (idle) { idle.enabled = true; idle.setEffectiveTimeScale(1); idle.setEffectiveWeight(1); a.crossFadeTo(idle, reduced ? 0 : FADE, false); }

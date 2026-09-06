@@ -36,7 +36,7 @@ registerHooks({
 });
 
 const THREE = await import('three');
-const { makePack, toInstanceGeometry, setFace, preparePixel, flattenRig, disposePack, FACES } = await import('../gltf.js');
+const { makePack, toInstanceGeometry, setFace, preparePixel, flattenRig, disposePack, FACES, faceFrames } = await import('../gltf.js');
 const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 
 // ---- the tiny assert kit ----------------------------------------------------------------
@@ -228,7 +228,8 @@ const emi = new THREE.Group();
 emi.name = 'EMI_root';
 emi.add(glass);
 
-ok(FACES.join(' ') === '^_^ :3 >_< o_o $_$', 'FACES is the authored atlas order');
+ok(FACES.join(' ') === '^_^ :3 >_< o_o $_$ ★_★ @_@', 'FACES is the authored atlas order');
+ok(faceFrames(tex) === 5, 'an untagged texture reads as the five frame strip baked into the glb');
 ok(setFace(emi, 2) === true, 'setFace finds EMI_glass');
 ok(near(tex.offset.x, 2 / 5), 'frame 2 sits at offset 0.4 (got ' + tex.offset.x + ')');
 ok(tex.wrapS === THREE.RepeatWrapping, 'wrapS is RepeatWrapping');
@@ -236,6 +237,14 @@ ok(tex.magFilter === THREE.NearestFilter && tex.minFilter === THREE.NearestFilte
 ok(tex.generateMipmaps === false, 'mipmaps are off');
 setFace(emi, 99); ok(near(tex.offset.x, 4 / 5), 'an out of range index clamps to the last frame');
 setFace(emi, -7); ok(near(tex.offset.x, 0), 'a negative index clamps to the first frame');
+// the live atlas (assets/emi-faces.png) is wider than the strip inside the glb: loadPack tags the
+// swapped texture with its frame count and setFace divides by that, never by a spelled out five
+tex.userData.faceFrames = FACES.length;
+ok(faceFrames(tex) === FACES.length, 'a tagged texture reports the swapped strip width');
+setFace(emi, 6); ok(near(tex.offset.x, 6 / FACES.length), 'frame 6 sits at 6/7 on the live atlas');
+setFace(emi, 99); ok(near(tex.offset.x, (FACES.length - 1) / FACES.length), 'the clamp follows the wider strip');
+delete tex.userData.faceFrames;
+setFace(emi, 0);
 ok(setFace(new THREE.Group(), 1) === false, 'no EMI_glass, no throw, just false');
 ok(setFace(null, 1) === false, 'setFace(null) is false');
 

@@ -2,7 +2,9 @@
 
 `emi.glb` is the hard-surface EMI from the Blender build (`tools/blender/emi/build_hs.py`),
 cut down to a game LOD and exported with named pivots, a five-frame face atlas and five
-character-select clips. `emi-faces.png` is the atlas the glass material samples. Nothing in
+character-select clips. `emi-faces.png` is the atlas the glass material samples, and it is
+the LIVE one: it now carries seven frames and `race/gltf.js` loadPack re-points the glass at
+it, so a new face is a rerun of `face2.py --game` and never a rebake of the glb. Nothing in
 here is hand-edited: regenerate both with `tools/blender/emi/run_game.cmd`.
 
 ## Numbers
@@ -17,7 +19,7 @@ here is hand-edited: regenerate both with `tools/blender/emi/run_game.cmd`.
 | footprint | x -0.51 .. 0.51, z(glTF) -0.59 .. 0.14 (she stands a little behind the origin) |
 | origin | sole centre between the feet, y = 0 at the floor |
 | facing | +Z in glTF (Blender -Y forward, exported Y up) |
-| textures | packed; one image, `emi-faces` 760x137 |
+| textures | packed; one image, `emi-faces` 760x137 (the five-frame fallback; the shipped png is 1064x137) |
 
 To match the size of the old primitive rig (a 0.525 m CRT case inside the cup), scale the
 root by about 0.64; the new case is 0.82 m tall at scale 1.
@@ -45,25 +47,38 @@ black `MeshBasicMaterial` with `side: THREE.FrontSide` if the standard one looks
 
 ## Face atlas
 
-`emi-faces.png`, 760x137 RGB, five 152x137 frames left to right in the owner-locked order:
+`emi-faces.png`, 1064x137 RGB, seven 152x137 frames left to right in the owner-locked order.
+A frame is only ever APPENDED: the index is the contract `race/gltf.js` FACES, `menu.js`
+ROSTER `faces` and `intro.js` FACE all quote.
 
-| frame | glyph | offset.x |
-|---|---|---|
-| 0 | `^_^` | 0.0 |
-| 1 | `:3` | 0.2 |
-| 2 | `>_<` | 0.4 |
-| 3 | `o_o` | 0.6 |
-| 4 | `$_$` | 0.8 |
+| frame | glyph | offset.x | drawn how |
+|---|---|---|---|
+| 0 | `^_^` | 0/7 | text |
+| 1 | `:3` | 1/7 | text in a cell turned on its side, then rotated 90 degrees clockwise, so the colon reads as two eyes side by side and the 3 as the cat mouth under them |
+| 2 | `>_<` | 2/7 | text |
+| 3 | `o_o` | 3/7 | text |
+| 4 | `$_$` | 4/7 | text |
+| 5 | star eyes | 5/7 | text, the star from the Segoe UI Symbol fallback |
+| 6 | spiral eyes | 6/7 | stroked, not typed: the `@` counters close up solid under the 5 px stroke |
 
 Pink (255,105,180) glyphs at one shared size (74 px Noto Sans Mono, 5 px stroke) over the
 dim screen purple (62,46,92), so a frame swap never rescales the face and the background is
-the idle screen glow. The glass UVs cover frame 0 only, U in [0.0007, 0.1993], V full:
+the idle screen glow. That shared size is measured on the FIRST FIVE faces only
+(`face2.py` `SIZED_ON`), so appending a face cannot rescale the ones already on the glass.
+
+The glass UVs cover one frame of the FIVE-frame strip baked into the glb, U in
+[0.0007, 0.1993], V full. `loadPack` swaps that strip for this png and takes up the slack
+with a repeat, so the offset stays one frame index:
 
 ```js
 const glass = root.getObjectByName('EMI_glass');
 const map = glass.material.emissiveMap;      // the atlas, sampler NEAREST + CLAMP
-map.offset.x = frame / 5;                    // frame 0..4
+map.repeat.x = 5 / 7;                        // gltf.js BAKED_FRAMES / FACES.length
+map.offset.x = frame / 7;                    // frame 0..6, gltf.js setFace does both
 ```
+
+If the png never arrives, the embedded five-frame strip stays and frames 5 and 6 clamp to 4:
+`gltf.js` `faceFrames(texture)` reads the width off the texture, never off `FACES`.
 
 The material ships with `emissiveMap` = atlas, `emissive` = white, `emissiveIntensity` = 1
 (the race renders with no tone mapping, so the pink is exact at 1.0; the AgX studio render
@@ -105,6 +120,9 @@ C:\Tools\emi3d\hs\run_game.cmd quick    stop after the re-import contract check
 
 The mirror of those scripts lives in `tools/blender/emi/` (`build_hs.py --game 1 --mode game`,
 `face2.py --game DIR`, `export_glb.py`, `verify_glb.py`, `pixup.py`, the `.cmd` runners).
+The atlas alone is `python tools/blender/emi/face2.py --game <dir>`, which needs only Pillow
+and fontTools; copy its `emi-faces.png` over the one in here. Frames 0 and 2..4 come out
+byte identical to the shipped strip, which is the check that nothing rescaled.
 Blender 5.2.1 portable at `C:\Tools\blender\`, Python with Pillow + fontTools for the atlas.
 Launch the .cmd detached (Blender hangs a foreground shell) and poll the log for `ALLDONE`.
 `verify_glb.py` prints the node list, animation lengths, triangle count, bounding box and the
