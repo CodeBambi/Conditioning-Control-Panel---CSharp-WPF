@@ -76,8 +76,39 @@ const roomId = (ctx) => (ctx.room && typeof ctx.room.id === 'string' ? ctx.room.
 
 /** Every field CHART.md promises, so run.js never has to test for one. */
 function blank() {
-  return { spawn: [], jump: 0, mix: null, mood: null, pose: null, toast: null,
+  return { spawn: [], fx: [], jump: 0, mix: null, mood: null, pose: null, toast: null,
     word: null, fog: null, boost: 0, density: null, holdSec: 0 };
+}
+
+/* ---- the hand override (CHART.md) --------------------------------------- */
+
+/** A wall is a full row the kart cannot steer around: the five road lanes plus one over the top. */
+const WALL_X = [-2.2, -1.1, 0, 1.1, 2.2];
+const WALL_AIR_H = AIR_H;
+/** The fields the author may set on a cue, copied straight through when they are present. */
+const HAND_FIELDS = ['jump', 'mix', 'mood', 'pose', 'toast', 'word', 'fog', 'boost', 'density', 'holdSec'];
+
+/**
+ * The author already said what this second is worth: build the cue from their words, not the table.
+ * `cue` has been through chart.js sanitizeCue, so every id, placement and number in here is already
+ * legal. The only thing left to do is expand `wall` into the six bubbles it stands for.
+ */
+function fromHand(hand, ctx) {
+  const cue = blank();
+  if (Array.isArray(hand.spawn)) {
+    for (const sp of hand.spawn) {
+      const placement = sp.placement || 'lane';
+      const h = (sp.h != null) ? sp.h : (placement === 'rain' ? CEILING_H : placement === 'air' ? AIR_H : LANE_H);
+      cue.spawn.push({ kindId: sp.kindId, placement, x: Number(sp.x) || 0, h, at: Number(sp.at) || 0 });
+    }
+  }
+  if (hand.wall) {
+    for (const x of WALL_X) cue.spawn.push({ kindId: hand.wall, placement: 'lane', x, h: LANE_H, at: 0 });
+    cue.spawn.push({ kindId: hand.wall, placement: 'air', x: 0, h: WALL_AIR_H, at: 0 });
+  }
+  if (Array.isArray(hand.fx)) cue.fx = hand.fx.map((f) => ({ id: f.id, strength: f.strength, dur: f.dur }));
+  for (const k of HAND_FIELDS) if (hand[k] !== undefined) cue[k] = hand[k];
+  return cue;
 }
 
 /** The bubble a spoken trigger wears: the chart's own map, else the room's effect, else the strobe. */
@@ -95,6 +126,9 @@ function triggerKind(label, ctx) {
  */
 export function cueFor(event, ctx = {}) {
   if (!event || typeof event.kind !== 'string') return null;
+  // the author's own reading of this second wins outright: no table, no roll, no room colour.
+  // A `mark` with no cue falls through the switch to null, which is the point of a mark.
+  if (event.cue) return fromHand(event.cue, ctx);
   const rng = typeof ctx.rng === 'function' ? ctx.rng : Math.random;
   const intensity = Number.isFinite(Number(ctx.intensity)) ? clamp(Number(ctx.intensity), 0, 1) : 0.5;
   const label = typeof event.label === 'string' ? event.label : '';

@@ -41,6 +41,7 @@ import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
 import { createTrackState } from './track.js';
 import { cueFor, resultTag } from './cues.js';
+import { createFrameFx } from './frameFx.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
@@ -112,6 +113,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const input = createInput({ root });   // root: the touch layer, on a phone, is built inside its .race-hud
   const audio = createRaceAudio({ bridge, hud, settings, input });
   const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
+  // the full-frame beats a hand chart drops (CHART.md): lids, a blackout, one white frame.
+  // Its own layer over the whole root, built once and disposed with the run like payloadFx.
+  const frameFx = createFrameFx({ root, reducedMotion, sfx });
   const camOut = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
   const _v = new THREE.Vector3();
 
@@ -121,9 +125,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
     flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
-    trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,
+    trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0, freezeSec: 0,
   };
   fovLive = true;   // S exists: resize() may shift S.fov from here on
+  /** Events whose first bubble has already been popped. A hand wall is six bubbles carrying ONE
+   *  event id: the first pop is the event, the other five are points (CHART.md). */
+  const takenEvents = new Set();
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
   const TR = createTrackState();      // the loaded track chart: its clock, its energy, its acts (race/track.js)
   const hosted = bridge.isHosted !== false;   // the standalone page logs where the host would be told
@@ -185,8 +192,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
       jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
-      trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
-    setFlip(false); trailClear();
+      trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0, freezeSec: 0 });
+    setFlip(false); trailClear(); takenEvents.clear(); frameFx.stop();
     mix.reset(); S.wobble = 0; clearMixChrome();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.pickupClear(); hud.item(null, 'no item yet');
   }
@@ -216,9 +223,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
   function onPop(w, p) {
-    if (p.eventId) TR.taken(p.eventId);
+    // one event, one meeting: the first bubble of a group is the word the voice said, the rest of a
+    // wall are just bubbles. Six pink pops in one row would otherwise be six pours at THE MIX.
+    const firstOfEvent = !p.eventId || !takenEvents.has(p.eventId);
+    if (p.eventId && firstOfEvent) { takenEvents.add(p.eventId); TR.taken(p.eventId); }
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (p.kind === 'treat') return treat(w, p);
+    if (!firstOfEvent) { w.score.pop(p.points, 'treat'); return; }
     if (S.parasol) { S.parasol = false; hud.toast('parasol', 'item'); return treat(w, p); }
     // THE MIX: one live effect per category, each with its own re-pop rule (cocktail.js); 'held' scores as a treat
     const durationMult = 0.5 + 0.5 * S.intensity;
@@ -382,6 +393,34 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     pour(w, { id: k.id, payload: k.payload, overlayKind: k.overlayKind }, r, Math.round(clamp(k.strength, 0, 1) * 100), durationMult);
     if (r.recipe) serve(w, r.recipe);
   }
+  /**
+   * One full-frame beat off a hand cue (CHART.md FX_KINDS). Three of the six are verbs the
+   * run already owns and keeps owning: the shake is the user's own dial, the melt goes through THE
+   * MIX exactly as a popped braindrain would, the flash is the engine's. The rest belong to
+   * race/frameFx.js, which is the only thing here allowed to take the whole frame.
+   */
+  function playFx(w, f) {
+    if (!f || typeof f.id !== 'string') return;
+    const s = clamp(isFinite(Number(f.strength)) ? Number(f.strength) : 1, 0, 1);
+    const sec = (f.dur != null && isFinite(Number(f.dur)) && Number(f.dur) > 0) ? Number(f.dur) : null;
+    if (f.id === 'shake') { shake.shake(s, (sec || 0.4) * 1000); return; }
+    if (f.id === 'melt') { cueMix(w, 'braindrain'); return; }
+    if (f.id === 'flash') { w.fx.pulseFlash(s); return; }
+    const r = frameFx.play(f.id, s, sec);
+    if (!r) return;
+    if (r.freezeSec > 0) S.freezeSec = Math.max(S.freezeSec, r.freezeSec);   // a snap: the world holds
+    if (r.flash > 0) w.fx.pulseFlash(r.flash);                               // reduced motion: a pulse instead
+  }
+  /** The one line the standalone page prints when the author's own cue lands, so a headless run can
+   *  be grepped for it: `hand cue h7: wall pink, fx snap+shake`. */
+  function logHandCue(event, cue) {
+    if (!bridge.log) return;
+    const bits = [];
+    if (event.cue.wall) bits.push('wall ' + event.cue.wall);
+    if (cue.spawn.length && !event.cue.wall) bits.push(cue.spawn.length + ' spawn');
+    bits.push('fx ' + (cue.fx.length ? cue.fx.map((f) => f.id).join('+') : 'none'));
+    bridge.log(`hand cue ${event.id}: ${bits.join(', ')}`);
+  }
   /** One event off the scheduler, spent on the world. Every spawn goes in at the depth the kart will
    *  have reached when the voice says it, so the pop lands on the word whatever the throttle did. */
   function applyCue(w, due) {
@@ -392,6 +431,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       const d = ks.d + ks.speed * Math.max(due.dueIn + (sp.at || 0), CUE_AHEAD_SEC);
       w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d, x: sp.x, h: sp.h, eventId: due.event.id });
     }
+    for (const f of cue.fx) playFx(w, f);
     if (cue.jump) { ks.vh = Math.max(ks.vh, cue.jump); ks.h = Math.max(ks.h, 0.06); ks.airborne = true; w.kart.pose('air'); }
     if (cue.mix) cueMix(w, cue.mix);
     if (cue.mood) poke(cue.mood, Math.max(1.2, cue.holdSec));
@@ -402,6 +442,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (cue.boost) w.kart.applyBoost(cue.boost);
     if (cue.density != null) w.field.setDensity(cue.density);
     if (cue.holdSec > 0) S.trackHold = cue.holdSec;
+    if (due.event.cue) logHandCue(due.event, cue);
   }
   /** The act moved with no gate in reach: dress the new room where we stand and marquee its name. */
   function actMoved(w, act, ks) {
@@ -446,6 +487,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- the frame ----
   function step(w, dt) {
     const k = w.kart, ks = k.state, lay = w.layout;
+    // a snap froze the world: the kart, the field and the clock-driven spawns all wait it out. The
+    // camera and frameFx still run in frame(), so the white frame is seen and the tube holds still.
+    if (S.freezeSec > 0) { S.freezeSec = Math.max(0, S.freezeSec - dt); return; }
     S.elapsed += dt;
     // with a track the intensity is the file's energy curve (smoothed, floored), not the clock ramp.
     // step() takes no delta: the voice runs on the wall, never on the run's clamped frame (track.js).
@@ -532,6 +576,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     last = now;
     if (stage) { try { stage.update(dt); stage.render(); } catch (e) { bridge.log && bridge.log('race stage: ' + (e && e.stack || e)); } return; }
     if (!W) return;
+    frameFx.tick(dt);   // outside the run gate on purpose: a brake mid-blink must not leave the lids shut
     if (S.running && !S.paused && !S.hostPaused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
     }
@@ -624,7 +669,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (payoutResolve) payoutResolve(null);
     teardown();
     audio.dispose();
-    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); frameFx.dispose(); speedFx.dispose(); lane.dispose();
     pixel.dispose();
     scene.clear(); renderer.dispose();
     setFlip(false);
