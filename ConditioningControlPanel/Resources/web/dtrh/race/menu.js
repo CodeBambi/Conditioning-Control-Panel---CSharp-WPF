@@ -25,7 +25,8 @@
  * no one-shots, no flashes, no crossfade pops.
  *
  * Screenshot aid: `?face=N` pins the stage face at atlas frame N, so one frame
- * can be shot on its own while the clips keep running.
+ * can be shot on its own while the clips keep running. `?panel=howto` (and
+ * `?panel=options`) opens the menu on that panel, the way `?card=N` opens a card.
  *
  * Props: race/assets/props.glb (podium, kart_cup, kart_saucer, floor_tile)
  * dresses the stage when it resolves; otherwise the lathe cup from the old
@@ -47,6 +48,13 @@
  * Keyboard (arrows, enter, esc), pointer and the gamepad (polled every frame,
  * the way the splash polled pads) all drive it. Every press answers inside
  * 100 ms (Law VIII): THE BOUNCE on the button, THE GLOW on focus.
+ *
+ * A FINGER CAN REACH EVERYTHING. There is no key card and no pad on a phone, so
+ * every path a key takes has a target under it: `how to drive` carries its own
+ * back row and a tap anywhere off the panel closes it, and each value row wears
+ * a real left and right button around the number, so music and sfx go DOWN by
+ * touch as well as up (a whole-row press still steps up the way the pad does).
+ * menu.css sizes all three to 44 px under `@media (pointer: coarse)`.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -97,6 +105,13 @@ const FACE_PIN = (() => {
     if (v === null || v === '' || !Number.isFinite(+v)) return -1;
     return clamp(+v | 0, 0, FACES.length - 1);
   } catch (e) { return -1; }              // no location (a node import), no pin
+})();
+/** Screenshot aid: `?panel=howto | options` opens the menu on that panel instead of the verbs. */
+const PANEL_PIN = (() => {
+  try {
+    const v = (new URLSearchParams(location.search).get('panel') || '').toLowerCase();
+    return v === 'howto' || v === 'how' ? 'how' : v === 'options' ? 'options' : null;
+  } catch (e) { return null; }           // no location (a node import), no pin
 })();
 
 // ---- options ------------------------------------------------------------------------------
@@ -393,7 +408,10 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   for (const [k, v] of [['arrows / wasd', 'steer, throttle, brake'], ['shift', 'drift (hold, let go for turbo)'], ['space', 'jump (time it at a ramp for big air)'], ['e', 'use the item'], ['p', 'pixel look'], ['m', 'mute'], ['esc', 'the brake'], ['pad', 'stick steers, rt goes, a drifts, b jumps, x item, start brakes']]) {
     const row = el('div', 'rm-key', howPanel); el('kbd', '', row, k); el('span', '', row, v);
   }
-  el('div', 'rm-hint', howPanel, 'nothing is lost. you cannot fail. esc or enter goes back.');
+  el('div', 'rm-hint', howPanel, 'nothing is lost. you cannot fail.');
+  // the way out for a finger: the keyboard has esc and enter, a phone has this row and the backdrop
+  const howBack = el('button', 'rm-btn rm-how-back', howPanel, 'back'); howBack.type = 'button'; howBack.setAttribute('role', 'menuitem');
+  howBack.addEventListener('click', (e) => { e.stopPropagation(); ui('back'); hit(howBack, 'is-hit'); open('main'); });
 
   // ---- options: each row is a value with left / right and a press ----
   const pct = (v) => `${Math.round(v * 100)}%`;
@@ -412,9 +430,21 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   el('h3', 'rm-h', optPanel, 'options');
   const rowEls = ROWS.map((r) => {
     const row = el('div', `rm-row${r.dim ? ' is-dim' : ''}`, optPanel); row.dataset.id = r.id; row.setAttribute('role', 'menuitem');
-    el('span', 'rm-row-label', row, r.label); r.valEl = el('span', 'rm-row-val rh-num', row, r.get());
+    el('span', 'rm-row-label', row, r.label);
+    // the value wears its own left / right buttons: a tap on the number alone can only ever step ONE
+    // way (the pad's press), so music and sfx would ratchet up and never come down on a phone.
+    const ctl = el('div', 'rm-row-ctl', row);
+    const arrow = (dir, cls, glyph, label) => {
+      const b = el('button', `rm-row-arrow ${cls}`, ctl, glyph); b.type = 'button'; b.tabIndex = -1;
+      b.setAttribute('aria-label', `${label} ${r.label}`);
+      b.addEventListener('click', (e) => { e.stopPropagation(); focusRow(ROWS.indexOf(r)); act(dir); });
+      return b;
+    };
+    if (r.move) arrow('left', 'is-dec', '‹', 'lower');
+    r.valEl = el('span', 'rm-row-val rh-num', ctl, r.get());
+    if (r.move) arrow('right', 'is-inc', '›', 'raise');
     if (r.hint) el('span', 'rm-row-hint', row, r.hint);
-    row.addEventListener('click', () => { focusRow(ROWS.indexOf(r)); act('press'); });
+    row.addEventListener('click', (e) => { e.stopPropagation(); focusRow(ROWS.indexOf(r)); act('press'); });
     row.addEventListener('pointerenter', () => focusRow(ROWS.indexOf(r)));
     return row;
   });
@@ -427,7 +457,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const VERBS = [['race', 'race'], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
-    b.addEventListener('click', () => { idx.main = i; act('press'); });
+    b.addEventListener('click', (e) => { e.stopPropagation(); idx.main = i; act('press'); });
     b.addEventListener('pointerenter', () => { idx.main = i; ui('tick'); refresh(); });
     return b;
   });
@@ -526,6 +556,10 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     stage.setViewFraction(parked ? ((col.offsetWidth || w * 0.38) / w + 1) / 2 + 0.03 : 0.5);
   }
   const onPointer = (e) => { if (shown && e.clientX > window.innerWidth * 0.5) stage.emi.peek(); };
+  // the backdrop closes the key card. Every verb and every row stops its own click, so the only
+  // clicks that reach the layer are the ones that landed on nothing.
+  const onBackdrop = (e) => { if (shown && panel === 'how' && !howPanel.contains(e.target)) { ui('back'); open('main'); } };
+  layer.addEventListener('click', onBackdrop);
   window.addEventListener('keydown', onKey);
   const unbindResize = bindViewportResize(onResize);
   stageEl.addEventListener('pointerenter', onPointer);
@@ -535,7 +569,15 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     options, stage: { update(dt) { if (shown) pollPad(dt); stage.update(dt); }, render: stage.render, dispose: stage.dispose, live: stage },
     onPick(cb) { if (typeof cb === 'function') picks.push(cb); },
     setTrack, get track() { return trackState; },
-    show() { shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu'); open('main'); onResize(); hit(layer, 'is-in'); theme(true); },
+    /** hideVerb(id): take a verb off the list for good. raceBoot hides `surface` when the page is not
+     *  hosted and has nowhere to surface to, so nobody taps their way to a blank screen. */
+    hideVerb(id) {
+      const b = verbEl(id); if (!b) return;
+      b.hidden = true;
+      if (verbEls[idx.main].hidden) idx.main = stepVerb(idx.main, 1);
+      refresh();
+    },
+    show() { shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu'); open(PANEL_PIN || 'main'); onResize(); hit(layer, 'is-in'); theme(true); },
     hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); },
     /** Park the stage the way the column parks it, with the menu hidden: race/cards.js uses the same
      *  layout, so hide() sending her back to the middle of the frame would only be a jump and a jump

@@ -30,7 +30,17 @@
  * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
  * the host init; `?itembox=ms` breaks the next sugar cube that comes into
- * reading range after that time and is a screenshot aid for the pickup card.
+ * reading range after that time and is a screenshot aid for the pickup card;
+ * `?panel=howto` opens the menu on the key card (race/menu.js).
+ *
+ * `?back=<same-origin path>` is WHERE THE MENU'S `surface` VERB GOES when there
+ * is no host to hand the page back to. Hosted, `surface` posts exit + exit-done
+ * and the shell takes the window away. In a plain browser there is no shell, so
+ * the old build disposed everything and left a black page. Now: `?back=` first,
+ * then a same-origin `document.referrer` (history.back()), and with neither the
+ * verb is taken off the list entirely, so no tap can reach a dead end. A
+ * cross-origin `?back=` or referrer is ignored: this never becomes an open
+ * redirect.
  *
  * TRACK CHARTS (CHART.md): the host posts track-progress / track-chart /
  * track-clock / track-ended / track-error and this file hands them to the run.
@@ -48,6 +58,22 @@ import { createHostMediaSource } from './hostMedia.js';
 const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250;
 const params = new URLSearchParams(location.search);
 const hosted = bridge.isHosted;
+/**
+ * Where `surface` goes with no host under the page: `?back=<path>` if it is same origin, else a
+ * same-origin referrer, else null and the verb comes off the list. Same origin only, always, so the
+ * query string can never point a player somewhere else.
+ */
+function resolveBack() {
+  const want = params.get('back');
+  if (want) {
+    try { const u = new URL(want, location.href); if (u.origin === location.origin) return () => { location.href = u.href; }; }
+    catch (e) { /* not a url, fall through */ }
+  }
+  try { const r = document.referrer; if (r && new URL(r).origin === location.origin) return () => history.back(); }
+  catch (e) { /* no referrer */ }
+  return null;
+}
+const standaloneExit = hosted ? null : resolveBack();
 const host = hosted ? bridge : {
   on: bridge.on,
   isHosted: false,
@@ -142,6 +168,9 @@ function surface() {
   try { if (race) race.dispose(); } catch (e) { host.log('exit dispose: ' + e); }
   host.send({ type: 'exit' });
   host.send({ type: 'exit-done' });
+  // no host means nothing takes the window away, so the page has to leave on its own or the tear-down
+  // above is all anyone sees. The verb is hidden when there is nowhere to go, so this is never null here.
+  if (!hosted && standaloneExit) { try { standaloneExit(); } catch (e) { host.log('back: ' + e); } }
 }
 
 function synthInit() {
@@ -181,6 +210,7 @@ async function boot() {
     if (params.get('autostart') === '1') { startRun(false); debugItemBox(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
     menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log });
+    if (!hosted && !standaloneExit) { menu.hideVerb('surface'); host.log('surface hidden: no host and no ?back='); }
     menu.onPick((id) => {
       if (id === 'race') startRun(true);
       else if (id === 'surface') surface();
