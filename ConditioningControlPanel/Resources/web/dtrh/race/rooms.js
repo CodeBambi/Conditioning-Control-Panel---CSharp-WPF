@@ -8,7 +8,9 @@
  * chequered kerbs and centre dash (one draw call, room-tinted through an alpha mask),
  * tiled ramp wedges with a pink lip and gold air-line cubes, lane-wide boost pads
  * with running chevrons, bobbing sugar-cube item boxes, and the diegetic props from
- * race/roomProps.js. update(d) culls rooms out of sight and animates what is near
+ * race/roomProps.js. The furniture is drawn from the Blender pack (race/assets/props.glb,
+ * race/propPack.js) as soon as it loads; the primitives below are the shape of every mesh
+ * until then and the fallback forever if the pack is missing. update(d) culls rooms out of sight and animates what is near
  * the kart; applyRoom(fx, roomId, fadeSec) hands the room's biome style to
  * fx.applyRegionGrade; breakItemBox(feature) smashes a crossed sugar cube (pooled
  * shards, a white flash, regrowth after RESPAWN_SEC); dispose() tears it all down.
@@ -23,6 +25,7 @@ import * as THREE from 'three';
 import { makeRng, CAM_BACK } from './consts.js';
 import { biomeById } from '../game/biomes.js';
 import { createRoomProps, pixelTex } from './roomProps.js';
+import { propPack, packGeo, geoSize } from './propPack.js';
 
 // ---- the eight rooms -------------------------------------------------------------
 // colors: road = ribbon tint, edge = kerb lines, prop = wall props, fog = the room's haze
@@ -321,12 +324,21 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75, 0, 0.0001, _m)); cubeMesh.instanceMatrix.needsUpdate = true;
     const fr = layout.frameAtDepth(c.d); _up.copy(fr.up);
     layout.toWorld(c.d, c.x, CUBE * 0.75, _p);
-    for (let k = 0; k < SHARDS_PER; k++) {
-      const s = shard[shardCursor]; shardCursor = (shardCursor + 1) % SHARD_N;
+    // with the pack in, a break throws the cube's OWN twelve splits from where they were
+    // authored, so the box comes apart instead of shedding generic crumbs
+    const per = shardKinds ? shardKinds.length : SHARDS_PER;
+    if (shardKinds) shardSet = (shardSet + 1) % SHARD_SETS;
+    for (let k = 0; k < per; k++) {
+      const kind = shardKinds ? shardKinds[k] : null;
+      const j = kind ? shardSet * shardKinds.length + k : shardCursor;
+      if (!kind) shardCursor = (shardCursor + 1) % SHARD_N;
+      const s = shard[j];
       if (s.life <= 0) shardsLive++;
       s.life = SHARD_TTL; s.age = 0;
-      s.p.copy(_p).addScaledVector(fr.right, (rng() - 0.5) * CUBE * 0.6).addScaledVector(_up, (rng() - 0.5) * CUBE * 0.6).addScaledVector(fr.tangent, (rng() - 0.5) * CUBE * 0.6);
-      s.v.copy(fr.right).multiplyScalar((rng() - 0.5) * 7).addScaledVector(_up, 2.5 + rng() * 4).addScaledVector(fr.tangent, 1 + rng() * 5);
+      const ox = kind ? kind.off.x : (rng() - 0.5) * CUBE * 0.6, oy = kind ? kind.off.y : (rng() - 0.5) * CUBE * 0.6, oz = kind ? kind.off.z : (rng() - 0.5) * CUBE * 0.6;
+      s.p.copy(_p).addScaledVector(fr.right, ox).addScaledVector(_up, oy).addScaledVector(fr.tangent, oz);
+      if (kind) s.v.copy(fr.right).multiplyScalar(ox * 7 + (rng() - 0.5) * 2).addScaledVector(_up, 2.5 + oy * 4 + rng() * 2).addScaledVector(fr.tangent, oz * 7 + 1 + rng() * 3);
+      else s.v.copy(fr.right).multiplyScalar((rng() - 0.5) * 7).addScaledVector(_up, 2.5 + rng() * 4).addScaledVector(fr.tangent, 1 + rng() * 5);
       s.g.copy(_up).multiplyScalar(-14);
       s.axis.set(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize(); s.spin = (rng() - 0.5) * 24;
     }
@@ -343,12 +355,14 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
         const s = shard[i];
         if (s.life <= 0) continue;
         s.life -= dt; s.age += dt;
-        if (s.life <= 0) { shards.setMatrixAt(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); continue; }
+        if (s.life <= 0) { setShard(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); continue; }
         live++;
         s.v.addScaledVector(s.g, dt); s.p.addScaledVector(s.v, dt);
-        shards.setMatrixAt(i, _m.compose(s.p, _q.setFromAxisAngle(s.axis, s.spin * s.age), _s.setScalar(0.4 + 0.6 * (s.life / SHARD_TTL))));
+        setShard(i, _m.compose(s.p, _q.setFromAxisAngle(s.axis, s.spin * s.age), _s.setScalar(0.4 + 0.6 * (s.life / SHARD_TTL))));
       }
-      shardsLive = live; shards.instanceMatrix.needsUpdate = true;
+      shardsLive = live;
+      if (shardKinds) for (const k of shardKinds) { k.mesh.visible = live > 0; k.mesh.instanceMatrix.needsUpdate = true; }
+      else shards.instanceMatrix.needsUpdate = true;
     }
     if (flashesLive > 0) {                  // the flash: a white cube on the spot that swells and vanishes
       let live = 0;
@@ -365,6 +379,114 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   }
   for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards, flashes]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
   if (wedges.instanceColor) wedges.instanceColor.needsUpdate = true;
+
+  // ---- the Blender pack takes the furniture over (race/assets/props.glb) -----------------
+  // Geometry and material only: every instance matrix written above stays valid, so the bob,
+  // the turn, the break, the regrow and the air-line fade all carry across untouched. The pack
+  // is authored base-centre on the ground, so each geometry is nudged to sit where the
+  // primitive's origin was. No pack, a slow pack or a broken node: the primitives stay.
+  // roadMatrix builds its basis from (right, up, tangent), which is LEFT handed, so every road
+  // instance matrix carries a -1 on x. Three picks the front face from the OBJECT matrix and never
+  // from the instance one, so an authored prop would rasterise inside out: its faces cull away and
+  // the inverted hull shows as a solid dark block. Mirroring the geometry on x cancels that: the
+  // pair of flips is a plain rotation, the prop reads the right way round and the hull is a
+  // silhouette again. The shards compose their own matrices, so they stay as authored.
+  const ROAD_MIRROR = -1;
+  const SHARD_KINDS = 12, SHARD_SETS = Math.max(1, Math.floor(SHARD_N / SHARD_KINDS));
+  const packGeos = [], packMeshes = [];
+  let itemMat = cubeMat, lipMat = pinkGlow, padPulse = null, shardKinds = null, shardSet = -1, dead = false;
+  const setShard = (i, m) => {
+    if (shardKinds) shardKinds[i % SHARD_KINDS].mesh.setMatrixAt((i / SHARD_KINDS) | 0, m);
+    else shards.setMatrixAt(i, m);
+  };
+  const litMat = (emissive, intensity) => mat(new THREE.MeshLambertMaterial({ vertexColors: true, emissive, emissiveIntensity: intensity }));
+  const swapMesh = (mesh, geo, material) => { packGeos.push(geo); mesh.geometry = geo; if (material) mesh.material = material; };
+  const hideMatrix = () => _m.compose(_hide, _q.identity(), _s.setScalar(0.0001));
+
+  /** The colour of the material named `name` anywhere under pack node `node`, or null. */
+  function packColor(pack, node, name) {
+    const root = pack.byName(node);
+    let hit = null;
+    if (root) root.traverse((o) => {
+      const list = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of list) if (!hit && m && m.name === name && m.color) hit = m.color;
+    });
+    return hit;
+  }
+
+  /** The pad's teal ribs glow, and the glow RUNS forward down the pad. The pack has no uvs, so
+   *  an aStrip mask (merged vertex colour matched against the pack's boost_strip material) picks
+   *  the ribs out of the one merged geometry: the chevrons run for no extra draw call. */
+  function stripMaterial(pack, geo, pulse) {
+    const m = mat(new THREE.MeshLambertMaterial({ vertexColors: true }));
+    const strip = packColor(pack, 'boost_pad', 'boost_strip');
+    const col = geo.attributes.color, n = col ? col.count : 0;
+    const mask = new Float32Array(n);
+    if (strip) for (let i = 0; i < n; i++) {
+      mask[i] = Math.abs(col.getX(i) - strip.r) + Math.abs(col.getY(i) - strip.g) + Math.abs(col.getZ(i) - strip.b) < 0.02 ? 1 : 0;
+    }
+    geo.setAttribute('aStrip', new THREE.BufferAttribute(mask, 1));
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uPulse = pulse;
+      sh.vertexShader = `attribute float aStrip;
+varying float vStrip;
+varying float vRun;
+${sh.vertexShader}`.replace('#include <begin_vertex>', `#include <begin_vertex>
+  vStrip = aStrip;
+  vRun = position.z;`);
+      sh.fragmentShader = `uniform float uPulse;
+varying float vStrip;
+varying float vRun;
+${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  totalEmissiveRadiance += vStrip * (0.25 + 0.75 * smoothstep(0.0, 1.0, sin(vRun * 4.2 - uPulse))) * vec3(0.36, 0.9, 0.85);`);
+    };
+    return m;
+  }
+
+  /** One InstancedMesh per authored split, SHARD_SETS deep, hidden while nothing is flying: the
+   *  steady-state draw count matches the single pooled shard mesh these replace. */
+  function packShards(pack, cy) {
+    const out = [];
+    for (let k = 0; k < SHARD_KINDS; k++) {
+      const name = `item_shard_${String(k).padStart(2, '0')}`;
+      const node = pack.byName(name), geo = packGeo(pack, name);
+      if (!node || !geo) {
+        for (const it of out) { group.remove(it.mesh); it.mesh.dispose(); it.geo.dispose(); }
+        if (geo) geo.dispose();
+        return null;
+      }
+      const mesh = new THREE.InstancedMesh(geo, itemMat, SHARD_SETS);
+      mesh.frustumCulled = false; mesh.visible = false; mesh.name = `race-shard-${k}`;
+      for (let j = 0; j < SHARD_SETS; j++) mesh.setMatrixAt(j, hideMatrix());
+      group.add(mesh); packMeshes.push(mesh);
+      out.push({ mesh, geo, off: new THREE.Vector3(node.position.x, node.position.y - cy, node.position.z) });
+    }
+    shards.visible = false;
+    return out;
+  }
+
+  function dressFurniture(pack) {
+    const lip = packGeo(pack, 'ramp_lip', [0, -0.07, 0], ROAD_MIRROR);       // base lands on the wedge crest
+    if (lip) { lipMat = litMat(0xff69b4, 0.7); swapMesh(lips, lip, lipMat); }
+    const dot = packGeo(pack, 'air_marker', null, ROAD_MIRROR);
+    if (dot) { dot.translate(0, -geoSize(dot).cy, 0); swapMesh(airDots, dot, litMat(0xf2c14e, 0.6)); }
+    const pad = packGeo(pack, 'boost_pad');
+    if (pad) {                                                              // authored 5.75 m wide, the lane is 2.4
+      pad.scale(ROAD_MIRROR * PAD_W / (geoSize(pad).w || PAD_W), 1, 1); pad.boundingBox = null; pad.computeBoundingSphere();
+      padPulse = { value: 0 };
+      swapMesh(padMesh, pad, stripMaterial(pack, pad, padPulse));
+    }
+    const cube = packGeo(pack, 'item_cube', null, ROAD_MIRROR);
+    if (cube) {
+      const cy = geoSize(cube).cy;                                          // the shards are authored in cube space
+      cube.translate(0, -cy, 0); cube.boundingBox = null;
+      itemMat = litMat(0xf2c14e, 0.25);
+      swapMesh(cubeMesh, cube, itemMat);
+      shardKinds = packShards(pack, cy);
+      if (shardKinds) { for (const s of shard) s.life = 0; shardsLive = 0; }
+    }
+  }
+  propPack().then((pack) => { if (pack && !dead) dressFurniture(pack); });
 
   // ---- diegetic props: grounded, voxel, animated near the kart (race/roomProps.js) ------
   const props = createRoomProps({ scene, group, layout, spans, specOf, rng });
@@ -409,10 +531,13 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
       adirty = true;
     }
     if (adirty) airDots.instanceMatrix.needsUpdate = true;
-    cubeMat.emissiveIntensity = 0.25 + 0.2 * (0.5 + 0.5 * Math.sin(t * 3));
-    if (padTex) padTex.offset.y = (t * 1.6) % 1;          // the chevrons run forward
-    padMat.color.setScalar(0.85 + 0.15 * Math.sin(t * 6));
-    pinkGlow.emissiveIntensity = 0.7 + 0.3 * Math.sin(t * 4);
+    itemMat.emissiveIntensity = 0.25 + 0.2 * (0.5 + 0.5 * Math.sin(t * 3));
+    if (padPulse) padPulse.value = t * 7;                 // the pack's ribs glow and the glow runs
+    else {
+      if (padTex) padTex.offset.y = (t * 1.6) % 1;        // the chevrons run forward
+      padMat.color.setScalar(0.85 + 0.15 * Math.sin(t * 6));
+    }
+    lipMat.emissiveIntensity = 0.7 + 0.3 * Math.sin(t * 4);
   }
 
   /** Hand the room's biome style to fx.applyRegionGrade. Returns the room spec. */
@@ -424,7 +549,10 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   }
 
   function dispose() {
+    dead = true;
     scene.remove(group);
+    for (const g of packGeos) g.dispose();
+    for (const m of packMeshes) { group.remove(m); m.dispose(); }
     for (const g of geos) g.dispose();
     for (const m of mats) m.dispose();
     for (const t of texes) t.dispose();

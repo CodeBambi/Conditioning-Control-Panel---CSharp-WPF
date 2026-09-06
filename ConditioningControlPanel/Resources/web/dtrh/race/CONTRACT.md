@@ -77,6 +77,12 @@ Rooms: `teagarden, toybox, casino, undertow, mirrors, chapel, greyward, coronati
 carries `loud` (rollRoomOrder deals loud/soft alternately after the Tea Garden). `rooms` may be
 specs or ids. The dresser adds its own hemisphere + directional light (the props are Lambert; the
 tunnel shader ignores lights) and exposes `group`, `spans` (`{id, d0, d1}` per room) and `rooms`.
+Road furniture (item box and its twelve splits, boost pad, ramp lip, air marker) takes its geometry
+from `props.glb` through `race/propPack.js` once the pack resolves; before that, and forever if the
+pack or a node is missing, the hand-built voxel primitives stay. Placement, physics and animation
+are untouched by the swap: only geometry and material change. `roadMatrix` builds a LEFT handed
+basis, so pack geometry driven by it is mirrored on x to keep its winding (and its outline hull)
+the right way round.
 
 ### `race/bubbles.js` (PR 2)
 ```js
@@ -269,6 +275,17 @@ run.js maps a served recipe to `score.boostMult` (never below x1), a toast, a mo
 ### `race/gltf.js` (pass four, the Blender packs)
 
 `loadPack`, `toInstanceGeometry`, `setFace`/`FACES`, `preparePixel`, `disposePack` for `race/assets/emi.glb` + `props.glb`; the node names, clip names and the linear colour rule live in that file header, `byName` returns null for anything missing and the voxel kit stays the fallback.
+
+### `race/propPack.js` (pass four, the Blender packs)
+
+```js
+export const PROPS_URL;                       // '/dtrh/race/assets/props.glb'
+export function propPack(opts) -> Promise<Pack|null>          // one shared, never-rejecting request
+export function packGeo(pack, name, off, scaleX) -> BufferGeometry|null
+export function geoSize(geo) -> { w, h, d, cy }
+```
+`rooms.js` and `roomProps.js` dress from this one handle, so the pack is fetched and parsed once. A
+null from either function always means the same thing: keep the voxel fallback.
 
 ## Host protocol (bridge.js, Protocol v1)
 
