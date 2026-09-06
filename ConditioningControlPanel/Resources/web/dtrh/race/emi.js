@@ -19,7 +19,7 @@
 // the pack lands. Needs feat/race-b4-props-glb underneath for the file itself.
 
 import * as THREE from 'three';
-import { loadPack, setFace as packSetFace, preparePixel, FACES } from './gltf.js';
+import { loadPack, setFace as packSetFace, preparePixel, flattenRig, FACES } from './gltf.js';
 import { createPoseLayer } from './emiPoses.js';
 
 const PINK = 0xff69b4, GOLD = 0xF2C14E, PALE = 0xB3C7FF, PORCELAIN = 0xF6E7C8;
@@ -242,6 +242,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     const root = pack.clone('EMI_root');
     const ant0 = root && root.getObjectByName('ant0'), ballpiv = root && root.getObjectByName('ballpiv');
     if (!root || !ant0 || !ballpiv) return;         // a pack without the contract pivots: the primitive stays
+    flattenRig(root, pack.animations);                // 69 draws a frame down to ~30: one per pivot and material
     blackOutline(root);
     const ballMats = [], glassMats = [];
     ownMaterials(root.getObjectByName('ball') || ballpiv, ballMats);
