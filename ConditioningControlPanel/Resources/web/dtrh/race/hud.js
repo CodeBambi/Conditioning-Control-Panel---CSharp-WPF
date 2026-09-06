@@ -1,5 +1,5 @@
 /* ============================================================================
- * hud.js - The Caucus Race HUD. Implements CONTRACT.md "race/hud.js + race/race.css".
+ * hud.js - Racing Thoughts HUD. Implements CONTRACT.md "race/hud.js + race/race.css".
  *
  * DOM only, built inside the `.race-hud` div race.html provides. Score rolls
  * up on a short tween (tabular numerals), the multiplier pill pulses on every

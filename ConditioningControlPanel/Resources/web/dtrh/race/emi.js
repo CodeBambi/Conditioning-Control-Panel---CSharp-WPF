@@ -1,4 +1,4 @@
-// race/emi.js - The Caucus Race: the teacup rig with EMI riding in it, seen from behind.
+// race/emi.js - Racing Thoughts: the teacup rig with EMI riding in it, seen from behind.
 // Visual half of CONTRACT.md "race/kart.js (PR 3)": saucer + cup + handle + tea surface, EMI as a
 // CRT body with vents, two glove arms on the rim, a bead antenna with the six mood poses, pooled
 // sweat drops, drift sparks, and a plain disc of tea. Canon lock: EMI faces forward, away from the

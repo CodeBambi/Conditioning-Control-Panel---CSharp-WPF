@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/speed.js - the sense of speed for The Caucus Race.
+ * race/speed.js - the sense of speed for Racing Thoughts.
  *
  * Three cheap layers, all additive, none of them paint over the road:
  *  - streaks: short lines around the camera edge (a child of the camera) that

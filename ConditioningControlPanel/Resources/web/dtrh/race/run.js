@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/run.js - the run brain of The Caucus Race. Implements CONTRACT.md
+ * race/run.js - the run brain of Racing Thoughts. Implements CONTRACT.md
  * "race/run.js + raceBoot.js + race.html (PR 5, integration)".
  *
  *   createRace({ root, bridge, media, settings, seed }) -> { start(), setPaused(b), dispose() }

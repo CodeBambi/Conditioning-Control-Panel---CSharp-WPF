@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/roomProps.js - The Caucus Race diegetic props. Everything is grounded:
+ * race/roomProps.js - Racing Thoughts diegetic props. Everything is grounded:
  * shoulder props stand on a chunky step block beside the kerb, wall props sit
  * flush on the tube wall at shoulder height and above. Nothing floats mid-tube.
  *

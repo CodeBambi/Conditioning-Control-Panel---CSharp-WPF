@@ -1,4 +1,8 @@
-# The Caucus Race - module contract
+# Racing Thoughts - module contract
+
+> Named **The Caucus Race** until 2026-09-06, so older notes, memory files and PR titles
+> that say "caucus" mean this game. The folder, the module names and the host message types
+> never changed.
 
 Single-player, no-lose kart run through the DtRH tube. Sibling entry to `index.html` / `loom.html`:
 `race.html` + `raceBoot.js` + this `race/` folder. Nothing in `game/chaosRun.js` or `engine/scene.js`

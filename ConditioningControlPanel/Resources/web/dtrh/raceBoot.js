@@ -1,5 +1,5 @@
 /* ============================================================================
- * raceBoot.js - boots The Caucus Race page. Implements CONTRACT.md
+ * raceBoot.js - boots Racing Thoughts page. Implements CONTRACT.md
  * "race/run.js + raceBoot.js + race.html (PR 5, integration)" and the
  * "race/menu.js + race/intro.js" section (the front door).
  *

@@ -1,4 +1,4 @@
-// race/kart.js - The Caucus Race: the kart (the teacup) in track space, its placement on the road,
+// race/kart.js - Racing Thoughts: the kart (the teacup) in track space, its placement on the road,
 // and the chase camera. Implements CONTRACT.md "race/kart.js (PR 3)". The cup + EMI meshes,
 // antenna moods, sweat and sparks live in race/emi.js; this file owns speed, steering, drift,
 // the drift mini-turbo, ramps, the lap counter and the camera seat. There is no fail state: speed

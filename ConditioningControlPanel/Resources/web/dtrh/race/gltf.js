@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/gltf.js - The Caucus Race glTF pack loader.
+ * race/gltf.js - Racing Thoughts glTF pack loader.
  *
  * Two packs, both authored in Blender and dropped in race/assets/:
  *

@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/rooms.js - The Caucus Race rooms and road furniture.
+ * race/rooms.js - Racing Thoughts rooms and road furniture.
  *
  * Implements CONTRACT.md section "race/rooms.js": ROOMS (the eight room specs),
  * rollRoomOrder(seed) (Tea Garden first, then the rest dealt loud/soft/loud so the

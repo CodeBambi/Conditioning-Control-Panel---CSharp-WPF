@@ -1,4 +1,4 @@
-# The Caucus Race - track charts (the file is the track)
+# Racing Thoughts - track charts (the file is the track)
 
 Owner call 2026-09-06: the race gets its identity from a hypno file. The player loads an audio
 file, the host charts it (energy curve + spoken trigger words with timestamps), and the run is

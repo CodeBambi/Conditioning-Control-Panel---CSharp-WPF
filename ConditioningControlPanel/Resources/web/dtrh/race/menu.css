@@ -1,4 +1,4 @@
-/* race/menu.css - the main menu of The Caucus Race (.rm-*). Scoped under #race-root.
+/* race/menu.css - the main menu of Racing Thoughts (.rm-*). Scoped under #race-root.
  * Same pixel look as the HUD: hard plates, stepped shadows, Poppins, lowercase.
  * The left column is DOM; the right side is a hole the stage shows through.
  * THE BOUNCE on press (Law VIII, inside 100 ms), THE GLOW on focus, springs never linear tweens (Law XI). */

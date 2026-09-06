@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/pixel.js - the big-pixel look for The Caucus Race, with a crisp layer.
+ * race/pixel.js - the big-pixel look for Racing Thoughts, with a crisp layer.
  *
  * Two-pass render while a block size is on:
  *   (a) the WORLD (THREE layer 0) renders into a low-resolution render target

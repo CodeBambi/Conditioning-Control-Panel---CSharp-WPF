@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/menu.js - the main menu and the character stage of The Caucus Race.
+ * race/menu.js - the main menu and the character stage of Racing Thoughts.
  *
  *   createMenu({ root, renderer, pixel, audio, settings, log }) ->
  *     { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose() }, dispose() }
@@ -261,9 +261,9 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const hit = (node, cls) => { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); };
   const canLevels = !!(audio && typeof audio.setLevels === 'function');
 
-  const layer = el('div', 'rm-root', root); layer.hidden = true; layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-label', 'the caucus race');
+  const layer = el('div', 'rm-root', root); layer.hidden = true; layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-label', 'racing thoughts');
   const col = el('div', 'rm-col', layer);
-  el('div', 'rm-title', col, 'the caucus race');
+  el('div', 'rm-title', col, 'racing thoughts');
   el('div', 'rm-tag', col, 'steer. pop. never stop.');
   const list = el('div', 'rm-list', col); list.setAttribute('role', 'menu');
   const optPanel = el('div', 'rm-panel rm-options', col); optPanel.hidden = true;

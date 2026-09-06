@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/audio.js - every sound The Caucus Race makes. See race/AUDIO.md.
+ * race/audio.js - every sound Racing Thoughts makes. See race/AUDIO.md.
  *
  *   createRaceAudio({ bridge, hud, settings, input }) -> audio
  *   audio.sfx(name, scale)       the run's sfx() helper lands here: host legs + in-page beats
