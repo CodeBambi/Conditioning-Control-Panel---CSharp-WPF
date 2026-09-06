@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Track Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="maker.css">
+</head>
+<body>
+
+<header id="top">
+  <input type="file" id="file" accept="audio/*,.json" hidden>
+  <button class="primary" id="pick">&#127925; pick the mp3</button>
+  <span class="name">track: <b id="trackname">nothing yet</b><small id="sub">pick an mp3, or drop one on the page.</small></span>
+  <span class="grow"></span>
+  <button id="addwall">&#129521; wall at playhead <kbd>w</kbd></button>
+  <button id="play">&#9654; play <kbd>space</kbd></button>
+  <span class="time" id="time">0:00.0</span>
+  <span class="zoom"><button id="zin" title="zoom in">&#65291;</button><button id="zout" title="zoom out">&#65293;</button></span>
+  <button id="undo">&#8630; undo <kbd>ctrl z</kbd></button>
+  <button id="export">save track <kbd>ctrl s</kbd></button>
+</header>
+
+<section id="lines">
+  <div class="g" style="grid-row:1"><span>time</span></div>
+  <div class="row ruler" id="ruler" style="grid-row:1"></div>
+
+  <div class="g" style="grid-row:2"><b>bubbles</b><span>drag any to slide what is picked. shift click = all of the same.</span></div>
+  <div class="row" id="seqs" style="grid-row:2"></div>
+
+  <div class="g" style="grid-row:3"><b>audio</b><span>click to jump</span></div>
+  <div class="row audio" id="audio" style="grid-row:3"><canvas id="wave"></canvas></div>
+
+  <div class="g" style="grid-row:4"><b>words</b><span>the triggers, as heard</span></div>
+  <div class="row words" id="words" style="grid-row:4"></div>
+
+  <div class="g" style="grid-row:5"></div>
+  <div class="row" style="grid-row:5"></div>
+
+  <aside id="side">
+    <h2>what each trigger gets</h2>
+    <p>ticked ones are placed for you at every word. untick to clear them.</p>
+    <div id="recipes"><p class="empty">no track yet.</p></div>
+    <div class="gap">
+      <b>bubbles stay</b><button class="small" id="gapm" title="closer">&#65293;</button>
+      <span class="v" id="gapv">0.4 s</span>
+      <button class="small" id="gapp" title="further apart">&#65291;</button><b>apart</b>
+      <a href="#" id="startover" class="startover" hidden>start over</a>
+    </div>
+  </aside>
+
+  <div id="playhead"></div>
+  <span class="note" id="status" hidden></span>
+  <div id="fx" hidden><h3>what the wall does</h3><div class="grid" id="fxgrid"></div></div>
+</section>
+
+<footer id="bar">
+  <span class="what" id="what">nothing picked</span>
+  <span class="how"><span><b>click</b> a bubble, a wall, a block or a word</span><span><b>shift click</b> picks every one like it</span><span><b>ctrl click</b> adds to the pick</span><span><b>drag</b> or <kbd>&#8592;</kbd><kbd>&#8594;</kbd> slides the whole pick</span><span><kbd>del</kbd> removes</span></span>
+  <span class="grow"></span>
+  <span class="how"><span id="showing">nothing loaded</span></span>
+</footer>
+
+<script type="module" src="maker/app.js"></script>
+</body>
+</html>
