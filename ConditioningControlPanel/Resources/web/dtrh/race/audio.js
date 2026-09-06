@@ -597,7 +597,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     master = null;
   }
 
-  return { sfx, ui, menu: menuMusic, setLevels, update, duck, toggleMute, dispose, _voices: voices, _music: music, _levels: levels };
+  return { sfx, ui, menu: menuMusic, setLevels, update, duck, toggleMute, dispose, _voices: voices, _music: music, _levels: levels, _tracks: tracks };
 }
 
 // self-check: node --check is the bar; the pure parts (pitchSemis, chimeFor, pickVoiceToDrop)

@@ -55,6 +55,16 @@
  * cross-origin `?back=` or referrer is ignored: this never becomes an open
  * redirect.
  *
+ * PERF AIDS: `?tier=mobile` / `?tier=desktop` overrides the quality tier
+ * capability.js detected (headless Chrome reads as a coarse pointer, so it
+ * lands on mobile at any window size; this pins either tier). `?perf=1` logs
+ * one `[race-perf]` line every 2 s: draw calls + triangles summed over the
+ * pixelizer's passes, programs, live geometries / textures, the biggest
+ * texture edge in the run scene, the JS heap (Chrome only), resident <audio>
+ * elements, the governor's device pixel ratio, the pixel block, whether the
+ * world is built and which of stage / run is drawing. Read the numbers off
+ * the console (standalone) or the host log.
+ *
  * TRACK CHARTS (CHART.md): the host posts track-progress / track-chart /
  * track-clock / track-ended / track-error and this file hands them to the run.
  * With no host - or under one that says `trackPick: false`, which is the browser
@@ -66,10 +76,10 @@
 
 import * as bridge from './bridge.js';
 import { detectMode } from './shared/capability.js';
-import { setQuality } from './shared/quality.js';
+import { setQuality, Q } from './shared/quality.js';
 import { createHostMediaSource } from './hostMedia.js';
 
-const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250;
+const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250, PERF_LOG_MS = 2000;
 const params = new URLSearchParams(location.search);
 const hosted = bridge.isHosted;
 /**
@@ -134,10 +144,11 @@ window.addEventListener('unhandledrejection', (e) => {
 // motion down inside the 3D scene instead of showing a boot error. Only a real
 // hard wall - no WebGL, no import maps - still fails.
 const mode = detectMode({ reducedIs3d: true });
+const tierParam = params.get('tier');
 if (mode.hardBlock || !mode.canTry3d) {
   fail('no webgl here: ' + (mode.reason || mode.mode));
 } else {
-  setQuality(mode.tier);
+  setQuality(tierParam === 'mobile' || tierParam === 'desktop' ? tierParam : mode.tier);
 }
 
 // ---- host wiring ----
@@ -234,7 +245,8 @@ async function boot() {
     // the persisted option sliders, before the first frame: the menu theme comes up at the right level
     try { if (race.audio && race.audio.setLevels) race.audio.setLevels({ music: opts.music, sfx: opts.sfx }); } catch (e) { host.log('levels: ' + e); }
     note('');
-    host.log(`race booted: seed ${seed} (${opts.seed}), tier ${mode.tier}, hosted ${hosted}, manifest ${haveManifest}`);
+    host.log(`race booted: seed ${seed} (${opts.seed}), tier ${Q.tier}${tierParam ? ' (?tier)' : ''}, hosted ${hosted}, manifest ${haveManifest}`);
+    if (params.get('perf') === '1') perfLog();
     await standaloneTrack();
     if (params.get('autostart') === '1') { startRun(false); debugItemBox(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
@@ -315,6 +327,20 @@ function stopTrackClock() {
   if (trackAudio) { try { trackAudio.pause(); } catch (e) { /* already gone */ } }
 }
 
+/** `?perf=1`: one `[race-perf]` line every PERF_LOG_MS with the counters in the header. */
+function perfLog() {
+  const t0 = performance.now();
+  const tick = () => {
+    if (exiting || !race || !race.perf) return;
+    let p;
+    try { p = race.perf(); } catch (e) { host.log('perf: ' + e); return; }
+    const heap = (performance.memory && performance.memory.usedJSHeapSize) ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + 'MB' : 'n/a';
+    host.log(`[race-perf] t+${((performance.now() - t0) / 1000).toFixed(0)}s calls ${p.calls} tris ${p.triangles} passes ${p.passes} frame ${p.frameMs.toFixed(1)}ms`
+      + ` progs ${p.programs} geos ${p.geometries} texs ${p.textures} texMax ${p.texMax} heap ${heap} audio ${p.audio} dpr ${p.dpr.toFixed(2)} block ${p.block}`
+      + ` bubbles ${p.bubbles} ${p.world ? 'world' : 'no-world'} ${p.stage ? 'stage' : p.running ? 'run' : 'idle'} tier ${Q.tier}`);
+  };
+  setInterval(tick, PERF_LOG_MS);
+}
 /** `?itembox=<ms>`: the screenshot aid. Waits for the run, then retries until a cube is in range. */
 function debugItemBox() {
   const at = Number(params.get('itembox'));

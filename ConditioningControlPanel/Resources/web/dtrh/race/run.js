@@ -24,6 +24,11 @@
  * curve and the acts; race/cues.js says what each spoken word is worth; everything
  * below only spends those on the world it already owns. Without a track not one
  * line of this changes: the seeded run is the else branch throughout.
+ *
+ * PERF (raceBoot `?perf=1`): `race.perf()` is one snapshot of the last frame,
+ * summed over the pixelizer's passes: draw calls, triangles, the programs the
+ * renderer holds, live geometries / textures, the biggest texture edge in the
+ * run scene, resident <audio> elements and the governor's device pixel ratio.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -655,8 +660,29 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   resetRunState(seed);
   raf = requestAnimationFrame(frame);
   function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
+  /** One perf snapshot (the `?perf=1` aid). Never throws: a missing counter reads as -1. */
+  function perf() {
+    const info = renderer.info || {}, mem = info.memory || {}, st = pixel.stats || {};
+    let texMax = 0;
+    try {
+      scene.traverse((o) => {
+        const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+        for (const m of mats) for (const k of ['map', 'emissiveMap', 'alphaMap']) {
+          const im = m[k] && m[k].image;
+          if (im && im.width) texMax = Math.max(texMax, im.width, im.height || 0);
+        }
+      });
+    } catch (e) { texMax = -1; }
+    return {
+      calls: st.calls == null ? -1 : st.calls, triangles: st.triangles == null ? -1 : st.triangles, passes: st.passes || 0,
+      frameMs: st.frameMs || 0, programs: info.programs ? info.programs.length : -1,
+      geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
+      audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
+      world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
+    };
+  }
   function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block
-  return { start, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera,
+  return { start, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => TR.replace(chart), trackClock: (t, playing) => TR.clock(t, playing),
