@@ -13,6 +13,12 @@
  * (video only), run-ended, exit, exit-done, and with a track loaded track-play,
  * track-pause, track-stop; listens to pause, payout-result.
  *
+ * CAMERA ASPECT (race/viewport.js): FOV_BASE is a HORIZONTAL field of view wearing
+ * a vertical number. 72 is what it measures at 16:9, and every other window shape
+ * solves back for the vertical fov that keeps that same width of road, clamped at
+ * MAX_VFOV so a tall phone stops short of a fisheye. Desktop 16:9 is untouched by
+ * definition. The boost/drift/tea_time kicks are added on top of that per frame.
+ *
  * TRACK CHARTS (CHART.md): setTrack(chart) hands the run a charted hypno file and
  * from then on the file is the clock. race/track.js holds the second, the energy
  * curve and the acts; race/cues.js says what each spoken word is worth; everything
@@ -43,10 +49,12 @@ import { createItems } from './items.js';
 import { createInput } from './input.js';
 import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
 import { createSpeedFx } from './speed.js';
+import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createRaceAudio } from './audio.js';
 import { resultTier, resultsCamera, preRollCamera } from './intro.js';
 
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE = 72;   // 1.6 read as ALMOST spam: the next lane over qualified
+// FOV_BASE is the VERTICAL fov at 16:9 only; race/viewport.js re-solves it per aspect (see the header).
 // effect lives are cocktail.js CATEGORIES (scaled by the pop's durationMult); a glitch re-pop wobbles
 // the world clock this hard, this long (only when tea_time is not already holding it)
 const WOBBLE_SCALE = 0.82, WOBBLE_SEC = 0.3;
@@ -81,11 +89,18 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   scene.add(new THREE.AmbientLight(0x8a70a8, 1.0));
   const cupLight = new THREE.PointLight(0xff69b4, 1.4, 14);
   scene.add(cupLight);
+  // the vertical fov this window shape needs to hold FOV_BASE's 16:9 width of road; the per-frame
+  // kick rides on top of it, and a resize slides S.fov by the same delta so the kick survives a flip
+  let fovBase = FOV_BASE, fovLive = false;
   function resize() {
     const w = root.clientWidth || window.innerWidth, h = root.clientHeight || window.innerHeight;
-    pixel.resize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+    pixel.resize(w, h); camera.aspect = w / h;
+    const next = vFovForAspect(FOV_BASE, camera.aspect);
+    if (fovLive) { S.fov += next - fovBase; camera.fov = S.fov; } else camera.fov = next;
+    fovBase = next;
+    camera.updateProjectionMatrix();
   }
-  window.addEventListener('resize', resize); resize();
+  const unbindResize = bindViewportResize(resize); resize();
 
   // ---- the parts that outlive a run ----
   const hud = createRaceHud(hudRoot);
@@ -104,10 +119,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const S = {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
-    flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: 72, fovBoost: 0, gates: 0, room: null,
+    flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
     trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,
   };
+  fovLive = true;   // S exists: resize() may shift S.fov from here on
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
   const TR = createTrackState();      // the loaded track chart: its clock, its energy, its acts (race/track.js)
   const hosted = bridge.isHosted !== false;   // the standalone page logs where the host would be told
@@ -492,7 +508,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // FOV kick: boost snaps wide (to ~84) and eases back slowly; drift adds a smaller one; tea_time narrows
     const boostT = ks.boostSec > 0 ? 1 : 0;
     S.fovBoost += (boostT - S.fovBoost) * Math.min(1, dt * (boostT ? 9 : 2.2));
-    const fovT = FOV_BASE + (reducedMotion ? 5 : 12) * S.fovBoost + (ks.drift && !reducedMotion ? 3 : 0) - (S.timeScale < 1 ? 4 : 0);
+    const fovT = fovBase + (reducedMotion ? 5 : 12) * S.fovBoost + (ks.drift && !reducedMotion ? 3 : 0) - (S.timeScale < 1 ? 4 : 0);
     if (Math.abs(fovT - S.fov) > 0.05) { S.fov += (fovT - S.fov) * Math.min(1, dt * 6); camera.fov = S.fov; camera.updateProjectionMatrix(); }
     cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.6);
     speedFx.update(dt, ks, lay);
@@ -603,7 +619,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (S.disposed) return;
     S.disposed = true;
     if (raf) cancelAnimationFrame(raf);
-    window.removeEventListener('resize', resize);
+    unbindResize();
     document.removeEventListener('visibilitychange', onVis);
     if (payoutResolve) payoutResolve(null);
     teardown();
