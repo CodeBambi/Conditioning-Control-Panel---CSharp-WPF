@@ -32,6 +32,42 @@ points from the road toward the tube centre).
 
 Constants live in `race/consts.js` (import them, do not redeclare).
 
+## Camera aspect rule
+
+**Every base fov in this game is a HORIZONTAL fov wearing a vertical number, and the number is
+measured at 16:9.** `THREE.PerspectiveCamera` takes a vertical fov, so a hard-coded one keeps the
+same height of picture at every window shape and lets the WIDTH go wherever the aspect drops it.
+That is fine on a desktop and wrong on a phone: the run's 72 collapses to about 37 horizontal at
+390x844, which turns the road into a slit and puts both side lanes off-screen, and blows out to
+about 118 at 844x390.
+
+`race/viewport.js` owns the fix and nothing else may re-derive it:
+
+```js
+import { vFovForAspect, hFovFor, bindViewportResize } from './viewport.js';
+vFovForAspect(baseVFov, aspect, maxVFov = MAX_VFOV) -> vertical fov, degrees
+hFovFor(vFov, aspect)                               -> the horizontal fov that pair covers
+bindViewportResize(fn)                              -> dispose()
+```
+
+- `hFov = 2 * atan(tan(base / 2) * 16 / 9)` is the constant being protected; the vertical is solved
+  back from it per aspect and clamped to `[MIN_VFOV, maxVFov]`.
+- **At 16:9 the two cancel exactly, so `vFovForAspect(base, 16 / 9) === base` and no desktop frame
+  moves by a pixel.** Every change to this file must keep that identity.
+- Narrower than 16:9 the vertical opens up to the clamp; wider it closes down, which is what stops
+  an ultrawide from being a fisheye.
+- `MAX_VFOV` is 102 for the road (picked on a 390x844 shot: wide enough for both lanes, short of a
+  tunnel that reads as a lens). The menu stage passes its own 86, because a character reads wrong at
+  a fov a tunnel still survives.
+- The kicks stay ADDITIVE on top of the solved base: `run.js` adds boost / drift / tea_time to
+  `fovBase`, never to `FOV_BASE`.
+- `bindViewportResize` is the only resize path. `resize` alone misses an iOS orientation flip (it
+  reports the OLD size) and misses a mobile URL bar sliding away (that only moves `visualViewport`),
+  so it binds `resize` + `orientationchange` + `visualViewport` and re-runs one frame after a flip.
+- Anything reading `camera.fov` per frame (`race/speed.js`) already follows for free: read it, never
+  assume a number.
+- `race/smoke/fov-check.mjs` is the guard: `node race/smoke/fov-check.mjs`.
+
 ## Modules and their exports
 
 ### `race/consts.js` (PR 1)
@@ -354,6 +390,10 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
   (the whip). `start()` clears the override; the boot installs the whip after `start()`.
 - `w.kart.emiModel()`, `w.kart.emiReady(cb)`, `w.kart.setFace(i)` are the kart's contract for the run's EMI; every call
   is guarded for null (the stage carries its own clone with its own glass material, so the two faces never fight).
+- The stage camera follows the **Camera aspect rule** above (base 42 at 16:9, its own 86 cap), and skips
+  `setViewOffset` entirely under `(max-width: 720px)`: menu.css collapses to one column and hides `.rm-stage`
+  there, so there is no right-hand column to park her beside and the offset would only shove her off the edge.
+  The canvas keeps rendering behind the single column, where she reads as the backdrop.
 - Options persist under the single localStorage key `race.options` (`pixel, music, sfx, motion, seed, seedValue`), not in
   `engine/settings.js`. Precedence for the block: `?pixel` > `race.options.pixel` > host `settings.pixel` > `PIXEL_DEFAULT`.
   The seed rule (daily / random / custom) sets `settings.seedLock`, which `again` honours; a change in the menu calls `reseed`.

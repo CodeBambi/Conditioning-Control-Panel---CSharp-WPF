@@ -53,6 +53,7 @@ import * as THREE from 'three';
 import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
 import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 import { createMenuFlashes } from './menuFlashes.js';
+import { vFovForAspect, bindViewportResize } from './viewport.js';
 
 export const OPTIONS_KEY = 'race.options';
 export const PROPS_URL = '/dtrh/race/assets/props.glb';
@@ -85,6 +86,8 @@ const MIST = 0x3a1c4e, FOG_NEAR = 9, FOG_FAR = 21, SKY_R = 44, FAR_PLUM = 0x4a24
 // far shapes: [x, z, scale, yaw]. The same cup profile, blown up and sat on the floor behind the gantry.
 const FAR_CUPS = [[-15, -28, 6, 0.5], [14, -33, 7, -0.8], [-6.5, -37, 6.4, 2.1]];
 const PAD = { a: 0, b: 1, up: 12, down: 13, left: 14, right: 15 };
+// the stage camera at 16:9, its own cap, and the one-column breakpoint menu.css already keeps
+const STAGE_FOV = 42, STAGE_MAX_VFOV = 86, ONE_COL_Q = '(max-width: 720px)';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 /** Screenshot aid: `?face=N` pins the stage face so one atlas frame can be shot on its own.
  *  -1 (no param, an empty one, or anything unparseable) means the clips drive the face. */
@@ -153,7 +156,11 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(HAZE);
   scene.fog = new THREE.Fog(MIST, FOG_NEAR, FOG_FAR);
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
+  // STAGE_FOV is the vertical fov at 16:9 only. race/viewport.js re-solves it per aspect so the
+  // stage keeps the same WIDTH of room at every window shape; a portrait phone opened it to about
+  // 112 unclamped, which put the camera inside her head, so the stage takes a tighter cap than the
+  // road does: a character reads wrong long before a tunnel does.
+  const camera = new THREE.PerspectiveCamera(STAGE_FOV, 1, 0.1, 80);
   camera.position.set(0, 1.0, 4.4); camera.lookAt(0, 0.6, 0);   // pulled back from the brief's (0, 0.9, 3.2): at block 3 she filled the frame
   const view = { w: 1, h: 1, frac: 0.5 };
   let t = 0, mode = 'menu', reduced = !!reducedMotion, disposed = false;
@@ -322,7 +329,12 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     if (ripple.material.opacity > 0) { ripple.scale.addScalar(dt * 4); ripple.material.opacity = Math.max(0, ripple.material.opacity - dt * 1.6); }
   }
   function render() { pixel.render(scene, camera); }
-  function resize(w, h) { view.w = Math.max(1, w | 0); view.h = Math.max(1, h | 0); camera.aspect = view.w / view.h; applyView(); }
+  function resize(w, h) {
+    view.w = Math.max(1, w | 0); view.h = Math.max(1, h | 0);
+    camera.aspect = view.w / view.h;
+    camera.fov = vFovForAspect(STAGE_FOV, camera.aspect, STAGE_MAX_VFOV);
+    applyView();
+  }
   /** Where the visible centre of the stage sits across the canvas (0.5 = the middle; the menu column pushes it right). */
   function setViewFraction(f) { view.frac = clamp(+f || 0.5, 0.3, 0.8); applyView(); }
   function applyView() {
@@ -500,17 +512,22 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     const ax = g.axes || [], now = { up: btn(PAD.up) || ax[1] < -0.6, down: btn(PAD.down) || ax[1] > 0.6, left: btn(PAD.left) || ax[0] < -0.6, right: btn(PAD.right) || ax[0] > 0.6, press: btn(PAD.a), back: btn(PAD.b) };
     for (const k of Object.keys(now)) { if (now[k] && !padWas[k]) act(k); padWas[k] = now[k]; }
   }
+  /** menu.css collapses to one column at ONE_COL_Q and hides `.rm-stage`; the canvas keeps rendering
+   *  behind it, so there is no right-hand column to push her into and the offset would only shove her
+   *  off the side of a phone. One column = dead centre, and she reads as the backdrop she now is. */
+  const oneColumn = () => !!(typeof matchMedia === 'function' && matchMedia(ONE_COL_Q).matches);
   function onResize() {
     const w = root.clientWidth || window.innerWidth, h = root.clientHeight || window.innerHeight;
     stage.resize(w, h);
     // a hair right of the visible centre: room for the cup. `viewHeld` keeps that framing while the
     // menu is hidden but something else owns the same column (race/cards.js), so a late resize does
     // not walk her back to the middle of the frame.
-    stage.setViewFraction((shown || viewHeld) ? ((col.offsetWidth || w * 0.38) / w + 1) / 2 + 0.03 : 0.5);
+    const parked = (shown || viewHeld) && !oneColumn();
+    stage.setViewFraction(parked ? ((col.offsetWidth || w * 0.38) / w + 1) / 2 + 0.03 : 0.5);
   }
   const onPointer = (e) => { if (shown && e.clientX > window.innerWidth * 0.5) stage.emi.peek(); };
   window.addEventListener('keydown', onKey);
-  window.addEventListener('resize', onResize);
+  const unbindResize = bindViewportResize(onResize);
   stageEl.addEventListener('pointerenter', onPointer);
   layer.dataset.motion = options.motion;
 
@@ -528,7 +545,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     dispose() {
       if (disposed) return;
       disposed = true; shown = false;
-      window.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize);
+      window.removeEventListener('keydown', onKey); unbindResize();
       stage.dispose(); layer.remove();
     },
   };
