@@ -14,8 +14,9 @@ using Newtonsoft.Json.Linq;
 namespace ConditioningControlPanel.Services.Chaos;
 
 /// <summary>
-/// Hosts THE CAUCUS RACE - the no-lose kart run that lives as a sibling page next to the
-/// DtRH game (<c>Resources/web/dtrh/race.html</c>). A stripped-down sibling of
+/// Hosts RACING THOUGHTS (called The Caucus Race until 2026-09-06; the class keeps its name):
+/// the no-lose kart run that lives as a sibling page next to the DtRH game
+/// (<c>Resources/web/dtrh/race.html</c>). A stripped-down sibling of
 /// <see cref="DtrhHostService"/>, the way <see cref="LoomHostService"/> is: one windowed,
 /// input-receiving <see cref="ChaosWebViewHost"/> with the SAME virtual-host mappings the
 /// descent registers (the race drives through the user's own media, so it needs ccp.assets,
@@ -123,7 +124,7 @@ internal static class CaucusHostService
                 // Glued above MainWindow like the descent, so a bark or a closing video window
                 // raising main can never bury the race.
                 OwnedByMainWindow = true,
-                WindowTitle = "The Caucus Race",
+                WindowTitle = "Racing Thoughts",
                 LogTag = "Race",
                 // The engine hum and the pop bed must start without a click.
                 ExtraBrowserArguments = "--autoplay-policy=no-user-gesture-required",

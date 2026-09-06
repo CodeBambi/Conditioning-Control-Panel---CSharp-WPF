@@ -488,11 +488,11 @@
                                             </Style>
                                         </Button.Resources>
                                     </Button>
-                                    <!-- The Caucus Race: the kart run on the same media, a DtRH sibling
+                                    <!-- Racing Thoughts: the kart run on the same media, a DtRH sibling
                                          page (dtrh/race.html). Same outline as Quick Drop and the same
                                          door - BtnStartRace_Click asks the descent's TierGate, so the
                                          lockband above needs no third exception. -->
-                                    <Button x:Name="BtnPlayRace" Content="☕ The Caucus Race" Cursor="Hand"
+                                    <Button x:Name="BtnPlayRace" Content="☕ Racing Thoughts" Cursor="Hand"
                                             Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="12"
                                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="14,6" Margin="0,8,0,0"
                                             HorizontalAlignment="Right" ToolTip="the tea party on wheels. beta"

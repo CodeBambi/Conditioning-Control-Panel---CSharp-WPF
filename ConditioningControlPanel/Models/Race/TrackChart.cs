@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 namespace ConditioningControlPanel.Models.Race;
 
 /// <summary>
-/// A hypno track's chart: the energy curve, the acts and the timed events the Caucus Race lays on
+/// A hypno track's chart: the energy curve, the acts and the timed events Racing Thoughts lays on
 /// the road. Mirrors Resources/web/dtrh/race/CHART.md (chart JSON version 1) field for field; the
 /// page reads this JSON as-is, so the names here are the wire names.
 /// </summary>
