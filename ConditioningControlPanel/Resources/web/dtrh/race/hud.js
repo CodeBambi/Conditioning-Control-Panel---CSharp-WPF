@@ -237,6 +237,7 @@ export function createRaceHud(root) {
     ? 'esc resumes. reduced motion is on: no roll, no jolt, banners fade.'
     : 'esc resumes. your score stays. turn on reduced motion in your system settings for a level camera and no jolts.');
 
+  const count = el('rh-count', root);   // 3 2 1 go: the one HUD element of the intro and the again
   const end = el('rh-screen', root);
   const endCard = el('rh-card', end);
   const endTitle = endCard.appendChild(Object.assign(document.createElement('h2'), { textContent: 'the tea party' }));
@@ -402,8 +403,20 @@ export function createRaceHud(root) {
       brake.classList.add('is-on');
       return new Promise((res) => { brakeResolve = res; });
     },
-    showEnd(summary) {
+    /** 3, 2, 1, go on the HUD. Resolves on GO. onTick(label) fires per beat for sound. */
+    countdown(opts = {}) {
+      return new Promise((res) => {
+        ['3', '2', '1', 'go'].forEach((s, i) => later(() => {
+          if (disposed) return;
+          count.textContent = s; count.classList.toggle('is-go', s === 'go'); hit(count, 'is-on');
+          if (opts.onTick) { try { opts.onTick(s); } catch (e) { /* a listener never breaks the count */ } }
+          if (s === 'go') { res(); later(() => { count.classList.remove('is-on'); count.textContent = ''; }, reduced ? 120 : 520); }
+        }, reduced ? i * 450 : i * 700));
+      });
+    },
+    showEnd(summary, opts = {}) {
       const s = summary || {};
+      end.classList.toggle('is-beside', !!opts.beside);   // the card slides in beside her instead of over her
       settleBrake('resume');
       endTitle.textContent = s.title || 'the tea party';
       pbEl.style.display = s.personalBest ? '' : 'none';
@@ -430,7 +443,7 @@ export function createRaceHud(root) {
       for (const t of timers) clearTimeout(t);
       timers.clear();
       if (raf) cancelAnimationFrame(raf);
-      chrome.remove(); brake.remove(); end.remove();
+      chrome.remove(); brake.remove(); end.remove(); count.remove();
     },
   };
   return hud;
