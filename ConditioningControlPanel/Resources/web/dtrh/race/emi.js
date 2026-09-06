@@ -21,6 +21,7 @@
 import * as THREE from 'three';
 import { loadPack, setFace as packSetFace, preparePixel, flattenRig, FACES } from './gltf.js';
 import { createPoseLayer } from './emiPoses.js';
+import { SAUCER_R } from './consts.js';
 
 const PINK = 0xff69b4, GOLD = 0xF2C14E, PALE = 0xB3C7FF, PORCELAIN = 0xF6E7C8;
 const BREATH_SEC = 3.9;      // the one breath on screen (Law III)
@@ -31,19 +32,26 @@ const PROPS_GLB = '/dtrh/race/assets/props.glb';
 // top of its glaze band, the cup is 0.695 to its rim with the band at 0.645..0.690, handle on +x.
 // The cup sits CUP_Y above the saucer base, the way the JS rig always sat it.
 const CUP_Y = 0.09, SAUCER_TOP = 0.125, CUP_RIM_TOP = 0.695;
-/** The saucer's outer radius in rig units (kart_saucer is 1.90 across, the JS dish 0.95 too).
- *  kart.js needs it to know how much air a pitch costs. */
-export const SAUCER_R = 0.95;
+/** The saucer's outer radius in rig units. consts.js owns the number now (kart.js clamps the
+ *  kart to it and needs it to know how much air a pitch costs); this re-export is the old door in.
+ *  Owner call 2026-09-06: a lil smaller, 0.95 down to 0.8. props.glb's kart_saucer is still
+ *  authored 1.90 across, so the dish clone is squeezed to SAUCER_R in x and z on mount and its
+ *  heights (SAUCER_TOP, CUP_Y) are left alone. */
+export { SAUCER_R };
+/** The radius kart_saucer is authored at, before DISH_SQUEEZE takes it down to SAUCER_R. */
+const SAUCER_R_GLB = 0.95, DISH_SQUEEZE = SAUCER_R / SAUCER_R_GLB;
 // THE CUP TIPS, THE SAUCER DOES NOT. kart.js hands its steer lean over as `ctx.lean` now instead
 // of rolling the whole kart about the forward axis: the group rides ON the road, so a banked
-// saucer put its outer edge sin(lean) * 0.95 * KART_SCALE under the surface, 0.84 m under it at a
+// saucer put its outer edge sin(lean) * SAUCER_R * KART_SCALE under the surface, most of a metre at a
 // drift lean. A saucer slides, it does not bank. So `body` alone turns, about the cup's foot on
 // the dish (CUP_PIVOT_Y), lifted by sin(tip) * CUP_FOOT_R so the low half of the foot kisses the
 // dish instead of cutting into it, and slid CUP_SLIDE * sin(tip) toward the outside of the turn so
 // the lean still reads as g-force. CUP_TIP_MAX saturates the angle (tanh, so small leans are one
 // for one and only the big ones are held back): the lift keeps the foot honest at any angle, but
 // the handle bows out to x 0.86 and reaches the road on its own at about 45 degrees, and a cup
-// tipped that far on a flat saucer reads as falling off it. At the 21 degree cap the foot clears
+// tipped that far on a flat saucer reads as falling off it. At the cap the cup rim's low side
+// reaches x 0.74 on the 0.8 dish, so the cup tips inside the saucer's own rim and never hangs
+// off it. At the 21 degree cap the foot clears
 // the road by 0.13 m, the handle by 0.24 m, and the cup rises 0.15 m off the dish at full lock.
 // This is geometry, not a transition, so reduced motion keeps every bit of it.
 const CUP_FOOT_R = 0.3, CUP_PIVOT_Y = CUP_Y, CUP_TIP_MAX = 0.38, CUP_SLIDE = 0.07;
@@ -147,9 +155,11 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
 
   // ---- saucer ----
   const saucer = new THREE.Group(); root.add(saucer);
-  const sc = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.7, 0.09, 40), porcelain); sc.position.y = 0.05; saucer.add(sc);
-  const saucerRim = new THREE.Mesh(new THREE.TorusGeometry(0.93, 0.03, 8, 48), pinkGlow); saucerRim.rotation.x = Math.PI / 2; saucerRim.position.y = 0.09; saucer.add(saucerRim);
-  const saucerMark = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 0.08), pinkGlow); saucerMark.position.set(0.7, 0.1, 0); saucer.add(saucerMark);
+  // every radius here is SAUCER_R times the ratio the dish was authored at, so the fallback dish
+  // and the glb one come out the same width and the mark keeps its place on the glaze band.
+  const sc = new THREE.Mesh(new THREE.CylinderGeometry(SAUCER_R, SAUCER_R * 0.737, 0.09, 40), porcelain); sc.position.y = 0.05; saucer.add(sc);
+  const saucerRim = new THREE.Mesh(new THREE.TorusGeometry(SAUCER_R * 0.979, 0.03, 8, 48), pinkGlow); saucerRim.rotation.x = Math.PI / 2; saucerRim.position.y = 0.09; saucer.add(saucerRim);
+  const saucerMark = new THREE.Mesh(new THREE.BoxGeometry(SAUCER_R * 0.316, 0.02, 0.08), pinkGlow); saucerMark.position.set(SAUCER_R * 0.737, 0.1, 0); saucer.add(saucerMark);
 
   // ---- cup ----
   const body = new THREE.Group(); root.add(body);
@@ -315,6 +325,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
     blackOutline(cup); blackOutline(dish);
     P = { cup, dish };
     retire(sc); retire(saucerRim);                  // pinkGlow still dresses the mark, so it lives on
+    dish.scale.set(DISH_SQUEEZE, 1, DISH_SQUEEZE);  // x and z only: SAUCER_TOP and CUP_Y stay true
     saucer.add(dish);
     saucerMark.position.y = SAUCER_TOP + 0.01;      // back on top of the new glaze band
     retire(cupMesh); retire(rim); retire(handle);

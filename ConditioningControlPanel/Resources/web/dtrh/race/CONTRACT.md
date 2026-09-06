@@ -17,6 +17,12 @@ Every gameplay object lives in **track space** `(d, x, h)`:
 |------|---------|-------|
 | `d`  | depth along the spine, metres, wraps at `layout.totalDepth` | `0 .. totalDepth` |
 | `x`  | lateral offset on the road, metres, +x = kart's right | `-ROAD_HALF_W .. +ROAD_HALF_W` |
+
+`ROAD_HALF_W` (3.2) is the lateral EXTENT of track space, not the edge of the asphalt: the road
+ribbon rooms.js draws runs out to `KERB_INNER_W` (2.875) and the kerb steps up from there to
+`KERB_OUTER_W` (3.5). Two derived limits fall out of that and both live in `consts.js`:
+`KART_X_MAX` is as far as the kart CENTRE may go before the saucer's rim would leave the asphalt,
+and `LANE_X_MAX` is as far out as a bubble may sit and still be poppable from there.
 | `h`  | height above the road surface, metres | `0` on the road, ceiling about `2*RADIUS - ROAD_DROP` |
 
 `layout.toWorld(d, x, h, out)` is the ONLY way to turn track space into a `THREE.Vector3`. Never
@@ -29,7 +35,8 @@ Constants live in `race/consts.js` (import them, do not redeclare).
 ## Modules and their exports
 
 ### `race/consts.js` (PR 1)
-`RADIUS`, `ROAD_DROP`, `ROAD_HALF_W`, `KART_BASE_SPEED`, `KART_MAX_SPEED`, `KART_MIN_SPEED`,
+`RADIUS`, `ROAD_DROP`, `ROAD_HALF_W`, `KERB_INNER_W`, `KERB_OUTER_W`, `SAUCER_R`, `SAUCER_R_ROAD`,
+`KART_X_MAX`, `LANE_X_MAX`, `KART_BASE_SPEED`, `KART_MAX_SPEED`, `KART_MIN_SPEED`,
 `GRAVITY`, `POP_HIT_D`, `POP_HIT_X`, `POP_HIT_H`, `MULT_LADDER`, `COMBO_HOLD_SEC`, `INTENSITY_RAMP_SEC`.
 
 ### `race/spine.js` (PR 1)
@@ -174,8 +181,10 @@ lathe cup, its rim torus, the handle tube, the saucer cylinder and its rim are t
 the tea disc, the pink saucer mark, `cupLight`, the seat and `TEA_Y` are shared by both paths.
 Speed: cruise `KART_BASE_SPEED`, cap `KART_MAX_SPEED`, floor `KART_MIN_SPEED`. Ramps: when
 `layout.rampAt(d)` matches the lip, give `vh` an upward impulse scaled by speed; `GRAVITY` pulls
-back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `ROAD_HALF_W`
-(soft wall, no bounce-off shock). Drift = tighter steer + sparks, no penalty. EMI: CRT body seen
+back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `KART_X_MAX` (soft wall,
+no bounce-off shock): THE KERB HOLDS THE SAUCER, NOT THE CUP, so the limit is measured from the
+saucer's outer rim (`KERB_INNER_W - SAUCER_R_ROAD - KERB_KISS` = 1.775 m) and the dish stops on the
+kerb line instead of hanging a metre and a half past it. Drift = tighter steer + sparks, no penalty. EMI: CRT body seen
 from behind, gloves on the rim, bead antenna with the six mood states, sweat particles when
 fraught, her face only as a mirrored emoticon in the tea (`:3`, `>_<`, `o_o`, `^_^`, `$_$`). Text
 emoticons only, never a drawn face, never a speech line.

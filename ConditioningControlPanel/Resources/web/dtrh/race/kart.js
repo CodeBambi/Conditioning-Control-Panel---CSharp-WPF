@@ -14,23 +14,33 @@
 //   { type:'lap', lap, sec }          the Tea Garden gate crossed again: a timed lap (the first crossing only starts the clock)
 //   { type:'split', frac, sec }       a quarter mark of the lap (0.25 / 0.5 / 0.75) passed at `sec` into the lap
 //
+// THE KERB HOLDS THE SAUCER, NOT THE CUP. Steering used to clamp the kart CENTRE to ROAD_HALF_W
+// (3.2), which is not even the edge of the asphalt: the ribbon in rooms.js runs out to KERB_INNER_W
+// (2.875) and the kerb face steps up from there. So at full lock the whole dish hung over the kerb
+// and the kerb face cut straight through it. The clamp is KART_X_MAX now (consts.js), measured off
+// the saucer's own rim, so the rim stops on the kerb line and the kart is as wide as it looks. The
+// feel is unchanged: the same WALL_SOFT bleed eases the outward push away over the last stretch and
+// the same vx damping catches the limit, so it is still a soft kerb and never a bounce.
+//
 // THE SAUCER NEVER BANKS. The steer lean used to roll the whole group about the forward axis, and
-// the group sits ON the road (h = 0), so the saucer's outer edge swung sin(lean) * 1.28 m straight
-// down through the road surface: 0.84 m under it at a drift lean. The lean now rides on `ctx.lean`
-// into race/emi.js, which tips the cup alone on a saucer that stays flat (a saucer slides, it does
+// the group sits ON the road (h = 0), so the saucer's outer edge swung sin(lean) * SAUCER_R_ROAD
+// straight down through the road surface, most of a metre under it at a drift lean. The lean now
+// rides on `ctx.lean` into race/emi.js, which tips the cup alone on a saucer that stays flat (a saucer slides, it does
 // not bank). Pitch is still the group's, capped here at what the height above the road allows.
 //
-// SCREENSHOT AID: `?lean=1` (steer right) / `?lean=-1` pins the lean at LEAN_MAX for as long as the
-// page is open, so a headless shot can be taken at full lock without holding a key. It only writes
-// `lean`; speed, steering and the pop box are untouched. Anything but -1..1 is ignored.
+// SCREENSHOT AIDS: `?lean=1` (steer right) / `?lean=-1` pins the lean at LEAN_MAX for as long as
+// the page is open, so a headless shot can be taken at full lock without holding a key. It only
+// writes `lean`; speed, steering and the pop box are untouched. Its sibling `?x=-1` / `?x=1` pins
+// the kart against the left / right kerb (state.x = -/+ KART_X_MAX) so a shot shows where the rim
+// actually sits. Both take -1..1 and scale, and anything else is ignored.
 
 import * as THREE from 'three';
 import {
-  KART_BASE_SPEED, KART_MAX_SPEED, KART_MIN_SPEED, GRAVITY, ROAD_HALF_W,
+  KART_BASE_SPEED, KART_MAX_SPEED, KART_MIN_SPEED, GRAVITY, KART_X_MAX, SAUCER_R_ROAD,
   CAM_BACK, CAM_UP, CAM_LOOK_AHEAD, CAM_LOOK_SPEED, KART_SCALE,
   POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, DRIFT_TIER_SEC, DRIFT_BOOST_SEC, WALL_SCRUB_SEC,
 } from './consts.js';
-import { createEmiRig, SAUCER_R } from './emi.js';
+import { createEmiRig } from './emi.js';
 
 const STEER_VMAX = 6.5;       // lateral m/s at full lock, cruise speed, no drift
 const DRIFT_STEER = 1.45;     // drift tightens the steer
@@ -42,23 +52,28 @@ const TRICK_SEC = 0.62;                 // one full rotation of the cup (spin ab
 const TRICK_POINTS = { spin: 150, flip: 250 };
 const TRICK_STREAK_MAX = 4;             // consecutive clean trick landings scale trick points by 1 + 0.5 * streak
 const LAND_BOOST_SEC = 0.7;             // a clean landing after a trick
-const LAND_CLEAN_M = 0.45;              // metres inside the road edge that still count as clean
+const LAND_CLEAN_M = 0.45;              // metres inside KART_X_MAX that still count as clean
+const SCRUB_EDGE_M = 0.12;              // metres of KART_X_MAX left: the rim is on the kerb, this is a scrub
 const INVERT_DEG = 120;                 // roll past this = upside down (pops count double, score.js)
 const TIER_COLORS = [0xFFD27A, 0x5BB8FF, 0xFF8A3D, 0xC46BFF];   // tier 0 (gold) is emi.js's own sparks
 const TARGET_AHEAD = POP_HIT_D * 0.5;   // the pop ring floats this far in front of the cup
 const TARGET_H = LANE_H - 0.15;         // ring centre: between the road box centre and a lane bubble
 const RING_ALPHA = 0.14;                // resting alpha; a pop pulses it up
 const CAM_BOOST_BACK = 0.7;             // the seat slides back a touch under boost
-// The saucer's outer radius in road metres (1.28), widened by the landing squash's fattest frame
-// (emi.js scales the rig 1.18 in x and z at squash 1) so the pitch cap below holds through a THUD.
-const SAUCER_R_W = SAUCER_R * KART_SCALE * 1.18;
+// The saucer's outer radius in road metres (SAUCER_R_ROAD, 1.08), widened by the landing squash's
+// fattest frame (emi.js scales the rig 1.18 in x and z at squash 1) so the pitch cap below holds
+// through a THUD. The steering clamp uses the resting rim (KART_X_MAX) rather than this one: a
+// squash lasts a fifth of a second and giving it 0.19 m of road either side all run would cost the
+// kerb its kiss.
+const SAUCER_R_W = SAUCER_R_ROAD * 1.18;
 // The steepest lean the physics below can reach: full lock at the speed floor, drifting, plus the
 // drift term. Only the screenshot aid uses it, and it is derived so it cannot go stale.
 const LEAN_MAX = STEER_VMAX * 1.15 * DRIFT_STEER * 0.07 + 0.1;
-const FORCE_LEAN = (() => {                 // `?lean=-1..1`, see the header. No DOM, no aid.
-  try { const v = +new URLSearchParams(location.search).get('lean') || 0; return Math.max(-1, Math.min(1, v)); }
+const forced = (key) => {                   // `?lean=-1..1` / `?x=-1..1`, see the header. No DOM, no aid.
+  try { const v = +new URLSearchParams(location.search).get(key) || 0; return Math.max(-1, Math.min(1, v)); }
   catch (e) { return 0; }                   // node, or a page with no location: the aid is simply off
-})();
+};
+const FORCE_LEAN = forced('lean'), FORCE_X = forced('x');
 const WORLD_UP = new THREE.Vector3(0, 1, 0), ZERO = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3();
 const _fwd = new THREE.Vector3(), _up = new THREE.Vector3(), _right = new THREE.Vector3(), _lvl = new THREE.Vector3();
@@ -202,18 +217,21 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     if (state.drift) auth *= DRIFT_STEER;
     if (state.airborne) auth *= 0.35;
     let vTarget = state.steer * STEER_VMAX * auth;
-    // soft wall: the last WALL_SOFT metres bleed the outward push away, no bounce shock
-    const edge = ROAD_HALF_W - Math.abs(state.x);
+    // soft wall: the last WALL_SOFT metres bleed the outward push away, no bounce shock. `edge` is
+    // road left under the saucer's RIM now, not under the cup, so the bleed starts where the dish
+    // starts running out of asphalt.
+    const edge = KART_X_MAX - Math.abs(state.x);
     const outward = state.steer !== 0 && Math.sign(state.steer) === Math.sign(state.x);
     if (edge < WALL_SOFT && outward) vTarget *= clamp(edge / WALL_SOFT, 0, 1);
     vx += (vTarget - vx) * ease(state.drift ? 9 : 6, dt);
     state.x += vx * dt;
-    if (Math.abs(state.x) > ROAD_HALF_W) {
-      state.x = Math.sign(state.x) * ROAD_HALF_W;
+    if (Math.abs(state.x) > KART_X_MAX) {
+      state.x = Math.sign(state.x) * KART_X_MAX;
       if (Math.sign(vx) === Math.sign(state.x)) vx *= 0.25;
     }
+    if (FORCE_X) { state.x = FORCE_X * KART_X_MAX; vx = 0; }           // screenshot aid, see the header
     // the kerb: leaning on the edge for WALL_SCRUB_SEC eases the speed target off a little (stepSpeed)
-    const scrubbing = edge < 0.12 && outward && Math.abs(state.steer) > 0.3 && !state.airborne;
+    const scrubbing = edge < SCRUB_EDGE_M && outward && Math.abs(state.steer) > 0.3 && !state.airborne;
     scrubSec = scrubbing ? scrubSec + dt : 0;
     const scrub = scrubSec >= WALL_SCRUB_SEC;
     if (scrub && !state.scrub) emit({ type: 'scrub', sec: scrubSec });
@@ -269,7 +287,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
       }
     }
     if (!state.airborne && airWas) {
-      const clean = Math.abs(state.x) < ROAD_HALF_W - LAND_CLEAN_M, trick = state.trick;
+      const clean = Math.abs(state.x) < KART_X_MAX - LAND_CLEAN_M, trick = state.trick;
       if (trick && clean) { applyBoost(LAND_BOOST_SEC); state.trickStreak = Math.min(state.trickStreak + 1, TRICK_STREAK_MAX + 1); }
       else state.trickStreak = 0;
       emit({ type: 'landing', clean, trick, streak: state.trickStreak });
@@ -324,8 +342,8 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     ring.quaternion.copy(group.quaternion);                            // the ring never leans
     // The lean is emi.js's now (the cup tips, the saucer stays flat). Pitch is still the whole
     // kart's, but only as far as the air under the saucer allows: on the road the nose-up left
-    // over from a landing would otherwise drive the saucer's back edge sin(pitch) * 1.28 m under
-    // the surface, so it is capped at asin(clearance / SAUCER_R_W) and touches down level.
+    // over from a landing would otherwise drive the saucer's back edge sin(pitch) * SAUCER_R_W
+    // under the surface, so it is capped at asin(clearance / SAUCER_R_W) and touches down level.
     const clear = Math.asin(clamp((state.h + Math.max(0, hopH)) / SAUCER_R_W, 0, 1));
     group.quaternion.multiply(_q.setFromAxisAngle(AX_X, clamp(pitch, -clear, clear)));
     if (trickT < 1) {                                                  // the trick: one full turn, eased

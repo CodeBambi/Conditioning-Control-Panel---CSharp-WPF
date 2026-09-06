@@ -27,7 +27,7 @@
  *              peak; the count and the drop word go on the chrome.
  * ==========================================================================*/
 
-import { LANE_H, CEILING_H, ROAD_HALF_W } from './consts.js';
+import { LANE_H, CEILING_H, LANE_X_MAX } from './consts.js';
 
 /** A trigger phrase nobody has assigned a bubble to wears the room's own effect, else this. */
 const FALLBACK_TRIGGER = 'flash';
@@ -71,7 +71,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const conf01 = (e) => (Number.isFinite(Number(e.conf)) ? clamp(Number(e.conf), 0, 1) : 1);
 const weight01 = (e) => (Number.isFinite(Number(e.weight)) ? clamp(Number(e.weight), 0, 1) : 1);
 const laneX = (rng) => LANE_X[Math.min(LANE_X.length - 1, (rng() * LANE_X.length) | 0)];
-const spread = (rng) => clamp((rng() * 2 - 1) * (ROAD_HALF_W - 0.8), -ROAD_HALF_W + 0.6, ROAD_HALF_W - 0.6);
+const spread = (rng) => clamp((rng() * 2 - 1) * LANE_X_MAX, -LANE_X_MAX, LANE_X_MAX);
 const roomId = (ctx) => (ctx.room && typeof ctx.room.id === 'string' ? ctx.room.id : (ctx.act && ctx.act.room) || null);
 
 /** Every field CHART.md promises, so run.js never has to test for one. */
