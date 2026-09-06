@@ -89,7 +89,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const sprite = new THREE.Sprite(mat);
     sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
-    pool.push({ sprite, mat, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
+    pool.push({ sprite, mat, slot: i, eventId: null, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
       x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false });
   }
   const shards = [];
@@ -103,6 +103,9 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   let liveCount = 0;
   let lastKartD = 0;
   let density = 1;
+  // With a track loaded the density knob changes what it means: the seeded lanes must keep dressing
+  // the road exactly as they do without one, so density gates the CUE spawns instead (CHART.md).
+  let tracked = false;
   let reachX = POP_HIT_X, reachH = POP_HIT_H;   // the pop box, widened by the magnet item (setReach)
   const popCbs = [], missCbs = [];
   const emit = (cbs, ev) => { for (const cb of cbs) { try { cb(ev); } catch (e) { /* listener bug, not ours */ } } };
@@ -141,7 +144,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     s.kindId = k.id; s.placement = placement;
     s.d = layout.wrap(d); s.x = clamp(x, -ROAD_HALF_W + 0.4, ROAD_HALF_W - 0.4); s.x0 = s.x;
     s.h = h; s.baseH = h; s.phase = Math.random() * Math.PI * 2; s.age = 0;
-    s.size = sizeOf(k.id); s.scale = placement === 'spawn' ? 0 : 1; s.popT = -1; s.missed = false;
+    s.size = sizeOf(k.id); s.scale = placement === 'spawn' ? 0 : 1; s.popT = -1; s.missed = false; s.eventId = null;
     s.mat.map = texOf[k.id]; s.mat.color.set(k.tint); s.mat.opacity = 1; s.mat.needsUpdate = true;
     s.sprite.scale.setScalar(s.size * s.scale);
     layout.toWorld(s.d, s.x, s.h, s.sprite.position);
@@ -175,7 +178,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const len = Math.max(0, chunk.d1 - chunk.d0);
     if (chunk.id === 1 && chunk.room === 'teagarden' && chunk.kind === 'straight') seedStartStraight(chunk);
     else if (chunk.kind !== 'gate' && len > 8) {
-      const lines = Math.max(1, Math.round((len / 26) * density));
+      const lines = Math.max(1, Math.round((len / 26) * (tracked ? 1 : density)));
       for (let l = 0; l < lines; l++) {
         const count = 3 + ((Math.random() * 4) | 0);
         const x = pick(LANES) + rand(-0.3, 0.3);
@@ -206,6 +209,24 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
   function rain(kartD, n = 1) {
     for (let i = 0; i < n; i++) place(roll('rain'), 'rain', kartD + rand(18, 44), rand(-ROAD_HALF_W + 0.6, ROAD_HALF_W - 0.6), CEILING_H);
+  }
+  /** An explicit placement from a track cue (CHART.md): the run has already worked the depth out at
+   *  the kart's speed, so nothing is rolled or gated by intensity here. Returns the slot id, -1 when
+   *  the pool is full (a cue never steals a live bubble) or when density has gated this one out.
+   *  Over 1, density is the chance of a second bubble beside the first. */
+  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null } = {}) {
+    if (liveCount >= CAP) return -1;
+    if (tracked) {
+      if (density <= 0) return -1;
+      if (density < 1 && Math.random() >= density) return -1;
+    }
+    const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
+    const s = place(kindId, placement, d, x, top);
+    s.eventId = eventId;
+    if (tracked && density > 1 && liveCount < CAP && Math.random() < density - 1) {
+      place(kindId, placement, d + 2.4, x + (x > 0 ? -1.1 : 1.1), top).eventId = eventId;
+    }
+    return s.slot;
   }
 
   // ---- pop -----------------------------------------------------------------
@@ -244,7 +265,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     burst(s, golden);
     const strength = k.strength > 0 ? clamp(k.strength + 0.35 * intensity() + Math.random() * 0.1, 0, 1) : 0;
     emit(popCbs, { id: k.id, kind: k.kind, payload: k.payload, overlayKind: k.overlayKind, strength,
-      points: k.points, placement: s.placement, x: s.x, d: s.d, worldPos: s.sprite.position.clone() });
+      points: k.points, placement: s.placement, x: s.x, d: s.d, eventId: s.eventId, worldPos: s.sprite.position.clone() });
     if (k.id === 'prism' && !chained) {
       for (const o of pool) {
         if (!o.alive || o === s || o.popT >= 0 || o.kindId === 'video') continue;
@@ -288,7 +309,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         if (rel < -MISS_BEHIND && rel > -DROP_BEHIND - 40 && !s.missed) {
           s.missed = true;
           const k = KIND_BY_ID[s.kindId];
-          if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d, x: s.x, h: s.h });
+          if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d, x: s.x, h: s.h, eventId: s.eventId });
         }
         if (rel < -DROP_BEHIND && rel > -DROP_BEHIND - 40) { freeSlot(s); continue; }
         if (Math.abs(rel) < POP_HIT_D && Math.abs(s.x - kart.x) < reachX && Math.abs(s.h - kart.h) < reachH) pop(s);
@@ -332,10 +353,12 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
 
   return {
-    seedChunk, spawnAhead, rain, update, dispose,
+    seedChunk, spawnAhead, rain, spawnAt, update, dispose,
     onPop(cb) { if (typeof cb === 'function') popCbs.push(cb); },
     onMiss(cb) { if (typeof cb === 'function') missCbs.push(cb); },
-    setDensity(mult) { density = clamp(Number(mult) || 1, 0.25, 3); },
+    setDensity(mult) { const v = Number(mult); density = clamp(isFinite(v) ? v : 1, tracked ? 0 : 0.25, 3); },
+    /** A track is loaded: setDensity now gates the cue spawns, not the seeded lanes. */
+    setTracked(on) { tracked = !!on; },
     /** Magnet: widen the pop box (X and H) by mult; 1 restores it. */
     setReach(mult) { const m = clamp(Number(mult) || 1, 0.5, 3); reachX = POP_HIT_X * m; reachH = POP_HIT_H * m; },
     get liveCount() { return liveCount; },

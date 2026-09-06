@@ -10,7 +10,14 @@
  * Nothing here subtracts: the run ends only from the Brake (Esc) or the host.
  *
  * Host traffic owned here: sends heartbeat, run-started, sfx, fire-payload
- * (video only), run-ended, exit, exit-done; listens to pause, payout-result.
+ * (video only), run-ended, exit, exit-done, and with a track loaded track-play,
+ * track-pause, track-stop; listens to pause, payout-result.
+ *
+ * TRACK CHARTS (CHART.md): setTrack(chart) hands the run a charted hypno file and
+ * from then on the file is the clock. race/track.js holds the second, the energy
+ * curve and the acts; race/cues.js says what each spoken word is worth; everything
+ * below only spends those on the world it already owns. Without a track not one
+ * line of this changes: the seeded run is the else branch throughout.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -26,6 +33,8 @@ import { createWalls } from './walls.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
+import { createTrackState } from './track.js';
+import { cueFor } from './cues.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
@@ -43,6 +52,9 @@ const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE =
 const WOBBLE_SCALE = 0.82, WOBBLE_SEC = 0.3;
 const ladderMult = (combo) => { let m = 1; for (const [at, mult] of MULT_LADDER) if (combo >= at) m = mult; return m; };
 const SPAWN_T0 = 2.5, RAIN_T0 = 20, EARLY_SLOW = 1.5;   // the opening drips slower (TREATS_ONLY_SEC)
+// track cues: a bubble never lands nearer than this, an act only re-dresses the world when no gate is
+// this many seconds of road away, and the standalone page logs the scheduler this often (track time).
+const CUE_AHEAD_SEC = 0.25, ACT_GATE_SEC = 6, TRACK_STATS_SEC = 10;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
 
@@ -94,8 +106,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
     flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: 72, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
+    trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,
   };
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
+  const TR = createTrackState();      // the loaded track chart: its clock, its energy, its acts (race/track.js)
+  const hosted = bridge.isHosted !== false;   // the standalone page logs where the host would be told
   let W = null;                       // the world: everything that is rebuilt on "again"
   let raf = 0, last = 0, lastBeat = 0, payoutResolve = null;
   let camOverride = null;                // fn(camera, dt, w, camOut) -> false when done (intro.js cameras)
@@ -140,6 +155,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     kart.onEvent((e) => onKart(w, e));
     score.onEvent((e) => onScore(w, e));
     items.onEvent((e) => onItem(w, e));
+    field.setTracked(!!TR.track);
     pixel.retexture(scene);
     return w;
   }
@@ -152,18 +168,19 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function resetRunState(runSeed) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
       jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
-      wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed });
+      wasAirborne: false, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
+      trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     setFlip(false); trailClear();
     mix.reset(); S.wobble = 0; clearMixChrome();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.item(null, 'no item yet');
   }
 
   // ---- rooms ----
-  function enterRoom(w, roomId) {
+  function enterRoom(w, roomId, actName) {
     const first = S.gates === 0;
     const spec = w.dresser.applyRoom(w.fx, roomId, first ? 0.2 : 1.2);
     S.room = spec; S.gates++;
-    hud.banner(spec.name, spec.tagline, hex(spec.colors.banner));
+    hud.banner(actName || spec.name, spec.tagline, hex(spec.colors.banner));
     sfx('depth_change', 0.7);
     if (roomId === 'teagarden' && !first && w.score.state.score > 0) {
       const bestBefore = w.score.state.best;
@@ -183,6 +200,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
   function onPop(w, p) {
+    if (p.eventId) TR.taken(p.eventId);
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (p.kind === 'treat') return treat(w, p);
     if (S.parasol) { S.parasol = false; hud.toast('parasol', 'item'); return treat(w, p); }
@@ -199,7 +217,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   // ---- THE MIX: actions -> payloadFx + chrome, recipes -> the ledger ----
   const fire = (p, strength, durationMult) => {
-    if (p.payload === 'video') send({ type: 'fire-payload', kind: 'video', strength, durationMult });
+    if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
     else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
   };
   function clearMixChrome() { root.removeAttribute('data-ov'); root.removeAttribute('data-tint'); if (hud.setTint) hud.setTint(0); }
@@ -306,6 +324,85 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
 
+  // ---- the track chart: the file is the clock (CHART.md) ----
+  /** Page -> host, and only when there is a host and a track: the audio has to follow the run. */
+  function trackSend(type, data) { if (hosted && TR.track) send({ type, ...(data || {}) }); }
+  /** The Brake, a host pause and a video pop all stop the voice; anything that resumes starts it. */
+  function trackPause(on) {
+    if (!TR.track || S.trackPaused === !!on) return;
+    S.trackPaused = !!on;
+    trackSend('track-pause', { on: !!on });
+  }
+  /** Load a chart (null goes back to the seeded run). Call before start(), or live for an upgrade. */
+  function setTrack(chart) {
+    const t = TR.setTrack(chart);
+    S.trackHold = 0; S.statsAt = 0;
+    if (W) { W.field.setTracked(!!t); W.field.setDensity(1); if (!t) applyFog(W, 0); }
+    if (bridge.log) bridge.log(t ? `race track: ${t.name}, ${Math.round(t.durationSec)}s, ${TR.stats().countable} to take` : 'race track: cleared');
+    return t;
+  }
+  /** The chart's fog knob rides the tunnel weather: fx.update writes scene.fog every frame, so the
+   *  zone is the only fog dial the run may hold. 0 hands the organic roll back. */
+  function applyFog(w, v) {
+    S.trackFog = clamp(Number(v) || 0, 0, 1);
+    if (w.fx.forceZone) w.fx.forceZone(S.trackFog > 0.4 ? 'pinkfog' : null);
+  }
+  /** A cue's `mix`: pour an effect through THE MIX exactly as a popped bubble of that kind would. */
+  function cueMix(w, kindId) {
+    const k = KIND_BY_ID[kindId];
+    if (!k || k.kind !== 'effect') return;
+    const durationMult = 0.5 + 0.5 * S.intensity;
+    const r = mix.add(k.id, { durationMult });
+    if (r.action === 'held' || r.action === 'ignore') return;
+    pour(w, { id: k.id, payload: k.payload, overlayKind: k.overlayKind }, r, Math.round(clamp(k.strength, 0, 1) * 100), durationMult);
+    if (r.recipe) serve(w, r.recipe);
+  }
+  /** One event off the scheduler, spent on the world. Every spawn goes in at the depth the kart will
+   *  have reached when the voice says it, so the pop lands on the word whatever the throttle did. */
+  function applyCue(w, due) {
+    const ks = w.kart.state;
+    const cue = cueFor(due.event, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds });
+    if (!cue) return;
+    for (const sp of cue.spawn) {
+      const d = ks.d + ks.speed * Math.max(due.dueIn + (sp.at || 0), CUE_AHEAD_SEC);
+      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d, x: sp.x, h: sp.h, eventId: due.event.id });
+    }
+    if (cue.jump) { ks.vh = Math.max(ks.vh, cue.jump); ks.h = Math.max(ks.h, 0.06); ks.airborne = true; w.kart.pose('air'); }
+    if (cue.mix) cueMix(w, cue.mix);
+    if (cue.mood) poke(cue.mood, Math.max(1.2, cue.holdSec));
+    if (cue.pose) w.kart.pose(cue.pose);
+    if (cue.toast) hud.toast(cue.toast.text, cue.toast.kind || 'effect');
+    if (cue.word) hud.toast(cue.word, 'effect');
+    if (cue.fog != null) applyFog(w, cue.fog);
+    if (cue.boost) w.kart.applyBoost(cue.boost);
+    if (cue.density != null) w.field.setDensity(cue.density);
+    if (cue.holdSec > 0) S.trackHold = cue.holdSec;
+  }
+  /** The act moved with no gate in reach: dress the new room where we stand and marquee its name. */
+  function actMoved(w, act, ks) {
+    if (!act) return;
+    for (const f of w.layout.featuresBetween(ks.d, ks.d + Math.max(20, ks.speed * ACT_GATE_SEC))) if (f.type === 'gate') return;
+    S.room = w.dresser.applyRoom(w.fx, act.room, 2.5);
+    S.gates++;
+    hud.banner(act.name, S.room.tagline, hex(S.room.colors.banner));
+    sfx('depth_change', 0.6);
+  }
+  /** One frame of the track. Returns true when the file is over and the run has been ended. */
+  function trackFrame(w, ts) {
+    const ks = w.kart.state;
+    if (S.trackHold > 0) { S.trackHold -= ts.dt; if (S.trackHold <= 0) { applyFog(w, 0); w.field.setDensity(1); } }
+    for (const due of TR.due(ks.d, ks.speed)) applyCue(w, due);
+    if (ts.actChanged) actMoved(w, ts.act, ks);
+    if (ts.dt > S.trackGap) S.trackGap = ts.dt;   // the worst frame the scheduler had to reach over
+    if (!hosted && ts.t - S.statsAt >= TRACK_STATS_SEC) {   // standalone dev aid: the scheduler on the console
+      S.statsAt = ts.t;
+      if (bridge.log) bridge.log(`track ${ts.t.toFixed(0)}s gap ${S.trackGap.toFixed(2)}s ${JSON.stringify(TR.stats())}`);
+      S.trackGap = 0;
+    }
+    if (ts.ended) { endRun(); return true; }
+    return false;
+  }
+
   // ---- kart events (drift turbo, tricks, the wheel, laps) ----
   const TURBO = ['', 'mini turbo', 'super turbo', 'ultra turbo'];
   function onKart(w, e) {
@@ -324,7 +421,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function step(w, dt) {
     const k = w.kart, ks = k.state, lay = w.layout;
     S.elapsed += dt;
-    S.intensity = clamp(Math.max(intensityFloor, S.elapsed / INTENSITY_RAMP_SEC), 0, 1);
+    // with a track the intensity is the file's energy curve (smoothed, floored), not the clock ramp.
+    // step() takes no delta: the voice runs on the wall, never on the run's clamped frame (track.js).
+    const ts = TR.step();
+    S.intensity = clamp(Math.max(intensityFloor, ts ? ts.intensity : S.elapsed / INTENSITY_RAMP_SEC), 0, 1);
     const wdt = dt * S.timeScale;                     // the world clock (tea_time); the kart keeps real time
     S.t += wdt;
     const prevD = ks.d;
@@ -341,18 +441,23 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
     // bubbles: seed the chunks ahead, drip spawns, rain bursts
     for (const c of lay.chunks) { const rel = lay.wrap(c.d0 - ks.d + lay.totalDepth / 2) - lay.totalDepth / 2; if (rel > -20 && rel < 250) w.field.seedChunk(c); }
-    const early = S.elapsed < TREATS_ONLY_SEC ? EARLY_SLOW : 1;
-    S.spawnT -= wdt;
-    if (S.spawnT <= 0) { w.field.spawnAhead(ks.d, 1 + Math.round(S.intensity * 2)); S.spawnT = (3.4 - 1.8 * S.intensity) * early; }
-    S.rainT -= wdt;
-    if (S.rainT <= 0) { w.field.rain(ks.d, 3 + Math.round(S.intensity * 4)); S.rainT = (S.room && S.room.loud ? 9 : 14) * (1 - 0.5 * S.intensity) * early; }
+    // a track owns the spawns outright: the random drip and the rain bursts stand down, seedChunk
+    // still dresses the chunks ahead so the road never looks empty between the spoken words
+    if (ts) { if (trackFrame(w, ts)) return; }
+    else {
+      const early = S.elapsed < TREATS_ONLY_SEC ? EARLY_SLOW : 1;
+      S.spawnT -= wdt;
+      if (S.spawnT <= 0) { w.field.spawnAhead(ks.d, 1 + Math.round(S.intensity * 2)); S.spawnT = (3.4 - 1.8 * S.intensity) * early; }
+      S.rainT -= wdt;
+      if (S.rainT <= 0) { w.field.rain(ks.d, 3 + Math.round(S.intensity * 4)); S.rainT = (S.room && S.room.loud ? 9 : 14) * (1 - 0.5 * S.intensity) * early; }
+    }
     w.field.update(wdt, S.t, ks);
 
     // track features crossed this frame
     for (const f of lay.featuresBetween(prevD, ks.d)) {
       if (f.type === 'boost' && !ks.airborne && Math.abs(f.x - ks.x) <= 1.2) { k.applyBoost(1.6); sfx('tunnel_powerup_collect', 0.8); shake.shake(0.25, 200); poke('streamed', 1.2); k.pose('boost'); }
       else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2 && w.dresser.breakItemBox(f)) { shake.shake(0.2, 120); if (w.items.roll(w.score.state.mult)) sfx('ui_click', 0.5); }
-      else if (f.type === 'gate') enterRoom(w, f.room);
+      else if (f.type === 'gate') enterRoom(w, ts && ts.act ? ts.act.room : f.room, ts && ts.act ? ts.act.name : null);
     }
     if (S.wasAirborne && !ks.airborne) { shake.shake(0.8, 300); poke('smug', 0.7); }
     S.wasAirborne = ks.airborne;
@@ -409,12 +514,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   async function brake() {
     if (!W || !S.running || S.ended || S.paused) return;
     S.paused = true; sfx('ui_click', 0.5);
-    audio.duck(true, 'brake');
+    audio.duck(true, 'brake'); trackPause(true);
     const pick = await hud.setPaused(true);
     if (S.disposed || !S.paused) return;
     if (pick === 'end') return endRun();
     S.paused = false;
-    audio.duck(false, 'brake');
+    audio.duck(false, 'brake'); trackPause(false);
   }
   function waitPayout(ms) {
     return new Promise((res) => { const t = setTimeout(() => { payoutResolve = null; res(null); }, ms); payoutResolve = (m) => { clearTimeout(t); payoutResolve = null; res(m); }; });
@@ -428,7 +533,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const summary = { score: st.score, banked: st.banked, bestCombo: st.bestCombo, popped: st.popped, treats: st.treats, effects: st.effects,
       nearMisses: st.nearMisses, laps: w.kart.state.lap, durationSec: Math.round(S.elapsed), seed: S.seed,
       personalBest: st.banked + st.score > S.bestAtStart && st.banked + st.score > 0 };
-    send({ type: 'run-ended', ...summary });
+    const track = TR.summary();   // "you took N of M" on a charted run (the results screen is PR c7)
+    if (track) Object.assign(summary, { taken: track.taken, countable: track.countable, trackName: track.name });
+    send({ type: 'run-ended', ...summary, ...(track ? { track } : {}) });
+    trackSend('track-stop');
     sfx('surface', 0.8);
     audio.duck(true, 'end');
     setCameraOverride(resultsCamera({ tier: resultTier(st.banked + st.score, S.bestAtStart, summary.personalBest), reducedMotion }));   // she turns to face the card
@@ -448,6 +556,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     hud.countdown().then(start);
   }
   function exit() {
+    trackSend('track-stop');
     send({ type: 'exit' });
     dispose();
     send({ type: 'exit-done' });
@@ -470,10 +579,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     S.room = W.dresser.applyRoom(W.fx, W.layout.roomAtDepth(0), 0.2);   // the gate 9 m in shows the banner
     W.kart.setMood('calm');
     send({ type: 'run-started', seed: S.seed });
+    if (TR.track) { S.trackPaused = false; trackSend('track-play', { name: TR.track.name }); }
     last = 0;
   }
   /** Host pause (native video playing etc): freezes the frame, no Brake screen. */
-  function setPaused(on) { S.hostPaused = !!on; if (!on) last = 0; audio.duck(!!on, 'host'); }
+  function setPaused(on) { S.hostPaused = !!on; if (!on) last = 0; audio.duck(!!on, 'host'); trackPause(!!on); }
   function dispose() {
     if (S.disposed) return;
     S.disposed = true;
@@ -494,7 +604,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   raf = requestAnimationFrame(frame);
   function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
   function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block
-  return { start, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera };
+  return { start, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera,
+    // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
+    // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
+    setTrack, replaceTrack: (chart) => TR.replace(chart), trackClock: (t, playing) => TR.clock(t, playing),
+    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); },
+    get track() { return TR.track; } };
 }
 
 // self-check: node --check is the bar; everything touches the DOM inside createRace.

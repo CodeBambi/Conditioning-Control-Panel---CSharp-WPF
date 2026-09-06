@@ -24,6 +24,13 @@
  * into the intro and `?hold=ms` freezes it at that intro time (screenshots);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
  * the host init.
+ *
+ * TRACK CHARTS (CHART.md): the host posts track-progress / track-chart /
+ * track-clock / track-ended / track-error and this file hands them to the run.
+ * Standalone there is no host, so `?chart=demo&dur=240` builds the demo chart and
+ * `?chart=<url>` fetches one; `?audio=<url>` plays an <audio> element and its
+ * currentTime is the clock, and without it the clock is wall time. Either way the
+ * page ticks race.trackClock on the host's own 250 ms cadence.
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
@@ -31,11 +38,12 @@ import { detectMode } from './shared/capability.js';
 import { setQuality } from './shared/quality.js';
 import { createHostMediaSource } from './hostMedia.js';
 
-const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000;
+const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250;
 const params = new URLSearchParams(location.search);
 const hosted = bridge.isHosted;
 const host = hosted ? bridge : {
   on: bridge.on,
+  isHosted: false,
   send: (m) => { try { console.log('[race->host]', JSON.stringify(m)); } catch (e) { console.log('[race->host]', m); } },
   log: (m) => console.log('[race->host] log', String(m)),
   announceReady: () => console.log('[race->host] ready (standalone)'),
@@ -49,6 +57,7 @@ const media = createHostMediaSource();
 const rollSeed = () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
 let initMsg = null, haveManifest = false, race = null, menu = null, booted = false, started = false, exiting = false;
 let settings = {}, seed = 0;
+let trackProgress = null, startTrackClock = null, trackTimer = 0, trackAudio = null;
 
 const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
 function fail(err) {
@@ -83,10 +92,28 @@ bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } 
 bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
 bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
 bridge.on('exit-request', surface);
+// ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
+bridge.on('track-chart', (m) => {
+  if (!race || !m || !m.chart) return;
+  try { (race.track && started) ? race.replaceTrack(m.chart) : race.setTrack(m.chart); }
+  catch (err) { host.log('track-chart: ' + ((err && err.message) || err)); trackError(String((err && err.message) || err)); }
+});
+bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });
+bridge.on('track-ended', () => { if (race) race.trackEnded(); });
+bridge.on('track-error', (m) => trackError((m && m.message) || 'the track would not load'));
+bridge.on('track-progress', (m) => {   // the menu's progress plate is PR c7; hold it for that
+  trackProgress = m || null;
+  host.log(`track-progress: ${(m && m.stage) || '?'} ${Math.round(((m && m.pct) || 0) * 100)}% ${(m && m.name) || ''}`);
+});
+function trackError(message) {
+  host.log('track-error: ' + message);
+  try { if (race && race.hud) race.hud.toast(String(message).slice(0, 60).toLowerCase(), 'effect'); } catch (e) { /* no hud yet */ }
+}
 /** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes through run.js). */
 function surface() {
   if (exiting) return;
   exiting = true;
+  stopTrackClock();
   try { if (menu) menu.dispose(); } catch (e) { host.log('menu dispose: ' + e); }
   try { if (race) race.dispose(); } catch (e) { host.log('exit dispose: ' + e); }
   host.send({ type: 'exit' });
@@ -123,6 +150,7 @@ async function boot() {
     race = createRace({ root, bridge: host, media, settings, seed });
     note('');
     host.log(`race booted: seed ${seed} (${opts.seed}), tier ${mode.tier}, hosted ${hosted}, manifest ${haveManifest}`);
+    await standaloneTrack();
     if (params.get('autostart') === '1') { startRun(false); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
     menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log });
@@ -140,6 +168,48 @@ async function boot() {
   } catch (err) {
     fail(err);
   }
+}
+
+/**
+ * No host, but a track was asked for on the query string: `?chart=demo&dur=240` builds the demo
+ * chart, `?chart=<url>` fetches one. `?audio=<url>` plays the file and its currentTime becomes the
+ * clock; without it the clock is wall time from the moment the run starts. Nothing here runs hosted.
+ */
+async function standaloneTrack() {
+  const want = params.get('chart');
+  if (hosted || !want || !race) return;
+  let chart = null;
+  try {
+    const mod = await import('./race/chart.js');
+    if (want === 'demo') chart = mod.demoChart({ durationSec: Number(params.get('dur')) || 240 });
+    else chart = mod.normalizeChart(await (await fetch(want)).json());
+    race.setTrack(chart);
+  } catch (err) {
+    trackError('chart: ' + ((err && err.message) || err));
+    return;
+  }
+  const src = params.get('audio');
+  if (src) {
+    try { trackAudio = new Audio(src); trackAudio.preload = 'auto'; } catch (e) { trackAudio = null; }
+  }
+  const dur = chart.source.durationSec;
+  startTrackClock = () => {
+    if (trackTimer) return;
+    if (trackAudio) { const p = trackAudio.play(); if (p && p.catch) p.catch((e) => host.log('track audio: ' + e)); }
+    race.trackClock(0, true);
+    trackTimer = setInterval(() => {
+      // with audio the file is the authority and its currentTime snaps the clock. Without it the run
+      // integrates the wall itself (race/track.js), and a second clock here would only race it, so
+      // the tick just watches for the end. Same 250 ms cadence either way, same as the host's.
+      if (trackAudio) race.trackClock(trackAudio.currentTime, !trackAudio.paused);
+      if ((race.track ? race.track.t : dur) >= dur) { stopTrackClock(); race.trackEnded(); }
+    }, TRACK_TICK_MS);
+  };
+  host.log(`track: ${chart.source.name}, ${Math.round(dur)}s, clock ${trackAudio ? 'audio' : 'wall'}`);
+}
+function stopTrackClock() {
+  if (trackTimer) { clearInterval(trackTimer); trackTimer = 0; }
+  if (trackAudio) { try { trackAudio.pause(); } catch (e) { /* already gone */ } }
 }
 
 function hideSplash() {
@@ -165,11 +235,13 @@ async function startRun(withIntro) {
       intro.dispose();
       if (hudRoot) hudRoot.classList.remove('is-lobby');
       race.start();
+      if (startTrackClock) startTrackClock();
       race.setCameraOverride(cameraWhip(0.8));
     } else {
       race.setStage(null);
       if (hudRoot) hudRoot.classList.remove('is-lobby');
       race.start();
+      if (startTrackClock) startTrackClock();
     }
   } catch (err) {
     host.log('start: ' + ((err && err.stack) || err));
