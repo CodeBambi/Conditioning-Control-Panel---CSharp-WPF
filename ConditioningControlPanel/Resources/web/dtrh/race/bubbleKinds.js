@@ -19,6 +19,11 @@ const PLAIN_SPRITE = '/dtrh/assets/bubbles/bubble.png';   // the classic soap bu
 // strength: the base 0..1 power of the effect (intensity nudges it up at pop).
 // weight: spawn odds; minIntensity gates the kind until the run is that deep.
 // category: THE MIX slot (race/cocktail.js CATEGORIES) an effect pop lands in; treats have none.
+// spawn: false darkens a row. The row keeps its data, sprite, tint, points and THE MIX slot so the
+//   rest of the game still knows the kind, but rollKind never returns it and bubbles.js refuses to
+//   place one, so no roll, lane line, rain or track cue can put it on the road. 'video' is dark
+//   since 2026-09-06: the tape bubble fired a real mandatory video mid-run and the owner has
+//   another use in mind for the slot. The host refuses a video fire-payload too.
 export const BUBBLE_KINDS = [
   { id: 'treat',      label: '',  kind: 'treat',  payload: null,         overlayKind: null,  category: null,
     strength: 0,    points: 10, weight: 22,  minIntensity: 0,    tint: 'rgb(184,222,255)', sprite: PLAIN_SPRITE },
@@ -45,17 +50,19 @@ export const BUBBLE_KINDS = [
   { id: 'gifrain',    label: '▼', kind: 'effect', payload: 'gifCascade', overlayKind: null,  category: 'cards',
     strength: 0.6,  points: 25, weight: 1.2, minIntensity: 0.45, tint: 'rgb(255,200,61)',  sprite: ART_BASE + 'htlink.png' },
   { id: 'video',      label: '▶', kind: 'effect', payload: 'video',      overlayKind: null,  category: 'video',
+    spawn: false,   // dark since 2026-09-06, see the header; the row stays for a later use
     strength: 0.7,  points: 40, weight: 0.35, minIntensity: 0.45, tint: 'rgb(224,64,77)',  sprite: ART_BASE + 'video.png' },
 ];
 
 export const KIND_BY_ID = Object.fromEntries(BUBBLE_KINDS.map((k) => [k.id, k]));
 export const TREAT_IDS = BUBBLE_KINDS.filter((k) => k.kind === 'treat').map((k) => k.id);
 
-/** Weighted roll over the kinds allowed at this intensity, in this room.
+/** Weighted roll over the kinds allowed at this intensity, in this room. Dark rows (spawn:false)
+ *  are out of the pool entirely, at every intensity and whatever the bias says.
  *  `bias` is the room's bubbleBias map; `extra(kind)` is an optional per-call
  *  multiplier (air lines favour gold, etc). rng defaults to Math.random. */
 export function rollKind(intensity, bias = null, extra = null, rng = Math.random) {
-  let pool = BUBBLE_KINDS.filter((k) => k.minIntensity <= intensity);
+  let pool = BUBBLE_KINDS.filter((k) => k.spawn !== false && k.minIntensity <= intensity);
   if (!pool.length) pool = [BUBBLE_KINDS[0]];
   const w = pool.map((k) => k.weight * ((bias && bias[k.id]) || 1) * (extra ? extra(k) : 1));
   let r = rng() * w.reduce((s, v) => s + v, 0);
