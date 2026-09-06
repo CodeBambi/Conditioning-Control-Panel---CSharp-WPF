@@ -76,7 +76,7 @@ export function createIntro({ stage, hud, audio = null, reducedMotion = false, l
     if (inCup) return;
     inCup = true;
     cup.attach(emi.root);   // she rides with the cup from here on
-    walk.set(emi.root.position).to(_v.set(0, 0.55, 0));   // cup-local: her face clears the rim
+    walk.set(emi.root.position).to(_v.set(0, 0.42, 0));   // cup-local: she sinks in past the rim (tea at 0.66), her face still clears it
     squash.set(0.8).to(1);  // the stretch is the overshoot
     stage.cup.ripple();
     emi.face(FACE.squint);

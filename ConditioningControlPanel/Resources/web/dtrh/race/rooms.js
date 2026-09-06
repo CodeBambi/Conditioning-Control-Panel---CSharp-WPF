@@ -472,7 +472,9 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
     if (dot) { dot.translate(0, -geoSize(dot).cy, 0); swapMesh(airDots, dot, litMat(0xf2c14e, 0.6)); }
     const pad = packGeo(pack, 'boost_pad');
     if (pad) {                                                              // authored 5.75 m wide, the lane is 2.4
-      pad.scale(ROAD_MIRROR * PAD_W / (geoSize(pad).w || PAD_W), 1, 1); pad.boundingBox = null; pad.computeBoundingSphere();
+      pad.scale(ROAD_MIRROR * PAD_W / (geoSize(pad).w || PAD_W), 1, 1);
+      pad.rotateY(Math.PI);                                                 // authored chevrons point -z (Blender +Y); the road runs +z, so turn them to face ahead
+      pad.boundingBox = null; pad.computeBoundingSphere();
       padPulse = { value: 0 };
       swapMesh(padMesh, pad, stripMaterial(pack, pad, padPulse));
     }

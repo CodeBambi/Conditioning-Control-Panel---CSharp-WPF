@@ -35,9 +35,12 @@ const OUTLINE = 'outline';   // the inverted hull's material name (gltf.js heade
 // The glb is metres, sole centre at the origin, +Z forward, case top at 1.00 m. 0.64 puts the case
 // at the old 1.25-scaled CRT's 0.525 m; with the sole on the tea (y 0.66) the case bottom lands at
 // 0.775, just clear of the cup rim at 0.75, so the legs stay in the cup and the case reads as before.
-const GLB_SCALE = 0.64;
-const GLB_SEAT_Z = 0.3;      // she stands ~0.21 behind her own origin, so this seat puts the case
-                             // centre at z ~0.09, where the primitive CRT's box sat
+// Owner call 2026-09-06: she rides INSIDE the cup, not on the tea. At 1.0 the case is 0.83 wide
+// in a 1.1 m bore, and GLB_SINK drops the sole 0.33 under the tea line so the case bottom (0.167 in
+// the model) sits 0.30 below the rim: the tea disc cuts her at the chest and the legs are never seen.
+const GLB_SCALE = 0.8;        // owner call 2026-09-06: full size read too big in the bore
+const GLB_SINK = 0.28;       // metres below TEA_Y the sole rests; the case bottom lands 0.28 m under the rim
+const GLB_SEAT_Z = 0.25;     // the case spans z -0.59..0.08 in the model, so this centres it in the bore
 const CASE_TOP = [0.36, 0.99, -0.2];   // EMI_case local: the top corner sweat comes off
 const GLOW_Y = 0.62, GLOW_Z = 0.9;     // the screen light, model local (0.58 m ahead of the glass)
 
@@ -208,7 +211,8 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
   let dead = false;
   const readyCbs = [], owned = [];  // owned = the materials this rig cloned or made, freed with it
   const seat = new THREE.Group();   // the mount point: the seat, the scale, the breath and the steer lean
-  seat.position.set(0, TEA_Y, GLB_SEAT_Z); seat.scale.setScalar(GLB_SCALE);
+  const SEAT_Y = TEA_Y - GLB_SINK;
+  seat.position.set(0, SEAT_Y, GLB_SEAT_Z); seat.scale.setScalar(GLB_SCALE);
 
   const matsOf = (o) => (Array.isArray(o.material) ? o.material : o.material ? [o.material] : []);
   const isOutline = (o) => matsOf(o).some((m) => m && m.name === OUTLINE);
@@ -337,7 +341,7 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
       if (G.ant1) G.ant1.rotation.set(r.a1x + kinkX, 0, r.a1z + kinkZ);
       if (G.ant2) G.ant2.rotation.x = r.a2x + kinkX * 0.4;      // the tip carries a little of the kink
       G.ballpiv.scale.setScalar(beadScale);
-      seat.position.y = TEA_Y + (reducedMotion ? 0 : 0.012 * Math.sin(t * (Math.PI * 2) / BREATH_SEC));
+      seat.position.y = SEAT_Y + (reducedMotion ? 0 : 0.012 * Math.sin(t * (Math.PI * 2) / BREATH_SEC));
       seat.rotation.z = -(ctx.steerVel || 0) * 0.012;           // the steer lean, on the whole body now
     } else {
       antenna.rotation.set(antX, 0, roll);
