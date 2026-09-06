@@ -8,11 +8,12 @@
  * ==========================================================================*/
 
 import { loadAudio, createPlayer, isAudioFile } from './audio.js';
+import * as pick from './pick.js';
 import { findWords, hashNote, isWords, scan } from './words.js';
 import * as tl from './timeline.js';
 import {
   DEFAULT_ON, DEFAULT_RECIPE, EFFECTS, KINDS, MIN_GAP_DEF, MIN_GAP_HI, MIN_GAP_LO, MIN_GAP_STEP,
-  RECIPE_BY_ID, byT, clamp, isOn, placeAll, placeHit, recipeFor, resetIds,
+  RECIPE_BY_ID, byT, clamp, isOn, pickLine, placeAll, placeHit, recipeFor, resetIds,
 } from './model.js';
 
 const $ = (id) => document.getElementById(id);
@@ -53,7 +54,7 @@ export function replaceSet(setId) {
 
 /* ---- the side panel ------------------------------------------------------ */
 
-function beads(recipe) {
+export function beads(recipe) {
   const box = document.createElement('div');
   box.className = 'beads';
   for (const s of recipe.seq) {
@@ -101,13 +102,23 @@ export function renderPanel() {
     const n = document.createElement('span');
     n.className = 'n';
     n.textContent = row.hits.length + ' in file';
-    el.append(cb, who, n, beads(recipeFor(state.cfg, id)));
+    const box = beads(recipeFor(state.cfg, id));
+    const ch = document.createElement('button');
+    ch.type = 'button';
+    ch.className = 'change';
+    ch.textContent = 'change';
+    ch.title = 'what ' + row.set.name + ' gets';
+    ch.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); pick.openRecipes(ch, id); });
+    box.append(ch);
+    el.append(cb, who, n, box);
     f.append(el);
   }
   host.replaceChildren(f);
 }
 
-function setGap(v) {
+export function bar() { $('what').textContent = pickLine(state); }
+
+export function setGap(v) {
   state.minGap = Number(clamp(v, MIN_GAP_LO, MIN_GAP_HI).toFixed(1));
   $('gapv').textContent = state.minGap.toFixed(1) + ' s';
 }
@@ -127,6 +138,7 @@ function useWords(json, via) {
   state.sel.clear();
   renderPanel();
   tl.render();
+  bar();
   $('sub').textContent = 'words found and placed. play it, then slide what is off.';
   const mismatch = hashNote(json, state.audio && state.audio.hash);
   const heard = state.hits.length + ' trigger words in ' + state.rows.length + ' sets';
@@ -243,10 +255,15 @@ function init() {
     else if (ev.code === 'Minus' || ev.code === 'NumpadSubtract') { ev.preventDefault(); tl.zoomAt(1 / 1.25, null); }
   });
 
+  pick.install({
+    state, status, bar, renderPanel, replaceSet, setGap,
+    beads, render: () => tl.render(),
+    pps: () => tl.view.pps, time: () => player.time,
+  });
   requestAnimationFrame(loop);
 }
 
 init();
 
 /* the headless checks drive the page through this, exactly as a hand would. */
-window.trackMaker = { state, tl, player, status, replaceSet, renderPanel, seekTo, RECIPE_BY_ID };
+window.trackMaker = { state, tl, player, pick, status, replaceSet, renderPanel, seekTo, bar, RECIPE_BY_ID };
