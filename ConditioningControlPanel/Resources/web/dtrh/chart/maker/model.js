@@ -113,7 +113,12 @@ export function clampSlide(bubs, sel, dt, minGap, durationSec = Infinity) {
   }
   lo = Math.max(lo, -picked[0].t);
   if (isFinite(durationSec)) hi = Math.min(hi, durationSec - picked[picked.length - 1].t);
-  return Math.max(lo, Math.min(hi, dt));
+  // Two runs that overlap can leave a picked bubble already inside the gap of one
+  // that stays put. Clamping to hi alone would then answer a nudge right with a
+  // jump left, so the delta keeps the sign it was asked for: it stops, never turns.
+  if (dt > 0) return Math.max(0, Math.min(hi, dt));
+  if (dt < 0) return Math.min(0, Math.max(lo, dt));
+  return 0;
 }
 
 /** Move the pick: bubbles by the clamped delta, tags along with them. */
@@ -154,7 +159,7 @@ export function pickLine(state) {
   const bump = (k) => n.set(k, (n.get(k) || 0) + 1);
   for (const b of state.bubs) if (state.sel.has(b.id)) bump(b.kind === 'wall' ? 'wall' : KINDS[b.kind].name);
   for (const h of state.hits) if (state.sel.has(h.id)) words++;
-  const parts = [...n].map(([k, c]) => c + ' ' + k + (c > 1 && (k === 'wall' || k === 'flash') ? 's' : ''));
+  const parts = [...n].map(([k, c]) => c + ' ' + k + (c > 1 && k === 'wall' ? 's' : ''));
   if (words) parts.push(words + ' word' + (words > 1 ? 's' : ''));
   return parts.join(', ') + ' picked. drag one, all slide.';
 }
