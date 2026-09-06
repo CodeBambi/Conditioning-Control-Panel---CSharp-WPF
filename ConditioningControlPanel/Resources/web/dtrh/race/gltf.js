@@ -154,9 +154,10 @@ export function disposePack(url) {
  * left alone: flipY, colour space, the UV channel and wrapT all come off the embedded texture, so
  * only the width of one frame changes. A miss (no glass, no map, a 404) resolves false and the
  * embedded strip stays, which is why setFace reads the frame count off the texture rather than
- * off FACES: a fallback atlas is still five frames wide and indices past it clamp.
+ * off FACES: a fallback atlas is still five frames wide and indices past it clamp. That fallback
+ * gets padded in place (hardenAtlas) so the phone-safe sampler holds either way.
  * The orphaned embedded texture is never uploaded (the swap lands before the pack resolves), so
- * it costs nothing on the GPU and is left for disposePack's material walk to miss harmlessly.
+ * it costs nothing on the GPU and is disposed here rather than left for disposePack to find.
  */
 function swapFaceAtlas(pack) {
   if (!pack || !pack.scene || !pack.url) return Promise.resolve(false);
@@ -171,8 +172,11 @@ function swapFaceAtlas(pack) {
   return new Promise((resolve) => {
     new THREE.TextureLoader().load(url, resolve, undefined, () => resolve(null));
   }).then((tex) => {
-    if (!tex) return false;
     const src = slots[0].m[slots[0].key];
+    if (!tex) { hardenAtlas(slots, src, src.repeat.x, 0); return false; }   // no sibling png: pad the baked strip
+    const wide = src.repeat.x * BAKED_FRAMES / FACES.length;               // one live frame over the authored UVs
+    const potted = padAtlasToPot(src, tex.image, wide, FACES.length);
+    if (potted) { tex.dispose(); for (const slot of slots) { slot.m[slot.key] = potted; slot.m.needsUpdate = true; } src.dispose(); return true; }
     tex.flipY = src.flipY;                       // glTF images are not flipped; TextureLoader's are
     tex.colorSpace = src.colorSpace;
     tex.channel = src.channel;
@@ -180,13 +184,22 @@ function swapFaceAtlas(pack) {
     tex.wrapS = THREE.RepeatWrapping; tex.wrapT = src.wrapT;
     tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
     tex.generateMipmaps = false;
-    tex.repeat.set(src.repeat.x * BAKED_FRAMES / FACES.length, src.repeat.y);
+    tex.repeat.set(wide, src.repeat.y);
     tex.offset.set(0, src.offset.y);
     tex.userData.faceFrames = FACES.length;
     tex.needsUpdate = true;
     for (const slot of slots) { slot.m[slot.key] = tex; slot.m.needsUpdate = true; }
     return true;
   }).catch(() => false);
+}
+
+/** Pad whatever strip a material already carries and put it back in the same slots. Returns
+ *  nothing: the caller's true/false is about the sibling atlas, not about this. */
+function hardenAtlas(slots, src, repeatX, frames) {
+  const potted = padAtlasToPot(src, src.image, repeatX, frames);
+  if (!potted) return;
+  for (const slot of slots) { slot.m[slot.key] = potted; slot.m.needsUpdate = true; }
+  src.dispose();
 }
 
 // ---- merge to a roomProps-shaped instance geometry --------------------------------------
@@ -355,11 +368,88 @@ export function faceFrames(tex) {
   return n > 0 ? n : BAKED_FRAMES;
 }
 
+const ONE_SCALE = { x: 1, y: 1 };
+const MAX_ATLAS_POT = 4096;    // past this we would be trading a white face for an out of memory
+
+/** The (x, y) the frame math is squeezed by once the strip sits in a padded texture, or 1, 1 when
+ *  it is still the raw strip. Exported for the smoke; setFace is the only caller that matters. */
+export function atlasScale(tex) {
+  const s = tex && tex.userData && tex.userData.atlasScale;
+  return s && s.x > 0 && s.y > 0 ? s : ONE_SCALE;
+}
+
+function potCeil(n) { return Math.pow(2, Math.ceil(Math.log2(Math.max(1, n)))); }
+
+/**
+ * Redraw a face strip into a POWER OF TWO CanvasTexture and hand back a texture that is legal
+ * under the strictest sampler rules there are, and whose pixels live in a <canvas>.
+ *
+ * WHY. emi_glass carries the atlas on emissiveMap with an emissive factor of 1,1,1 and no base
+ * map at all, so anything that makes that one sample come back blank paints the glass a SOLID
+ * WHITE RECTANGLE, which is what the owner's iPhone shows on the home screen. Two things fed
+ * that, and this kills both:
+ *   1. setFace used to flag the texture needsUpdate on every frame change, and a source version
+ *      bump makes three re-upload the whole image. Measured: 21 face changes, 21 full
+ *      texSubImage2D calls of the 1064x137 strip. Mobile Safari is free to drop the decoded
+ *      bitmap of an <img> that is not in the document once it wants the memory back, and a
+ *      re-upload after that hands GL nothing. A canvas keeps its own backing store, and setFace
+ *      no longer asks for a re-upload at all.
+ *   2. 1064x137 is not a power of two, and the strip was sampled with RepeatWrapping. That pair
+ *      is illegal on a WebGL1 context (NPOT wants clamp to edge, no mipmaps and a non mipmapping
+ *      min filter) and is the kind of thing a driver is allowed to be unhappy about. Padded and
+ *      clamped, nothing about this sampler is exotic anywhere.
+ *
+ * The frame math rides along. The strip goes in the corner that ends up at uv 0,0 whichever way
+ * flipY points, so repeat and offset scale by the same (w/W, h/H) and every sampled uv stays
+ * inside the strip: EMI_glass's authored u span is 0.0007 .. 0.1993 and the widest frame window
+ * lands at 0.9995 before padding, so no wrap mode is ever exercised in the first place.
+ *
+ * Returns null (caller keeps the raw strip) with nothing to draw on (the node smoke), on a
+ * source carrying a uv transform we would have to compose with, or on a silly padded size.
+ */
+function padAtlasToPot(src, image, repeatX, frames) {
+  if (typeof document === 'undefined' || !document.createElement) return null;
+  const w = image && (image.width || image.naturalWidth), h = image && (image.height || image.naturalHeight);
+  if (!w || !h) return null;
+  if (src.center.x !== 0 || src.center.y !== 0 || src.rotation !== 0) return null;
+  const W = potCeil(w), H = potCeil(h);
+  if (W > MAX_ATLAS_POT || H > MAX_ATLAS_POT) return null;
+  let canvas;
+  try {
+    canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
+    if (!ctx) return null;
+    // flipY flips the whole upload, so the strip goes wherever it ends up at the uv origin
+    ctx.drawImage(image, 0, src.flipY ? H - h : 0, w, h);
+  } catch (e) { return null; }                 // an undrawable or tainted source is not worth a throw
+  const sx = w / W, sy = h / H;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.flipY = src.flipY;                       // glTF images are not flipped; a loaded png is
+  tex.colorSpace = src.colorSpace;
+  tex.channel = src.channel;
+  tex.wrapS = THREE.ClampToEdgeWrapping;       // the sampled uv never leaves the strip, so clamping
+  tex.wrapT = THREE.ClampToEdgeWrapping;       // costs nothing and is legal on every context there is
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;         // Nearest takes no mipmaps, which is the other NPOT rule
+  tex.generateMipmaps = false;
+  tex.repeat.set(repeatX * sx, src.repeat.y * sy);
+  tex.offset.set(0, src.offset.y * sy);
+  tex.userData.atlasScale = { x: sx, y: sy };
+  if (frames > 0) tex.userData.faceFrames = frames;
+  return tex;
+}
+
 /**
  * Point EMI_glass's map at one atlas frame. The atlas is a horizontal strip and the authored UVs
  * span frame 0 of the BAKED strip, so the frame width is already in the mesh (plus the repeat.x
  * swapFaceAtlas set) and all we move is the offset. An index past the end of the strip actually
  * loaded clamps to its last frame. Returns true if a glass mesh with a map was found.
+ *
+ * The offset is a uniform, not pixels, so NOTHING here flags the texture needsUpdate: that used
+ * to re-upload the whole atlas on every single face change (see padAtlasToPot). A raw strip that
+ * never went through padAtlasToPot still gets its sampler forced, but only once, and only when
+ * something is actually wrong with it, because sampler state only lands on an upload.
  */
 export function setFace(model, index) {
   if (!model || !model.traverse) return false;
@@ -373,16 +463,25 @@ export function setFace(model, index) {
   for (const m of mats) for (const key of ['map', 'emissiveMap']) {
     const tex = m && m[key];
     if (!tex) continue;
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
+    forceAtlasSampler(tex);
     const n = faceFrames(tex);
-    tex.offset.x = Math.min(n - 1, Math.max(0, index | 0)) / n;
-    tex.needsUpdate = true;
+    tex.offset.x = (Math.min(n - 1, Math.max(0, index | 0)) / n) * atlasScale(tex).x;
     hit = true;
   }
   return hit;
+}
+
+/** A strip that never went through padAtlasToPot (the node smoke, a browser with no 2D canvas)
+ *  still wants the sampler a bare atlas needs. One upload, and only if it is not already right. */
+export function forceAtlasSampler(tex) {
+  if (!tex || (tex.userData && tex.userData.atlasScale)) return;
+  if (tex.wrapS === THREE.RepeatWrapping && tex.magFilter === THREE.NearestFilter
+    && tex.minFilter === THREE.NearestFilter && tex.generateMipmaps === false) return;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;                   // sampler state only lands on an upload
 }
 
 // ---- the pixel pass ---------------------------------------------------------------------
