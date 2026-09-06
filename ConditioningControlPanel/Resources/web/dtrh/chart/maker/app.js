@@ -9,6 +9,7 @@
 
 import { loadAudio, createPlayer, isAudioFile } from './audio.js';
 import * as pick from './pick.js';
+import * as save from './save.js';
 import { findWords, hashNote, isWords, scan } from './words.js';
 import * as tl from './timeline.js';
 import {
@@ -92,7 +93,7 @@ export function renderPanel() {
     cb.addEventListener('change', () => {
       state.cfg[id].on = cb.checked;
       replaceSet(id);
-      tl.render();
+      render();
       status(cb.checked ? row.set.name + ' placed at all ' + row.hits.length + ' of them' : row.set.name + ' cleared');
     });
     const who = document.createElement('span');
@@ -118,12 +119,23 @@ export function renderPanel() {
 
 export function bar() { $('what').textContent = pickLine(state); }
 
+/** Every edit goes through here: draw it, then let the autosave catch up. */
+export function render() { tl.render(); save.touch(); }
+
 export function setGap(v) {
   state.minGap = Number(clamp(v, MIN_GAP_LO, MIN_GAP_HI).toFixed(1));
   $('gapv').textContent = state.minGap.toFixed(1) + ' s';
 }
 
 /* ---- loading ------------------------------------------------------------- */
+
+/** Throw the autosave away and place the whole track again from the recipes. */
+export function startOver() {
+  if (!state.audio || !state.words) return status('nothing to start over yet');
+  save.forget(state.audio.hash);
+  useWords(state.words, 'again');
+  status('started over. every trigger is back on its recipe.');
+}
 
 function useWords(json, via) {
   state.words = json;
@@ -146,6 +158,20 @@ function useWords(json, via) {
   return true;
 }
 
+/** A track this machine was working on before. Only offered for the same audio. */
+function restoreSaved() {
+  const saved = state.audio && save.read(state.audio.hash);
+  if (!saved) { $('startover').hidden = true; return false; }
+  save.restoreInto(state, saved);
+  setGap(saved.minGap || state.minGap);
+  renderPanel();
+  tl.render();
+  bar();
+  $('startover').hidden = false;
+  status('picked up where you left off: ' + state.bubs.length + ' on the track. start over is on the right.', true);
+  return true;
+}
+
 async function onAudioFile(file) {
   status('reading ' + file.name, true);
   const a = await loadAudio(file, (m) => status(m, true));
@@ -164,7 +190,7 @@ async function onAudioFile(file) {
   renderPanel();
   status('finding the words for it', true);
   const found = await findWords(a.stem, a.hash);
-  if (found) return useWords(found.json, found.via);
+  if (found) { useWords(found.json, found.via); return restoreSaved() || true; }
   $('sub').textContent = 'no words for this file yet. drop its .words.json here.';
   status('no words for this file yet. drop its .words.json here.', true);
   return false;
@@ -216,8 +242,8 @@ function init() {
   player.el.addEventListener('pause', playLabel);
   $('zin').addEventListener('click', () => tl.zoomAt(1.25, null));
   $('zout').addEventListener('click', () => tl.zoomAt(1 / 1.25, null));
-  $('gapm').addEventListener('click', () => setGap(state.minGap - MIN_GAP_STEP));
-  $('gapp').addEventListener('click', () => setGap(state.minGap + MIN_GAP_STEP));
+  $('gapm').addEventListener('click', () => { setGap(state.minGap - MIN_GAP_STEP); save.touch(); });
+  $('gapp').addEventListener('click', () => { setGap(state.minGap + MIN_GAP_STEP); save.touch(); });
 
   // click the audio row or the ruler to jump
   for (const id of ['audio', 'ruler']) {
@@ -255,15 +281,16 @@ function init() {
     else if (ev.code === 'Minus' || ev.code === 'NumpadSubtract') { ev.preventDefault(); tl.zoomAt(1 / 1.25, null); }
   });
 
-  pick.install({
-    state, status, bar, renderPanel, replaceSet, setGap,
-    beads, render: () => tl.render(),
-    pps: () => tl.view.pps, time: () => player.time,
-  });
+  const shared = {
+    state, status, bar, renderPanel, replaceSet, setGap, startOver,
+    beads, render, pps: () => tl.view.pps, time: () => player.time,
+  };
+  pick.install(shared);
+  save.install(shared);
   requestAnimationFrame(loop);
 }
 
 init();
 
 /* the headless checks drive the page through this, exactly as a hand would. */
-window.trackMaker = { state, tl, player, pick, status, replaceSet, renderPanel, seekTo, bar, RECIPE_BY_ID };
+window.trackMaker = { state, tl, player, pick, save, status, replaceSet, renderPanel, seekTo, bar, startOver, RECIPE_BY_ID };

@@ -163,3 +163,66 @@ export function pickLine(state) {
   if (words) parts.push(words + ' word' + (words > 1 ? 's' : ''));
   return parts.join(', ') + ' picked. drag one, all slide.';
 }
+
+/* ---- what it writes ------------------------------------------------------ */
+
+/** The name that goes on an event: the trigger it came from, else what it is. */
+export function labelOf(state, b) {
+  const set = state.setById && state.setById.get ? state.setById.get(b.trig) : null;
+  if (set && set.name) return set.name;
+  return b.kind === 'wall' ? 'wall' : KINDS[b.kind].name;
+}
+
+/**
+ * The chart the race reads (chart JSON v1, see race/CHART.md and race/chart.js):
+ * one event per bubble carrying a hand cue. A bubble is one lane spawn; a wall is
+ * `cue.wall` plus the frame effect, and race/cues.js expands it into the six
+ * bubbles of a full row and stamps `sure: true` so the density knob leaves them be.
+ *
+ * The generated road (maker/generate.js) rides underneath: its energy curve, its
+ * acts and its analyzer events go in the same file, with no `hand` on them, so
+ * race/cues.js reads the road off the table and the recipes off the author.
+ */
+export function buildChart(state, now = new Date()) {
+  const src = state.audio || {};
+  const durationSec = Number(state.durationSec) || Number(src.durationSec) || 0;
+  const road = (state.road && Array.isArray(state.road.events)) ? state.road : null;
+  const names = new Set();
+  const events = byT(state.bubs).map((b, i) => {
+    const label = labelOf(state, b);
+    if (b.trig) names.add(label);
+    const cue = b.kind === 'wall'
+      ? { wall: 'pink', fx: [{ id: b.eff, strength: 1, dur: FX_DUR[b.eff] }] }
+      : { spawn: [{ kindId: b.kind, placement: 'lane', x: 0, h: 1, at: 0 }] };
+    return { id: 'm' + i, t: Math.max(0, Math.min(durationSec, b.t)), kind: b.trig ? 'trigger' : 'mark',
+      label, conf: 1, dur: 0, weight: 1, hand: true, cue };
+  });
+  const road_ = road ? road.events.map((e, i) => ({ ...e, id: 'g' + i, t: clamp(e.t, 0, durationSec) })) : [];
+  return {
+    version: 1, hand: true,
+    binSec: road ? road.binSec : 0.5,
+    energy: road ? road.energy : [],
+    acts: road ? road.acts : [],
+    rules: [],
+    events: road_.concat(events).sort((a, b) => a.t - b.t),
+    source: { name: src.name || 'track', hash: src.hash || '', durationSec, sampleRate: 16000 },
+    analysis: { energy: road ? 'maker' : '', words: 'whisper', lexicon: [...names],
+      generatedAt: (road && road.generatedAt) || now.toISOString(), partial: false },
+  };
+}
+
+/** The whole working state, small enough to sit in localStorage. The road goes with
+ *  it: it is a minute of arithmetic to rebuild and the author already saw it. */
+export function snapshotState(state) {
+  return { v: 1, minGap: state.minGap, cfg: state.cfg, bubs: state.bubs, hits: state.hits, road: state.road || null };
+}
+
+/** Ids come back off a restore, so the next new wall cannot land on one of them. */
+export function bumpIds(bubs) {
+  let top = 0;
+  for (const b of bubs || []) {
+    const n = Number(String(b.id).slice(1));
+    if (isFinite(n) && n >= top) top = n + 1;
+  }
+  while (Number(newId('b').slice(1)) < top) { /* walk the counter past them */ }
+}

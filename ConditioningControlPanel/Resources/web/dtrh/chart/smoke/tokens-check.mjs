@@ -76,5 +76,23 @@ const HTML = join(CHART, 'maker.html');
 if (!existsSync(HTML)) console.log('  ok  the maker is one screen: no tabs, no settings panel (maker.html lands in a later PR)');
 else ok(!/<nav|role="tab"|id="settings"/.test(read(HTML)), 'the maker is one screen: no tabs, no settings panel');
 
+
+/* ---- 4. the maker's own sheet keeps its shape (PR M4) --------------------- */
+/* maker.css declares every token it spends, and the top bar stays one row: a
+   long track name is cut with an ellipsis rather than wrapping the bar in two. */
+const MCSS = join(CHART, 'maker.css');
+if (!existsSync(MCSS)) console.log('  ok  maker.css keeps its shape (it lands in a later PR)');
+else {
+  const css = read(MCSS);
+  const root = (css.match(/:root\s*\{([\s\S]*?)\n\}/) || [, ''])[1];
+  const TOKENS = ['ink', 'panel', 'panel-2', 'line', 'text', 'dim', 'pink', 'violet', 'mint', 'gold',
+    'sub', 'flash', 'drain', 'wall', 'display', 'body', 'gutter', 'sp'];
+  const miss = TOKENS.filter((t) => !new RegExp('--' + t + '\\s*:').test(root));
+  ok(miss.length === 0, 'maker.css declares every token it uses' + (miss.length ? ' (missing: ' + miss.join(', ') + ')' : ''));
+  const top = (css.match(/#top\s*\{([^}]*)\}/) || [, ''])[1];
+  ok(/flex-wrap:\s*nowrap/.test(top), 'the maker top bar stays one row, whatever the track is called');
+  ok(/#top\s+\.name\s*\{[^}]*text-overflow:\s*ellipsis/.test(css), 'a long track name is cut, not wrapped');
+}
+
 console.log(fails ? '\ntokens-check: ' + fails + ' failed' : '\ntokens-check: all good');
 process.exit(fails ? 1 : 0);

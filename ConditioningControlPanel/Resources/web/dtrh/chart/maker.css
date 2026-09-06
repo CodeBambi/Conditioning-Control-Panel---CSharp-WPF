@@ -18,7 +18,10 @@
   --gutter: 120px; --sp: 10px;
 }
 * { box-sizing: border-box; }
-body { background: var(--ink); color: var(--text); font: 16px/1.4 var(--body); margin: 0; height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+/* The one column is pinned to the window on purpose: the top bar is a nowrap
+   row, so an `auto` column would size the whole page to the bar's own width and
+   push the side panel off the right edge. */
+body { background: var(--ink); color: var(--text); font: 16px/1.4 var(--body); margin: 0; height: 100vh; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 100%); overflow: hidden; }
 button { font: 700 16px var(--body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
 button:hover { border-color: var(--violet); }
 button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -28,7 +31,7 @@ button[disabled] { opacity: .45; cursor: default; }
 kbd { font: 700 13px var(--body); background: #0d0c18; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: var(--dim); }
 a { color: var(--violet); }
 
-#top { display: flex; align-items: center; gap: var(--sp); padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: nowrap; }
+#top { display: flex; align-items: center; gap: var(--sp); padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: nowrap; min-width: 0; overflow: hidden; }
 #top .name { font: 800 22px var(--display); color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #top #pick { display: inline-block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
 #top button { flex: none; }

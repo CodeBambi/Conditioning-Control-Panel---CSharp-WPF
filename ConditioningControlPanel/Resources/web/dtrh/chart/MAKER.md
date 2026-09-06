@@ -80,8 +80,8 @@ and `race/cues.js` runs (see `race/CHART.md`):
   `label` = the trigger name, `cue.spawn: [{ kindId, placement: 'lane', x: 0, h: 1, at: 0 }]`.
   `race/cues.js` stamps `sure: true` on hand spawns, so the density knob leaves them alone.
 - one event per wall, `cue.wall: 'pink'` plus `cue.fx: [{ id, strength: 1, dur: FX_DUR[id] }]`.
-  `run.js` expands a wall into five road bubbles and one over the top, and the first pop of
-  the row is the one that counts for the event.
+  `race/cues.js` opens a wall into five road bubbles and one over the top, all stamped
+  `sure: true`, and `run.js` plays the frame effect with them.
 - `source` = `{ name, hash, durationSec, sampleRate: 16000 }`, so the chart says which file
   it was written against.
 
