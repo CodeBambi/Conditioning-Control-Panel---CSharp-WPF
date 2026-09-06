@@ -38,8 +38,8 @@ const OUTLINE = 'outline';   // the inverted hull's material name (gltf.js heade
 // Owner call 2026-09-06: she rides INSIDE the cup, not on the tea. At 1.0 the case is 0.83 wide
 // in a 1.1 m bore, and GLB_SINK drops the sole 0.33 under the tea line so the case bottom (0.167 in
 // the model) sits 0.30 below the rim: the tea disc cuts her at the chest and the legs are never seen.
-const GLB_SCALE = 1.0;
-const GLB_SINK = 0.33;       // metres below TEA_Y the sole rests (the seat, breath rides on top)
+const GLB_SCALE = 0.8;        // owner call 2026-09-06: full size read too big in the bore
+const GLB_SINK = 0.28;       // metres below TEA_Y the sole rests; the case bottom lands 0.28 m under the rim
 const GLB_SEAT_Z = 0.25;     // the case spans z -0.59..0.08 in the model, so this centres it in the bore
 const CASE_TOP = [0.36, 0.99, -0.2];   // EMI_case local: the top corner sweat comes off
 const GLOW_Y = 0.62, GLOW_Z = 0.9;     // the screen light, model local (0.58 m ahead of the glass)
