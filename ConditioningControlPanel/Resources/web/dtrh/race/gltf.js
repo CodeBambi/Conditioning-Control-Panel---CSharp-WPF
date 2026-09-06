@@ -27,6 +27,7 @@
  *   flattenRig(root, animations, { keep })   one draw per pivot + material
  *   preparePixel(model, pixel)
  *   disposePack(url)
+ *   stripBoneScaleTracks(animations)         drops the scale tracks a bone may never have
  *
  * COLOUR SPACE. roomProps voxel() writes Color.setHex(hex).r/g/b into its
  * `color` attribute, and setHex decodes sRGB into the linear working space, so
@@ -51,6 +52,35 @@ const FACE_ATLAS = 'emi-faces.png';
 const GLASS = 'EMI_glass';
 const OUTLINE = 'outline';                 // material name: inverted hull, never re-wound
 const MAP_KEYS = ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap'];
+
+/**
+ * Bones no clip may ever scale. A shoulder is a HINGE: the arm under it (armR, handR, thumbR,
+ * shoulder_capR) turns, it never grows. emi.glb's `wave` export bakes a y scale on shoulderR that
+ * runs up to 2.12, which stretches that whole arm to twice its length and out of the case for the
+ * length of the wave (the desktop build shows the same stretch, and every other clip holds both
+ * shoulders at 1). The glb belongs to the Blender pipeline, so the fix is here: the scale track is
+ * dropped at load and the bone sits at its rest scale of 1 while the rotation does the wave.
+ */
+export const NO_SCALE_BONES = ['shoulderL', 'shoulderR'];
+
+/**
+ * Drop every `.scale` track aimed at one of `bones` from every clip, in place. Rotation and
+ * translation are left alone: only the scale is the export mistake. Returns how many tracks went.
+ */
+export function stripBoneScaleTracks(animations, bones = NO_SCALE_BONES) {
+  const want = new Set(bones.map((b) => THREE.PropertyBinding.sanitizeNodeName(b)));
+  let dropped = 0;
+  for (const clip of animations || []) {
+    if (!clip || !Array.isArray(clip.tracks)) continue;
+    clip.tracks = clip.tracks.filter((t) => {
+      const parsed = t && t.name ? THREE.PropertyBinding.parseTrackName(t.name) : null;
+      const hit = parsed && parsed.propertyName === 'scale' && want.has(parsed.nodeName);
+      if (hit) dropped++;
+      return !hit;
+    });
+  }
+  return dropped;
+}
 
 const _cache = new Map();                  // url -> { promise, pack }
 const _mat = new THREE.Matrix4();
@@ -91,6 +121,7 @@ export function loadPack(url, { log } = {}) {
 export function makePack(gltf, url = '') {
   const scene = gltf.scene || (gltf.scenes && gltf.scenes[0]) || new THREE.Group();
   const animations = gltf.animations || [];
+  stripBoneScaleTracks(animations);       // one choke point: every pack, every clip, every caller
   const index = new Map();
   let nodes = 0, tris = 0;
   scene.traverse((o) => {

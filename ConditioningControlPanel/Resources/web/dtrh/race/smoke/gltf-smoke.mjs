@@ -14,7 +14,8 @@
  *   3. parses it with GLTFLoader.parse(arrayBuffer, '', onLoad, onError);
  *   4. asserts names(), stats, toInstanceGeometry (vertex count, colours, the
  *      node-relative bake, outline winding), setFace on a hand-built
- *      EMI_glass + DataTexture, preparePixel, and the clip names.
+ *      EMI_glass + DataTexture, preparePixel, the clip names, and the shoulder
+ *      scale filter (hand-built clips, no GLB needed).
  *
  * SHIMS: none. three r169 and GLTFLoader both import clean under node 22+,
  * and the textureless GLB path never reaches createImageBitmap, ImageBitmap-
@@ -36,7 +37,7 @@ registerHooks({
 });
 
 const THREE = await import('three');
-const { makePack, toInstanceGeometry, setFace, preparePixel, flattenRig, disposePack, FACES, faceFrames, atlasScale, forceAtlasSampler } = await import('../gltf.js');
+const { makePack, toInstanceGeometry, setFace, preparePixel, flattenRig, disposePack, FACES, faceFrames, atlasScale, forceAtlasSampler, stripBoneScaleTracks, NO_SCALE_BONES } = await import('../gltf.js');
 const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 
 // ---- the tiny assert kit ----------------------------------------------------------------
@@ -150,6 +151,33 @@ ok(pack.clone('nope_not_here') === null, 'clone() returns null for a miss');
 // ---- animations --------------------------------------------------------------------------
 ok(pack.animations.length === 1 && pack.animations[0].name === 'idle', 'animations carry the clip names');
 ok(near(pack.animations[0].duration, 1), 'the clip is 1 second');
+
+// ---- the shoulder scale filter -------------------------------------------------------------
+// emi.glb's `wave` bakes a y scale up to 2.12 on shoulderR, which stretches the whole arm hanging
+// under it. A shoulder is a hinge and its rest scale is 1, so makePack drops those tracks at load.
+// Rotation and translation stay: the wave itself is the rotation.
+{
+  const wave = new THREE.AnimationClip('wave', 1, [
+    new THREE.VectorKeyframeTrack('shoulderR.scale', [0, 1], [1, 1, 1, 1, 2.12, 1]),
+    new THREE.VectorKeyframeTrack('shoulderR.position', [0, 1], [0.39, 0.49, -0.03, 0.39, 0.594, -0.03]),
+    new THREE.QuaternionKeyframeTrack('shoulderR.quaternion', [0, 1], [0, 0, 0, 1, 0, 0, 0.38, 0.92]),
+    new THREE.VectorKeyframeTrack('shoulderL.scale', [0, 1], [1, 1, 1, 1, 1, 1]),
+    new THREE.VectorKeyframeTrack('EMI_root.scale', [0, 1], [1, 1, 1, 1, 1.02, 1]),
+  ]);
+  const rigged = makePack({ scene: new THREE.Group(), animations: [wave] }, 'race/assets/rig.glb');
+  const tracksOf = (clip) => clip.tracks.map((t) => t.name);
+  const shoulderScale = (clips) => clips.some((c) => c.tracks.some((t) => {
+    const p = THREE.PropertyBinding.parseTrackName(t.name);
+    return p.propertyName === 'scale' && NO_SCALE_BONES.includes(p.nodeName);
+  }));
+  ok(!shoulderScale(rigged.animations), 'makePack leaves no scale track on a shoulder (' + tracksOf(rigged.animations[0]).join(' ') + ')');
+  ok(tracksOf(rigged.animations[0]).includes('shoulderR.quaternion'), 'the wave keeps its rotation track');
+  ok(tracksOf(rigged.animations[0]).includes('shoulderR.position'), 'and its translation track');
+  ok(tracksOf(rigged.animations[0]).includes('EMI_root.scale'), 'a scale on a node that is not a shoulder is left alone');
+  const twice = stripBoneScaleTracks(rigged.animations);
+  ok(twice === 0, 'the filter is idempotent: a second pass finds nothing');
+  ok(stripBoneScaleTracks(null) === 0 && stripBoneScaleTracks([null]) === 0, 'no clips, or a null clip, is a no-op not a throw');
+}
 
 // ---- toInstanceGeometry ------------------------------------------------------------------
 const geo = toInstanceGeometry(pack.byName('kart_cup'));
