@@ -299,7 +299,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'mult': hud.setCombo(w.score.state.combo, e.to); if (e.to > e.from) { hud.toast(`x${e.to}`, 'pop'); sfx('streak_milestone', 0.6); poke('smug', 1.0); } break;
       case 'miss': hud.setCombo(0, e.mult); break;
       case 'almost': hud.setScore(e.score); hud.toast(`almost +${e.gain}`, 'almost'); break;
-      case 'bank': hud.setBank(e.banked); hud.setScore(0); hud.toast(`bank +${e.amount}`, 'bank'); break;
+      case 'bank': hud.setBank(e.banked); hud.setScore(0); hud.toast(`kept +${e.amount}`, 'bank'); break;
       case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain}`, 'jackpot'); break;
     }
   }

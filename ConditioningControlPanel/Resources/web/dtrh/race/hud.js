@@ -74,7 +74,7 @@ export function createRaceHud(root) {
   comboFill.style.setProperty('--rh-hold', `${COMBO_HOLD_SEC}s`);
   const comboN = el('rh-num', comboRow, 'combo 0');
   const nextEl = el('rh-next rh-num', scoreWrap, '');
-  const bankEl = el('rh-bank rh-num', scoreWrap, 'banked 0');
+  const bankEl = el('rh-bank rh-num', scoreWrap, 'kept 0');
 
   // ---- the rung ladder: consts by default, swappable via setLadder ----
   let ladder = okLadder(MULT_LADDER) ? MULT_LADDER : NEW_LADDER;
@@ -168,7 +168,7 @@ export function createRaceHud(root) {
     if (Math.abs(bankTarget - bankShown) > 0.5) {
       bankShown += (bankTarget - bankShown) * (reduced ? 1 : 0.2);
       if (Math.abs(bankTarget - bankShown) < 0.5) bankShown = bankTarget; else busy = true;
-      bankEl.textContent = `banked ${fmt(bankShown)}`;
+      bankEl.textContent = `kept ${fmt(bankShown)}`;
     }
     if (busy && !disposed) raf = requestAnimationFrame(tick);
   }
@@ -426,7 +426,7 @@ export function createRaceHud(root) {
         rows.appendChild(Object.assign(document.createElement('dd'), { textContent: v, className: 'rh-num' }));
       };
       line('score', fmt(s.score || 0));
-      line('banked', fmt(s.banked || 0));
+      line('kept', fmt(s.banked || 0));
       line('best combo', fmt(s.bestCombo || 0));
       line('popped', fmt(s.popped || 0));
       line('laps', fmt(s.laps || 0));
