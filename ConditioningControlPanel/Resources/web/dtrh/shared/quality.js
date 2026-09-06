@@ -25,6 +25,7 @@ export const Q = {
   swirlCount: 90,        // orbiting particles per feature card
   veinRadial: 18,        // branch-vein tube radial segments
   deeperRadial: 20,      // Deeper flagship tube radial segments
+  leanLights: false,     // race: 7 lights -> 3 (ambient + the dresser's hemisphere + EMI's cupLight stay)
 };
 
 export function setQuality(tier) {
@@ -46,5 +47,6 @@ export function setQuality(tier) {
     swirlCount: 36,
     veinRadial: 12,
     deeperRadial: 14,
+    leanLights: true,    // 7 lights -> 3: every lit material's fragment loop shrinks with the light count
   });
 }

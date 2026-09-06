@@ -96,8 +96,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   scene.background = new THREE.Color(0x12261f);
   scene.fog = new THREE.FogExp2(0x12261f, FOG_DENSITY);
   const camera = new THREE.PerspectiveCamera(FOV_BASE, 1, 0.1, 400);
+  // Q.leanLights (mobile): the dresser's sun, EMI's screen / bead points and this cupLight are hidden
+  // (three.js does not count an invisible light); the ambient, the dresser's hemisphere (the pink sky the
+  // props and the cup are painted for) and EMI's own cupLight are that tier's whole light bill
   scene.add(new THREE.AmbientLight(0x8a70a8, 1.0));
   const cupLight = new THREE.PointLight(0xff69b4, 1.4, 14);
+  cupLight.visible = !Q.leanLights;
   scene.add(cupLight);
   // the vertical fov this window shape needs to hold FOV_BASE's 16:9 width of road; the per-frame
   // kick rides on top of it, and a resize slides S.fov by the same delta so the kick survives a flip

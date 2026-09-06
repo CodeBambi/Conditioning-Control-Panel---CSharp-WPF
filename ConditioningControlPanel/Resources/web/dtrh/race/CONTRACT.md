@@ -124,6 +124,11 @@ Rooms: `teagarden, toybox, casino, undertow, mirrors, chapel, greyward, coronati
 carries `loud` (rollRoomOrder deals loud/soft alternately after the Tea Garden). `rooms` may be
 specs or ids. The dresser adds its own hemisphere + directional light (the props are Lambert; the
 tunnel shader ignores lights) and exposes `group`, `spans` (`{id, d0, d1}` per room) and `rooms`.
+Light budget: desktop runs 7 lights (run.js ambient + cupLight, the dresser's hemisphere + sun, EMI's
+screen / bead / cup points). On the mobile tier `Q.leanLights` hides the sun, run.js's cupLight and
+EMI's screen + bead points (`visible = false`, which three.js counts as absent): the ambient, the
+hemisphere (the pink sky the props and the cup are painted for; a directional in its place reads
+purple and flat) and EMI's cupLight are that tier's whole bill. Desktop is untouched.
 A crossed cube hides, throws its splits and puts a BILLBOARD flash on its spot: never a solid mesh,
 which used to read as a second, empty white box standing beside the shards.
 Road furniture (item box and its twelve splits, boost pad, ramp lip, air marker) takes its geometry

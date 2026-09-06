@@ -23,6 +23,7 @@
 
 import * as THREE from 'three';
 import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W } from './consts.js';
+import { Q } from '../shared/quality.js';
 import { biomeById } from '../game/biomes.js';
 import { createRoomProps, pixelTex } from './roomProps.js';
 import { propPack, packGeo, geoSize } from './propPack.js';
@@ -524,6 +525,7 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
   // ---- light so the Lambert props read (the tunnel shader ignores lights) ---------
   const hemi = new THREE.HemisphereLight(0xffd6ee, 0x1a1a2e, 1.1);
   const sun = new THREE.DirectionalLight(0xf6e7c8, 0.6); sun.position.set(0.3, 1, 0.2);
+  sun.visible = !Q.leanLights;   // an invisible light is not counted: the lit shaders compile one light shorter
   group.add(hemi, sun);
   scene.add(group);
 
