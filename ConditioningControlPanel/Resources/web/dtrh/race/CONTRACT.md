@@ -181,6 +181,12 @@ Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
 | gifrain | effect | gifCascade | 25 | minIntensity 0.45 |
 | video | effect | video | 40 | DARK since 2026-09-06, never spawns (see below) |
 
+Spiral pops (`payloadFx.showSpiral`, untouched) take their url from `engine/loomSpirals.js`
+`pickSpiralUrl()`. On the mobile tier `Q.leanSpirals` has run.js narrow that module's bundled pool
+to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the other five are 2.2-5.3 MB) with
+`setBundledSpiralPool` and prefetch both in `prepare()` (while the intro plays; `start()` covers
+`?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full pool and the Descent
+never calls the setter.
 A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
 of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
 one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its

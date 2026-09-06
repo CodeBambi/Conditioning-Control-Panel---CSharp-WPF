@@ -41,6 +41,7 @@ import { Q } from '../shared/quality.js';
 import { createTunnel, FOG_DENSITY } from '../engine/tunnel.js';
 import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
+import { setBundledSpiralPool, prefetchSpirals, LEAN_SPIRALS } from '../engine/loomSpirals.js';
 import { createScreenShake } from '../game/screenShake.js';
 import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, makeRng } from './consts.js';
 import { createSpine } from './spine.js';
@@ -120,6 +121,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const hud = createRaceHud(hudRoot);
   const fxProxy = { pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
+  // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
+  // (warmFx) rather than 2-5 MB mid-lap; the desktop pool and the Loom's own spirals are untouched
+  setBundledSpiralPool(Q.leanSpirals ? LEAN_SPIRALS : null);
+  let fxWarm = false;
+  function warmFx() { if (fxWarm || !Q.leanSpirals) return; fxWarm = true; prefetchSpirals(LEAN_SPIRALS); }
   const lane = createMediaLane(sfHud);   // re-homes payload cards off the road
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
@@ -602,6 +608,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
    *  frame pays for it; the renderer compiles the world's programs in the same breath. A no-op once built. */
   function prepare() {
     if (S.disposed || W) return;
+    warmFx();
     W = build(S.seed);
     try { renderer.compile(scene, camera); } catch (e) { /* a warm-up only: the first frame compiles what this missed */ }
   }
@@ -627,7 +634,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   function start() {
     if (S.started || S.disposed) return;
-    if (!W) W = build(S.seed);
+    if (!W) { warmFx(); W = build(S.seed); }   // ?autostart=1 skipped prepare(): the warm-up rides the first seconds
     S.started = true; S.running = true; S.ended = false;
     input.flush();          // a space that closed the last introduction card is not a jump on frame one
     S.bestAtStart = W.score.state.best;
