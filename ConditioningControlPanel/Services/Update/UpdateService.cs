@@ -28,45 +28,49 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const string CurrentPatchNotes = @"v6.9.2 - The Spiral pt. 2
 
-a fix wave for the things you told us about after the Spiral, plus a few Arcademy asks from the suggestions forum that were too good to leave sitting. nothing here touches your progress. it stays yours :3
+a polish wave for the things you told us about after the Spiral, plus a few Arcademy asks from the suggestions forum that were too good to leave sitting. nothing here touches your progress. it stays yours :3
 
 THE SPIRAL, NOW ON THE WEB
-- OWNER LINE: the spiral visualization on cclabs.app goes here (what it shows, where to find it).
+- your descent is on cclabs.app. open your profile and the spiral is a 3D rail, one turn per day, your features and achievements hanging off it where they happened. it is on for everyone with at least one day in; add ?rail=0 to the address if you prefer the 2D map.
+- the phone home-screen app signs in through Safari in one smooth pass.
 
-VIDEOS BEHAVE AGAIN
-- silent mandatory videos are fixed. the app was reading your master volume as the video volume, baked ""no audio"" into the clip and never let go. mute is the player's state now, not the media's.
-- no more black 2 to 3 seconds between clips, and no more videos that never draw a frame. the old clip's stop could wedge and the next one started on top of it. it waits its turn now.
-- popped video bubbles actually launch a video again. a latched trigger guard was eating three out of four.
-- ""no videos found"" says WHY (empty folder, filters too tight, pack not downloaded) and stops stacking a new box on every trigger.
-- a remote ""play hypnotube"" while the Arcademy is open lands on a surface you can actually see.
+VIDEOS
+- video fix: mandatory videos keep their sound when your master volume sits low.
+- video fix: clips hand over to each other without a black gap, and every clip draws its first frame.
+- video fix: popped video bubbles launch their video every time.
+- ""no videos found"" now tells you why (empty folder, filters too tight, pack not downloaded) and only says it once.
+- a remote ""play hypnotube"" while the Arcademy is open shows up on a surface you can see.
 
 FLASHES AND AUDIO
-- flash voicelines stop looping the same clip. the pool now respects the phrase library toggles and sees both content roots, so the one file that shadowed everything is gone.
-- 100% fade no longer spikes the frame time. the unified renderer was paying a full-screen present for every fade frame.
-- the flash ""Size"" slider was the centre keep-out slider wearing the wrong label. it says what it does now, and the real size and opacity live on the Visuals card.
+- flash voicelines rotate through the whole pool and respect your phrase library toggles.
+- optimization: 100% fade runs at full frame rate.
+- the flash ""Size"" slider is now labelled for what it does (centre keep-out). size and opacity live on the Visuals card.
 
 CAMERA, GAZE AND COMPANION
-- turning the camera off no longer freezes the app. the stop runs off the UI thread.
-- the Focus Gaze switch shows your setting, not whether the engine happens to be running.
-- companion roster cards show each companion's XP mechanic again (hover the card).
-- the AI companion's ""play audio"" effect stops claiming it played something when it did not.
-- daily and weekly quests stop dealing Blink Trainer tasks to machines with no camera. a re-roll never costs you the same dead quest twice.
-- switching mods repaints the Studio rack in the right colours instead of the previous mod's.
+- solved a bug where the app might freeze for a moment when stopping the camera.
+- the Focus Gaze switch reflects your saved setting.
+- companion roster cards show each companion's XP mechanic (hover the card).
+- the AI companion's ""play audio"" effect reports honestly whether a clip played.
+- daily and weekly quests only deal camera or mic tasks to machines that have one. a re-roll never hands you the same dead quest twice.
+- switching mods repaints the Studio rack in the new mod's colours.
+- Brain Drain is back in the session creator, with a random onset option.
 
 THE ARCADEMY (from the suggestions forum)
 - the Tardy Slip: streak protection sold at the Prize Counter. hold up to two, they burn themselves on a missed night, and the Rake will upsell you one when you are holding none.
 - share your report card as an image. anonymous by default, name and ID are an opt-in toggle.
 - the Time Capsule: first exhibit in the trophy case, sealed until 30 nights of attendance.
-- the Bugle's comics are finally drawn. all six.
+- the Bugle's comics are drawn. all six.
 - EMI at her desk wears whatever outfit the Locker armed.
-- the Front Gate: a way back to CC Labs from the web campus, and the classroom door sign stays inside the frame on phones.
+- the Front Gate: a way back to CC Labs from the web campus.
+- the classroom door sign fits the frame on phones.
 
 UNDER THE HOOD
-- logs were rebuilt. one file per run with a header and footer, a tenth of the noise, personal content redacted at write time instead of at upload, and a flight recorder that keeps the debug trail in memory and only writes it when something breaks. the bug button sends the session file so we see the run that hurt, not yesterday's.
-- age moderation catches spelled-out, mixed leet and zero-padded numbers.
-- the Deeper editor stops fighting the playhead while you scrub the mini timeline.
+- logs were rebuilt. one file per run with a header and footer, a tenth of the noise, personal content redacted as it is written, and a flight recorder that keeps the debug trail in memory and only writes it when something needs a look. the bug button sends the session file for the run you are reporting.
+- age moderation reads spelled-out, mixed leet and zero-padded numbers.
+- optimization: the Deeper editor's mini timeline scrubs smoothly (thanks wunadacatt).
+- a handful of campus and rabbit hole lines got reworded.
 
-full nerd changelog in pull requests 639 through 648, 782 through 799 and 824 through 838.";
+full nerd changelog in pull requests 477, 480, 639 through 648, 782 through 799, 824 through 841 and 871.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
