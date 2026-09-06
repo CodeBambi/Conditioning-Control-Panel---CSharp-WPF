@@ -124,6 +124,8 @@ export function createTrackState(opts = {}) {
     due(kartD, kartSpeed) { return track ? sched.update(track.t, kartD, kartSpeed) : []; },
     /** The player met this event: popped its bubble, took its drop. */
     taken(id) { if (sched) sched.taken(id); },
+    /** cues.js left this event off the road: it is not one the player can take, so it leaves the count. */
+    skip(id) { if (sched) sched.skip(id); },
     stats() { return sched ? sched.stats() : { total: 0, fired: 0, countable: 0, taken: 0, missed: 0 }; },
     /** The end-of-run fields CHART.md adds to the summary and to `run-ended`. */
     summary() {
