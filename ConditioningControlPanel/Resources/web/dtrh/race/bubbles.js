@@ -7,7 +7,7 @@
  * through layout.toWorld only. Four placements: lane (rests on the road and
  * bobs), air (threads a ramp's air line), spawn (materialises ahead and
  * wobbles), rain (falls from the ceiling, rests, fizzles). Pops are pass-
- * through against the kart box; a pop plays the DtRH pop/chime in-page
+ * through against the kart box; a pop is SILENT here (race/audio.js sounds it)
  * (engine/audioBus) and throws a few sparkle shards, the WPF BubbleService way.
  * Sprite textures come from the two locally mapped hosts (never remote media). Every sprite
  * (bubbles and shards) sits on pixel.js's CRISP_LAYER: full resolution over the blocky world.
@@ -16,16 +16,10 @@
 import * as THREE from 'three';
 import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, TREATS_ONLY_SEC } from './consts.js';
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
-import { makeSfxPlayer } from '../engine/audioBus.js';
-import { getLevel } from '../engine/audioLevels.js';
 import { CRISP_LAYER } from './pixel.js';
 
 export { BUBBLE_KINDS };
 
-const SFX_BASE = '/dtrh/assets/bubbles/sfx/';
-const POP_SFX = ['Pop.mp3', 'Pop2.mp3', 'Pop3.mp3'];
-const CHIME_SFX = ['chime1.mp3', 'chime2.mp3', 'chime3.mp3'];
-const BURST_SFX = 'Burst.mp3';
 
 const CAP = 160;              // live bubbles, recycled farthest-first when full
 const SHARD_CAP = 64;
@@ -67,9 +61,6 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   /** 0 while the opening is treats only, then a ramp to 1 over the next minute. */
   const effectGate = () => { const el = getElapsed ? getElapsed() : Infinity; return el < TREATS_ONLY_SEC ? 0 : clamp((el - TREATS_ONLY_SEC) / 60, 0.15, 1); };
 
-  const audio = makeSfxPlayer();
-  audio.preload([...POP_SFX, ...CHIME_SFX, BURST_SFX].map((f) => SFX_BASE + f));
-  const sfx = (file, vol) => audio.play(SFX_BASE + file, vol * getLevel('fx'));
 
   // ---- textures: one per kind, fallback dot until the PNG lands --------------
   const dotTex = makeDotTex();
@@ -250,9 +241,6 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const k = KIND_BY_ID[s.kindId];
     s.popT = 0;
     const golden = k.id === 'golden';
-    if (golden) sfx(pick(CHIME_SFX), 0.4);
-    else if (k.id === 'prism') sfx(BURST_SFX, 0.35);
-    else sfx(pick(POP_SFX), 0.28);
     burst(s, golden);
     const strength = k.strength > 0 ? clamp(k.strength + 0.35 * intensity() + Math.random() * 0.1, 0, 1) : 0;
     emit(popCbs, { id: k.id, kind: k.kind, payload: k.payload, overlayKind: k.overlayKind, strength,

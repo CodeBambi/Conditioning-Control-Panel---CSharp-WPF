@@ -108,7 +108,13 @@ export function createEmiRig({ scene, reducedMotion = false }) {
   const cupMat = new THREE.MeshStandardMaterial({ color: PORCELAIN, roughness: 0.35, metalness: 0.05, side: THREE.DoubleSide });
   const cupMesh = new THREE.Mesh(new THREE.LatheGeometry(prof, 40), cupMat); cupMesh.position.y = 0.09; body.add(cupMesh);
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.53, 0.025, 8, 48), pinkGlow); rim.rotation.x = Math.PI / 2; rim.position.y = 0.75; body.add(rim);
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.045, 10, 24, Math.PI), porcelain); handle.position.set(0.62, 0.42, 0); handle.rotation.z = -Math.PI / 2; body.add(handle);
+  // the handle: a C along a bezier whose two ends start INSIDE the cup wall (the wall radius is
+  // ~0.37 at the low root and ~0.51 at the high root, so 0.33 and 0.46 sit 4-5 cm inside it),
+  // bows out to 0.86 and comes back. Same material as the cup so the retexture tints them alike.
+  const handleCurve = new THREE.CubicBezierCurve3(
+    new THREE.Vector3(0.33, 0.24, 0), new THREE.Vector3(0.86, 0.14, 0),
+    new THREE.Vector3(0.86, 0.74, 0), new THREE.Vector3(0.46, 0.63, 0));
+  const handle = new THREE.Mesh(new THREE.TubeGeometry(handleCurve, 18, 0.048, 8, false), cupMat); body.add(handle);
 
   // ---- the tea: a plain tinted liquid disc, nothing drawn in it. It takes the room's colour
   // (the scene fog hue, which fx grades per room) and ripples a little. EMI faces forward, away
@@ -136,12 +142,15 @@ export function createEmiRig({ scene, reducedMotion = false }) {
     const arm = new THREE.Mesh(armGeo, navyDark); arm.position.set(sd * 0.3, -0.1, 0.25 - EMI_Z / 1.25); arm.rotation.set(-0.9, 0, sd * 0.35); emi.add(arm);
     const hand = new THREE.Mesh(handGeo, glove); hand.position.set(sd * 0.36, -0.22, 0.44 - EMI_Z / 1.25); emi.add(hand);
   }
+  // the antenna: a short stem, a kink joint and the bead, about half the reach of the first
+  // draft (STEM_L + KINK_L). The moods read through the kink angle, not the length.
+  const STEM_L = 0.11, KINK_L = 0.08;
   const antenna = new THREE.Group(); antenna.position.y = 0.21; emi.add(antenna);
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.22, 8), stemMat); stem.position.y = 0.11; antenna.add(stem);
-  const kink = new THREE.Group(); kink.position.y = 0.22; antenna.add(kink);
-  const stem2 = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.16, 8), stemMat); stem2.position.y = 0.08; kink.add(stem2);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, STEM_L, 8), stemMat); stem.position.y = STEM_L / 2; antenna.add(stem);
+  const kink = new THREE.Group(); kink.position.y = STEM_L; antenna.add(kink);
+  const stem2 = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, KINK_L, 8), stemMat); stem2.position.y = KINK_L / 2; kink.add(stem2);
   const beadMat = new THREE.MeshStandardMaterial({ color: PINK, emissive: PINK, emissiveIntensity: 0.9, roughness: 0.3 });
-  const bead = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), beadMat); bead.position.y = 0.17; kink.add(bead);
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), beadMat); bead.position.y = KINK_L + 0.01; kink.add(bead);
   const beadLight = new THREE.PointLight(PINK, 0.5, 2); bead.add(beadLight);
   const cupLight = new THREE.PointLight(PINK, 1.4, 14); cupLight.position.y = 1.2; group.add(cupLight);
 
