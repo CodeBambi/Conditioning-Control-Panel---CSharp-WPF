@@ -23,7 +23,13 @@
  * replays the four introduction cards of race/cards.js. RIGHT is the stage: a second THREE.Scene drawn through
  * the race's own renderer + pixelizer (no second canvas) by a menu camera
  * whose view offset parks EMI in the right part of the frame (the boot puts
- * `is-lobby` on .race-hud so the run's chrome stays out of it). She STANDS on a
+ * `is-lobby` on .race-hud so the run's chrome stays out of it). ONE COLUMN, on
+ * a portrait phone, there is no right half to park her in: the title takes the
+ * top of the screen, the verbs take the bottom, and THE BAND left between them
+ * is her frame. The menu measures it, the stage aims the camera inside it with
+ * one setViewOffset (a window on a bigger virtual frame, so a shift and a
+ * magnification at once) and menu.css cuts the two scrims to the band's
+ * complement, so no dark plate and no verb ever lies over her. She STANDS on a
  * saucer podium with the cup beside her (never in it on the stage). Her idle
  * clip is the one breath on screen (Law III); every 3..6 s a wave / hop /
  * drum plays on a 0.3 s crossfade and settles back; a peek fires when the
@@ -110,6 +116,16 @@ const FAR_CUPS = [[-15, -28, 6, 0.5], [14, -33, 7, -0.8], [-6.5, -37, 6.4, 2.1]]
 const PAD = { a: 0, b: 1, up: 12, down: 13, left: 14, right: 15 };
 // the stage camera at 16:9, its own cap, and the one-column breakpoint menu.css already keeps
 const STAGE_FOV = 42, STAGE_MAX_VFOV = 86, ONE_COL_Q = '(max-width: 720px)';
+// THE BAND, one column only. Portrait puts the title at the top and the verbs at the bottom, so the
+// clear strip between them is the only frame she has: the menu measures it and the stage aims there
+// through ONE setViewOffset, reading a window of a bigger virtual frame, which is a shift and a
+// magnification at once. BAND_FILL is how much of the band the floor-to-antenna silhouette fills,
+// BAND_EYE is the house law's eye line (58% down the frame), BAND_GAP the air kept off the title and
+// the verbs, BAND_MIN the shortest band worth aiming at (under it the old centred backdrop framing
+// stands) and BAND_MAX_ZOOM the ceiling on the magnification.
+const BAND_FILL = 0.62, BAND_EYE = 0.58, BAND_GAP = 12, BAND_MIN = 150, BAND_MAX_ZOOM = 2.6;
+/** Her eyes sit two thirds up the standing silhouette: a big head on a short body. */
+const EMI_EYE_AT = 0.67;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 /** Screenshot aid: `?face=N` pins the stage face so one atlas frame can be shot on its own.
  *  -1 (no param, an empty one, or anything unparseable) means the clips drive the face. */
@@ -194,7 +210,10 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   // road does: a character reads wrong long before a tunnel does.
   const camera = new THREE.PerspectiveCamera(STAGE_FOV, 1, 0.1, 80);
   camera.position.set(0, 1.0, 4.4); camera.lookAt(0, 0.6, 0);   // pulled back from the brief's (0, 0.9, 3.2): at block 3 she filled the frame
-  const view = { w: 1, h: 1, frac: 0.5 };
+  const view = { w: 1, h: 1, frac: 0.5, band: null };
+  // the silhouette the band framing aims: the floor she stands over and the top of her head. Read off
+  // the model's own box the moment the pack lands, so a taller EMI never needs a number changed here.
+  const aim = { top: PODIUM_H + 1.05, eye: PODIUM_H + 0.7 };
   let t = 0, mode = 'menu', reduced = !!reducedMotion, disposed = false;
   const own = [];
   const keep = (x) => { own.push(x); return x; };
@@ -304,6 +323,13 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     });
     preparePixel(model, pixel);
     emi.root.add(model); emi.model = model;
+    // her real silhouette, for the band framing: the box the idle pose sits in, taken once.
+    emi.root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    if (isFinite(box.max.y) && box.max.y > PODIUM_H + 0.2) {
+      aim.top = box.max.y; aim.eye = PODIUM_H + EMI_EYE_AT * (box.max.y - PODIUM_H);
+      applyView();
+    }
     const mixer = new THREE.AnimationMixer(model); emi.mixer = mixer;
     for (const [k, name] of Object.entries(character.clips)) {
       const clip = THREE.AnimationClip.findByName(pack.animations, name);
@@ -369,9 +395,44 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   }
   /** Where the visible centre of the stage sits across the canvas (0.5 = the middle; the menu column pushes it right). */
   function setViewFraction(f) { view.frac = clamp(+f || 0.5, 0.3, 0.8); applyView(); }
+  /**
+   * setBand({ top, bottom } | null): the strip of the canvas, in css pixels down from the top, that
+   * she must land inside. One column hands the menu's free band over; two columns and every other
+   * mode hand null and the camera frames the way it always did.
+   */
+  function setBand(b) {
+    const band = b && +b.bottom - +b.top >= BAND_MIN ? { top: +b.top, bottom: +b.bottom } : null;
+    const was = view.band;
+    if (!band && !was) return;
+    if (band && was && Math.abs(band.top - was.top) < 0.5 && Math.abs(band.bottom - was.bottom) < 0.5) return;
+    view.band = band; applyView();
+  }
+  /** How far down the plain frame (0 top, 1 bottom) a point on her axis lands. The view offset is off. */
+  const _aimV = new THREE.Vector3();
+  const frameFraction = (y, z = 0) => { _aimV.set(0, y, z).project(camera); return (1 - _aimV.y) * 0.5; };
   function applyView() {
-    const off = Math.round((view.frac - 0.5) * view.w);
-    if (off) camera.setViewOffset(view.w, view.h, -off, 0, view.w, view.h); else camera.clearViewOffset();
+    const w = view.w, h = view.h, band = view.band;
+    if (!band) {                          // two columns, and every frame the stage had before the band
+      const off = Math.round((view.frac - 0.5) * w);
+      if (off) camera.setViewOffset(w, h, -off, 0, w, h); else camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+      return;
+    }
+    camera.clearViewOffset(); camera.updateProjectionMatrix();      // read the plain frame first
+    // the silhouette is her ON the saucer: the antenna at the top, and at the bottom the NEAR foot of
+    // the podium, which the camera looking down puts lower on the glass than the floor under her axis.
+    const head = frameFraction(aim.top), foot = frameFraction(0, 0.78);
+    const span = Math.max(0.02, foot - head);
+    const bandH = band.bottom - band.top;
+    // magnify until the silhouette fills BAND_FILL of the band, then slide the window so her eye line
+    // sits BAND_EYE down it. At zoom 1 with a centred band this is the identity, to the pixel.
+    const zoom = clamp((BAND_FILL * bandH / h) / span, 1, BAND_MAX_ZOOM);
+    const eye = frameFraction(aim.eye);
+    // where the eye line wants to sit, then the two edges it may not push her past: the antenna stays
+    // under the title and the saucer stays off the verbs, whatever the band's shape asks for.
+    const lo = band.top + (eye - head) * h * zoom, hi = band.bottom - (foot - eye) * h * zoom;
+    const want = clamp(band.top + BAND_EYE * bandH, Math.min(lo, hi), Math.max(lo, hi));
+    camera.setViewOffset(w * zoom, h * zoom, 0.5 * w * zoom - view.frac * w, eye * h * zoom - want, w, h);
     camera.updateProjectionMatrix();
   }
   function dispose() {
@@ -385,7 +446,11 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
   return {
     scene, camera, podium, cup: { group: cup, body: cupBody, ripple: rippleTea },
     emi: { root: emi.root, play, face, peek, model: () => emi.model, busy: () => emi.busy, ready(cb) { if (emi.model) cb(emi.model); else emi.ready.push(cb); } },
-    update, render, resize, setViewFraction, setMode(m) { mode = m; }, setReduced(v) { reduced = !!v; bubDirty = true; }, dispose,
+    update, render, resize, setViewFraction, setBand,
+    // the intro drives this camera itself (race/intro.js walks it to the gantry): the band is the
+    // menu's frame and nothing else's, so leaving menu mode gives the whole canvas back.
+    setMode(m) { mode = m; if (m !== 'menu') setBand(null); },
+    setReduced(v) { reduced = !!v; bubDirty = true; }, dispose,
   };
 }
 
@@ -405,8 +470,8 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   const layer = el('div', 'rm-root', root); layer.hidden = true; layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-label', 'racing thoughts');
   const col = el('div', 'rm-col', layer);
-  el('div', 'rm-title', col, 'racing thoughts');
-  el('div', 'rm-tag', col, 'steer. pop. never stop.');
+  const titleEl = el('div', 'rm-title', col, 'racing thoughts');
+  const tagEl = el('div', 'rm-tag', col, 'steer. pop. never stop.');
   const list = el('div', 'rm-list', col); list.setAttribute('role', 'menu');
   const optPanel = el('div', 'rm-panel rm-options', col); optPanel.hidden = true;
   const mediaPanel = el('div', 'rm-panel rm-media', col); mediaPanel.hidden = true;
@@ -584,10 +649,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   // ---- navigation: one focus index per panel, every input path lands on act() ----
   let panel = 'main', shown = false, disposed = false, viewHeld = false;
   const idx = { main: 0, options: 0, media: 0 };
+  // onResize re-reads the band: a panel opening or closing moves the edge she is framed against.
   function open(p) {
     panel = p; list.hidden = p !== 'main'; optPanel.hidden = p !== 'options'; mediaPanel.hidden = p !== 'media'; howPanel.hidden = p !== 'how';
     if (p === 'options') idx.options = 0; if (p === 'media') idx.media = 0;
-    refresh(); if (p !== 'options') seedIn.blur();
+    refresh(); if (p !== 'options') seedIn.blur(); onResize();
   }
   function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); ui('tick'); refresh(); }
   function refresh() {
@@ -643,9 +709,28 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     for (const k of Object.keys(now)) { if (now[k] && !padWas[k]) act(k); padWas[k] = now[k]; }
   }
   /** menu.css collapses to one column at ONE_COL_Q and hides `.rm-stage`; the canvas keeps rendering
-   *  behind it, so there is no right-hand column to push her into and the offset would only shove her
-   *  off the side of a phone. One column = dead centre, and she reads as the backdrop she now is. */
+   *  behind it, so there is no right-hand column to push her into and a sideways offset would only
+   *  shove her off the edge of a phone. One column parks her horizontally dead centre and hands the
+   *  vertical to the band below. */
   const oneColumn = () => !!(typeof matchMedia === 'function' && matchMedia(ONE_COL_Q).matches);
+  /**
+   * THE BAND, one column only. The title sits at the top of the screen and the verbs at the bottom,
+   * so the clear strip between them is the whole of her frame: the verbs' top edge closes it, or a
+   * panel's bottom edge opens it lower down when the panel ends before the screen does. Null means
+   * there is no strip worth aiming at (the menu is off, the column is scrolling past the bottom, or
+   * what is left is under BAND_MIN) and the stage keeps the centred framing it always had.
+   */
+  function measureBand(h) {
+    if (!shown || layer.hidden || !oneColumn()) return null;
+    const box = (e) => (e && !e.hidden && e.offsetParent !== null ? e.getBoundingClientRect() : null);
+    const head = [titleEl, tagEl].map(box).filter(Boolean);
+    if (!head.length) return null;
+    const openPanel = [optPanel, mediaPanel, howPanel].map(box).find(Boolean), listBox = box(list);
+    const band = openPanel
+      ? { top: openPanel.bottom + BAND_GAP, bottom: h - BAND_GAP }
+      : listBox ? { top: Math.max(...head.map((r) => r.bottom)) + BAND_GAP, bottom: listBox.top - BAND_GAP } : null;
+    return band && band.bottom - band.top >= BAND_MIN ? band : null;
+  }
   function onResize() {
     const w = root.clientWidth || window.innerWidth, h = root.clientHeight || window.innerHeight;
     stage.resize(w, h);
@@ -654,6 +739,13 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     // not walk her back to the middle of the frame.
     const parked = (shown || viewHeld) && !oneColumn();
     stage.setViewFraction(parked ? ((col.offsetWidth || w * 0.38) / w + 1) / 2 + 0.03 : 0.5);
+    // the stage aims inside the band and the two scrims are cut to its complement, so the dark that
+    // carries the words stops where she starts. No band, no `is-band`: menu.css keeps the one sheet.
+    const band = measureBand(h);
+    stage.setBand(band);
+    layer.classList.toggle('is-band', !!band);
+    layer.style.setProperty('--rm-scrim-t', `${band ? Math.round(band.top) : 0}px`);
+    layer.style.setProperty('--rm-scrim-b', `${band ? Math.round(Math.max(0, h - band.bottom)) : 0}px`);
   }
   const onPointer = (e) => { if (shown && e.clientX > window.innerWidth * 0.5) stage.emi.peek(); };
   // the backdrop closes the key card. Every verb and every row stops its own click, so the only
@@ -698,7 +790,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       open(PANEL_PIN === 'media' && !webMedia ? 'main' : (PANEL_PIN || 'main'));
       onResize(); hit(layer, 'is-in'); theme(true);
     },
-    hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); },
+    hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); stage.setBand(null); layer.classList.remove('is-band'); },
     /** Park the stage the way the column parks it, with the menu hidden: race/cards.js uses the same
      *  layout, so hide() sending her back to the middle of the frame would only be a jump and a jump
      *  back. The hold survives a resize; show() takes it off again. */
