@@ -12,6 +12,12 @@
  * lies for 450 ms, the ledger never does (Law I). The Brake and the End card
  * are the only pointer targets. Copy is DtRH voice: lowercase, short.
  *
+ * THE PICKUP (pass f3): a cube gives its item a card of its own, centre of the
+ * view just above the cup. It rolls a `?` while items.js rolls, flips to the
+ * decided item the moment items.js arms it (never earlier: Fake Shuffle),
+ * holds, then flies into the item slot and leaves the slot lit until the item
+ * is used. Under reduced motion the card fades in place instead of flying.
+ *
  * Pass three: THE MIXER rail above the item slot shows the live ingredients
  * of the mix (race/cocktail.js) as pixel chips with drain bars and charge
  * pips, and the served recipe's name while one is live. strobe() is the
@@ -110,6 +116,13 @@ export function createRaceHud(root) {
   itemKey.textContent = 'E';
   itemName.appendChild(itemKey);
 
+  // THE PICKUP: the item's own card. No per-item art ships, so the tile IS the picture: the room
+  // colour, a soft glow and the glyph big. It rides in the chrome, so a freeze or a tape covers it.
+  const pickup = el('rh-pickup', chrome);
+  const pickTile = el('rh-pickup-tile', pickup);
+  const pickGlyph = el('rh-pickup-glyph', pickTile, '?');
+  const pickName = el('rh-pickup-name', pickup, '');
+
   const speed = el('rh-speed rh-plate', chrome);
   const speedRow = el('rh-speed-row', speed);
   const speedN = document.createElement('span');
@@ -124,6 +137,41 @@ export function createRaceHud(root) {
   el('rh-speed-mark', speedBar).style.left = `${(KART_BASE_SPEED / KART_MAX_SPEED * 100).toFixed(1)}%`;
   el('rh-speed-tag', speed, 'boost');   // shown only while .is-boost is on
   let speedHot = false;
+
+  // ---- the pickup's own clock: roll -> flip -> hold -> flight -> the slot holds it ----
+  const PICK_HOLD_MS = 600, PICK_FLY_MS = 420;
+  let pickTimers = [], pickLive = false;
+  const pickLater = (fn, ms) => { const t = later(fn, ms); pickTimers.push(t); return t; };
+  /** Take the card off screen at once. A second cube may never stack a second card (no orphans). */
+  function endPickup() {
+    for (const t of pickTimers) { clearTimeout(t); timers.delete(t); }
+    pickTimers = [];
+    pickLive = false;
+    pickup.classList.remove('is-on', 'is-rolling', 'is-flip', 'is-fly');
+    pickup.style.transform = ''; pickup.style.transformOrigin = '';
+  }
+  /** The flight: the slot's rect is measured HERE, so the card lands right at any window size. */
+  function flyPickup(onLand) {
+    const land = () => {
+      pickLive = false;
+      item.classList.remove('is-inbound');
+      item.classList.add('is-held');
+      hit(item, 'is-bounce');
+      if (onLand) { try { onLand(); } catch (e) { /* a listener never breaks the run */ } }
+    };
+    if (reduced) { pickup.classList.add('is-fly'); pickLater(endPickup, 160); land(); return; }
+    try {
+      const from = pickTile.getBoundingClientRect(), to = itemBox.getBoundingClientRect(), card = pickup.getBoundingClientRect();
+      if (from.width > 0 && to.width > 0) {
+        const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+        const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+        pickup.style.transformOrigin = `${(from.left + from.width / 2 - card.left).toFixed(1)}px ${(from.top + from.height / 2 - card.top).toFixed(1)}px`;
+        pickup.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${(to.width / from.width).toFixed(3)})`;
+      }
+    } catch (e) { /* no layout yet: the card fades where it stands */ }
+    pickup.classList.add('is-fly');
+    pickLater(() => { endPickup(); land(); }, PICK_FLY_MS);
+  }
 
   const toasts = el('rh-toasts', chrome);
   const strobeEl = el('rh-strobe', chrome);
@@ -311,7 +359,33 @@ export function createRaceHud(root) {
       itemName.appendChild(itemKey);
       item.classList.toggle('is-armed', glyph != null);
       item.classList.toggle('is-rolling', glyph === '?');
+      if (glyph == null) item.classList.remove('is-held', 'is-inbound');
       hit(item, 'is-bounce');
+    },
+    /** THE PICKUP, on `itemRoll`: the card pops in near the cup with the rolling `?`. */
+    pickupRoll() {
+      endPickup();
+      pickGlyph.textContent = '?';
+      pickName.textContent = 'rolling';
+      void pickup.offsetWidth;                       // replay the pop when one card follows another
+      pickup.classList.add('is-on', 'is-rolling');
+      pickLive = true;
+    },
+    /** On `itemArm`: the card flips to the decided item, holds, then flies into the slot.
+     *  `onLand` fires as it lands, for the sound the run brain owns. */
+    pickupArm(glyph, name, onLand) {
+      if (!pickLive) { hud.pickupRoll(); }
+      pickup.classList.remove('is-rolling');
+      pickGlyph.textContent = glyph == null ? '?' : String(glyph);
+      pickName.textContent = String(name || '').toLowerCase();
+      hit(pickup, 'is-flip');
+      item.classList.add('is-inbound');              // the slot stays empty until the card lands in it
+      pickLater(() => flyPickup(onLand), reduced ? 200 : PICK_HOLD_MS);
+    },
+    /** On `itemUse` (or a reset): the card and the slot's highlight both go. */
+    pickupClear() {
+      endPickup();
+      item.classList.remove('is-held', 'is-inbound');
     },
     toast(text, kind) {
       kind = TOAST_HOLD[kind] ? kind : 'pop';

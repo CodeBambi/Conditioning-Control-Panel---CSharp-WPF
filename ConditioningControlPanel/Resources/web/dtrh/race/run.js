@@ -172,7 +172,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     setFlip(false); trailClear();
     mix.reset(); S.wobble = 0; clearMixChrome();
-    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.item(null, 'no item yet');
+    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.pickupClear(); hud.item(null, 'no item yet');
   }
 
   // ---- rooms ----
@@ -305,8 +305,16 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function onItem(w, e) {
     switch (e.type) {
-      case 'itemArm': sfx('ui_click', 0.4); break;
-      case 'itemUse': sfx('tunnel_powerup_collect', 0.7); poke('smug', 0.8); w.kart.pose('throw'); break;
+      // THE PICKUP: the card pops with the rolling '?', flips when the cube arms (never earlier,
+      // Fake Shuffle), then flies into the slot and leaves it lit until the item is spent
+      case 'itemRoll': hud.pickupRoll(); break;
+      case 'itemArm': {
+        const it = w.items.byId(e.id);
+        sfx('ui_click', 0.4);
+        hud.pickupArm(it ? it.glyph : '?', it ? it.name : '', () => sfx('ui_click', 0.3));
+        break;
+      }
+      case 'itemUse': hud.pickupClear(); sfx('tunnel_powerup_collect', 0.7); poke('smug', 0.8); w.kart.pose('throw'); break;
       case 'timeScale': S.timeScale = e.value; sfx('time_slow_in', 0.8); break;
       case 'magnet': S.magnet = true; w.field.setReach(2.2); w.kart.setReach(2.2); break;
       case 'multBoost': w.score.boostMult(e.mult, e.sec); break;
@@ -606,6 +614,27 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     setFlip(false);
   }
 
+  /** Screenshot aid (`?itembox=<ms>` on the standalone page): break the nearest sugar cube ahead the
+   *  way a crossing does, so a headless shot catches the pickup without anyone steering. A cube too
+   *  far to read is pulled into view first (the kart's depth jumps): a dev-only warp, and the reason
+   *  this is never reachable from the host. Returns false when there is no cube to break. */
+  function debugItemBox() {
+    if (!W || !S.running || S.paused) return false;
+    const ks = W.kart.state, lay = W.layout, half = lay.totalDepth / 2;
+    let best = null, bestRel = Infinity;
+    for (const c of lay.chunks) for (const f of c.features || []) {
+      if (f.type !== 'itembox') continue;
+      const rel = lay.wrap(f.d - ks.d + half) - half;
+      if (rel > 5 && rel < bestRel) { bestRel = rel; best = f; }
+    }
+    if (!best) return false;
+    if (bestRel > 16) { ks.d = lay.wrap(best.d - 16); trailClear(); }
+    if (!W.dresser.breakItemBox(best)) return false;
+    shake.shake(0.2, 120);
+    if (W.items.roll(W.score.state.mult)) sfx('ui_click', 0.5);
+    return true;
+  }
+
   W = build(seed);
   resetRunState(seed);
   raf = requestAnimationFrame(frame);
@@ -615,7 +644,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => TR.replace(chart), trackClock: (t, playing) => TR.clock(t, playing),
-    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(),
+    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), debugItemBox,
     get track() { return TR.track; } };
 }
 

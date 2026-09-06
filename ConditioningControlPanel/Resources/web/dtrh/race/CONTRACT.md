@@ -88,6 +88,8 @@ Rooms: `teagarden, toybox, casino, undertow, mirrors, chapel, greyward, coronati
 carries `loud` (rollRoomOrder deals loud/soft alternately after the Tea Garden). `rooms` may be
 specs or ids. The dresser adds its own hemisphere + directional light (the props are Lambert; the
 tunnel shader ignores lights) and exposes `group`, `spans` (`{id, d0, d1}` per room) and `rooms`.
+A crossed cube hides, throws its splits and puts a BILLBOARD flash on its spot: never a solid mesh,
+which used to read as a second, empty white box standing beside the shards.
 Road furniture (item box and its twelve splits, boost pad, ramp lip, air marker) takes its geometry
 from `props.glb` through `race/propPack.js` once the pack resolves; before that, and forever if the
 pack or a node is missing, the hand-built voxel primitives stay. Placement, physics and animation
@@ -229,6 +231,9 @@ export function createRaceHud(root) -> hud
 hud.setScore(n) hud.setCombo(combo, mult) hud.setSpeed(ms) hud.setBank(n)
 hud.banner(name, tagline, colorHex)   // MARQUEE, once per gate
 hud.item(glyph | null, name)
+hud.pickupRoll()                      // THE PICKUP card: pops near the cup with the rolling '?' (on itemRoll)
+hud.pickupArm(glyph, name, onLand)    // flips to the decided item (on itemArm), holds, flies into the slot, onLand as it lands
+hud.pickupClear()                     // on itemUse or a reset: the card and the slot's highlight both go
 hud.toast(text, kind)                 // kind: 'pop' | 'almost' | 'jackpot' | 'bank' | 'item' | 'effect'
 hud.flicker()                         // Stat Flicker under glitch
 hud.setFraught(v)
