@@ -429,7 +429,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (!cue) { TR.skip(due.event.id); return; }   // a guess the feel pass threw out never counts against the player
     for (const sp of cue.spawn) {
       const d = ks.d + ks.speed * Math.max(due.dueIn + (sp.at || 0), CUE_AHEAD_SEC);
-      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d, x: sp.x, h: sp.h, eventId: due.event.id });
+      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d, x: sp.x, h: sp.h, eventId: due.event.id, sure: !!sp.sure });
     }
     for (const f of cue.fx) playFx(w, f);
     if (cue.jump) { ks.vh = Math.max(ks.vh, cue.jump); ks.h = Math.max(ks.h, 0.06); ks.airborne = true; w.kart.pose('air'); }

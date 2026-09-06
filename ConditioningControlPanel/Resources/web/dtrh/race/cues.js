@@ -99,12 +99,13 @@ function fromHand(hand, ctx) {
     for (const sp of hand.spawn) {
       const placement = sp.placement || 'lane';
       const h = (sp.h != null) ? sp.h : (placement === 'rain' ? CEILING_H : placement === 'air' ? AIR_H : LANE_H);
-      cue.spawn.push({ kindId: sp.kindId, placement, x: Number(sp.x) || 0, h, at: Number(sp.at) || 0 });
+      cue.spawn.push({ kindId: sp.kindId, placement, x: Number(sp.x) || 0, h, at: Number(sp.at) || 0, sure: true });
     }
   }
+  // `sure`: the author placed these, so the density knob never thins them (bubbles.js spawnAt).
   if (hand.wall) {
-    for (const x of WALL_X) cue.spawn.push({ kindId: hand.wall, placement: 'lane', x, h: LANE_H, at: 0 });
-    cue.spawn.push({ kindId: hand.wall, placement: 'air', x: 0, h: WALL_AIR_H, at: 0 });
+    for (const x of WALL_X) cue.spawn.push({ kindId: hand.wall, placement: 'lane', x, h: LANE_H, at: 0, sure: true });
+    cue.spawn.push({ kindId: hand.wall, placement: 'air', x: 0, h: WALL_AIR_H, at: 0, sure: true });
   }
   if (Array.isArray(hand.fx)) cue.fx = hand.fx.map((f) => ({ id: f.id, strength: f.strength, dur: f.dur }));
   for (const k of HAND_FIELDS) if (hand[k] !== undefined) cue[k] = hand[k];
