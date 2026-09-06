@@ -312,7 +312,7 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Play tab, DtRH card -> "The Caucus Race": the kart run on the descent's media, hosted
+        /// Play tab, DtRH card -> "Racing Thoughts": the kart run on the descent's media, hosted
         /// as its own WebView2 window (CaucusHostService). Same tier-2 door as FALL IN, checked
         /// here for the same reason: the card's lockband is decoration, the handler is the wall.
         /// </summary>
@@ -326,7 +326,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "BtnStartRace_Click failed");
-                MessageBox.Show("Couldn't start The Caucus Race:\n\n" + ex.Message, "The Caucus Race",
+                MessageBox.Show("Couldn't start Racing Thoughts:\n\n" + ex.Message, "Racing Thoughts",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }

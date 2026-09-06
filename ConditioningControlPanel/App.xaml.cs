@@ -2703,7 +2703,7 @@ namespace ConditioningControlPanel
                 else Logger?.Information("--dtrh ignored: {Reason}", dtrhGate.Reason);
             }
 
-            // The Caucus Race (the kart run on the descent's media), dev shortcut: `--race` opens
+            // Racing Thoughts (the kart run on the descent's media), dev shortcut: `--race` opens
             // the race window straight away. Same door as `--dtrh` - the race is a DtRH sibling
             // and answers to the descent's tier gate, not one of its own.
             if (e.Args.Contains("--race"))
