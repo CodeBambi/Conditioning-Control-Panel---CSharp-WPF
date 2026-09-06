@@ -1,11 +1,14 @@
 /* ============================================================================
  * race/input.js - the wheel. Implements CONTRACT.md "race/run.js + raceBoot.js"
- * (PR 5, integration): the one place keyboard and gamepad are read.
+ * (PR 5, integration): the one place keyboard, gamepad and touch are read.
  *
  * Keyboard: arrows / WASD steer + accel + brake, Shift drift, Space jump, E item,
  * Esc brake, P cycles the pixel look.
  * Gamepad (navigator.getGamepads, standard map): left stick steer, RT accel,
  * LT brake, A drift, B jump, X item, Start brake.
+ * Touch (race/touch.js, only on a touchable page): the left half drags the wheel,
+ * the right half taps to jump and holds to drift.
+ * `createInput({ root })` needs the race root or the touch layer is never built.
  *
  *   read() -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool, jump:bool }
  *   onAction(cb)   cb(action) for the ACTIONS table below ('item' | 'brake' | 'pixel' | 'mute'), edge-triggered, never repeats on hold
@@ -24,7 +27,15 @@
  * (Law VIII) without a hard snap. The mirror item flips the picture, never
  * the hand: there is no flip/mirror API here and none may be added (the
  * owner's law: left stays left).
+ *
+ * THE MERGE: keys, pad and touch are three ADDITIVE sources, never a remap of
+ * one another. steer takes whichever source has the larger magnitude (an analog
+ * source, stick or thumb, also turns the easing off because it is already
+ * continuous); accel and brake take the max; drift is an OR; jump and the
+ * ACTIONS are edges, so any source may raise one and each is one press.
  * ==========================================================================*/
+
+import { createTouch } from './touch.js';
 
 const KEYS = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
@@ -53,7 +64,7 @@ const AID_JUMP = (() => {
 })();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-export function createInput({ target = window } = {}) {
+export function createInput({ target = window, root = null } = {}) {
   const down = new Set();
   const acts = [];
   const out = { steer: 0, accel: 1, brake: 0, drift: false, jump: false };
@@ -62,6 +73,9 @@ export function createInput({ target = window } = {}) {
   const padWas = { item: false, start: false, jump: false };
 
   const fire = (name) => { for (const cb of acts) { try { cb(name); } catch (e) { /* a listener never breaks the wheel */ } } };
+
+  /** The third source. null on a mouse desktop: not one node is built there. */
+  const touch = createTouch({ root });
 
   function onKey(e) {
     if (disposed || e.altKey || e.metaKey || e.ctrlKey) return;
@@ -126,6 +140,12 @@ export function createInput({ target = window } = {}) {
       if (jmp && !padWas.jump) jump = true;                    // pad B, edge-triggered like the key
       padWas.item = item; padWas.start = start; padWas.jump = jmp;
     }
+    if (touch) {
+      const t = touch.read();
+      if (Math.abs(t.steer) > Math.abs(steer)) { steer = t.steer; digital = false; }   // the thumb is analog too
+      drift = drift || t.drift;
+      if (t.jump) jump = true;                                 // one tap, one press
+    }
     if (digital) steerE += (steer - steerE) * Math.min(1, dt * 14);
     else steerE = steer;
     if (Math.abs(steerE) < 0.002) steerE = 0;
@@ -142,6 +162,7 @@ export function createInput({ target = window } = {}) {
   function flush() {
     down.clear(); jumpQ = false;
     padWas.item = false; padWas.start = false; padWas.jump = false;
+    if (touch) touch.flush();   // and a thumb still on the glass starts the run neutral
   }
 
   function dispose() {
@@ -149,6 +170,7 @@ export function createInput({ target = window } = {}) {
     target.removeEventListener('keydown', onKey);
     target.removeEventListener('keyup', onKey);
     target.removeEventListener('blur', onBlur);
+    if (touch) touch.dispose();
     down.clear(); acts.length = 0;
     jumpQ = false; jumpHeld = false;
   }
@@ -156,6 +178,8 @@ export function createInput({ target = window } = {}) {
   return {
     read,
     flush,
+    /** The touch layer element, or null where none was built. Test aid only. */
+    get touchEl() { return touch ? touch.el : null; },
     onAction(cb) { if (typeof cb === 'function') acts.push(cb); return () => { const i = acts.indexOf(cb); if (i >= 0) acts.splice(i, 1); }; },
     dispose,
   };

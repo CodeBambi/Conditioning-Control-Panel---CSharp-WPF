@@ -309,8 +309,26 @@ through the `fire-payload` bridge message exactly like `chaosRun.js` does today.
 (pause + end screen). Run end sends `run-ended` (below).
 
 As built (PR 5 reality notes):
-- `race/input.js` is the single reader of keyboard + gamepad: `createInput() -> { read(), onAction(cb), flush(), dispose() }`,
+- `race/input.js` is the single reader of keyboard + gamepad + touch:
+  `createInput({ root }) -> { read(), onAction(cb), flush(), dispose(), touchEl }`,
   `read()` = `{ steer, accel, brake, drift, jump }` with `accel` defaulting to 1 when nothing is pressed.
+  The three sources are ADDITIVE and never remap one another (Law II): `steer` takes whichever source
+  has the larger magnitude (an analog source, stick or thumb, also turns the digital easing off),
+  `accel` / `brake` take the max, `drift` is an OR, and `jump` plus the ACTIONS are edges, so any
+  source may raise one and each is exactly one press. `flush()` clears all three.
+- `race/touch.js` is that third source and the ONLY pointer path into the run:
+  `createTouch({ root, fire }) -> null | { el, read(), flush(), dispose() }`. It returns null unless the
+  page is touchable (`(pointer: coarse)` or `navigator.maxTouchPoints > 0`), so a mouse desktop and the
+  WebView2 desktop build build not one node of it; `?touch=1` forces it on (the headless screenshot aid)
+  and `?touch=0` forces it off. The layer is `.rh-touch` at z12 inside `.race-hud`: above the chrome (z3)
+  and the payload layers (z4 / z9), below the Brake and End screens (z20), the countdown (z21), the menu
+  (z25), the cards (z26) and the splash (z30), so every card still takes the tap first. Left `STEER_SIDE`
+  (55%) of the width steers by horizontal drag from the touch-down point (`STEER_DEAD_PX` 6 dead,
+  `STEER_LOCK_PX` 72 to full lock, zero on release, a ring-and-dot thumb pad while held); the rest of the
+  width taps (under `TAP_MS` 180 and `TAP_PX` 12 of travel) for one jump press and holds for drift.
+  Accel is never touched: nothing pressed is cruise, and there is no brake pedal on glass. The pause /
+  mute / use buttons that hang off the same layer are the sibling pass. Pointer Events only, never
+  TouchEvent.
 - Space (pad B) is the jump: `read().jump` is true for exactly the frame of a fresh press, never on hold,
   and `kart.stepJump` turns it into 1.1 m of real height (`state.h`, so the pop box goes up with it).
   A press within 4 m of a ramp lip, or inside 0.12 s of one firing, boosts that launch by 1.3 and hands
