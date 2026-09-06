@@ -212,10 +212,12 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
   /** An explicit placement from a track cue (CHART.md): the run has already worked the depth out at
    *  the kart's speed, so nothing is rolled or gated by intensity here. Returns the slot id, -1 when
-   *  the pool is full (a cue never steals a live bubble) or when density has gated this one out.
+   *  the pool is full (a cue never steals a live bubble), when the kind is dark (bubbleKinds.js
+   *  spawn:false), or when density has gated this one out.
    *  Over 1, density is the chance of a second bubble beside the first. */
   function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null } = {}) {
     if (liveCount >= CAP) return -1;
+    if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return -1;   // a dark kind: no chart may place one
     if (tracked) {
       if (density <= 0) return -1;
       if (density < 1 && Math.random() >= density) return -1;

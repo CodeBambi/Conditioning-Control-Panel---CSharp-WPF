@@ -126,7 +126,12 @@ Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
 | glitch | effect | glitch | 20 | |
 | freeze | effect | bambiFreeze | 25 | minIntensity 0.15 |
 | gifrain | effect | gifCascade | 25 | minIntensity 0.45 |
-| video | effect | video | 40 | rare, minIntensity 0.45, host plays it |
+| video | effect | video | 40 | DARK since 2026-09-06, never spawns (see below) |
+
+A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
+of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
+one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its
+sprite and its THE MIX `video` slot stay put for a later use.
 
 Placements: `lane` (rests on the road, h ~0.9, bobbing), `air` (along a ramp air line, h rises
 2..5), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` to the road in
@@ -259,7 +264,8 @@ As built (PR 5 reality notes):
 - `run.js` registers the `pause` and `payout-result` bridge handlers itself; `raceBoot.js` owns `init`,
   `manifest`, `favorites`, `ping`, `exit-request`, `fullscreen`.
 - Only `video` pops go to the host (`fire-payload {kind:'video', strength 0..100, durationMult}`);
-  `payloadFx` never sends it. There is no `audio` bubble kind.
+  `payloadFx` never sends it. There is no `audio` bubble kind. Since 2026-09-06 no video bubble spawns
+  and the host refuses the message, so this path is dark at both ends.
 - The first Tea Garden gate sits at d = 9 (mid gate chunk), so it crosses ~0.4 s after start: that crossing
   shows the opening MARQUEE and never banks. Later Tea Garden gates bank only when the road score is > 0.
 - Magnet (the wand) is a known gap: the field's hit box is fixed at `POP_HIT_*` and exposes no widen API,
