@@ -21,9 +21,11 @@
  * without those pivots gets a small lean of the whole root instead), the face
  * swaps for the hold and then everything springs home together.
  *
- * The show is menu-mode only, it never starts while a one-shot has her, and a
- * one-shot or a peek that starts mid-glance ends the glance through the same
- * return path. Reduced motion: no flashes at all, the sprites stay hidden.
+ * The show is menu-mode only, nothing at all fires before `attach` has put a
+ * real model on the podium (the first beat counts from there, not from the
+ * stage going up), it never starts while a one-shot has her, and a one-shot or
+ * a peek that starts mid-glance ends the glance through the same return path.
+ * Reduced motion: no flashes at all, the sprites stay hidden.
  * `?flash=<ms>` fires one at that time for a screenshot, `?flash=<ms>,pop`
  * picks the bubble pop.
  * ==========================================================================*/
@@ -116,7 +118,8 @@ function dotTexture() {
 }
 
 /**
- * The screenshot aid. `?flash=<ms>` fires one flash that many ms after the stage is up,
+ * The screenshot aid. `?flash=<ms>` fires one flash that many ms after the stage is up (or the
+ * moment the pack lands, if that is later: the show never fires into an empty podium),
  * `?flash=<ms>,pop` picks the bubble pop and a third field pins the slot (`?flash=3000,pop,3`) so
  * two captures of the same beat land in the same place; `?freeze=<ms>` then holds the whole stage
  * still that many ms after it fired, so a headless capture is on exactly the frame it asked for.
@@ -156,6 +159,9 @@ export function createMenuFlashes({ scene, emiRoot, baseY = 0, faces = null, set
   const yaw = new Spring(YAW_W, YAW_Z), lean = new Spring(15, 0.7), tip = new Spring(11, 0.8);
   const aid = flashAid();
   let disposed = false, lastSlot = -1, nextAt = rand(FIRST_MIN, FIRST_MAX), aidLive = !!aid, aidFrom = -1, frozen = false;
+  // Nothing pops before the glb is on the podium: a flash with no one to turn to it is a light and
+  // a shrug. `ready` is the gate, `lastT` is the stage clock the gate starts the first beat from.
+  let ready = false, lastT = 0;
   let fxOn = false, fxAge = 0, fxKind = KINDS.flash;
   let phase = '', glanceAge = 0, hold = 0;      // '' | 'turn' | 'home'
   let ant0 = null, ant1 = null, antDriven = false, antApplied = false;
@@ -166,6 +172,8 @@ export function createMenuFlashes({ scene, emiRoot, baseY = 0, faces = null, set
    * after the mixer has had the frame (the mixer rewrites it from the clip every frame, so the offset
    * cannot pile up); a pivot no clip touches is written as its authored rest plus the offset. With no
    * `ant0` at all the lean lands on the root instead, which reads as a smaller version of the same beat.
+   * This is also what opens the show: on a slow disk (or a bigger face atlas) the pack can land well
+   * after the stage does, so the first beat is counted from HERE and not from the stage going up.
    */
   function attach(model, animations) {
     if (!model || !model.getObjectByName) return;
@@ -178,7 +186,9 @@ export function createMenuFlashes({ scene, emiRoot, baseY = 0, faces = null, set
     antDriven = !!(ant0 && driven.has('ant0'));
     if (ant0) { rest.a0x = ant0.rotation.x; rest.a0z = ant0.rotation.z; }
     if (ant1) { rest.a1x = ant1.rotation.x; rest.a1z = ant1.rotation.z; }
-    if (log) log(`[menu] flashes: antenna ${ant0 ? (antDriven ? 'ant0 additive over the clip' : 'ant0 over its rest') : 'absent, the root leans instead'}`);
+    ready = true;
+    nextAt = lastT + rand(FIRST_MIN, FIRST_MAX);
+    if (log) log(`[menu] flashes: antenna ${ant0 ? (antDriven ? 'ant0 additive over the clip' : 'ant0 over its rest') : 'absent, the root leans instead'}, first beat at t ${nextAt.toFixed(2)}`);
   }
 
   /** One slot, never the one the last flash used, weighted to the half the camera can see. */
@@ -239,8 +249,10 @@ export function createMenuFlashes({ scene, emiRoot, baseY = 0, faces = null, set
   function update(dt, ctx) {
     if (disposed || !ctx) return;
     const t = ctx.t || 0, live = ctx.mode === 'menu' && !ctx.reduced;
+    lastT = t;
     // the run, the story and the options all stop the show where it stands; the menu picks it back up
     if (!live) { if (phase) release(); if (fxOn) hideFx(); if (nextAt < t + FIRST_MIN) nextAt = t + FIRST_MIN; }
+    else if (!ready) { /* the pack is still landing: the aid waits with everything else */ }
     else if (aidLive && t >= aid.at && !ctx.busy) { aidLive = false; aidFrom = t; if (log) log(`[menu] flash aid: ${aid.kind} at t ${t.toFixed(2)}`); fire(aid.kind, aid.slot); }
     else if (!phase && !fxOn && !ctx.busy && t >= nextAt) fire(null);
     if (aid && aid.freeze != null && aidFrom >= 0 && t - aidFrom >= aid.freeze) frozen = true;
