@@ -6,12 +6,14 @@
  *
  * Every row mirrors game/variants.js + engine/bubbles.js: same sprites, same
  * tints, same payload names, so the race bubbles read as THE SAME bubbles the
- * player pops in DtRH and on the desktop. Sprites come from the two locally
- * mapped hosts (installer tree + ccp.art = assets/Chaos/bubbles/<id>.png).
+ * player pops in DtRH and on the desktop. Every sprite is a page-relative
+ * path under /dtrh/assets/, so the table loads the same in a plain browser as
+ * it does in WebView2: the four faces that used to come off the ccp.art
+ * virtual host (assets/Chaos/bubbles/<id>.png, a 404 outside the app) now ship
+ * as 256px copies beside their siblings in assets/bubbles/effects/.
  * ==========================================================================*/
 
 const SPRITE_BASE = '/dtrh/assets/bubbles/effects/';
-const ART_BASE = 'https://ccp.art/bubbles/';
 const PLAIN_SPRITE = '/dtrh/assets/bubbles/bubble.png';   // the classic soap bubble
 
 // kind: 'treat' pops for points only; 'effect' also fires a payloadFx spec.
@@ -30,7 +32,7 @@ export const BUBBLE_KINDS = [
   { id: 'golden',     label: '🍀', kind: 'treat',  payload: null,         overlayKind: null,  category: null,
     strength: 0,    points: 50, weight: 1.2, minIntensity: 0,    tint: 'rgb(255,215,0)',   sprite: SPRITE_BASE + 'golden.png' },
   { id: 'lucky',      label: '✧', kind: 'treat',  payload: null,         overlayKind: null,  category: null,
-    strength: 0,    points: 25, weight: 1.6, minIntensity: 0,    tint: 'rgb(255,215,0)',   sprite: ART_BASE + 'gold_droplet.png' },
+    strength: 0,    points: 25, weight: 1.6, minIntensity: 0,    tint: 'rgb(255,215,0)',   sprite: SPRITE_BASE + 'gold_droplet.png' },
   { id: 'prism',      label: '❂', kind: 'treat',  payload: null,         overlayKind: null,  category: null,
     strength: 0,    points: 30, weight: 1.4, minIntensity: 0.1,  tint: 'rgb(200,168,255)', sprite: SPRITE_BASE + 'prism.png' },
   { id: 'flash',      label: '',  kind: 'effect', payload: 'flash',      overlayKind: null,  category: 'strobe',
@@ -46,12 +48,12 @@ export const BUBBLE_KINDS = [
   { id: 'glitch',     label: '▚', kind: 'effect', payload: 'glitch',     overlayKind: null,  category: 'corruption',
     strength: 0.5,  points: 20, weight: 3,   minIntensity: 0.2,  tint: 'rgb(120,255,190)', sprite: SPRITE_BASE + 'glitch.png' },
   { id: 'freeze',     label: '❄', kind: 'effect', payload: 'bambiFreeze', overlayKind: null,  category: 'freeze',
-    strength: 0.6,  points: 25, weight: 1,   minIntensity: 0.15, tint: 'rgb(138,230,255)', sprite: ART_BASE + 'bambifreeze.png' },
+    strength: 0.6,  points: 25, weight: 1,   minIntensity: 0.15, tint: 'rgb(138,230,255)', sprite: SPRITE_BASE + 'bambifreeze.png' },
   { id: 'gifrain',    label: '▼', kind: 'effect', payload: 'gifCascade', overlayKind: null,  category: 'cards',
-    strength: 0.6,  points: 25, weight: 1.2, minIntensity: 0.45, tint: 'rgb(255,200,61)',  sprite: ART_BASE + 'htlink.png' },
+    strength: 0.6,  points: 25, weight: 1.2, minIntensity: 0.45, tint: 'rgb(255,200,61)',  sprite: SPRITE_BASE + 'htlink.png' },
   { id: 'video',      label: '▶', kind: 'effect', payload: 'video',      overlayKind: null,  category: 'video',
     spawn: false,   // dark since 2026-09-06, see the header; the row stays for a later use
-    strength: 0.7,  points: 40, weight: 0.35, minIntensity: 0.45, tint: 'rgb(224,64,77)',  sprite: ART_BASE + 'video.png' },
+    strength: 0.7,  points: 40, weight: 0.35, minIntensity: 0.45, tint: 'rgb(224,64,77)',  sprite: SPRITE_BASE + 'video.png' },
 ];
 
 export const KIND_BY_ID = Object.fromEntries(BUBBLE_KINDS.map((k) => [k.id, k]));

@@ -18,6 +18,10 @@
  * so the DtRH master colour applies. The fanfares the host already owns
  * (`Resources/sounds/chaos/*.mp3`) go out as `sfx` bridge messages using ONLY
  * names in HOST_SFX; a wrong name is silent on the host, so the set is closed.
+ * With no host (a plain browser) there is nobody to send to, so the same eleven
+ * cues play in page instead: web copies of those mp3s ship under SFX_BASE and
+ * ride our own sfx bus at the host's own volume (master * scale). Hosted, not one
+ * byte of that path runs and the host still plays them natively.
  *
  * Sources of truth. In-page sounds come from the world's own events (field
  * pops, score rungs, item roll/arm/use) and from per-frame edges (airborne,
@@ -42,7 +46,9 @@ export const ALMOST_GAP_MS = 260;       // the near-miss whisper at most this of
 export const PITCH_CAP_SEMIS = 7;       // the combo ladder tops out here
 export const PITCH_STEP_COMBO = 4;      // +1 semitone per this many combo
 
-/** Host catalogue names this page may send (verified against Resources/sounds/chaos/). */
+/** Host catalogue names this page may send (verified against Resources/sounds/chaos/).
+ *  Unhosted, each one is SFX_BASE + name + '.mp3' - the same clip, copied into the web
+ *  tree - so this set is also the closed list of files playHostSfx may ask for. */
 export const HOST_SFX = new Set([
   'depth_change', 'pb_fanfare', 'streak_milestone', 'golden_pop', 'ui_click',
   'tunnel_powerup_collect', 'time_slow_in', 'time_slow_out', 'surface', 'thud', 'chain_pop',
@@ -51,6 +57,7 @@ export const HOST_SFX = new Set([
 // Burst.mp3 and GG.mp3 are deliberately NOT here: the owner cut both (they read as random
 // stingers on a bubble pop). Golden, prism and the jackpot are pops + chimes now.
 const FILES = { pop: 'Pop.mp3', pop2: 'Pop2.mp3', pop3: 'Pop3.mp3', chime1: 'chime1.mp3', chime2: 'chime2.mp3', chime3: 'chime3.mp3' };
+const HOST_KEY = 'host:';   // buffer-key prefix for the HOST_SFX clips, so they cannot collide with FILES
 const POPS = ['pop', 'pop2', 'pop3'];
 const POP_KEYS = new Set(POPS);
 const LEVELS = { sfx: 1, pop: 0.34, effect: 0.42, whisper: 0.1, chime: 0.36, tick: 0.16, thud: 0.55 };
@@ -146,9 +153,13 @@ export function rollPlaylist(rng, roomOrder, pools = ROOM_POOLS, dead = new Set(
 export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   const log = (m) => { try { bridge && bridge.log && bridge.log('[audio] ' + m); } catch (e) { /* host gone */ } };
   const send = (m) => { try { bridge && bridge.send && bridge.send(m); } catch (e) { /* host gone */ } };
+  // WebView2 or a browser? Only a real host has the ccp.content mirror to retry a missing
+  // clip against, and only a real host can play the HOST_SFX catalogue for us.
+  const hosted = !!(bridge && bridge.isHosted);
   const masterLevel = clamp((Number(settings.masterVolume) == null || isNaN(Number(settings.masterVolume)) ? 60 : Number(settings.masterVolume)) / 100, 0, 1);
   const levels = { music: 1, sfx: 1 };   // the two option sliders (menu.js persists them); setLevels moves them
   const buffers = new Map();     // key -> AudioBuffer | 'pending' | 'failed'
+  const loading = new Map();     // key -> Promise<AudioBuffer|null>, so a first play can wait on its file
   const voices = [];             // live one-shots: { src, gain, level, t0 }
   const live = { world: null, run: null, kart: null };   // what update() last saw (run/kart are live objects)
   const edge = { room: null, airborne: false, boost: 0, d: null, drift: false };
@@ -193,7 +204,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const el = new Audio();
     el.preload = 'auto'; el.loop = true; el.crossOrigin = 'anonymous';
     const first = audioUrl(OST_BASE + name + '.mp3');
-    const t = { name, el, gain: null, bound: false, failed: false, vol: 0, fadeTimer: 0, pauseTimer: 0, alt: altAudioUrl(first) };
+    const t = { name, el, gain: null, bound: false, failed: false, vol: 0, fadeTimer: 0, pauseTimer: 0, alt: hosted ? altAudioUrl(first) : null };
     el.addEventListener('error', () => {
       if (t.alt) { const a = t.alt; t.alt = null; el.src = a; if (music.cur === t) el.play().catch(() => {}); return; }
       t.failed = true; music.dead.add(name);
@@ -338,18 +349,23 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     for (const t of tracks.values()) { clearInterval(t.fadeTimer); clearTimeout(t.pauseTimer); try { t.el.pause(); t.el.removeAttribute('src'); t.el.load(); } catch (e) { /* ignore */ } }
     tracks.clear(); music.cur = null; music.roomId = null;
   }
-  function load(key) {
-    if (buffers.has(key)) return;
+  /** Fetch + decode one file under SFX_BASE, once. Resolves to the buffer, or null when the
+   *  clip is not there. The second host is only worth a try when there IS one: in a browser
+   *  https://ccp.content does not resolve, so an unhosted page fails once and moves on. */
+  function load(key, file) {
+    if (loading.has(key)) return loading.get(key);
     buffers.set(key, 'pending');
-    const path = SFX_BASE + FILES[key];
     const grab = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
       .then((raw) => { const c = getAudioCtx(); if (!c) throw new Error('no ctx'); return new Promise((res, rej) => c.decodeAudioData(raw, res, rej)); });
-    const first = audioUrl(path);
-    grab(first).catch(() => { const alt = altAudioUrl(first); if (!alt) throw new Error('no alt'); return grab(alt); })
-      .then((buf) => buffers.set(key, buf))
-      .catch((e) => { buffers.set(key, 'failed'); log('sfx missing: ' + FILES[key] + ' (' + (e && e.message || e) + ')'); });
+    const first = audioUrl(SFX_BASE + file);
+    const job = grab(first)
+      .catch(() => { const alt = hosted ? altAudioUrl(first) : null; if (!alt) throw new Error('no alt'); return grab(alt); })
+      .then((buf) => { buffers.set(key, buf); return buf; })
+      .catch((e) => { buffers.set(key, 'failed'); log('sfx missing: ' + file + ' (' + (e && e.message || e) + ')'); return null; });
+    loading.set(key, job);
+    return job;
   }
-  Object.keys(FILES).forEach(load);
+  Object.keys(FILES).forEach((k) => load(k, FILES[k]));
 
   // ---- one-shots (the voice cap lives here) ----
   function admit(level) {
@@ -469,6 +485,17 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   }
 
   // ---- the host legs (run.js sfx(name, scale) lands here) ----
+  /** No host: play the host's own clip ourselves. Same file, same volume the host would use
+   *  (its master times the cue's scale), through the page's sfx bus so the mute, the voice cap
+   *  and the sfx slider all still apply. Loaded on first ask, then straight from the buffer. */
+  function playHostSfx(name, scale) {
+    const key = HOST_KEY + name;
+    const level = clamp(Number(scale) || 0, 0, 1);
+    const buf = buffers.get(key);
+    if (buf === 'failed') return;                                    // asked once, not there: stay quiet
+    if (buf && buf !== 'pending') { play(key, { level }); return; }
+    load(key, name + '.mp3').then((b) => { if (b && !disposed && !isMuted()) play(key, { level }); });
+  }
   function sfx(name, scale = 0.8) {
     if (!HOST_SFX.has(name)) { log('unknown host sfx dropped: ' + name); return; }
     const paused = !!(live.run && live.run.paused);
@@ -477,6 +504,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     if (name === 'ui_click' && !paused) return;               // item roll / arm: the ticks own it
     if (name === 'surface') endSting();
     if (isMuted()) return;
+    if (!hosted) { playHostSfx(name, scale); return; }
     send({ type: 'sfx', name, scale });
   }
 
@@ -518,7 +546,8 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   /**
    * The two option sliders, live under a moving slider. music multiplies MUSIC_LEVEL on the music
    * chain's level node; sfx multiplies sfxBus, which every in-page one-shot and every ui blip rides.
-   * The HOST legs are deliberately untouched: those play on the host's own mixer at its own volume.
+   * The HOST legs are deliberately untouched WHEN THERE IS A HOST: those play on the host's own
+   * mixer at its own volume. Unhosted they are ordinary one-shots on sfxBus, so the slider moves them.
    */
   function setLevels(l) {
     if (disposed || !l || typeof l !== 'object') return;
