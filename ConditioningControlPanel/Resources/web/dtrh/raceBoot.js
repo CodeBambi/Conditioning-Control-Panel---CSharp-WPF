@@ -3,7 +3,9 @@
  * "race/run.js + raceBoot.js + race.html (PR 5, integration)" and the
  * "race/menu.js + race/intro.js" section (the front door).
  *
- * Order: capability detect -> quality tier -> bridge handlers -> announceReady
+ * Order: capability detect (reduced motion does not block the boot: the race
+ * turns its own motion down through settings.reducedMotion) -> quality tier ->
+ * bridge handlers -> announceReady
  * -> wait for `init` (+ `manifest`, `favorites`) with a 4 s timeout -> hostMedia
  * -> createRace + createMenu -> the splash is a 1 s title flash (it covers the
  * module import, the world build and the glb fetch, and hosts the wait note
@@ -83,7 +85,13 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 // ---- capability -> quality tier ----
-const mode = detectMode();
+// reducedIs3d: prefers-reduced-motion is NOT a boot blocker here. The race owns
+// a complete reduced path (menu stage, HUD, flashes, cards, intro and the run's
+// own shake/whip all read settings.reducedMotion, which boot() resolves from the
+// host init, the menu's motion option and matchMedia), so "reduce" turns the
+// motion down inside the 3D scene instead of showing a boot error. Only a real
+// hard wall - no WebGL, no import maps - still fails.
+const mode = detectMode({ reducedIs3d: true });
 if (mode.hardBlock || !mode.canTry3d) {
   fail('no webgl here: ' + (mode.reason || mode.mode));
 } else {
