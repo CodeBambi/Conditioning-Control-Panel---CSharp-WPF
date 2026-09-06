@@ -215,17 +215,18 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
    *  the pool is full (a cue never steals a live bubble), when the kind is dark (bubbleKinds.js
    *  spawn:false), or when density has gated this one out.
    *  Over 1, density is the chance of a second bubble beside the first. */
-  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null } = {}) {
+  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null, sure = false } = {}) {
     if (liveCount >= CAP) return -1;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return -1;   // a dark kind: no chart may place one
-    if (tracked) {
+    // `sure` spawns are hand-placed (a wall, an authored bubble): the density knob leaves them alone.
+    if (tracked && !sure) {
       if (density <= 0) return -1;
       if (density < 1 && Math.random() >= density) return -1;
     }
     const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
     const s = place(kindId, placement, d, x, top);
     s.eventId = eventId;
-    if (tracked && density > 1 && liveCount < CAP && Math.random() < density - 1) {
+    if (tracked && !sure && density > 1 && liveCount < CAP && Math.random() < density - 1) {
       place(kindId, placement, d + 2.4, x + (x > 0 ? -1.1 : 1.1), top).eventId = eventId;
     }
     return s.slot;

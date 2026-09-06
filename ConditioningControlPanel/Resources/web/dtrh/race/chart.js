@@ -15,7 +15,8 @@
  * after its second is dropped and counted as missed, never spawned behind the kart.
  * ==========================================================================*/
 
-import { ROOM_IDS, KART_BASE_SPEED, makeRng } from './consts.js';
+import { ROOM_IDS, KART_BASE_SPEED, makeRng, CEILING_H, ROAD_HALF_W } from './consts.js';
+import { KIND_BY_ID } from './bubbleKinds.js';
 
 export const CHART_VERSION = 1;
 
@@ -31,7 +32,7 @@ export const STRUCTURE_WORDS = [
 /** A structure word outside a countdown that reads as a drop ('now' only right after a count). */
 export const DROP_WORDS = ['drop', 'dropping', 'sleep', 'asleep', 'deeper', 'sink', 'sinking', 'now'];
 
-export const EVENT_KINDS = ['trigger', 'word', 'count', 'drop', 'chant', 'build', 'peak', 'release', 'silence'];
+export const EVENT_KINDS = ['trigger', 'word', 'count', 'drop', 'chant', 'build', 'peak', 'release', 'silence', 'mark'];
 export const ACT_KINDS = ['induction', 'deepening', 'triggers', 'mantra', 'build', 'silence', 'wake', 'free'];
 
 /** Default act -> room. The analyzer may override a room to avoid repeating one back to back. */
@@ -51,6 +52,72 @@ const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const clamp01 = (v) => clamp(v, 0, 1);
 const str = (v, d = '') => (typeof v === 'string' ? v : d);
+
+/* ---- hand cues (CHART.md) ----------------------------------------------- */
+
+/** The full-frame beats a hand cue may ask for. race/frameFx.js owns the table and the pixels;
+ *  the ids live here so chart.js can validate a cue without ever seeing the DOM. */
+export const FX_IDS = ['blink', 'blackout', 'snap', 'shake', 'melt', 'flash'];
+
+/** A hand spawn may only land where a spoken word could: on the road, in the air, out of the ceiling. */
+const CUE_PLACEMENTS = ['lane', 'air', 'rain'];
+/** The moods poke() answers to. Anything else is dropped rather than passed to EMI. */
+const CUE_MOODS = ['calm', 'streamed', 'fraught', 'smug', 'shock', 'jackpot'];
+/** How far ahead of or behind its own second a hand spawn may sit. */
+const CUE_AT_MIN = -5, CUE_AT_MAX = 30;
+/** Ceilings on the knobs a hand cue drives, so a bad file cannot launch the kart out of the tube. */
+const CUE_JUMP_MAX = 12, CUE_BOOST_MAX = 10, CUE_DENSITY_MAX = 4, CUE_FX_DUR_MAX = 10;
+const CUE_NOTE_MAX = 200;
+
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const effectKind = (v) => (typeof v === 'string' && KIND_BY_ID[v] ? v : null);
+
+/**
+ * Sanitise the author's `cue` override off the wire. Everything is optional and everything is
+ * clamped: an unknown bubble kind, an unknown placement or an unknown fx id is dropped rather
+ * than played, because a hand chart is a file a stranger can hand you. Returns null when nothing
+ * survives, so `event.cue` is either a cue worth running or absent.
+ */
+export function sanitizeCue(cue, durationSec = 0) {
+  if (!cue || typeof cue !== 'object') return null;
+  const out = {};
+  const dur = Math.max(0, num(durationSec, 0));
+  if (Array.isArray(cue.spawn)) {
+    out.spawn = cue.spawn
+      .filter((s) => s && typeof s === 'object' && CUE_PLACEMENTS.includes(s.placement) && KIND_BY_ID[s.kindId])
+      .map((s) => ({
+        kindId: s.kindId, placement: s.placement,
+        x: clamp(num(s.x, 0), -ROAD_HALF_W + 0.4, ROAD_HALF_W - 0.4),
+        h: clamp(num(s.h, 0), 0, CEILING_H),
+        at: clamp(num(s.at, 0), CUE_AT_MIN, CUE_AT_MAX),
+      }));
+  }
+  if (has(cue, 'wall')) out.wall = (typeof cue.wall === 'string' && KIND_BY_ID[cue.wall]) ? cue.wall : null;
+  if (Array.isArray(cue.fx)) {
+    out.fx = cue.fx
+      .filter((f) => f && typeof f === 'object' && FX_IDS.includes(f.id))
+      .map((f) => {
+        const e = { id: f.id, strength: clamp01(num(f.strength, 1)) };
+        e.dur = has(f, 'dur') && isFinite(num(f.dur, NaN)) ? clamp(num(f.dur, 0), 0, CUE_FX_DUR_MAX) : null;
+        return e;
+      });
+  }
+  if (has(cue, 'jump')) out.jump = clamp(num(cue.jump, 0), 0, CUE_JUMP_MAX);
+  if (has(cue, 'mix')) out.mix = effectKind(cue.mix);
+  if (has(cue, 'mood')) out.mood = CUE_MOODS.includes(cue.mood) ? cue.mood : null;
+  if (has(cue, 'pose')) out.pose = typeof cue.pose === 'string' && cue.pose ? cue.pose : null;
+  if (has(cue, 'toast')) {
+    const t = cue.toast;
+    out.toast = (t && typeof t === 'object' && typeof t.text === 'string' && t.text)
+      ? { text: t.text.slice(0, CUE_NOTE_MAX), kind: str(t.kind, 'effect') } : null;
+  }
+  if (has(cue, 'word')) out.word = typeof cue.word === 'string' && cue.word ? cue.word : null;
+  if (has(cue, 'fog')) out.fog = isFinite(num(cue.fog, NaN)) ? clamp01(num(cue.fog, 0)) : null;
+  if (has(cue, 'boost')) out.boost = clamp(num(cue.boost, 0), 0, CUE_BOOST_MAX);
+  if (has(cue, 'density')) out.density = isFinite(num(cue.density, NaN)) ? clamp(num(cue.density, 1), 0, CUE_DENSITY_MAX) : null;
+  if (has(cue, 'holdSec')) out.holdSec = clamp(num(cue.holdSec, 0), 0, dur > 0 ? dur : CUE_AT_MAX);
+  return Object.keys(out).length ? out : null;
+}
 
 /* ---- normalize ---------------------------------------------------------- */
 
@@ -73,6 +140,10 @@ export function normalizeChart(json) {
 
   return Object.freeze({
     version: CHART_VERSION, binSec, energy: Object.freeze(energy),
+    // CHART.md: the editor stamps `hand` and carries its rule table along for the round trip.
+    // The race reads neither; it keeps them so a chart survives a load and a save unchanged.
+    hand: json.hand === true,
+    rules: Object.freeze(Array.isArray(json.rules) ? JSON.parse(JSON.stringify(json.rules)) : []),
     acts: normalizeActs(Array.isArray(json.acts) ? json.acts : [], durationSec),
     events: normalizeEvents(Array.isArray(json.events) ? json.events : [], durationSec),
     source: Object.freeze({ name: str(src.name, 'track'), hash: str(src.hash, ''), durationSec, sampleRate: num(src.sampleRate, 16000) }),
@@ -116,6 +187,12 @@ function normalizeEvents(raw, durationSec) {
       if (e.kind === 'count') { ev.n = num(e.n, 0); ev.of = num(e.of, 0); ev.last = e.last === true; }
       if (e.kind === 'drop') ev.strength = clamp01(num(e.strength, 1));
       if (e.kind === 'chant') { ev.reps = Math.max(1, Math.round(num(e.reps, 3))); ev.period = Math.max(0, num(e.period, 0)); }
+      // the hand-authored half (CHART.md): the override, where it came from, and the author's note
+      const cue = sanitizeCue(e.cue, durationSec);
+      if (cue) ev.cue = Object.freeze(cue);
+      if (e.rule != null) ev.rule = str(e.rule, '');
+      if (e.hand === true) ev.hand = true;
+      if (e.note != null) ev.note = str(e.note, '').slice(0, CUE_NOTE_MAX);
       return Object.freeze(ev);
     });
   return Object.freeze(out);
@@ -168,6 +245,9 @@ export function demoChart(opts = {}) {
       ev('drop', from + 9 * 1.4 + 1.1, { strength: 1, label: 'drop' });
     } else if (a.kind === 'triggers') {
       for (let k = 0, t = a.t0 + 4; t < a.t1 - 2; t += 6.5, k++) ev('trigger', t, { label: DEMO_TRIGGERS[k % DEMO_TRIGGERS.length], conf: 0.7 + rng() * 0.3 });
+      // hand-authored (CHART.md): a wall of pink nobody can steer around, and the lids close on the word
+      ev('trigger', a.t1 - 3.5, { label: 'good girl', conf: 1, hand: true, rule: 'demo-wall',
+        cue: { wall: 'pink', fx: [{ id: 'blink', strength: 0.8, dur: 0.45 }], word: 'good girl' } });
     } else if (a.kind === 'mantra') {
       const period = 2.4, reps = Math.max(3, Math.min(8, Math.floor((len - 6) / period)));
       ev('chant', a.t0 + 3, { label: 'good girl', reps, period, dur: reps * period });
@@ -178,6 +258,9 @@ export function demoChart(opts = {}) {
       ev('peak', a.t0 + 3 + dur, {});
       ev('drop', a.t0 + 3.2 + dur, { strength: 0.85, label: 'sink' });
       ev('release', a.t0 + 5.4 + dur, {});
+      // hand-authored: the finger snap on the second drop, a white frame and a jolt with no bubble at all
+      ev('mark', a.t0 + 4.2 + dur, { label: 'the snap', hand: true, note: 'finger snap, the second drop',
+        cue: { fx: [{ id: 'snap', strength: 1 }, { id: 'shake', strength: 0.6, dur: 0.4 }], jump: 7, mix: 'spiral', mood: 'streamed' } });
     } else if (a.kind === 'silence') {
       ev('silence', a.t0 + 0.5, { dur: Math.max(3, len - 1.5) });
     } else if (a.kind === 'wake') {

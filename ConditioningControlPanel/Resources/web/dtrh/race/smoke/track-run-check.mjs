@@ -14,7 +14,8 @@
  * with a floor; the acts arrive in order, once each, never the opening one twice;
  * every event kind has a cue and every cue field is legal; a whole run spawns
  * everything ahead of the kart; the run ends inside END_PAD of the duration and the
- * summary counts what the player took; replace() keeps the clock and the taken ids.
+ * summary counts what the player took; replace() keeps the clock and the taken ids. The
+ * hand-authored half (cue overrides, walls, frame beats) is race/smoke/hand-cues-check.mjs.
  * ==========================================================================*/
 
 import { KART_BASE_SPEED, LANE_H, CEILING_H, ROAD_HALF_W, makeRng } from '../consts.js';
@@ -117,7 +118,7 @@ function chartEnergy(t) {
     if (cue.boost < 0 || cue.boost > 4) bad = bad || ('boost out of range ' + cue.boost);
   }
   ok(!bad, bad || 'every cue names a real bubble kind, placement, mood and mix');
-  ok(EVENT_KINDS.every((k) => seen.has(k)), 'the demo track exercised all nine event kinds');
+  ok(EVENT_KINDS.every((k) => seen.has(k)), 'the demo track exercised all ten event kinds, the hand-authored mark included');
   ok(cueFor(null, ctx) === null && cueFor({ kind: 'nonsense' }, ctx) === null, 'a junk event is null, never a throw');
 
   const t = cueFor({ kind: 'trigger', label: 'good girl' }, ctx);

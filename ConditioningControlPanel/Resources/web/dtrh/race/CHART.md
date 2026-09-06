@@ -137,6 +137,33 @@ peak `cheer` (`smug` over intensity 0.7), release `drift`, silence a `. . .` toa
 A loaded track ducks the room OST to `TRACK_DUCK` (0.12) and the bed to silence via
 `audio.duck(on, 'track')`, the standing level `update()` eases back to, until the track is cleared.
 
+### Hand-authored charts (hand cues)
+
+A curated track is not analysis, it is authorship: someone sat with the audio and said what each
+second is worth. The chart file carries that as a few optional additions, and the version stays 1.
+A chart without them is an auto chart and plays exactly as the table above says.
+
+| where | field | what |
+|-------|-------|------|
+| chart | `hand` | the editor saved this file |
+| chart | `rules` | the editor's rule table, kept for the round trip; the race ignores it |
+| event | `kind: 'mark'` | a hand-placed beat with no analyzer meaning; with no `cue` it is worth nothing |
+| event | `rule`, `hand`, `note` | the rule that made it, the author's edit flag, free text (200 chars) |
+| event | `cue` | the override: `cueFor` builds from it and never opens the table |
+
+`cue` is the cue shape above plus `wall` (a bubble kind: five lane bubbles at `x = -2.2 .. 2.2` plus
+one in the air, all on the word, the row the kart cannot steer around) and `fx` (the full-frame
+beats `blink`, `blackout`, `snap`, `shake`, `melt`, `flash`). `race/chart.js` `sanitizeCue` drops
+every bubble kind, placement and fx name it does not know and clamps every number, because a hand
+chart is a file a stranger can hand you. `race/frameFx.js` owns the three beats that take the whole
+frame; run.js maps `shake` to the user's screen-shake dial, `melt` to a braindrain through THE MIX
+and `flash` to the engine pulse, and a `snap` holds the world still for 120 ms. Only one frame beat
+runs at a time. Reduced motion turns `blink` and `snap` into a plain pulse at half strength and caps
+a blackout at 0.5.
+
+One wall is one event: the first bubble of the row is the word the voice said, the other five are
+points. `node race/smoke/hand-cues-check.mjs` walks all of it.
+
 ### `race/bubbles.js` additions (PR c2)
 ```js
 field.spawnAt({ kindId, placement, d, x, h, eventId })   // an explicit placement; returns the slot id or -1 when the pool is full

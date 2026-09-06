@@ -31,7 +31,9 @@
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
  * the host init; `?itembox=ms` breaks the next sugar cube that comes into
  * reading range after that time and is a screenshot aid for the pickup card;
- * `?panel=howto` opens the menu on the key card (race/menu.js).
+ * `?panel=howto` opens the menu on the key card (race/menu.js); `?music=N`
+ * (0..1, 0 = silent music) beats the saved music slider the same way and
+ * `?bridge=parent` is the Chart Room preview (armParentBridge below).
  *
  * `?back=<same-origin path>` is WHERE THE MENU'S `surface` VERB GOES when there
  * is no host to hand the page back to. Hosted, `surface` posts exit + exit-done
@@ -74,6 +76,8 @@ function resolveBack() {
   return null;
 }
 const standaloneExit = hosted ? null : resolveBack();
+/** The Chart Room embeds this page and drives the clock itself (armParentBridge below). */
+const toParent = params.get('bridge') === 'parent' && window.parent && window.parent !== window;
 const host = hosted ? bridge : {
   on: bridge.on,
   isHosted: false,
@@ -91,6 +95,7 @@ const rollSeed = () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>>
 let initMsg = null, haveManifest = false, race = null, menu = null, booted = false, started = false, exiting = false;
 let settings = {}, seed = 0;
 let trackProgress = null, trackReady = null, errorTimer = 0, startTrackClock = null, trackTimer = 0, trackAudio = null;
+let parentArmed = false;
 
 const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
 function fail(err) {
@@ -195,6 +200,7 @@ async function boot() {
     settings = { ...((initMsg && initMsg.settings) || {}) };
     if (opts.pixel !== undefined) settings.pixel = opts.pixel;
     if (params.has('pixel') && params.get('pixel') !== '') settings.pixel = Number(params.get('pixel'));
+    if (params.has('music') && params.get('music') !== '') opts.music = Math.max(0, Math.min(1, Number(params.get('music')) || 0));
     settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
     settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // audio.js reads masterVolume; the two sliders go in through setLevels below
     settings.seedLock = seedFromOptions(opts);
@@ -290,6 +296,38 @@ function debugItemBox() {
   }, at);
 }
 
+/**
+ * THE PREVIEW BRIDGE. `?bridge=parent` in an iframe: the
+ * page posts `race-ready` up once the run is going, then takes `chart` (setTrack, or replaceTrack
+ * when the run is already carrying one), `clock` and `seek`. There is no jump notion under
+ * track.js: `clock(t)` sets the second outright and the scheduler lets the future back in when the
+ * clock walks backwards, so a seek is a clock tick with a jump in it and nothing more.
+ * Same origin only, and only from our own opener. Nothing here runs hosted or standalone.
+ */
+async function armParentBridge() {
+  if (!toParent || parentArmed || !race) return;
+  parentArmed = true;
+  let normalizeChart = null;
+  try { ({ normalizeChart } = await import('./race/chart.js')); }
+  catch (err) { host.log('preview: no chart module: ' + ((err && err.message) || err)); return; }
+  window.addEventListener('message', (ev) => {
+    if (ev.origin !== location.origin || ev.source !== window.parent) return;
+    const m = ev.data;
+    if (!m || typeof m !== 'object' || !race) return;
+    try {
+      if (m.type === 'chart' && m.chart) {
+        const chart = normalizeChart(m.chart);
+        if (race.track && started) race.replaceTrack(chart); else race.setTrack(chart);
+      } else if (m.type === 'clock' || m.type === 'seek') {
+        race.trackClock(Number(m.t) || 0, m.playing !== false);
+      }
+    } catch (err) { host.log('preview ' + m.type + ': ' + ((err && err.message) || err)); }
+  });
+  try { window.parent.postMessage({ type: 'race-ready' }, location.origin); }
+  catch (err) { host.log('preview: the parent would not take race-ready: ' + ((err && err.message) || err)); }
+  host.log('preview bridge armed');
+}
+
 function hideSplash() {
   splash.classList.add('is-off');
   setTimeout(() => { splash.hidden = true; }, 600);
@@ -350,6 +388,7 @@ async function startRun(withIntro) {
       race.start();
       if (startTrackClock) startTrackClock();
     }
+    armParentBridge();
   } catch (err) {
     host.log('start: ' + ((err && err.stack) || err));
     try { race.setStage(null); race.start(); } catch (e) { fail(e); }
