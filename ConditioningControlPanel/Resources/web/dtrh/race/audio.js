@@ -28,7 +28,7 @@
 import { getAudioCtx, getMasterOut } from '../engine/audioBus.js';
 import { isMuted, setMuted, onMuteChange, setDucked } from '../shared/audioMute.js';
 import { audioUrl, altAudioUrl } from '../shared/audioSrc.js';
-import { ROAD_HALF_W, KART_MIN_SPEED, KART_MAX_SPEED } from './consts.js';
+import { ROAD_HALF_W, KART_MIN_SPEED, KART_MAX_SPEED, makeRng } from './consts.js';
 
 export const SFX_BASE = '/dtrh/assets/bubbles/sfx/';
 export const MAX_VOICES = 6;            // one-shots at once; the quietest is dropped for the 7th
@@ -66,6 +66,61 @@ export function pickVoiceToDrop(voices) {
   return at;
 }
 
+// ---------------------------------------------------------------------------
+// THE SOUNDTRACK. The Arcademy OST for now (owner: "same as the arcademy, mix
+// those upbeat songs"); the owner's mix drops in by editing TRACKS + ROOM_POOLS
+// and nothing else. `name` is the file: OST_BASE + name + '.mp3'. `mood` and
+// `energy` are guesses from the Arcademy's own table (shell/ost.js) and the
+// file lengths; nobody here has listened. Every file loops whole (no loop
+// points in the Arcademy either); `start` skips a quiet intro if one needs it.
+// ---------------------------------------------------------------------------
+export const OST_BASE = '/arcademy/assets/sfx/';
+export const CROSSFADE_SEC = 1.5;
+export const MUSIC_LEVEL = 0.3;          // the OSTs sit at about -15.5 LUFS; this keeps them under the pops
+export const TRACKS = Object.freeze([
+  { name: 'ost_campus',          title: 'Star Byte Loop',     mood: 'soft', energy: 0.45, sec: 75,  start: 0 },
+  { name: 'ost_deep_end',        title: 'Pixel Rush',         mood: 'loud', energy: 0.8,  sec: 77,  start: 0 },
+  { name: 'ost_sort',            title: 'Pixel Rush 2',       mood: 'loud', energy: 0.85, sec: 52,  start: 0 },
+  { name: 'ost_records',         title: 'Midnight Static',    mood: 'soft', energy: 0.3,  sec: 109, start: 0 },
+  { name: 'ost_lost_found',      title: 'Neon Skyline',       mood: 'soft', energy: 0.5,  sec: 141, start: 0 },
+  { name: 'ost_instant_recall',  title: 'Midnight Static 2',  mood: 'soft', energy: 0.25, sec: 121, start: 0 },
+  { name: 'ost_anomaly',         title: 'Midnight Static 3',  mood: 'soft', energy: 0.3,  sec: 124, start: 0 },
+  { name: 'ost_daily_trigger',   title: 'Neon Pixel Rain',    mood: 'loud', energy: 0.75, sec: 164, start: 0 },
+  { name: 'ost_impulse_control', title: 'Neon Pixel Rain 2',  mood: 'loud', energy: 0.8,  sec: 159, start: 0 },
+  { name: 'ost_prizes',          title: 'Neon Jackpot 3',     mood: 'loud', energy: 0.7,  sec: 98,  start: 0 },
+  { name: 'ost_misdirection',    title: 'Neon Jackpot',       mood: 'loud', energy: 0.75, sec: 76,  start: 0 },
+  { name: 'ost_deja_vu',         title: 'Neon Jackpot 2',     mood: 'loud', energy: 0.7,  sec: 41,  start: 0 },
+  { name: 'ost_annex',           title: 'Corroded Pulse',     mood: 'soft', energy: 0.35, sec: 139, start: 0 },
+]);
+export const TRACK_BY_NAME = Object.freeze(Object.fromEntries(TRACKS.map((t) => [t.name, t])));
+/** room -> the tracks it may draw, best first. The per-run roll rotates each pool by the seed
+ *  and skips a track another room already took, so one run never hears the same tune twice. */
+export const ROOM_POOLS = Object.freeze({
+  teagarden:  ['ost_campus'],
+  toybox:     ['ost_daily_trigger', 'ost_deep_end', 'ost_impulse_control'],
+  casino:     ['ost_misdirection', 'ost_prizes', 'ost_deja_vu'],
+  chapel:     ['ost_impulse_control', 'ost_sort', 'ost_daily_trigger'],
+  coronation: ['ost_prizes', 'ost_deep_end', 'ost_misdirection'],
+  undertow:   ['ost_instant_recall', 'ost_records', 'ost_anomaly'],
+  mirrors:    ['ost_anomaly', 'ost_lost_found', 'ost_deja_vu'],
+  greyward:   ['ost_annex', 'ost_records', 'ost_instant_recall'],
+});
+
+/** Deterministic per-run playlist: { roomId: trackName }. `rng` is a 0..1 function (consts makeRng). */
+export function rollPlaylist(rng, roomOrder, pools = ROOM_POOLS, dead = new Set()) {
+  const used = new Set(), out = {};
+  for (const room of roomOrder) {
+    const pool = (pools[room] || []).filter((n) => !dead.has(n));
+    if (!pool.length) continue;
+    const off = Math.floor(rng() * pool.length);
+    let pick = null;
+    for (let i = 0; i < pool.length && !pick; i++) { const n = pool[(off + i) % pool.length]; if (!used.has(n)) pick = n; }
+    if (!pick) pick = pool[off];
+    used.add(pick); out[room] = pick;
+  }
+  return out;
+}
+
 export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   const log = (m) => { try { bridge && bridge.log && bridge.log('[audio] ' + m); } catch (e) { /* host gone */ } };
   const send = (m) => { try { bridge && bridge.send && bridge.send(m); } catch (e) { /* host gone */ } };
@@ -76,6 +131,10 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   const edge = { room: null, airborne: false, boost: 0, d: null, drift: false };
   let ctx = null, master = null, sfxBus = null, noise = null, popRR = 0, disposed = false, dropped = 0, dropLogT = 0;
   let lastScorePop = null;       // the score 'pop' event that ran just before the field pop reaches us
+  // music: the chain is duck -> lowpass (fraught / Undertow / tea time) -> highpass (Grey Ward) -> level -> master
+  let musicDuck = null, musicLp = null, musicHp = null, musicLevelNode = null, elementMode = false;
+  const tracks = new Map();      // name -> { name, el, gain, bound, failed, vol, fadeTimer, pauseTimer }
+  const music = { cur: null, playlist: {}, dead: new Set(), duckTo: 1, duckWhy: null, lp: 20000, hp: 20, gesture: false, roomId: null };
 
   setDucked(true);               // bubbles.js's kind-blind pop steps aside (see header)
 
@@ -88,12 +147,155 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
       master = ctx.createGain(); master.gain.value = isMuted() ? 0 : masterLevel;
       master.connect(getMasterOut() || ctx.destination);
       sfxBus = ctx.createGain(); sfxBus.gain.value = LEVELS.sfx; sfxBus.connect(master);
+      musicDuck = ctx.createGain(); musicDuck.gain.value = 1;
+      musicLp = ctx.createBiquadFilter(); musicLp.type = 'lowpass'; musicLp.frequency.value = 20000; musicLp.Q.value = 0.6;
+      musicHp = ctx.createBiquadFilter(); musicHp.type = 'highpass'; musicHp.frequency.value = 20; musicHp.Q.value = 0.6;
+      musicLevelNode = ctx.createGain(); musicLevelNode.gain.value = MUSIC_LEVEL;
+      musicDuck.connect(musicLp); musicLp.connect(musicHp); musicHp.connect(musicLevelNode); musicLevelNode.connect(master);
       const n = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const data = n.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
       noise = n;
     } catch (e) { master = null; log('graph failed: ' + e); return false; }
     return true;
+  }
+
+  // ---- music ----
+  function trackFor(name) {
+    if (tracks.has(name)) return tracks.get(name);
+    const spec = TRACK_BY_NAME[name];
+    if (!spec) return null;
+    const el = new Audio();
+    el.preload = 'auto'; el.loop = true; el.crossOrigin = 'anonymous';
+    const first = audioUrl(OST_BASE + name + '.mp3');
+    const t = { name, el, gain: null, bound: false, failed: false, vol: 0, fadeTimer: 0, pauseTimer: 0, alt: altAudioUrl(first) };
+    el.addEventListener('error', () => {
+      if (t.alt) { const a = t.alt; t.alt = null; el.src = a; if (music.cur === t) el.play().catch(() => {}); return; }
+      t.failed = true; music.dead.add(name);
+      log('track missing: ' + name + ' (' + (el.error && el.error.code) + ')');
+      reroll();                                                          // the room draws again from what is left
+      if (music.cur === t) { music.cur = null; music.roomId = null; }   // the next update re-enters the room on another track
+    });
+    el.src = first;
+    tracks.set(name, t);
+    return t;
+  }
+  /** Element -> WebAudio, once; a throw (no ctx, CORS) leaves the whole player in element-volume mode. */
+  function bind(t) {
+    if (t.bound) return;
+    t.bound = true;
+    if (elementMode || !ensureGraph()) { elementMode = true; return; }
+    try {
+      const src = ctx.createMediaElementSource(t.el);
+      t.gain = ctx.createGain(); t.gain.gain.value = 0;
+      src.connect(t.gain); t.gain.connect(musicDuck);
+      t.el.volume = 1;
+    } catch (e) { t.gain = null; elementMode = true; log('media element route failed, element volume mode: ' + e); }
+  }
+  const elVol = (t) => clamp(t.vol * MUSIC_LEVEL * music.duckTo * (isMuted() ? 0 : masterLevel), 0, 1);
+  function fade(t, to, sec) {
+    t.vol = to;
+    if (t.gain && ctx) {
+      try { const now = ctx.currentTime; t.gain.gain.cancelScheduledValues(now); t.gain.gain.setValueAtTime(t.gain.gain.value, now); t.gain.gain.linearRampToValueAtTime(to, now + sec); } catch (e) { t.gain.gain.value = to; }
+      return;
+    }
+    clearInterval(t.fadeTimer);
+    const from = t.el.volume, target = elVol(t), steps = Math.max(1, Math.round(sec / 0.05));
+    let i = 0;
+    t.fadeTimer = setInterval(() => { i++; try { t.el.volume = from + (target - from) * Math.min(1, i / steps); } catch (e) { /* ignore */ } if (i >= steps) clearInterval(t.fadeTimer); }, 50);
+  }
+  function armGesture() {
+    if (music.gesture) return;
+    music.gesture = true;
+    const retry = () => { music.gesture = false; window.removeEventListener('pointerdown', retry); window.removeEventListener('keydown', retry); if (music.cur) startEl(music.cur); };
+    window.addEventListener('pointerdown', retry, { passive: true }); window.addEventListener('keydown', retry, { passive: true });
+  }
+  function startEl(t) {
+    try { getAudioCtx(); } catch (e) { /* ignore */ }
+    try { t.el.muted = isMuted(); const p = t.el.play(); if (p && p.catch) p.catch(() => { if (!t.failed) armGesture(); }); } catch (e) { armGesture(); }
+  }
+  function enterTrack(roomId) {
+    const name = music.playlist[roomId];
+    if (!name || (music.cur && music.cur.name === name)) return;
+    const next = trackFor(name);
+    if (!next || next.failed) return;
+    const prev = music.cur;
+    if (prev) { fade(prev, 0, CROSSFADE_SEC); clearTimeout(prev.pauseTimer); prev.pauseTimer = setTimeout(() => { if (music.cur !== prev) { try { prev.el.pause(); } catch (e) { /* ignore */ } } }, CROSSFADE_SEC * 1000 + 200); }
+    music.cur = next;
+    clearTimeout(next.pauseTimer);
+    bind(next);
+    const spec = TRACK_BY_NAME[name];
+    if (next.el.paused && spec.start > 0 && next.el.currentTime < spec.start) { try { next.el.currentTime = spec.start; } catch (e) { /* not seekable yet */ } }
+    startEl(next);
+    fade(next, 1, prev ? CROSSFADE_SEC : 0.8);
+    log('track ' + name + ' in (' + roomId + ')' + (prev ? ', ' + prev.name + ' out, crossfade ' + CROSSFADE_SEC + 's' : ''));
+  }
+  // ---- the speed bed + drift sparks: loops under the music, outside the voice cap ----
+  // wind = lowpassed noise whose cutoff and gain follow speed (boost and air open it up);
+  // hum = a triangle under 200 Hz that climbs with speed; sparks = highpassed noise that
+  // crackles (random gain per frame) only while drifting. All three ride bedBus, which the
+  // duck pulls to 0 with the music.
+  let bed = null, bedBus = null;
+  function ensureBed() {
+    if (bed || !ensureGraph()) return !!bed;
+    try {
+      bedBus = ctx.createGain(); bedBus.gain.value = music.duckTo < 1 ? 0 : 1; bedBus.connect(master);
+      const mk = (type, f, q) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+      const wind = ctx.createBufferSource(); wind.buffer = noise; wind.loop = true;
+      const windLp = mk('lowpass', 200, 0.9), windGain = ctx.createGain(); windGain.gain.value = 0;
+      wind.connect(windLp); windLp.connect(windGain); windGain.connect(bedBus);
+      const hum = ctx.createOscillator(); hum.type = 'triangle'; hum.frequency.value = 50;
+      const humLp = mk('lowpass', 180, 0.7), humGain = ctx.createGain(); humGain.gain.value = 0;
+      hum.connect(humLp); humLp.connect(humGain); humGain.connect(bedBus);
+      const sparks = ctx.createBufferSource(); sparks.buffer = noise; sparks.loop = true;
+      const sparksHp = mk('highpass', 4500, 0.8), sparksGain = ctx.createGain(); sparksGain.gain.value = 0;
+      sparks.connect(sparksHp); sparksHp.connect(sparksGain); sparksGain.connect(bedBus);
+      wind.start(); hum.start(); sparks.start(0, 0.5);   // sparks read the noise from another offset so the two never correlate
+      bed = { wind, windLp, windGain, hum, humGain, sparks, sparksGain };
+    } catch (e) { bed = null; log('bed failed: ' + e); }
+    return !!bed;
+  }
+  function bedUpdate(k) {
+    if (!bed && isMuted()) return;   // nothing is built under mute; once built it runs on (master is 0)
+    if (!ensureBed()) return;
+    const now = ctx.currentTime, tc = 0.08;
+    const v = clamp((k.speed - KART_MIN_SPEED) / (KART_MAX_SPEED - KART_MIN_SPEED), 0, 1);
+    const boost = k.boostSec > 0 ? 1 : 0, air = k.airborne ? 1 : 0;
+    try {
+      bed.windLp.frequency.setTargetAtTime(160 + 1300 * Math.pow(v, 1.4) + 500 * boost + 400 * air, now, tc);
+      bed.windGain.gain.setTargetAtTime((0.012 + 0.05 * v + 0.03 * boost) * (1 + 0.4 * air), now, tc);
+      bed.hum.frequency.setTargetAtTime(46 + 64 * v + 12 * boost, now, tc);
+      bed.humGain.gain.setTargetAtTime((0.022 + 0.02 * v) * (1 - 0.6 * air), now, tc);
+      bed.sparksGain.gain.setTargetAtTime(k.drift && !k.airborne ? 0.03 + Math.random() * 0.045 : 0, now, 0.03);
+    } catch (e) { /* a param never breaks the run */ }
+  }
+  function stopBed() {
+    if (!bed) return;
+    try { bed.wind.stop(); bed.hum.stop(); bed.sparks.stop(); bedBus.disconnect(); } catch (e) { /* ignore */ }
+    bed = null; bedBus = null;
+  }
+
+  /** Room colour on the music only: lowpass under fraught state, the Undertow and tea time; highpass in the Grey Ward. */
+  function colour(roomId, fraught, timeScale) {
+    let lp = 20000, hp = 20;
+    if (fraught > 0) lp = Math.exp(Math.log(20000) * (1 - fraught) + Math.log(800) * fraught);
+    if (roomId === 'undertow') lp = Math.min(lp, 650);
+    if (timeScale < 1) lp = Math.min(lp, 1400);
+    if (roomId === 'greyward') hp = 240;
+    if (!musicLp || !ctx) return;
+    if (Math.abs(lp - music.lp) > music.lp * 0.02) { music.lp = lp; try { musicLp.frequency.setTargetAtTime(lp, ctx.currentTime, 0.5); } catch (e) { /* ignore */ } }
+    if (Math.abs(hp - music.hp) > music.hp * 0.02) { music.hp = hp; try { musicHp.frequency.setTargetAtTime(hp, ctx.currentTime, 0.5); } catch (e) { /* ignore */ } }
+  }
+  function setDuck(to, why) {
+    if (to === music.duckTo) return;
+    music.duckTo = to; music.duckWhy = to < 1 ? why : null;
+    if (musicDuck && ctx) { try { musicDuck.gain.setTargetAtTime(to, ctx.currentTime, to < 1 ? 0.15 : 0.4); } catch (e) { /* ignore */ } }
+    else if (music.cur) fade(music.cur, music.cur.vol, 0.4);
+    if (bedBus && ctx) { try { bedBus.gain.setTargetAtTime(to < 1 ? 0 : 1, ctx.currentTime, to < 1 ? 0.1 : 0.4); } catch (e) { /* ignore */ } }
+  }
+  function stopMusic() {
+    for (const t of tracks.values()) { clearInterval(t.fadeTimer); clearTimeout(t.pauseTimer); try { t.el.pause(); t.el.removeAttribute('src'); t.el.load(); } catch (e) { /* ignore */ } }
+    tracks.clear(); music.cur = null; music.roomId = null;
   }
   function load(key) {
     if (buffers.has(key)) return;
@@ -217,8 +419,14 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     live.world = world;
     edge.d = null; edge.room = null; edge.airborne = false; edge.boost = 0; edge.drift = false;
     try { world.field.onPop(onFieldPop); world.score.onEvent(onScore); world.items.onEvent(onItem); } catch (e) { log('attach: ' + e); }
-    log('attached to world' + (live.run ? ' seed ' + live.run.seed : ''));
+    music.seed = live.run ? live.run.seed : 1;
+    music.order = Object.keys(ROOM_POOLS);
+    try { if (world.dresser && world.dresser.spans) music.order = world.dresser.spans.map((s) => s.id); } catch (e) { /* default order */ }
+    reroll();
+    music.roomId = null;
+    log('attached to world seed ' + music.seed + ', playlist ' + music.order.map((r) => r + ':' + (music.playlist[r] || '-')).join(' '));
   }
+  function reroll() { music.playlist = rollPlaylist(makeRng(((music.seed | 0) ^ 0xa11d10) >>> 0), music.order || Object.keys(ROOM_POOLS), ROOM_POOLS, music.dead); }
   function update(dt, l) {
     if (disposed || !l) return;
     live.run = l.run || live.run; live.kart = l.kart || live.kart;
@@ -227,6 +435,9 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     if (!k || !run || !w) return;
     const roomId = run.room ? run.room.id : null;
     if (roomId !== edge.room) { if (edge.room) gateSting(); edge.room = roomId; }
+    if (roomId && roomId !== music.roomId) { music.roomId = roomId; enterTrack(roomId); }
+    if (music.duckTo < 1) setDuck(1, null);     // update() only runs while the run is live: nothing ducks it
+    colour(roomId, clamp((run.effects ? run.effects.length : 0) / 3, 0, 1), run.timeScale == null ? 1 : run.timeScale);
     if (k.airborne && !edge.airborne) rampRise(); else if (!k.airborne && edge.airborne) rampLand();
     edge.airborne = !!k.airborne;
     if (k.boostSec > 0 && edge.boost <= 0) boostWhoosh();
@@ -234,14 +445,17 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     if (edge.d != null && w.layout && w.layout.featuresBetween) { for (const f of w.layout.featuresBetween(edge.d, k.d)) if (f.type === 'loop') wheelSwoosh(); }
     edge.d = k.d;
     edge.drift = !!k.drift;
+    bedUpdate(k);
   }
 
   // ---- duck / mute / dispose ----
   function duck(on, why) {
     if (why === 'brake') { if (on) play('pop', { level: 0.3, semis: -7 }); else play('pop2', { level: 0.24, semis: 3 }); }
+    if (on) setDuck(why === 'end' ? 0.45 : 0.1, why || 'host'); else setDuck(1, null);
   }
   function applyMute(m) {
     if (master) { try { master.gain.setTargetAtTime(m ? 0 : masterLevel, ctx.currentTime, 0.03); } catch (e) { /* ignore */ } }
+    for (const t of tracks.values()) { try { t.el.muted = m; if (!t.gain) t.el.volume = elVol(t); } catch (e) { /* ignore */ } }   // unmuting is the owner's job (audioMute.js)
   }
   const offMute = onMuteChange(applyMute);
   function toggleMute() {
@@ -260,11 +474,12 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     offMute();
     setDucked(false);
     for (const v of voices.splice(0)) { try { v.src.stop(); } catch (e) { /* ignore */ } }
+    stopMusic(); stopBed();
     try { master && master.disconnect(); } catch (e) { /* ignore */ }
     master = null;
   }
 
-  return { sfx, update, duck, toggleMute, dispose, _voices: voices };
+  return { sfx, update, duck, toggleMute, dispose, _voices: voices, _music: music };
 }
 
 // self-check: node --check is the bar; the pure parts (pitchSemis, chimeFor, pickVoiceToDrop)
