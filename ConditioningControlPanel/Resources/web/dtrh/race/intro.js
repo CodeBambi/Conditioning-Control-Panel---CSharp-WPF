@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/intro.js - the intro sequence and the results camera of The Caucus Race.
+ * race/intro.js - the intro sequence and the results camera of Racing Thoughts.
  *
  *   createIntro({ stage, hud, audio, reducedMotion, log }) ->
  *     { play(): Promise<void>, skip(), update(dt), render(), dispose() }

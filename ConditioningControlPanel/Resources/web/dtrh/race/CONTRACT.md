@@ -1,4 +1,8 @@
-# The Caucus Race - module contract
+# Racing Thoughts - module contract
+
+> Named **The Caucus Race** until 2026-09-06, so older notes, memory files and PR titles
+> that say "caucus" mean this game. The folder, the module names and the host message types
+> never changed.
 
 Single-player, no-lose kart run through the DtRH tube. Sibling entry to `index.html` / `loom.html`:
 `race.html` + `raceBoot.js` + this `race/` folder. Nothing in `game/chaosRun.js` or `engine/scene.js`
@@ -328,6 +332,25 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
 - props.glb (`podium`, `kart_cup`, `kart_saucer`, `floor_tile`, `gantry`) dresses the stage when it resolves; lathe
   placeholders otherwise. `emi.glb`'s `EMI_glass` carries the atlas as `emissiveTexture` only, so the stage sets the face
   on `emissiveMap` (and `map` when present); gltf.js `setFace` shifts whichever of the two the material carries.
+
+### `race/cards.js` (the introduction cards, PR c8)
+```js
+createCards({ root, audio, reducedMotion, log, start }) -> { show(): Promise<void>, dispose(), index }
+cardsSeen() -> bool | markCardsSeen() -> void
+export const CARDS_KEY = 'race.cards', CARDS;
+```
+- Four cards read one at a time on a `.rc-root` DOM layer at z26: above the menu (z25), below the boot
+  splash (z30). Same two-column layout as `.rm-root`, so EMI keeps the right half of the frame while
+  they read. The boot hides the menu around them and calls `menu.refreshView()`, which parks the stage
+  at the column framing that `hide()` would otherwise reset to 0.5.
+- Enter / space / right / d / a pointer press / pad A advances, left / a / pad B goes back (nothing on
+  card 1), esc ends it. The last card's advance ends it too. `show()` resolves either way.
+- Gate: its OWN localStorage key `race.cards` = `'1'`, written by `show()` the moment they go up, so
+  read through, escaped and abandoned all count. `race.options` keeps the shape menu.js documents; the
+  cards never widen it. Every read and write is wrapped, a storage that refuses shows them again.
+- The boot shows them once after the splash and again from the menu's `the story` verb. `?cards=1`
+  forces them, `?cards=0` skips them, `?card=N` opens on card N (screenshot aid). `?autostart=1` and
+  `?scene=intro` never reach them.
 
 ### `race/chart.js` (track charts, PR c1)
 ```js

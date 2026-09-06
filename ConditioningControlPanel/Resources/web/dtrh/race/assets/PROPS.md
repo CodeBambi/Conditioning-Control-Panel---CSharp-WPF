@@ -1,4 +1,4 @@
-# props.glb - The Caucus Race prop pack
+# props.glb - Racing Thoughts prop pack
 
 Every prop, the kart cup and saucer, the item box and the road furniture, built in Blender in the
 same hard-surface look as the EMI mascot: flat Principled colours (no image textures), one-segment

@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/score.js - The Caucus Race ledger: score, combo, the multiplier ladder,
+ * race/score.js - Racing Thoughts ledger: score, combo, the multiplier ladder,
  * THE BANK at the Tea Garden, near-miss ALMOSTs and the jackpot ladder.
  * Implements CONTRACT.md section `race/score.js`.
  *

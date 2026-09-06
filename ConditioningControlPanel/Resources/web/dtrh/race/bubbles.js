@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/bubbles.js - The Caucus Race pickup layer: the bubbles on the road.
+ * race/bubbles.js - Racing Thoughts pickup layer: the bubbles on the road.
  * Implements CONTRACT.md section `race/bubbles.js` (createBubbleField + the
  * BUBBLE_KINDS table, which lives in bubbleKinds.js and is re-exported here).
  *

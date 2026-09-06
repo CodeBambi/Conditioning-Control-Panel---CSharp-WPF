@@ -1,4 +1,4 @@
-/* race/menu.css - the main menu of The Caucus Race (.rm-*). Scoped under #race-root.
+/* race/menu.css - the main menu of Racing Thoughts (.rm-*). Scoped under #race-root.
  * Same pixel look as the HUD: hard plates, stepped shadows, Poppins, lowercase.
  * The left column is DOM; the right side is a hole the stage shows through.
  * THE BOUNCE on press (Law VIII, inside 100 ms), THE GLOW on focus, springs never linear tweens (Law XI). */
@@ -124,3 +124,63 @@
 }
 #race-root .rm-root[data-motion="on"] .rm-col, #race-root .rm-root[data-motion="on"] .is-hit, #race-root .rm-root[data-motion="on"] .rm-btn:active { animation: none; }
 #race-root .rm-root[data-motion="on"] .rm-btn, #race-root .rm-root[data-motion="on"] .rm-row { transition: none; }
+
+/* ---- the cards ---- */
+/* race/cards.js, z26: above the menu (z25), below the boot splash (z30). Same column as .rm-root
+   so EMI keeps the right half of the frame while the four cards read. */
+#race-root .rc-root {
+  position: fixed; inset: 0; z-index: 26;
+  display: grid; grid-template-columns: minmax(300px, 38%) 1fr;
+  font-family: var(--rh-font, 'Poppins', 'Segoe UI', system-ui, sans-serif);
+  color: #fff1f8; text-transform: lowercase; user-select: none;
+  pointer-events: auto; cursor: pointer;
+}
+#race-root .rc-root[hidden] { display: none; }
+#race-root .rc-col {
+  display: flex; flex-direction: column; gap: 14px; justify-content: center;
+  padding: 6vh 28px 6vh 5vw; min-width: 0;
+  background: linear-gradient(90deg, rgba(18, 11, 36, 0.92) 0%, rgba(18, 11, 36, 0.86) 88%, rgba(18, 11, 36, 0) 100%);
+}
+#race-root .rc-deck { display: flex; flex-direction: column; min-height: 46vh; justify-content: center; }
+/* the copy stops before the plate thins: this column is prose, not a verb list with its own box */
+#race-root .rc-card { display: flex; flex-direction: column; gap: 14px; padding-right: 9%; }
+#race-root .rc-card[hidden] { display: none; }
+#race-root .rc-card.is-in { animation: rcIn 0.42s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+#race-root .rc-card.is-hit { animation: rcBounce 0.28s cubic-bezier(0.2, 1.6, 0.4, 1); }
+
+/* card 1 wears the menu wordmark: 800 weight, the pink stepped shadow */
+#race-root .rc-word {
+  font-size: clamp(30px, 4.6vw, 62px); font-weight: 800; line-height: 0.95; letter-spacing: -0.02em;
+  color: #fff; text-shadow: 0 3px 0 #b5177c, 0 6px 0 #4a0a35, 0 0 22px rgba(255, 105, 180, 0.55);
+}
+#race-root .rc-h { margin: 0; font-size: clamp(22px, 2.6vw, 32px); font-weight: 800; letter-spacing: 0.02em; color: var(--pink, #ff69b4); }
+#race-root .rc-h.rc-face { font-size: clamp(30px, 4vw, 48px); letter-spacing: 0.06em; text-shadow: 0 0 22px rgba(255, 105, 180, 0.5); }
+#race-root .rc-line { margin: 0; max-width: 30em; font-size: clamp(15px, 1.5vw, 19px); font-weight: 500; line-height: 1.55; color: #ffe4f2; }
+
+/* the rail: 1 · 2 · 3 · 4, the one you are on lit */
+#race-root .rc-dots { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+#race-root .rc-dot {
+  min-width: 22px; padding: 3px 0; text-align: center; color: rgba(255, 214, 234, 0.45);
+  background: rgba(255, 255, 255, 0.04); box-shadow: 0 0 0 2px #2b1b3f;
+  transition: color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+#race-root .rc-dot.is-on { color: #fff; background: rgba(255, 105, 180, 0.2); box-shadow: 0 0 0 2px #2b1b3f, 0 0 0 3px var(--pink, #ff69b4); }
+#race-root .rc-sep { color: rgba(255, 214, 234, 0.3); }
+#race-root .rc-foot { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: rgba(255, 214, 234, 0.55); }
+#race-root .rc-foot-k[hidden] { display: none; }
+
+@keyframes rcIn { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+@keyframes rcBounce { 0% { transform: scale(1); } 35% { transform: scale(0.97); } 100% { transform: scale(1); } }
+
+@media (max-width: 720px) {
+  #race-root .rc-root { grid-template-columns: 1fr; }
+  #race-root .rc-col { padding: 4vh 22px; background: linear-gradient(180deg, rgba(18, 11, 36, 0.94) 0%, rgba(18, 11, 36, 0.86) 70%, rgba(18, 11, 36, 0) 100%); }
+}
+
+/* Law VI again: no card holds anyone. The system preference or the menu's own switch. */
+@media (prefers-reduced-motion: reduce) {
+  #race-root .rc-card.is-in, #race-root .rc-card.is-hit { animation: none; }
+  #race-root .rc-dot { transition: none; }
+}
+#race-root .rc-root[data-motion="on"] .rc-card.is-in, #race-root .rc-root[data-motion="on"] .rc-card.is-hit { animation: none; }
+#race-root .rc-root[data-motion="on"] .rc-dot { transition: none; }

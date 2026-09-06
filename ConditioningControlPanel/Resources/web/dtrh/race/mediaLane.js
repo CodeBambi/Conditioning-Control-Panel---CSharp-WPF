@@ -1,5 +1,5 @@
 /* ============================================================================
- * mediaLane.js - the media lane governor for The Caucus Race.
+ * mediaLane.js - the media lane governor for Racing Thoughts.
  *
  * game/payloadFx.js scatters its cards at random over the whole viewport:
  * `.sf-pfx-flash` lands at (14..86vw, 16..80vh), `.sf-pfx-cascade` rains from

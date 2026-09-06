@@ -1,4 +1,4 @@
-// The Caucus Race - shared constants. Import these; never redeclare them in a module.
+// Racing Thoughts - shared constants. Import these; never redeclare them in a module.
 // Track space is (d, x, h): depth along the spine, lateral offset, height above the road.
 // See race/CONTRACT.md.
 

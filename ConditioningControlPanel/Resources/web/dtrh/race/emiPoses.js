@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/emiPoses.js - The Caucus Race: EMI's pose layer over the Blender glb.
+ * race/emiPoses.js - Racing Thoughts: EMI's pose layer over the Blender glb.
  *
  * race/emi.js owns the moods (the antenna, the bead, the sweat). This owns her
  * BODY on the race's events: the arms, the feet and a root lean / tilt / lift /

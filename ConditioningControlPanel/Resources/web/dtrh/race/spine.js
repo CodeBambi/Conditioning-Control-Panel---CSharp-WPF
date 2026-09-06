@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/spine.js - The Caucus Race track spine.
+ * race/spine.js - Racing Thoughts track spine.
  *
  * Implements CONTRACT.md section "race/spine.js": createSpine({ seed, roomOrder })
  * returns a closed CatmullRom layout built from the chunk grammar (straight, bendL,

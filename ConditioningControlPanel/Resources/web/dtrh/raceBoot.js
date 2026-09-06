@@ -1,5 +1,5 @@
 /* ============================================================================
- * raceBoot.js - boots The Caucus Race page. Implements CONTRACT.md
+ * raceBoot.js - boots Racing Thoughts page. Implements CONTRACT.md
  * "race/run.js + raceBoot.js + race.html (PR 5, integration)" and the
  * "race/menu.js + race/intro.js" section (the front door).
  *
@@ -7,7 +7,8 @@
  * -> wait for `init` (+ `manifest`, `favorites`) with a 4 s timeout -> hostMedia
  * -> createRace + createMenu -> the splash is a 1 s title flash (it covers the
  * module import, the world build and the glb fetch, and hosts the wait note
- * and boot errors) -> the MENU is the resting state -> `race` plays the intro
+ * and boot errors) -> on a first open the four introduction cards
+ * (race/cards.js) -> the MENU is the resting state -> `race` plays the intro
  * on the menu stage -> the run starts under the camera whip. `surface` from
  * the menu is the same exit the End screen takes.
  *
@@ -22,6 +23,9 @@
  * intro and boots straight into the run (headless checks depend on it);
  * `?intro=0` keeps the menu and skips the intro; `?scene=intro` boots straight
  * into the intro and `?hold=ms` freezes it at that intro time (screenshots);
+ * `?cards=1` forces the introduction cards and `?cards=0` skips them (without
+ * either they show once, gated on localStorage `race.cards`), and `?card=N`
+ * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
  * the host init.
  *
@@ -171,6 +175,7 @@ async function boot() {
       else if (id === 'surface') surface();
       else if (id === 'track') { plate({ stage: 'picking' }); host.send({ type: 'track-pick' }); }
       else if (id === 'clear') { host.send({ type: 'track-cancel' }); race.setTrack(null); trackReady = null; plate(null); }
+      else if (id === 'story') { menu.hide(); menu.refreshView(); showCards().then(() => { if (!exiting && !started) menu.show(); }); }
     });
     if (trackReady) plate(trackReady); else if (trackProgress && trackProgress.stage !== 'cancelled') plate(trackProgress);
     menu.seedCheck = () => {   // the menu may have changed the seed rule: rebuild the world once, before the intro
@@ -182,7 +187,7 @@ async function boot() {
     };
     race.setStage(menu.stage);
     if (params.get('scene') === 'intro') { startRun(true); return; }
-    setTimeout(() => { hideSplash(); menu.show(); }, Math.max(0, SPLASH_MS - (performance.now() - t0)));
+    setTimeout(() => { hideSplash(); firstCards(); }, Math.max(0, SPLASH_MS - (performance.now() - t0)));
   } catch (err) {
     fail(err);
   }
@@ -235,6 +240,33 @@ function stopTrackClock() {
 function hideSplash() {
   splash.classList.add('is-off');
   setTimeout(() => { splash.hidden = true; }, 600);
+}
+/**
+ * The four introduction cards (race/cards.js) on the menu's own stage framing. Resolves when they
+ * end, read through or escaped; either way they count as seen. A card layer that will not build is
+ * never worth the front door, so it is logged and swallowed.
+ */
+async function showCards() {
+  try {
+    const { createCards } = await import('./race/cards.js');
+    const reducedMotion = menu ? (menu.options.motion === 'on' || (menu.options.motion === 'system' && settings.reducedMotion)) : !!settings.reducedMotion;
+    const cards = createCards({ root, audio: race && race.audio, reducedMotion, log: host.log, start: (Number(params.get('card')) || 1) - 1 });
+    await cards.show();   // show() writes the gate itself, so a window closed mid-read still counts
+    cards.dispose();
+  } catch (err) {
+    host.log('cards: ' + ((err && err.message) || err));
+  }
+}
+/** First open: the cards, then the menu. `?cards=1` forces them, `?cards=0` says never. */
+async function firstCards() {
+  const want = params.get('cards');
+  if (want !== '0' && !started) {
+    try {
+      const { cardsSeen } = await import('./race/cards.js');
+      if (want === '1' || !cardsSeen()) { menu.refreshView(); await showCards(); }
+    } catch (err) { host.log('cards gate: ' + ((err && err.message) || err)); }
+  }
+  if (!exiting && !started) menu.show();
 }
 /** race: the intro on the menu stage, then the run under the camera whip. autostart / intro=0 go straight to the run. */
 async function startRun(withIntro) {

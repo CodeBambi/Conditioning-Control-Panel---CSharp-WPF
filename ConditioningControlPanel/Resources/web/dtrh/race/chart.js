@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/chart.js - The Caucus Race track charts: the file is the track.
+ * race/chart.js - Racing Thoughts track charts: the file is the track.
  * Implements CHART.md section `race/chart.js`.
  *
  * A chart is timestamps and labels, never audio: an energy curve in fixed bins, a list

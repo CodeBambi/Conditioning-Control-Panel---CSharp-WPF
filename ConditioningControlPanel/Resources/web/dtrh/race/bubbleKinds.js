@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/bubbleKinds.js - The Caucus Race bubble table, data only (no three.js)
+ * race/bubbleKinds.js - Racing Thoughts bubble table, data only (no three.js)
  * so score.js and the HUD can read it without pulling the renderer in.
  * Implements the "Bubble kinds" table of CONTRACT.md section `race/bubbles.js`;
  * bubbles.js re-exports BUBBLE_KINDS from here.

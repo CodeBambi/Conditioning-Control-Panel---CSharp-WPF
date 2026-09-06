@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/walls.js - The Caucus Race wall media: the player's own images plastered on
+ * race/walls.js - Racing Thoughts wall media: the player's own images plastered on
  * the upper tube wall, exactly like the descent's wall posters (engine/wallPosters.js
  * is reused as-is), plus painted room signage so the wall is never bare when the
  * library is empty.

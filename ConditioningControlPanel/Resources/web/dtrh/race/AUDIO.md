@@ -1,4 +1,4 @@
-# The Caucus Race - audio
+# Racing Thoughts - audio
 
 One module, `race/audio.js`, owns every sound. Two doors: the hot beats are WebAudio in the page
 on the dive's shared context (`engine/audioBus.js`, so the DtRH master colour applies); the

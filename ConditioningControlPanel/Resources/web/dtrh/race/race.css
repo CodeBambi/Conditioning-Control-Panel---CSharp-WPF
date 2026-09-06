@@ -1,5 +1,5 @@
 /* ============================================================================
- * race.css - The Caucus Race HUD skin. Implements CONTRACT.md "race/hud.js + race/race.css".
+ * race.css - Racing Thoughts HUD skin. Implements CONTRACT.md "race/hud.js + race/race.css".
  *
  * Everything is scoped under .race-hud. Fonts and palette ride styles.css
  * (--rh-font, --pink); nothing new is loaded. Layers: the chrome sits at z3,

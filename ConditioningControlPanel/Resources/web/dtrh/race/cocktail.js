@@ -1,5 +1,5 @@
 /* ============================================================================
- * race/cocktail.js - THE MIX. How effect bubbles chain in The Caucus Race.
+ * race/cocktail.js - THE MIX. How effect bubbles chain in Racing Thoughts.
  *
  * Pass two ran one screen-level effect at a time and scored the rest as
  * treats. Pass three replaces that with CATEGORIES: one live effect per
