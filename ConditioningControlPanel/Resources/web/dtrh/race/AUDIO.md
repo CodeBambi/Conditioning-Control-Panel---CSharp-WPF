@@ -136,7 +136,14 @@ the two Midnight Statics, active: the rest") and the file lengths; re-order free
 Plus, in any room: the fraught state (effects stacked, `run.effects.length / 3`) eases a lowpass
 from open down to 800 Hz; tea time caps it at 1.4 kHz. Crossfade at every gate is 1.5 s (linear
 ramps on per-track gain nodes; the outgoing element pauses 200 ms after the ramp and resumes
-from where it was next lap). Each track is one `<audio>` element through a
+from where it was next lap). At most two elements are resident: the room's track and the next
+room's, which `residentTracks` names along the run's route (the dresser's spans, or a chart's acts
+via `audio.setRoute`, since a loaded chart re-orders the gates) and the gate prefetches (`preload=auto`, so it is buffered
+by the time its room comes). Every other element is released after its crossfade (src emptied,
+the file buffer with it; a lap of eight rooms used to hold all eight, 10-14 MB) and its position
+parked, so the resume-next-lap rule holds through a re-fetch. Nothing is fetched before the menu
+asks for its theme. The Arcademy mp3s (0.77-2.74 MB each) are the only variants shipped: there
+is no lower-bitrate set for phones. Each track is one `<audio>` element through a
 `MediaElementSource` into the chain `duck -> lowpass -> highpass -> level -> master`. If that
 route ever throws (it should not: the files are same-origin on `ccp.game`, the same route
 `engine/scene.js` uses for the drone) the player falls back to element volume with a 50 ms

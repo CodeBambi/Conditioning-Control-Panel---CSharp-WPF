@@ -372,8 +372,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     trackSend('track-pause', { on: !!on });
   }
   /** Load a chart (null goes back to the seeded run). Call before start(), or live for an upgrade. */
+  // a chart's acts decide the room order at every gate (step: ts.act.room); the music prefetches by that route
+  const routeOf = (t) => { const acts = t && t.chart && Array.isArray(t.chart.acts) ? t.chart.acts : null; return acts ? acts.map((a) => a.room).filter((r, i, arr) => r && r !== arr[i - 1]) : null; };
   function setTrack(chart) {
     const t = TR.setTrack(chart);
+    audio.setRoute(routeOf(t));
     S.trackHold = 0; S.statsAt = 0;
     if (W) { W.field.setTracked(!!t); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
@@ -701,7 +704,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
-    setTrack, replaceTrack: (chart) => TR.replace(chart), trackClock: (t, playing) => TR.clock(t, playing),
+    setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); }, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), debugItemBox,
     get track() { return TR.track; } };
 }
