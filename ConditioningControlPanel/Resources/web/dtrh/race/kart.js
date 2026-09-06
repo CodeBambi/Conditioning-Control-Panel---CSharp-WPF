@@ -13,6 +13,16 @@
 //   { type:'inverted', on }           roll past 120 degrees (inside THE BIG WHEEL) began / ended; state.inverted mirrors it
 //   { type:'lap', lap, sec }          the Tea Garden gate crossed again: a timed lap (the first crossing only starts the clock)
 //   { type:'split', frac, sec }       a quarter mark of the lap (0.25 / 0.5 / 0.75) passed at `sec` into the lap
+//
+// THE SAUCER NEVER BANKS. The steer lean used to roll the whole group about the forward axis, and
+// the group sits ON the road (h = 0), so the saucer's outer edge swung sin(lean) * 1.28 m straight
+// down through the road surface: 0.84 m under it at a drift lean. The lean now rides on `ctx.lean`
+// into race/emi.js, which tips the cup alone on a saucer that stays flat (a saucer slides, it does
+// not bank). Pitch is still the group's, capped here at what the height above the road allows.
+//
+// SCREENSHOT AID: `?lean=1` (steer right) / `?lean=-1` pins the lean at LEAN_MAX for as long as the
+// page is open, so a headless shot can be taken at full lock without holding a key. It only writes
+// `lean`; speed, steering and the pop box are untouched. Anything but -1..1 is ignored.
 
 import * as THREE from 'three';
 import {
@@ -20,7 +30,7 @@ import {
   CAM_BACK, CAM_UP, CAM_LOOK_AHEAD, CAM_LOOK_SPEED, KART_SCALE,
   POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, DRIFT_TIER_SEC, DRIFT_BOOST_SEC, WALL_SCRUB_SEC,
 } from './consts.js';
-import { createEmiRig } from './emi.js';
+import { createEmiRig, SAUCER_R } from './emi.js';
 
 const STEER_VMAX = 6.5;       // lateral m/s at full lock, cruise speed, no drift
 const DRIFT_STEER = 1.45;     // drift tightens the steer
@@ -39,10 +49,20 @@ const TARGET_AHEAD = POP_HIT_D * 0.5;   // the pop ring floats this far in front
 const TARGET_H = LANE_H - 0.15;         // ring centre: between the road box centre and a lane bubble
 const RING_ALPHA = 0.14;                // resting alpha; a pop pulses it up
 const CAM_BOOST_BACK = 0.7;             // the seat slides back a touch under boost
+// The saucer's outer radius in road metres (1.28), widened by the landing squash's fattest frame
+// (emi.js scales the rig 1.18 in x and z at squash 1) so the pitch cap below holds through a THUD.
+const SAUCER_R_W = SAUCER_R * KART_SCALE * 1.18;
+// The steepest lean the physics below can reach: full lock at the speed floor, drifting, plus the
+// drift term. Only the screenshot aid uses it, and it is derived so it cannot go stale.
+const LEAN_MAX = STEER_VMAX * 1.15 * DRIFT_STEER * 0.07 + 0.1;
+const FORCE_LEAN = (() => {                 // `?lean=-1..1`, see the header. No DOM, no aid.
+  try { const v = +new URLSearchParams(location.search).get('lean') || 0; return Math.max(-1, Math.min(1, v)); }
+  catch (e) { return 0; }                   // node, or a page with no location: the aid is simply off
+})();
 const WORLD_UP = new THREE.Vector3(0, 1, 0), ZERO = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _v = new THREE.Vector3();
 const _fwd = new THREE.Vector3(), _up = new THREE.Vector3(), _right = new THREE.Vector3(), _lvl = new THREE.Vector3();
-const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0), AX_Z = new THREE.Vector3(0, 0, 1);
+const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0);   // z (the roll) is emi.js's
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (k, dt) => 1 - Math.exp(-k * dt);
@@ -114,7 +134,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   let airWas = false, steerWas = 0, trickArmed = false, trickKind = null, trickDir = 1, trickT = 1;
   let gateLay = null, gateD = 0, lapTimed = false, lapMark = 0;
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
-  const ctx = { t: 0, up: _up, right: _right, tangent: _fwd, speedNorm: 0, airborne: false, steerVel: 0, drift: false, driftSide: 1, driftTier: 0 };
+  const ctx = { t: 0, up: _up, right: _right, tangent: _fwd, speedNorm: 0, airborne: false, steerVel: 0, drift: false, driftSide: 1, driftTier: 0, lean: 0 };
   const listeners = [];
   const emit = (ev) => { for (const cb of listeners) { try { cb(ev); } catch (e) { /* a listener never breaks the kart */ } } };
 
@@ -200,6 +220,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     state.scrub = scrub;
     const leanT = -vx * 0.07 - (state.drift ? state.steer * 0.1 : 0);
     lean += (leanT - lean) * ease(8, dt);
+    if (FORCE_LEAN) lean = -FORCE_LEAN * LEAN_MAX;      // screenshot aid, see the header
   }
 
   function stepRamps(dt, lay, prevD) {
@@ -301,7 +322,12 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     _m.lookAt(_fwd, ZERO, _up);                                        // +z faces down the road
     group.quaternion.setFromRotationMatrix(_m);
     ring.quaternion.copy(group.quaternion);                            // the ring never leans
-    group.quaternion.multiply(_q.setFromAxisAngle(AX_Z, lean)).multiply(_q.setFromAxisAngle(AX_X, pitch));
+    // The lean is emi.js's now (the cup tips, the saucer stays flat). Pitch is still the whole
+    // kart's, but only as far as the air under the saucer allows: on the road the nose-up left
+    // over from a landing would otherwise drive the saucer's back edge sin(pitch) * 1.28 m under
+    // the surface, so it is capped at asin(clearance / SAUCER_R_W) and touches down level.
+    const clear = Math.asin(clamp((state.h + Math.max(0, hopH)) / SAUCER_R_W, 0, 1));
+    group.quaternion.multiply(_q.setFromAxisAngle(AX_X, clamp(pitch, -clear, clear)));
     if (trickT < 1) {                                                  // the trick: one full turn, eased
       const ang = Math.PI * 2 * smooth(trickT);
       group.quaternion.multiply(trickKind === 'flip' ? _q.setFromAxisAngle(AX_X, -ang) : _q.setFromAxisAngle(AX_Y, ang * trickDir));
@@ -372,7 +398,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     stepCamera(dt, lay);
     stepTierSparks(dt);
     ctx.t = elapsed; ctx.speedNorm = state.speed / KART_MAX_SPEED; ctx.airborne = state.airborne;
-    ctx.steerVel = vx; ctx.drift = state.drift; ctx.driftSide = driftSide;
+    ctx.steerVel = vx; ctx.drift = state.drift; ctx.driftSide = driftSide; ctx.lean = lean;
     rig.update(dt, ctx);
   }
 
