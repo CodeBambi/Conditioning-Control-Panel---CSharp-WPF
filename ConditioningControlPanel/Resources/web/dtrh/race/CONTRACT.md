@@ -151,6 +151,9 @@ kart.dispose()
 `retexture(scene)` pass, so the rig walks them through `preparePixel` when the model mounts. EMI is
 the Blender glb from the moment `emi.glb` resolves; the primitive CRT is the fallback and rides on
 if it never does.
+The cup and the saucer come from `props.glb` (`kart_cup`, `kart_saucer`) on the same terms: the
+lathe cup, its rim torus, the handle tube, the saucer cylinder and its rim are the fallback, and
+the tea disc, the pink saucer mark, `cupLight`, the seat and `TEA_Y` are shared by both paths.
 Speed: cruise `KART_BASE_SPEED`, cap `KART_MAX_SPEED`, floor `KART_MIN_SPEED`. Ramps: when
 `layout.rampAt(d)` matches the lip, give `vh` an upward impulse scaled by speed; `GRAVITY` pulls
 back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `ROAD_HALF_W`
@@ -158,6 +161,20 @@ back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `
 from behind, gloves on the rim, bead antenna with the six mood states, sweat particles when
 fraught, her face only as a mirrored emoticon in the tea (`:3`, `>_<`, `o_o`, `^_^`, `$_$`). Text
 emoticons only, never a drawn face, never a speech line.
+
+### `race/emiPoses.js` (pass four, EMI's body)
+```js
+export const POSES, PIVOTS;   // the pure preset table, and the four glb pivots a preset may name
+export function resolvePose(name, opts) -> flattened target
+export function createPoseLayer(model) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
+```
+Poses: `cruise` (the rest), `drift`, `boost` -> `boostOut`, `air`, `landing` / `landingKerb`,
+`grab`, `clamp`, `tuck`, `throw`, `cheer`. `opts` = `{ side:-1|1, tier:1..3, hold:sec }`; sided
+presets are authored for +1 and mirrored for -1. Every value is an offset on the pack's authored
+rest rotation, blended on damped springs (Law XI, never a linear tween), and a pose with a `hold`
+falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and emi.js takes the
+max of that and the run brain's. run.js only ever calls `kart.pose(...)`; the layer exists only
+while the glb is mounted (the primitive EMI has no limbs to pose).
 
 ### `race/items.js` (PR 4)
 ```js
