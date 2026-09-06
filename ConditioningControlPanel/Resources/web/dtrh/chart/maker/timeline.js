@@ -82,6 +82,17 @@ function drawRuler() {
 function drawBubbles() {
   const f = document.createDocumentFragment();
   const wallW = 30 / view.pps;
+  // the road first, so it sits under everything the author can actually grab. These are not
+  // pickable and never will be: they belong to generate.js, not to the hand (MAKER.md, M5).
+  for (const e of (S.road && S.road.events) || []) {
+    const x = xOf(e.t);
+    if (x < -10 || x > W + 10) continue;
+    const d = document.createElement('i');
+    d.className = 'road ' + e.kind;
+    d.style.left = x.toFixed(1) + 'px';
+    d.title = e.kind + (e.label ? ' ' + e.label : '');
+    f.append(d);
+  }
   for (const [g, list] of groupsOf(S.bubs)) {
     const last = list[list.length - 1];
     const t0 = list[0].t, t1 = last.t + (last.kind === 'wall' ? wallW : 0);

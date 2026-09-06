@@ -9,24 +9,27 @@
 
 import { loadAudio, createPlayer, isAudioFile } from './audio.js';
 import * as pick from './pick.js';
+import * as preview from './preview.js';
 import * as save from './save.js';
 import { findWords, hashNote, isWords, scan } from './words.js';
+import { generate, roadLine } from './generate.js';
 import * as tl from './timeline.js';
 import {
   DEFAULT_ON, DEFAULT_RECIPE, EFFECTS, KINDS, MIN_GAP_DEF, MIN_GAP_HI, MIN_GAP_LO, MIN_GAP_STEP,
-  RECIPE_BY_ID, byT, clamp, isOn, pickLine, placeAll, placeHit, recipeFor, resetIds,
+  RECIPE_BY_ID, byT, clamp, fmtShort, isOn, pickLine, placeAll, placeHit, recipeFor, resetIds,
 } from './model.js';
 
 const $ = (id) => document.getElementById(id);
 
 export const state = {
   audio: null, words: null, rows: [], setById: new Map(),
-  hits: [], bubs: [], sel: new Set(),
+  hits: [], bubs: [], sel: new Set(), road: null,
   cfg: {}, minGap: MIN_GAP_DEF, durationSec: 0, peaks: null, perSec: 50,
 };
 
 const player = createPlayer();
 let statusTimer = 0;
+let pv = null;                          // the race in the bottom row, once there is a road
 
 /* ---- the status line ----------------------------------------------------- */
 
@@ -120,11 +123,70 @@ export function renderPanel() {
 export function bar() { $('what').textContent = pickLine(state); }
 
 /** Every edit goes through here: draw it, then let the autosave catch up. */
-export function render() { tl.render(); save.touch(); }
+export function render() { tl.render(); save.touch(); if (pv) pv.onEdit(); }
 
 export function setGap(v) {
   state.minGap = Number(clamp(v, MIN_GAP_LO, MIN_GAP_HI).toFixed(1));
   $('gapv').textContent = state.minGap.toFixed(1) + ' s';
+}
+
+/* ---- the road ------------------------------------------------------------ */
+
+/**
+ * Run maker/generate.js over the peaks and the words and keep what it says.
+ * The road only: every bubble the author placed or moved stays exactly where it
+ * is, which is why `g` is safe to lean on while the file is playing.
+ */
+export function generateRoad(quiet = false) {
+  if (!state.audio || !state.words) { if (!quiet) status('pick an mp3 with its words first'); return null; }
+  state.road = generate({
+    peaks: state.peaks, perSec: state.perSec, durationSec: state.durationSec,
+    words: state.words, hits: state.hits, setById: state.setById,
+  });
+  if (pv) pv.ensure();                   // the first road is what turns the preview on
+  render();
+  if (!quiet) status(roadLine(state.road.counts));
+  return state.road;
+}
+
+/* ---- the one card -------------------------------------------------------- */
+
+/**
+ * The file landed and the words were found: say what is in it and ask the one
+ * question worth asking. It is the only modal in the tool, esc says start empty
+ * and everything under it keeps working the moment it goes.
+ */
+export const card = {
+  get open() { return !$('ask').hidden; },
+  show(saved) {
+    $('askname').textContent = (state.audio && state.audio.stem) || 'this track';
+    $('askline').textContent = fmtShort(state.durationSec || 0) + ', ' + state.hits.length
+      + ' trigger word' + (state.hits.length === 1 ? '' : 's') + ' in ' + state.rows.length + ' set' + (state.rows.length === 1 ? '' : 's');
+    $('askgo').textContent = saved ? 'pick up where you left off' : 'generate the track';
+    $('askalt').hidden = !saved;
+    $('askwarn').hidden = !saved;
+    $('ask').hidden = false;
+    $('askgo').focus();
+  },
+  hide() { $('ask').hidden = true; },
+};
+
+function cardGo() {
+  const saved = !$('askalt').hidden;
+  card.hide();
+  if (saved) return status('picked up where you left off: ' + state.bubs.length + ' on the track.', true);
+  generateRoad();
+}
+function cardAgain() {
+  card.hide();
+  save.forget(state.audio.hash);
+  useWords(state.words, 'again');
+  const road = generateRoad(true);
+  status('generated again. every trigger is back on its recipe. ' + (road ? roadLine(road.counts) : ''), true);
+}
+function cardSkip() {
+  card.hide();
+  status('started empty. the triggers are placed, the road is not: press g when you want it.', true);
 }
 
 /* ---- loading ------------------------------------------------------------- */
@@ -133,12 +195,14 @@ export function setGap(v) {
 export function startOver() {
   if (!state.audio || !state.words) return status('nothing to start over yet');
   save.forget(state.audio.hash);
+  state.road = null;
   useWords(state.words, 'again');
-  status('started over. every trigger is back on its recipe.');
+  status('started over. every trigger is back on its recipe, and the road is gone. press g for a new one.');
 }
 
 function useWords(json, via) {
   state.words = json;
+  if (via === 'again') state.road = null;
   if (!state.durationSec) state.durationSec = Number(json.source && json.source.durationSec) || 0;
   state.rows = scan(json, state.durationSec || Infinity);
   state.setById = new Map(state.rows.map((r) => [r.set.id, r.set]));
@@ -168,8 +232,8 @@ function restoreSaved() {
   tl.render();
   bar();
   $('startover').hidden = false;
-  status('picked up where you left off: ' + state.bubs.length + ' on the track. start over is on the right.', true);
-  return true;
+  return true;                                   // what to do about it is the card's question
+
 }
 
 async function onAudioFile(file) {
@@ -190,7 +254,7 @@ async function onAudioFile(file) {
   renderPanel();
   status('finding the words for it', true);
   const found = await findWords(a.stem, a.hash);
-  if (found) { useWords(found.json, found.via); return restoreSaved() || true; }
+  if (found) { useWords(found.json, found.via); card.show(restoreSaved()); return true; }
   $('sub').textContent = 'no words for this file yet. drop its .words.json here.';
   status('no words for this file yet. drop its .words.json here.', true);
   return false;
@@ -201,7 +265,9 @@ async function onJsonFile(file) {
   try { json = JSON.parse(await file.text()); } catch (e) { json = null; }
   if (!isWords(json)) return status('that json is not a words file');
   if (!state.audio) return status('pick the mp3 first, then drop the words on it');
-  return useWords(json, 'dropped');
+  useWords(json, 'dropped');
+  card.show(false);
+  return true;
 }
 
 const takeFile = (f) => (isAudioFile(f) ? onAudioFile(f) : /\.json$/i.test(f.name || '') ? onJsonFile(f) : status('that is not an mp3 or a words file'));
@@ -216,6 +282,7 @@ function loop() {
     lastT = t;
     if (playing && tl.shouldFollow(t)) tl.follow(t);
     tl.moveHead(t);
+    if (pv) pv.clock(t, playing);         // the frame's own clock is 4 Hz, not per frame
   }
   requestAnimationFrame(loop);
 }
@@ -224,11 +291,14 @@ function loop() {
 
 function playLabel() {
   $('play').innerHTML = (player.playing ? '⏸ pause' : '▶ play') + ' <kbd>space</kbd>';
+  if (pv) pv.clock(player.time, player.playing);   // play and pause are news the frame wants now
 }
 
 export function seekTo(t) {
-  player.seek(clamp(t, 0, state.durationSec || 0));
+  const at = clamp(t, 0, state.durationSec || 0);
+  player.seek(at);
   lastT = -1;
+  if (pv) pv.seek(at, player.playing);
 }
 
 function init() {
@@ -238,6 +308,10 @@ function init() {
   $('pick').addEventListener('click', () => $('file').click());
   $('file').addEventListener('change', (ev) => { const f = ev.target.files[0]; if (f) takeFile(f); ev.target.value = ''; });
   $('play').addEventListener('click', () => { player.toggle(); playLabel(); });
+  $('gen').addEventListener('click', () => generateRoad());
+  $('askgo').addEventListener('click', cardGo);
+  $('askalt').addEventListener('click', cardAgain);
+  $('askskip').addEventListener('click', (ev) => { ev.preventDefault(); cardSkip(); });
   player.el.addEventListener('play', playLabel);
   player.el.addEventListener('pause', playLabel);
   $('zin').addEventListener('click', () => tl.zoomAt(1.25, null));
@@ -274,7 +348,9 @@ function init() {
 
   document.addEventListener('keydown', (ev) => {
     if (ev.target && /^(INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
-    if (ev.code === 'Space') { ev.preventDefault(); player.toggle(); playLabel(); }
+    if (card.open) { if (ev.code === 'Escape') { ev.preventDefault(); cardSkip(); } return; }
+    if (ev.code === 'KeyG' && !ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); generateRoad(); }
+    else if (ev.code === 'Space') { ev.preventDefault(); player.toggle(); playLabel(); }
     else if (ev.code === 'Home') { ev.preventDefault(); tl.setView(0); seekTo(0); }
     else if (ev.code === 'End') { ev.preventDefault(); tl.setView(state.durationSec - tl.spanSec() * 0.5); }
     else if (ev.code === 'Equal' || ev.code === 'NumpadAdd') { ev.preventDefault(); tl.zoomAt(1.25, null); }
@@ -282,15 +358,18 @@ function init() {
   });
 
   const shared = {
-    state, status, bar, renderPanel, replaceSet, setGap, startOver,
-    beads, render, pps: () => tl.view.pps, time: () => player.time,
+    state, status, bar, renderPanel, replaceSet, setGap, startOver, generateRoad,
+    beads, render, pps: () => tl.view.pps, time: () => player.time, modal: () => card.open,
   };
   pick.install(shared);
   save.install(shared);
+  pv = preview.install(shared);
+  if (state.road) pv.ensure();            // a restored track already has a road to watch
   requestAnimationFrame(loop);
 }
 
 init();
 
 /* the headless checks drive the page through this, exactly as a hand would. */
-window.trackMaker = { state, tl, player, pick, save, status, replaceSet, renderPanel, seekTo, bar, startOver, RECIPE_BY_ID };
+window.trackMaker = { state, tl, player, pick, save, status, replaceSet, renderPanel, seekTo, bar, startOver,
+  generateRoad, card, preview: () => pv, RECIPE_BY_ID };

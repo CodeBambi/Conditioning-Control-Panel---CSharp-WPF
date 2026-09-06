@@ -1,7 +1,7 @@
 /* ============================================================================
  * editor/audio.js - the pure half: peaks and the file hash (chart/EDITOR.md, PR E1).
  *
- * CARVE-OUT: the canonical copy of this file lives on the Chart Room / Track
+ * CARVE-OUT: the full copy of this file lives on the shelved chart room / Track
  * Maker chain and also carries install() (the <audio> element, the clock, the
  * decode). Only the functions that touch no DOM are here, so the web build can
  * import the waveform walk and CHART.md's hash from app main before the rest

@@ -16,6 +16,7 @@
   <button class="primary" id="pick">&#127925; pick the mp3</button>
   <span class="name">track: <b id="trackname">nothing yet</b><small id="sub">pick an mp3, or drop one on the page.</small></span>
   <span class="grow"></span>
+  <button id="gen">&#10024; generate <kbd>g</kbd></button>
   <button id="addwall">&#129521; wall at playhead <kbd>w</kbd></button>
   <button id="play">&#9654; play <kbd>space</kbd></button>
   <span class="time" id="time">0:00.0</span>
@@ -28,7 +29,7 @@
   <div class="g" style="grid-row:1"><span>time</span></div>
   <div class="row ruler" id="ruler" style="grid-row:1"></div>
 
-  <div class="g" style="grid-row:2"><b>bubbles</b><span>drag any to slide what is picked. shift click = all of the same.</span></div>
+  <div class="g" style="grid-row:2"><b>bubbles</b><span>drag any to slide what is picked. shift click = all of the same.</span><span class="key"><i class="road"></i> road</span></div>
   <div class="row" id="seqs" style="grid-row:2"></div>
 
   <div class="g" style="grid-row:3"><b>audio</b><span>click to jump</span></div>
@@ -37,8 +38,8 @@
   <div class="g" style="grid-row:4"><b>words</b><span>the triggers, as heard</span></div>
   <div class="row words" id="words" style="grid-row:4"></div>
 
-  <div class="g" style="grid-row:5"></div>
-  <div class="row" style="grid-row:5"></div>
+  <div class="g" id="pvg" style="grid-row:5" hidden><b>preview</b><span>what the run looks like</span><button class="small" id="pvpop">pop out</button></div>
+  <div class="row preview" id="preview" style="grid-row:5"></div>
 
   <aside id="side">
     <h2>what each trigger gets</h2>
@@ -51,6 +52,15 @@
       <a href="#" id="startover" class="startover" hidden>start over</a>
     </div>
   </aside>
+
+  <div id="ask" hidden>
+    <h2 id="askname">this track</h2>
+    <p id="askline">0:00, no trigger words yet</p>
+    <button class="primary" id="askgo">generate the track</button>
+    <button id="askalt" hidden>generate again</button>
+    <p class="warn" id="askwarn" hidden>generating again puts every trigger back on its recipe and replaces the track you saved.</p>
+    <a href="#" id="askskip">start empty</a>
+  </div>
 
   <div id="playhead"></div>
   <span class="note" id="status" hidden></span>
