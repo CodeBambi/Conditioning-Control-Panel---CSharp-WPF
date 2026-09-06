@@ -319,6 +319,16 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
   placeholders otherwise. `emi.glb`'s `EMI_glass` carries the atlas as `emissiveTexture` only, so the stage sets the face
   on `emissiveMap` (and `map` when present); gltf.js `setFace` shifts whichever of the two the material carries.
 
+### `race/chart.js` (track charts, PR c1)
+```js
+normalizeChart(json) -> chart | demoChart({ seed, durationSec }) -> chart | createScheduler(chart, { leadSec }) -> sched
+export const CHART_VERSION, STRUCTURE_WORDS, DROP_WORDS, EVENT_KINDS, ACT_KINDS, ACT_ROOM;
+```
+Pure data: no three, no DOM, no clock, so it runs under node (`node race/smoke/chart-check.mjs`). The chart
+is the analysed hypno file (energy bins, acts, spoken events); the scheduler hands run.js each event `leadSec`
+before its second (2.5 s, floor 1.2) at `d = kartD + speed * dueIn`, so the pop lands on the spoken word
+whatever the throttle did, and anything already spoken is dropped. Full shape and protocol in `CHART.md`.
+
 ## Host protocol (bridge.js, Protocol v1)
 
 Page -> host (`bridge.send(type, data)`): `ready` (announceReady), `heartbeat`, `pong`, `sfx {name, scale}`,
