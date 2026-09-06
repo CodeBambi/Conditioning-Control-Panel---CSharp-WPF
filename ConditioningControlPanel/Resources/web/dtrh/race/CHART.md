@@ -92,7 +92,8 @@ export function createScheduler(chart, { leadSec = 2.2 } = {}) -> sched
   sched.energyAt(t) -> 0..1       // linear interpolation between bins, 0 outside the file
   sched.replace(chart)            // swap in an upgraded chart: keeps fired ids and taken ids, adopts events with t > lastT only
   sched.taken(id)                 // the player met this event (popped its bubble, hit the drop)
-  sched.stats() -> { total, fired, countable, taken }   // countable = events of kind trigger|word|count|drop
+  sched.skip(id)                  // cues.js put nothing on the road for it (a guess): it leaves the count, never a miss
+  sched.stats() -> { total, fired, countable, taken }   // countable = events of kind trigger|word|count|drop, minus skipped ids
   sched.lastT                     // the last trackT seen
   sched.reset()
 ```
@@ -117,6 +118,24 @@ placement, `word: label`; `word` -> a treat bubble; `count` -> a golden air bubb
 `at = 0.2, 0.5, 0.8`; `chant` -> `reps` treats in lane placement alternating `x = +-1.2` at
 `at = k * period`; `build` -> `boost: min(dur, 4)`, `density: 1.6`; `peak` -> 6 rain treats; `release`
 -> `mood: 'calm'`, `density: 0.6`; `silence` -> `fog: 1`, `density: 0`, `holdSec: dur`.
+
+The feel (c3), on top of the mapping. Confidence: a `trigger` under conf 0.55 is a plain treat with no
+`word` and no pose; a `word` under conf 0.5, a lone number word (the spotter hears "one" in "someone"),
+or a wake word (`wake awake waking up open`) outside a `wake`/`free` act returns null, and run.js
+calls `sched.skip(id)` so it never counts against the player. Room: an unmapped trigger wears the
+room's effect (`teagarden flash, undertow spiral, toybox pink, chapel spiral, mirrors glitch, greyward
+freeze, coronation prism, casino lucky`); a `peak` rains the room's bubble (`casino lucky, coronation
+golden, chapel/mirrors prism`, else treats), 4..8 of them by `intensity`. Amount: a `chant` lane is
+`reps * max(0.5, weight)` treats, every fourth gold; a `build` boost is `dur * max(0.5, weight)` capped
+at 4; a `drop` under strength 0.6 is `jump: 5`, two rings and no spiral. A `count` ring sinks toward
+the road as the spoken number falls (`n` is the number, `of` the run length) and toasts the number;
+a lifting `word` (`float up open light rise lift`) hangs in the air. Poses and toasts: trigger `grab`,
+last count `clamp` + `item` toast, drop `jackpot` toast of its label, chant `cheer`, build `boost`,
+peak `cheer` (`smug` over intensity 0.7), release `drift`, silence a `. . .` toast.
+`resultTag(taken, countable)` is the end card's second line: `every word`, `good girl` (>= 0.8),
+`half of her` (>= 0.5), `she noticed` (>= 0.2), `you were not listening`; null with nothing to take.
+A loaded track ducks the room OST to `TRACK_DUCK` (0.12) and the bed to silence via
+`audio.duck(on, 'track')`, the standing level `update()` eases back to, until the track is cleared.
 
 ### `race/bubbles.js` additions (PR c2)
 ```js

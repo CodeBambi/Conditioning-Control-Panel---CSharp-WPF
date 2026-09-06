@@ -214,7 +214,7 @@ export function demoChart(opts = {}) {
 export function createScheduler(chart, opts = {}) {
   let ch = (chart && chart.version === CHART_VERSION && Object.isFrozen(chart)) ? chart : normalizeChart(chart);
   const leadSec = Math.max(MIN_LEAD_SEC, num(opts.leadSec, LEAD_SEC));
-  const fired = new Set(), takenIds = new Set();
+  const fired = new Set(), takenIds = new Set(), skipped = new Set();
   let cursor = 0, lastT = 0, missed = 0;
 
   // The cursor is the first event nobody has looked at yet: after a seek or a swap it walks past
@@ -272,12 +272,14 @@ export function createScheduler(chart, opts = {}) {
     },
     /** The player met this event: popped its bubble, took the drop. */
     taken(id) { if (id) takenIds.add(id); },
+    /** cues.js had nothing to put on the road for this one (a word the spotter only guessed at): it leaves the count. */
+    skip(id) { if (id) skipped.add(id); },
     stats() {
       let countable = 0;
-      for (const e of ch.events) if (COUNTABLE.has(e.kind)) countable++;
+      for (const e of ch.events) if (COUNTABLE.has(e.kind) && !skipped.has(e.id)) countable++;
       return { total: ch.events.length, fired: fired.size, countable, taken: takenIds.size, missed };
     },
-    reset() { fired.clear(); takenIds.clear(); cursor = 0; lastT = 0; missed = 0; },
+    reset() { fired.clear(); takenIds.clear(); skipped.clear(); cursor = 0; lastT = 0; missed = 0; },
     get chart() { return ch; },
     get lastT() { return lastT; },
     get leadSec() { return leadSec; },

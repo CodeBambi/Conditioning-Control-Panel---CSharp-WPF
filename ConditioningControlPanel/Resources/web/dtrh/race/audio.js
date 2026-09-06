@@ -4,7 +4,9 @@
  *   createRaceAudio({ bridge, hud, settings, input }) -> audio
  *   audio.sfx(name, scale)       the run's sfx() helper lands here: host legs + in-page beats
  *   audio.update(dt, live)       live = { world, run, kart }; once per step, after everything moved
- *   audio.duck(on, why)          'host' (native video) | 'brake' | 'end'
+ *   audio.duck(on, why)          'host' (native video) | 'brake' | 'end' | 'track'
+ *                                'track' is the standing one: a loaded file (CHART.md) is the
+ *                                soundtrack, so the OST and the bed sit under it until it is cleared
  *   audio.toggleMute() -> bool   M key; shared with the dive's master mute (shared/audioMute.js)
  *   audio.dispose()
  *
@@ -82,6 +84,7 @@ export function pickVoiceToDrop(voices) {
 export const OST_BASE = '/arcademy/assets/sfx/';
 export const CROSSFADE_SEC = 1.5;
 export const MUSIC_LEVEL = 0.3;          // the OSTs sit at about -15.5 LUFS; this keeps them under the pops
+export const TRACK_DUCK = 0.12;          // where the OST sits under a loaded track: felt, never heard over her
 export const TRACKS = Object.freeze([
   { name: 'ost_campus',          title: 'Star Byte Loop',     mood: 'soft', energy: 0.45, sec: 75,  start: 0 },
   { name: 'ost_deep_end',        title: 'Pixel Rush',         mood: 'loud', energy: 0.8,  sec: 77,  start: 0 },
@@ -139,6 +142,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   let lastScorePop = null;       // the score 'pop' event that ran just before the field pop reaches us
   // music: the chain is duck -> lowpass (fraught / Undertow / tea time) -> highpass (Grey Ward) -> level -> master
   let musicDuck = null, musicLp = null, musicHp = null, musicLevelNode = null, elementMode = false;
+  let standing = 1;   // the level update() eases the music back to: 1, or TRACK_DUCK while a track is loaded
   const tracks = new Map();      // name -> { name, el, gain, bound, failed, vol, fadeTimer, pauseTimer }
   const music = { cur: null, playlist: {}, dead: new Set(), duckTo: 1, duckWhy: null, lp: 20000, hp: 20, gesture: false, roomId: null };
 
@@ -448,7 +452,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const roomId = run.room ? run.room.id : null;
     if (roomId !== edge.room) { if (edge.room) gateSting(); edge.room = roomId; }
     if (roomId && roomId !== music.roomId) { music.roomId = roomId; enterTrack(roomId); }
-    if (music.duckTo < 1) setDuck(1, null);     // update() only runs while the run is live: nothing ducks it
+    if (music.duckTo !== standing) setDuck(standing, standing < 1 ? 'track' : null);   // update() only runs while the run is live: only a loaded track ducks it
     colour(roomId, clamp((run.effects ? run.effects.length : 0) / 3, 0, 1), run.timeScale == null ? 1 : run.timeScale);
     if (k.airborne && !edge.airborne) rampRise(); else if (!k.airborne && edge.airborne) rampLand();
     edge.airborne = !!k.airborne;
@@ -462,6 +466,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
 
   // ---- duck / mute / dispose ----
   function duck(on, why) {
+    if (why === 'track') { standing = on ? TRACK_DUCK : 1; setDuck(standing, on ? 'track' : null); return; }
     if (why === 'brake') { if (on) play('pop', { level: 0.3, semis: -7 }); else play('pop2', { level: 0.24, semis: 3 }); }
     if (on) setDuck(why === 'end' ? 0.45 : 0.1, why || 'host'); else setDuck(1, null);
   }

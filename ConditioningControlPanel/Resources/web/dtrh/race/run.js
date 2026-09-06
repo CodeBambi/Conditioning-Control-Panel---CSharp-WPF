@@ -34,7 +34,7 @@ import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
 import { createTrackState } from './track.js';
-import { cueFor } from './cues.js';
+import { cueFor, resultTag } from './cues.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
@@ -338,6 +338,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const t = TR.setTrack(chart);
     S.trackHold = 0; S.statsAt = 0;
     if (W) { W.field.setTracked(!!t); W.field.setDensity(1); if (!t) applyFog(W, 0); }
+    audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
     if (bridge.log) bridge.log(t ? `race track: ${t.name}, ${Math.round(t.durationSec)}s, ${TR.stats().countable} to take` : 'race track: cleared');
     return t;
   }
@@ -362,7 +363,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function applyCue(w, due) {
     const ks = w.kart.state;
     const cue = cueFor(due.event, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds });
-    if (!cue) return;
+    if (!cue) { TR.skip(due.event.id); return; }   // a guess the feel pass threw out never counts against the player
     for (const sp of cue.spawn) {
       const d = ks.d + ks.speed * Math.max(due.dueIn + (sp.at || 0), CUE_AHEAD_SEC);
       w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d, x: sp.x, h: sp.h, eventId: due.event.id });
@@ -543,7 +544,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const payout = await waitPayout(PAYOUT_WAIT_MS);
     if (S.disposed) return;
     const shown = { ...summary };
-    if (track && track.countable > 0) shown.title = `you took ${track.taken} of ${track.countable}`;   // a charted run is scored by the words it met
+    if (track && track.countable > 0) shown.title = `you took ${track.taken} of ${track.countable} · ${resultTag(track.taken, track.countable)}`;   // a charted run is scored by the words it met
     if (payout && payout.finalXp != null) shown.title = (shown.title || 'the tea party') + ` · +${Math.round(payout.finalXp)} xp` + (payout.sparksEarned ? ` · ${payout.sparksEarned} sparks` : '');
     const pick = await hud.showEnd(shown, { beside: true });
     if (S.disposed) return;
