@@ -433,10 +433,21 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
   (the whip). `start()` clears the override; the boot installs the whip after `start()`.
 - `w.kart.emiModel()`, `w.kart.emiReady(cb)`, `w.kart.setFace(i)` are the kart's contract for the run's EMI; every call
   is guarded for null (the stage carries its own clone with its own glass material, so the two faces never fight).
-- The stage camera follows the **Camera aspect rule** above (base 42 at 16:9, its own 86 cap), and skips
-  `setViewOffset` entirely under `(max-width: 720px)`: menu.css collapses to one column and hides `.rm-stage`
-  there, so there is no right-hand column to park her beside and the offset would only shove her off the edge.
-  The canvas keeps rendering behind the single column, where she reads as the backdrop.
+- The stage camera follows the **Camera aspect rule** above (base 42 at 16:9, its own 86 cap). Two columns
+  park her right of the menu with a horizontal `setViewOffset`, exactly as they always did.
+- **THE BAND**, one column only (`(max-width: 720px)`, where menu.css hides `.rm-stage`): there is no right
+  half to park her in on a phone, so the column hands her the middle of the screen instead. The title rides
+  the top, the verbs ride the bottom (`.rm-list { margin-top: auto }`), and `measureBand()` gives the strip
+  left between them to `stage.setBand({ top, bottom })` in css pixels; an open panel gives the room under it
+  instead, and null (no menu on screen, a strip under `BAND_MIN` 150, or a column scrolling past the bottom)
+  keeps the centred framing the stage always had. `applyView()` spends ONE `setViewOffset` on it, reading a
+  window of a `zoom` times bigger virtual frame, so the same call shifts AND magnifies: the silhouette (her
+  antenna down to the near foot of the saucer, both projected through the live camera) fills `BAND_FILL`
+  0.62 of the band with her eye line `BAND_EYE` 0.58 down it, the house camera law, clamped so the antenna
+  never crosses the title and the saucer never crosses the verbs. `setMode(m)` with anything but `'menu'`
+  drops the band, so race/intro.js drives the camera on a clean frame. The menu sets `--rm-scrim-t` /
+  `--rm-scrim-b` to the band's complement and `is-band` on `.rm-root`: menu.css draws those two scrims
+  instead of its one sheet, so no dark plate and no verb ever lies over her.
 - Options persist under the single localStorage key `race.options` (`pixel, music, sfx, motion, seed, seedValue`), not in
   `engine/settings.js`. Precedence for the block: `?pixel` > `race.options.pixel` > host `settings.pixel` > `PIXEL_DEFAULT`.
   The seed rule (daily / random / custom) sets `settings.seedLock`, which `again` honours; a change in the menu calls `reseed`.

@@ -6,7 +6,10 @@
  * PHONE: the column scrolls itself rather than spilling past #race-root's overflow:hidden (a landscape
  * 844x390 used to lose the top and bottom verbs with no way to reach them), it keeps clear of the notch
  * through env(safe-area-inset-*), a short-viewport rule packs the seven verbs into 390 px, and
- * @media (pointer: coarse) puts every verb, value arrow and roster arrow on a 44 px target. */
+ * @media (pointer: coarse) puts every verb, value arrow and roster arrow on a 44 px target.
+ * One column also cuts the screen into three: the title at the top, the verbs at the bottom, and THE
+ * BAND between them, which is EMI's and nothing else's (race/menu.js measures it, aims the stage
+ * camera inside it and hands back the two scrim heights). */
 
 #race-root .rm-root {
   position: fixed; inset: 0; z-index: 25;
@@ -152,14 +155,42 @@
 @keyframes rmIn { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
 @keyframes rmBounce { 0% { transform: translateX(4px) scale(1); } 35% { transform: translateX(4px) scale(0.96); } 100% { transform: translateX(4px) scale(1); } }
 
-/* portrait phones: one column, the stage folds away, the notch insets stay on */
+/* portrait phones: one column, the stage folds away, the notch insets stay on.
+   THE BAND. There is no right half to park EMI in on a phone, so the column hands her the middle of
+   the screen instead: the title block rides the top under the notch, the verbs ride the bottom above
+   the home bar, and the strip left between them is hers. race/menu.js measures that strip, aims the
+   stage camera inside it, and sets --rm-scrim-t / --rm-scrim-b to the two heights left over, so the
+   dark that carries the words stops where she starts. With `is-band` off (no strip worth the
+   trouble, or the column is scrolling past the bottom) the one sheet below stands, as before. */
 @media (max-width: 720px) {
   #race-root .rm-root { grid-template-columns: 1fr; }
   #race-root .rm-col {
+    justify-content: flex-start;
     padding: calc(4vh + var(--rm-sa-t)) calc(22px + var(--rm-sa-r)) calc(4vh + var(--rm-sa-b)) calc(22px + var(--rm-sa-l));
     background: linear-gradient(180deg, rgba(18, 11, 36, 0.94) 0%, rgba(18, 11, 36, 0.86) 70%, rgba(18, 11, 36, 0) 100%);
   }
+  /* the verbs go to the bottom. A column too tall to fit eats the auto margin and scrolls, top first. */
+  #race-root .rm-list { margin-top: auto; }
+  #race-root .rm-root.is-band .rm-col { position: relative; z-index: 1; background: none; }
+  #race-root .rm-root.is-band::before, #race-root .rm-root.is-band::after {
+    content: ''; position: absolute; left: 0; right: 0; z-index: 0; pointer-events: none;
+  }
+  /* the fade is a fixed 64 px at the band's edge, never a percentage: a tall scrim (a panel open
+     above her) still has to be opaque under the words all the way down to that edge. */
+  #race-root .rm-root.is-band::before {
+    top: 0; height: var(--rm-scrim-t, 0px);
+    background: linear-gradient(0deg, rgba(18, 11, 36, 0) 0px, rgba(18, 11, 36, 0.9) 64px, rgba(18, 11, 36, 0.94) 100%);
+  }
+  #race-root .rm-root.is-band::after {
+    bottom: 0; height: var(--rm-scrim-b, 0px);
+    background: linear-gradient(180deg, rgba(18, 11, 36, 0) 0px, rgba(18, 11, 36, 0.9) 64px, rgba(18, 11, 36, 0.94) 100%);
+  }
   #race-root .rm-stage { display: none; }
+}
+/* the wordmark is at the top of the screen now, where the run's `sound` and `ii` pills live: under
+   about 380 px the two would touch, so the title takes two lines the way the desktop one does. */
+@media (max-width: 380px) {
+  #race-root .rm-title { max-width: 62%; }
 }
 
 /* Law VI: nobody is held by a transition. System preference or the menu's own switch. */
