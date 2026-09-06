@@ -1,20 +1,29 @@
 /* ============================================================================
  * raceBoot.js - boots The Caucus Race page. Implements CONTRACT.md
- * "race/run.js + raceBoot.js + race.html (PR 5, integration)".
+ * "race/run.js + raceBoot.js + race.html (PR 5, integration)" and the
+ * "race/menu.js + race/intro.js" section (the front door).
  *
  * Order: capability detect -> quality tier -> bridge handlers -> announceReady
  * -> wait for `init` (+ `manifest`, `favorites`) with a 4 s timeout -> hostMedia
- * -> createRace -> start on the first key / pointer / gamepad press.
+ * -> createRace + createMenu -> the splash is a 1 s title flash (it covers the
+ * module import, the world build and the glb fetch, and hosts the wait note
+ * and boot errors) -> the MENU is the resting state -> `race` plays the intro
+ * on the menu stage -> the run starts under the camera whip. `surface` from
+ * the menu is the same exit the End screen takes.
  *
  * Host messages owned here: init, manifest, favorites, ping, exit-request,
  * fullscreen (run.js owns pause + payout-result). Sent here: pong, boot-error,
- * fullscreen-set, exit + exit-done on a host exit-request.
+ * fullscreen-set, exit + exit-done on a host exit-request or a menu surface.
  *
  * STANDALONE DEV MODE (no WebView2): `bridge.isHosted` is false, so `init` is
  * synthesised (masterVolume 60, reducedMotion from matchMedia, empty manifest)
  * and every would-be host message is logged to the console with a
- * `[race->host]` prefix. `?autostart=1` skips the splash; `?pixel=N` (0 = off)
- * overrides the pixel look, as does `settings.pixel` from the host init.
+ * `[race->host]` prefix. Query switches: `?autostart=1` skips the menu AND the
+ * intro and boots straight into the run (headless checks depend on it);
+ * `?intro=0` keeps the menu and skips the intro; `?scene=intro` boots straight
+ * into the intro and `?hold=ms` freezes it at that intro time (screenshots);
+ * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
+ * the host init.
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
@@ -22,7 +31,7 @@ import { detectMode } from './shared/capability.js';
 import { setQuality } from './shared/quality.js';
 import { createHostMediaSource } from './hostMedia.js';
 
-const INIT_TIMEOUT_MS = 4000;
+const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000;
 const params = new URLSearchParams(location.search);
 const hosted = bridge.isHosted;
 const host = hosted ? bridge : {
@@ -33,10 +42,13 @@ const host = hosted ? bridge : {
 };
 
 const root = document.getElementById('race-root');
+const hudRoot = document.querySelector('#race-root .race-hud');
 const splash = document.getElementById('race-splash');
 const waitEl = document.getElementById('race-wait');
 const media = createHostMediaSource();
-let initMsg = null, haveManifest = false, race = null, booted = false, started = false, exiting = false;
+const rollSeed = () => (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+let initMsg = null, haveManifest = false, race = null, menu = null, booted = false, started = false, exiting = false;
+let settings = {}, seed = 0;
 
 const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
 function fail(err) {
@@ -70,13 +82,16 @@ bridge.on('manifest', (m) => { try { media.setManifest(m); } catch (e) { host.lo
 bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } catch (e) { host.log('favorites: ' + e); } });
 bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
 bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
-bridge.on('exit-request', () => {
+bridge.on('exit-request', surface);
+/** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes through run.js). */
+function surface() {
   if (exiting) return;
   exiting = true;
+  try { if (menu) menu.dispose(); } catch (e) { host.log('menu dispose: ' + e); }
   try { if (race) race.dispose(); } catch (e) { host.log('exit dispose: ' + e); }
   host.send({ type: 'exit' });
   host.send({ type: 'exit-done' });
-});
+}
 
 function synthInit() {
   return {
@@ -93,37 +108,74 @@ function maybeBoot() {
 async function boot() {
   if (booted) return;
   booted = true;
+  const t0 = performance.now();
   try {
-    const settings = { ...((initMsg && initMsg.settings) || {}) };
+    const [{ createRace }, { createMenu, loadOptions, seedFromOptions, wantsReducedMotion }] = await Promise.all([import('./race/run.js'), import('./race/menu.js')]);
+    const opts = loadOptions();
+    settings = { ...((initMsg && initMsg.settings) || {}) };
+    if (opts.pixel !== undefined) settings.pixel = opts.pixel;
     if (params.has('pixel') && params.get('pixel') !== '') settings.pixel = Number(params.get('pixel'));
-    const seed = (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0;
+    settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
+    settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // for the audio pass; audio.js reads masterVolume today
+    settings.seedLock = seedFromOptions(opts);
+    seed = settings.seedLock != null ? settings.seedLock : rollSeed();
     note('the road is drawing');
-    const { createRace } = await import('./race/run.js');
     race = createRace({ root, bridge: host, media, settings, seed });
     note('');
-    host.log(`race booted: seed ${seed}, tier ${mode.tier}, hosted ${hosted}, manifest ${haveManifest}`);
-    if (params.get('autostart') === '1') startRace();
+    host.log(`race booted: seed ${seed} (${opts.seed}), tier ${mode.tier}, hosted ${hosted}, manifest ${haveManifest}`);
+    if (params.get('autostart') === '1') { startRun(false); return; }
+    if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
+    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log });
+    menu.onPick((id) => { if (id === 'race') startRun(true); else if (id === 'surface') surface(); });
+    menu.seedCheck = () => {   // the menu may have changed the seed rule: rebuild the world once, before the intro
+      const lock = seedFromOptions(menu.options);
+      if (lock === settings.seedLock) return;
+      settings.seedLock = lock; seed = lock != null ? lock : rollSeed();
+      race.reseed(seed);
+      host.log(`race reseeded: ${seed} (${menu.options.seed})`);
+    };
+    race.setStage(menu.stage);
+    if (params.get('scene') === 'intro') { startRun(true); return; }
+    setTimeout(() => { hideSplash(); menu.show(); }, Math.max(0, SPLASH_MS - (performance.now() - t0)));
   } catch (err) {
     fail(err);
   }
 }
 
-function startRace() {
-  if (started || !race) return;
-  started = true;
+function hideSplash() {
   splash.classList.add('is-off');
   setTimeout(() => { splash.hidden = true; }, 600);
-  race.start();
 }
-// "press any key": keyboard, pointer, or a gamepad button (polled while the splash is up)
-window.addEventListener('keydown', (e) => { if (!e.repeat && race && !started) startRace(); });
-splash.addEventListener('pointerdown', () => { if (race && !started) startRace(); });
-(function pollPad() {
-  if (started) return;
-  const pads = navigator.getGamepads ? navigator.getGamepads() : null;
-  if (pads && race) for (const g of pads) if (g && g.buttons.some((b) => b && b.pressed)) { startRace(); return; }
-  requestAnimationFrame(pollPad);
-})();
+/** race: the intro on the menu stage, then the run under the camera whip. autostart / intro=0 go straight to the run. */
+async function startRun(withIntro) {
+  if (started || !race) return;
+  started = true;
+  hideSplash();
+  try {
+    if (menu) { menu.hide(); menu.seedCheck(); }
+    if (menu && withIntro && params.get('intro') !== '0') {
+      const { createIntro, cameraWhip } = await import('./race/intro.js');
+      const reducedMotion = menu.options.motion === 'on' || (menu.options.motion === 'system' && settings.reducedMotion);
+      const intro = createIntro({ stage: menu.stage.live, hud: race.hud, audio: race.audio, reducedMotion, log: host.log });
+      const hold = Number(params.get('hold')) / 1000;   // screenshot aid: freeze the intro at that intro time
+      race.setStage(hold > 0 ? { update(dt) { if (intro.time < hold) intro.update(dt); }, render: intro.render } : intro);
+      await intro.play();
+      if (exiting) return;
+      race.setStage(null);
+      intro.dispose();
+      if (hudRoot) hudRoot.classList.remove('is-lobby');
+      race.start();
+      race.setCameraOverride(cameraWhip(0.8));
+    } else {
+      race.setStage(null);
+      if (hudRoot) hudRoot.classList.remove('is-lobby');
+      race.start();
+    }
+  } catch (err) {
+    host.log('start: ' + ((err && err.stack) || err));
+    try { race.setStage(null); race.start(); } catch (e) { fail(e); }
+  }
+}
 
 // ---- go ----
 bridge.announceReady();
