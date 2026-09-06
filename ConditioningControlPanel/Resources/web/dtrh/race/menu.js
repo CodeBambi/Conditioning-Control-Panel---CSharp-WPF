@@ -3,12 +3,14 @@
  *
  *   createMenu({ root, renderer, pixel, audio, settings, log }) ->
  *     { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose() }, dispose() }
- *   onPick yields 'race' | 'track' | 'clear' | 'surface'; setTrack(state | null) drives the track plate
- *   (CHART.md: the host's track-progress and the chart that lands).
+ *   onPick yields 'race' | 'track' | 'clear' | 'story' | 'surface'; setTrack(state | null) drives the
+ *   track plate (CHART.md: the host's track-progress and the chart that lands). refreshView() parks
+ *   the stage where the column would park it even while the menu is hidden (race/cards.js borrows it).
  *
  * Two halves. LEFT is a DOM column (menu.css, .rm-*): the title, the tagline,
- * four verbs (race / options / how to drive / surface), options opening in
- * place, a key card. RIGHT is the stage: a second THREE.Scene drawn through
+ * the verbs (race / load a track / just the road / options / how to drive /
+ * the story / surface), options and the key card opening in place. `the story`
+ * replays the four introduction cards of race/cards.js. RIGHT is the stage: a second THREE.Scene drawn through
  * the race's own renderer + pixelizer (no second canvas) by a menu camera
  * whose view offset parks EMI in the right part of the frame (the boot puts
  * `is-lobby` on .race-hud so the run's chrome stays out of it). She STANDS on a
@@ -315,7 +317,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   // ---- the verbs. `track` only under a host (the file dialog is its), `clear` only once a file is in ----
   const canTrack = !!settings.trackPick;
-  const VERBS = [['race', 'race'], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['how', 'how to drive'], ['surface', 'surface']];
+  const VERBS = [['race', 'race'], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
     b.addEventListener('click', () => { idx.main = i; act('press'); });
@@ -360,7 +362,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   }
 
   // ---- navigation: one focus index per panel, every input path lands on act() ----
-  let panel = 'main', shown = false, disposed = false;
+  let panel = 'main', shown = false, disposed = false, viewHeld = false;
   const idx = { main: 0, options: 0 };
   function open(p) { panel = p; list.hidden = p !== 'main'; optPanel.hidden = p !== 'options'; howPanel.hidden = p !== 'how'; if (p === 'options') idx.options = 0; refresh(); if (p !== 'options') seedIn.blur(); }
   function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); refresh(); }
@@ -406,7 +408,10 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   function onResize() {
     const w = root.clientWidth || window.innerWidth, h = root.clientHeight || window.innerHeight;
     stage.resize(w, h);
-    stage.setViewFraction(shown ? ((col.offsetWidth || w * 0.38) / w + 1) / 2 + 0.03 : 0.5);   // a hair right of the visible centre: room for the cup
+    // a hair right of the visible centre: room for the cup. `viewHeld` keeps that framing while the
+    // menu is hidden but something else owns the same column (race/cards.js), so a late resize does
+    // not walk her back to the middle of the frame.
+    stage.setViewFraction((shown || viewHeld) ? ((col.offsetWidth || w * 0.38) / w + 1) / 2 + 0.03 : 0.5);
   }
   const onPointer = (e) => { if (shown && e.clientX > window.innerWidth * 0.5) stage.emi.peek(); };
   window.addEventListener('keydown', onKey);
@@ -418,8 +423,12 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     options, stage: { update(dt) { if (shown) pollPad(dt); stage.update(dt); }, render: stage.render, dispose: stage.dispose, live: stage },
     onPick(cb) { if (typeof cb === 'function') picks.push(cb); },
     setTrack, get track() { return trackState; },
-    show() { shown = true; layer.hidden = false; stage.setMode('menu'); open('main'); onResize(); hit(layer, 'is-in'); },
+    show() { shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu'); open('main'); onResize(); hit(layer, 'is-in'); },
     hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); },
+    /** Park the stage the way the column parks it, with the menu hidden: race/cards.js uses the same
+     *  layout, so hide() sending her back to the middle of the frame would only be a jump and a jump
+     *  back. The hold survives a resize; show() takes it off again. */
+    refreshView() { viewHeld = true; onResize(); },
     refresh,
     dispose() {
       if (disposed) return;
