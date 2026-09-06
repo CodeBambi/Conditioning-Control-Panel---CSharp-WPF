@@ -161,7 +161,15 @@ Items: `sugar_rush` (boost), `tea_time` (slow-mo 4 s, world slows, kart does not
 `parasol` (next effect pop is a treat instead), `mirror` (Hall of Mirrors flip 6 s: canvas flips,
 input does not), `spring` (instant ramp), `pocket_watch` (freeze the combo timer 10 s),
 `rabbit_foot` (jackpot chance up). `roll(position)` biases toward catch-up items when the
-multiplier is low (position-aware, Mario Kart style).
+multiplier is low (position-aware, Mario Kart style). `position` is a multiplier number or
+`{ mult }`; omitted, it reads `score.state.mult`. Extra options: `rng` (seeded, Law V) and
+`autoUseSec` (default 1.5, 0 = never auto-use). The cube rolls 0.9 s then arms.
+Items only touch `kart.applyBoost` and `bubbles.rain`; everything else is an event the run brain
+must handle: `{type:'itemRoll'|'itemArm'|'itemUse'|'itemEnd', id}`, `{type:'timeScale', value, sec}`
+(tea_time), `{type:'magnet', sec}`, `{type:'multBoost', mult, sec}` (lucky_star),
+`{type:'parasol', armed:true}` (run brain owns the flag: next effect pop scores as a treat, no
+payload), `{type:'flip', sec}` (mirror), `{type:'jump', vh}` (spring), `{type:'comboFreeze', sec}`
+(pocket_watch), `{type:'jackpotBias', mult, sec}` (rabbit_foot).
 
 ### `race/hud.js` + `race/race.css` (PR 4)
 ```js
