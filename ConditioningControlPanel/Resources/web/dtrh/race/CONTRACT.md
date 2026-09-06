@@ -326,9 +326,9 @@ As built (PR 5 reality notes):
   (55%) of the width steers by horizontal drag from the touch-down point (`STEER_DEAD_PX` 6 dead,
   `STEER_LOCK_PX` 72 to full lock, zero on release, a ring-and-dot thumb pad while held); the rest of the
   width taps (under `TAP_MS` 180 and `TAP_PX` 12 of travel) for one jump press and holds for drift.
-  Accel is never touched: nothing pressed is cruise, and there is no brake pedal on glass. The pause /
-  mute / use buttons that hang off the same layer are the sibling pass. Pointer Events only, never
-  TouchEvent.
+  Accel is never touched: nothing pressed is cruise, and there is no brake pedal on glass. Three buttons
+  fire existing actions through `input.onAction`: pause (`'brake'`), mute (`'mute'`) and a use button
+  (`'item'`) that only appears while `.rh-item` carries `is-held`. Pointer Events only, never TouchEvent.
 - Space (pad B) is the jump: `read().jump` is true for exactly the frame of a fresh press, never on hold,
   and `kart.stepJump` turns it into 1.1 m of real height (`state.h`, so the pop box goes up with it).
   A press within 4 m of a ramp lip, or inside 0.12 s of one firing, boosts that launch by 1.3 and hands

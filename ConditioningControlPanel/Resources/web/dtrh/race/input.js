@@ -7,7 +7,7 @@
  * Gamepad (navigator.getGamepads, standard map): left stick steer, RT accel,
  * LT brake, A drift, B jump, X item, Start brake.
  * Touch (race/touch.js, only on a touchable page): the left half drags the wheel,
- * the right half taps to jump and holds to drift.
+ * the right half taps to jump and holds to drift, plus pause / mute / use buttons.
  * `createInput({ root })` needs the race root or the touch layer is never built.
  *
  *   read() -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool, jump:bool }
@@ -75,7 +75,7 @@ export function createInput({ target = window, root = null } = {}) {
   const fire = (name) => { for (const cb of acts) { try { cb(name); } catch (e) { /* a listener never breaks the wheel */ } } };
 
   /** The third source. null on a mouse desktop: not one node is built there. */
-  const touch = createTouch({ root });
+  const touch = createTouch({ root, fire: (name) => fire(name) });
 
   function onKey(e) {
     if (disposed || e.altKey || e.metaKey || e.ctrlKey) return;

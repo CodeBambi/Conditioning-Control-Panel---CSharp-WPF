@@ -124,14 +124,18 @@ const settle = (input, ms = 800) => {
 /* ---- 3. the layer it does build ----------------------------------------- */
 const built = (() => {
   const { root, hud, slot } = makeRoot();
-  const t = createTouch({ root, win: makeWin({ coarse: true }), doc });
-  return { root, hud, slot, t };
+  const acts = [];
+  const t = createTouch({ root, win: makeWin({ coarse: true }), doc, fire: (n) => acts.push(n) });
+  return { root, hud, slot, acts, t };
 })();
 {
   const { hud, t } = built;
   ok(!!t && t.el && t.el.classList.contains('rh-touch'), 'a touchable page gets the .rh-touch layer');
   ok(hud.children.some((c) => c === t.el), 'built inside .race-hud, so it inherits the safe insets');
   ok(!!t.el.querySelector('.rt-pad') && !!t.el.querySelector('.rt-ring') && !!t.el.querySelector('.rt-dot'), 'with a thumb pad: a ring and a dot');
+  const btns = t.el.children.filter((c) => c._cls.has('rt-btn'));
+  ok(btns.length === 3, 'and three buttons: pause, mute, use');
+  ok(btns.every((b) => b.tagName === 'BUTTON' && b.attrs['aria-label']), 'every button is a real <button> with a label');
 }
 
 /* ---- 4. steering: the left 55% ------------------------------------------ */
@@ -198,6 +202,29 @@ const built = (() => {
   ok(f.steer === 0 && f.drift === false && f.jump === false, 'flush() drops everything the thumbs were holding');
 }
 
+/* ---- 7. the buttons and the item gate ----------------------------------- */
+{
+  const { t, slot, acts } = built;
+  const byLabel = (l) => t.el.children.find((c) => c.attrs['aria-label'] === l);
+  acts.length = 0;
+  byLabel('brake').fire('pointerdown', { pointerId: 20 });
+  byLabel('mute').fire('pointerdown', { pointerId: 21 });
+  byLabel('use item').fire('pointerdown', { pointerId: 22 });
+  ok(acts.join(',') === 'brake,mute,item', 'the three buttons fire the actions input.js already routes');
+
+  const use = byLabel('use item');
+  ok(!use.classList.contains('is-on'), 'the use button is hidden while the slot is empty');
+  slot.classList.add('is-held');
+  ok(use.classList.contains('is-on'), 'and appears the moment hud.js marks the slot is-held');
+  slot.classList.remove('is-held');
+  ok(!use.classList.contains('is-on'), 'and goes again when the item is spent');
+
+  // a press that lands on a button must not also start a turn on the layer under it
+  t.flush();
+  t.el.fire('pointerdown', { pointerId: 23, clientX: 40, clientY: 40, target: byLabel('brake') });
+  ok(t.read().steer === 0 && !t.el.classList.contains('is-steering'), 'a press on a button never doubles as a steer');
+}
+
 /* ---- 8. dispose leaves nothing behind ----------------------------------- */
 {
   const { root, hud, slot } = makeRoot();
@@ -217,7 +244,9 @@ const built = (() => {
   globalThis.window = win;                       // createTouch's default win/doc
   const { root } = makeRoot();
   const target = new Elem('div');                // stands in for the key target
+  const seen = [];
   const input = createInput({ target, root });
+  input.onAction((a) => seen.push(a));
   const L = input.touchEl;
   ok(!!L, 'createInput({ root }) builds the touch layer on a touchable page');
 
@@ -254,6 +283,14 @@ const built = (() => {
   L.fire('pointerup', { pointerId: 3, clientX: 700, clientY: 300 });
   ok(input.read().jump === true, 'a tap raises read().jump');
   ok(input.read().jump === false, 'for exactly one frame, like Space');
+
+  // the buttons reach the same onAction run.js and audio.js already listen on
+  const btn = (l) => L.children.find((c) => c.attrs['aria-label'] === l);
+  seen.length = 0;
+  btn('brake').fire('pointerdown', { pointerId: 30 });
+  btn('use item').fire('pointerdown', { pointerId: 31 });
+  btn('mute').fire('pointerdown', { pointerId: 32 });
+  ok(seen.join(',') === 'brake,item,mute', 'pause / use / mute arrive as the existing brake / item / mute actions');
 
   // flush() and dispose() reach the touch source too
   L.fire('pointerdown', { pointerId: 4, clientX: 100, clientY: 300 });
