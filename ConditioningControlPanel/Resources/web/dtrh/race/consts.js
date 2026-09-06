@@ -51,6 +51,32 @@ export const TREATS_ONLY_SEC = 45;
 /** The cup + EMI rig scale (the pitch demo cup read tiny at the chase camera). */
 export const KART_SCALE = 1.35;
 
+// ---- the road profile and what the kerb holds -------------------------------------------
+// Metres from the centre line, and the x the road ribbon in rooms.js is actually drawn to: the
+// asphalt runs out to KERB_INNER_W, then the kerb face steps KERB up and the chequered kerb top
+// carries on to KERB_OUTER_W. ROAD_HALF_W above is the track-space lateral EXTENT (bubbles, audio
+// pan, wall props), not the edge of the asphalt: it sits 0.325 m out on the kerb top.
+/** Outer edge of the kerb top. */
+export const KERB_OUTER_W = 3.5;
+/** The kerb face: the last x that is still asphalt. */
+export const KERB_INNER_W = 2.875;
+
+/** The saucer's outer radius in rig units (race/emi.js builds the dish to it, race/menu.js keeps
+ *  its own podium copy). Shrunk from 0.95 on 2026-09-06: the old dish read too wide on the road. */
+export const SAUCER_R = 0.8;
+/** The dish's radius once the rig is scaled up onto the road: 0.8 * 1.35 = 1.08 m. */
+export const SAUCER_R_ROAD = SAUCER_R * KART_SCALE;
+/** Metres of asphalt kept under the rim at the limit, so a float wobble never pokes the kerb face. */
+export const KERB_KISS = 0.02;
+/** How far the kart CENTRE may travel. THE KERB HOLDS THE SAUCER, NOT THE CUP: steering clamped
+ *  the centre to ROAD_HALF_W, which hung the whole 1.28 m dish over the kerb and let the kerb face
+ *  cut straight through it. The rim now stops on the kerb line instead.
+ *  2.875 - 1.08 - 0.02 = 1.775 m. */
+export const KART_X_MAX = KERB_INNER_W - SAUCER_R_ROAD - KERB_KISS;
+/** The widest a bubble may sit and still be poppable with the kart parked against the kerb:
+ *  KART_X_MAX plus 70 percent of the pop box's half width, 1.775 + 0.805 = 2.58 m. */
+export const LANE_X_MAX = KART_X_MAX + POP_HIT_X * 0.7;
+
 /** Camera seat behind the cup, track space offsets: low and close, the road fills the frame. */
 export const CAM_BACK = 5.8;
 export const CAM_UP = 2.45;

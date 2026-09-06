@@ -22,7 +22,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { makeRng, CAM_BACK } from './consts.js';
+import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W } from './consts.js';
 import { biomeById } from '../game/biomes.js';
 import { createRoomProps, pixelTex } from './roomProps.js';
 import { propPack, packGeo, geoSize } from './propPack.js';
@@ -112,8 +112,11 @@ function wedgeGeometry(halfW, len, hgt) {
 // is a tint mask, not transparency: 0.5 = multiply by the vertex colour (room tint),
 // 1.0 = keep the texel's own colour (white chequers, the cream centre dash).
 const TEXEL = 16, ROAD_W_PX = 112, ROAD_L_PX = 32, KERB_PX = 10, KERB_H = 0.16;
-const KERB_OUT = ROAD_W_PX / TEXEL / 2;            // 3.5 m: outer edge of the kerb top
-const KERB_IN = KERB_OUT - KERB_PX / TEXEL;        // 2.875 m: the kerb face
+// The ribbon's two x live in consts.js now, so kart.js can hold the saucer to the same asphalt
+// this draws. They are still exactly the texel maths they were: ROAD_W_PX / TEXEL / 2, and that
+// less KERB_PX / TEXEL. Move one and the other has to move with it.
+const KERB_OUT = KERB_OUTER_W;                     // 3.5 m: outer edge of the kerb top
+const KERB_IN = KERB_INNER_W;                      // 2.875 m: the kerb face
 function roadSheet(rng) {
   return pixelTex(ROAD_W_PX, ROAD_L_PX, (c, w, h) => {
     // every put() clears first: stacked half-alpha fills would composite to 0.75 and lose the mask

@@ -14,7 +14,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { ROAD_HALF_W, CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, TREATS_ONLY_SEC } from './consts.js';
+import { CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, LANE_X_MAX, TREATS_ONLY_SEC } from './consts.js';
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
 import { CRISP_LAYER } from './pixel.js';
 
@@ -142,7 +142,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const k = KIND_BY_ID[kindId] || KIND_BY_ID.treat;
     const s = takeSlot();
     s.kindId = k.id; s.placement = placement;
-    s.d = layout.wrap(d); s.x = clamp(x, -ROAD_HALF_W + 0.4, ROAD_HALF_W - 0.4); s.x0 = s.x;
+    s.d = layout.wrap(d); s.x = clamp(x, -LANE_X_MAX, LANE_X_MAX); s.x0 = s.x;
     s.h = h; s.baseH = h; s.phase = Math.random() * Math.PI * 2; s.age = 0;
     s.size = sizeOf(k.id); s.scale = placement === 'spawn' ? 0 : 1; s.popT = -1; s.missed = false; s.eventId = null;
     s.mat.map = texOf[k.id]; s.mat.color.set(k.tint); s.mat.opacity = 1; s.mat.needsUpdate = true;
@@ -205,10 +205,10 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
 
   function spawnAhead(kartD, n = 1) {
-    for (let i = 0; i < n; i++) place(roll('spawn'), 'spawn', kartD + rand(35, 60), rand(-ROAD_HALF_W + 0.6, ROAD_HALF_W - 0.6), LANE_H);
+    for (let i = 0; i < n; i++) place(roll('spawn'), 'spawn', kartD + rand(35, 60), rand(-LANE_X_MAX, LANE_X_MAX), LANE_H);
   }
   function rain(kartD, n = 1) {
-    for (let i = 0; i < n; i++) place(roll('rain'), 'rain', kartD + rand(18, 44), rand(-ROAD_HALF_W + 0.6, ROAD_HALF_W - 0.6), CEILING_H);
+    for (let i = 0; i < n; i++) place(roll('rain'), 'rain', kartD + rand(18, 44), rand(-LANE_X_MAX, LANE_X_MAX), CEILING_H);
   }
   /** An explicit placement from a track cue (CHART.md): the run has already worked the depth out at
    *  the kart's speed, so nothing is rolled or gated by intensity here. Returns the slot id, -1 when
@@ -296,7 +296,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         else if (s.placement === 'spawn') {
           const a = Math.min(1, s.age / 0.45);
           s.scale = 1 - (1 - a) * (1 - a);
-          s.x = clamp(s.x0 + 0.55 * Math.sin(t * 1.7 + s.phase), -ROAD_HALF_W + 0.4, ROAD_HALF_W - 0.4);
+          s.x = clamp(s.x0 + 0.55 * Math.sin(t * 1.7 + s.phase), -LANE_X_MAX, LANE_X_MAX);
           s.h = LANE_H + bob;
         } else if (s.placement === 'rain') {
           if (s.age < RAIN_FALL) { const k = s.age / RAIN_FALL; s.h = CEILING_H - (CEILING_H - LANE_H) * k * k; }
