@@ -87,7 +87,7 @@ field.spawnAhead(kartD, n)              // 'spawn' placement: appear 35..60 m ah
 field.rain(kartD, n)                    // 'rain' placement: fall from the ceiling ahead of the kart
 field.update(dt, t, kart)               // kart = { d, x, h, speed }; runs motion + collision
 field.onPop(cb)                         // cb(popEvent)
-field.onMiss(cb)                        // cb(missEvent) when a bubble passes behind the kart unpopped (treats only)
+field.onMiss(cb)                        // cb({ id, points, d, x, h }) when a treat passes behind the kart unpopped
 field.setDensity(mult)
 field.dispose()
 ```
@@ -202,12 +202,31 @@ and gates which bubble kinds may appear. Treat pops go to score; effect pops cal
 through the `fire-payload` bridge message exactly like `chaosRun.js` does today. ESC = Brake
 (pause + end screen). Run end sends `run-ended` (below).
 
+As built (PR 5 reality notes):
+- `race/input.js` is the single reader of keyboard + gamepad: `createInput() -> { read(), onAction(cb), dispose() }`,
+  `read()` = `{ steer, accel, brake, drift }` with `accel` defaulting to 1 when nothing is pressed.
+- `bridge.isHosted` is a BOOLEAN export, not a function. `raceBoot.js` reads it to pick standalone dev mode
+  (synthesised `init`, every would-be host message logged as `[race->host]`).
+- `run.js` registers the `pause` and `payout-result` bridge handlers itself; `raceBoot.js` owns `init`,
+  `manifest`, `favorites`, `ping`, `exit-request`, `fullscreen`.
+- Only `video` pops go to the host (`fire-payload {kind:'video', strength 0..100, durationMult}`);
+  `payloadFx` never sends it. There is no `audio` bubble kind.
+- The first Tea Garden gate sits at d = 9 (mid gate chunk), so it crosses ~0.4 s after start: that crossing
+  shows the opening MARQUEE and never banks. Later Tea Garden gates bank only when the road score is > 0.
+- Magnet (the wand) is a known gap: the field's hit box is fixed at `POP_HIT_*` and exposes no widen API,
+  so `magnet` only flips a flag in the run brain. Wiring it needs a `field.setReach(mult)` in a later PR.
+- The mirror item flips the `<canvas>` only (`scaleX(-1)`); screen shake transforms the root, so the two
+  never fight over one `style.transform`.
+- `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart, score,
+  items) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
+- Extra `run-ended` fields: `nearMisses`, `personalBest`. `exit` is followed by `exit-done` once torn down.
+
 ## Host protocol (bridge.js, Protocol v1)
 
 Page -> host (`bridge.send(type, data)`): `ready` (announceReady), `heartbeat`, `pong`, `sfx {name, scale}`,
 `fire-payload {kind:'video'|'audio', strength, durationMult}`, `run-started {seed}`,
 `run-ended {score, banked, durationSec, bestCombo, popped, treats, effects, laps, seed}`,
-`boot-error {message}`, `report-bug {text}`, `fullscreen-set {on}`, `exit`.
+`boot-error {message}`, `report-bug {text}`, `fullscreen-set {on}`, `exit`, `exit-done`.
 
 Host -> page: `init {protocol, settings:{masterVolume, reducedMotion}, modId, modContent}`,
 `manifest {images:[{name,url}], videos, skipped, truncated}`, `favorites {names}`,
