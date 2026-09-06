@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using ConditioningControlPanel.Models.Race;
+using ConditioningControlPanel.Services.Race;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
 
@@ -42,15 +46,32 @@ internal static class CaucusHostService
     private static bool _disposing;
     private static bool _videoHooked;
 
+    // ---- track charts (CHART.md, PR c6) ----
+    private static TrackPlayer? _player;
+    private static DispatcherTimer? _trackClock;
+    private static CancellationTokenSource? _analysisCts;
+    private static string _trackName = "";
+    /// <summary>Throttle for track-progress: at most five posts a second, whatever the pass does.</summary>
+    private static DateTime _lastProgressUtc = DateTime.MinValue;
+    /// <summary>Bumped per pick so a superseded worker knows to keep quiet.</summary>
+    private static int _analysisGen;
+    /// <summary>Set by the `--race-track` dev arg: the file to drive the track handlers against.</summary>
+    private static string? _devTrackPath;
+    /// <summary>While the dev arg is active every track-* post is logged as JSON.</summary>
+    private static bool _devTrackLog;
+
     /// <summary>True while the race window is open.</summary>
     public static bool IsActive => _host != null;
 
     /// <summary>Open the race window (idempotent - refocuses if already open).</summary>
-    public static void Launch()
+    /// <param name="devTrackPath">The `--race-track` dev arg's file, or null in a normal launch.</param>
+    public static void Launch(string? devTrackPath = null)
     {
         if (_host != null) { _host.FocusWeb(); return; }
         try
         {
+            _devTrackPath = devTrackPath;
+            _devTrackLog = !string.IsNullOrEmpty(devTrackPath);
             // EMI Desk: the ring learns from every open, not just its own cards.
             try { App.EmiDesk?.NoteOpen("race"); } catch { }
 
@@ -117,6 +138,7 @@ internal static class CaucusHostService
             HookVideoEvents(true);
             StartHeartbeatWatch();
             _host.FocusWeb();
+            if (_devTrackLog) ArmDevTrackDrive();
             App.Logger?.Information("CaucusHostService: launched");
         }
         catch (Exception ex)
@@ -234,8 +256,25 @@ internal static class CaucusHostService
             case "fullscreen-set":   // page's Esc ladder / dock button: C# owns the borderless toggle
                 ApplyHostFullscreen((bool?)o["on"] ?? false);
                 break;
+            // ---- track charts: the page drives the file the run is charted from ----
+            case "track-pick":
+                PickTrack();
+                break;
+            case "track-play":
+                TrackPlay();
+                break;
+            case "track-pause":
+                TrackPause((bool?)o["on"] ?? false);
+                break;
+            case "track-stop":
+                StopTrack();
+                break;
+            case "track-cancel":
+                CancelAnalysis(postCancelled: true);
+                break;
             case "exit":       // page-initiated: it winds itself down, then exit-done
                 _exiting = true;
+                StopTrack();
                 ArmExitWatchdog();
                 break;
             case "exit-done":
@@ -279,6 +318,8 @@ internal static class CaucusHostService
     private static void OnRunEnded(JObject o)
     {
         _runActive = false;
+        // The file is the clock, so the end of the run is the end of the audio either way.
+        StopTrack();
         try
         {
             double score = Math.Max(0, (double?)o["score"] ?? 0);
@@ -488,6 +529,11 @@ internal static class CaucusHostService
             CancelExitWatchdog();
             StopHeartbeatWatch();
             HookVideoEvents(false);
+            StopTrack();
+            try { _player?.Dispose(); } catch { }
+            _player = null;
+            _devTrackPath = null;
+            _devTrackLog = false;
             try { _meta?.FlushSave(); } catch { }
             _runActive = false;
             try { _host?.Dispose(); } catch { }
@@ -497,6 +543,284 @@ internal static class CaucusHostService
             App.Logger?.Information("CaucusHostService: closed");
         }
         finally { _disposing = false; }
+    }
+
+    // ============================ track charts ============================
+    //
+    // CHART.md "Host protocol additions (PR c6)". The page asks for a file, the host charts it on
+    // a worker and answers with progress, one or two charts, a 250 ms clock and an ended note.
+    // Nothing about the audio ever leaves the machine: the chart carries timestamps and labels.
+
+    /// <summary>Every host to page track message goes through here: logged under the dev arg,
+    /// then marshalled onto the UI thread because the analysis runs on a worker.</summary>
+    private static void PostTrack(object msg, string? logAs = null)
+    {
+        if (_devTrackLog)
+        {
+            try
+            {
+                App.Logger?.Information("RaceHost track post: {Msg}",
+                    logAs ?? Newtonsoft.Json.JsonConvert.SerializeObject(msg));
+            }
+            catch { }
+        }
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        if (disp.CheckAccess()) { try { _host?.Post(msg); } catch { } }
+        else disp.BeginInvoke(() => { try { _host?.Post(msg); } catch { } });
+    }
+
+    /// <summary>track-progress, throttled to five posts a second so a fast pass cannot flood the
+    /// bridge. A forced post (a stage change, a cancel) always goes.</summary>
+    private static void PostProgress(string stage, double pct, string name, bool force = false)
+    {
+        var now = DateTime.UtcNow;
+        if (!force && (now - _lastProgressUtc).TotalMilliseconds < 200) return;
+        _lastProgressUtc = now;
+        PostTrack(new { type = "track-progress", stage, pct = Math.Clamp(pct, 0, 1), name });
+    }
+
+    /// <summary>track-chart. The chart itself goes out whole; the dev log only gets a summary,
+    /// since a full chart is thousands of lines of numbers.</summary>
+    private static void PostChart(TrackChart chart, bool partial)
+    {
+        int events = chart.Events?.Count ?? 0;
+        PostTrack(new { type = "track-chart", chart, partial },
+            "{ type: track-chart, partial: " + (partial ? "true" : "false") + ", events: " + events + " }");
+    }
+
+    /// <summary>track-pick: the file dialog on the UI thread. A cancelled dialog is not an error,
+    /// it is a cancelled progress post.</summary>
+    private static void PickTrack()
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        disp.BeginInvoke(() =>
+        {
+            try
+            {
+                var dlg = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = "Load a track",
+                    Filter = "Audio|*.mp3;*.wav;*.m4a;*.wma;*.flac;*.ogg|All files|*.*",
+                    CheckFileExists = true,
+                };
+                var owner = _host?.Window;
+                bool? ok = owner != null && owner.IsLoaded ? dlg.ShowDialog(owner) : dlg.ShowDialog();
+                if (ok != true) { PostProgress("cancelled", 0, "", force: true); return; }
+                BeginTrack(dlg.FileName);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("RaceHost.track-pick: {E}", ex.Message);
+                PostTrack(new { type = "track-error", message = ex.Message });
+            }
+        });
+    }
+
+    /// <summary>A pick landed: load it into the player right away so track-play can start it,
+    /// then chart it on a worker.</summary>
+    private static void BeginTrack(string path)
+    {
+        CancelAnalysis(postCancelled: false);
+        _trackName = Path.GetFileName(path);
+        _lastProgressUtc = DateTime.MinValue;
+        LoadTrackFile(path);
+
+        var cts = new CancellationTokenSource();
+        _analysisCts = cts;
+        int gen = ++_analysisGen;
+        string name = _trackName;
+        var ct = cts.Token;
+        _ = Task.Run(() => AnalyzeTrack(path, name, gen, ct, cts));
+    }
+
+    private static void LoadTrackFile(string path)
+    {
+        try
+        {
+            if (_player == null)
+            {
+                _player = new TrackPlayer();
+                _player.Ended += OnTrackEnded;
+            }
+            _player.Stop();
+            _player.Load(path);
+            StartTrackClock();
+            App.Logger?.Information("RaceHost: track loaded {Name} ({Dur:0.0}s)", _trackName, _player.DurationSec);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("RaceHost: track load failed: {E}", ex.Message);
+            PostTrack(new { type = "track-error", message = ex.Message });
+        }
+    }
+
+    /// <summary>The whole analysis, off the UI thread. Every call into the decoder, the analyzer,
+    /// the cache and the word spotter sits inside this one try: a file NAudio hates, a missing
+    /// Vosk model or a half-written cache entry becomes a track-error, never a crash.</summary>
+    private static void AnalyzeTrack(string path, string name, int gen, CancellationToken ct, CancellationTokenSource cts)
+    {
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            PostProgress("decode", 0, name, force: true);
+
+            string hash = TrackDecoder.HashFile(path);
+            var cached = TrackChartCache.TryLoad(hash);
+            // A cached chart is only worth reusing if its word pass is as good as the one we could
+            // run now: a "none" chart is charted again once a model has appeared.
+            if (cached != null && (cached.Analysis?.Words == "vosk-v1" || !TrackWordSpotter.ModelAvailable))
+            {
+                App.Logger?.Information("RaceHost: chart cache hit for {Name}", name);
+                PostChart(cached, partial: false);
+                return;
+            }
+
+            var pcm = TrackDecoder.Decode(path, new Progress<double>(v => PostProgress("decode", v, name)), ct);
+            ct.ThrowIfCancellationRequested();
+
+            var chart = TrackAnalyzer.Energy(pcm, new Progress<double>(v => PostProgress("energy", v, name)), ct);
+            ct.ThrowIfCancellationRequested();
+            chart.Analysis.Partial = true;
+            PostChart(chart, partial: true);
+
+            // The word pass is the slow one, which is why the page already has a playable chart.
+            var lexicon = TrackLexicon.Build();
+            var words = TrackWordSpotter.Spot(pcm, lexicon, new Progress<double>(v => PostProgress("words", v, name)), ct);
+            ct.ThrowIfCancellationRequested();
+            TrackChartWords.Apply(chart, words, lexicon);
+            chart.Analysis.Partial = false;
+            TrackChartCache.Save(chart);
+            PostChart(chart, partial: false);
+            App.Logger?.Information("RaceHost: charted {Name}: {Events} events", name, chart.Events?.Count ?? 0);
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer pick superseded this one: that pick owns the plate now, so say nothing.
+            if (_analysisGen == gen) PostProgress("cancelled", 0, "", force: true);
+            App.Logger?.Information("RaceHost: track analysis cancelled for {Name}", name);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("RaceHost: track analysis failed for {Name}: {E}", name, ex.Message);
+            PostTrack(new { type = "track-error", message = ex.Message });
+        }
+        finally
+        {
+            if (ReferenceEquals(_analysisCts, cts)) _analysisCts = null;
+            try { cts.Dispose(); } catch { }
+        }
+    }
+
+    /// <summary>Drop an analysis in flight. With nothing running there is no worker to answer, so
+    /// an explicit track-cancel is answered here.</summary>
+    private static void CancelAnalysis(bool postCancelled)
+    {
+        var cts = _analysisCts;
+        _analysisCts = null;
+        if (cts == null)
+        {
+            if (postCancelled) PostProgress("cancelled", 0, "", force: true);
+            return;
+        }
+        try { cts.Cancel(); }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.CancelAnalysis: {E}", ex.Message); }
+    }
+
+    /// <summary>track-play: the run started, so the file starts from its own zero.</summary>
+    private static void TrackPlay()
+    {
+        if (_player == null) return;
+        _player.RefreshVolume();
+        _player.Play();
+        StartTrackClock();
+        PostClock();
+    }
+
+    /// <summary>track-pause {on}: the Brake, a host pause and a video pop all land here.</summary>
+    private static void TrackPause(bool on)
+    {
+        if (_player == null) return;
+        if (on) _player.Pause(); else _player.Resume();
+        PostClock();
+    }
+
+    /// <summary>End of run, exit or teardown: the audio stops, the clock stops and any analysis
+    /// still grinding away is dropped.</summary>
+    private static void StopTrack()
+    {
+        StopTrackClock();
+        CancelAnalysis(postCancelled: false);
+        try { _player?.Stop(); }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.StopTrack: {E}", ex.Message); }
+    }
+
+    private static void OnTrackEnded()
+    {
+        StopTrackClock();
+        PostTrack(new { type = "track-ended" });
+        App.Logger?.Information("RaceHost: track ended");
+    }
+
+    /// <summary>The 250 ms clock the page integrates between. UI thread only.</summary>
+    private static void StartTrackClock()
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        if (_trackClock == null)
+        {
+            _trackClock = new DispatcherTimer(DispatcherPriority.Normal, disp)
+            {
+                Interval = TimeSpan.FromMilliseconds(250),
+            };
+            _trackClock.Tick += (_, _) => PostClock();
+        }
+        _trackClock.Start();
+    }
+
+    private static void StopTrackClock()
+    {
+        try { _trackClock?.Stop(); } catch { }
+    }
+
+    private static void PostClock()
+    {
+        var p = _player;
+        if (p == null) { StopTrackClock(); return; }
+        PostTrack(new
+        {
+            type = "track-clock",
+            t = Math.Round(p.PositionSec, 3),
+            playing = p.IsPlaying,
+            durationSec = Math.Round(p.DurationSec, 3),
+        });
+    }
+
+    /// <summary>The dev arg's drive: pick, play, pause at 5 s, resume at 8 s, stop at 12 s, with
+    /// every post logged. Posts queue inside the host until the page handshakes, so this exercises
+    /// the C# side on its own.</summary>
+    private static void ArmDevTrackDrive()
+    {
+        var path = _devTrackPath;
+        if (string.IsNullOrEmpty(path)) return;
+        App.Logger?.Information("RaceHost dev: --race-track {Path}", path);
+        DevAfter(2, () => { BeginTrack(path); TrackPlay(); });
+        DevAfter(7, () => TrackPause(true));
+        DevAfter(10, () => TrackPause(false));
+        DevAfter(14, StopTrack);
+    }
+
+    private static void DevAfter(double sec, Action act)
+    {
+        var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(sec) };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            try { act(); }
+            catch (Exception ex) { App.Logger?.Warning("RaceHost dev step: {E}", ex.Message); }
+        };
+        t.Start();
     }
 
     // ============================ settings reads ============================

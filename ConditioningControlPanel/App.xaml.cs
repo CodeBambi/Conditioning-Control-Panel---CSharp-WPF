@@ -2788,6 +2788,20 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Track charts (CHART.md PR c6), dev shortcut: `--race-track <file>` opens the race
+            // and drives the host's own track handlers against that file - pick, play, pause at
+            // 5s, resume at 8s, stop at 12s - logging every track-* post as JSON. Unrestricted
+            // like `--dtrh-m2test`: it is a debugging rig for the audio + analysis path, not a
+            // way into the game (the page it drives is the same one `--race` opens).
+            int raceTrackArg = Array.IndexOf(e.Args, "--race-track");
+            if (raceTrackArg >= 0)
+            {
+                if (raceTrackArg + 1 < e.Args.Length)
+                    Services.Chaos.CaucusHostService.Launch(e.Args[raceTrackArg + 1]);
+                else
+                    Logger?.Information("--race-track ignored: no file path after the arg");
+            }
+
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
             // window natively above main and ducks main out of the way at launch.
