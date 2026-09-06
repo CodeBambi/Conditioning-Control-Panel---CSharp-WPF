@@ -2742,6 +2742,40 @@ namespace ConditioningControlPanel
                 else Logger?.Information("--race ignored: {Reason}", raceGate.Reason);
             }
 
+            // `--race-chart <file>`: chart a hypno file from the command line - decode, the energy
+            // pass, the word pass when it is available, then write the chart to the cache and quit.
+            // The rig for eyeballing a chart's numbers without opening the race at all.
+            if (e.Args.Contains("--race-chart"))
+            {
+                var trackArg = Array.IndexOf(e.Args, "--race-chart") + 1;
+                var trackPath = trackArg > 0 && trackArg < e.Args.Length ? e.Args[trackArg] : "";
+                try
+                {
+                    var charting = Stopwatch.StartNew();
+                    var pcm = Services.Race.TrackDecoder.Decode(trackPath, null, CancellationToken.None);
+                    var chart = Services.Race.TrackAnalyzer.Energy(pcm, null, CancellationToken.None);
+                    try
+                    {
+                        var lexicon = Services.Race.TrackLexicon.Build();
+                        var words = Services.Race.TrackWordSpotter.Spot(pcm, lexicon, null, CancellationToken.None);
+                        Services.Race.TrackChartWords.Apply(chart, words, lexicon);
+                    }
+                    catch (Exception wordsEx)
+                    {
+                        Logger?.Information("race-chart: words pass unavailable ({Message})", wordsEx.Message);
+                    }
+                    Services.Race.TrackChartCache.Save(chart);
+                    var reloaded = Services.Race.TrackChartCache.TryLoad(chart.Source.Hash);
+                    var kinds = string.Join(", ", chart.Events.GroupBy(v => v.Kind).OrderBy(g => g.Key).Select(g => g.Key + " " + g.Count()));
+                    Logger?.Information("race-chart: {Name} {Duration:F1}s -> {Path} ({Acts} acts, {Events} events [{Kinds}], reload {Reload}) in {Ms} ms",
+                        chart.Source.Name, chart.Source.DurationSec, Services.Race.TrackChartCache.PathFor(chart.Source.Hash),
+                        chart.Acts.Count, chart.Events.Count, kinds, reloaded?.Events.Count ?? -1, charting.ElapsedMilliseconds);
+                }
+                catch (Exception ex) { Logger?.Error(ex, "race-chart failed for {Path}", trackPath); }
+                Shutdown();
+                return;
+            }
+
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
             // window natively above main and ducks main out of the way at launch.
