@@ -95,9 +95,12 @@ field.update(dt, t, kart)               // kart = { d, x, h, speed }; runs motio
 field.onPop(cb)                         // cb(popEvent)
 field.onMiss(cb)                        // cb({ id, points, d, x, h }) when a treat passes behind the kart unpopped
 field.setDensity(mult)
+field.spawnAt({ kindId, placement, d, x, h, eventId })   // PR c2: an explicit placement from a track cue; the slot id, or -1 when the pool is full
+field.setTracked(on)                    // PR c2: a track is loaded, so setDensity gates the CUE spawns and leaves the seeded lanes alone
 field.dispose()
 ```
-Pop event: `{ id, kind, payload, strength, points, placement, x, d, worldPos }`.
+Pop event: `{ id, kind, payload, strength, points, placement, x, d, eventId, worldPos }`.
+`eventId` is the chart event the bubble came from, or null; `onMiss` events carry it too.
 `kind` is `'treat'` or `'effect'`. `payload` is the `payloadFx` spec name (`flash`, `subliminal`,
 `overlay`, `glitch`, `bambiFreeze`, `gifCascade`, `video`, or `null` for treats) plus `overlayKind`
 where relevant (`spiral | braindrain | pink_filter`). `strength` is 0..1.
@@ -226,8 +229,15 @@ below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own sta
 ### `race/run.js` + `raceBoot.js` + `race.html` (PR 5, integration)
 ```js
 export function createRace({ root, bridge, media, settings, seed }) ->
-  { start(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera }
+  { start(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera,
+    setTrack(chart | null), replaceTrack(chart), trackClock(t, playing), trackEnded(), track }
 ```
+Track charts (PR c2, CHART.md): `setTrack` before `start()`; `replaceTrack` when the words pass lands
+on a live run; `trackClock` is the host's tick and `race.track` the CHART.md track object or null.
+With a track set, intensity follows the chart's energy curve (smoothed 2 s, floor 0.05), the random
+`spawnAhead` / `rain` timers stand down while `seedChunk` keeps dressing the road, every cue spawn
+goes in at `d = kart.d + kart.speed * max(dueIn + at, 0.25)`, gates and act changes take the act's
+room and name, and the run ends at `durationSec - 0.25`. Without one nothing changes.
 Composes everything: renderer, `createSpine`, `createTunnel(layout)` from `engine/tunnel.js`,
 `createFx` from `engine/fx.js`, `createRoomDresser`, `createBubbleField`, `createKart`,
 `createScore`, `createItems`, `createRaceHud`, `createPayloadFx` from `game/payloadFx.js`,
@@ -324,7 +334,22 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
 normalizeChart(json) -> chart | demoChart({ seed, durationSec }) -> chart | createScheduler(chart, { leadSec }) -> sched
 export const CHART_VERSION, STRUCTURE_WORDS, DROP_WORDS, EVENT_KINDS, ACT_KINDS, ACT_ROOM;
 ```
-Pure data: no three, no DOM, no clock, so it runs under node (`node race/smoke/chart-check.mjs`). The chart
+```js
+// race/track.js (PR c2): the loaded track's clock, energy and acts. No three, no DOM.
+createTrackState({ leadSec }) -> st
+st.setTrack(chart | null) -> track | null      // track = { chart, sched, t, playing, name, durationSec }
+st.replace(chart)                              // the words pass landing on a partial chart, clock kept
+st.clock(t, playing)                           // the host's 250 ms tick: the only thing that SETS the second
+st.step(dt) -> { t, intensity, act, actChanged, ended } | null   // one frame of real time between ticks
+st.due(kartD, kartSpeed) / st.taken(id) / st.stats() / st.summary() / st.end()
+st.track / st.act / st.intensity / st.triggerKinds / st.ended
+```
+```js
+// race/cues.js (PR c2): one chart event -> the cue run.js spends on the world. Pure, node-checkable.
+cueFor(event, { energy, act, room, intensity, rng, triggerKinds }) -> cue | null
+```
+Pure data: no three, no DOM, no clock, so it runs under node (`node race/smoke/chart-check.mjs`,
+`node race/smoke/track-run-check.mjs`). The chart
 is the analysed hypno file (energy bins, acts, spoken events); the scheduler hands run.js each event `leadSec`
 before its second (2.5 s, floor 1.2) at `d = kartD + speed * dueIn`, so the pop lands on the spoken word
 whatever the throttle did, and anything already spoken is dropped. Full shape and protocol in `CHART.md`.
@@ -334,12 +359,18 @@ whatever the throttle did, and anything already spoken is dropped. Full shape an
 Page -> host (`bridge.send(type, data)`): `ready` (announceReady), `heartbeat`, `pong`, `sfx {name, scale}`,
 `fire-payload {kind:'video'|'audio', strength, durationMult}`, `run-started {seed}`,
 `run-ended {score, banked, durationSec, bestCombo, popped, treats, effects, laps, seed}`,
-`boot-error {message}`, `report-bug {text}`, `fullscreen-set {on}`, `exit`, `exit-done`.
+`boot-error {message}`, `report-bug {text}`, `fullscreen-set {on}`, `exit`, `exit-done`,
+and with a track loaded (PR c2): `track-play {name}` (the run started, start the audio),
+`track-pause {on}` (the Brake, a host pause, a video pop), `track-stop` (run end or exit).
+`track-pick` and `track-cancel` come with the menu in PR c7.
 
 Host -> page: `init {protocol, settings:{masterVolume, reducedMotion}, modId, modContent}`,
 `manifest {images:[{name,url}], videos, skipped, truncated}`, `favorites {names}`,
 `payout-result {baseXp, skillMult, finalXp, sparksEarned, previousBest, dryRun}`, `pause {on}`,
-`ping`, `exit-request`.
+`ping`, `exit-request`, and the track messages (PR c2): `track-progress {stage, pct, name}`,
+`track-chart {chart, partial}`, `track-clock {t, playing, durationSec}`, `track-ended`,
+`track-error {message}`. Standalone, `?chart=demo&dur=N` / `?chart=<url>` load a chart and
+`?audio=<url>` makes an `<audio>` element the clock (wall time without it).
 
 `sfx` names must exist in `Resources/sounds/chaos/*.mp3` (C# `ChaosSfx.Play(name, scale)`), e.g.
 `tunnel_powerup_collect`, `golden_pop`, `chain_pop`, `streak_milestone`, `pb_fanfare`,
