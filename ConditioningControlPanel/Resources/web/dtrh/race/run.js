@@ -34,6 +34,7 @@ import { createItems } from './items.js';
 import { createInput } from './input.js';
 import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
 import { createSpeedFx } from './speed.js';
+import { createRaceAudio } from './audio.js';
 
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.6, FOV_BASE = 72;
 // effect lives are cocktail.js CATEGORIES (scaled by the pop's durationMult); a glitch re-pop wobbles
@@ -52,7 +53,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     : !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const intensityFloor = clamp(Number(settings.intensityFloor) || 0, 0, 1);
   const send = (m) => { try { bridge.send(m); } catch (e) { /* host gone */ } };
-  const sfx = (name, scale = 0.8) => send({ type: 'sfx', name, scale });
+  const sfx = (name, scale = 0.8) => audio.sfx(name, scale);   // race/audio.js: host legs + in-page beats
 
   // ---- renderer / scene / camera (engine/scene.js pattern, pitch-demo look) ----
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, alpha: false, powerPreference: 'high-performance' });
@@ -81,6 +82,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
   const input = createInput();
+  const audio = createRaceAudio({ bridge, hud, settings, input });
   const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
   const camOut = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
   const _v = new THREE.Vector3();
@@ -358,6 +360,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const fraught = clamp(S.effects.length / 3, 0, 1);
     k.setFraught(fraught); hud.setFraught(fraught);
     hud.setSpeed(ks.speed);
+    audio.update(dt, { world: w, run: S, kart: ks });
   }
 
   function frame(now) {
@@ -377,10 +380,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   async function brake() {
     if (!W || !S.running || S.ended || S.paused) return;
     S.paused = true; sfx('ui_click', 0.5);
+    audio.duck(true, 'brake');
     const pick = await hud.setPaused(true);
     if (S.disposed || !S.paused) return;
     if (pick === 'end') return endRun();
     S.paused = false;
+    audio.duck(false, 'brake');
   }
   function waitPayout(ms) {
     return new Promise((res) => { const t = setTimeout(() => { payoutResolve = null; res(null); }, ms); payoutResolve = (m) => { clearTimeout(t); payoutResolve = null; res(m); }; });
@@ -396,6 +401,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       personalBest: st.banked + st.score > S.bestAtStart && st.banked + st.score > 0 };
     send({ type: 'run-ended', ...summary });
     sfx('surface', 0.8);
+    audio.duck(true, 'end');
     const payout = await waitPayout(PAYOUT_WAIT_MS);
     if (S.disposed) return;
     const shown = { ...summary };
@@ -437,7 +443,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     last = 0;
   }
   /** Host pause (native video playing etc): freezes the frame, no Brake screen. */
-  function setPaused(on) { S.hostPaused = !!on; if (!on) last = 0; }
+  function setPaused(on) { S.hostPaused = !!on; if (!on) last = 0; audio.duck(!!on, 'host'); }
   function dispose() {
     if (S.disposed) return;
     S.disposed = true;
@@ -446,6 +452,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     document.removeEventListener('visibilitychange', onVis);
     if (payoutResolve) payoutResolve(null);
     teardown();
+    audio.dispose();
     input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
     scene.clear(); renderer.dispose();
     setFlip(false);

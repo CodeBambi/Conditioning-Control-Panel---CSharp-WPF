@@ -8,7 +8,7 @@
  * LT brake, A drift, X item, Start brake.
  *
  *   read() -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool }
- *   onAction(cb)   cb('item' | 'brake' | 'pixel'), edge-triggered, never repeats on hold
+ *   onAction(cb)   cb('item' | 'brake' | 'pixel' | 'mute'), edge-triggered, never repeats on hold
  *   dispose()
  *
  * Law II (input honesty): nothing here ever remaps an axis. accel defaults to 1
@@ -43,6 +43,7 @@ export function createInput({ target = window } = {}) {
       if (code === 'KeyE') { fire('item'); return; }
       if (code === 'Escape') { fire('brake'); return; }
       if (code === 'KeyP') { fire('pixel'); return; }
+      if (code === 'KeyM') { fire('mute'); return; }   // race/audio.js listens
       if (!KEYS[code]) return;
       down.add(KEYS[code]);
       e.preventDefault();
