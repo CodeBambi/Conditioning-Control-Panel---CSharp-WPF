@@ -20,6 +20,13 @@ export const KART_MAX_SPEED = 34;
 export const KART_MIN_SPEED = 8;
 export const GRAVITY = 18;
 
+// Drift mini-turbo (kart.js): hold drift while steering; the charge crosses these seconds to reach
+// tier 1/2/3 (blue / orange / purple sparks) and releasing hands out that many seconds of boost.
+export const DRIFT_TIER_SEC = [0.8, 1.6, 2.6];
+export const DRIFT_BOOST_SEC = [0, 1.15, 1.35, 1.6];
+/** Seconds of scrubbing the road edge before the soft wall costs a little speed (never a stop). */
+export const WALL_SCRUB_SEC = 0.5;
+
 // Pass-through pop box, metres, kart-centred. Sized for the 1.35x cup (KART_SCALE below);
 // bubbles.js field.setReach(mult) widens X/H for the magnet item.
 export const POP_HIT_D = 1.4;

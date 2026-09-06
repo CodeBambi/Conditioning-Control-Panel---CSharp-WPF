@@ -8,19 +8,28 @@
  * LT brake, A drift, X item, Start brake.
  *
  *   read() -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool }
- *   onAction(cb)   cb('item' | 'brake' | 'pixel' | 'mute'), edge-triggered, never repeats on hold
+ *   onAction(cb)   cb(action) for the ACTIONS table below ('item' | 'brake' | 'pixel' | 'mute'), edge-triggered, never repeats on hold
  *   dispose()
  *
  * Law II (input honesty): nothing here ever remaps an axis. accel defaults to 1
  * when nothing is pressed, so a player who only ever steers still cruises.
  * Digital steer is eased over ~80 ms so the cup leans on the first frame
- * (Law VIII) without a hard snap.
+ * (Law VIII) without a hard snap. The mirror item flips the picture, never
+ * the hand: there is no flip/mirror API here and none may be added (the
+ * owner's law: left stays left).
  * ==========================================================================*/
 
 const KEYS = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
   ArrowUp: 'accel', KeyW: 'accel', ArrowDown: 'brake', KeyS: 'brake',
   ShiftLeft: 'drift', ShiftRight: 'drift',
+};
+/** Edge-triggered actions by key code; append a line here to add one (fired once per press, never on hold). */
+const ACTIONS = {
+  KeyE: 'item',
+  Escape: 'brake',
+  KeyP: 'pixel',
+  KeyM: 'mute',   // race/audio.js listens
 };
 const DEADZONE = 0.16;
 const PAD = { steer: 0, accelBtn: 7, brakeBtn: 6, drift: 0, item: 2, start: 9 };
@@ -40,10 +49,7 @@ export function createInput({ target = window } = {}) {
     const code = e.code || '';
     if (e.type === 'keydown') {
       if (e.repeat) { if (KEYS[code]) e.preventDefault(); return; }
-      if (code === 'KeyE') { fire('item'); return; }
-      if (code === 'Escape') { fire('brake'); return; }
-      if (code === 'KeyP') { fire('pixel'); return; }
-      if (code === 'KeyM') { fire('mute'); return; }   // race/audio.js listens
+      if (ACTIONS[code]) { fire(ACTIONS[code]); return; }
       if (!KEYS[code]) return;
       down.add(KEYS[code]);
       e.preventDefault();

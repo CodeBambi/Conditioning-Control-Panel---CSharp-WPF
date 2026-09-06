@@ -130,6 +130,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const w = { layout, tunnel, fx, dresser, walls, kart, score, field, items, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
+    kart.onEvent((e) => onKart(w, e));
     score.onEvent((e) => onScore(w, e));
     items.onEvent((e) => onItem(w, e));
     pixel.retexture(scene);
@@ -297,6 +298,20 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
 
+  // ---- kart events (drift turbo, tricks, the wheel, laps) ----
+  const TURBO = ['', 'mini turbo', 'super turbo', 'ultra turbo'];
+  function onKart(w, e) {
+    switch (e.type) {
+      case 'driftTier': sfx('ui_click', 0.3 + 0.15 * e.tier); break;
+      case 'driftBoost': hud.toast(TURBO[e.tier] || 'turbo', 'pop'); sfx('tunnel_powerup_collect', 0.5 + 0.15 * e.tier); if (e.tier >= 2) shake.shake(0.12 * e.tier, 160); poke(e.tier >= 3 ? 'smug' : 'streamed', 1.0); break;
+      case 'trick': { const g = w.score.trick(e.points, e.name); hud.toast(`${e.name} +${g}`, 'pop'); sfx('chain_pop', 0.8); poke('smug', 0.6); break; }
+      case 'landing': if (e.trick) { hud.toast(e.clean ? (e.streak >= 3 ? 'hat trick, clean' : 'clean') : 'kerbed it', e.clean ? 'pop' : 'almost'); if (e.clean) sfx('surface', 0.5); } break;
+      case 'inverted': w.score.setInverted(e.on); if (e.on) { hud.toast('upside down', 'effect'); poke('shock', 0.8); } break;
+      case 'lap': { const r = w.score.lap(e.sec); hud.toast(`lap ${r.text}`, 'item'); if (r.pb && r.prevBest > 0) { hud.toast('pb!', 'jackpot'); sfx('pb_fanfare', 0.9); poke('jackpot', 1.5); } break; }
+      case 'split': w.score.pace(e.frac, e.sec); break;
+    }
+  }
+
   // ---- the frame ----
   function step(w, dt) {
     const k = w.kart, ks = k.state, lay = w.layout;
@@ -330,6 +345,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
     if (S.wasAirborne && !ks.airborne) { shake.shake(0.8, 300); poke('smug', 0.7); }
     S.wasAirborne = ks.airborne;
+    for (const n of w.score.drainNotes()) { hud.toast(n.text, n.kind); if (n.mood) poke(n.mood, 1.2); if (n.sfx) sfx(n.sfx, 0.9); }   // upside down, full circle, hot lap
 
     // tube + fx + rooms
     S.tunnelTime += wdt * (0.5 + ks.speed / 12);

@@ -6,7 +6,9 @@
  * multiplier leans the pool toward catch-up items, a high one toward
  * risk/reward. The cube rolls for ROLL_SEC (the roll is decided before the
  * animation starts: Fake Shuffle), then arms; E uses it, or the cup uses it
- * for you after AUTO_USE_SEC so autopilot players never touch a key.
+ * for you after AUTO_USE_SEC so autopilot players never touch a key. Every item
+ * gets a visible beat on use (`beat`) and, for the quiet timed ones, one when it
+ * runs out (`over`), so nothing ever fires into silence.
  *
  * Effects go through the contract APIs only (kart.applyBoost, bubbles.rain,
  * bubbles.setDensity, hud.*). Anything that needs the run brain's hands is
@@ -30,16 +32,16 @@ const AUTO_USE_SEC = 1.5;
 const USED_FLASH_SEC = 0.8;
 
 export const ITEMS = [
-  { id: 'sugar_rush',   name: 'sugar rush',   glyph: '▲', desc: 'boost 2.6 s. the big word.',                 durationSec: 2.6, pool: 'catch' },
-  { id: 'tea_time',     name: 'tea time',     glyph: '◷', desc: 'the world slows for 4 s. you do not.',      durationSec: 4,   pool: 'mid' },
-  { id: 'magnet',       name: 'the wand',     glyph: '✦', desc: 'treats bend to the cup for 7 s.',            durationSec: 7,   pool: 'catch' },
-  { id: 'bubble_wand',  name: 'bubble wand',  glyph: '○', desc: 'twelve treats rain in ahead of you.',        durationSec: 0,   pool: 'catch' },
-  { id: 'lucky_star',   name: 'lucky star',   glyph: '★', desc: 'x2 on top of the ladder for 8 s.',          durationSec: 8,   pool: 'risk' },
-  { id: 'parasol',      name: 'parasol',      glyph: '☂', desc: 'the next effect pops as a treat instead.',   durationSec: 0,   pool: 'mid' },
-  { id: 'mirror',       name: 'mirror',       glyph: '◫', desc: 'the picture flips for 6 s. left is still left.', durationSec: 6, pool: 'risk' },
-  { id: 'spring',       name: 'spring',       glyph: '⤴', desc: 'a ramp, right here, right now.',            durationSec: 0,   pool: 'mid' },
-  { id: 'pocket_watch', name: 'pocket watch', glyph: '◔', desc: 'the combo timer stops for 10 s.',            durationSec: 10,  pool: 'mid' },
-  { id: 'rabbit_foot',  name: 'rabbit foot',  glyph: '♣', desc: 'jackpots come easier for 12 s.',             durationSec: 12,  pool: 'risk' },
+  { id: 'sugar_rush',   name: 'sugar rush',   glyph: '▲', desc: 'boost 2.6 s. the big word.',                 durationSec: 2.6, pool: 'catch', beat: 'sugar rush' },
+  { id: 'tea_time',     name: 'tea time',     glyph: '◷', desc: 'the world slows for 4 s. you do not.',      durationSec: 4,   pool: 'mid',   beat: 'tea time. the world slows, you do not', over: 'tea is over' },
+  { id: 'magnet',       name: 'the wand',     glyph: '✦', desc: 'treats bend to the cup for 7 s.',            durationSec: 7,   pool: 'catch', beat: 'the wand. treats come to you', over: 'wand down' },
+  { id: 'bubble_wand',  name: 'bubble wand',  glyph: '○', desc: 'twelve treats rain in ahead of you.',        durationSec: 0,   pool: 'catch', beat: 'twelve, incoming' },
+  { id: 'lucky_star',   name: 'lucky star',   glyph: '★', desc: 'x2 on top of the ladder for 8 s.',          durationSec: 8,   pool: 'risk',  beat: 'lucky star. x2 on top', over: 'star fell' },
+  { id: 'parasol',      name: 'parasol',      glyph: '☂', desc: 'the next effect pops as a treat instead.',   durationSec: 0,   pool: 'mid',   beat: 'parasol up. next effect is a treat' },
+  { id: 'mirror',       name: 'mirror',       glyph: '◫', desc: 'the picture flips for 6 s. left is still left.', durationSec: 6, pool: 'risk', beat: 'mirror. left is still left', over: 'mirror gone' },
+  { id: 'spring',       name: 'spring',       glyph: '⤴', desc: 'a ramp, right here, right now.',            durationSec: 0,   pool: 'mid',   beat: 'spring' },
+  { id: 'pocket_watch', name: 'pocket watch', glyph: '◔', desc: 'the combo timer stops for 10 s.',            durationSec: 10,  pool: 'mid',   beat: 'pocket watch. the combo waits', over: 'the watch ticks again' },
+  { id: 'rabbit_foot',  name: 'rabbit foot',  glyph: '♣', desc: 'jackpots come easier for 12 s.',             durationSec: 12,  pool: 'risk',  beat: 'rabbit foot. jackpots lean in', over: 'foot wore off' },
 ];
 const BY_ID = Object.fromEntries(ITEMS.map((it) => [it.id, it]));
 
@@ -107,7 +109,7 @@ export function createItems({ kart, bubbles, score, fx, hud, payload, rng, autoU
       armed = null; armedFor = 0;
       emit({ type: 'itemUse', id: it.id });
       apply(it);
-      if (hud) { hud.item(it.glyph, `${it.name} used`); hud.toast(it.name, 'item'); }
+      if (hud) { hud.item(it.glyph, `${it.name} used`); hud.toast(it.beat || it.name, 'item'); }
       usedFlash = USED_FLASH_SEC;
       return true;
     },
@@ -133,6 +135,7 @@ export function createItems({ kart, bubbles, score, fx, hud, payload, rng, autoU
         if (next > 0) { active.set(id, next); continue; }
         active.delete(id);
         emit({ type: 'itemEnd', id });
+        if (hud && BY_ID[id] && BY_ID[id].over) hud.toast(BY_ID[id].over, 'item');
       }
     },
     onEvent(cb) { if (typeof cb === 'function') listeners.push(cb); return () => { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); }; },
