@@ -109,7 +109,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const lane = createMediaLane(sfHud);   // re-homes payload cards off the road
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
-  const input = createInput();
+  const input = createInput({ root });   // root: the touch layer, on a phone, is built inside its .race-hud
   const audio = createRaceAudio({ bridge, hud, settings, input });
   const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
   const camOut = { pos: new THREE.Vector3(), look: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), roll: 0 };
