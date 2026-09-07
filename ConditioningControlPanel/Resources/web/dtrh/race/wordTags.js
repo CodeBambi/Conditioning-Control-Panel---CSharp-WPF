@@ -39,9 +39,9 @@ export const TEX_W = 256, TEX_H = 64;
 /** The floor, in CSS pixels of cap height, and how it grows on a window wider than a phone. */
 export const MIN_CAP_PX = 18, CAP_VW = 0.048, MAX_CAP_PX = 30, REF_W_PX = 390;
 /** Nearer than this (camera distance) the tag stops holding the floor and grows with the bubble. */
-export const TAG_HOLD_M = 12;
-/** And the most it may grow to, so a tag at the pop point is not the whole windscreen. */
-export const MAX_GROW = 2.2;
+export const TAG_HOLD_M = 9;
+/** And the most it may grow to: the owner's call, so a near plate never covers the cup or EMI. */
+export const MAX_GROW = 1.5;
 /** The tag hangs this far over its bubble before anything is stacked on top of it. */
 export const LIFT_BASE_PX = 26;
 /** Clear air between two tags of one line, and the highest a tag may be pushed before it is dropped. */
