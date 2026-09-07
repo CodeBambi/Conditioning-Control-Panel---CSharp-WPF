@@ -80,6 +80,12 @@ export function normalizeChart(json) {
       energy: str(an.energy, ''), words: str(an.words, 'none'), generatedAt: str(an.generatedAt, ''), partial: an.partial === true,
       lexicon: Object.freeze((Array.isArray(an.lexicon) ? an.lexicon : []).filter((w) => typeof w === 'string')),
     }),
+    // AUTHORED CHARTS (race/charts/README.md). A chart a person wrote carries `hand: true`
+    // and may carry a `rules` object. Normalizing is a validation pass, not an edit, so both
+    // come back untouched: strip them and an authored chart stops being one the moment it
+    // goes through here, and it goes through here on every single load.
+    hand: json.hand === true,
+    rules: Object.freeze((json.rules && typeof json.rules === 'object') ? { ...json.rules } : null),
   });
 }
 
@@ -116,6 +122,12 @@ function normalizeEvents(raw, durationSec) {
       if (e.kind === 'count') { ev.n = num(e.n, 0); ev.of = num(e.of, 0); ev.last = e.last === true; }
       if (e.kind === 'drop') ev.strength = clamp01(num(e.strength, 1));
       if (e.kind === 'chant') { ev.reps = Math.max(1, Math.round(num(e.reps, 3))); ev.period = Math.max(0, num(e.period, 0)); }
+      // An author marks the events they placed by hand inside a road, names the cue they
+      // want on one, and leaves a note for the next author. Kept, for the same reason `hand`
+      // is kept above: this pass validates a chart, it does not rewrite one.
+      if (e.hand === true) ev.hand = true;
+      if (typeof e.cue === 'string' && e.cue) ev.cue = e.cue;
+      if (typeof e.note === 'string' && e.note) ev.note = e.note.slice(0, 200);
       return Object.freeze(ev);
     });
   return Object.freeze(out);
