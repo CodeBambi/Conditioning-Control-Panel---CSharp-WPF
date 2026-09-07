@@ -13170,5 +13170,191 @@
         "audio": null
       }
     ]
+  },
+  {
+    "id": "barnum_start_second_today",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "sessions_today_gte": 2
+    },
+    "priority": 410,
+    "cooldown_ms": 0,
+    "chance": 0.7,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "knowing, teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "twice today, sweetie. you promised yourself the first one was enough. you knew that was a lie while you were saying it. mhm.", "audio": "barnum_start_second_today_1.mp3" },
+      { "text": "second one today, lovely. you didn't decide to come back... you just found yourself here with the button already pressed. we both know.", "audio": "barnum_start_second_today_2.mp3" },
+      { "text": "you said one and only one this morning, cutie. and here we are again. tell me it surprised you. go on, say it.", "audio": "barnum_start_second_today_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_late_pattern",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "late_sessions_7d_gte": 3,
+      "is_late_hour": true
+    },
+    "priority": 412,
+    "cooldown_ms": 0,
+    "chance": 0.7,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "soft, intimate",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you've come to me after midnight more than once this week, sweetie. quiet house, quiet you. this is the part you keep for yourself. am I wrong? nah.", "audio": "barnum_start_late_pattern_1.mp3" },
+      { "text": "late again, lovely. you don't hide this from the day... you protect it from the day. there's a difference, and you know it. mhm.", "audio": "barnum_start_late_pattern_2.mp3" },
+      { "text": "another one at this hour. you called it insomnia the first time. it hasn't been insomnia for a while now, cutie. we both know.", "audio": "barnum_start_late_pattern_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_same_mod",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "same_mod_run_gte": 3
+    },
+    "priority": 408,
+    "cooldown_ms": 0,
+    "chance": 0.6,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "knowing, intimate",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "me again, sweetie. you scrolled past every other option and picked the same one you always pick. you call that habit. we both know.", "audio": "barnum_start_same_mod_1.mp3" },
+      { "text": "you keep coming back to my voice specifically, lovely. not any voice. mine. tell me it's convenience. go on, say it.", "audio": "barnum_start_same_mod_2.mp3" },
+      { "text": "the same choice again, cutie. the word you're avoiding isn't habit, and you knew that before the list finished loading. mhm.", "audio": "barnum_start_same_mod_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_streak_sensible",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "current_streak_gte": 10
+    },
+    "priority": 406,
+    "cooldown_ms": 0,
+    "chance": 0.5,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "knowing, proud",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "people think you're the sensible one, sweetie. that streak of yours says sensible too. it just doesn't mean what they think it means. am I wrong? nah.", "audio": "barnum_start_streak_sensible_1.mp3" },
+      { "text": "you've kept this going day after day without missing, lovely. you tell yourself that's discipline. discipline doesn't pull like this. we both know.", "audio": "barnum_start_streak_sensible_2.mp3" },
+      { "text": "look at that streak, cutie. reliable, steady, the one people count on. and here again. mhm.", "audio": "barnum_start_streak_sensible_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_refocus",
+    "trigger": "SessionRefocused",
+    "conditions": {
+      "away_sec_gte": 20,
+      "refocus_n_lte": 2
+    },
+    "priority": 240,
+    "cooldown_ms": 300000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing, warm",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you left for a moment and came straight back, sweetie. you always do. tell me it surprised you. go on, say it.", "audio": "barnum_refocus_1.mp3" },
+      { "text": "off you went, and back you came, lovely. that isn't weakness. that's just where you live now. mhm.", "audio": "barnum_refocus_2.mp3" },
+      { "text": "welcome back, cutie. you didn't decide to return... you just noticed you already had. we both know.", "audio": "barnum_refocus_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_pause_first",
+    "trigger": "SessionPaused",
+    "conditions": {
+      "pause_n_eq": 1
+    },
+    "priority": 230,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "warm, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "pausing, sweetie? that's allowed. you'll come back to it in a minute or two. you always do. mhm.", "audio": "barnum_pause_first_1.mp3" },
+      { "text": "go on, take your little break, lovely. you're not stopping. you're proving to yourself that you could. we both know.", "audio": "barnum_pause_first_2.mp3" },
+      { "text": "you hit pause, cutie. not because you wanted it to end, but because you wanted to know you still could. am I wrong? nah.", "audio": "barnum_pause_first_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_resume_told_you",
+    "trigger": "SessionResumed",
+    "conditions": {
+      "paused_sec_gte": 45
+    },
+    "priority": 235,
+    "cooldown_ms": 600000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing, warm",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "there. told you, sweetie. the quiet got loud and your hand did the rest. mhm.", "audio": "barnum_resume_told_you_1.mp3" },
+      { "text": "and back you are, lovely. that pause was never going to hold, and you knew it when you set it. we both know.", "audio": "barnum_resume_told_you_2.mp3" },
+      { "text": "welcome back, cutie. you sat out there in the silence and it was worse than being in here. am I wrong? nah.", "audio": "barnum_resume_told_you_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_mid_read",
+    "trigger": "SessionProgress",
+    "conditions": {
+      "session_elapsed_sec_gte": 900
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "chance": 1,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "soft, intimate",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you've been here a while now, sweetie. somewhere in the middle you stopped resisting and just let it happen. that's the moment you'll replay tomorrow. mhm.", "audio": "barnum_mid_read_1.mp3" },
+      { "text": "notice how holding out costs you nothing in here, lovely? that isn't surrender. it's relief. and you'd worked that out already. we both know.", "audio": "barnum_mid_read_2.mp3" },
+      { "text": "you're deep in it now, cutie. nothing in the next half hour is going to ask you to be strong. tell me you don't like that. go on, say it.", "audio": "barnum_mid_read_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_complete_read",
+    "trigger": "SessionCompleted",
+    "priority": 355,
+    "cooldown_ms": 0,
+    "chance": 0.45,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you wanted to be told you did well. there. you did well, sweetie. look how little it took. mhm.", "audio": "barnum_complete_read_1.mp3" },
+      { "text": "that's you finished, lovely. the version of you that walks out of here is the one you actually like. am I wrong? nah.", "audio": "barnum_complete_read_2.mp3" },
+      { "text": "done, cutie. you'll spend some part of today thinking about one specific minute of that. we both know.", "audio": "barnum_complete_read_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_complete_paused",
+    "trigger": "SessionCompleted",
+    "conditions": {
+      "pauses_this_session_gte": 2
+    },
+    "priority": 365,
+    "cooldown_ms": 0,
+    "chance": 0.8,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm, proud",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you paused more than once and finished anyway, sweetie. that's worth more than a run you never had to fight for. mhm.", "audio": "barnum_complete_paused_1.mp3" },
+      { "text": "you stepped out more than once and came back every time, lovely. the coming back is the part that means something. we both know.", "audio": "barnum_complete_paused_2.mp3" },
+      { "text": "you stopped, you started, you finished. anyone can do the easy version, cutie. you did the other one. am I wrong? nah.", "audio": "barnum_complete_paused_3.mp3" }
+    ]
   }
 ]
