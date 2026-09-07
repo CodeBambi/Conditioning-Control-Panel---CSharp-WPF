@@ -182,10 +182,16 @@ export function labelOf(state, b) {
  * The generated road (maker/generate.js) rides underneath: its energy curve, its
  * acts and its analyzer events go in the same file, with no `hand` on them, so
  * race/cues.js reads the road off the table and the recipes off the author.
+ *
+ * `state.offsetSec` (maker/run.js) slides every event, hand and road alike, by
+ * that much: the author heard the effects land early or late against the voice
+ * and this is the one knob that fixes all of them. The energy curve and the acts
+ * are the audio's own timing and stay put.
  */
 export function buildChart(state, now = new Date()) {
   const src = state.audio || {};
   const durationSec = Number(state.durationSec) || Number(src.durationSec) || 0;
+  const off = Number(state.offsetSec) || 0;
   const road = (state.road && Array.isArray(state.road.events)) ? state.road : null;
   const names = new Set();
   const events = byT(state.bubs).map((b, i) => {
@@ -194,10 +200,10 @@ export function buildChart(state, now = new Date()) {
     const cue = b.kind === 'wall'
       ? { wall: 'pink', fx: [{ id: b.eff, strength: 1, dur: FX_DUR[b.eff] }] }
       : { spawn: [{ kindId: b.kind, placement: 'lane', x: 0, h: 1, at: 0 }] };
-    return { id: 'm' + i, t: Math.max(0, Math.min(durationSec, b.t)), kind: b.trig ? 'trigger' : 'mark',
+    return { id: 'm' + i, t: clamp(b.t + off, 0, durationSec), kind: b.trig ? 'trigger' : 'mark',
       label, conf: 1, dur: 0, weight: 1, hand: true, cue };
   });
-  const road_ = road ? road.events.map((e, i) => ({ ...e, id: 'g' + i, t: clamp(e.t, 0, durationSec) })) : [];
+  const road_ = road ? road.events.map((e, i) => ({ ...e, id: 'g' + i, t: clamp(e.t + off, 0, durationSec) })) : [];
   return {
     version: 1, hand: true,
     binSec: road ? road.binSec : 0.5,
@@ -214,7 +220,7 @@ export function buildChart(state, now = new Date()) {
 /** The whole working state, small enough to sit in localStorage. The road goes with
  *  it: it is a minute of arithmetic to rebuild and the author already saw it. */
 export function snapshotState(state) {
-  return { v: 1, minGap: state.minGap, cfg: state.cfg, bubs: state.bubs, hits: state.hits, road: state.road || null };
+  return { v: 1, minGap: state.minGap, offsetSec: Number(state.offsetSec) || 0, cfg: state.cfg, bubs: state.bubs, hits: state.hits, road: state.road || null };
 }
 
 /** Ids come back off a restore, so the next new wall cannot land on one of them. */

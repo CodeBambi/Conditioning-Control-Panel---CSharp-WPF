@@ -146,7 +146,7 @@ function onDown(ev) {
   closeGrid();
   const el = ev.target.closest('.bub, .tag, .band');
   if (!el) {
-    if (!ev.target.closest('#audio, #ruler') && ev.target.closest('.row')) { S.sel.clear(); api.render(); api.bar(); }
+    if (!ev.target.closest('#audio, #ruler, #run') && ev.target.closest('.row')) { S.sel.clear(); api.render(); api.bar(); }
     return;
   }
   const ids = idsFor(el, ev.shiftKey);

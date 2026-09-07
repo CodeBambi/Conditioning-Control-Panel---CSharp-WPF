@@ -21,6 +21,7 @@ import {
 } from '../maker/model.js';
 import { BIN_SEC, countRuns, chantRuns, energyFromPeaks, generate, readWords, roadLine } from '../maker/generate.js';
 import { ASPECT_H, ASPECT_W, HINT, PREVIEW_URL, WAIT_MS, canDraw, fitBox } from '../maker/preview.js';
+import { OFFSET_MAX, PAD, TICK_MIN_PX, clampOffset, offsetLine, runT, runX, tickStep } from '../maker/run.js';
 import { normalizeChart } from '../../race/chart.js';
 import { cueFor } from '../../race/cues.js';
 
@@ -233,6 +234,37 @@ ok(canDraw(() => ({ getContext: (n) => (n === 'webgl2' ? {} : null) })) === true
 ok(canDraw(() => { throw new Error('blocked'); }) === false, 'a browser that throws at us is a no as well');
 eq(HINT, 'what the run looks like', 'the gutter says what the row is');
 
+/* ---- 8b. the run lane and the offset (PR M7) ------------------------------ */
+/* The whole file on one line: 0 lands at the left pad, the end at the right pad,
+   and the pixel under a time is the time under that pixel. The offset slides every
+   event the chart carries, hand and road alike, and nothing else. */
+near(runX(0, 300, 1000), PAD, 'the start of the file sits one EMI width in from the left');
+near(runX(300, 300, 1000), 1000 - PAD, 'and the end one EMI width in from the right');
+near(runX(150, 300, 1000), 500, 'half way through the file is half way along the lane');
+near(runT(runX(123.4, 300, 1000), 300, 1000), 123.4, 'the pixel under a time is the time under that pixel');
+near(runX(400, 300, 1000), 1000 - PAD, 'nothing lands past the end of the lane');
+near(runT(-50, 300, 1000), 0, 'a click left of the pad is the start');
+near(runX(10, 0, 1000), PAD, 'with no file loaded EMI waits at the start');
+ok(tickStep(300, 1000) * ((1000 - 2 * PAD) / 300) >= TICK_MIN_PX, 'the lane labels are never crowded');
+ok(tickStep(3600, 1000) > tickStep(300, 1000), 'a longer file gets a wider tick');
+eq(offsetLine(0), 'on time', 'no offset reads as on time');
+eq(offsetLine(0.25), '0.25 s late', 'a positive offset lands late');
+eq(offsetLine(-0.5), '0.5 s early', 'a negative one early');
+eq(clampOffset(99), OFFSET_MAX, 'the offset stops at its cap');
+eq(clampOffset('junk'), 0, 'and junk reads as zero');
+{
+  const shifted = buildChart({ ...full, offsetSec: 0.3, road: { binSec: 0.5, energy: [0.1, 0.2], acts: [], generatedAt: 'x',
+    events: [{ id: 'r', t: 50, kind: 'word', label: 'w', conf: 1, dur: 0, weight: 1 }] } }, new Date(0));
+  const hand = shifted.events.filter((e) => e.hand), road = shifted.events.filter((e) => !e.hand);
+  near(hand[0].t, chart.events[0].t + 0.3, 'the offset slides every hand cue by that much');
+  near(road[0].t, 50.3, 'and the road events with them');
+  ok(shifted.energy.length === 2 && shifted.binSec === 0.5, 'the energy curve stays on the audio clock');
+  const early = buildChart({ ...full, offsetSec: -99 }, new Date(0));
+  ok(early.events.every((e) => e.t >= 0), 'an early offset never puts an event before the file starts');
+  eq(snapshotState({ ...full, offsetSec: 0.3 }).offsetSec, 0.3, 'the offset goes into the autosave');
+  eq(snapshotState(full).offsetSec, 0, 'and reads as zero when it was never set');
+}
+
 /* ---- 9. the modules keep their promises ---------------------------------- */
 const src = (f) => readFileSync(join(MAKER, f), 'utf8');
 ok(!/getComputedStyle/.test(src('timeline.js')), 'nothing reads layout inside the draw loop');
@@ -242,7 +274,8 @@ ok(/fetch\(/.test(src('words.js')) && !/fetch\(/.test(src('audio.js')), 'the aud
 ok(!/document\.|window\./.test(src('generate.js')), 'generate.js is pure: it never reaches for the page');
 ok(typeof PREVIEW_URL === 'string' && PREVIEW_URL.length > 0, 'preview.js loads with no page at all: node just imported it');
 ok(/postMessage/.test(src('preview.js')) && !/fetch\(/.test(src('preview.js')), 'the preview talks to its frame and to nothing else');
-for (const f of ['model.js', 'audio.js', 'words.js', 'timeline.js', 'app.js', 'pick.js', 'save.js', 'generate.js', 'preview.js']) {
+ok(!/getComputedStyle/.test(src('run.js')), 'the run lane never reads layout to draw');
+for (const f of ['model.js', 'audio.js', 'words.js', 'timeline.js', 'app.js', 'pick.js', 'save.js', 'generate.js', 'preview.js', 'run.js']) {
   ok(src(f).startsWith('/* ====='), f + ' says what it is at the top');
 }
 

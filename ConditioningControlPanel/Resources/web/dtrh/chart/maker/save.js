@@ -57,6 +57,7 @@ export function restoreInto(state, saved) {
   state.hits = saved.hits;
   state.cfg = saved.cfg || state.cfg;
   state.road = saved.road || null;
+  state.offsetSec = Number(saved.offsetSec) || 0;
   state.sel.clear();
   bumpIds(saved.bubs);
   return saved;

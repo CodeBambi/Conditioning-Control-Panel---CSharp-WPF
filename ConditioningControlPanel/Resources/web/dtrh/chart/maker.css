@@ -15,7 +15,7 @@
   --sub: #ff8fcf; --flash: #fff6fb; --drain: #9d7bff; --wall: #ff4fa5;
   --display: "Baloo 2", "Segoe UI", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
-  --gutter: 120px; --sp: 10px;
+  --gutter: 120px; --sp: 10px; --run-h: 84px;
 }
 * { box-sizing: border-box; }
 /* The one column is pinned to the window on purpose: the top bar is a nowrap
@@ -41,17 +41,28 @@ a { color: var(--violet); }
 #top .grow { flex: 1; }
 #top .zoom { display: inline-flex; gap: 4px; }
 
-#lines { display: grid; grid-template-columns: var(--gutter) 1fr 240px; grid-template-rows: 28px 150px 150px 64px 1fr; position: relative; min-height: 0; overflow: hidden; }
+#lines { display: grid; grid-template-columns: var(--gutter) 1fr 240px; grid-template-rows: var(--run-h) 28px 150px 150px 64px 1fr; position: relative; min-height: 0; overflow: hidden; }
 .g { background: var(--panel); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px 12px; display: flex; flex-direction: column; justify-content: center; }
 .g[hidden] { display: none; }            /* display: flex above outruns the browser's [hidden] */
 .g b { font: 800 19px/1.1 var(--display); }
 .g span { color: var(--dim); font-size: 13px; }
 .row { position: relative; border-bottom: 1px solid var(--line); overflow: hidden; background: var(--ink); }
 .row.ruler { background: var(--panel); }
+
+/* the run, whole: 0 to the end at one scale, EMI on the audio clock, the marks
+   where the run meets them. Everything is a child of the row so a click on any
+   of it is a seek, and only EMI moves per frame (maker/run.js). */
+.row.run { background: #0b0b18; cursor: pointer; user-select: none; }
+.row.run canvas { position: absolute; inset: 0; pointer-events: none; }
+.row.run #runticks { position: absolute; inset: 0; pointer-events: none; }
+.row.run .tick { top: 3px; transform: translateX(-50%); color: #6f6b96; }
+.row.run .tick::before { display: none; }
+#runemi { position: absolute; left: 0; bottom: 4px; width: 52px; height: 52px; image-rendering: pixelated; pointer-events: none; will-change: transform; filter: drop-shadow(0 3px 4px rgba(0,0,0,.6)); }
+.row.run.empty #runemi { opacity: .35; }
 .row.audio { background: #0e0e1c; }
 .row.words { background: #15142a; }
 #side { grid-column: 3; grid-row: 1 / -1; background: var(--panel); border-left: 1px solid var(--line); padding: 14px; overflow: auto; display: flex; flex-direction: column; }
-#playhead { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--pink); box-shadow: 0 0 10px rgba(255,105,180,.8); pointer-events: none; z-index: 6; will-change: transform; }
+#playhead { position: absolute; top: var(--run-h); bottom: 0; width: 0; border-left: 2px solid var(--pink); box-shadow: 0 0 10px rgba(255,105,180,.8); pointer-events: none; z-index: 6; will-change: transform; }
 #playhead::before { content: ""; position: absolute; top: 0; left: -7px; border: 6px solid transparent; border-top: 10px solid var(--pink); }
 canvas { display: block; width: 100%; height: 100%; }
 .tick { position: absolute; top: 4px; font: 700 13px var(--body); color: var(--dim); font-variant-numeric: tabular-nums; }
@@ -106,6 +117,10 @@ canvas { display: block; width: 100%; height: 100%; }
 .gap b { font: 800 17px var(--display); }
 .gap .v { font: 800 20px var(--display); color: var(--pink); font-variant-numeric: tabular-nums; min-width: 52px; text-align: center; }
 .startover { font-size: 13px; margin-left: auto; }
+.gap.off { margin-top: 0; }
+.gap.off .v { min-width: 92px; color: var(--dim); cursor: pointer; }
+.gap.off .v.on { color: var(--gold); }
+.gap.off .hint { flex-basis: 100%; color: var(--dim); font-size: 13px; }
 
 /* the race in the bottom row: letterboxed, centred, watch only */
 .row.preview { background: #07070f; display: grid; place-items: center; }
@@ -116,7 +131,7 @@ canvas { display: block; width: 100%; height: 100%; }
 #pvg .small { margin-top: 6px; align-self: flex-start; }
 
 /* the one card in the tool: what to do with the file that just landed */
-#ask { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); z-index: 24; width: 420px; max-width: calc(100% - 280px);
+#ask { position: absolute; left: 50%; top: calc(var(--run-h) + 96px); transform: translateX(-50%); z-index: 24; width: 420px; max-width: calc(100% - 280px);
   background: var(--panel); border: 2px solid var(--pink); border-radius: 18px; padding: 22px; text-align: center;
   box-shadow: 0 18px 60px rgba(0,0,0,.7); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 #ask[hidden] { display: none; }
@@ -143,6 +158,6 @@ canvas { display: block; width: 100%; height: 100%; }
 #bar .how { color: var(--dim); font-size: 14px; display: flex; gap: 14px; flex-wrap: wrap; }
 #bar .how b { color: var(--text); }
 #bar .grow { flex: 1; }
-.note { position: absolute; right: 256px; top: 34px; z-index: 7; font-size: 13px; color: var(--text); background: rgba(18,17,31,.9); border: 1px solid var(--line); padding: 4px 10px; border-radius: 6px; max-width: 46ch; }
+.note { position: absolute; right: 256px; top: calc(var(--run-h) + 34px); z-index: 7; font-size: 13px; color: var(--text); background: rgba(18,17,31,.9); border: 1px solid var(--line); padding: 4px 10px; border-radius: 6px; max-width: 46ch; }
 .note[hidden] { display: none; }
 body.dropping #lines { outline: 3px dashed var(--pink); outline-offset: -6px; }
