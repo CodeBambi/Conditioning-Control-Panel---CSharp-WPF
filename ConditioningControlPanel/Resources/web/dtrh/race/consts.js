@@ -42,7 +42,7 @@ export const DRIFT_BOOST_SEC = [0, 1.15, 1.35, 1.6];
 export const WALL_SCRUB_SEC = 0.5;
 
 // Pass-through pop box, metres, kart-centred. Sized for the 1.35x cup (KART_SCALE below);
-// bubbles.js field.setReach(mult) widens X/H for the magnet item.
+// bubbles.js field.setReach(mult) widens X/H for poppers and the wand (race/pickups.js).
 export const POP_HIT_D = 1.4;
 export const POP_HIT_X = 1.15;
 export const POP_HIT_H = 1.25;

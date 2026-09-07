@@ -52,8 +52,8 @@ export function createScore() {
   const notes = [];
   const note = (text, kind = 'pop', mood = null, sfx = null) => { notes.push({ text, kind, mood, sfx }); };
   let hold = 0;          // seconds of combo left before it lets go
-  let freezeSec = 0;     // pocket_watch: the hold timer stands still
-  let boost = 1, boostSec = 0;   // lucky_star: a temporary multiplier on top of the ladder
+  let freezeSec = 0;     // pocket watch (race/pickups.js): the hold timer stands still
+  let boost = 1, boostSec = 0;   // golden touch (race/pickups.js): a temporary multiplier on top of the ladder
   const cbs = [];
   const emit = (ev) => { for (const cb of cbs) { try { cb(ev); } catch (e) { /* listener bug, not ours */ } } };
 
@@ -181,7 +181,7 @@ export function createScore() {
     onEvent(cb) { if (typeof cb === 'function') cbs.push(cb); },
     /** Pending HUD notes (upside down, full circle, ...), oldest first; the queue empties. */
     drainNotes() { return notes.splice(0, notes.length); },
-    // items.js hooks (additive to the contract): pocket_watch + lucky_star
+    // pickups.js hooks (additive to the contract): pocket watch + golden touch
     freezeCombo(sec) { freezeSec = Math.max(freezeSec, Number(sec) || 0); },
     boostMult(mult, sec) { boost = Math.max(1, Number(mult) || 1); boostSec = Number(sec) || 0; setMult(); },
     /** 0..1 fraction of the combo hold still left, for a HUD ring. */

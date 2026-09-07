@@ -5,7 +5,7 @@
  *   createRace({ root, bridge, media, settings, seed }) -> { start(), setPaused(b), dispose() }
  *
  * Composes renderer + spine + tunnel + fx + rooms + bubbles + kart + score + hud
- * + items + payloadFx + screen shake and runs the frame loop. `root` holds the
+ * + payloadFx + screen shake and runs the frame loop. `root` holds the
  * <canvas>, the `.race-hud` div and the `.sf-hud` layer payloadFx draws into.
  * Nothing here subtracts: the run ends only from the Brake (Esc) or the host.
  *
@@ -17,7 +17,7 @@
  * a vertical number. 72 is what it measures at 16:9, and every other window shape
  * solves back for the vertical fov that keeps that same width of road, clamped at
  * MAX_VFOV so a tall phone stops short of a fisheye. Desktop 16:9 is untouched by
- * definition. The boost/drift/tea_time kicks are added on top of that per frame.
+ * definition. The boost/drift kicks are added on top of that per frame.
  *
  * TRACK CHARTS (CHART.md): setTrack(chart) hands the run a charted hypno file and
  * from then on the file is the clock. race/track.js holds the second, the energy
@@ -59,7 +59,6 @@ import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
 import { createCaptions } from './captions.js';
 import { createMediaLane } from './mediaLane.js';
-import { createItems } from './items.js';
 import { createInput } from './input.js';
 import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
 import { createSpeedFx } from './speed.js';
@@ -70,7 +69,7 @@ import { resultTier, resultsCamera, preRollCamera } from './intro.js';
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE = 72;   // 1.6 read as ALMOST spam: the next lane over qualified
 // FOV_BASE is the VERTICAL fov at 16:9 only; race/viewport.js re-solves it per aspect (see the header).
 // effect lives are cocktail.js CATEGORIES (scaled by the pop's durationMult); a glitch re-pop wobbles
-// the world clock this hard, this long (only when tea_time is not already holding it)
+// the world clock this hard, this long
 const WOBBLE_SCALE = 0.82, WOBBLE_SEC = 0.3;
 const ladderMult = (combo) => { let m = 1; for (const [at, mult] of MULT_LADDER) if (combo >= at) m = mult; return m; };
 const SPAWN_T0 = 2.5, RAIN_T0 = 20, EARLY_SLOW = 1.5;   // the opening drips slower (TREATS_ONLY_SEC)
@@ -144,8 +143,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- run state ----
   const S = {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
-    elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
-    flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
+    elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1,
+    spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
     trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,   // trackHold: the track second a fog/density hold ends, 0 for none
   };
@@ -166,7 +165,6 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const trailClear = () => { for (const s of trail) s.ok = false; trailI = 0; };
 
   function poke(mood, sec) { S.moodHeld = mood; S.moodHold = sec; }
-  function setFlip(on) { S.flip = !!on; canvas.style.transform = on ? 'scaleX(-1)' : ''; }
 
   // ---- world build / teardown ----
   function build(runSeed) {
@@ -192,13 +190,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       return { ...r, bubbleBias: { ...r.bubbleBias, golden: (r.bubbleBias.golden == null ? 1 : r.bubbleBias.golden) * S.jackpotBias } };
     };
     const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
-    const items = createItems({ kart, bubbles: field, score, fx, hud, payload: payloadFx, rng });
-    const w = { layout, tunnel, fx, dresser, walls, kart, score, field, items, rng };
+    const w = { layout, tunnel, fx, dresser, walls, kart, score, field, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     kart.onEvent((e) => onKart(w, e));
     score.onEvent((e) => onScore(w, e));
-    items.onEvent((e) => onItem(w, e));
     field.setTracked(!!TR.track);
     field.setSparse(TR.lyrics);
     pixel.retexture(scene);
@@ -212,12 +208,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function resetRunState(runSeed) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
-      jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
+      jackpotBias: 1, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
-    setFlip(false); trailClear();
+    trailClear();
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset();
-    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.pickupClear(); hud.item(null, 'no item yet');
+    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0);
   }
 
   // ---- rooms ----
@@ -238,7 +234,6 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- pops ----
   function treat(w, p) {
     w.score.pop(p.points, p.id);
-    if (p.id === 'lucky') w.items.roll(w.score.state.mult);
     if (p.id === 'golden') {
       w.score.jackpot(S.jackpotBias > 1 ? 'major' : 'minor');
       sfx('golden_pop', 0.9); shake.shake(0.35, 240); poke('jackpot', 1.4); w.kart.pose('cheer');
@@ -248,7 +243,6 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (p.eventId) TR.taken(p.eventId);
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (p.kind === 'treat') return treat(w, p);
-    if (S.parasol) { S.parasol = false; hud.toast('parasol', 'item'); return treat(w, p); }
     // THE MIX: one live effect per category, each with its own re-pop rule (cocktail.js); 'held' scores as a treat
     const durationMult = 0.5 + 0.5 * S.intensity;
     const r = mix.add(p.id, { durationMult });
@@ -348,35 +342,6 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain}`, 'jackpot'); break;
     }
   }
-  function onItem(w, e) {
-    switch (e.type) {
-      // THE PICKUP: the card pops with the rolling '?', flips when the cube arms (never earlier,
-      // Fake Shuffle), then flies into the slot and leaves it lit until the item is spent
-      case 'itemRoll': hud.pickupRoll(); break;
-      case 'itemArm': {
-        const it = w.items.byId(e.id);
-        sfx('ui_click', 0.4);
-        hud.pickupArm(it ? it.glyph : '?', it ? it.name : '', () => sfx('ui_click', 0.3));
-        break;
-      }
-      case 'itemUse': hud.pickupClear(); sfx('tunnel_powerup_collect', 0.7); poke('smug', 0.8); w.kart.pose('throw'); break;
-      case 'timeScale': S.timeScale = e.value; sfx('time_slow_in', 0.8); break;
-      case 'magnet': S.magnet = true; w.field.setReach(2.2); w.kart.setReach(2.2); break;
-      case 'multBoost': w.score.boostMult(e.mult, e.sec); break;
-      case 'parasol': S.parasol = true; break;
-      case 'flip': setFlip(true); break;
-      case 'jump': w.kart.state.vh = Math.max(w.kart.state.vh, e.vh); w.kart.state.h = Math.max(w.kart.state.h, 0.06); w.kart.state.airborne = true; poke('shock', 0.6); break;
-      case 'comboFreeze': w.score.freezeCombo(e.sec); break;
-      case 'jackpotBias': S.jackpotBias = e.mult; break;
-      case 'itemEnd':
-        if (e.id === 'tea_time') { S.timeScale = 1; sfx('time_slow_out', 0.8); }
-        else if (e.id === 'mirror') setFlip(false);
-        else if (e.id === 'rabbit_foot') S.jackpotBias = 1;
-        else if (e.id === 'magnet') { S.magnet = false; w.field.setReach(1); w.kart.setReach(1); }
-        break;
-    }
-  }
-
   // ---- the track chart: the file is the clock (CHART.md) ----
   /** Page -> host, and only when there is a host and a track: the audio has to follow the run. */
   function trackSend(type, data) { if (hosted && TR.track) send({ type, ...(data || {}) }); }
@@ -520,7 +485,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     S.pace = PACE.at(ts ? ts.t : S.elapsed, ts ? ts.act : null, TR.track ? TR.track.chart : null);
     k.pace(S.pace.base, S.pace.cap);
     k.update(dt, input.read(), lay);
-    w.score.tick(dt); w.items.update(dt);
+    w.score.tick(dt);
     { const tr = trail[trailI]; tr.d = ks.d; tr.x = ks.x; tr.h = ks.h; tr.ok = true; trailI = (trailI + 1) % TRAIL_N; }
     for (const e of mix.tick(dt)) onMix(w, e);
     if (S.wobble > 0) { S.wobble -= dt; if (S.wobble <= 0 && S.timeScale === WOBBLE_SCALE) S.timeScale = 1; }
@@ -547,7 +512,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track features crossed this frame
     for (const f of lay.featuresBetween(prevD, ks.d)) {
       if (f.type === 'boost' && !ks.airborne && Math.abs(f.x - ks.x) <= 1.2) { k.applyBoost(1.6); sfx('tunnel_powerup_collect', 0.8); shake.shake(0.25, 200); poke('streamed', 1.2); k.pose('boost'); }
-      else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2 && w.dresser.breakItemBox(f)) { shake.shake(0.2, 120); if (w.items.roll(w.score.state.mult)) sfx('ui_click', 0.5); }
+      else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2 && w.dresser.breakItemBox(f)) shake.shake(0.2, 120);
       else if (f.type === 'gate') enterRoom(w, ts && ts.act ? ts.act.room : f.room, ts && ts.act ? ts.act.name : null);
     }
     if (ks.airborne) S.airH = Math.max(S.airH, ks.h);
@@ -570,7 +535,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // camera + the cup light
     k.camera(camOut);
     camera.position.copy(camOut.pos); camera.up.copy(camOut.up); camera.lookAt(camOut.look);
-    // FOV kick: boost snaps wide (to ~84) and eases back slowly; drift adds a smaller one; tea_time narrows
+    // FOV kick: boost snaps wide (to ~84) and eases back slowly; drift adds a smaller one; a slowed clock narrows
     const boostT = ks.boostSec > 0 ? 1 : 0;
     S.fovBoost += (boostT - S.fovBoost) * Math.min(1, dt * (boostT ? 9 : 2.2));
     const fovT = fovBase + (reducedMotion ? 5 : 12) * S.fovBoost + (ks.drift && !reducedMotion ? 3 : 0) - (S.timeScale < 1 ? 4 : 0);
@@ -671,7 +636,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   bridge.on('pause', (m) => setPaused(!!(m && m.on)));
   bridge.on('payout-result', (m) => { if (payoutResolve) payoutResolve(m); });
   function cyclePixel() { pixel.cycle(); pixel.retexture(scene); hud.toast(pixel.label(), 'item'); }
-  input.onAction((a) => { if (a === 'item') { if (W && S.running && !S.paused) W.items.use(); } else if (a === 'brake') brake(); else if (a === 'pixel') cyclePixel(); });
+  input.onAction((a) => { if (a === 'brake') brake(); else if (a === 'pixel') cyclePixel(); });
   const onVis = () => { last = 0; };
   document.addEventListener('visibilitychange', onVis);
 
@@ -702,11 +667,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     input.dispose(); hud.dispose(); if (captions) captions.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
     pixel.dispose();
     scene.clear(); renderer.dispose();
-    setFlip(false);
   }
 
   /** Screenshot aid (`?itembox=<ms>` on the standalone page): break the nearest sugar cube ahead the
-   *  way a crossing does, so a headless shot catches the pickup without anyone steering. A cube too
+   *  way a crossing does, so a headless shot catches the break without anyone steering. A cube too
    *  far to read is pulled into view first (the kart's depth jumps): a dev-only warp, and the reason
    *  this is never reachable from the host. Returns false when there is no cube to break. */
   function debugItemBox() {
@@ -722,7 +686,6 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (bestRel > 16) { ks.d = lay.wrap(best.d - 16); trailClear(); }
     if (!W.dresser.breakItemBox(best)) return false;
     shake.shake(0.2, 120);
-    if (W.items.roll(W.score.state.mult)) sfx('ui_click', 0.5);
     return true;
   }
 

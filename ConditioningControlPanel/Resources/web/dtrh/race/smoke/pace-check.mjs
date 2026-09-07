@@ -253,7 +253,10 @@ for (const want of [0, 10, 30, 60]) {
  * ==========================================================================*/
 const pops = await json('window.__pops');
 const lastT = ran.length ? ran[ran.length - 1].t : 0;
-const trig = RAMP.events.filter((e) => e.kind === 'trigger' && e.t > 3 && e.t < lastT - 2);
+// Only the sure triggers: a phrase under cues.js TRIGGER_SURE is a loose treat at a random lane,
+// placed once and never re-placed (a guess at an unsure word, not a pop on a beat), so what it
+// measures is the seeded lane roll, not the sync. The last two rows of this fixture are such guesses.
+const trig = RAMP.events.filter((e) => e.kind === 'trigger' && e.t > 3 && e.t < lastT - 2 && !(Number(e.conf) < 0.55));
 const deltas = [];
 for (const e of trig) {
   let best = null;

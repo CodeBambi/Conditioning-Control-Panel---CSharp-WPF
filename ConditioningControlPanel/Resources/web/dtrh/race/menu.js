@@ -70,7 +70,7 @@
  *
  * A FINGER CAN REACH EVERYTHING. There is no key card and no pad on a phone, so
  * `how to drive` opens on a THUMB card (drag the left side, double tap to jump,
- * hold the right side to drift, the use button, pause and sound) with the keys
+ * hold the right side to drift, pause and sound) with the keys
  * and the pad kept below it, and
  * every path a key takes has a target under it: `how to drive` carries its own
  * back row and a tap anywhere off the panel closes it, and each value row wears
@@ -526,7 +526,6 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       ['left side', 'drag it. wherever your thumb lands is the wheel.'],
       ['double tap', 'jump. two quick taps, anywhere on the glass.'],
       ['right side', 'hold to drift, let go for turbo. one tap there jumps too.'],
-      ['use', 'the round button by the gauge spends your item.'],
       ['ii / sound', 'pause and mute, top right.'],
     ]) {
       const row = el('div', 'rm-key', howPanel); el('kbd', '', row, k); el('span', '', row, v);
@@ -534,7 +533,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     el('div', 'rm-row-hint', howPanel, 'you are always going. there is no pedal on glass.');
     el('div', 'rm-sub', howPanel, 'or keys and a pad');
   }
-  for (const [k, v] of [['arrows / wasd', 'steer, throttle, brake'], ['shift', 'drift (hold, let go for turbo)'], ['space', 'jump (time it at a ramp for big air)'], ['e', 'use the item'], ['p', 'pixel look'], ['m', 'mute'], ['esc', 'the brake'], ['pad', 'stick steers, rt goes, a drifts, b jumps, x item, start brakes']]) {
+  for (const [k, v] of [['arrows / wasd', 'steer, throttle, brake'], ['shift', 'drift (hold, let go for turbo)'], ['space', 'jump (time it at a ramp for big air)'], ['p', 'pixel look'], ['m', 'mute'], ['esc', 'the brake'], ['pad', 'stick steers, rt goes, a drifts, b jumps, start brakes']]) {
     const row = el('div', 'rm-key', howPanel); el('kbd', '', row, k); el('span', '', row, v);
   }
   el('div', 'rm-hint', howPanel, 'nothing is lost. you cannot fail.');

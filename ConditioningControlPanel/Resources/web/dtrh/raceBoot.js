@@ -46,7 +46,7 @@
  * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
  * the host init; `?itembox=ms` breaks the next sugar cube that comes into
- * reading range after that time and is a screenshot aid for the pickup card;
+ * reading range after that time and is a screenshot aid for the break;
  * `?panel=howto` opens the menu on the key card (race/menu.js).
  *
  * `?back=<same-origin path>` is WHERE THE MENU'S `surface` VERB GOES when there

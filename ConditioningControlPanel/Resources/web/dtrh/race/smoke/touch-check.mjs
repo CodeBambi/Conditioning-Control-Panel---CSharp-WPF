@@ -80,12 +80,11 @@ const makeWin = ({ search = '', maxTouchPoints = 0, coarse = false } = {}) => ({
   matchMedia: (q) => ({ matches: !!coarse && /coarse/.test(String(q)) }),
   addEventListener() { }, removeEventListener() { },
 });
-/** a race root with the .race-hud host and the item slot hud.js owns */
+/** a race root with the .race-hud host hud.js owns */
 const makeRoot = () => {
   const root = new Elem('div'); root.className = 'race-root';
   const hud = new Elem('div'); hud.className = 'race-hud'; root.appendChild(hud);
-  const slot = new Elem('div'); slot.className = 'rh-item'; hud.appendChild(slot);
-  return { root, hud, slot };
+  return { root, hud };
 };
 
 // the clock the hold test drives by hand
@@ -125,10 +124,10 @@ const settle = (input, ms = 800) => {
 
 /* ---- 3. the layer it does build ----------------------------------------- */
 const built = (() => {
-  const { root, hud, slot } = makeRoot();
+  const { root, hud } = makeRoot();
   const acts = [];
   const t = createTouch({ root, win: makeWin({ coarse: true }), doc, fire: (n) => acts.push(n) });
-  return { root, hud, slot, acts, t };
+  return { root, hud, acts, t };
 })();
 {
   const { hud, t } = built;
@@ -136,7 +135,7 @@ const built = (() => {
   ok(hud.children.some((c) => c === t.el), 'built inside .race-hud, so it inherits the safe insets');
   ok(!!t.el.querySelector('.rt-pad') && !!t.el.querySelector('.rt-ring') && !!t.el.querySelector('.rt-dot'), 'with a thumb pad: a ring and a dot');
   const btns = t.el.children.filter((c) => c._cls.has('rt-btn'));
-  ok(btns.length === 3, 'and three buttons: pause, mute, use');
+  ok(btns.length === 2, 'and two buttons: pause, mute');
   ok(btns.every((b) => b.tagName === 'BUTTON' && b.attrs['aria-label']), 'every button is a real <button> with a label');
 }
 
@@ -282,20 +281,20 @@ const built = (() => {
 {
   const { t } = built;
   const L = t.el, R = 700;
-  const use = L.children.find((c) => c.attrs['aria-label'] === 'use item');
+  const use = L.children.find((c) => c.attrs['aria-label'] === 'mute');
   const tc = (id, x, y, target) => ({ identifier: id, clientX: x, clientY: y, target });
 
   // two fingers in ONE touchstart: e.target is only the first of them, so the button test
-  // has to be asked of each touch or the finger on `use` becomes a tap under it
+  // has to be asked of each touch or the finger on mute becomes a tap under it
   t.flush(); tick(500);
   L.fire('touchstart', { changedTouches: [tc(6, R, 300), tc(7, R, 700, use)], touches: [tc(6, R, 300), tc(7, R, 700, use)] });
   tick(60);
   L.fire('touchend', { changedTouches: [tc(7, R, 700, use)], touches: [tc(6, R, 300)] });
-  ok(t.read().jump === false, 'a finger on the use button is the button\'s, never a tap on the road under it');
+  ok(t.read().jump === false, 'a finger on the mute button is the button\'s, never a tap on the road under it');
   L.fire('touchend', { changedTouches: [tc(6, R, 300)], touches: [] });
   ok(t.read().jump === true, 'while the finger beside it on the road still lands its tap');
 
-  // and double tapping `use` spends the item twice, never a jump
+  // and double tapping mute mutes twice, never a jump
   t.flush(); tick(500);
   const acts = built.acts; acts.length = 0;
   for (let i = 0; i < 2; i++) {
@@ -305,7 +304,7 @@ const built = (() => {
     L.fire('touchend', { changedTouches: [tc(8 + i, R, 700, use)], touches: [] });
     tick(100);
   }
-  ok(acts.join(',') === 'item,item', 'double tapping use spends the item twice');
+  ok(acts.join(',') === 'mute,mute', 'double tapping mute fires it twice');
   ok(t.read().jump === false, 'and never jumps while doing it');
 }
 
@@ -324,22 +323,14 @@ const built = (() => {
   ok(f.steer === 0 && f.drift === false && f.jump === false, 'flush() drops everything the thumbs were holding');
 }
 
-/* ---- 7. the buttons and the item gate ----------------------------------- */
+/* ---- 7. the buttons ------------------------------------------------------ */
 {
-  const { t, slot, acts } = built;
+  const { t, acts } = built;
   const byLabel = (l) => t.el.children.find((c) => c.attrs['aria-label'] === l);
   acts.length = 0;
   byLabel('brake').fire('pointerdown', { pointerId: 20 });
   byLabel('mute').fire('pointerdown', { pointerId: 21 });
-  byLabel('use item').fire('pointerdown', { pointerId: 22 });
-  ok(acts.join(',') === 'brake,mute,item', 'the three buttons fire the actions input.js already routes');
-
-  const use = byLabel('use item');
-  ok(!use.classList.contains('is-on'), 'the use button is hidden while the slot is empty');
-  slot.classList.add('is-held');
-  ok(use.classList.contains('is-on'), 'and appears the moment hud.js marks the slot is-held');
-  slot.classList.remove('is-held');
-  ok(!use.classList.contains('is-on'), 'and goes again when the item is spent');
+  ok(acts.join(',') === 'brake,mute', 'the two buttons fire the actions input.js already routes');
 
   // a press that lands on a button must not also start a turn on the layer under it
   t.flush();
@@ -349,14 +340,12 @@ const built = (() => {
 
 /* ---- 8. dispose leaves nothing behind ----------------------------------- */
 {
-  const { root, hud, slot } = makeRoot();
+  const { root, hud } = makeRoot();
   const t = createTouch({ root, win: makeWin({ coarse: true }), doc });
   const layer = t.el;
   t.dispose();
   ok(layer.parentNode === null && !hud.children.includes(layer), 'dispose() takes the layer out of the page');
   ok(layer.listenerCount === 0, 'and unhooks every pointer listener');
-  slot.classList.add('is-held');   // the observer is gone: this must not throw
-  ok(true, 'and disconnects the slot observer');
 }
 
 /* ---- 9. THE MERGE: input.js reads all three sources ---------------------- */
@@ -410,9 +399,8 @@ const built = (() => {
   const btn = (l) => L.children.find((c) => c.attrs['aria-label'] === l);
   seen.length = 0;
   btn('brake').fire('pointerdown', { pointerId: 30 });
-  btn('use item').fire('pointerdown', { pointerId: 31 });
   btn('mute').fire('pointerdown', { pointerId: 32 });
-  ok(seen.join(',') === 'brake,item,mute', 'pause / use / mute arrive as the existing brake / item / mute actions');
+  ok(seen.join(',') === 'brake,mute', 'pause / mute arrive as the existing brake / mute actions');
 
   // flush() and dispose() reach the touch source too
   L.fire('pointerdown', { pointerId: 4, clientX: 100, clientY: 300 });
@@ -434,7 +422,7 @@ const built = (() => {
   const { root, hud } = makeRoot();
   const input = createInput({ target: new Elem('div'), root });
   ok(input.touchEl === null, 'a mouse desktop gets no touch layer from createInput');
-  ok(hud.children.length === 1, 'and not one extra node in .race-hud (the WebView2 build stays identical)');
+  ok(hud.children.length === 0, 'and not one extra node in .race-hud (the WebView2 build stays identical)');
   const r = input.read();
   ok(r.steer === 0 && r.accel === 1 && r.drift === false && r.jump === false, 'and read() is exactly what it was');
   input.dispose();
