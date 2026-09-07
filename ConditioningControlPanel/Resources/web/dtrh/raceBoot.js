@@ -89,6 +89,9 @@ import * as bridge from './bridge.js';
 import { detectMode } from './shared/capability.js';
 import { setQuality, Q } from './shared/quality.js';
 import { createHostMediaSource } from './hostMedia.js';
+// The feed's pictures start loading the moment a manifest carrying them lands, so a run built
+// later opens with pictures already on the wall. Imports nothing itself: this is the boot path.
+import { warmWallPosters } from './race/wallWarm.js';
 
 const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250, PERF_LOG_MS = 2000;
 const params = new URLSearchParams(location.search);
@@ -186,7 +189,7 @@ if (mode.hardBlock || !mode.canTry3d) {
 
 // ---- host wiring ----
 bridge.on('init', (m) => { initMsg = m; maybeBoot(); });
-bridge.on('manifest', (m) => { try { media.setManifest(m); } catch (e) { host.log('manifest: ' + e); } haveManifest = true; maybeBoot(); });
+bridge.on('manifest', (m) => { try { media.setManifest(m); warmWallPosters(media); } catch (e) { host.log('manifest: ' + e); } haveManifest = true; maybeBoot(); });
 bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } catch (e) { host.log('favorites: ' + e); } });
 // The media panel's two frames (race/menu.js "YOUR MEDIA"). Both can land before the menu exists -
 // the pickers are only reachable from the menu, but the host pushes the pile it already holds on

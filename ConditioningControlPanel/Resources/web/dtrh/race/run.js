@@ -188,7 +188,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // (race/wallDom.js); the painted fill placards stand down as soon as its pictures are in
     let wallDom = null;
     const walls = createWalls({ scene, layout, media, renderer, camera, rng, hasDomPosters: () => !!wallDom && wallDom.ready() });
-    wallDom = createWallDomPosters({ root, layout, camera, media, rng });
+    // its OWN stream, not the world's. The layer draws or does not draw depending on whether a
+    // feed answered, and a draw off the shared rng would shift every roll after it: measured on
+    // race/smoke/pace-check.mjs, one extra draw here moved the worst "row under the kart" from
+    // 0.12 s to 0.67 s. The road a player gets must not depend on whether their pictures arrived.
+    wallDom = createWallDomPosters({ root, layout, camera, media, rng: makeRng(runSeed ^ 0x7f4a7c15) });
     const kart = createKart({ scene, layout, reducedMotion, pixel });
     const score = createScore();
     const getRoom = () => {

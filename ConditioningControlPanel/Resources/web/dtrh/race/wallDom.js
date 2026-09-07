@@ -36,11 +36,16 @@
  * translate(-50%,-50%) plus its own world matrix with its y COLUMN negated. Both
  * negations are the same fact twice: CSS's y axis points down.
  *
- * PLACED, NOT FETCHED. A fixed set of remote entries is drawn ONCE at creation and
- * every one starts loading immediately; a slot is only ever pointed at a picture
- * that has already finished loading, and a slot that falls behind the camera is
- * re-pointed at another member of that same set. Nothing is drawn or loaded per
- * slot mid-run, so the wall never stalls waiting on the CDN.
+ * PLACED, NOT FETCHED, AND WARM BEFORE THE FLAG. A slot is only ever pointed at a
+ * picture that has already finished loading, so the loading cannot start when the
+ * world does or the run opens on a bare wall while the CDN answers. race/wallWarm.js
+ * starts it as soon as a manifest carrying feed rows lands - before the menu, let
+ * alone the countdown - and this layer opens on that set. It tops itself up from the
+ * pool afterwards, once a second while it is short, which is also how a feed switched
+ * on late (or a manifest that landed after the world was built) still reaches the wall
+ * instead of leaving the layer dead for the whole run. A slot that falls behind the
+ * camera is re-pointed at another member of the set it already holds; nothing is
+ * fetched per slot mid-run, so the wall never stalls waiting on the CDN.
  *
  * OCCLUSION. A DOM layer sits over the WebGL canvas and cannot be hidden by
  * geometry, so the discipline is all here: a forward-depth window, a facing test
@@ -53,15 +58,17 @@
 import * as THREE from 'three';
 import { BAND_LO, BAND_HI, makeWallFrame } from './walls.js';
 import { roomById } from './rooms.js';
+import { warmShots, warmWallPosters } from './wallWarm.js';
 
-/* The pre-drawn set. Ten, because the forward window below is ~58 m and a slot
- * lands every ~7.5 m, so ten covers the whole visible band with a little slack:
- * one picture per slot at the start, and enough spare that a recycled slot can
- * re-point at something it was not already showing. Ten decodes of feed-sized
- * jpegs is a one-time cost the HTTP cache absorbs, and it stays wide enough that
- * hostMedia's four-deep echo guard keeps neighbours different. */
-const PRE_DRAW = 10;
-const SLOT_GAP = 7.5;        // metres of road between slots
+/* The drawn set. Twelve, because the forward window below is ~56 m and a slot lands
+ * every ~6.5 m, so twelve covers the whole visible band with a little slack: one
+ * picture per slot at the start, and enough spare that a recycled slot can re-point
+ * at something it was not already showing. Twelve decodes of feed-sized jpegs is a
+ * one-time cost the HTTP cache absorbs, and it stays wide enough that hostMedia's
+ * four-deep echo guard keeps neighbours different. */
+const PRE_DRAW = 12;
+const REFILL_MS = 900;       // how often a layer that is short of pictures asks the pool again
+const SLOT_GAP = 6.5;        // metres of road between slots
 const FAR = 58, NEAR = 2.2;  // the forward window: nothing outside it is on the wall
 const FADE_FAR = 16, FADE_NEAR = 3.5;   // metres of fade at each end of the window
 const BEHIND = 9;            // metres behind the lens before a slot recycles ahead
@@ -71,8 +78,12 @@ const POSTER_W = 3.4;        // metres wide, before the per-slot jitter
 const ALPHA = 0.94;          // never quite solid: the wall paint reads through
 const NDC_PAD = 1.5;         // off-screen by more than half a screen, stop transforming it
 
-/** loud rooms plaster, soft rooms scatter, the Tea Garden keeps a bare wall (walls.js). */
-const density = (id) => { const r = roomById(id); return !r || id === 'teagarden' ? 0 : r.loud ? 1 : 0.6; };
+/** loud rooms plaster, soft rooms scatter, and the TEA GARDEN carries pictures too.
+ *  rooms.js rollRoomOrder puts the Tea Garden first in every run and it runs 222..560 m
+ *  (10..25 s at KART_BASE_SPEED), so a bare opening room is a bare opening minute - which
+ *  is exactly what a player saw. It opens generously and the rest of the run reads off it.
+ *  race/walls.js's own per-room density carries the same fix for the player's own media. */
+const density = (id) => { const r = roomById(id); return !r ? 0 : id === 'teagarden' ? 0.8 : r.loud ? 1 : 0.6; };
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const e6 = (v) => (Math.abs(v) < 1e-6 ? 0 : Math.round(v * 1e5) / 1e5);
 /** camera.matrixWorldInverse as CSS: the y ROW flips, because CSS's y points down. */
@@ -86,46 +97,76 @@ export function createWallDomPosters({ root, layout, camera, media, rng }) {
   if (!root || !layout || !camera || !media || typeof media.drawRemoteDom !== 'function') return INERT;
   if (typeof document === 'undefined' || typeof Image === 'undefined') return INERT;
 
-  // ---- the pre-draw: one pass at the pool, before anything is placed ----------------
-  const picks = [];
-  for (let i = 0; i < PRE_DRAW; i++) { const p = media.drawRemoteDom('image'); if (p) picks.push(p); }
-  if (!picks.length) return INERT;   // no feed, no consent: build nothing, cost nothing
-
+  // ---- the picture set -------------------------------------------------------------
+  // Whatever race/wallWarm.js already decoded IS the opening set: those pictures are in hand
+  // before the world is built, so the first slots can be aimed on the run's very first frame.
   let disposed = false;
-  const shots = [];            // { url, aspect } - ONLY once the picture has finished loading
-  const loading = new Set();   // the loader <img>s, so dispose can let go of them
-  for (const p of picks) {
+  const shots = warmShots().slice();   // { url, aspect } - ONLY pictures that have finished loading
+  const loading = new Set();           // the loader <img>s, so dispose can let go of them
+  let pending = 0;                     // draws in flight, so a refill does not re-ask for them
+  let lastRefill = 0;
+
+  function pull(p) {
+    pending++;
     Promise.resolve().then(() => p.acquire()).then((h) => {
-      if (disposed || !h || !h.url) return;
+      if (disposed || !h || !h.url) { pending--; return; }
       // no crossOrigin: the CDN sends no ACAO, and an anonymous request would not load at all
       const img = new Image();
       img.decoding = 'async';
       loading.add(img);
       img.onload = () => {
+        pending--;
         loading.delete(img);
-        if (!disposed && img.naturalWidth) shots.push({ url: h.url, aspect: img.naturalHeight / img.naturalWidth });
+        // the element is kept on the shot: its decode stays resident, so a slot pointed at this
+        // url paints in the same frame instead of asking the cache for the picture again
+        if (!disposed && img.naturalWidth) shots.push({ url: h.url, aspect: img.naturalHeight / img.naturalWidth, img });
       };
-      img.onerror = () => loading.delete(img);
+      img.onerror = () => { pending--; loading.delete(img); };
       img.src = h.url;
-    }).catch(() => { /* the pool handed back nothing: the slot simply stays empty */ });
+    }).catch(() => { pending--; /* the pool handed back nothing: the slot simply stays empty */ });
   }
 
-  // ---- the layer -------------------------------------------------------------------
-  const box = document.createElement('div');
-  box.className = 'rh-wall3d';
-  const camEl = document.createElement('div');
-  camEl.className = 'rh-wall3d-cam';
-  box.appendChild(camEl);
-  root.appendChild(box);
+  /** Top the set up from the pool. Called at creation and then, at most once a REFILL_MS,
+   *  while the layer is short: a manifest that lands after the world was built (the feed's
+   *  own build takes seconds on a phone) is the ordinary case, not the exception, and a
+   *  layer that only ever asked once would stay dead for the whole of that run. */
+  function refill() {
+    if (disposed || shots.length + pending >= PRE_DRAW) return;
+    for (let i = shots.length + pending; i < PRE_DRAW; i++) {
+      const p = media.drawRemoteDom('image');
+      if (!p) return;   // nothing in the pool yet: ask again on the next tick
+      pull(p);
+    }
+  }
+  warmWallPosters(media, PRE_DRAW);   // whatever the warm set is short of, start it now
+  refill();
 
+  // ---- the layer, built only when there is a picture for it -------------------------
+  // NOT eager. A full-screen 3D container with a dozen posters in it standing over the
+  // canvas is not free even with nothing in it and display:none on top: measured on
+  // race/smoke/pace-check.mjs, building it in a run that has no feed at all pushed the
+  // worst "row under the kart" from 0.10 s to 0.70 s and failed that check. A player with
+  // no feed (no consent, the desktop build, a manifest that carries no remote rows) must
+  // pay nothing for a layer that can never show anything, so the elements are made on the
+  // first frame that actually has a picture to hang, and a feed that arrives late still
+  // builds them then.
+  let box = null, camEl = null;
   const slots = [];
-  for (let i = 0; i < PRE_DRAW; i++) {
-    const el = document.createElement('img');
-    el.className = 'rh-wall3d-shot';
-    el.alt = '';
-    el.decoding = 'async';
-    camEl.appendChild(el);
-    slots.push({ el, shot: null, depth: 0, angle: 0, roll: 0, w: POSTER_W, h: POSTER_W, on: false, shown: false });
+  function build() {
+    box = document.createElement('div');
+    box.className = 'rh-wall3d';
+    camEl = document.createElement('div');
+    camEl.className = 'rh-wall3d-cam';
+    box.appendChild(camEl);
+    root.appendChild(box);
+    for (let i = 0; i < PRE_DRAW; i++) {
+      const el = document.createElement('img');
+      el.className = 'rh-wall3d-shot';
+      el.alt = '';
+      el.decoding = 'async';
+      camEl.appendChild(el);
+      slots.push({ el, shot: null, depth: 0, angle: 0, roll: 0, w: POSTER_W, h: POSTER_W, on: false, shown: false });
+    }
   }
 
   const wallFrame = makeWallFrame(layout);
@@ -166,13 +207,13 @@ export function createWallDomPosters({ root, layout, camera, media, rng }) {
   function setRoom(id) {
     if (id === room) return;
     room = id;
-    live = Math.round(slots.length * density(id));
+    live = Math.round(PRE_DRAW * density(id));
   }
   /** Hides AT ONCE, not on the next update: the run's pause and the menu both stop calling
    *  update(), so a lever that only took effect there would leave the layer standing. */
   function setHidden(v) {
     hidden = !!v;
-    if (hidden && wasHidden !== true) { wasHidden = true; box.style.display = 'none'; }
+    if (hidden && wasHidden !== true) { wasHidden = true; if (box) box.style.display = 'none'; }
   }
   const ready = () => shots.length > 0;
 
@@ -190,10 +231,20 @@ export function createWallDomPosters({ root, layout, camera, media, rng }) {
     odo += delta; lastW = w;
     setRoom(layout.roomAtDepth(w));
 
-    if (hidden || !live) {
-      if (wasHidden !== true) { wasHidden = true; box.style.display = 'none'; }
+    // ahead of the hidden check: a layer standing in a room that wants nothing still gathers
+    // the pictures the room after it will want
+    if (shots.length < PRE_DRAW) {
+      const now = Date.now();
+      if (now - lastRefill > REFILL_MS) { lastRefill = now; refill(); }
+    }
+
+    // Nothing decoded yet: no elements are made and none of the camera work below runs.
+    // This is the whole of the no-feed cost, and it is a room lookup and a compare.
+    if (hidden || !live || !shots.length) {
+      if (box && wasHidden !== true) { wasHidden = true; box.style.display = 'none'; }
       return;
     }
+    if (!box) build();
     if (wasHidden !== false) { wasHidden = false; box.style.display = ''; }
 
     if (!seeded) { seeded = true; head = odo + 6; }
@@ -246,8 +297,13 @@ export function createWallDomPosters({ root, layout, camera, media, rng }) {
     for (const img of loading) { img.onload = null; img.onerror = null; img.src = ''; }
     loading.clear();
     for (const slot of slots) { slot.el.src = ''; slot.shot = null; }
-    slots.length = 0; shots.length = 0;
-    if (box.parentNode) box.parentNode.removeChild(box);
+    slots.length = 0;
+    live = 0;
+    // the warm set's own elements are NOT released here: race/wallWarm.js owns those and the
+    // next run opens on them. Only this layer's own loaders are let go.
+    shots.length = 0;
+    if (box && box.parentNode) box.parentNode.removeChild(box);
+    box = null; camEl = null;
   }
 
   return { update, setRoom, setHidden, ready, dispose };
