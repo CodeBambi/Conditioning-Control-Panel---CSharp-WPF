@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { BUBBLE_KINDS, KIND_BY_ID } from '../bubbleKinds.js';
 import { normalizeChart } from '../chart.js';
 import { THEME_BY_PRESET, PRESETS_IN_USE, kindForPreset, themeFor, FALLBACK_KIND } from '../triggerTheme.js';
-import { GENERATOR_ID, WORD_BIN_SEC, BIN_SEC, CAPTION_CONF, captionWords, scanTriggers, wordedRoad, roadFromPeaks, PEAKS_PER_SEC } from '../cloudChart.js';
+import { GENERATOR_ID, WORD_BIN_SEC, BIN_SEC, CAPTION_CONF, captionWords, scanTriggers, triggerHits, wordedRoad, roadFromPeaks, PEAKS_PER_SEC } from '../cloudChart.js';
 
 let fails = 0;
 const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -75,6 +75,27 @@ ok(hits.every((h, i) => i === 0 || h.t >= hits[i - 1].t), 'the hits come out sor
 ok(hits.every((h) => h.setId && h.id && h.t >= 0 && h.t <= DUR), 'every hit names its set and sits inside the file');
 ok(hits.some((h) => h.setId === 'bambi-sleep'), 'and the opening track really does say the phrase the road is built on');
 
+/* ---- 2b. the fingerprinted seconds win over the scan ------------------------ */
+{
+  const bare = { ...WORDS }; delete bare.hits;
+  const scanned = scanTriggers(bare, DUR);
+  eq(JSON.stringify(triggerHits(bare, DUR)), JSON.stringify(scanned), 'a words file with no hits gets the live scan, exactly');
+  const fp = { ...bare, hits: [{ setId: 'bambi-sleep', t: 10, dur: 0.6, score: 0.9, src: 'fp', conf: 0.7 }, { setId: 'good-girl', t: 20.5, dur: 0.5, score: 0.5, src: 'words', conf: 1 },
+    { setId: 'bambi-sleep', t: 30, dur: 0.6, score: 0.95, src: 'fp' }, { setId: 'not-a-set', t: 40, dur: 1, score: 1, src: 'fp' }] };
+  const got = triggerHits(fp, DUR);
+  eq(got.length, 3, 'a words file with hits gets its hits, and a set the catalogue no longer has is dropped');
+  eq(got.map((h) => h.t).join(','), '10,20.5,30', 'in time order, at the fingerprinted seconds, not the scan\'s');
+  eq(got.map((h) => h.id).join(','), 'h:bambi-sleep:0,h:good-girl:0,h:bambi-sleep:1', 'numbered per set in the scan\'s own shape');
+  eq(got[0].conf, 0.7, 'the phrase keeps the confidence the transcript gave it');
+  eq(got[2].conf, 1, 'and a hit with no conf is sure');
+  eq(triggerHits({ ...bare, hits: [{ setId: 'not-a-set', t: 1, dur: 1, score: 1, src: 'fp' }] }, DUR).length, scanned.length, 'hits that are all for unknown sets fall back to the scan');
+  const road2 = wordedRoad({ peaks: swell(DUR), durationSec: DUR, name: ROW.title, hash: ROW.hash, words: fp });
+  const tr2 = road2.events.filter((e) => e.kind === 'trigger');
+  ok(tr2.some((e) => e.setId === 'bambi-sleep' && e.t === 10) && tr2.some((e) => e.setId === 'bambi-sleep' && e.t === 30), 'and the worded road lays its triggers at the fingerprinted seconds');
+  ok(Array.isArray(WORDS.hits) && WORDS.hits.length > 0, ROW.title + ' ships with ' + (WORDS.hits || []).length + ' fingerprinted hits');
+  ok(WORDS.hits.every((h) => scanned.some((s) => s.setId === h.setId && Math.abs(s.t - h.t) <= 0.6)), 'every shipped hit is a hit the scan hears too, within 0.6 s (the fingerprint refines, it does not invent)');
+}
+
 /* ---- 3. the worded road --------------------------------------------------- */
 const road = wordedRoad({ peaks: swell(DUR), durationSec: DUR, name: ROW.title, hash: ROW.hash, words: WORDS });
 const kinds = {};
@@ -121,7 +142,7 @@ eq(plain.analysis.words, 'none', 'a track with no transcript still gets the road
 eq(plain.binSec, BIN_SEC, 'at the quarter second bin it was tuned to');
 ok(!plain.events.some((e) => e.kind === 'trigger'), 'and it has no triggers on it, because nobody heard one');
 eq(normalizeChart(plain).words.length, 0, 'and no caption track');
-eq(GENERATOR_ID, 'web-road-v2', 'the cache key moved, so a v1 road (which has no words) can never be served');
+eq(GENERATOR_ID, 'web-road-v3', 'the cache key moved again, so a v2 road (laid on the aligner\'s seconds) can never be served');
 
 console.log(fails ? '\nlyrics-road-check: ' + fails + ' failed' : '\nlyrics-road-check: all good');
 process.exit(fails ? 1 : 0);

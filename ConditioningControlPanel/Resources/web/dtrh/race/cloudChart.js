@@ -54,8 +54,11 @@ import { detect } from '../chart/maker/triggers.js';
  *
  * v2 (the lyrics wave): a road built on a transcript has words on it and a v1 road
  * has none, so every v1 entry in the cache must regenerate rather than be served.
+ * v3 (the sync wave): the trigger seconds come off the fingerprinted `hits` in the
+ * words file (tools/racechart/fingerprint.py) when it has them, so a v2 road, laid
+ * on the aligner's guess, must regenerate too.
  */
-export const GENERATOR_ID = 'web-road-v2';
+export const GENERATOR_ID = 'web-road-v3';
 
 /* ---- the knobs, and why each one is what it is --------------------------- */
 /**
@@ -247,6 +250,27 @@ export function scanTriggers(words, durationSec) {
 }
 
 /**
+ * The trigger seconds for a transcript: the fingerprinted `hits` the words file
+ * carries when tools/racechart/fingerprint.py has been over it (each one's `t` is
+ * the correlation peak in the audio itself, a quarter second truer than the
+ * aligner's guess in the median), in scanTriggers' shape; the live scan when it
+ * has none. A hit for a set the catalogue no longer has is dropped.
+ */
+export function triggerHits(words, durationSec) {
+  const fp = words && Array.isArray(words.hits) ? words.hits : null;
+  if (!fp || !fp.length) return scanTriggers(words, durationSec);
+  const perSet = new Map(), out = [];
+  for (const h of fp.slice().sort((a, b) => a.t - b.t || a.setId.localeCompare(b.setId))) {
+    if (!SET_BY_ID.has(h.setId) || !(h.t >= 0) || (durationSec > 0 && h.t > durationSec)) continue;
+    const n = perSet.get(h.setId) || 0;
+    perSet.set(h.setId, n + 1);
+    out.push({ id: 'h:' + h.setId + ':' + n, t: r3(h.t), dur: r3(Number(h.dur) || 0), setId: h.setId, n,
+      conf: Math.round(clamp01(typeof h.conf === 'number' ? h.conf : 1) * 100) / 100, src: h.src === 'fp' ? 'fp' : 'words' });
+  }
+  return out.length ? out : scanTriggers(words, durationSec);
+}
+
+/**
  * THE TRIGGERS OWN THEIR SECOND.
  *
  * generate.js spends a hit as a `word` event, because on the maker page the trigger
@@ -303,7 +327,7 @@ export function captionWords(words) {
  * mapping both read. Pure, so the smoke runs it in node.
  */
 export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 'track', hash = '', words, now = new Date() }) {
-  const hits = scanTriggers(words, durationSec);
+  const hits = triggerHits(words, durationSec);
   const g = generate({ peaks, perSec, durationSec, words, hits, setById: SET_BY_ID, binSec: WORD_BIN_SEC, now });
   const energy = g.energy.map(clamp01);
   const events = triggersFromHits(g.events, hits, SET_BY_ID)

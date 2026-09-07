@@ -1,7 +1,13 @@
 /* ============================================================================
  * race/words.js - the transcript for a track, if there is one.
  *
- *   loadWords({ cloudId, hash }) -> Promise<{ version, hash, durationSec, words } | null>
+ *   loadWords({ cloudId, hash }) -> Promise<{ version, hash, durationSec, words, hits? } | null>
+ *
+ * `hits`, when the file has them, are the trigger seconds tools/racechart/fingerprint.py
+ * refined against the audio itself: { setId, t, dur, score, src: 'fp' | 'words', conf },
+ * `t` at the correlation peak for src 'fp' and at the aligner's guess for src 'words'.
+ * race/cloudChart.js triggerHits() lays the road on them and falls back to its own
+ * detector scan for a file without them.
  *
  * `race/words/index.json` is a written-down table, exactly like `race/levels.json`
  * beside it: a row per track that has an aligned transcript, keyed by the file's
@@ -47,7 +53,17 @@ function readFile(json) {
   if (!json || typeof json !== 'object' || !Array.isArray(json.words)) return null;
   const words = json.words.filter((w) => w && typeof w.t === 'number' && typeof w.w === 'string');
   if (!words.length) return null;
-  return { version: 1, hash: String(json.hash || ''), durationSec: Number(json.durationSec) || 0, words };
+  const out = { version: 1, hash: String(json.hash || ''), durationSec: Number(json.durationSec) || 0, words };
+  // the fingerprinted trigger seconds, when tools/racechart/fingerprint.py has been over this file:
+  // { setId, t, dur, score, src: 'fp' | 'words', conf }. cloudChart.js prefers them to its own scan.
+  // Only a well-formed row gets through; a file without them is exactly the file it was.
+  if (Array.isArray(json.hits)) {
+    const hits = json.hits.filter((h) => h && typeof h.setId === 'string' && h.setId && typeof h.t === 'number' && isFinite(h.t) && h.t >= 0)
+      .map((h) => ({ setId: h.setId, t: h.t, dur: Number(h.dur) > 0 ? Number(h.dur) : 0, score: Number(h.score) || 0,
+        src: h.src === 'fp' ? 'fp' : 'words', conf: typeof h.conf === 'number' ? Math.max(0, Math.min(1, h.conf)) : 1 }));
+    if (hits.length) out.hits = hits;
+  }
+  return out;
 }
 
 /**
