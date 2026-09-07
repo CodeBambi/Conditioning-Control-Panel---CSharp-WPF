@@ -33,6 +33,11 @@
  *   pane?:'<paneId>', panes?:['<paneId>',...], dwell?:ms }. The scene fades out,
  *   the guide opens the REAL warren card + pulses the pane(s), then fades back.
  *   Locked cards/panes are skipped gracefully. Pure data - no functions.
+ *   `vo: false` = text-only beat: the VN never requests its mp3 (voReady or not).
+ *   `when` = a Barnum cold-read gate (reactive/hub pools only; ids `b_*`):
+ *   { fact: { min?, max? } } checked by cheshireGuide against the facts that are
+ *   GUARANTEED at the trigger (the bark data + runs/hour/weekday/weekend/sitting).
+ *   A Barnum line = one true fact, a vague flattering reading, ONE closer tag.
  * Run-schedule entry shape:
  *   { at: {progress}|{event}|{wave}, mode: 'say'|'overlay', ...beat }
  * ==========================================================================*/
@@ -364,17 +369,23 @@ export const CHESHIRE = {
         { id: 'e_cbig2', pose: 'table_lean', mood: 'delighted', text: 'That streak of yours is getting indecent, kitten. Don’t you dare drop it.' },
         { id: 'e_cbig3', pose: 'seated', mood: 'savoring', text: 'Mm. A streak like that pays better than it has any right to. Keep braiding it.' },
         { id: 'e_cbig4', pose: 'standing', mood: 'proud', text: 'There’s my quick-fingered girl. The hole notices streaks like that.' },
+        { id: 'b_cbig1', pose: 'couch_invite', mood: 'quiet awe', vo: false, when: { threshold: { min: 50 } }, text: 'Fifty in a row at the least, and not one slip. You go quiet when you’re good at something, no fuss, just hands. People miss how good you are because you never make noise about it. Am I wrong? Nah.' },
+        { id: 'b_cbig2', pose: 'standing', mood: 'pleased, reading her', vo: false, when: { threshold: { max: 25 } }, text: 'Twenty-five in a row. You settle in slow and then you don’t stop. Slow to start, hard to shake off. That’s you in most things. Hm?' },
       ] },
       'combo-milestone': { cd: 120000, chance: 0.45, lines: [
         { id: 'e_cmil1', pose: 'lean_fwd', mood: 'quiet awe', text: '[low] Now THAT is a number. They’ll hear about that one upstairs.' },
         { id: 'e_cmil2', pose: 'couch_invite', mood: 'wicked joy', text: '[giggles] Unbroken, all that way. You were made for this work, sweet thing.' },
         { id: 'e_cmil3', pose: 'table_lean', mood: 'merchant counting', text: 'A milestone streak. That’s real money, kitten. My cut’s already spent.' },
+        { id: 'b_cmil1', pose: 'table_lean', mood: 'amused', vo: false, text: 'A round number on your streak, just now. You like it when the count comes out even. A tidy little person under all that, kitten. Hihi.' },
       ] },
       'detonated': { cd: 75000, chance: 0.4, lines: [
         { id: 'e_det1', pose: 'embarrassed', mood: 'wincing sympathy', text: 'Oof. It got away from you. Happens to everyone, hon. [whispers] Enjoy the consequences.' },
         { id: 'e_det2', pose: 'curled', mood: 'unbothered amusement', text: '[chuckles] One slipped. That’s what the glow means, remember. Hold. It. Down.' },
         { id: 'e_det3', pose: 'base', mood: 'dry', text: 'And that, kitten, is why we don’t let the live ones finish their sentence.' },
         { id: 'e_det4', pose: 'dizzy', mood: 'giddy tease', text: 'Boom. [giggles] Pretty though, wasn’t it? Costly, but pretty.' },
+        { id: 'b_det1', pose: 'curled', mood: 'dry, fond, reading her', vo: false, when: { runDetonations: { min: 3 } }, text: 'Third one to go off on you this fall, at least. You knew exactly what to do and did the other thing anyway. You do that in most rooms of your life, don’t you, kitten?' },
+        { id: 'b_det2', pose: 'lean_fwd', mood: 'told-you-so purr', vo: false, when: { combo: { min: 15 } }, text: 'You had a real streak going and you let one finish. You relax the moment things go well, and that’s exactly when you slip. Am I wrong? Nah.' },
+        { id: 'b_det3', pose: 'base', mood: 'amused, unbothered', vo: false, when: { runDetonations: { max: 1 } }, text: 'First one to slip this fall. You held the others fine, then you got curious about what happens when you don’t. You like finding out the hard way. Thought so.' },
       ] },
       'detonated-absorbed': { cd: 90000, chance: 0.45, lines: [
         { id: 'e_dabs1', pose: 'seated', mood: 'relieved shopkeeper', text: 'Your shield ate that one. Shields are why we buy shields, kitten.' },
@@ -400,56 +411,80 @@ export const CHESHIRE = {
       'tease-clicked': { cd: 90000, chance: 0.5, lines: [
         { id: 'e_tsc1', pose: 'embarrassed', mood: 'told-you-so wince', text: 'It SAID don’t touch, kitten. Red means the answer is no. [sighs] Expensive lesson.' },
         { id: 'e_tsc2', pose: 'base', mood: 'dry blade', text: 'You touched it. Of course you touched it. That’s exactly what it wanted.' },
+        { id: 'b_tsc1', pose: 'embarrassed', mood: 'fond scolding', vo: false, text: 'You were told not to touch the red one, and you touched it. You’ve never once left a thing alone just because somebody said so. [chuckles] Cute.' },
+        { id: 'b_tsc2', pose: 'base', mood: 'sly, low', vo: false, text: 'The red one said no, and your hand went anyway. That hand moves a little before your head does. Always has. Hm?' },
       ] },
       'tease-denied': { cd: 75000, chance: 0.4, lines: [
         { id: 'e_tsd1', pose: 'couch_invite', mood: 'genuinely impressed, low', text: '[low] You let it leave unanswered. That kind of restraint is rare down here... and it pays.' },
         { id: 'e_tsd2', pose: 'seated', mood: 'approving purr', text: 'Ignored it completely. Good. Wanting you and having you are different things, and it just learned that.' },
+        { id: 'b_tsd1', pose: 'seated', mood: 'appraising purr', vo: false, when: { count: { min: 2 } }, text: 'Second red one you’ve walked past this fall. You like being the one who could have, and didn’t. [low] That’s not restraint, sweet thing, that’s a taste. Hihi.' },
       ] },
       'tease-denied-streak': { cd: 150000, chance: 0.6, lines: [
         { id: 'e_tsds1', pose: 'lean_fwd', mood: 'wondering at her', text: 'Every single one, denied. [low] Either you have iron nerves or terrible taste, kitten. The hole pays for both.' },
+        { id: 'b_tsds1', pose: 'lean_fwd', mood: 'quietly certain', vo: false, text: 'Every red one this fall, left alone. You’re better at wanting than taking, and you already knew that about yourself. No? Sure.' },
       ] },
       'junction-chosen': { cd: 120000, chance: 0.3, lines: [
         { id: 'e_jch1', pose: 'curled', mood: 'noting it, quiet', text: 'Another door, another word. [low] They add up, the words you keep choosing.' },
         { id: 'e_jch2', pose: 'base', mood: 'light', text: 'Chosen and fallen. The road you didn’t take is already gone. Don’t look back, it’s rude.' },
         { id: 'e_jch3', pose: 'standing', mood: 'wry', text: 'You do keep picking the interesting doors. [chuckles] I’d have picked the same.' },
+        { id: 'b_jch1', pose: 'standing', mood: 'light tease', vo: false, text: 'You read both doors and picked one yourself. You like it to feel like your idea. It usually is, right up until it isn’t. Hihi.' },
+        { id: 'b_jch2', pose: 'seated', mood: 'wry, fond', vo: false, text: 'Picked your door before the tube had to nudge you. Quick down here, slower up there, I’d wager. Thought so.' },
       ] },
       'junction-forced': { cd: 120000, chance: 0.45, lines: [
         { id: 'e_jfr1', pose: 'lean_fwd', mood: 'soft menace', text: 'Took too long, so the tube chose for you. [low] It usually chooses well. Usually.' },
         { id: 'e_jfr2', pose: 'curled', mood: 'amused', text: 'Hesitate at a fork and the fall decides. That’s not a punishment, kitten. That’s the house style.' },
+        { id: 'b_jfr1', pose: 'curled', mood: 'dry, knowing', vo: false, text: 'You stood at the fork until the tube chose for you. You wait things out and call it thinking. Am I wrong? Nah.' },
+        { id: 'b_jfr2', pose: 'base', mood: 'soft, reading her', vo: false, text: 'Two doors, and you let the fall pick. Somewhere along the way you learned it feels lighter when it isn’t your choice, didn’t you, kitten?' },
       ] },
       'boon-picked': { cd: 90000, chance: 0.3, lines: [
         { id: 'e_bpk1', pose: 'table_lean', mood: 'merchant pleased', text: 'Sold. It’ll ride with you the rest of the way down. My wares always behave.' },
         { id: 'e_bpk2', pose: 'seated', mood: 'approving', text: 'Good eye. That one suits how you fall.' },
         { id: 'e_bpk3', pose: 'couch_invite', mood: 'purring', text: 'Mm, that’s one of my favorites. Wear it well, kitten.' },
+        { id: 'b_bpk1', pose: 'seated', mood: 'warm, approving', vo: false, text: 'You took a mantra from my table. You like having something riding along with you, something on your side. You always have. No? Sure.' },
       ] },
       'curse-picked': { cd: 120000, chance: 0.55, lines: [
         { id: 'e_crs1', pose: 'lean_fwd', mood: 'delighted blade', text: '[low] Ohh, you took the wicked one. Bigger pay, sharper teeth. I do love watching this part.' },
         { id: 'e_crs2', pose: 'curled', mood: 'savoring', text: 'A sin, kitten? [giggles] Bold. It pays beautifully right up until it doesn’t.' },
         { id: 'e_crs3', pose: 'base', mood: 'mock warning', text: 'You read the fine print on that one, I hope. No? [chuckles] Even better.' },
+        { id: 'b_crs1', pose: 'lean_fwd', mood: 'delighted, low', vo: false, text: 'You took the wicked card. Nobody made you. You like a little trouble braided into your reward, don’t you, kitten?' },
+        { id: 'b_crs2', pose: 'curled', mood: 'savoring', vo: false, text: 'A sin, chosen with your own hand. You’ve always been a little more curious than careful. [giggles] Cute.' },
       ] },
       'boon-skipped': { cd: 120000, chance: 0.45, lines: [
         { id: 'e_bsk1', pose: 'embarrassed', mood: 'mock offense', text: 'Nothing? You looked at my table and took NOTHING? [sighs] Pride is expensive, kitten.' },
         { id: 'e_bsk2', pose: 'base', mood: 'shrugging', text: 'Walked past the wares. Brave. The fall respects it... I just find it strange. [chuckles]' },
+        { id: 'b_bsk1', pose: 'table_lean', mood: 'mock hurt, then knowing', vo: false, text: 'You looked at every card on my table and took none. You don’t like owing anyone, not even a cat. [low] Am I wrong? Nah.' },
+        { id: 'b_bsk2', pose: 'base', mood: 'shrugging, fond', vo: false, text: 'Took nothing from the table. You’d rather do it the hard way than accept a gift you didn’t ask for. Old habit of yours. Cute.' },
       ] },
       'wave-escalated': { cd: 150000, chance: 0.25, lines: [
         { id: 'e_wes1', pose: 'standing', mood: 'announcing the deep', text: 'Deeper now. Hear how the room changed? Everything down here is a little hungrier.' },
         { id: 'e_wes2', pose: 'curled', mood: 'low relish', text: '[low] Another chamber down. It gets richer from here. It also gets... attentive.' },
       ] },
+      // wave-cleared: chaosRun barks it at every chamber transition (data.wave =
+      // the chamber just finished). New pool, Barnum text-only until voiced.
+      'wave-cleared': { cd: 150000, chance: 0.3, lines: [
+        { id: 'b_wcl1', pose: 'standing', mood: 'observing, light', vo: false, text: 'Another chamber behind you. You don’t look back at a finished thing, you just want the next one. Funny how nothing ever quite feels done for you. Hm?' },
+        { id: 'b_wcl2', pose: 'curled', mood: 'low, certain', vo: false, when: { wave: { min: 3 } }, text: 'Three chambers down at the least, and still going. Once you start a thing you can’t leave it half done. It bothers you more than you’d admit. No? Sure.' },
+      ] },
       'act-changed': { cd: 150000, chance: 0.35, lines: [
         { id: 'e_act1', pose: 'base', mood: 'marking the act', text: 'New act, kitten. The performance moves along whether you’re ready or not. You’re ready.' },
         { id: 'e_act2', pose: 'lean_fwd', mood: 'quiet drama', text: '[low] The music changed. Next act. Play it prettier than the last one.' },
+        { id: 'b_act1', pose: 'lean_fwd', mood: 'low, impressed', vo: false, when: { act: { min: 4 } }, text: 'You’ve reached the Court. Fourth act, the deep one, and you came anyway. Careful people turn back around act two. You’re not careful, you’re curious. [low] Cute.' },
       ] },
       'focus-low': { cd: 120000, chance: 0.5, lines: [
         { id: 'e_flow1', pose: 'seated', mood: 'gentle reminder', text: 'Your focus is running dry, hon. Pop the soft ones. They feed the bar that feeds everything else.' },
         { id: 'e_flow2', pose: 'base', mood: 'coaching', text: 'Empty tank, kitten. No focus, no snapping, no ripple. Treats first. Always treats first.' },
+        { id: 'b_flow1', pose: 'base', mood: 'coaching, dry', vo: false, text: 'You let the tank run dry before you thought about filling it. You chase the shiny part and leave the boring part for later. Every time. Am I wrong? Nah.' },
       ] },
       'ending-soon': { cd: 60000, chance: 0.3, lines: [
         { id: 'e_end1', pose: 'couch_invite', mood: 'calling her up, warm', text: 'Ten seconds, sweet thing. Finish pretty. I’m watching the dismount.' },
         { id: 'e_end2', pose: 'lean_fwd', mood: 'low', text: '[low] The hole’s closing. Take one last thing on the way up.' },
+        { id: 'b_end1', pose: 'couch_invite', mood: 'warm, low', vo: false, text: 'Ten seconds left, and you’re still here. You never did like the part where a thing ends. You hang on a beat longer than you need to, don’t you, kitten?' },
+        { id: 'b_end2', pose: 'lean_fwd', mood: 'fond, knowing', vo: false, when: { sitting: { min: 2 } }, text: 'Nearly up, and that makes two falls this sitting at the least. One is never quite enough for you. You say one more and you mean two. Thought so.' },
       ] },
       'draft-autopick': { cd: 120000, chance: 0.45, lines: [
         { id: 'e_apk1', pose: 'table_lean', mood: 'indulgent', text: 'Couldn’t decide, so I chose for you. [chuckles] I have excellent taste, don’t worry.' },
         { id: 'e_apk2', pose: 'seated', mood: 'wry', text: 'Time’s up, so the table picked. It knows what you like better than you do, kitten.' },
+        { id: 'b_apk1', pose: 'table_lean', mood: 'indulgent', vo: false, text: 'The table waited, you didn’t choose, so it chose. You freeze a little when everything looks good at once. Too many pretty things, no hand. Hm?' },
       ] },
       'gold-first': { cd: 1, chance: 1, lines: [
         { id: 'e_gld1', pose: 'table_lean', mood: 'the first gold; merchant delight', once: true, prop: 'gold', text: 'That shine in your hand? Gold, kitten. It spends at my bench, and ONLY at my bench. [low] Careful. It’s habit-forming.' },
@@ -471,6 +506,9 @@ export const CHESHIRE = {
         { id: 'h_gr4', pose: 'curled', mood: 'sleepy warmth', text: 'Mm. You again. Good. I was starting to talk to the furniture.' },
         { id: 'h_gr5', pose: 'base', mood: 'light tease', text: 'You’ve got that look, kitten. The one that means you’re about to fall down a hole on purpose.' },
         { id: 'h_gr6', pose: 'standing', mood: 'brisk', text: 'Perfect timing. The hole’s in a generous mood today... [low] I can always tell.' },
+        { id: 'b_hgr1', pose: 'curled', mood: 'hushed, fond', vo: false, when: { hour: { min: 0, max: 3 } }, text: 'Past midnight where you are, and here you are in my burrow. The quiet hours are when you come looking. You think better when the house has gone still, don’t you, kitten?' },
+        { id: 'b_hgr2', pose: 'seated', mood: 'amused, lazy', vo: false, when: { hour: { min: 5, max: 8 } }, text: 'Early. Not even nine in the morning and you’re already down here with me. You reach for the thing you want before you reach for anything sensible. Hihi.' },
+        { id: 'b_hgr3', pose: 'couch_invite', mood: 'delighted', vo: false, when: { weekend: { min: 1 } }, text: 'It’s the weekend and this is what you chose to do with it. You could be anywhere, and you picked a hole in the ground with a cat in it. [chuckles] Cute.' },
       ] },
       idle: { cd: 300000, chance: 0.25, lines: [
         { id: 'h_id1', pose: 'curled', mood: 'idle musing', text: 'The rooms rearranged themselves again last night. [sighs] Nobody asks the furniture what it wants.' },
@@ -478,6 +516,7 @@ export const CHESHIRE = {
         { id: 'h_id3', pose: 'table_lean', mood: 'shop talk', text: 'Emotes level. Gold unlocks. The liturgy hasn’t changed since you last checked, hon. [chuckles]' },
         { id: 'h_id4', pose: 'base', mood: 'idle observation', text: 'You can hear it if you stand still, you know. The hole. It hums when it’s waiting for someone.' },
         { id: 'h_id5', pose: 'couch_invite', mood: 'soft sell', text: 'No rush. The hole keeps. [low] It always keeps.' },
+        { id: 'b_hid1', pose: 'base', mood: 'idle, knowing', vo: false, text: 'Still floating around the Warren, not falling yet. You like to circle a thing before you commit to it. You always did. Thought so.' },
       ] },
     },
   },
