@@ -25,7 +25,11 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<SessionCompletedEventArgs>? SessionCompleted;
         public event EventHandler? SessionStarted;
         public event EventHandler? SessionStopped;
-        
+        /// <summary>Raised after a pause takes effect. Payload = the pause count this session (1-based).</summary>
+        public event EventHandler<int>? SessionPaused;
+        /// <summary>Raised after a resume takes effect. Payload = how long the pause lasted.</summary>
+        public event EventHandler<TimeSpan>? SessionResumed;
+
         // State
         private Session? _currentSession;
         private bool _isRunning;
@@ -239,6 +243,11 @@ namespace ConditioningControlPanel.Services
             _mainTimer.Tick += MainTimer_Tick;
             _mainTimer.Start();
             
+            // Local session ledger (recent start times + same-mod run) feeds the companion's
+            // "I noticed" bark conditions. Recorded BEFORE SessionStarted so the bark that fires
+            // on this very start already counts it. Local settings only, never sent anywhere.
+            try { App.Settings?.Current?.RecordSessionStart(App.Settings.Current.ActiveModId); } catch { }
+
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
 
@@ -500,6 +509,7 @@ namespace ConditioningControlPanel.Services
             try { App.EmiDesk?.Fire("sessionPaused", new { n = _pauseCount }); } catch { }
             _pauseStartTime = DateTime.Now;
             _wallClockStopwatch.Stop();
+            try { SessionPaused?.Invoke(this, _pauseCount); } catch (Exception ex) { App.Logger?.Debug(ex, "SessionPaused handler threw"); }
 
             // Stop timers but keep session state
             _mainTimer?.Stop();
@@ -588,6 +598,10 @@ namespace ConditioningControlPanel.Services
             // EMI Desk (MOMENTS 4.B).
             try { App.EmiDesk?.Fire("sessionResumed", new { minutes = (int)Math.Round(RemainingTime.TotalMinutes) }); }
             catch { }
+
+            var pausedFor = DateTime.Now - _pauseStartTime;
+            if (pausedFor < TimeSpan.Zero) pausedFor = TimeSpan.Zero;
+            try { SessionResumed?.Invoke(this, pausedFor); } catch (Exception ex) { App.Logger?.Debug(ex, "SessionResumed handler threw"); }
         }
 
         private void MainTimer_Tick(object? sender, EventArgs e)
