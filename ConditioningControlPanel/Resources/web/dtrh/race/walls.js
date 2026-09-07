@@ -180,7 +180,12 @@ export function createWalls({ scene, layout, media, renderer, camera, rng, hasDo
     if (id === room) return;
     room = id;
     const spec = roomById(id);
-    posters.setRegion(!spec || id === 'teagarden' ? 1 : spec.loud ? 3 : 2);
+    // The Tea Garden used to take Region I, which wallPosters.js keeps deliberately BARE. It is
+    // also always the first room of a run (rooms.js rollRoomOrder) and runs 222..560 m, so that
+    // one line was the whole of "no pictures on the wall from the start": the opening 10..25 s
+    // had a hard ceiling of zero posters no matter what media the player had. It scatters now,
+    // like the other calm rooms; the loud rooms still plaster.
+    posters.setRegion(!spec ? 2 : spec.loud ? 3 : 2);
   }
 
   // ---- runtime ----------------------------------------------------------------------------
