@@ -162,7 +162,7 @@ try {
     AssertComposition $repo $Mode # caller-bound gate before ANY owned child or discovery
     $present = $Mode -eq 'RequireNative'
     Save 'mode' @{ expectation = $Mode; nativeRequired = $present }
-    $gitExe = (Get-Command git -CommandType Application -ErrorAction Stop).Source
+    $gitExe = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     foreach ($hive in 'LocalMachine', 'CurrentUser') {
         foreach ($view in 'Registry64', 'Registry32') {
             $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, $view)
