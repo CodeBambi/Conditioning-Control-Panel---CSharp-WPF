@@ -44,7 +44,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const HERE = resolve(fileURLToPath(import.meta.url), '..');
 const WEB = resolve(HERE, '../../..');                     // Resources/web
-const TRACK_FILE = resolve(WEB, 'dtrh/assets/audio/drone1.mp3');
+// RACE_TRACK_FILE: a local copy of a track the words index knows (the hash is a length and the first
+// MiB, chartSource.js, so the stub serves the same bytes and the transcript lands by hash), which is
+// how section 3c measures the sync against a real voice with nothing leaving this machine.
+const TRACK_FILE = process.env.RACE_TRACK_FILE ? resolve(process.env.RACE_TRACK_FILE) : resolve(WEB, 'dtrh/assets/audio/drone1.mp3');
 const PORT = 8865;
 const REAL = process.env.RACE_REAL_URL || '';
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -52,7 +55,7 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 
 if (!existsSync(TRACK_FILE)) { console.error('FAIL no mp3 at ' + TRACK_FILE); process.exit(1); }
 const TRACK = readFileSync(TRACK_FILE);
-console.log(`the file: ${TRACK_FILE.slice(WEB.length + 1)}, ${TRACK.length} bytes (${(TRACK.length / 1048576).toFixed(2)} MiB)`);
+console.log(`the file: ${TRACK_FILE.startsWith(WEB) ? TRACK_FILE.slice(WEB.length + 1) : 'RACE_TRACK_FILE'}, ${TRACK.length} bytes (${(TRACK.length / 1048576).toFixed(2)} MiB)`);
 
 /* ============================================================================
  * 0. the cdn's own headers, only when a real url was handed in
@@ -259,6 +262,68 @@ if (c.words && c.words !== 'none') {
   }
 } else {
   console.log('  --  3b skipped: this file has no transcript, so there is nothing to caption');
+}
+
+/* ============================================================================
+ * 3c. the sync, measured against the real voice
+ *
+ * The owner heard the plate land "too soon by 2 sec or so" on the phone. This
+ * seeks a few seconds ahead of the first sure triggers, lets the file PLAY, and
+ * watches: the track second each plate reached the DOM, and race/sync.js's own
+ * trace (the second the scheduler handed the event over, the second its visible
+ * half fired, the second the kart met its row). Everything is a delta from
+ * event.t; nothing here is a word of the transcript. The clock is the <audio>
+ * element through the host's 250 ms tick, so a quarter second of slack is real
+ * playback, not the sync. RACE_SYNC_REPORT=1 prints and does not judge.
+ * ==========================================================================*/
+if (c.words && c.words !== 'none') {
+  const trig = await json(`(()=>{const ch=window.__race.race.track.chart; return ch.events.filter(e=>e.kind==='trigger'&&(e.conf==null||e.conf>=0.55)).map(e=>({id:String(e.id),t:e.t}));})()`);
+  const WINDOW = 12, TOL = 0.3, REPORT = !!process.env.RACE_SYNC_REPORT;
+  if (trig.length) {
+    // the window: the WINDOW seconds with the most sure triggers in them, starting 3 s before the first
+    const count = (t0) => trig.filter((e) => e.t >= t0 && e.t <= t0 + WINDOW).length;
+    // (RACE_SYNC_T0 pins it: the number an isolated trigger gives is the one to quote)
+    const t0 = process.env.RACE_SYNC_T0 ? Number(process.env.RACE_SYNC_T0) : trig.map((e) => Math.max(0, e.t - 3)).reduce((best, v) => (count(v) > count(best) ? v : best), Math.max(0, trig[0].t - 3));
+    const watched = trig.filter((e) => e.t >= t0 && e.t <= t0 + WINDOW);
+    await ev(`(()=>{const S=window.__sync={plates:[]}; const R=window.__race.race;
+      new MutationObserver((ms)=>{for(const m of ms)for(const n of m.addedNodes){if(n.nodeType===1&&n.classList&&n.classList.contains('rc-plate'))S.plates.push({t:R.track?R.track.t:-1});}}).observe(document.body,{childList:true,subtree:true});
+      const a=window.__rcAudio; if(a){a.currentTime=${t0}; if(a.paused)a.play().catch(()=>{});} return 1;})()`);
+    let now = -1;
+    for (let i = 0; i < (WINDOW + 4) * 4 && now < t0 + WINDOW + 1; i++) { await sleep(250); now = await ev(`window.__race.race.track.t`); }
+    ok(now >= t0 + WINDOW, `the file played the ${WINDOW}s window on its own clock (${t0.toFixed(1)}s to ${now.toFixed(1)}s)`);
+    const plates = await json(`window.__sync.plates`);
+    const gates = await json(`(()=>{const ch=window.__race.race.track.chart; return ch.events.filter(e=>e.kind==='silence'||e.kind==='build'||e.kind==='release').map(e=>e.kind+'@'+e.t.toFixed(1)+(e.dur?'x'+Number(e.dur).toFixed(1):''));})()`);
+    console.log('  --  density gates on the road: ' + (gates.join(' ') || 'none') + `; ${await ev('window.__race.race.perf().bubbles')} bubbles live`);
+    const trace = await json(`window.__race.race.syncTrace ? window.__race.race.syncTrace() : []`);
+    const byId = new Map(trace.map((r) => [String(r.id), r]));
+    const f2 = (v) => (v == null ? '   -   ' : (v >= 0 ? '+' : '') + v.toFixed(2));
+    console.log(`  --  ${watched.length} sure triggers in the window, ${plates.length} plates seen, ${trace.length} trace lines`);
+    // every plate against the sure trigger nearest to it: the raw picture, whichever way the sync leans
+    const nearest = (t) => trig.reduce((b, e) => (Math.abs(e.t - t) < Math.abs(b.t - t) ? e : b), trig[0]);
+    console.log('  plates, each against the nearest sure trigger: ' + (plates.map((p) => f2(p.t - nearest(p.t).t)).join('  ') || 'none'));
+    console.log('  event.t   plate    handed   fired    placed   rowAt');
+    const plateOff = [], rowOff = [], used = new Set();
+    for (const e of watched) {
+      const r = byId.get(e.id) || {};
+      const pl = plates.find((p, i) => !used.has(i) && p.t >= e.t - 0.5 && p.t <= e.t + 1.5 && used.add(i));   // the plate on or just after the second, once
+      const dp = pl ? pl.t - e.t : null, dr = r.rowAt != null ? r.rowAt - e.t : null;
+      if (dp != null) plateOff.push(dp);
+      if (dr != null) rowOff.push(dr);
+      console.log(`  ${e.t.toFixed(2).padStart(7)}  ${f2(dp)}  ${f2(r.handedAt != null ? r.handedAt - e.t : null)}  ${f2(r.firedAt != null ? r.firedAt - e.t : null)}  ${f2(r.rowPlacedAt != null ? r.rowPlacedAt - e.t : null)}  ${f2(dr)}${r.dropped ? '  dropped' : ''}`);
+    }
+    const worst = (a) => a.reduce((m, v) => (Math.abs(v) > Math.abs(m) ? v : m), 0);
+    if (plateOff.length) console.log(`  --  plate - t: worst ${f2(worst(plateOff))}s over ${plateOff.length};  row - t: worst ${f2(worst(rowOff))}s over ${rowOff.length}`);
+    if (!REPORT) {
+      ok(plateOff.length === watched.length, `every sure trigger in the window flew a plate (${plateOff.length} of ${watched.length})`);
+      ok(plateOff.every((v) => v >= -0.05 && v <= TOL), `every plate reached the DOM on its word, never early, within ${TOL}s of real playback`);
+      ok(watched.every((e) => !(byId.get(e.id) || {}).dropped), 'and no cue in the window was dropped (a seek forward in 3b may drop what the voice already said)');
+      const laid = watched.filter((e) => (byId.get(e.id) || {}).rowPlacedAt != null);   // the density gate may keep a row off the road
+      ok(laid.length > 0, `at least one row went down in the window (${laid.length} of ${watched.length})`);
+      ok(laid.every((e) => { const r = byId.get(e.id); return r.rowAt != null && Math.abs(r.rowAt - e.t) <= TOL; }), `every row that went down was under the kart within ${TOL}s of its word`);
+    }
+  } else {
+    console.log('  --  3c skipped: this transcript has no sure trigger to measure against');
+  }
 }
 
 /* ============================================================================

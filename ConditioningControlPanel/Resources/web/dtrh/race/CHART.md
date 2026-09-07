@@ -199,7 +199,19 @@ race.track                          // { chart, sched, t, playing, name, duratio
   `spawnAhead` / `rain` timers are off; `seedChunk` still dresses chunks with plain treats at
   `density` so the road never looks empty (unless the road has words on it: see `setSparse`); every
   cue spawn goes through `field.spawnAt`, or `field.spawnRow` for the row, at
-  `d = kart.d + kart.speed * max(dueIn + at, 0.25)`.
+  `d = kart.d + kart.speed * max(event.t + at - t, 0.25)` (`sync.depthFor`).
+- The sync (`race/sync.js`): the scheduler hands an event over `LEAD_SEC` early so the spawns can
+  go down the road; only the spawns are spent at that handover. The visible half of the cue (plate,
+  toast, mood, pose, jump, mix, fog, boost, density, hold) is held by `createCueSync` and fired from
+  `trackFrame` the frame the track clock reaches `event.t` (`sync.update`), so it lands on the word
+  and not 2.5 s before it. A held cue found more than `LATE_SEC` (1 s) past its second is dropped
+  (a seek forward); a seek back drops what the scheduler is about to hand over again; a pause drains
+  nothing because the second does not move. The row is re-placed every frame off the kart's current
+  speed (`field.moveRow`) until `CUE_AHEAD_SEC` is left, so a boost or a ramp inside the lookahead
+  still lands it under the kart on the word. A fog/density hold is a stretch of track seconds
+  (`S.trackHold` is the second it ends), never a count of frames. `race.syncTrace()` is the per-event
+  trace (handedAt, firedAt, rowPlacedAt, rowAt, dropped) the smokes read: `race/smoke/sync-check.mjs`
+  (demo, headless) and `real-audio-check.mjs` section 3c (a real voice, `RACE_TRACK_FILE`).
 - `TR.lyrics` is true while the loaded chart has a caption track or an `analysis.words` other than
   `none`. It drives `field.setSparse` and `ctx.lyrics`, and is re-read on `replaceTrack` so a words
   pass landing on a partial chart thins the road the moment it arrives.

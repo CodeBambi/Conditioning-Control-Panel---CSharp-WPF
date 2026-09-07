@@ -47,6 +47,7 @@ import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, make
 import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
 import { createWalls } from './walls.js';
+import { createCueSync, CUE_AHEAD_SEC } from './sync.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
@@ -72,9 +73,9 @@ const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE =
 const WOBBLE_SCALE = 0.82, WOBBLE_SEC = 0.3;
 const ladderMult = (combo) => { let m = 1; for (const [at, mult] of MULT_LADDER) if (combo >= at) m = mult; return m; };
 const SPAWN_T0 = 2.5, RAIN_T0 = 20, EARLY_SLOW = 1.5;   // the opening drips slower (TREATS_ONLY_SEC)
-// track cues: a bubble never lands nearer than this, an act only re-dresses the world when no gate is
-// this many seconds of road away, and the standalone page logs the scheduler this often (track time).
-const CUE_AHEAD_SEC = 0.25, ACT_GATE_SEC = 6, TRACK_STATS_SEC = 10;
+// track cues: an act only re-dresses the world when no gate is this many seconds of road away, and
+// the standalone page logs the scheduler this often (track time). CUE_AHEAD_SEC lives in race/sync.js.
+const ACT_GATE_SEC = 6, TRACK_STATS_SEC = 10;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
 
@@ -145,12 +146,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, parasol: false, magnet: false,
     flip: false, spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
-    trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,
+    trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,   // trackHold: the track second a fog/density hold ends, 0 for none
   };
   fovLive = true;   // S exists: resize() may shift S.fov from here on
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
   const TR = createTrackState();      // the loaded track chart: its clock, its energy, its acts (race/track.js)
   const hosted = bridge.isHosted !== false;   // the standalone page logs where the host would be told
+  const sync = createCueSync({ aheadSec: CUE_AHEAD_SEC, trace: true });   // the visible half of a cue waits for the word (race/sync.js); the trace is 64 small rows the smokes read
   let W = null;                       // the world: everything that is rebuilt on "again"
   let raf = 0, last = 0, lastBeat = 0, payoutResolve = null;
   let camOverride = null;                // fn(camera, dt, w, camOut) -> false when done (intro.js cameras)
@@ -210,9 +212,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
       jackpotBias: 1, parasol: false, magnet: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
-      trackHold: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
+      trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     setFlip(false); trailClear();
-    mix.reset(); S.wobble = 0; clearMixChrome();
+    mix.reset(); S.wobble = 0; clearMixChrome(); sync.reset();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.pickupClear(); hud.item(null, 'no item yet');
   }
 
@@ -388,7 +390,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function setTrack(chart) {
     const t = TR.setTrack(chart);
     audio.setRoute(routeOf(t));
-    S.trackHold = 0; S.statsAt = 0;
+    S.trackHold = 0; S.statsAt = 0; sync.reset();
     if (W) { W.field.setTracked(!!t); W.field.setSparse(TR.lyrics); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     if (captions) captions.setTrack(t ? t.chart : null);
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
@@ -411,23 +413,34 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     pour(w, { id: k.id, payload: k.payload, overlayKind: k.overlayKind }, r, Math.round(clamp(k.strength, 0, 1) * 100), durationMult);
     if (r.recipe) serve(w, r.recipe);
   }
-  /** One event off the scheduler, spent on the world. Every spawn goes in at the depth the kart will
-   *  have reached when the voice says it, so the pop lands on the word whatever the throttle did. */
+  /** One event off the scheduler. The scheduler hands it over LEAD_SEC early on purpose, so the SPAWNS
+   *  can go down the road at the depth the kart will have reached when the voice says the word: they
+   *  go in now. Everything the player sees or hears is held by race/sync.js and fired from trackFrame
+   *  the frame the track clock reaches event.t; spent here it landed 2.5 s before the word (the
+   *  owner's "too soon by 2 sec or so", measured in race/smoke/sync-check.mjs). */
   function applyCue(w, due) {
-    const ks = w.kart.state;
-    const cue = cueFor(due.event, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds, lyrics: TR.lyrics });
-    if (!cue) { TR.skip(due.event.id); return; }   // a guess the feel pass threw out never counts against the player
+    const ks = w.kart.state, e = due.event, t = TR.track ? TR.track.t : 0;
+    const cue = cueFor(e, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds, lyrics: TR.lyrics });
+    if (!cue) { TR.skip(e.id); return; }   // a guess the feel pass threw out never counts against the player
     // A row goes in as one thing (bubbles.js spawnRow): the density gate is rolled once for the
     // whole line, so the road never gets a row with a hole in it that the kart can steer through.
+    // Its depth assumes the speed the kart has now; the sync re-places it every frame until the
+    // kart is on it, so a boost or a ramp inside the lookahead still lands the row on the word.
+    // A loose treat keeps its first depth: it is a guess at an unsure word, not a pop on a beat.
     const row = cue.spawn.filter((sp) => sp.row), loose = cue.spawn.filter((sp) => !sp.row);
     if (row.length) {
-      const d = ks.d + ks.speed * Math.max(due.dueIn + (row[0].at || 0), CUE_AHEAD_SEC);
-      w.field.spawnRow({ kindId: row[0].kindId, placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: due.event.id });
+      const at = e.t + (row[0].at || 0), d = sync.depthFor(t, ks.d, ks.speed, at);
+      const rowId = w.field.spawnRow({ kindId: row[0].kindId, placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id });
+      if (rowId) sync.trackRow(rowId, e, at, d, t);
     }
     for (const sp of loose) {
-      const d = ks.d + ks.speed * Math.max(due.dueIn + (sp.at || 0), CUE_AHEAD_SEC);
-      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d, x: sp.x, h: sp.h, eventId: due.event.id });
+      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d: sync.depthFor(t, ks.d, ks.speed, e.t + (sp.at || 0)), x: sp.x, h: sp.h, eventId: e.id });
     }
+    sync.defer(e, cue, t);
+  }
+  /** The visible half of a cue, on the word: trackFrame fires it the frame the clock reaches event.t. */
+  function spendCue(w, event, cue) {
+    const ks = w.kart.state;
     if (cue.jump) { ks.vh = Math.max(ks.vh, cue.jump); ks.h = Math.max(ks.h, 0.06); ks.airborne = true; w.kart.pose('air'); }
     if (cue.mix) cueMix(w, cue.mix);
     if (cue.mood) poke(cue.mood, Math.max(1.2, cue.holdSec));
@@ -435,11 +448,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (cue.toast) hud.toast(cue.toast.text, cue.toast.kind || 'effect');
     // a sure trigger no longer whispers on the toast rail: it flies at the camera, themed off the
     // preset its set carries (race/captions.js + race/triggerTheme.js). Everything else still toasts.
-    if (cue.word) { if (due.event.kind === 'trigger' && captions) captions.showPlate(due.event); else hud.toast(cue.word, 'effect'); }
+    if (cue.word) { if (event.kind === 'trigger' && captions) captions.showPlate(event); else hud.toast(cue.word, 'effect'); }
     if (cue.fog != null) applyFog(w, cue.fog);
     if (cue.boost) w.kart.applyBoost(cue.boost);
     if (cue.density != null) w.field.setDensity(cue.density);
-    if (cue.holdSec > 0) S.trackHold = cue.holdSec;
+    // the hold is a stretch of the TRACK, not a count of frames: a seek past it must not carry the
+    // fog and the empty road along for the seconds it had left (a 20 s silence hold once did)
+    if (cue.holdSec > 0) { S.trackHoldFrom = event.t; S.trackHold = event.t + cue.holdSec; }
   }
   /** The act moved with no gate in reach: dress the new room where we stand and marquee its name. */
   function actMoved(w, act, ks) {
@@ -453,9 +468,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   /** One frame of the track. Returns true when the file is over and the run has been ended. */
   function trackFrame(w, ts) {
     const ks = w.kart.state;
-    if (S.trackHold > 0) { S.trackHold -= ts.dt; if (S.trackHold <= 0) { applyFog(w, 0); w.field.setDensity(1); } }
+    if (S.trackHold > 0 && (ts.t >= S.trackHold || ts.t < S.trackHoldFrom)) { S.trackHold = 0; applyFog(w, 0); w.field.setDensity(1); }   // over, or a seek back to before it (the scheduler re-hands it)
     if (captions) captions.update(ts.t);   // the phrase is a function of the second, never of the frame
     for (const due of TR.due(ks.d, ks.speed)) applyCue(w, due);
+    // the sync: rows nudged onto their word off the speed the kart has now, held cues fired on the second
+    const held = sync.update(ts.t, ks.d, ks.speed);
+    for (const m of held.move) w.field.moveRow(m.rowId, m.d);
+    for (const f of held.fire) spendCue(w, f.event, f.cue);
     if (ts.actChanged) actMoved(w, ts.act, ks);
     if (ts.dt > S.trackGap) S.trackGap = ts.dt;   // the worst frame the scheduler had to reach over
     if (!hosted && ts.t - S.statsAt >= TRACK_STATS_SEC) {   // standalone dev aid: the scheduler on the console
@@ -729,7 +748,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); if (captions) captions.setTrack(TR.track ? TR.track.chart : null); }, trackClock: (t, playing) => TR.clock(t, playing),
-    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), debugItemBox,
+    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugItemBox,
     get track() { return TR.track; } };
 }
 

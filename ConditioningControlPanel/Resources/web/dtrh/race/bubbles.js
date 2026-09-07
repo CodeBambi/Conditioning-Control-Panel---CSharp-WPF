@@ -261,7 +261,17 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
     const id = ++rowSeq;
     for (const x of list) { const s = place(kindId, placement, d, Number(x), top); s.eventId = eventId; s.rowId = id; }
-    return list.length;
+    return id;   // the row's id: run.js hands it to race/sync.js, which moveRow()s it onto its word
+  }
+  /** A row goes to depth `d`: the kart's speed changed inside the lookahead, so the word will be said
+   *  somewhere else on the road (race/sync.js re-places it every frame until the kart is on it). A
+   *  bubble already popped or slipped stays where it is; the sprite follows `d` on the next update. */
+  function moveRow(id, d) {
+    if (!id || !Number.isFinite(Number(d))) return 0;
+    const dd = layout.wrap(Number(d));
+    let n = 0;
+    for (const s of pool) if (s.alive && s.rowId === id && s.popT < 0 && !s.missed) { s.d = dd; n++; }
+    return n;
   }
   /** The row has been settled by one of its own: nobody else in it may report a miss. `missed` is
    *  only ever read by the miss gate, so marking the siblings is all it takes. */
@@ -396,7 +406,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
 
   return {
-    seedChunk, spawnAhead, rain, spawnAt, spawnRow, update, dispose,
+    seedChunk, spawnAhead, rain, spawnAt, spawnRow, moveRow, update, dispose,
     onPop(cb) { if (typeof cb === 'function') popCbs.push(cb); },
     onMiss(cb) { if (typeof cb === 'function') missCbs.push(cb); },
     setDensity(mult) { const v = Number(mult); density = clamp(isFinite(v) ? v : 1, tracked ? 0 : 0.25, 3); },
