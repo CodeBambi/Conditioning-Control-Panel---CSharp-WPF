@@ -5,7 +5,7 @@
  *   createRace({ root, bridge, media, settings, seed }) -> { start(), setPaused(b), dispose() }
  *
  * Composes renderer + spine + tunnel + fx + rooms + bubbles + kart + score + hud
- * + payloadFx + screen shake and runs the frame loop. `root` holds the
+ * + pickups + payloadFx + screen shake and runs the frame loop. `root` holds the
  * <canvas>, the `.race-hud` div and the `.sf-hud` layer payloadFx draws into.
  * Nothing here subtracts: the run ends only from the Brake (Esc) or the host.
  *
@@ -60,6 +60,7 @@ import { createRaceHud } from './hud.js';
 import { createCaptions } from './captions.js';
 import { createMediaLane } from './mediaLane.js';
 import { createInput } from './input.js';
+import { createPickups, TUNE as PICK } from './pickups.js';
 import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
 import { createSpeedFx } from './speed.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
@@ -143,7 +144,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- run state ----
   const S = {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
-    elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1,
+    elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, sweep: false,
     spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
     trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,   // trackHold: the track second a fog/density hold ends, 0 for none
@@ -190,11 +191,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       return { ...r, bubbleBias: { ...r.bubbleBias, golden: (r.bubbleBias.golden == null ? 1 : r.bubbleBias.golden) * S.jackpotBias } };
     };
     const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
-    const w = { layout, tunnel, fx, dresser, walls, kart, score, field, rng };
+    const pickups = createPickups({ rng, spots: layout.chunks.flatMap((c) => c.features || []).filter((f) => f.type === 'pickup'), totalDepth: layout.totalDepth });
+    const w = { layout, tunnel, fx, dresser, walls, kart, score, field, pickups, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     kart.onEvent((e) => onKart(w, e));
     score.onEvent((e) => onScore(w, e));
+    pickups.onEvent((e) => onPickup(w, e));
     field.setTracked(!!TR.track);
     field.setSparse(TR.lyrics);
     pixel.retexture(scene);
@@ -208,12 +211,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function resetRunState(runSeed) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
-      jackpotBias: 1, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
+      jackpotBias: 1, sweep: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     trailClear();
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset();
-    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0);
+    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear();
   }
 
   // ---- rooms ----
@@ -242,6 +245,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function onPop(w, p) {
     if (p.eventId) TR.taken(p.eventId);
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
+    if (S.sweep) sfx('chain_pop', 0.5);          // the pump: every pop on the road sounds like the chain
     if (p.kind === 'treat') return treat(w, p);
     // THE MIX: one live effect per category, each with its own re-pop rule (cocktail.js); 'held' scores as a treat
     const durationMult = 0.5 + 0.5 * S.intensity;
@@ -342,6 +346,33 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain}`, 'jackpot'); break;
     }
   }
+  // ---- THE PICKUPS (race/pickups.js): passive, taken by driving through them ----
+  function onPickup(w, e) {
+    switch (e.type) {
+      case 'pickupSpawn': { const p = w.pickups.byId(e.id); if (p) w.dresser.showPickup({ d: e.d, x: e.x, sprite: p.sprite }); break; }
+      case 'pickupDrop': w.dresser.hidePickup(false); break;
+      // the take beat: the white flash on the spot, the collect sound, EMI's grab, a plain treat's
+      // points (the combo stays warm), then the effect itself (a refresh only restarts the bar)
+      case 'pickupTake':
+        w.dresser.hidePickup(true);
+        w.score.pop(PICK.POINTS, 'pickup');
+        sfx('tunnel_powerup_collect', 0.8); shake.shake(0.2, 120); poke('smug', 0.9); w.kart.pose('grab');
+        if (!e.refresh) applyPickup(w, e.p, true);
+        break;
+      case 'pickupEnd': applyPickup(w, w.pickups.byId(e.id), false); hud.passive(e.id, null); break;
+    }
+  }
+  /** What each pickup DOES, on and off. Every number comes off its PICKUPS row. */
+  function applyPickup(w, p, on) {
+    if (!p) return;
+    switch (p.id) {
+      // poppers: the cup grows, the pop box grows with it and the seat slides back (kart.js setScale)
+      case 'poppers': w.kart.setScale(on ? p.scale : 0); w.field.setReach(on ? p.reach : 1); w.kart.setReach(on ? p.reach : 1); break;
+      // the pump: the whole road is the pop box, and the kart rides a boost for the length of it
+      case 'the_pump': S.sweep = on; w.field.setSweep(on); if (on) w.kart.applyBoost(p.sec); break;
+    }
+  }
+
   // ---- the track chart: the file is the clock (CHART.md) ----
   /** Page -> host, and only when there is a host and a track: the audio has to follow the run. */
   function trackSend(type, data) { if (hosted && TR.track) send({ type, ...(data || {}) }); }
@@ -486,6 +517,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     k.pace(S.pace.base, S.pace.cap);
     k.update(dt, input.read(), lay);
     w.score.tick(dt);
+    w.pickups.update(dt, { d: ks.d, x: ks.x, speed: ks.speed, elapsed: S.elapsed, opening: !!(S.pace && S.pace.opening), mult: w.score.state.mult });
+    for (const c of w.pickups.chips()) hud.passive(c.id, c);
     { const tr = trail[trailI]; tr.d = ks.d; tr.x = ks.x; tr.h = ks.h; tr.ok = true; trailI = (trailI + 1) % TRAIL_N; }
     for (const e of mix.tick(dt)) onMix(w, e);
     if (S.wobble > 0) { S.wobble -= dt; if (S.wobble <= 0 && S.timeScale === WOBBLE_SCALE) S.timeScale = 1; }
@@ -668,6 +701,24 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     scene.clear(); renderer.dispose();
   }
 
+  /** Screenshot aid (`?pickup=<id>` on the standalone page): stand that pickup up on the nearest spot
+   *  ahead, gentle start or not, so a headless shot catches it without anyone steering. A spot too far
+   *  to read is pulled into view first (the kart's depth jumps): a dev-only warp, and the reason this
+   *  is never reachable from the host. False until the run is up, the road is clear and a spot is ahead. */
+  function debugPickup(id) {
+    if (!W || !S.running || S.paused || W.pickups.live) return false;
+    const ks = W.kart.state, lay = W.layout, half = lay.totalDepth / 2;
+    let best = null, bestRel = Infinity;
+    for (const f of W.pickups.spots) {
+      const rel = lay.wrap(f.d - ks.d + half) - half;
+      if (rel > 5 && rel < bestRel) { bestRel = rel; best = f; }
+    }
+    if (!best || !W.pickups.light(id, best)) return false;
+    if (bestRel > 16) { ks.d = lay.wrap(best.d - 16); trailClear(); }
+    ks.x = best.x;
+    return true;
+  }
+
   resetRunState(seed);          // the world waits for prepare() / start(): frame() draws the stage until then
   raf = requestAnimationFrame(frame);
   function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
@@ -699,7 +750,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); if (captions) captions.setTrack(TR.track ? TR.track.chart : null); }, trackClock: (t, playing) => TR.clock(t, playing),
-    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(),
+    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugPickup,
     get track() { return TR.track; } };
 }
 

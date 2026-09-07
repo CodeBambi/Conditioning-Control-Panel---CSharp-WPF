@@ -178,7 +178,7 @@ const at = async (t) => {
     return { t: window.__race.race.track.t, hidden: !cap || cap.hidden, words: cap?cap.querySelectorAll('.rc-cap-word').length:0,
       said: cap?cap.querySelectorAll('.rc-cap-word.is-said').length:0, now: cap?cap.querySelectorAll('.rc-cap-word.is-now').length:0,
       theme: plate?plate.getAttribute('data-theme'):null, plateLen: plate?plate.textContent.length:0,
-      cap: cap&&!cap.hidden?r(cap):null, score: r(document.querySelector('.rh-score-wrap')),
+      cap: cap&&!cap.hidden?r(cap):null, score: r(document.querySelector('.rh-score-wrap')), chips: r(document.querySelector('.rh-passive')),
       speed: r(document.querySelector('.rh-speed')), mute: r(document.querySelector('.rt-mute')), pause: r(document.querySelector('.rt-pause')),
       lines: tops.size, hidWords: line ? Math.max(0, line.scrollHeight - line.clientHeight) : 0,
       vw: innerWidth, vh: innerHeight };})()`);
@@ -230,6 +230,7 @@ ok(!!shot.cap, 'the caption has a box on the glass');
 const hits = (a, b) => !!a && !!b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 ok(!hits(shot.cap, shot.score), `it never touches the score plate (caption y ${shot.cap.y}..${shot.cap.y + shot.cap.h}, score y ${shot.score.y}..${shot.score.y + shot.score.h})`);
 ok(!hits(shot.cap, shot.speed), 'nor the speed bar');
+ok(!hits(shot.cap, shot.chips), 'nor the pickup chips');
 ok(shot.cap.y >= 0 && shot.cap.y + shot.cap.h <= shot.vh, 'and it is fully on the glass, not clipped off an edge');
 ok(shot.cap.y < shot.vh * 0.45, `it is a TOP band (its top sits at ${Math.round((shot.cap.y / shot.vh) * 100)}% of the height)`);
 ok(shot.cap.y >= shot.score.y + shot.score.h, `and it opens under the score plate row (band top ${shot.cap.y}, plate bottom ${shot.score.y + shot.score.h})`);

@@ -115,7 +115,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   // bubbles, the fun is realising the bubbles are the lyric.
   let sparse = false;
   let rowSeq = 0;
-  let reachX = POP_HIT_X, reachH = POP_HIT_H;   // the pop box, widened by the magnet item (setReach)
+  let reachX = POP_HIT_X, reachH = POP_HIT_H;   // the pop box (setReach: poppers, the wand)
+  let sweep = false;                            // the pump: the whole road pops (setSweep)
   const popCbs = [], missCbs = [];
   const emit = (cbs, ev) => { for (const cb of cbs) { try { cb(ev); } catch (e) { /* listener bug, not ours */ } } };
 
@@ -362,7 +363,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
           if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d, x: s.x, h: s.h, eventId: s.eventId });
         }
         if (rel < -DROP_BEHIND && rel > -DROP_BEHIND - 40) { freeSlot(s); continue; }
-        if (Math.abs(rel) < POP_HIT_D && Math.abs(s.x - kart.x) < reachX && Math.abs(s.h - kart.h) < reachH) pop(s);
+        if (Math.abs(rel) < POP_HIT_D && (sweep || (Math.abs(s.x - kart.x) < reachX && Math.abs(s.h - kart.h) < reachH))) pop(s);
       }
       s.sprite.visible = rel > -DROP_BEHIND && rel < VIEW_AHEAD;
       if (s.sprite.visible) {
@@ -411,8 +412,10 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     setTracked(on) { tracked = !!on; },
     /** The loaded track has a transcript under it: seedChunk stands down to the chunk's golden. */
     setSparse(on) { sparse = !!on; },
-    /** Magnet: widen the pop box (X and H) by mult; 1 restores it. */
+    /** Poppers / the wand: widen the pop box (X and H) by mult; 1 restores it. */
     setReach(mult) { const m = clamp(Number(mult) || 1, 0.5, 3); reachX = POP_HIT_X * m; reachH = POP_HIT_H * m; },
+    /** The pump: while on, every bubble the kart's depth crosses pops, the whole road wide and high. */
+    setSweep(on) { sweep = !!on; },
     get liveCount() { return liveCount; },
   };
 }

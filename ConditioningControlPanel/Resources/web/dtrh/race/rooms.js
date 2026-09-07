@@ -7,13 +7,13 @@
  * everything that sits on or around the road: the pixel-tiled road ribbon with its
  * chequered kerbs and centre dash (one draw call, room-tinted through an alpha mask),
  * tiled ramp wedges with a pink lip and gold air-line cubes, lane-wide boost pads
- * with running chevrons, and the diegetic props from
+ * with running chevrons, the one pickup standing on the road (race/pickups.js), and the diegetic props from
  * race/roomProps.js. The furniture is drawn from the Blender pack (race/assets/props.glb,
  * race/propPack.js) as soon as it loads; the primitives below are the shape of every mesh
  * until then and the fallback forever if the pack is missing. update(d) culls rooms out of sight and animates what is near
  * the kart; applyRoom(fx, roomId, fadeSec) hands the room's biome style to
- * fx.applyRegionGrade; dispose() tears it all down. The sugar cube and its shards are retired
- * (the white take flash stays, for race/pickups.js).
+ * fx.applyRegionGrade; showPickup / movePickup / hidePickup stand the pickup's picture up on
+ * its spot and take it away (a white flash on the take); dispose() tears it all down.
  *
  * Every position goes through layout.toWorld(d, x, h) and every orientation through
  * layout.frameAtDepth(d). Draw calls: 6 for the furniture + 21 for the props (27).
@@ -22,7 +22,8 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W } from './consts.js';
+import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W, LANE_H } from './consts.js';
+import { CRISP_LAYER } from './pixel.js';
 import { Q } from '../shared/quality.js';
 import { biomeById } from '../game/biomes.js';
 import { createRoomProps, pixelTex } from './roomProps.js';
@@ -236,7 +237,7 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     return mesh;
   })();
 
-  // ---- ramps: tiled wedge + pink lip + gold air cubes; boost pads; the take flash ---------
+  // ---- ramps: tiled wedge + pink lip + gold air cubes; boost pads; the pickup + its take flash ----
   const feats = layout.chunks.flatMap((c) => c.features);
   const ramps = feats.filter((f) => f.type === 'ramp');
   const pads = feats.filter((f) => f.type === 'boost');
@@ -288,6 +289,44 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   pads.forEach((p, i) => padMesh.setMatrixAt(i, roadMatrix(p.d, p.x, 0.03, 0, 1, _m)));
   padMesh.count = pads.length;
   const FLASH_N = 4, FLASH_SEC = 0.22, FLASH_SIZE = 1.2;
+  // ---- THE PICKUP (race/pickups.js says which and where): one picture standing on the road ----
+  // A billboard on the crisp layer, PICK_H tall, bobbing at bubble height over a soft ring of light
+  // on the asphalt. It lives with the furniture, not the bubbles, so density, rows and rain never
+  // touch it. Taken, it leaves the white flash below on its spot (the sugar cube's old break beat).
+  const PICK_H = 1.6;
+  const picLoader = new THREE.TextureLoader(), picTex = new Map();
+  const picMat = mat(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+  const pic = new THREE.Sprite(picMat);
+  pic.name = 'race-pickup'; pic.visible = false; pic.frustumCulled = false; pic.layers.set(CRISP_LAYER);
+  const haloMat = mat(new THREE.MeshBasicMaterial({ color: 0xffd6ea, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  const halo = new THREE.Mesh(track(new THREE.RingGeometry(0.5, 0.9, 32).rotateX(-Math.PI / 2)), haloMat);
+  halo.name = 'race-pickup-halo'; halo.visible = false; halo.frustumCulled = false; halo.matrixAutoUpdate = false;
+  group.add(pic, halo);
+  let pick = null;   // { d, x } while one stands on the road
+  function showPickup({ d, x, sprite }) {
+    pick = { d: layout.wrap(Number(d) || 0), x: Number(x) || 0 };
+    let tex = picTex.get(sprite);
+    if (!tex) {
+      tex = picLoader.load(sprite, (t) => { t.colorSpace = THREE.SRGBColorSpace; picMat.needsUpdate = true; }, undefined, () => { /* no picture: the halo alone marks the spot */ });
+      picTex.set(sprite, tex); texes.push(tex);
+    }
+    picMat.map = tex; picMat.needsUpdate = true;
+    pic.scale.set(PICK_H, PICK_H, 1);
+    pic.visible = true; halo.visible = true;
+    placePickup(0);
+  }
+  function movePickup(x) { if (pick) pick.x = Number(x) || 0; }
+  /** Take the picture away; `taken` lights the white flash on its spot. */
+  function hidePickup(taken) {
+    if (!pick) return;
+    if (taken) flashAt(pick.d, pick.x, LANE_H);
+    pick = null; pic.visible = false; halo.visible = false;
+  }
+  function placePickup(t) {
+    layout.toWorld(pick.d, pick.x, LANE_H + 0.12 * Math.sin(t * 2.2), pic.position);
+    halo.matrix.copy(roadMatrix(pick.d, pick.x, 0.04, 0, 1, _m));
+    haloMat.opacity = 0.24 + 0.12 * Math.sin(t * 3);
+  }
   // The take flash (race/pickups.js) is light, not furniture: a billboard that always faces the seat,
   // additive over the road and fading as it swells. It can never draw an edge, so it can never read
   // as a box. flashAt(d, x, h) lights one on that spot.
@@ -431,6 +470,7 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
   function update(d) {
     const t = now() - t0;
     props.update(d, t);
+    if (pick) placePickup(t);
     updateFlashes(t);
     // air-line dots: gone while they would sit between the seat and the cup, back over DOT_NEAR..DOT_FAR
     let adirty = false;
@@ -471,7 +511,8 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
     props.dispose();
     for (const fl of flash) group.remove(fl.sprite);
     for (const m of [wedges, lips, airDots, padMesh]) m.dispose();
+    group.remove(pic, halo);
   }
 
-  return { update, applyRoom, dispose, group, spans, rooms: specs };
+  return { update, applyRoom, showPickup, movePickup, hidePickup, dispose, group, spans, rooms: specs, get pickup() { return pick; } };
 }
