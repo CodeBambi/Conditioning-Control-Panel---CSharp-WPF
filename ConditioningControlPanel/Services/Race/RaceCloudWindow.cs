@@ -36,6 +36,9 @@ internal sealed class RaceCloudWindow : IDisposable
     private WebView2? _web;
     private bool _initStarted;
     private bool _coreReady;
+    /// <summary>The page to open on, when the levels panel named one. Read once by
+    /// InitWebAsync, so a window built for a track lands on that track and not the front door.</summary>
+    private string? _openOn;
     private bool _disposed;
 
     /// <summary>Every cloud-* frame the watcher posts. Raised on the UI thread.</summary>
@@ -47,13 +50,19 @@ internal sealed class RaceCloudWindow : IDisposable
 
     public bool IsOpen => _window != null && _window.IsVisible;
 
-    /// <summary>Open the window, or bring it back if it was closed to the tray of the mind.</summary>
-    public void ShowOrFocus()
+    /// <summary>Open the window, or bring it back if it was closed to the tray of the mind.
+    /// <paramref name="url"/> is the page to land on (a track's own page, from the levels
+    /// panel); null keeps whatever is already loaded, or the site's front door on a fresh
+    /// window. Checked against the site here as well, never trusted from the caller.</summary>
+    public void ShowOrFocus(string? url = null)
     {
         if (_disposed) return;
         try
         {
-            if (_window == null) Build();
+            var want = IsSiteUri(url) ? url : null;
+            if (_window == null) { _openOn = want; Build(); }
+            else if (want != null && _coreReady && _web?.CoreWebView2 != null) _web.CoreWebView2.Navigate(want);
+            else if (want != null) _openOn = want;   // still starting up: InitWebAsync takes it
             if (_window == null) return;
             if (!_window.IsVisible) _window.Show();
             _window.Activate();
@@ -190,7 +199,8 @@ internal sealed class RaceCloudWindow : IDisposable
             core.WebMessageReceived += OnWebMessageReceived;
             core.ProcessFailed += OnProcessFailed;
             _coreReady = true;
-            core.Navigate(StartUrl);
+            var landing = _openOn; _openOn = null;
+            core.Navigate(IsSiteUri(landing) ? landing! : StartUrl);
         }
         catch (Exception ex)
         {

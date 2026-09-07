@@ -63,19 +63,37 @@ internal static class CaucusHostService
     private static string? _devTrackPath;
     /// <summary>While the dev arg is active every track-* post is logged as JSON.</summary>
     private static bool _devTrackLog;
+    /// <summary>Set by the `--race-cloud` dev arg: open the BambiCloud window once the page is up,
+    /// so the cloud path can be exercised without driving the menu by hand.</summary>
+    private static bool _devOpenCloud;
+    /// <summary>The dev arg's Brake drive runs once, on the first cloud track of the session.</summary>
+    private static bool _devCloudDriven;
+
+    // ---- bambicloud (lane D1) ----
+    /// <summary>The on-demand browser frame, built the first time the page asks for it.</summary>
+    private static RaceCloudWindow? _cloud;
+    /// <summary>The cloud clock, kept across laps: one window, one audio element, one clock.</summary>
+    private static CloudTrackClock? _cloudClock;
+    /// <summary>True between "the next track started over there" and the run-ended that answers our
+    /// track-ended. The next lap already owns the clock, so that stop must not take it away.</summary>
+    private static bool _cloudSwapping;
 
     /// <summary>True while the race window is open.</summary>
     public static bool IsActive => _host != null;
 
     /// <summary>Open the race window (idempotent - refocuses if already open).</summary>
     /// <param name="devTrackPath">The `--race-track` dev arg's file, or null in a normal launch.</param>
-    public static void Launch(string? devTrackPath = null)
+    /// <param name="openCloud">The `--race-cloud` dev arg: open the BambiCloud window on its own.</param>
+    public static void Launch(string? devTrackPath = null, bool openCloud = false)
     {
-        if (_host != null) { _host.FocusWeb(); return; }
+        if (_host != null) { _host.FocusWeb(); if (openCloud) OpenCloudWindow(); return; }
         try
         {
             _devTrackPath = devTrackPath;
-            _devTrackLog = !string.IsNullOrEmpty(devTrackPath);
+            // Both dev args log every track-* post as JSON: that log IS the verification, and the
+            // cloud path has no other way to show the page what it was sent.
+            _devTrackLog = !string.IsNullOrEmpty(devTrackPath) || openCloud;
+            _devOpenCloud = openCloud;
             // EMI Desk: the ring learns from every open, not just its own cards.
             try { App.EmiDesk?.NoteOpen("race"); } catch { }
 
@@ -143,6 +161,7 @@ internal static class CaucusHostService
             StartHeartbeatWatch();
             _host.FocusWeb();
             if (_devTrackLog) ArmDevTrackDrive();
+            if (_devOpenCloud) DevAfter(3, () => OpenCloudWindow());
             App.Logger?.Information("CaucusHostService: launched");
         }
         catch (Exception ex)
@@ -195,6 +214,10 @@ internal static class CaucusHostService
                     // owns that resolution). Reduced and Off both read as reduced motion on the
                     // page: it has no third state to offer.
                     reducedMotion = SafeReducedMotion(),
+                    // The menu's `levels` panel. The desktop owns the browser window a level
+                    // opens in, so only the desktop host offers it; a host without one simply
+                    // leaves the key off.
+                    cloud = true,
                 },
                 modId = SafeActiveModId(),
                 // Creator mods: the mod's own DTRH content as ccp.mod URLs; null = no mod
@@ -275,6 +298,11 @@ internal static class CaucusHostService
                 break;
             case "track-cancel":
                 CancelAnalysis(postCancelled: true);
+                break;
+            case "cloud-open":
+                // `url` is optional: the levels panel names the track's own page, and a page
+                // that does not send one just gets the site's front door.
+                OpenCloudWindow((string?)o["url"]);
                 break;
             case "exit":       // page-initiated: it winds itself down, then exit-done
                 _exiting = true;
@@ -540,7 +568,12 @@ internal static class CaucusHostService
             CancelExitWatchdog();
             StopHeartbeatWatch();
             HookVideoEvents(false);
+            _cloudSwapping = false;
+            _devCloudDriven = false;
             StopTrack();
+            try { _cloud?.Dispose(); } catch { }
+            _cloud = null;
+            _cloudClock = null;
             _clock = null;
             try { _player?.Dispose(); } catch { }
             _player = null;
@@ -742,8 +775,8 @@ internal static class CaucusHostService
         catch (Exception ex) { App.Logger?.Debug("RaceHost.CancelAnalysis: {E}", ex.Message); }
     }
 
-    /// <summary>track-play: the run started, so a local file starts from its own zero. A source
-    /// that is already running is left exactly where it is.</summary>
+    /// <summary>track-play: the run started, so a local file starts from its own zero. A cloud
+    /// element is already running (that is what started the run) and is left alone.</summary>
     private static void TrackPlay()
     {
         var c = _clock;
@@ -753,7 +786,9 @@ internal static class CaucusHostService
         PostClock();
     }
 
-    /// <summary>track-pause {on}: the Brake, a host pause and a video pop all land here.</summary>
+    /// <summary>track-pause {on}: the Brake, a host pause and a video pop all land here. On the
+    /// cloud source this is the frame that pauses their player, which is the other half of the
+    /// bargain their own pause button makes when it pauses the race.</summary>
     private static void TrackPause(bool on)
     {
         var c = _clock;
@@ -763,9 +798,13 @@ internal static class CaucusHostService
     }
 
     /// <summary>End of run, exit or teardown: the audio stops, the clock stops and any analysis
-    /// still grinding away is dropped.</summary>
+    /// still grinding away is dropped. A cloud lap turnover is the one stop that passes straight
+    /// through: the next track already owns the clock and its chart is already on the way.</summary>
     private static void StopTrack()
     {
+        bool swapping = _cloudSwapping;
+        _cloudSwapping = false;
+        if (swapping) return;
         StopTrackClock();
         CancelAnalysis(postCancelled: false);
         try { _clock?.Stop(); }
@@ -827,6 +866,18 @@ internal static class CaucusHostService
         DevAfter(14, StopTrack);
     }
 
+    /// <summary>The `--race-cloud` arg's other half: once a cloud track is running, hold the Brake
+    /// at 10 s and let it go at 16 s. That is the only way to watch C# pause their own player,
+    /// because the race window will not take a synthetic key press.</summary>
+    private static void ArmDevCloudDrive()
+    {
+        if (!_devOpenCloud || _devCloudDriven) return;
+        _devCloudDriven = true;
+        App.Logger?.Information("RaceHost dev: --race-cloud brake at 10s, released at 16s");
+        DevAfter(10, () => { App.Logger?.Information("RaceHost dev: brake on"); TrackPause(true); });
+        DevAfter(16, () => { App.Logger?.Information("RaceHost dev: brake off"); TrackPause(false); });
+    }
+
     private static void DevAfter(double sec, Action act)
     {
         var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(sec) };
@@ -837,6 +888,152 @@ internal static class CaucusHostService
             catch (Exception ex) { App.Logger?.Warning("RaceHost dev step: {E}", ex.Message); }
         };
         t.Start();
+    }
+
+    // ============================ bambicloud (lane D1) ============================
+    //
+    // The player signs in over there and drives their own playlist. We open a plain browser frame
+    // on the site, watch the audio element their page is already playing, and follow it: their
+    // pause pauses the race, the Brake pauses them, the next track is the next lap.
+    //
+    // READ-ONLY GUEST. Nothing here calls their API, logs anybody in, or reads anything of theirs
+    // beyond the audio element's own state and the tab title. See RaceCloudWindow for the window
+    // and for the watcher, which is the only code of ours that runs inside their page.
+
+    /// <summary>The one message the player ever sees when the site is not answering. Plain, and it
+    /// points at the path that always works.</summary>
+    private const string CloudDownMessage = "bambicloud is not answering, load a file instead";
+
+    /// <summary>cloud-open: a level tapped on the menu. Opens the window on that track's page, or
+    /// brings it back if the player closed it (closing hides it, so their playlist survives). A
+    /// null or off-site url falls back to the site's front door.</summary>
+    private static void OpenCloudWindow(string? url = null)
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        disp.BeginInvoke(() =>
+        {
+            try
+            {
+                if (_cloud == null)
+                {
+                    _cloud = new RaceCloudWindow();
+                    _cloud.Message += OnCloudMessage;
+                    _cloud.Hidden += OnCloudHidden;
+                }
+                _cloud.ShowOrFocus(RaceCloudWindow.IsSiteUri(url) ? url : null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("RaceHost.cloud-open: {E}", ex.Message);
+                PostTrack(new { type = "track-error", message = CloudDownMessage });
+            }
+        });
+    }
+
+    /// <summary>The window was closed (hidden) with no cloud track in hand: take the menu's
+    /// "opening" plate back down so it is not left waiting for something that is not coming.</summary>
+    private static void OnCloudHidden()
+    {
+        if (_clock is CloudTrackClock) return;
+        PostProgress("cancelled", 0, "", force: true);
+    }
+
+    /// <summary>Every cloud-* frame the watcher posts, on the UI thread.</summary>
+    private static void OnCloudMessage(JObject o)
+    {
+        try
+        {
+            switch ((string?)o["type"])
+            {
+                case "cloud-track":
+                    OnCloudTrack(o);
+                    break;
+                case "cloud-clock":
+                    if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) break;
+                    _cloudClock.Update((double?)o["t"] ?? 0, (bool?)o["playing"] ?? false, (double?)o["durationSec"] ?? 0);
+                    break;
+                case "cloud-play":
+                    OnCloudPlay();
+                    break;
+                case "cloud-pause":
+                    if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) break;
+                    _cloudClock.Update(_cloudClock.PositionSec, false, _cloudClock.DurationSec);
+                    PostClock();   // the run reads playing:false and holds where it is
+                    break;
+                case "cloud-ended":
+                    OnCloudEnded();
+                    break;
+                case "cloud-failed":
+                    PostTrack(new { type = "track-error", message = CloudDownMessage });
+                    break;
+            }
+        }
+        catch (Exception ex) { App.Logger?.Warning("RaceHost.OnCloudMessage: {E}", ex.Message); }
+    }
+
+    /// <summary>A new source started playing over there. It becomes the clock straight away, so the
+    /// run follows the voice from the first second, on the plain seeded road. Charting what they
+    /// are playing is the next commit in this stack.</summary>
+    private static void OnCloudTrack(JObject o)
+    {
+        string src = (string?)o["src"] ?? "";
+        string title = ((string?)o["title"] ?? "").Trim();
+        double dur = (double?)o["durationSec"] ?? 0;
+        if (string.IsNullOrWhiteSpace(src)) return;
+
+        // A new track while a run is live is the next lap: end this one the way the file running
+        // out does. The run-ended that answers must not take the new clock away, hence the flag.
+        bool live = _runActive && _clock is CloudTrackClock;
+        CancelAnalysis(postCancelled: false);
+        try { _player?.Stop(); } catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud stop local: {E}", ex.Message); }
+
+        _trackName = string.IsNullOrWhiteSpace(title) ? "bambicloud" : title;
+        _lastProgressUtc = DateTime.MinValue;
+        _cloudClock ??= new CloudTrackClock(SetCloudPaused);
+        _cloudClock.Update(0, true, dur);
+        _clock = _cloudClock;
+        if (live)
+        {
+            _cloudSwapping = true;
+            PostTrack(new { type = "track-ended" });
+        }
+        StartTrackClock();
+        PostClock();
+        App.Logger?.Information("RaceHost: cloud track {Name} ({Dur:0.0}s){Lap}",
+            _trackName, dur, live ? ", next lap" : "");
+        ArmDevCloudDrive();
+    }
+
+    /// <summary>Their player started. If the race is still sitting on the menu, this is what starts
+    /// the run: the audio is the clock, so the run begins when the audio does.</summary>
+    private static void OnCloudPlay()
+    {
+        if (_cloudClock == null || !ReferenceEquals(_clock, _cloudClock)) return;
+        _cloudClock.Update(_cloudClock.PositionSec, true, _cloudClock.DurationSec);
+        if (!_runActive) PostTrack(new { type = "cloud-run" });
+        StartTrackClock();
+        PostClock();
+    }
+
+    /// <summary>Their element ran out. Same ending a local file gets: the page winds the lap up and
+    /// the next cloud-track starts the next one.</summary>
+    private static void OnCloudEnded()
+    {
+        if (!ReferenceEquals(_clock, _cloudClock) || _cloudClock == null) return;
+        _cloudClock.Stop();
+        StopTrackClock();
+        PostTrack(new { type = "track-ended" });
+        App.Logger?.Information("RaceHost: cloud track ended");
+    }
+
+    /// <summary>The Brake's half of the bargain: cloud-set-paused into their page.</summary>
+    private static void SetCloudPaused(bool on)
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || disp.HasShutdownStarted) return;
+        if (disp.CheckAccess()) _cloud?.PostToPage(new { type = "cloud-set-paused", on });
+        else disp.BeginInvoke(() => _cloud?.PostToPage(new { type = "cloud-set-paused", on }));
     }
 
     // ============================ settings reads ============================
