@@ -79,6 +79,34 @@ is `wake` if its mean energy is above the file mean; a segment that is mostly si
 everything else `free`. The words pass upgrades: a segment holding 3+ `trigger` events becomes
 `triggers`; one holding a `chant` becomes `mantra`.
 
+## Authored charts (owner rule: they always win)
+
+A chart with top level `"hand": true` was written by a person. It is used exactly as written:
+never merged with a generated road, never regenerated over, never written into any cache of
+generated charts. `normalizeChart` keeps `hand`, keeps a top level `rules` object, and keeps
+`hand`, `cue` and `note` on individual events, so an author can mark the events they placed and
+leave notes in the file without the validation pass quietly eating them.
+
+The web build ships them in `race/charts/`, with `race/charts/index.json` as the lookup table:
+
+```json
+{ "version": 1, "tracks": [
+  { "cloudId": "<file id or cdn basename>", "hash": "<sha1>", "title": "the settle",
+    "durationSec": 1834.2, "chart": "charts/the-settle.chart.json" } ] }
+```
+
+Lookup order for every track, first answer wins:
+
+1. an index row matching `cloudId`, derived from the url (`race/chartSource.js` `cloudIdFrom`)
+2. an index row matching the `CHART.md` hash of the file
+3. the generated-chart cache (`race/chartCache.js`, IndexedDB, keyed by hash)
+4. generate a road from the audio
+
+Steps 1 and 2 both answer before the audio is downloaded, so an authored track costs no
+download: 1 needs only the url, and 2 needs a length and the first 1 MiB. `race/charts/README.md`
+is the format and the link step in full. The desktop host holds the same rule with its own
+`TrackChartCache`: an authored chart is never handed to `Save`.
+
 ## Page side
 
 ### `race/chart.js` (PR c1, pure, node self-check, no THREE)
