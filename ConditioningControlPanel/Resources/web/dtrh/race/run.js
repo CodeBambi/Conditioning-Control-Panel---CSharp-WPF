@@ -144,7 +144,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- run state ----
   const S = {
     started: false, running: false, paused: false, hostPaused: false, ended: false, disposed: false,
-    elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, sweep: false,
+    elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, sweep: false, tide: 1,
     spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
     trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,   // trackHold: the track second a fog/density hold ends, 0 for none
@@ -211,12 +211,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function resetRunState(runSeed) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
-      jackpotBias: 1, sweep: false, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
+      jackpotBias: 1, sweep: false, tide: 1, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     trailClear();
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset();
-    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear();
+    hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
 
   // ---- rooms ----
@@ -362,6 +362,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'pickupEnd': applyPickup(w, w.pickups.byId(e.id), false); hud.passive(e.id, null); break;
     }
   }
+  /** The one door pickups.js has into the file: the next chart event's second (track.js nextEvent). */
+  const nextEventT = (t, kind) => { const e = TR.nextEvent(t, kind); return e ? e.t : null; };
   /** What each pickup DOES, on and off. Every number comes off its PICKUPS row. */
   function applyPickup(w, p, on) {
     if (!p) return;
@@ -370,6 +372,16 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'poppers': w.kart.setScale(on ? p.scale : 0); w.field.setReach(on ? p.reach : 1); w.kart.setReach(on ? p.reach : 1); break;
       // the pump: the whole road is the pop box, and the kart rides a boost for the length of it
       case 'the_pump': S.sweep = on; w.field.setSweep(on); if (on) w.kart.applyBoost(p.sec); break;
+      // pocket watch: the cup swings like the pendulum and the combo clock stops for the length of it
+      case 'pocket_watch': w.kart.setSway(on ? p.swing : 0, p.period); if (on) w.score.freezeCombo(p.sec); break;
+      // the wand: the pop box reaches for treats alone (an effect bubble still has to be driven into)
+      case 'the_wand': w.field.setReach(on ? p.reach : 1, on); w.kart.setReach(on ? p.reach : 1); break;
+      // rabbit foot: the seeded lanes lean golden; on a worded road the next rows carry one instead (cues.js)
+      case 'rabbit_foot': S.jackpotBias = on ? p.bias : 1; TR.gild(on && TR.lyrics ? p.rows : 0); break;
+      // golden touch: every pop pays double for sec (score.js boostMult; off resets it)
+      case 'golden_touch': w.score.boostMult(on ? p.mult : 1, on ? p.sec : 0); break;
+      // riptide: the road ahead slides into the lane and the cruise runs faster through the pace
+      case 'riptide': S.tide = on ? p.speed : 1; w.field.setPull(on); break;
     }
   }
 
@@ -418,7 +430,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
    *  owner's "too soon by 2 sec or so", measured in race/smoke/sync-check.mjs). */
   function applyCue(w, due) {
     const ks = w.kart.state, e = due.event, t = TR.track ? TR.track.t : 0;
-    const cue = cueFor(e, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds, lyrics: TR.lyrics });
+    const cue = cueFor(e, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds, lyrics: TR.lyrics, gold: () => TR.takeGold() });
     if (!cue) { TR.skip(e.id); return; }   // a guess the feel pass threw out never counts against the player
     // A row goes in as one thing (bubbles.js spawnRow): the density gate is rolled once for the
     // whole line, so the road never gets a row with a hole in it that the kart can steer through.
@@ -428,7 +440,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const row = cue.spawn.filter((sp) => sp.row), loose = cue.spawn.filter((sp) => !sp.row);
     if (row.length) {
       const at = e.t + (row[0].at || 0), d = sync.depthFor(t, ks.d, ks.speed, at);
-      const rowId = w.field.spawnRow({ kindId: row[0].kindId, placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id });
+      const rowId = w.field.spawnRow({ kindId: row[0].kindId, kindIds: row.map((sp) => sp.kindId), placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id });
       if (rowId) sync.trackRow(rowId, e, at, d, t);
     }
     for (const sp of loose) {
@@ -514,10 +526,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // that only lifts to 1.15 of it, then the full curve walks in over 20 s, and the act's kind
     // colours the pace from there. Off a chart the clock is the run's own elapsed seconds.
     S.pace = PACE.at(ts ? ts.t : S.elapsed, ts ? ts.act : null, TR.track ? TR.track.chart : null);
-    k.pace(S.pace.base, S.pace.cap);
+    k.pace(Math.min(S.pace.base * S.tide, S.pace.cap), S.pace.cap);   // riptide runs the cruise faster, under the same ceiling
     k.update(dt, input.read(), lay);
     w.score.tick(dt);
-    w.pickups.update(dt, { d: ks.d, x: ks.x, speed: ks.speed, elapsed: S.elapsed, opening: !!(S.pace && S.pace.opening), mult: w.score.state.mult });
+    w.pickups.update(dt, { d: ks.d, x: ks.x, speed: ks.speed, elapsed: S.elapsed, opening: !!(S.pace && S.pace.opening), mult: w.score.state.mult,
+      t: TR.track ? TR.track.t : null, nextEventT });
     for (const c of w.pickups.chips()) hud.passive(c.id, c);
     { const tr = trail[trailI]; tr.d = ks.d; tr.x = ks.x; tr.h = ks.h; tr.ok = true; trailI = (trailI + 1) % TRAIL_N; }
     for (const e of mix.tick(dt)) onMix(w, e);

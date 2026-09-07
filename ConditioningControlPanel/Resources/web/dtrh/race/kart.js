@@ -93,6 +93,8 @@ const ease = (k, dt) => 1 - Math.exp(-k * dt);
 /** setScale (poppers): the tween rate, and how far the seat slides back / up per unit of
  *  (scale / KART_SCALE - 1), so poppers' 1.8 (a third bigger) is 1.2 m back and 0.4 m up. */
 const SIZE_EASE = 8, SIZE_CAM_BACK = 3.6, SIZE_CAM_UP = 1.2;
+/** Pocket watch: the swing's amplitude eases in and out (~0.5 s) so the cup never jumps at either end. */
+const SWAY_EASE = 4;
 const smooth = (u) => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
 const tierFor = (sec) => { let t = 0; for (const at of DRIFT_TIER_SEC) if (sec >= at) t++; return t; };
 
@@ -162,6 +164,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   scene.add(ring);
   let pulse = 0, reach = 1;
   let size = KART_SCALE, sizeTarget = KART_SCALE;   // the rig's scale: poppers grows it (setScale)
+  let sway = 0, swayTarget = 0, swayPeriod = 2, swayX = 0;   // pocket watch: the pendulum (setSway)
 
   let vx = 0, lean = 0, pitch = 0, elapsed = 0, lastRampD = -1, driftSide = 1, camReady = false, camX = 0, camH = 0;
   let camBoost = 0, steerS = 0, hopT = 0, scrubSec = 0, sparkAcc = 0, driftWas = false;
@@ -299,6 +302,10 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     if (edge < WALL_SOFT && outward) vTarget *= clamp(edge / WALL_SOFT, 0, 1);
     vx += (vTarget - vx) * ease(state.drift ? 9 : 6, dt);
     state.x += vx * dt;
+    // pocket watch: the pendulum. Added as a delta so the clamp and the soft wall below still hold,
+    // with the amplitude eased so the cup settles back where the player left it when the watch stops.
+    if (sway !== swayTarget) { sway += (swayTarget - sway) * ease(SWAY_EASE, dt); if (Math.abs(sway - swayTarget) < 0.002) sway = swayTarget; }
+    if (sway > 0 || swayX !== 0) { const sx = sway * Math.sin((Math.PI * 2 * elapsed) / swayPeriod); state.x += sx - swayX; swayX = sx; }
     if (Math.abs(state.x) > xMax) {
       state.x = Math.sign(state.x) * xMax;
       if (Math.sign(vx) === Math.sign(state.x)) vx *= 0.25;
@@ -515,6 +522,8 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   function setReach(mult) { reach = clamp(+mult || 1, 0.5, 3); }
   /** Poppers: tween the rig to this scale (0 = back to KART_SCALE); the seat and the road clamp follow. */
   function setScale(s) { sizeTarget = s > 0 ? clamp(+s, KART_SCALE * 0.5, KART_SCALE * 2) : KART_SCALE; }
+  /** Pocket watch: swing the cup `amp` metres either side every `period` seconds (amp 0 stops it). */
+  function setSway(amp, period) { swayTarget = clamp(+amp || 0, 0, KART_X_MAX); if (period > 0) swayPeriod = +period; }
   function onEvent(cb) { if (typeof cb === 'function') listeners.push(cb); return () => { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); }; }
 
   function dispose() {
@@ -526,7 +535,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   }
 
   return { state, update, applyBoost, applySlow, pace, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
-    pulseTarget, setReach, setScale, onEvent, dispose,
+    pulseTarget, setReach, setScale, setSway, onEvent, dispose,
     emiModel: () => rig.model(), emiReady: (cb) => rig.onReady(cb),
     setFace: (i) => rig.setFace(i), pose: (name, opts) => rig.pose(name, opts) };
 }

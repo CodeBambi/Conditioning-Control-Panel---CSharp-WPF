@@ -39,6 +39,8 @@ export const TUNE = Object.freeze({
   TAKE_X: 1.2,              // the cube's own crossing test: |x - ks.x| <= TAKE_X
   POINTS: 10,               // a take pays like a plain treat and keeps the combo warm
   DROP_M: 8,                // this far behind the kart an untaken pickup goes away
+  CLEAR_SEC: 2,             // on a track the take lands this clear of every chart event (pickFor)
+  GOLD_LEAD_SEC: [6, 9],    // golden touch lights when the next trigger is this far past the take
 });
 
 /**
@@ -48,9 +50,16 @@ export const TUNE = Object.freeze({
 export const PICKUPS = [
   // group one: the passive bonuses (family bonus)
   { id: 'poppers',      name: 'poppers',      family: 'bonus', pool: 'mid',   sec: 8,  scale: 1.8, reach: 1.35, sprite: SPRITE_BASE + 'poppers.png' },
+  { id: 'pocket_watch', name: 'pocket watch', family: 'bonus', pool: 'catch', sec: 10, swing: 0.8, period: 2, sprite: SPRITE_BASE + 'pocket_watch.png' },
+  { id: 'the_wand',     name: 'the wand',     family: 'bonus', pool: 'catch', sec: 7,  reach: 2.2, sprite: SPRITE_BASE + 'the_wand.png' },
+  { id: 'rabbit_foot',  name: 'rabbit foot',  family: 'bonus', pool: 'mid',   sec: 12, bias: 2, rows: 2, sprite: SPRITE_BASE + 'rabbit_foot.png' },
+  { id: 'golden_touch', name: 'golden touch', family: 'bonus', pool: 'risk',  sec: 8,  mult: 2, sprite: SPRITE_BASE + 'golden_touch.png' },
   // group two: the pop-everything family (family sweep)
   { id: 'the_pump',     name: 'the pump',     family: 'sweep', pool: 'mid',   sec: 5,  sprite: SPRITE_BASE + 'the_pump.png' },
+  { id: 'riptide',      name: 'riptide',      family: 'sweep', pool: 'catch', sec: 6,  pull: 40, pullSec: 0.5, speed: 1.15, sprite: SPRITE_BASE + 'riptide.png' },
 ];
+/** On a track golden touch is never rolled: pickFor lights it on the lead rule alone. */
+const GOLD = new Set(['golden_touch']);
 export const PICKUP_BY_ID = Object.fromEntries(PICKUPS.map((p) => [p.id, p]));
 
 /** Pool weights by multiplier: x1 is generous with catch-up, x8 leans into risk / reward. */
@@ -105,6 +114,25 @@ export function createPickups({ rng, spots = [], totalDepth = 1e9 } = {}) {
     }
     return best;
   }
+  /**
+   * THE LYRIC PLACEMENT RULE. Off a track (f.t null) the roll is the pool. On one, f.t is the track
+   * second and f.nextEventT the one door into the file (track.js nextEvent): the take must land
+   * CLEAR_SEC clear of every chart event at the speed the kart has now, so a pickup never sits on a
+   * word's row; a spot that would is skipped this frame and the gap keeps waiting. golden touch is
+   * not rolled there at all: it lights when the next trigger is GOLD_LEAD_SEC past the take, where
+   * its double is worth the most, and only then.
+   */
+  function pickFor(spot, d, f) {
+    const next = typeof f.nextEventT === 'function' ? f.nextEventT : null;
+    if (f.t == null || !next) return rollPickup(f.mult, rand);
+    const arrive = Number(f.t) + relD(spot.d, d) / Math.max(1, Number(f.speed) || 0);
+    const near = next(arrive - TUNE.CLEAR_SEC);
+    if (near != null && near < arrive + TUNE.CLEAR_SEC) return null;
+    const trig = next(arrive, 'trigger');
+    const lead = trig == null ? -1 : trig - arrive;
+    if (lead >= TUNE.GOLD_LEAD_SEC[0] && lead <= TUNE.GOLD_LEAD_SEC[1]) return PICKUP_BY_ID.golden_touch;
+    return rollPickup(f.mult, rand, GOLD);
+  }
   function start(p) {
     const was = [...active.values()].find((a) => a.p.family === p.family);
     const refresh = !!was && was.p.id === p.id;
@@ -116,8 +144,9 @@ export function createPickups({ rng, spots = [], totalDepth = 1e9 } = {}) {
   const api = {
     /**
      * One frame. `f` is the kart and the run this second:
-     *   { d, x, speed, elapsed, opening, mult }
-     * elapsed is seconds of driving, opening true while the gentle start holds (race/pace.js).
+     *   { d, x, speed, elapsed, opening, mult, t, nextEventT }
+     * elapsed is seconds of driving, opening true while the gentle start holds (race/pace.js),
+     * t the track second (null off a track) and nextEventT(t, kind) track.js's getter (pickFor).
      */
     update(dt, f) {
       if (!(dt > 0) || !f) return;
@@ -140,7 +169,8 @@ export function createPickups({ rng, spots = [], totalDepth = 1e9 } = {}) {
         gapLeft -= dt;
         if (gapLeft <= 0) {
           const spot = spotAhead(d);
-          if (spot) { light(rollPickup(f.mult, rand), spot); gapLeft = rollGap(); }
+          const p = spot ? pickFor(spot, d, f) : null;
+          if (p) { light(p, spot); gapLeft = rollGap(); }
         }
       }
       prevD = d;

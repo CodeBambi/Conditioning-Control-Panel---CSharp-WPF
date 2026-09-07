@@ -258,7 +258,7 @@ while the glb is mounted (the primitive EMI has no limbs to pose).
 
 ### `race/pickups.js` (the passive pickups)
 ```js
-export const TUNE;      // the one table of knobs: FIRST_SEC, GAP_SEC, AHEAD_M, TAKE_X, POINTS, DROP_M
+export const TUNE;      // the one table of knobs: FIRST_SEC, GAP_SEC, AHEAD_M, TAKE_X, POINTS, DROP_M, CLEAR_SEC, GOLD_LEAD_SEC
 export const PICKUPS;   // rows { id, name, family, pool, sec, sprite, ...the effect's own numbers }; PICKUP_BY_ID by id
 export function weightFor(pickup, mult) / rollPickup(mult, rand, exclude)
 export function createPickups({ rng, spots, totalDepth }) -> { update(dt, frame), take(), light(id, spot), chips(), reset(), onEvent(cb), byId(id), live, active, spots }
@@ -275,8 +275,18 @@ The module never touches three or the DOM; effects are events the run brain appl
 `applyPickup` in run.js) off the row's numbers: `{type:'pickupSpawn', id, d, x}`, `{type:'pickupTake',
 id, p, refresh}`, `{type:'pickupEnd', id}`, `{type:'pickupDrop', id}`. The rows: `poppers` (the cup grows
 to `scale`, the pop box to `reach` and the seat slides back: `kart.setScale`, `field.setReach`,
-`kart.setReach`), `the_pump` (`field.setSweep(on)` pops the whole road for `sec` on a
-`kart.applyBoost(sec)`). `lucky` is a plain 25 point treat.
+`kart.setReach`), `pocket_watch` (`kart.setSway(swing, period)` swings the cup like the pendulum,
+`score.freezeCombo(sec)` holds the combo), `the_wand` (`field.setReach(reach, true)`: a magnet for
+treats alone, effect bubbles keep the plain box), `rabbit_foot` (`S.jackpotBias = bias` on a seeded
+road; on a worded one `track.gild(rows)` and cues.js puts a `golden` in the centre of the next `rows`
+trigger rows through `ctx.gold()`), `golden_touch` (`score.boostMult(mult, sec)`), `the_pump`
+(`field.setSweep(on)` pops the whole road for `sec` on a `kart.applyBoost(sec)`) and `riptide`
+(`field.setPull(on)` slides everything within 40 m ahead into the lane over 0.5 s; the cruise runs
+`speed` times faster through `S.tide` on the pace path, under the pace's own ceiling). `lucky` is a
+plain 25 point treat. On a track the frame carries `t` and `nextEventT` (track.js `nextEvent`, the
+one door into the file): a take lands `CLEAR_SEC` clear of every chart event at the kart's speed,
+never in the first act, and `golden_touch` is not rolled but lit when the next trigger is
+`GOLD_LEAD_SEC` past the take.
 
 ### `race/hud.js` + `race/race.css` (PR 4)
 ```js
@@ -372,8 +382,9 @@ As built (PR 5 reality notes):
   and the host refuses the message, so this path is dark at both ends.
 - The first Tea Garden gate sits at d = 9 (mid gate chunk), so it crosses ~0.4 s after start: that crossing
   shows the opening MARQUEE and never banks. Later Tea Garden gates bank only when the road score is > 0.
-- The pickups (race/pickups.js) widen the pop box through `field.setReach(mult)` + `kart.setReach(mult)`
-  (poppers, the wand) and open it to the whole road through `field.setSweep(on)` (the pump).
+- The pickups (race/pickups.js) widen the pop box through `field.setReach(mult, treatsOnly)` + `kart.setReach(mult)`
+  (poppers, the wand), open it to the whole road through `field.setSweep(on)` (the pump) and pull the
+  road into the lane through `field.setPull(on)` (riptide).
 - Nothing flips the canvas: screen shake owns the root's `style.transform` alone.
 - `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart, score,
   pickups) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.

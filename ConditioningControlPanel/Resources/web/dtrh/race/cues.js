@@ -106,7 +106,8 @@ function triggerKind(label, ctx) {
 
 /**
  * @param event a chart event (race/chart.js normalizeChart shape)
- * @param ctx { energy, act, room, intensity, rng, triggerKinds, lyrics }
+ * @param ctx { energy, act, room, intensity, rng, triggerKinds, lyrics, gold }
+ *            gold() answers true while a trigger row is owed a golden centre (rabbit foot, track.js takeGold)
  * @returns the cue, or null for an event this build has nothing to say about (an unknown
  *          kind, or a word the feel pass decided the spotter only guessed at).
  */
@@ -126,7 +127,8 @@ export function cueFor(event, ctx = {}) {
         break;
       }
       const kindId = triggerKind(label, ctx);
-      for (const x of ROW_X) cue.spawn.push({ kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true });
+      const gold = typeof ctx.gold === 'function' && ctx.gold() === true;   // rabbit foot: a golden in the middle
+      for (const x of ROW_X) cue.spawn.push({ kindId: gold && Math.abs(x) < 1e-6 ? 'golden' : kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true });
       cue.word = label || null;
       cue.pose = 'grab';
       break;
