@@ -42,6 +42,13 @@ function stubField() {
       live.push({ kindId, placement, d, x, h, eventId });
       return live.length - 1;
     },
+    /** A row goes down whole or not at all, and the density gate is rolled once for it. */
+    spawnRow({ kindId, placement, d, h, xs, eventId }) {
+      if (live.length + xs.length > CAP) return 0;
+      if (density <= 0) return 0;
+      for (const x of xs) live.push({ kindId, placement, d, x, h, eventId, row: true });
+      return xs.length;
+    },
     setDensity(m) { density = m; },
     get live() { return live; },
     get density() { return density; },
@@ -121,8 +128,10 @@ function chartEnergy(t) {
   ok(cueFor(null, ctx) === null && cueFor({ kind: 'nonsense' }, ctx) === null, 'a junk event is null, never a throw');
 
   const t = cueFor({ kind: 'trigger', label: 'good girl' }, ctx);
-  ok(t.spawn.length === 1 && KIND_BY_ID[t.spawn[0].kindId].kind === 'effect' && t.word === 'good girl', 'a trigger is one effect bubble and the word: ' + t.spawn[0].kindId);
-  ok(cueFor({ kind: 'trigger', label: 'never analysed' }, ctx).spawn[0].kindId === 'flash', 'an unmapped phrase falls back to flash');
+  // a sure trigger is a ROW across the road now (rows-check.mjs holds its geometry), all one kind
+  ok(t.spawn.length > 1 && t.spawn.every((sp) => sp.row) && KIND_BY_ID[t.spawn[0].kindId].kind === 'effect' && t.word === 'good girl',
+    'a trigger is a row of ' + t.spawn.length + ' effect bubbles and the word: ' + t.spawn[0].kindId);
+  ok(cueFor({ kind: 'trigger', label: 'never analysed' }, ctx).spawn.every((sp) => sp.kindId === 'flash'), 'an unmapped phrase falls back to flash');
   const w = cueFor({ kind: 'word', label: 'deeper' }, ctx);
   ok(w.spawn.length === 1 && w.spawn[0].kindId === 'treat' && w.spawn[0].h === LANE_H, 'a structure word is one lane treat');
   const c = cueFor({ kind: 'count', label: '1', n: 1, of: 10, last: true }, ctx);
@@ -180,7 +189,14 @@ function chartEnergy(t) {
     for (const due of st.due(d, SPEED)) {
       const cue = cueFor(due.event, { energy: s.intensity, act: s.act, room: null, intensity: s.intensity, rng, triggerKinds: st.triggerKinds });
       if (!cue) { st.skip(due.event.id); skips++; continue; }
+      const rowSp = cue.spawn.filter((sp) => sp.row);
+      if (rowSp.length) {
+        const at = d + SPEED * Math.max(due.dueIn + (rowSp[0].at || 0), CUE_AHEAD_SEC);
+        if (at <= d) behind++;
+        spawns += field.spawnRow({ kindId: rowSp[0].kindId, placement: rowSp[0].placement, d: at, h: rowSp[0].h, xs: rowSp.map((sp) => sp.x), eventId: due.event.id });
+      }
       for (const sp of cue.spawn) {
+        if (sp.row) continue;
         const at = d + SPEED * Math.max(due.dueIn + (sp.at || 0), CUE_AHEAD_SEC);
         if (at <= d) behind++;
         if (field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d: at, x: sp.x, h: sp.h, eventId: due.event.id }) >= 0) spawns++;

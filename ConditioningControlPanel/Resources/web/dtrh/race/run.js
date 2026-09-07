@@ -192,6 +192,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     score.onEvent((e) => onScore(w, e));
     items.onEvent((e) => onItem(w, e));
     field.setTracked(!!TR.track);
+    field.setSparse(TR.lyrics);
     pixel.retexture(scene);
     return w;
   }
@@ -384,7 +385,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const t = TR.setTrack(chart);
     audio.setRoute(routeOf(t));
     S.trackHold = 0; S.statsAt = 0;
-    if (W) { W.field.setTracked(!!t); W.field.setDensity(1); if (!t) applyFog(W, 0); }
+    if (W) { W.field.setTracked(!!t); W.field.setSparse(TR.lyrics); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
     if (bridge.log) bridge.log(t ? `race track: ${t.name}, ${Math.round(t.durationSec)}s, ${TR.stats().countable} to take` : 'race track: cleared');
     return t;
@@ -409,9 +410,16 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
    *  have reached when the voice says it, so the pop lands on the word whatever the throttle did. */
   function applyCue(w, due) {
     const ks = w.kart.state;
-    const cue = cueFor(due.event, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds });
+    const cue = cueFor(due.event, { energy: TR.intensity, act: TR.act, room: S.room, intensity: S.intensity, rng: w.rng, triggerKinds: TR.triggerKinds, lyrics: TR.lyrics });
     if (!cue) { TR.skip(due.event.id); return; }   // a guess the feel pass threw out never counts against the player
-    for (const sp of cue.spawn) {
+    // A row goes in as one thing (bubbles.js spawnRow): the density gate is rolled once for the
+    // whole line, so the road never gets a row with a hole in it that the kart can steer through.
+    const row = cue.spawn.filter((sp) => sp.row), loose = cue.spawn.filter((sp) => !sp.row);
+    if (row.length) {
+      const d = ks.d + ks.speed * Math.max(due.dueIn + (row[0].at || 0), CUE_AHEAD_SEC);
+      w.field.spawnRow({ kindId: row[0].kindId, placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: due.event.id });
+    }
+    for (const sp of loose) {
       const d = ks.d + ks.speed * Math.max(due.dueIn + (sp.at || 0), CUE_AHEAD_SEC);
       w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d, x: sp.x, h: sp.h, eventId: due.event.id });
     }
@@ -711,7 +719,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
-    setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); }, trackClock: (t, playing) => TR.clock(t, playing),
+    setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); }, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), debugItemBox,
     get track() { return TR.track; } };
 }
