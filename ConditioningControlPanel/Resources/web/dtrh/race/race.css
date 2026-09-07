@@ -222,27 +222,38 @@
 .race-hud .rh-speed.is-boost .rh-speed-fill { background: linear-gradient(90deg, #d8fbff, #7fe7f0 55%, #fff); box-shadow: 0 0 14px rgba(127, 231, 240, 0.95); }
 .race-hud .rh-speed.is-boost .rh-speed-tag { opacity: 1; animation: rhBoostTag 0.42s steps(2) infinite; }
 
-/* ---- toasts: one word at a time, mid-screen, each kind with its own motion ---- */
+/* ---- toasts: one word at a time, mid-screen, each kind with its own motion ----
+   CHATTER, NOT HEADLINES. The owner, on the phone build: "the items notification and the jackpot
+   as well as the streak ones are noisy, make them last less and be kinda faded so they dont
+   clash". So the whole rail is 0.85 of the size it was, at 70 percent, every hold is 40 percent
+   shorter (hud.js TOAST_HOLD) and the glows are roughly half. It reads under the caption band
+   now instead of over it. The score plate, the combo and the speed plate are untouched: those
+   are the honest numbers (Law I) and they stay loud. The rail's TOP does not move: the zoom
+   plate is what got out of its way (race/captions.js measures this rail to find its own air). */
 .race-hud .rh-toasts {
   position: absolute; top: 34%; left: 26vw; right: 26vw;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
+  transform: scale(0.85); transform-origin: top center; opacity: 0.7;
 }
 .race-hud .rh-toast {
   font-weight: 900; letter-spacing: 0.1em; text-align: center; will-change: transform, opacity;
-  text-shadow: 0 0 18px rgba(255, 105, 180, 0.8), 0 2px 4px rgba(0, 0, 0, 0.85);
+  /* a toast grows DOWN out of its own top: the jackpot's reveal opens at 2.1 of its size, and
+     from the middle that would have swelled up into the air the zoom plate rests in */
+  transform-origin: top center;
+  text-shadow: 0 0 10px rgba(255, 105, 180, 0.45), 0 2px 4px rgba(0, 0, 0, 0.85);
   animation: rhToastPop var(--rh-hold, 1.2s) ease-out forwards;
 }
 .race-hud .rh-toast--pop { font-size: 1.1rem; color: #ffd6ea; }
 /* a merged run of pops ("+30 x3"): one toast, one spot, and it grows with the run */
-.race-hud .rh-toast--pop.is-run { font-size: 1.4rem; color: #fff0b8; text-shadow: 0 0 20px rgba(255, 212, 94, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); }
-.race-hud .rh-toast--almost { font-size: 1.5rem; color: #bfe9ff; animation: rhShiver 0.34s linear, rhToastPop 1.3s ease-out forwards; text-shadow: 0 0 18px rgba(150, 210, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); }
+.race-hud .rh-toast--pop.is-run { font-size: 1.4rem; color: #fff0b8; text-shadow: 0 0 11px rgba(255, 212, 94, 0.5), 0 2px 4px rgba(0, 0, 0, 0.85); }
+.race-hud .rh-toast--almost { font-size: 1.5rem; color: #bfe9ff; animation: rhShiver 0.34s linear, rhToastPop 1.3s ease-out forwards; text-shadow: 0 0 10px rgba(150, 210, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.85); }
 .race-hud .rh-toast--almost.is-run { font-size: 1.8rem; color: #e2f5ff; }
-.race-hud .rh-toast--jackpot { font-size: 2.4rem; color: #fff0b8; text-shadow: 0 0 26px rgba(242, 193, 78, 1), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.8s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
-.race-hud .rh-toast--bank { font-size: 1.3rem; color: #ffe082; text-shadow: 0 0 18px rgba(255, 200, 60, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhToastPop 1.6s ease-out forwards; }
+.race-hud .rh-toast--jackpot { font-size: 2.4rem; color: #fff0b8; text-shadow: 0 0 14px rgba(242, 193, 78, 0.55), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.8s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+.race-hud .rh-toast--bank { font-size: 1.3rem; color: #ffe082; text-shadow: 0 0 10px rgba(255, 200, 60, 0.5), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhToastPop 1.6s ease-out forwards; }
 .race-hud .rh-toast--item { font-size: 1.6rem; color: #ffd6ea; animation: rhBounce 0.36s cubic-bezier(0.2, 1.6, 0.4, 1), rhToastPop 1.4s ease-out forwards; }
-.race-hud .rh-toast--effect { font-size: 1.2rem; color: #e9c8ff; text-shadow: 0 0 18px rgba(180, 120, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhLean 1.4s ease-out forwards; }
+.race-hud .rh-toast--effect { font-size: 1.2rem; color: #e9c8ff; text-shadow: 0 0 10px rgba(180, 120, 255, 0.5), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhLean 1.4s ease-out forwards; }
 /* a served recipe: the name lands big and pink, a REVEAL like the jackpot but softer */
-.race-hud .rh-toast--recipe { font-size: 1.8rem; color: #ffb6d9; letter-spacing: 0.14em; text-shadow: 0 0 24px rgba(255, 61, 165, 0.95), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.7s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
+.race-hud .rh-toast--recipe { font-size: 1.8rem; color: #ffb6d9; letter-spacing: 0.14em; text-shadow: 0 0 13px rgba(255, 61, 165, 0.55), 0 2px 4px rgba(0, 0, 0, 0.85); animation: rhReveal 1.7s cubic-bezier(0.2, 1.4, 0.4, 1) forwards; }
 .race-hud .rh-gold { position: absolute; inset: 0; background: radial-gradient(60% 60% at 50% 50%, rgba(255, 230, 140, 0.55), rgba(242, 193, 78, 0.18)); opacity: 0; }
 .race-hud .rh-gold.is-on { animation: rhGold 0.7s ease-out forwards; }
 .race-hud .rh-token {
@@ -537,50 +548,72 @@
 /* ============================================================================
  * THE VOICE ON THE GLASS (race/captions.js): the caption line and the zoom plate.
  *
- * One layer above .rh-chrome, click-through like the rest of it. The caption is a
- * lower third that clears the item slot, the mixer stack and the speed bar, so it
- * can never sit on a plate; the score plate is top-left and is never in reach of
- * it at any size. The plate flies out of the vanishing point in the middle of the
- * glass, one at a time, wearing the theme race/triggerTheme.js named for its
- * trigger's preset. THIRTEEN THEMES, one class each, listed in the table there.
+ * One layer above .rh-chrome, click-through like the rest of it.
+ *
+ * THE BAND IS AT THE TOP, AND IT IS MEASURED, NOT GUESSED. The owner's phone cut
+ * the caption's second line in half and dropped the zoom plate onto a jackpot
+ * toast. The cut was an `em` max-height on a phone that inflates small text: the
+ * box held 1.7 of its own rendered line boxes, so the second line lost its bottom
+ * half. Nothing here caps a height in `em` any more. captions.js measures the
+ * score plate, the top buttons and the toast rail and hands this file three
+ * numbers:
+ *   --rc-cap-t     the top of the caption band, clear of the chrome above it
+ *   --rc-plate-y   the plate's resting centre, in the air under that band
+ *   --rc-plate-fs  the plate's size, cut down only when that air is thin
+ * and it steps a long phrase's own size down until it draws in two lines, which
+ * is the only cap that cannot slice a letter in half. The plate flies out of the
+ * vanishing point into that air, one at a time, wearing the theme
+ * race/triggerTheme.js named for its trigger's preset. THIRTEEN THEMES, one class
+ * each, listed in the table there.
  * ==========================================================================*/
-.race-hud .rc-layer { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.race-hud .rc-layer {
+  position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: hidden;
+  /* a phone that inflates the text inside a measured box makes the measuring a lie */
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
 .race-hud .rc-layer * { pointer-events: none; }
 .race-hud.is-lobby .rc-layer { display: none; }
 
-/* ---- the caption: low, fleeting, one phrase, typed by the voice ---- */
+/* ---- the caption: top of the glass, fleeting, one phrase, typed by the voice ---- */
 .race-hud .rc-cap {
   position: absolute; left: var(--rh-in-l); right: var(--rh-in-r);
-  /* above the item slot (bottom), the mixer column (bottom + 72px) and the speed bar */
-  bottom: calc(var(--rh-in-b) + 148px);
+  /* under the score plate row; the value here is only the pre-measure fallback */
+  top: var(--rc-cap-t, calc(var(--rh-in-t) + 154px));
   display: flex; justify-content: center;
   opacity: var(--rc-out, 1); transition: opacity 0.18s linear;
 }
-.race-hud .rc-line {
+.race-hud .rc-cap-line {
   max-width: min(94%, 900px); text-align: center; text-wrap: balance;
-  font-size: clamp(1.05rem, 4.4vw, 1.55rem); font-weight: 800; line-height: 1.28; letter-spacing: 0.02em;
-  /* two lines at most: a third would climb into the road */
-  max-height: 2.6em; overflow: hidden;
+  /* --rc-fs is captions.js stepping a three line phrase down into two */
+  font-size: calc(var(--rc-fs, 1) * clamp(1rem, 4.6vw, 1.5rem));
+  font-weight: 800; line-height: 1.3; letter-spacing: 0.02em;
   text-shadow: 0 0 14px rgba(0, 0, 0, 0.9), 0 2px 5px rgba(0, 0, 0, 0.95);
 }
-/* every word of the phrase is in the DOM from the start so the line never reflows as it types;
-   a word the voice has not reached holds its space and nothing else */
-.race-hud .rc-word { color: var(--rc-ink, #fff); opacity: 0; transition: opacity 0.16s linear, text-shadow 0.16s linear; }
-.race-hud .rc-word.is-said { opacity: 0.82; }
-.race-hud .rc-word.is-said.is-now { opacity: 1; text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
+/* THE NAMES ARE THE CAPTION'S OWN. menu.css styles the intro cards under #race-root with
+   .rc-word and .rc-line, and an id beats any class, so a caption word used to be drawn at the
+   card wordmark's 30px inside a band built for 18px: that is what cut the owner's second line.
+   Nothing in this layer answers to a card's name any more.
+   Every word of the phrase is in the DOM from the start so the line never reflows as it types;
+   a word the voice has not reached holds its space and nothing else. */
+.race-hud .rc-cap-word { color: var(--rc-ink, #fff); opacity: 0; transition: opacity 0.16s linear, text-shadow 0.16s linear; }
+.race-hud .rc-cap-word.is-said { opacity: 0.82; }
+.race-hud .rc-cap-word.is-said.is-now { opacity: 1; text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
 
 /* ---- the plate: out of the vanishing point, into your face ---- */
 .race-hud .rc-plates { position: absolute; inset: 0; perspective: 900px; }
 .race-hud .rc-plate {
-  position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) scale(0.15);
+  /* --rc-plate-y is the measured air between the caption band and the toast rail, so a trigger
+     and a jackpot can no longer land on each other; the percentage is the pre-measure fallback */
+  position: absolute; top: var(--rc-plate-y, 30%); left: 50%; transform: translate(-50%, -50%) scale(0.15);
   max-width: 92vw; text-align: center; white-space: nowrap;
-  font-size: 12vw; font-weight: 900; line-height: 1; letter-spacing: 0.06em; text-transform: lowercase;
+  font-size: var(--rc-plate-fs, 12vw);
+  font-weight: 900; line-height: 1; letter-spacing: 0.06em; text-transform: lowercase;
   color: var(--rc-glow, #fff);
   text-shadow: 0 0 30px var(--rc-glow, #fff), 0 4px 10px rgba(0, 0, 0, 0.9);
   animation: rcZoom 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
-@media (min-width: 700px) { .race-hud .rc-plate { font-size: 7vw; } }
+@media (min-width: 700px) { .race-hud .rc-plate { font-size: var(--rc-plate-fs, 7vw); } }
 .race-hud .rc-plate-sparks { display: none; }
 /* zoom 0.15 to 1.35 over 700 ms, hold 400 ms, then away */
 @keyframes rcZoom {
@@ -598,7 +631,8 @@
 /* ---- the thirteen themes (race/triggerTheme.js THEME_BY_PRESET) ---- */
 /* blackout: a near black card, white letters, and the room goes with it */
 .race-hud .rc-plate--ink {
-  color: var(--rc-ink, #f4f2ff); padding: 0.18em 0.5em; border-radius: 0.12em;
+  /* the card is wide, not tall: vertical padding here is height the measured air has to hold */
+  color: var(--rc-ink, #f4f2ff); padding: 0.05em 0.5em; border-radius: 0.12em;
   background: rgba(9, 9, 16, 0.94); border: 2px solid rgba(244, 242, 255, 0.22);
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.95);
 }
@@ -634,7 +668,7 @@
 }
 /* flash-pulse: three white flashes behind the word */
 .race-hud .rc-plate--pulse::before {
-  content: ''; position: absolute; inset: -18vh -30vw; z-index: -1;
+  content: ''; position: absolute; inset: -10vh -30vw; z-index: -1;
   background: radial-gradient(closest-side, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
   animation: rcPulse 300ms steps(1) 260ms 3;
 }

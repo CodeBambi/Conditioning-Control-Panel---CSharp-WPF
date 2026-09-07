@@ -39,13 +39,25 @@ import { wantsTouch } from './touch.js';
 const TOUCH = wantsTouch();
 
 const FLICK_MS = 450;
-const TOAST_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400, recipe: 1700 };
+/**
+ * How long each kind of toast stays up, in milliseconds. CHATTER, NOT HEADLINES: the owner, on
+ * the phone build, "the items notification and the jackpot as well as the streak ones are noisy,
+ * make them last less and be kinda faded so they dont clash". Every hold is 60 percent of the one
+ * it replaced, and the two chatter kinds (a pop, an almost) are capped at CHATTER_MAX_MS however
+ * loud the run gets, because those are the ones that arrive ten to the second. race.css takes the
+ * rail down to 0.85 of its size at 70 percent to finish the job. The score plate keeps the number
+ * honestly (Law I); a toast is only the noise it makes on the way there.
+ */
+const CHATTER_MAX_MS = 700;
+const TOAST_HOLD = { pop: 660, almost: CHATTER_MAX_MS, jackpot: 1080, bank: 960, item: 840, effect: 840, recipe: 1020 };
 /** Two "+N" pops inside this window merge into one counting toast ("+30 x3"). */
 const POP_MERGE_MS = 600;
 /** Two "almost +N" inside this window merge the same way ("almost +50 x2"). */
 const ALMOST_MERGE_MS = 900;
 /** Chatter kinds (pop, almost) may not open a NEW toast more often than this. */
 const CHATTER_GAP_MS = 180;
+/** Where the act ribbon parks when a caption band owns the air under the score plate. */
+const BANNER_LOW = 0.58;
 
 /** The second-pass rung ladder. consts.js MULT_LADDER is the source of truth;
  * this is the documented fallback for when the import is missing or malformed. */
@@ -358,10 +370,17 @@ export function createRaceHud(root) {
       bannerTag.textContent = (tagline || '').toLowerCase();
       banner.classList.remove('is-on');
       // sit the ribbon under the MEASURED score block, so it never rides up
-      // into the bank line on a short window or down into the media lane
+      // into the bank line on a short window or down into the media lane.
+      // WITH WORDS ON THE GLASS that spot is the caption band's (race/captions.js sets the class
+      // and --rc-cap-b on this root), so the ribbon takes the clear air below the toast rail
+      // instead: an act name and a spoken line never sit on top of each other.
       try {
-        const b = scoreWrap.getBoundingClientRect();
-        if (b && b.bottom > 0) banner.style.top = `${Math.round(b.bottom + 12)}px`;
+        const vh = typeof window === 'object' ? (window.innerHeight || 0) : 0;
+        if (root.classList.contains('has-rc-cap') && vh > 0) banner.style.top = `${Math.round(vh * BANNER_LOW)}px`;
+        else {
+          const b = scoreWrap.getBoundingClientRect();
+          if (b && b.bottom > 0) banner.style.top = `${Math.round(b.bottom + 12)}px`;
+        }
       } catch (e) { /* no layout yet: the CSS fallback top stands */ }
       later(() => banner.classList.add('is-on'), 40);
       later(() => banner.classList.remove('is-on'), 2600);

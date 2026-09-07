@@ -47,6 +47,21 @@ export const END_PUNCT = /[.?!]["')\]]?$/;
 /** The plate: the zoom, the hold, and the fade, in milliseconds (race.css runs the same numbers). */
 export const PLATE_MS = 1400;
 
+/** Two lines and no more. A third is shrunk into the two, never cut off the glass. */
+export const MAX_LINES = 2;
+/** The band sits this far under the chrome above it (the score plate, the sound / pause buttons). */
+export const CAP_GAP = 8;
+/** And the plate keeps this much air off the band above it and the toast rail below it. */
+export const PLATE_GAP = 8;
+/** The plate's peak scale: race.css rcZoom holds it here. */
+export const PLATE_PEAK = 1.35;
+/** What the roomiest theme's box costs over its own font size (the ink card's padding). */
+const PLATE_ROOM = PLATE_PEAK * 1.08;
+/** The steps the caption may take down to fit a phrase that wanted a third line into two. */
+const FIT_STEPS = [1, 0.89, 0.78, 0.67, 0.58];
+/** The plate never shrinks past this, whatever the air says: below it there is no point. */
+const PLATE_MIN_PX = 26;
+
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 /**
@@ -131,6 +146,16 @@ function phraseAt(phrases, t) {
 /**
  * The layer. `root` is the `.race-hud` div; this sits above `.rh-chrome` so a caption is never
  * under the score plate, and it is click-through like the rest of the chrome.
+ *
+ * NOTHING BELOW GUESSES AT A BOX. The owner's phone cut the caption's second line in half and
+ * dropped the zoom plate straight onto a jackpot toast, and both were the same mistake: three
+ * layers guessing at each other's heights in CSS, on a phone that quietly inflates small text so
+ * that an `em` height holds fewer lines than it reads. So the layer measures the chrome it has to
+ * live between, and publishes what it found for the stylesheet to place things by:
+ *   --rc-cap-t     the top of the caption band, under the score plate and the top buttons
+ *   --rc-plate-y   the plate's resting centre, in the air between that band and the toast rail
+ *   --rc-plate-fs  how big the plate may be and still fit that air, whatever its theme adds
+ * and `--rc-cap-b` on the hud root, which is where hud.js parks the act ribbon out of the way.
  */
 export function createCaptions(root) {
   const doc = root && root.ownerDocument;
@@ -142,7 +167,7 @@ export function createCaptions(root) {
   const dim = el('rc-dim', layer);                 // the ink theme's 300 ms screen dip
   const plateWrap = el('rc-plates', layer);
   const cap = el('rc-cap', layer);
-  const line = el('rc-line', cap);
+  const line = el('rc-cap-line', cap);
   cap.hidden = true;
 
   let phrases = [];
@@ -150,6 +175,79 @@ export function createCaptions(root) {
   let inked = -1;              // how many of its words have been inked
   let spans = [];              // the word elements of the phrase in the DOM
   let plate = null, plateTimer = 0, dimTimer = 0;
+
+  // ---- the measured layout: see the header of this function ----
+  const win = doc.defaultView || (typeof window === 'object' ? window : null);
+  let capT = -1, plateY = -1, plateFs = -1, bandBot = 0;
+
+  /** The lowest edge of the chrome the band has to clear: the score plate, and the top buttons. */
+  function chromeBottom() {
+    let y = 0;
+    for (const sel of ['.rh-score-wrap', '.rt-mute', '.rt-pause']) {
+      const n = root.querySelector(sel);
+      if (!n) continue;
+      const r = n.getBoundingClientRect();
+      if (r.height > 0) y = Math.max(y, r.bottom);
+    }
+    return y;
+  }
+
+  /**
+   * How many lines the phrase is actually drawing, counted off the word boxes themselves: one
+   * distinct top per line, whatever the font or the phone's own idea of small text. (A Range's
+   * rects are not the answer: the spaces between the words draw their own shorter boxes at their
+   * own tops, so a two line phrase counts as four.)
+   */
+  function lineCount() {
+    const tops = new Set();
+    for (const s of spans) {
+      const b = s.getBoundingClientRect ? s.getBoundingClientRect() : null;
+      if (b && b.height > 0) tops.add(Math.round(b.top));
+    }
+    return tops.size || 1;          // a stub DOM with no layout: the CSS size stands
+  }
+
+  /**
+   * Two lines and no more, and never half of one. A phrase that wants a third line steps its own
+   * size down until it does not, and the steps are judged off the RENDERED line boxes rather than
+   * off the font size, because a phone inflates small text and an `em` height does not know it.
+   */
+  function fit() {
+    for (let i = 0; i < FIT_STEPS.length; i++) {
+      line.style.setProperty('--rc-fs', String(FIT_STEPS[i]));
+      if (lineCount() <= MAX_LINES) return FIT_STEPS[i];
+    }
+    return FIT_STEPS[FIT_STEPS.length - 1];
+  }
+
+  /** Where the band sits, where the plate rests, and how big the plate may be. Cheap, idempotent. */
+  function measure() {
+    const vw = (win && win.innerWidth) || 390, vh = (win && win.innerHeight) || 844;
+    const t = Math.round((chromeBottom() || vh * 0.02) + CAP_GAP);
+    if (t !== capT) { capT = t; layer.style.setProperty('--rc-cap-t', `${t}px`); }
+    // the band is always two lines tall whether or not a phrase is up, so the plate under it
+    // never hops about between a spoken line and a silence
+    let lh = 0;
+    try { lh = parseFloat(win ? win.getComputedStyle(line).lineHeight : '') || 0; } catch (e) { lh = 0; }
+    if (lh <= 0) lh = 23;
+    if (spans.length) {                       // never smaller than what the phrase really drew
+      const n = lineCount(), box = line.getBoundingClientRect();
+      if (n > 0 && box.height > 0) lh = Math.max(lh, box.height / n);
+    }
+    bandBot = t + Math.round(lh * MAX_LINES);
+    root.style.setProperty('--rc-cap-b', `${bandBot}px`);
+    const rail = root.querySelector('.rh-toasts');
+    const railTop = rail ? rail.getBoundingClientRect().top : vh * 0.34;
+    const a0 = bandBot + PLATE_GAP, a1 = Math.max(a0 + 32, railTop - PLATE_GAP);
+    const y = Math.round((a0 + a1) / 2);
+    if (y !== plateY) { plateY = y; layer.style.setProperty('--rc-plate-y', `${y}px`); }
+    const f = Math.round(Math.max(PLATE_MIN_PX, Math.min(vw * (vw >= 700 ? 0.07 : 0.12), (a1 - a0) / PLATE_ROOM)));
+    if (f !== plateFs) { plateFs = f; layer.style.setProperty('--rc-plate-fs', `${f}px`); }
+  }
+
+  const onResize = () => { capT = -1; plateY = -1; plateFs = -1; measure(); };
+  if (win && win.addEventListener) win.addEventListener('resize', onResize, { passive: true });
+  measure();
 
   function clearPhrase() {
     line.textContent = '';
@@ -164,7 +262,7 @@ export function createCaptions(root) {
     if (!p) return;
     for (const w of p.words) {
       const s = doc.createElement('span');
-      s.className = 'rc-word';
+      s.className = 'rc-cap-word';
       s.textContent = w.w;
       if (w.color) s.style.setProperty('--rc-ink', w.color);
       line.appendChild(s);
@@ -173,6 +271,8 @@ export function createCaptions(root) {
     }
     shown = i; inked = 0;
     cap.hidden = false;
+    fit();          // two lines, measured off what the phrase actually drew
+    measure();      // and the plate under it goes wherever that left room
   }
 
   /**
@@ -211,6 +311,7 @@ export function createCaptions(root) {
     const row = themeFor(event);
     const text = (event && typeof event.label === 'string' ? event.label : '').trim();
     if (!row || !text) return null;
+    measure();      // it lands in the air the band and the toast rail left, never on either
     if (plateTimer) { clearTimeout(plateTimer); plateTimer = 0; }
     if (plate) plate.remove();
     plate = doc.createElement('div');
@@ -242,6 +343,10 @@ export function createCaptions(root) {
     setTrack(chart) {
       phrases = chart ? paintTriggers(buildPhrases(chart.words), chart.events) : [];
       clearPhrase();
+      // hud.js reads this: with words on the glass the act ribbon's old spot under the score
+      // plate belongs to the caption band, so the ribbon takes the clear air lower down instead
+      root.classList.toggle('has-rc-cap', phrases.length > 0);
+      measure();
       return phrases.length;
     },
     update,
@@ -254,9 +359,17 @@ export function createCaptions(root) {
       if (dimTimer) { clearTimeout(dimTimer); dimTimer = 0; }
       dim.classList.remove('is-on');
     },
-    dispose() { this.clear(); phrases = []; layer.remove(); },
+    dispose() {
+      this.clear(); phrases = []; layer.remove();
+      root.classList.remove('has-rc-cap');
+      if (win && win.removeEventListener) win.removeEventListener('resize', onResize);
+    },
+    /** Re-read the chrome: the run calls nothing, the layer does it itself on a resize and a draw. */
+    measure,
     get phraseCount() { return phrases.length; },
     get phrases() { return phrases; },
+    /** What the last measure() found, so a check can hold the boxes against it. */
+    get band() { return { top: capT, bottom: bandBot, plateY, plateFs }; },
   };
 }
 
