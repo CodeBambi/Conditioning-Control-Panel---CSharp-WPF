@@ -49,6 +49,9 @@ internal static class CaucusHostService
 
     // ---- track charts (CHART.md, PR c6) ----
     private static TrackPlayer? _player;
+    /// <summary>Whatever is making the sound right now: the local player, or the audio element the
+    /// player is driving in the BambiCloud window. Null with no track loaded.</summary>
+    private static ITrackClock? _clock;
     private static DispatcherTimer? _trackClock;
     private static CancellationTokenSource? _analysisCts;
     private static string _trackName = "";
@@ -538,6 +541,7 @@ internal static class CaucusHostService
             StopHeartbeatWatch();
             HookVideoEvents(false);
             StopTrack();
+            _clock = null;
             try { _player?.Dispose(); } catch { }
             _player = null;
             _devTrackPath = null;
@@ -654,6 +658,7 @@ internal static class CaucusHostService
             }
             _player.Stop();
             _player.Load(path);
+            _clock = new LocalTrackClock(_player);
             StartTrackClock();
             App.Logger?.Information("RaceHost: track loaded {Name} ({Dur:0.0}s)", _trackName, _player.DurationSec);
         }
@@ -692,6 +697,7 @@ internal static class CaucusHostService
             ct.ThrowIfCancellationRequested();
             chart.Analysis.Partial = true;
             PostChart(chart, partial: true);
+            App.Logger?.Information("RaceHost: partial chart for {Name}: {Events} events", name, chart.Events?.Count ?? 0);
 
             // The word pass is the slow one, which is why the page already has a playable chart.
             var lexicon = TrackLexicon.Build();
@@ -736,12 +742,13 @@ internal static class CaucusHostService
         catch (Exception ex) { App.Logger?.Debug("RaceHost.CancelAnalysis: {E}", ex.Message); }
     }
 
-    /// <summary>track-play: the run started, so the file starts from its own zero.</summary>
+    /// <summary>track-play: the run started, so a local file starts from its own zero. A source
+    /// that is already running is left exactly where it is.</summary>
     private static void TrackPlay()
     {
-        if (_player == null) return;
-        _player.RefreshVolume();
-        _player.Play();
+        var c = _clock;
+        if (c == null) return;
+        c.Start();
         StartTrackClock();
         PostClock();
     }
@@ -749,8 +756,9 @@ internal static class CaucusHostService
     /// <summary>track-pause {on}: the Brake, a host pause and a video pop all land here.</summary>
     private static void TrackPause(bool on)
     {
-        if (_player == null) return;
-        if (on) _player.Pause(); else _player.Resume();
+        var c = _clock;
+        if (c == null) return;
+        c.SetPaused(on);
         PostClock();
     }
 
@@ -760,7 +768,7 @@ internal static class CaucusHostService
     {
         StopTrackClock();
         CancelAnalysis(postCancelled: false);
-        try { _player?.Stop(); }
+        try { _clock?.Stop(); }
         catch (Exception ex) { App.Logger?.Debug("RaceHost.StopTrack: {E}", ex.Message); }
     }
 
@@ -794,14 +802,14 @@ internal static class CaucusHostService
 
     private static void PostClock()
     {
-        var p = _player;
-        if (p == null) { StopTrackClock(); return; }
+        var c = _clock;
+        if (c == null) { StopTrackClock(); return; }
         PostTrack(new
         {
             type = "track-clock",
-            t = Math.Round(p.PositionSec, 3),
-            playing = p.IsPlaying,
-            durationSec = Math.Round(p.DurationSec, 3),
+            t = Math.Round(c.PositionSec, 3),
+            playing = c.IsPlaying,
+            durationSec = Math.Round(c.DurationSec, 3),
         });
     }
 
