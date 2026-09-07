@@ -44,6 +44,7 @@ import { createPayloadFx } from '../game/payloadFx.js';
 import { setBundledSpiralPool, prefetchSpirals, LEAN_SPIRALS } from '../engine/loomSpirals.js';
 import { createScreenShake } from '../game/screenShake.js';
 import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, makeRng } from './consts.js';
+import { createPace } from './pace.js';
 import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
 import { createWalls } from './walls.js';
@@ -151,6 +152,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   fovLive = true;   // S exists: resize() may shift S.fov from here on
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
   const TR = createTrackState();      // the loaded track chart: its clock, its energy, its acts (race/track.js)
+  const PACE = createPace();          // how fast the road is allowed to feel this second (race/pace.js)
   const hosted = bridge.isHosted !== false;   // the standalone page logs where the host would be told
   const sync = createCueSync({ aheadSec: CUE_AHEAD_SEC, trace: true });   // the visible half of a cue waits for the word (race/sync.js); the trace is 64 small rows the smokes read
   let W = null;                       // the world: everything that is rebuilt on "again"
@@ -214,7 +216,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     setFlip(false); trailClear();
-    mix.reset(); S.wobble = 0; clearMixChrome(); sync.reset();
+    mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.pickupClear(); hud.item(null, 'no item yet');
   }
 
@@ -512,6 +514,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const wdt = dt * S.timeScale;                     // the world clock (tea_time); the kart keeps real time
     S.t += wdt;
     const prevD = ks.d;
+    // THE OPENING IS GENTLE (race/pace.js): the first act cruises at 0.7 of the base with a boost
+    // that only lifts to 1.15 of it, then the full curve walks in over 20 s, and the act's kind
+    // colours the pace from there. Off a chart the clock is the run's own elapsed seconds.
+    S.pace = PACE.at(ts ? ts.t : S.elapsed, ts ? ts.act : null, TR.track ? TR.track.chart : null);
+    k.pace(S.pace.base, S.pace.cap);
     k.update(dt, input.read(), lay);
     w.score.tick(dt); w.items.update(dt);
     { const tr = trail[trailI]; tr.d = ks.d; tr.x = ks.x; tr.h = ks.h; tr.ok = true; trailI = (trailI + 1) % TRAIL_N; }
@@ -578,7 +585,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (mood !== S.mood) { S.mood = mood; k.setMood(mood); }
     const fraught = clamp(S.effects.length / 3, 0, 1);
     k.setFraught(fraught); hud.setFraught(fraught);
-    hud.setSpeed(ks.speed);
+    hud.setSpeed(ks.speed, ks.boostSec > 0);
     audio.update(dt, { world: w, run: S, kart: ks });
   }
 
@@ -741,6 +748,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
       audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
       world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
+      // the pace envelope and what the kart actually did with it (race/pace.js, race/smoke/pace-check.mjs)
+      speed: W ? W.kart.state.speed : 0, boosting: W ? W.kart.state.boostSec > 0 : false, pace: S.pace ? { ...S.pace } : null,
     };
   }
   function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block

@@ -20,6 +20,20 @@ export const KART_MAX_SPEED = 34;
 export const KART_MIN_SPEED = 8;
 export const GRAVITY = 18;
 
+// THE OPENING IS GENTLE. The owner, on the phone build: "the start feels too fast (122mph)". A
+// track opens at OPEN_PACE of the cruise with a boost that may only reach OPEN_BOOST_PACE of it,
+// and the full curve arrives over OPEN_RAMP_SEC after the first act (or after OPEN_SEC on a road
+// with no acts). race/pace.js is the only place these are read; kart.js takes the two numbers it
+// works out and nothing else in the run knows the difference. See race/pace.js.
+export const OPEN_PACE = 0.7;
+export const OPEN_BOOST_PACE = 1.15;
+export const OPEN_SEC = 45;
+export const OPEN_RAMP_SEC = 20;
+/** What an act's kind does to the pace once the opening is over, blended over ACT_BLEND_SEC. */
+export const ACT_PACE = { induction: 0.85, deepening: 0.85, triggers: 1, mantra: 1, build: 1.1, wake: 1.05, silence: 0.75, free: 1 };
+/** An act change is a lean, not a lurch: its pace arrives over these seconds from the act's own t0. */
+export const ACT_BLEND_SEC = 3;
+
 // Drift mini-turbo (kart.js): hold drift while steering; the charge crosses these seconds to reach
 // tier 1/2/3 (blue / orange / purple sparks) and releasing hands out that many seconds of boost.
 export const DRIFT_TIER_SEC = [0.8, 1.6, 2.6];
