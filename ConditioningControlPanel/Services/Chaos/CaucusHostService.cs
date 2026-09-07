@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -705,7 +706,12 @@ internal static class CaucusHostService
     /// <summary>The whole analysis, off the UI thread. Every call into the decoder, the analyzer,
     /// the cache and the word spotter sits inside this one try: a file NAudio hates, a missing
     /// Vosk model or a half-written cache entry becomes a track-error, never a crash.</summary>
-    private static void AnalyzeTrack(string path, string name, int gen, CancellationToken ct, CancellationTokenSource cts)
+    /// <param name="displayName">The name to chart under, when the file's own is not worth having.
+    /// A cloud track lands in a temp file called a GUID, and its title is the better name for both
+    /// the plate and the cache: pick the same audio up locally later and the chart still reads as
+    /// the track, not as a download nobody kept.</param>
+    private static void AnalyzeTrack(string path, string name, int gen, CancellationToken ct, CancellationTokenSource cts,
+        string? displayName = null)
     {
         try
         {
@@ -729,6 +735,7 @@ internal static class CaucusHostService
             var chart = TrackAnalyzer.Energy(pcm, new Progress<double>(v => PostProgress("energy", v, name)), ct);
             ct.ThrowIfCancellationRequested();
             chart.Analysis.Partial = true;
+            if (displayName != null) chart.Source.Name = displayName;
             PostChart(chart, partial: true);
             App.Logger?.Information("RaceHost: partial chart for {Name}: {Events} events", name, chart.Events?.Count ?? 0);
 
@@ -973,8 +980,7 @@ internal static class CaucusHostService
     }
 
     /// <summary>A new source started playing over there. It becomes the clock straight away, so the
-    /// run follows the voice from the first second, on the plain seeded road. Charting what they
-    /// are playing is the next commit in this stack.</summary>
+    /// run follows the voice from the first second; the chart catches up behind it.</summary>
     private static void OnCloudTrack(JObject o)
     {
         string src = (string?)o["src"] ?? "";
@@ -1003,6 +1009,7 @@ internal static class CaucusHostService
         App.Logger?.Information("RaceHost: cloud track {Name} ({Dur:0.0}s){Lap}",
             _trackName, dur, live ? ", next lap" : "");
         ArmDevCloudDrive();
+        BeginCloudChart(src);
     }
 
     /// <summary>Their player started. If the race is still sitting on the menu, this is what starts
@@ -1034,6 +1041,149 @@ internal static class CaucusHostService
         if (disp == null || disp.HasShutdownStarted) return;
         if (disp.CheckAccess()) _cloud?.PostToPage(new { type = "cloud-set-paused", on });
         else disp.BeginInvoke(() => _cloud?.PostToPage(new { type = "cloud-set-paused", on }));
+    }
+
+    // ---- charting what they are playing ----
+    //
+    // The chart comes from the audio itself, which means the desktop pulls the file down and runs
+    // the SAME analysis a picked file gets: cache hit by hash first (so a track charted once, from
+    // anywhere, is instant), then the energy pass, then the word pass. The page runs the plain
+    // seeded road until the partial chart lands and swaps in mid-run, exactly as CHART.md says.
+    //
+    // The file lives under race/cloud/ for as long as the analysis takes and is deleted after,
+    // cancelled or not: audio never stays on this machine, charts hold timestamps and labels.
+
+    /// <summary>Where a cloud track waits while it is being charted. Emptied as it goes.</summary>
+    private static string CloudTempRoot => Path.Combine(App.UserDataPath, "race", "cloud");
+
+    /// <summary>One client for the whole session. The desktop talks to the site directly: nothing
+    /// of theirs is ever proxied through anything of ours.</summary>
+    private static readonly HttpClient CloudHttp = new() { Timeout = TimeSpan.FromMinutes(15) };
+
+    /// <summary>Pull the track down and chart it. Supersedes any analysis already running, the same
+    /// way a second file pick does.</summary>
+    private static void BeginCloudChart(string src)
+    {
+        SweepCloudTemp();
+        var cts = new CancellationTokenSource();
+        _analysisCts = cts;
+        int gen = ++_analysisGen;
+        string name = _trackName;
+        PostProgress("fetching", 0, name, force: true);
+        _ = Task.Run(() => ChartCloudTrackAsync(src, name, gen, cts.Token, cts));
+    }
+
+    private static async Task ChartCloudTrackAsync(string src, string name, int gen, CancellationToken ct, CancellationTokenSource cts)
+    {
+        string? temp = null;
+        try
+        {
+            temp = await DownloadCloudTrackAsync(src, name, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            // From here it is the ordinary path, cache and all - the hash is computed off these
+            // bytes by TrackDecoder.HashFile, so it matches a local chart of the same file.
+            AnalyzeTrack(temp, name, gen, ct, cts, displayName: name);
+        }
+        catch (OperationCanceledException)
+        {
+            if (_analysisGen == gen) PostProgress("cancelled", 0, "", force: true);
+            App.Logger?.Information("RaceHost: cloud chart cancelled for {Name}", name);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("RaceHost: cloud chart failed for {Name}: {E}", name, ex.Message);
+            // Fail loud, and leave the seeded road running: the run is already following the clock.
+            if (_analysisGen == gen) PostTrack(new { type = "track-error", message = CloudDownMessage });
+        }
+        finally
+        {
+            DeleteCloudTemp(temp);
+            if (ReferenceEquals(_analysisCts, cts)) _analysisCts = null;
+            try { cts.Dispose(); } catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud cts: {E}", ex.Message); }
+        }
+    }
+
+    /// <summary>Stream the audio to a temp file, reporting bytes as track-progress. ONE retry and no
+    /// more: a site that answered wrong twice is a site to stop asking.</summary>
+    private static async Task<string> DownloadCloudTrackAsync(string src, string name, CancellationToken ct)
+    {
+        // Their own addresses only. A player's page could carry any src at all, and this is the one
+        // place a url off that page turns into a request from the desktop.
+        if (!RaceCloudWindow.IsSiteUri(src))
+            throw new InvalidOperationException("the audio is not an address we may fetch");
+
+        Directory.CreateDirectory(CloudTempRoot);
+        string path = Path.Combine(CloudTempRoot, "cloud-" + Guid.NewGuid().ToString("N") + CloudExtension(src));
+        Exception? last = null;
+        for (int attempt = 1; attempt <= 2; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                using var resp = await CloudHttp.GetAsync(src, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                resp.EnsureSuccessStatusCode();
+                long? total = resp.Content.Headers.ContentLength;
+                using var body = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                using (var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
+                {
+                    var buffer = new byte[1 << 16];
+                    long got = 0;
+                    int read;
+                    while ((read = await body.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                    {
+                        await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                        got += read;
+                        if (total is > 0) PostProgress("fetching", (double)got / total.Value, name);
+                    }
+                    await file.FlushAsync(ct).ConfigureAwait(false);
+                    App.Logger?.Information("RaceHost: cloud audio down for {Name} ({Bytes} bytes)", name, got);
+                }
+                return path;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                last = ex;
+                DeleteCloudTemp(path);
+                App.Logger?.Information("RaceHost: cloud download attempt {N} failed: {E}", attempt, ex.Message);
+            }
+        }
+        throw last ?? new IOException("the audio would not come down");
+    }
+
+    /// <summary>The url's own extension when it is one the decoder knows, else mp3.</summary>
+    private static string CloudExtension(string src)
+    {
+        try
+        {
+            var ext = Path.GetExtension(new Uri(src).AbsolutePath).ToLowerInvariant();
+            return ext is ".mp3" or ".m4a" or ".wav" or ".ogg" or ".flac" or ".wma" ? ext : ".mp3";
+        }
+        catch { return ".mp3"; }
+    }
+
+    private static void DeleteCloudTemp(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud temp delete: {E}", ex.Message); }
+    }
+
+    /// <summary>A crash mid-chart is the one way a download outlives its analysis. Anything left in
+    /// the folder from a previous session goes before the next one starts.</summary>
+    private static void SweepCloudTemp()
+    {
+        try
+        {
+            if (!Directory.Exists(CloudTempRoot)) return;
+            var cutoff = DateTime.UtcNow.AddHours(-6);
+            foreach (var file in Directory.GetFiles(CloudTempRoot, "cloud-*"))
+            {
+                try { if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file); }
+                catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud sweep file: {E}", ex.Message); }
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud sweep: {E}", ex.Message); }
     }
 
     // ============================ settings reads ============================
