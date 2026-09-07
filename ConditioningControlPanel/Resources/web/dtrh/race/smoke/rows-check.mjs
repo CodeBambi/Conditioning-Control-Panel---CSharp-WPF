@@ -17,6 +17,9 @@
  *   3. a trigger the spotter only half heard is the single treat it always was
  *   4. one event is one credit however many of its bubbles were popped
  *   5. a worded track halves the peak rain; nothing else on the road moves
+ *   7. and a WORD BUBBLE (a row of one, race/cues.js `case 'word'`) lands on its
+ *      own word the same way, driven off the real opening transcript through the
+ *      opening ramp and a boost: worst inside 0.15 s, median inside 0.08 s
  *   6. the row lands ON the word: driven through race/sync.js with a simulated
  *      kart whose speed changes inside the lookahead, the row is under the kart
  *      within 0.15 s of event.t, and the visible half of the cue fires on the
@@ -31,6 +34,13 @@ import { KART_X_MAX, LANE_X_MAX, POP_HIT_X, LANE_H, makeRng } from '../consts.js
 import { THEME_BY_PRESET, kindForPreset } from '../triggerTheme.js';
 import { KIND_BY_ID } from '../bubbleKinds.js';
 import { createCueSync, CUE_AHEAD_SEC, LATE_SEC } from '../sync.js';
+import { wordEventsFrom } from '../wordBubbles.js';
+import { triggerHits, triggersFromHits, captionWords, SET_BY_ID } from '../cloudChart.js';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 let fails = 0;
 const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -189,6 +199,63 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
   eq(sync.dropped, 1, 'and counts it');
   const d0 = sync.depthFor(5, 100, 20, 5.1);
   eq(d0, 100 + 20 * CUE_AHEAD_SEC, 'a spawn never lands nearer than CUE_AHEAD_SEC of road');
+}
+
+/* ---- 7. a WORD BUBBLE lands on its own word too --------------------------- */
+// The row used to be the only thing race/sync.js tracked. A word bubble is a row of ONE (cues.js
+// `case 'word'` marks its single spawn `row: true` for exactly this reason), so the same
+// re-placement holds it on the second the voice says it, through the opening ramp and through a
+// boost. Driven off the REAL opening transcript rather than a made-up one, because the thing being
+// measured is whether the road holds three words a second, not whether the arithmetic closes.
+{
+  const file = JSON.parse(readFileSync(resolve(HERE, '../words/a15c22e0-d347-4d92-9f78-0fb37099e549.json'), 'utf8'));
+  const triggers = triggersFromHits([], triggerHits(file, file.durationSec), SET_BY_ID);
+  const events = wordEventsFrom(captionWords(file), triggers, { rng: makeRng(7) })
+    .sort((a, b) => a.t - b.t)
+    .map((e, i) => ({ ...e, id: 'w' + i }));
+  ok(events.length > 50, 'the opening transcript lays ' + events.length + ' word bubbles');
+
+  const wctx = { rng: makeRng(11), intensity: 0.5, act: { kind: 'induction', room: 'teagarden' },
+    room: { id: 'teagarden' }, triggerKinds: new Map(), lyrics: true };
+  /** The throttle a real lap has over this stretch: the opening ramp, a cruise, then a boost. */
+  const speedAt = (t) => (t < 84 ? 15 + Math.max(0, t - 78) * 1.2 : (t > 100 && t < 108) ? 30 : 22);
+
+  /** One 60 Hz run over the worded stretch. `track` off is what a loose spawn does. */
+  function driveWords(track) {
+    const sy = createCueSync();
+    const placed = new Map();        // rowId -> { d, at }
+    const err = [];
+    let t = events[0].t - LEAD - 1, d = 0, cursor = 0, seq = 0, laid = 0;
+    for (let i = 0; i < 200 * 60 && (cursor < events.length || placed.size); i++) {
+      const speed = speedAt(t);
+      while (cursor < events.length && events[cursor].t - LEAD <= t) {     // the scheduler's handover
+        const e = events[cursor++];
+        const cue = cueFor(e, wctx);
+        const sp = cue && cue.spawn[0];
+        if (!sp || !sp.row) continue;
+        const at = e.t + (sp.at || 0), dd = sy.depthFor(t, d, speed, at);
+        const rowId = ++seq;
+        placed.set(rowId, { d: dd, at });
+        if (track) sy.trackRow(rowId, e, at, dd, t);
+        laid++;
+      }
+      for (const m of sy.update(t, d, speed).move) { const r = placed.get(m.rowId); if (r) r.d = m.d; }
+      for (const [id, r] of placed) if (d >= r.d) { err.push(t - r.at); placed.delete(id); }
+      d += speed * DT; t += DT;
+    }
+    const abs = err.map((x) => Math.abs(x)).sort((a, b) => a - b);
+    return { laid, met: abs.length, median: abs.length ? abs[abs.length >> 1] : 99, worst: abs.length ? abs[abs.length - 1] : 99 };
+  }
+
+  const kept = driveWords(true);
+  ok(kept.laid > 50, 'and the run lays every one of them (' + kept.laid + ')');
+  eq(kept.met, kept.laid, 'the kart meets each of them exactly once');
+  ok(kept.worst <= ROW_TOL, `every word bubble is under the kart within ${ROW_TOL} s of its word (worst ${kept.worst.toFixed(3)}s)`);
+  ok(kept.median <= 0.08, `and the median is inside 0.08 s (${kept.median.toFixed(3)}s over ${kept.met} bubbles)`);
+  const loose = driveWords(false);
+  ok(loose.worst > kept.worst, `left where it was placed a bubble is ${loose.worst.toFixed(2)}s off its word at worst, which is what the tracking is for`);
+  console.log('  --  ' + kept.laid + ' word bubbles, median ' + kept.median.toFixed(3) + 's, worst '
+    + kept.worst.toFixed(3) + 's tracked, ' + loose.worst.toFixed(2) + 's loose');
 }
 
 console.log(fails ? '\nrows-check: ' + fails + ' failed' : '\nrows-check: all good');

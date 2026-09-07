@@ -54,8 +54,10 @@ const WAKE_WORDS = new Set(['wake', 'awake', 'waking', 'up', 'open']);
 const WAKE_ACTS = new Set(['wake', 'free']);
 /** Words that lift: their treat hangs in the air; every other structure word sits in a lane. */
 const FLOAT_WORDS = new Set(['float', 'floating', 'up', 'open', 'light', 'rise', 'lift']);
-/** The lanes a spoken word may land in. Narrower than the road: the kart has to steer, not lunge. */
-const LANE_X = [-1.6, -0.8, 0, 0.8, 1.6];
+/** The lanes a spoken word may land in. Narrower than the road: the kart has to steer, not lunge.
+ *  Exported because race/wordBubbles.js walks a line of word bubbles across these same five lanes
+ *  and a second copy of them would be a second road. */
+export const LANE_X = [-1.6, -0.8, 0, 0.8, 1.6];
 /** THE ROW. A trigger the spotter is sure of is not a bubble in a lane, it is a line of them
  *  across the whole road, because the owner's read of the game is that a trigger word is a thing
  *  that HAPPENS to you: you do not get to steer around the word she just said.
@@ -137,6 +139,19 @@ export function cueFor(event, ctx = {}) {
     // a structure word (drop, deeper, breathe): a treat to drive through; a lifting word hangs in the air.
     // A lone number, a wake word before the way up, or a guess is nothing at all.
     case 'word': {
+      // A WORD BUBBLE off the transcript (race/wordBubbles.js): one word, one bubble, sitting in
+      // the lane its PHRASE was given, so the line of them spells the sentence down one lane and
+      // the player steers in the silence between two lines. `row: true` is not a row of five here,
+      // it is what buys the bubble its tracking: run.js hands a row to race/sync.js, which re-places
+      // it every frame off the speed the kart has NOW, so the kart meets the word when the voice
+      // says it whatever the throttle did. A row of one is still a row of one.
+      // It carries nothing on the chrome: six hundred words on the toast rail is exactly the noise
+      // the owner asked us to take off this road, and the word is read off the bubble's own tag.
+      if (typeof event.w === 'string' && event.w) {
+        const x = Number.isFinite(Number(event.x)) ? clamp(Number(event.x), -LANE_X_MAX, LANE_X_MAX) : 0;
+        cue.spawn.push({ kindId: 'treat', placement: 'lane', x, h: LANE_H, at: 0, row: true, w: event.w });
+        break;
+      }
       if (conf01(event) < WORD_SURE) return null;
       if (NUMBER_WORD.test(label)) return null;
       if (WAKE_WORDS.has(label) && !(ctx.act && WAKE_ACTS.has(ctx.act.kind))) return null;
