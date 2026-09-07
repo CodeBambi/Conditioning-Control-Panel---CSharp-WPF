@@ -161,6 +161,9 @@ for (let i = 0; i < 80 && !up; i++) {
   up = await ev(`!!(window.__race && window.__race.menu) && !!document.querySelector('.rm-root') && !document.querySelector('.rm-root').hidden`);
 }
 ok(up, 'the page boots to the menu with ?cloud=1');
+// The player makes its clock with `new Audio` (CLOUD.md), so it is in no document and cannot be
+// queried for. Section 3b needs to seek it, so keep a handle on the last one the page makes.
+await ev(`(()=>{const A=window.Audio; window.Audio=function(){const el=new A(); window.__rcAudio=el; return el;}; return 1;})()`);
 await click('.rm-list .rm-btn[data-id=cloud]');
 await sleep(400);
 // lane W4: the paste box lives in a drawer under the levels list
@@ -216,6 +219,46 @@ if (!REAL) {
   ok(b.playing === true, 'the file is playing, so the race has a clock');
   ok(b.t > a.t, `and the clock is moving, so the run rolled (${a.t.toFixed(2)}s -> ${b.t.toFixed(2)}s)`);
   ok(Math.abs(b.el - b.t) < 0.5, `the run's clock is the file's clock, on a real mp3 (${b.t.toFixed(2)}s vs ${b.el.toFixed(2)}s)`);
+}
+
+/* ============================================================================
+ * 3b. the voice on the glass, when this file has a transcript
+ *
+ * The clock here is the <audio> element (CLOUD.md), so this seeks the element and
+ * lets the player's own tick carry the second through: the caption and the plate
+ * are read at seconds the ROAD chose, not at seconds this file made up. It counts
+ * what is on the glass and never reads a word of it back.
+ * ==========================================================================*/
+if (c.words && c.words !== 'none') {
+  // Seek the file, then let the player's own 250 ms tick carry the second in: the caption and the
+  // plate are read at seconds the ROAD chose, off real playback, never at a clock this file forced.
+  const glass = async (t, wait = 900) => {
+    await ev(`(()=>{const a=window.__rcAudio; if(a) a.currentTime=${Math.max(0, t)}; return 1;})()`);
+    await sleep(wait);
+    return json(`(()=>{const cap=document.querySelector('.rc-cap'), pl=document.querySelector('.rc-plate');
+      return { t: window.__race.race.track.t, hidden: !cap || cap.hidden, said: cap?cap.querySelectorAll('.rc-word.is-said').length:0,
+        words: cap?cap.querySelectorAll('.rc-word').length:0, theme: pl?pl.getAttribute('data-theme'):null };})()`);
+  };
+  const w = await json(`(()=>{const ch=window.__race.race.track.chart, tr=ch.events.filter(e=>e.kind==='trigger');
+    return { n: ch.words.length, t0: ch.words.length?ch.words[0].t:-1, trig: tr.length, at: tr.length?tr[0].t:-1 };})()`);
+  ok(w.n > 0, `the real chart carries its caption track (${w.n} words, ${w.trig} triggers)`);
+  ok(await ev(`!!document.querySelector('.rc-layer')`), 'and the run built the caption layer');
+  ok(await ev(`!!window.__rcAudio`), 'and the smoke has the file itself to seek');
+  if (w.t0 > 4) {
+    const before = await glass(w.t0 - 3, 700);
+    ok(before.hidden, `the glass is empty a second before the first word (at ${before.t.toFixed(1)}s)`);
+  }
+  const on = await glass(w.t0 - 0.4);
+  ok(!on.hidden && on.words > 0, `the phrase is on the glass as the voice reaches it (${on.words} words at ${on.t.toFixed(1)}s, first word ${w.t0.toFixed(1)}s)`);
+  ok(on.said >= 1 && on.said <= on.words, `and it is inked only as far as the second (${on.said} of ${on.words})`);
+  if (w.at > 0) {
+    const plated = await glass(w.at - 0.6, 1100);
+    ok(!!plated.theme, `the trigger at ${w.at.toFixed(1)}s flew its plate as the run passed it (${plated.theme} at ${plated.t.toFixed(1)}s)`);
+    await sleep(1700);
+    ok(await ev(`!document.querySelector('.rc-plate')`), 'and the plate is off the glass a second and a half later: fleeting, as asked');
+  }
+} else {
+  console.log('  --  3b skipped: this file has no transcript, so there is nothing to caption');
 }
 
 /* ============================================================================
