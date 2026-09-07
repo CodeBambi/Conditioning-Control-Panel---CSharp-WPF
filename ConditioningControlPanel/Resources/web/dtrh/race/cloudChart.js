@@ -1,0 +1,374 @@
+/* ============================================================================
+ * race/cloudChart.js - the W2 seam: a real chart for a track on the CDN.
+ *
+ *   createChartSource({ ... }) -> { chartFor, prefetch, cancel, dispose }
+ *
+ * `chartFor(info)` is what `race/cloud.js` calls through `hooks.chart`. It answers
+ * a CHART.md chart for a track the player pasted, and it answers FAST: if the road
+ * is not in hand inside PARTIAL_MS it hands back a plain road marked
+ * `analysis.partial` and swaps the real one in later through `onUpgrade`, so the
+ * kart is already moving while an hour of audio is being read.
+ *
+ * THE FOUR DOORS (race/charts/README.md, and the log says which one was used):
+ *
+ *   authored by cloudId   an index row keyed off the url. No download at all.
+ *   authored by hash      an index row keyed off the CHART.md hash, which is a
+ *                         length and the first megabyte. Still no download.
+ *   cached                a road this browser generated before, by hash.
+ *   generated             fetch, decode, walk the peaks, lay a road.
+ *
+ * AUTHORED ALWAYS WINS and is used as it was written: no merge, no regeneration,
+ * and `chartCache.put` refuses to keep one.
+ *
+ * THE BRIGHT LINE. The mp3 is fetched by the player's browser straight from the
+ * CDN, which answers `Access-Control-Allow-Origin: *`. Nothing of ours is in the
+ * middle of it. The bytes are decoded, walked for peaks and dropped; what is kept
+ * is a chart, which is timestamps and labels. No byte of audio is uploaded, and
+ * the cache lives in this browser.
+ *
+ * OFF THE FRAME BUDGET. `decodeAudioData` runs off the main thread and the peak
+ * walk yields every YIELD_BINS bins, so the kart never stalls behind a decode. The
+ * decoded buffer is dropped the moment the peaks are out of it: an hour of 16 kHz
+ * mono is 230 MB, which is a lot to be holding on a phone and nothing at all to be
+ * holding for four hundred milliseconds. A file longer than MAX_DECODE_SEC is not
+ * decoded at all - it gets the demo road and a line saying so, because a phone that
+ * runs out of memory mid lap is worse than a road that is not the file's own.
+ *
+ * NOTHING DIES SILENTLY. A track that will not fetch, will not decode or will not
+ * chart falls back to `demoChart` cut to the real duration and renamed to the real
+ * track, plus a toast. There is never a dead run.
+ * ==========================================================================*/
+
+import { demoChart, normalizeChart } from './chart.js';
+import { generate } from '../chart/maker/generate.js';
+import { peaksInto, binsPer, binCount } from '../chart/editor/audio.js';
+import { cloudIdFrom, hashUrl, hashBytes, loadIndex, findAuthored, isAuthored } from './chartSource.js';
+
+/**
+ * THE GENERATOR ID. It is the cache key's second half: change any knob below and
+ * change this, and every chart the old road wrote is dropped on sight instead of
+ * being played back at a player who is owed the new one.
+ */
+export const GENERATOR_ID = 'web-road-v1';
+
+/* ---- the knobs, and why each one is what it is --------------------------- */
+/**
+ * BIN_SEC. generate.js defaults to 0.5 s bins. With words in hand that is right:
+ * the road is mostly words and the curve only has to carry the mood. With NO words
+ * the curve is the whole road, and `buildEvents` reads a peak as a local maximum
+ * over +/- 8 bins - four seconds either side at 0.5, which swallows the swell of a
+ * spoken sentence whole. At 0.25 the window is +/- 2 s, which is the length of the
+ * swell itself, so the build lands on the rise it belongs to instead of on
+ * whichever of six rises happened to be loudest.
+ */
+export const BIN_SEC = 0.25;
+/** Peaks per second off the waveform. `energyFromPeaks` bins these down; this is the walk's own rate. */
+export const PEAKS_PER_SEC = 50;
+/** The rate everything is decoded at. Charts are timestamps: nothing here needs music bandwidth. */
+export const DECODE_RATE = 16000;
+/**
+ * QUIET. generate.js finds silence in the GAPS BETWEEN WORDS, so with no words it
+ * sees one gap - the whole file - and lays a 20 s fog over the start line. Those
+ * are dropped and silence is read off the energy curve instead, which is what
+ * CHART.md says a silence event is anyway: under QUIET_LEVEL for QUIET_MIN_SEC.
+ * The floor is 0.06 in CHART.md; 0.08 here because the curve is normalised to the
+ * file's own loud end and a hypno file's quiet is room tone, not digital silence.
+ */
+export const QUIET_LEVEL = 0.08, QUIET_MIN_SEC = 5, QUIET_MAX_SEC = 20;
+/**
+ * ACTS. `actsFrom` scores act kinds off words. With none, every window scores zero
+ * and carries the last kind forward, so an hour of audio comes out as ONE act -
+ * one room, one mood, for the whole run. So the acts are read off the curve here:
+ * ACT_WIN seconds per window, LOUD/QUIET as the two levels, nothing shorter than
+ * ACT_MIN_SEC and no more than ACT_MAX of them, which are generate.js's own limits.
+ */
+export const ACT_WIN = 30, ACT_MIN_SEC = 45, ACT_MAX = 16, ACT_LOUD = 0.55, ACT_QUIET = 0.22;
+/** How long the panel waits for a road before it starts the run on a plain one. */
+export const PARTIAL_MS = 2500;
+/** Longer than this is not decoded: the buffer would be most of a phone's memory. */
+export const MAX_DECODE_SEC = 5400;
+/** Bins between yields in the peak walk. 4000 bins is 80 s of audio, about 8 ms of work. */
+export const YIELD_BINS = 4000;
+/** Said when a track could not be charted and the demo road is standing in for it. */
+export const FALLBACK_LINE = 'could not read that file, driving a stand-in road';
+export const TOO_LONG_LINE = 'that file is too long to chart here, driving a stand-in road';
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const r3 = (v) => Math.round(v * 1000) / 1000;
+/** Hand the frame back. `setTimeout` and not a microtask: a microtask does not let anything draw. */
+const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
+
+/* ---- the no-word road ---------------------------------------------------- */
+
+/**
+ * Quiet stretches, read off the energy curve. CHART.md's own definition of a
+ * silence event, and the reason generate.js's word-gap silences are dropped for a
+ * wordless file: it would see one gap, the whole file, and fog the start line.
+ */
+export function quietFromEnergy(energy, binSec, durationSec) {
+  const out = [];
+  let run = -1;
+  const close = (endBin) => {
+    if (run < 0) return;
+    const t0 = run * binSec, len = (endBin - run) * binSec;
+    if (len >= QUIET_MIN_SEC) out.push({ kind: 'silence', t: r3(t0 + 0.15), dur: r3(Math.min(QUIET_MAX_SEC, len - 0.3)), label: 'quiet', conf: 1, weight: 1 });
+    run = -1;
+  };
+  for (let i = 0; i < energy.length; i++) {
+    if (energy[i] <= QUIET_LEVEL) { if (run < 0) run = i; } else close(i);
+  }
+  close(energy.length);
+  // The tail of a file is usually a fade to nothing. Fogging the finish line reads as a
+  // broken run rather than as quiet, so a silence that reaches the end is not laid.
+  return out.filter((e) => e.t + e.dur < durationSec - 2);
+}
+
+/**
+ * Acts off the curve alone: which room the racer is in when nobody said anything
+ * about it. Window by window, loud is `triggers`, quiet is `deepening`, silent is
+ * `silence`, the rest is `free`; the first window is the settle and the last
+ * stretch is the way up when the file is going out louder than it came in.
+ * Then the same tidy-up generate.js does: no act under ACT_MIN_SEC, no more than
+ * ACT_MAX of them.
+ */
+export function actsFromEnergy(energy, binSec, durationSec) {
+  const n = Math.max(1, Math.ceil(durationSec / ACT_WIN)), per = Math.max(1, Math.round(ACT_WIN / binSec));
+  const mean = (a, b) => { let s = 0, c = 0; for (let i = a; i < b && i < energy.length; i++) { s += energy[i]; c++; } return c ? s / c : 0; };
+  const whole = mean(0, energy.length);
+  const kinds = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const m = mean(i * per, (i + 1) * per);
+    kinds[i] = m <= QUIET_LEVEL ? 'silence' : m >= ACT_LOUD ? 'triggers' : m <= ACT_QUIET ? 'deepening' : 'free';
+  }
+  kinds[0] = 'induction';
+  const tail = Math.max(1, Math.floor(n * 0.88));
+  if (mean(tail * per, energy.length) > whole) for (let i = tail; i < n; i++) kinds[i] = 'wake';
+  for (let i = 1; i < n - 1; i++) if (kinds[i - 1] === kinds[i + 1] && kinds[i] !== kinds[i - 1]) kinds[i] = kinds[i - 1];
+
+  const acts = [];
+  for (let i = 0; i < n; i++) {
+    const last = acts[acts.length - 1];
+    if (last && last.kind === kinds[i]) last.t1 = Math.min(durationSec, (i + 1) * ACT_WIN);
+    else acts.push({ kind: kinds[i], t0: i * ACT_WIN, t1: Math.min(durationSec, (i + 1) * ACT_WIN) });
+  }
+  for (let i = acts.length - 1; i > 0; i--) {
+    if (acts[i].t1 - acts[i].t0 >= ACT_MIN_SEC) continue;
+    acts[i - 1].t1 = acts[i].t1;
+    acts.splice(i, 1);
+  }
+  while (acts.length > ACT_MAX) {
+    let s = 1;
+    for (let i = 2; i < acts.length; i++) if (acts[i].t1 - acts[i].t0 < acts[s].t1 - acts[s].t0) s = i;
+    acts[s - 1].t1 = acts[s].t1;
+    acts.splice(s, 1);
+  }
+  acts[0].t0 = 0;
+  acts[acts.length - 1].t1 = durationSec;
+  return acts.map((a) => ({ t0: r3(a.t0), t1: r3(a.t1), kind: a.kind, name: a.kind }));
+}
+
+/**
+ * The whole road for a file with no words: generate.js lays the build, peak and
+ * release events off the curve, and the two passes that need words - its silences
+ * and its acts - are replaced by the two above. Pure, so the smoke runs it in node.
+ *
+ * @param {Float32Array} peaks   min/max pairs, PEAKS_PER_SEC of them a second
+ */
+export function roadFromPeaks({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 'track', hash = '', now = new Date() }) {
+  const g = generate({ peaks, perSec, durationSec, words: { words: [] }, hits: [], binSec: BIN_SEC, now });
+  const energy = g.energy.map(clamp01);
+  const events = g.events
+    .filter((e) => e.kind !== 'silence')                       // word-gap silences: one fog over the whole file
+    .concat(quietFromEnergy(energy, BIN_SEC, durationSec))
+    .sort((a, b) => a.t - b.t)
+    .map((e, i) => ({ ...e, id: 'g' + i }));
+  return {
+    version: 1, binSec: BIN_SEC, energy, events,
+    acts: actsFromEnergy(energy, BIN_SEC, durationSec),
+    source: { name, hash, durationSec, sampleRate: DECODE_RATE },
+    analysis: { energy: 'web-rms-v1', words: 'none', generatedAt: g.generatedAt, partial: false },
+  };
+}
+
+/* ---- the decode ---------------------------------------------------------- */
+
+/**
+ * Bytes in, peaks out. Decoded ONCE into a throwaway OfflineAudioContext at
+ * DECODE_RATE, walked in chunks with the frame handed back between them, and the
+ * buffer dropped on the way out of this function.
+ */
+export async function peaksFromBytes(buf, { ctx = null, onProgress = null } = {}) {
+  const Ctx = ctx ? null : (typeof OfflineAudioContext !== 'undefined' ? OfflineAudioContext : (typeof webkitOfflineAudioContext !== 'undefined' ? webkitOfflineAudioContext : null));
+  if (!ctx && !Ctx) throw new Error('this browser has no audio decoder');
+  const ac = ctx || new Ctx(1, DECODE_RATE, DECODE_RATE);
+  const audio = await ac.decodeAudioData(buf);
+  const rate = audio.sampleRate, length = audio.length;
+  const chans = [];
+  for (let c = 0; c < audio.numberOfChannels; c++) chans.push(audio.getChannelData(c));
+  const per = binsPer(rate, PEAKS_PER_SEC), bins = binCount(length, per);
+  const peaks = new Float32Array(bins * 2);
+  for (let b = 0; b < bins; b += YIELD_BINS) {
+    const end = Math.min(bins, b + YIELD_BINS);
+    peaksInto(peaks, chans, length, per, b, end);
+    if (onProgress) { try { onProgress(end / bins); } catch (e) { /* nobody listening */ } }
+    if (end < bins) await yieldFrame();
+  }
+  return { peaks, perSec: PEAKS_PER_SEC, durationSec: audio.duration, sampleRate: rate };
+}
+
+/* ---- the source ---------------------------------------------------------- */
+
+/** A chart with no events at all: the plain road a run starts on while the real one is read. */
+function plainRoad(name, durationSec) {
+  return normalizeChart({
+    version: 1, binSec: 0.5, energy: [], events: [],
+    acts: [{ t0: 0, t1: durationSec, kind: 'induction', name: 'the settle' }],
+    source: { name, hash: '', durationSec, sampleRate: DECODE_RATE },
+    analysis: { energy: '', words: 'none', partial: true },
+  });
+}
+
+/**
+ * @param {object}   o
+ * @param {string}   o.indexUrl        where race/charts/index.json lives
+ * @param {object}   [o.cache]         race/chartCache.js, or null for none
+ * @param {function} [o.onUpgrade]     (chart) -> void, the real road landing on a partial one
+ * @param {function} [o.toast]         (line) -> void
+ * @param {function} [o.log]
+ * @param {function} [o.fetch]         the smoke's seam
+ * @param {number}   [o.partialMs]
+ */
+export function createChartSource({ indexUrl, cache = null, onUpgrade = null, toast = null, log = null, fetch: f = null, partialMs = PARTIAL_MS } = {}) {
+  const get = f || (typeof fetch !== 'undefined' ? fetch : null);
+  const say = (m) => { try { if (log) log('chart: ' + m); } catch (e) { /* no log */ } };
+  const shout = (m) => { try { if (toast) toast(m); } catch (e) { /* no toast */ } };
+  // README: a row's `chart` is written relative to `race/`, not to the index beside it, so
+  // `charts/x.chart.json` is one readable path in the file instead of `./x.chart.json`.
+  const chartUrl = (rel) => new URL(String(rel), new URL('../', indexUrl)).href;
+  let ahead = null;                    // { id, promise } - the one prefetch allowed at a time
+  let dead = false;
+
+  /** An authored chart file. Used as written, or not used: a broken one is not repaired. */
+  async function authoredChart(row, fallbackName) {
+    const res = await get(chartUrl(row.chart), { credentials: 'omit' });
+    if (!res || !res.ok) throw new Error('authored chart answered ' + (res ? res.status : 'nothing'));
+    const json = await res.json();
+    if (!isAuthored(json)) throw new Error('that file is in the index but is not marked `hand: true`');
+    const src = (json.source && typeof json.source === 'object') ? json.source : {};
+    return normalizeChart({ ...json, source: { ...src, name: src.name || row.title || fallbackName } });
+  }
+
+  /**
+   * A road out of the cache, wearing THIS track's name. The cache is keyed on the file,
+   * and one file can sit at two urls under two names: the road is the same road, but the
+   * plate, the marquee and the results card all read `source.name` and they must say what
+   * the player pasted, not what the last person to paste those bytes called them.
+   */
+  const named = (chart, title) => normalizeChart({ ...chart, source: { ...chart.source, name: title || (chart.source && chart.source.name) || 'track' } });
+
+  /** Fetch, decode, walk, lay a road. The only path that downloads the whole file. */
+  async function generated({ url, title, durationSec, head }) {
+    const res = await get(url, { mode: 'cors', credentials: 'omit' });
+    if (!res || !res.ok) throw new Error('the file answered ' + (res ? res.status : 'nothing'));
+    let bytes = new Uint8Array(await res.arrayBuffer());
+    // The hash could not be worked out ahead of the download (no HEAD, no range): it can be
+    // worked out now, so the cache still hits next time even on a CDN that will do neither.
+    const hash = head && head.hash ? head.hash : await hashBytes(bytes, bytes.length);
+    if (hash && cache) {
+      const hit = await cache.get(hash, GENERATOR_ID);
+      if (hit) { say('cached (late hash) ' + hash.slice(0, 8)); return { chart: named(hit, title), door: 'cached' }; }
+    }
+    const buf = bytes.buffer;
+    bytes = null;
+    const walked = await peaksFromBytes(buf);
+    const dur = durationSec > 0 ? durationSec : walked.durationSec;
+    if (Math.abs(walked.durationSec - dur) > 1) say(`the element says ${Math.round(dur)}s and the file decodes to ${Math.round(walked.durationSec)}s; the element is the clock`);
+    const road = roadFromPeaks({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash });
+    if (hash && cache) await cache.put(hash, road, GENERATOR_ID);
+    return { chart: normalizeChart(road), door: 'generated' };
+  }
+
+  /** The four doors, in order, for one track. Throws only when every one of them failed. */
+  async function resolve(info) {
+    const { url, title } = info;
+    const durationSec = Number(info.durationSec) || 0;
+    const cloudId = cloudIdFrom(url);
+    const index = await loadIndex(indexUrl, { fetch: get, log });
+
+    const byId = findAuthored(index, { cloudId });
+    if (byId) return { chart: await authoredChart(byId.row, title), door: 'authored by cloudId' };
+
+    // The hash is a length and the first megabyte, so both remaining lookups that can
+    // answer without the file get their chance BEFORE anything is downloaded.
+    let head = null;
+    try { head = await hashUrl(url, { fetch: get, log }); } catch (e) { say('hash: ' + ((e && e.message) || e)); }
+    const hash = head && head.hash ? head.hash : '';
+    if (hash) {
+      const byHash = findAuthored(index, { hash });
+      if (byHash) return { chart: await authoredChart(byHash.row, title), door: 'authored by hash' };
+      if (cache) {
+        const hit = await cache.get(hash, GENERATOR_ID);
+        if (hit) return { chart: named(hit, title), door: 'cached' };
+      }
+    }
+    if (durationSec > MAX_DECODE_SEC) { shout(TOO_LONG_LINE); throw new Error(`${Math.round(durationSec / 60)} minutes is past the ${Math.round(MAX_DECODE_SEC / 60)} minute decode limit`); }
+    return generated({ url, title, durationSec, head });
+  }
+
+  /** Resolve, log the door, and fall back to the demo road rather than to a dead run. */
+  async function settle(info) {
+    const t0 = Date.now();
+    try {
+      const { chart, door } = await resolve(info);
+      say(`${info.title}: ${door} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      return chart;
+    } catch (err) {
+      say(`${info.title}: ${(err && err.message) || err}`);
+      shout(FALLBACK_LINE);
+      const dur = Number(info.durationSec) > 0 ? Number(info.durationSec) : 240;
+      const demo = demoChart({ durationSec: dur });
+      return normalizeChart({ ...demo, source: { ...demo.source, name: info.title || demo.source.name, hash: '' } });
+    }
+  }
+
+  /** The one in-flight resolve, so `chartFor` on the next lap takes what prefetch already has. */
+  function claim(info) {
+    if (ahead && ahead.id === info.id) { const p = ahead.promise; ahead = null; return p; }
+    return settle(info);
+  }
+
+  return {
+    /**
+     * `hooks.chart`. Answers inside partialMs whatever happens: the real road if it
+     * is ready by then, otherwise a plain road that the real one replaces through
+     * `onUpgrade` when it lands.
+     */
+    async chartFor(info) {
+      const work = claim(info);
+      let landed = false;
+      work.then(() => { landed = true; }, () => { landed = true; });
+      await Promise.race([work, new Promise((r) => setTimeout(r, partialMs))]);
+      if (landed) return work;
+      say(info.title + ': still reading, starting on a plain road');
+      work.then((chart) => { if (!dead && onUpgrade) { try { onUpgrade(chart); } catch (e) { say('upgrade: ' + e); } } }, () => { /* settle never rejects */ });
+      return plainRoad(info.title || 'track', Number(info.durationSec) || 240);
+    },
+
+    /**
+     * Get the NEXT track's road while this one is being driven, so the next lap
+     * starts with its chart in hand. One at a time, and a new one replaces the old.
+     */
+    prefetch(info) {
+      if (dead || !info || !info.url || !info.id) { ahead = null; return; }
+      if (ahead && ahead.id === info.id) return;
+      say('reading ahead: ' + info.title);
+      ahead = { id: info.id, promise: settle(info) };
+    },
+    /** The panel closed. Nothing is aborted mid flight; it is simply not waited on. */
+    cancel() { ahead = null; },
+    dispose() { dead = true; ahead = null; },
+    get pending() { return ahead ? ahead.id : null; },
+  };
+}
+
+export default createChartSource;

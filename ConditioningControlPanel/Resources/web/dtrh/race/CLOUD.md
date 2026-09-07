@@ -76,39 +76,143 @@ locked test is `patreonTiers.length > 0 && audioURL === null`, which is why
 2. `GET /playlists?public=true&official=true&includeFiles=true&pageSize=2&pageOffset=0&sort=likes&sortDir=descending`
    -> `500 Internal Server Error`, empty detail.
 
-Two probes is the budget for this, so probing stopped there and the paste box
-shipped alone. CORS on the API reflects the calling origin with credentials
-allowed; that was observed on both probes and is not relied on by anything that
+3. `GET /playlists/recent` (lane W2, one probe, no parameters, no credential)
+   -> `400`, body `{"error": "Missing auth token."}`
+
+That third answer settles it: the public playlist collection is not public. It
+wants a session, and this code never logs in and never will, so **there is still no
+playlist browser, and there is not going to be one built this way.** The paste box
+is the door. CORS on the API reflects the calling origin with credentials allowed;
+that was observed on all three probes and is not relied on by anything that
 shipped.
 
-**Before any future lane builds a playlist browser** it needs one successful
-read of `/playlists` (or `/playlists/recent`, which takes no parameters and may
-well be the easier door) and the field names off a real response. Until then the
-entries seam is `addTracks([{ id, url, title, locked }])` in `race/cloud.js`:
-hand it a listing's rows and the panel, the locked wording and the playlist walk
-already work.
+**A playlist browser would need the player's own session**, which is theirs and not
+ours to hold, so the honest shape for one is the player copying their own links out
+of the site. The entries seam stays open for whatever lands:
+`addTracks([{ id, url, title, locked }])` in `race/cloud.js`. Hand it a listing's
+rows and the panel, the locked wording and the playlist walk already work, and
+`race/cloudChart.js` charts whatever comes out of it.
 
-## The chart seam (lane W2)
+## The charts (lane W2)
 
-`race/cloud.js` never charts anything itself. It calls one hook per track:
+`race/cloud.js` still never charts anything itself: it calls one hook per track,
+`hooks.chart({ id, url, title, durationSec, el }) -> Promise<chart>`, and
+`raceBoot.js` points that at `race/cloudChart.js`. Whatever comes back goes
+straight to `race.setTrack`, so it has to satisfy `CHART.md`.
 
-```js
-hooks.chart({ id, url, title, durationSec, el }) -> Promise<chart>
-```
+### The four doors
 
-`durationSec` is the element's real duration and `el` is the live `<audio>`
-element, so a decoder can read the file the player is already streaming instead
-of fetching it twice. Whatever comes back goes straight to `race.setTrack`, so
-it must satisfy `CHART.md` (`normalizeChart` will throw otherwise, and the throw
-is shown on the plate).
+Every track is looked up in this order and stops at the first answer. The log says
+which one it came through.
 
-The default lives in `raceBoot.js` `makeCloud()`: a `demoChart` cut to the real
-duration, renamed to the real track. That keeps the road and the clock honest
-end to end today. Lane W2 replaces that one function body and touches nothing
-else.
+| door | what it costs | what it is |
+| --- | --- | --- |
+| `authored by cloudId` | nothing | a row in `race/charts/index.json` matching the id in the url |
+| `authored by hash` | a HEAD and 1 MiB | a row matching the file's `CHART.md` hash |
+| `cached` | a HEAD and 1 MiB | a road this browser generated before, out of IndexedDB |
+| `generated` | the whole file | decode it, walk the peaks, lay a road |
 
-`CHART.md`'s authored-chart rule still wins: a hand-made chart for a track is
-used instead of anything generated, and is never overwritten by one.
+**Authored charts always win** and are used exactly as written: never merged with a
+generated road, never regenerated, never written into the cache.
+`race/charts/README.md` is the format, the `cloudId` derivation and the link step;
+`race/charts/index.json` ships empty.
+
+### Naming a file before downloading it
+
+The hash is `CHART.md`'s, unchanged: SHA1 of the byte length as 8 bytes little
+endian plus the first 1 MiB. `race/chartSource.js` `hashUrl()` gets it from a HEAD
+(for `content-length`, a CORS safelisted response header) and a `Range` GET for the
+first megabyte, so the two lookups that can answer without the audio get their
+chance before any audio moves.
+
+None of that is required. `Range` is not a CORS simple header, so the ranged GET
+needs a preflight the CDN may not answer, and `Content-Range` needs to be exposed
+before it can be read. If any of it is shut, `hashUrl` answers null quietly and the
+hash is taken from the body that had to be downloaded anyway: the cache still hits
+on the second run, only the saved download is lost.
+
+### Generating a road with no words
+
+The desktop host runs a word spotter. A browser has none, so the energy curve is
+the entire road. `race/cloudChart.js` fetches the file (the player's browser
+straight to the CDN, nothing of ours in the middle), decodes it once in a throwaway
+16 kHz `OfflineAudioContext`, walks min/max peaks at 50 a second in chunks that hand
+the frame back between them, drops the buffer, and runs the pure road generator
+`chart/maker/generate.js` with no words.
+
+Three knobs are different from the generator's defaults, and only three:
+
+1. **`binSec` 0.25, not 0.5.** `buildEvents` calls a peak a local maximum over plus
+   or minus 8 bins. At 0.5 s bins that is four seconds either side, which swallows
+   the swell of a spoken sentence whole; at 0.25 it is two seconds, which is the
+   length of the swell, so a build lands on the rise it belongs to.
+2. **Silence is read off the curve, not off the gaps between words.**
+   `silenceEvents` finds quiet in the gaps between words, so with no words it sees
+   exactly one gap, the whole file, and lays a 20 second fog over the start line.
+   Those are dropped, and quiet is found where the energy is under `QUIET_LEVEL`
+   for `QUIET_MIN_SEC` or more, which is what `CHART.md` says a silence event is
+   anyway. A quiet stretch that reaches the end of the file is not laid: a fade out
+   is not fog on the finish line.
+3. **Acts are read off the curve, not off act words.** `actsFrom` scores act kinds
+   from spoken words; with none, every window scores zero and carries the last kind
+   forward, so an hour of audio comes out as ONE act, one room and one mood for the
+   whole run. `actsFromEnergy` labels each 30 second window by level instead (loud
+   is `triggers`, quiet is `deepening`, silent is `silence`, the rest is `free`, the
+   first is the settle and a loud tail is the way up), then applies `CHART.md`'s own
+   tidy-up: nothing under 45 seconds, no more than 16 of them.
+
+Everything else, the build/peak/release pass and the energy normalisation and the
+act merge rules, is `chart/maker/generate.js` unchanged and imported, never copied.
+`analysis.words` is `none`, so the end card never claims the player missed words
+nobody ever heard.
+
+`GENERATOR_ID` in `race/cloudChart.js` is the second half of the cache key. Tune any
+of the three knobs and change that string, or players get yesterday's road.
+
+### While it is being read
+
+`chartFor` answers inside `PARTIAL_MS` whatever happens. If the road is not in hand
+by then it hands back a plain road marked `analysis.partial` and the run starts on
+that; the real one arrives through `onUpgrade`, which calls `race.replaceTrack` on a
+live lap and `race.setTrack` otherwise, which is `CHART.md`'s partial rule. A file
+that will not fetch, will not decode, or is longer than `MAX_DECODE_SEC` gets the
+demo road cut to its real duration and renamed to the real track, plus a toast.
+There is never a dead run.
+
+### Reading the next one ahead
+
+When a track starts, `race/cloud.js` names the next playable entry through
+`hooks.prefetch`, and `cloudChart` resolves it in the background so the next lap
+starts with its road in hand. One at a time; a new one replaces the old; closing the
+panel or forgetting the list lets it go. `chartFor` on the next lap takes the
+prefetched promise rather than starting again.
+
+### The cache
+
+`race/chartCache.js`: IndexedDB `race-charts`, keyed by hash, capped at 50 entries,
+least recently read first. It holds GENERATED charts only (`put` refuses a chart
+with `hand: true`) and every record carries `GENERATOR_ID`, so a tuned road drops
+its own old entries on sight instead of playing them back. A browser that refuses
+IndexedDB, a private window or blocked site data, charts every track instead:
+slower, never broken.
+
+One file can sit at two urls under two names, and the cache is keyed on the file. So
+a chart out of the cache is re-stamped with the name of the track that asked for it:
+the plate, the marquee and the results card say what the player pasted.
+
+### What never happens
+
+The mp3 is fetched by the player's browser straight from the CDN, which answers
+`Access-Control-Allow-Origin: *`. Nothing of ours is in the middle of it. The bytes
+are decoded, walked for peaks and dropped; what is kept is a chart, which is
+timestamps and labels. No byte of audio is uploaded anywhere, and the cache lives in
+the browser that wrote it.
+
+An hour of 16 kHz mono is about 230 MB of decoded buffer, which is a lot to be
+holding on a phone. It is held for as long as the peak walk takes and then dropped,
+and a file longer than `MAX_DECODE_SEC` (90 minutes) is not decoded at all: it gets
+the stand-in road and a line saying so, because a phone that runs out of memory mid
+lap is worse than a road that is not the file's own.
 
 ## Frames, and why the Brake works
 
@@ -151,3 +255,18 @@ and exactly once, a locked entry that is never requested, the plate, the clock
 following the element second for second, the Brake both ways, the rollover to
 the next track, and that nothing left localhost. `CHROME_PATH` overrides the
 Chrome it looks for.
+
+```
+node race/smoke/cloud-chart-check.mjs
+```
+
+The W2 half. Sections 1 to 3 are pure and run in node before Chrome is started: the
+`cloudId` derivation, the hash, the wordless road (energy bins, build, peak,
+release, quiet where the file is quiet, nothing fogging the start line, more than
+one room) and what `normalizeChart` is allowed to throw away. Then the browser half,
+over a synthesized 90 second WAV that swells twice and has two long quiet stretches:
+a real decode gives a real road, an authored chart wins and costs no download, the
+next track is read ahead while this one plays, the second load of the same file is a
+cache hit with no decode, and nothing left localhost. The authored index it tests
+against is served by the smoke, not shipped: `race/charts/index.json` in the repo
+stays empty.
