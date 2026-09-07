@@ -27,7 +27,7 @@ import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildPhrases, paintTriggers, MAX_WORDS, GAP_SEC, HOLD_SEC } from '../captions.js';
+import { buildPhrases, paintTriggers, MAX_WORDS, GAP_SEC, HOLD_SEC, PLATE_MS } from '../captions.js';
 import { THEME_BY_PRESET, themeFor } from '../triggerTheme.js';
 import { wordedRoad, PEAKS_PER_SEC } from '../cloudChart.js';
 
@@ -173,11 +173,15 @@ const at = async (t) => {
   await sleep(220);
   return json(`(()=>{ const cap=document.querySelector('.rc-cap'), plate=document.querySelector('.rc-plate');
     const r=(el)=>{ if(!el) return null; const b=el.getBoundingClientRect(); return { x:Math.round(b.left), y:Math.round(b.top), w:Math.round(b.width), h:Math.round(b.height) }; };
-    return { t: window.__race.race.track.t, hidden: !cap || cap.hidden, words: cap?cap.querySelectorAll('.rc-word').length:0,
-      said: cap?cap.querySelectorAll('.rc-word.is-said').length:0, now: cap?cap.querySelectorAll('.rc-word.is-now').length:0,
+    const line=document.querySelector('.rc-cap-line');
+    const tops=new Set(); for(const w of document.querySelectorAll('.rc-cap-word')){ const b=w.getBoundingClientRect(); if(b.height>0) tops.add(Math.round(b.top)); }
+    return { t: window.__race.race.track.t, hidden: !cap || cap.hidden, words: cap?cap.querySelectorAll('.rc-cap-word').length:0,
+      said: cap?cap.querySelectorAll('.rc-cap-word.is-said').length:0, now: cap?cap.querySelectorAll('.rc-cap-word.is-now').length:0,
       theme: plate?plate.getAttribute('data-theme'):null, plateLen: plate?plate.textContent.length:0,
       cap: cap&&!cap.hidden?r(cap):null, score: r(document.querySelector('.rh-score-wrap')), item: r(document.querySelector('.rh-item')),
-      speed: r(document.querySelector('.rh-speed')), vw: innerWidth, vh: innerHeight };})()`);
+      speed: r(document.querySelector('.rh-speed')), mute: r(document.querySelector('.rt-mute')), pause: r(document.querySelector('.rt-pause')),
+      lines: tops.size, hidWords: line ? Math.max(0, line.scrollHeight - line.clientHeight) : 0,
+      vw: innerWidth, vh: innerHeight };})()`);
 };
 
 /* ============================================================================
@@ -209,7 +213,16 @@ if (gapAt >= 0) {
 }
 
 /* ============================================================================
- * 3. the caption keeps off the chrome, on a 390x844 phone
+ * 3. the caption keeps off the chrome, at the TOP, on a 390x844 phone
+ *
+ * The owner's phone cut the second line in half and the band sat under the road.
+ * So: the band opens UNDER the score plate row, it is two lines at most, and
+ * every line of it is whole and on the glass. The cut had two causes and both
+ * are asserted here, not described: an `em` max-height on a box whose rendered
+ * lines were taller than its own font said (nothing is capped in `em` any more,
+ * so `hidWords` is 0), and menu.css owning `.rc-word` under #race-root at the
+ * intro card's 30px, which an id-carrying selector won over anything this layer
+ * could say (the caption's classes are its own now: .rc-cap-line, .rc-cap-word).
  * ==========================================================================*/
 const shot = await at(target.words[1].t);
 eq(shot.vw + 'x' + shot.vh, '390x844', 'the page really is a phone portrait viewport');
@@ -219,8 +232,16 @@ ok(!hits(shot.cap, shot.score), `it never touches the score plate (caption y ${s
 ok(!hits(shot.cap, shot.item), 'nor the item slot');
 ok(!hits(shot.cap, shot.speed), 'nor the speed bar');
 ok(shot.cap.y >= 0 && shot.cap.y + shot.cap.h <= shot.vh, 'and it is fully on the glass, not clipped off an edge');
-ok(shot.cap.y > shot.vh * 0.55, `it is a lower third (its top sits at ${Math.round((shot.cap.y / shot.vh) * 100)}% of the height)`);
-ok(shot.cap.h <= 100, `and it is two lines at most (${shot.cap.h}px tall)`);
+ok(shot.cap.y < shot.vh * 0.45, `it is a TOP band (its top sits at ${Math.round((shot.cap.y / shot.vh) * 100)}% of the height)`);
+ok(shot.cap.y >= shot.score.y + shot.score.h, `and it opens under the score plate row (band top ${shot.cap.y}, plate bottom ${shot.score.y + shot.score.h})`);
+if (shot.mute || shot.pause) {
+  ok(!hits(shot.cap, shot.mute) && !hits(shot.cap, shot.pause), 'nor under the sound and pause buttons');
+} else {
+  ok(true, 'the sound and pause buttons are a touch build; this run has none to clear');
+}
+ok(shot.lines <= 2, `it draws two lines at most (${shot.lines})`);
+ok(shot.hidWords === 0, `and not a pixel of it is hidden by its own box (${shot.hidWords}px over)`);
+
 
 /* ============================================================================
  * 4. the plate flies on a sure trigger
@@ -240,7 +261,84 @@ const themed = await json(`(()=>{ const s=[...document.styleSheets].flatMap(x=>{
 eq(themed, Object.keys(THEME_BY_PRESET).length, 'and race.css carries a class for every theme in the table');
 
 /* ============================================================================
- * 5. the demo road still runs, and nothing shouted
+ * 5. the plate rests in its own air: never on the band, never on a toast
+ *
+ * The owner's screenshot has the zoom plate sitting on top of "jackpot +200" and
+ * "+130 x3" in the same spot. captions.js measures the score plate, the band and
+ * the toast rail and parks the plate in what is left, so this holds a plate at
+ * the peak of its zoom against a jackpot and a pop fired the same second.
+ * ==========================================================================*/
+await at(trig.t);
+await ev(`window.__race.race.hud.toast('jackpot +200', 'jackpot')`);
+await sleep(200);
+await ev(`window.__race.race.hud.toast('+130 x3', 'pop')`);
+await sleep(480);                    // the zoom is at its peak by now, the toasts are up
+const air = await json(`(()=>{ const r=(el)=>{ if(!el) return null; const b=el.getBoundingClientRect();
+    return { x:Math.round(b.left), y:Math.round(b.top), w:Math.round(b.width), h:Math.round(b.height) }; };
+  return { plate:r(document.querySelector('.rc-plate')), cap:r(document.querySelector('.rc-cap')),
+    score:r(document.querySelector('.rh-score-wrap')), rail:r(document.querySelector('.rh-toasts')),
+    // only the toasts a player can SEE: one on its way out is a transparent box, not a clash
+    toasts:[...document.querySelectorAll('.rh-toast')].filter(t=>+getComputedStyle(t).opacity>0.05).map(r),
+    vh: innerHeight };})()`);
+ok(!!air.plate, 'a plate is on the glass with the toasts');
+ok(air.toasts.length >= 1, `and the rail is carrying ${air.toasts.length}`);
+ok(!hits(air.plate, air.cap), `the plate rests under the caption band (band ${air.cap ? air.cap.y + air.cap.h : '?'}, plate top ${air.plate.y})`);
+ok(!hits(air.plate, air.score), 'and clear of the score plate');
+const onToast = air.toasts.filter((t) => hits(air.plate, t));
+eq(onToast.length, 0, `and not one toast is under it (plate ${air.plate.y}..${air.plate.y + air.plate.h}, rail ${air.rail.y}..${air.rail.y + air.rail.h})`);
+ok(air.plate.y + air.plate.h <= air.rail.y, 'the plate is finished before the rail begins');
+ok(air.plate.y > air.vh * 0.15 && air.plate.y + air.plate.h < air.vh * 0.55, 'and it lands in the upper middle of the glass, where nothing else lives');
+
+/* ============================================================================
+ * 6. the toasts read as chatter: shorter, smaller, quieter
+ *
+ * The owner: "the items notification and the jackpot as well as the streak ones
+ * are noisy, make them last less and be kinda faded so they dont clash". Every
+ * hold is 60 percent of the wave 2 one, the two chatter kinds are capped, and
+ * the rail is 0.85 of its size at 70 percent. The score plate, the combo and the
+ * speed plate are not in this table and are not touched.
+ * ==========================================================================*/
+const WANT_HOLD = { pop: 660, almost: 700, jackpot: 1080, bank: 960, item: 840, effect: 840, recipe: 1020 };
+const WAS_HOLD = { pop: 1100, almost: 1300, jackpot: 1800, bank: 1600, item: 1400, effect: 1400, recipe: 1700 };
+for (const kind of Object.keys(WANT_HOLD)) {
+  await ev(`window.__race.race.hud.toast(${JSON.stringify(kind === 'bank' ? 'kept 40' : '+10')}, '${kind}')`);
+  await sleep(260);                  // longer than the chatter gap, so every kind gets its turn
+  const hold = await ev(`(()=>{const t=[...document.querySelectorAll('.rh-toast--${kind}')].pop();
+    return t ? t.style.getPropertyValue('--rh-hold') : null;})()`);
+  eq(hold, `${WANT_HOLD[kind]}ms`, `a ${kind === 'bank' ? 'kept' : kind} toast holds ${WANT_HOLD[kind]}ms`);
+  ok(WANT_HOLD[kind] <= Math.round(WAS_HOLD[kind] * 0.6), `and that is 40 percent off the wave 2 hold (${WAS_HOLD[kind]}ms)`);
+}
+ok(WANT_HOLD.pop <= 700 && WANT_HOLD.almost <= 700, 'the two chatter kinds are capped at 0.7s however loud the run gets');
+const railStyle = await json(`(()=>{const n=document.querySelector('.rh-toasts'); const cs=getComputedStyle(n);
+  const sc=document.querySelector('.rh-score-wrap'), sp=document.querySelector('.rh-speed');
+  return { t: cs.transform, o: +cs.opacity, scoreO: +getComputedStyle(sc).opacity, speedO: +getComputedStyle(sp).opacity };})()`);
+ok(/matrix\(0\.85,/.test(railStyle.t), `the rail is 0.85 of its old size (${railStyle.t})`);
+ok(Math.abs(railStyle.o - 0.7) < 0.01, `and sits at 70 percent (${railStyle.o})`);
+ok(railStyle.scoreO === 1 && railStyle.speedO === 1, 'while the score plate and the speed plate stay at full strength: those are the honest numbers');
+
+/* ============================================================================
+ * 7. EVERY phrase of the track, not the lucky one
+ *
+ * The cut the owner photographed was a long phrase's second line, so walk the
+ * whole caption track and hold each phrase to the same two rules: two lines at
+ * most, and not a pixel of it hidden by its own box. (Last, because it drives
+ * the clock past every trigger on the road.)
+ * ==========================================================================*/
+let widest = 0, worst = null, lines3 = 0, clipped = 0;
+for (const p of phrases.filter((x) => x.t0 > 3)) {
+  const s = await at(p.words[Math.min(1, p.words.length - 1)].t + 0.02);
+  if (s.hidden || !s.cap) continue;
+  if (s.lines > 2) lines3++;
+  if (s.hidWords > 0) clipped++;
+  if (s.cap.h > widest) { widest = s.cap.h; worst = s; }
+}
+eq(lines3, 0, `no phrase of the ${phrases.length} on this track draws a third line`);
+eq(clipped, 0, 'and none of them is cut off by its own box');
+ok(!!worst && worst.cap.y + worst.cap.h <= worst.vh, `the tallest band on the track is whole on the glass (${widest}px, bottom ${worst ? worst.cap.y + worst.cap.h : '?'} of ${shot.vh})`);
+ok(!!worst && !hits(worst.cap, worst.score), 'and even the tallest keeps off the score plate');
+
+/* ============================================================================
+ * 8. the demo road still runs, and nothing shouted
  * ==========================================================================*/
 await cdp('Page.navigate', { url: `${site}/dtrh/race.html?autostart=1&intro=0&cards=0&chart=demo&dur=240` });
 let demo = false;

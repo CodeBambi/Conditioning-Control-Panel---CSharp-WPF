@@ -239,8 +239,8 @@ if (c.words && c.words !== 'none') {
     await ev(`(()=>{const a=window.__rcAudio; if(a) a.currentTime=${Math.max(0, t)}; return 1;})()`);
     await sleep(wait);
     return json(`(()=>{const cap=document.querySelector('.rc-cap'), pl=document.querySelector('.rc-plate');
-      return { t: window.__race.race.track.t, hidden: !cap || cap.hidden, said: cap?cap.querySelectorAll('.rc-word.is-said').length:0,
-        words: cap?cap.querySelectorAll('.rc-word').length:0, theme: pl?pl.getAttribute('data-theme'):null };})()`);
+      return { t: window.__race.race.track.t, hidden: !cap || cap.hidden, said: cap?cap.querySelectorAll('.rc-cap-word.is-said').length:0,
+        words: cap?cap.querySelectorAll('.rc-cap-word').length:0, theme: pl?pl.getAttribute('data-theme'):null };})()`);
   };
   const w = await json(`(()=>{const ch=window.__race.race.track.chart, tr=ch.events.filter(e=>e.kind==='trigger');
     return { n: ch.words.length, t0: ch.words.length?ch.words[0].t:-1, trig: tr.length, at: tr.length?tr[0].t:-1 };})()`);
