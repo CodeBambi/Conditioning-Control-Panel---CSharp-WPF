@@ -39,7 +39,7 @@ import * as THREE from 'three';
 import {
   KART_BASE_SPEED, KART_MAX_SPEED, KART_MIN_SPEED, GRAVITY, KART_X_MAX, SAUCER_R_ROAD,
   CAM_BACK, CAM_UP, CAM_LOOK_AHEAD, CAM_LOOK_SPEED, KART_SCALE,
-  POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, DRIFT_TIER_SEC, DRIFT_BOOST_SEC, WALL_SCRUB_SEC,
+  POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, DRIFT_TIER_SEC, DRIFT_BOOST_SEC, WALL_SCRUB_SEC, OPEN_PACE,
 } from './consts.js';
 import { createEmiRig } from './emi.js';
 
@@ -132,8 +132,14 @@ function makeTierSparks(scene, n) {
  */
 export function createKart({ scene, layout, reducedMotion = false, pixel = null }) {
   const state = {
-    d: 0, x: 0, h: 0, vh: 0, speed: KART_BASE_SPEED, steer: 0, drift: false, airborne: false,
+    // the flag drops at the opening cruise, not the full one: a run that opened at 79 km/h and
+    // eased down to 55 over its first second is exactly the start the owner called too fast.
+    // The pace (race/pace.js) holds the road there for its first act; this is only the first frame.
+    d: 0, x: 0, h: 0, vh: 0, speed: KART_BASE_SPEED * OPEN_PACE, steer: 0, drift: false, airborne: false,
     boostSec: 0, slowMult: 1, slowSec: 0, lap: 0,
+    // the pace the run is asking for, in metres per second: the cruise and the hard ceiling.
+    // run.js writes them every frame off race/pace.js; untouched they are the old constants.
+    paceBase: KART_BASE_SPEED, paceCap: KART_MAX_SPEED,
     driftSec: 0, driftTier: 0, scrub: false,
     inverted: false, roll: 0, trick: null, trickStreak: 0,
     lapSec: 0, lapsTimed: 0,
@@ -164,6 +170,12 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   const emit = (ev) => { for (const cb of listeners) { try { cb(ev); } catch (e) { /* a listener never breaks the kart */ } } };
 
   function applyBoost(sec) { state.boostSec = Math.max(state.boostSec, +sec || 0); }
+  /** The run's pace for this frame, in m/s: the cruise it holds and the ceiling a boost may reach. */
+  function pace(base, cap) {
+    const b = +base, c = +cap;
+    state.paceBase = isFinite(b) && b > 0 ? Math.min(b, KART_MAX_SPEED) : KART_BASE_SPEED;
+    state.paceCap = isFinite(c) && c > 0 ? Math.min(Math.max(c, state.paceBase), KART_MAX_SPEED) : KART_MAX_SPEED;
+  }
   function applySlow(mult, sec) {
     state.slowMult = clamp(+mult || 1, 0.2, 1);
     state.slowSec = Math.max(state.slowSec, +sec || 0);
@@ -223,18 +235,22 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   function stepSpeed(dt, input) {
     if (state.boostSec > 0) state.boostSec = Math.max(0, state.boostSec - dt);
     if (state.slowSec > 0) { state.slowSec = Math.max(0, state.slowSec - dt); if (state.slowSec === 0) state.slowMult = 1; }
-    const cap = state.boostSec > 0 ? KART_MAX_SPEED : KART_BASE_SPEED;
+    // the cruise and the ceiling are the run's to set (race/pace.js): a track's first act rolls
+    // slower than its last, and a boost early on is a lift rather than the full 122 km/h
+    const cruise = state.paceBase > 0 ? state.paceBase : KART_BASE_SPEED;
+    const ceiling = clamp(state.paceCap > 0 ? state.paceCap : KART_MAX_SPEED, cruise, KART_MAX_SPEED);
+    const cap = state.boostSec > 0 ? ceiling : cruise;
     // accel holds cruise, letting go coasts a touch under it, boost pins the cap
     let target = state.boostSec > 0 ? cap : cap * (0.88 + 0.12 * input.accel);
     if (state.drift) target *= 1.04;                                   // small speed keep while drifting
     target = target * (1 - input.brake) + KART_MIN_SPEED * input.brake;
     if (state.slowSec > 0) target *= state.slowMult;
     if (state.scrub) target *= WALL_SCRUB_MULT;                         // scrubbing the kerb costs a touch, never a stop
-    target = clamp(target, KART_MIN_SPEED, KART_MAX_SPEED);
+    target = clamp(target, KART_MIN_SPEED, ceiling);
     const rising = target > state.speed;
     const k = rising ? (state.boostSec > 0 ? 6 : 2.5) : (input.brake > 0 ? 3 : state.drift ? 0.8 : 1.5);
     state.speed += (target - state.speed) * ease(k, dt);
-    state.speed = clamp(state.speed, KART_MIN_SPEED, KART_MAX_SPEED);
+    state.speed = clamp(state.speed, KART_MIN_SPEED, ceiling);
   }
 
   /** Drift let go: the charge becomes boost by tier, and the cup straightens with a counter-steer snap. */
@@ -496,7 +512,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     listeners.length = 0;
   }
 
-  return { state, update, applyBoost, applySlow, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
+  return { state, update, applyBoost, applySlow, pace, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
     pulseTarget, setReach, onEvent, dispose,
     emiModel: () => rig.model(), emiReady: (cb) => rig.onReady(cb),
     setFace: (i) => rig.setFace(i), pose: (name, opts) => rig.pose(name, opts) };
