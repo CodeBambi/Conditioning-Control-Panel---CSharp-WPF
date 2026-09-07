@@ -5,38 +5,24 @@
  * up on a short tween (tabular numerals), the multiplier pill pulses on every
  * rung (CHIME LADDER), the combo bar drains over COMBO_HOLD_SEC, the MARQUEE
  * banner rides in as a left ribbon under the score block once per gate in the
- * room's colour, the item slot bounces,
+ * room's colour,
  * speed is a gauge with a boost state. Toasts each carry their own motion (ALMOST shivers,
  * JACKPOT is a gold flash and a REVEAL, BANK flies tokens into the score and
  * ticks the counter as they land). flicker() is the Stat Flicker: the face
  * lies for 450 ms, the ledger never does (Law I). The Brake and the End card
  * are the chrome's own pointer targets; since the touch pass they are no longer
  * the page's only ones, because race/touch.js adds .rh-touch at z12 (the thumb
- * pad and its pause / mute / use buttons) on a touchable page. It rides BELOW
+ * pad and its pause / mute buttons) on a touchable page. It rides BELOW
  * the screens at z20, so a card still takes the tap first and nothing here has
- * to cooperate. The item button watches this file's `is-held` class on the slot.
- * On a touchable page the item hint drops the `E` badge: an empty slot reads
- * `no item yet` with nothing after it, and a full one reads `<name> tap to use`.
- * Copy is DtRH voice: lowercase, short.
+ * to cooperate. Copy is DtRH voice: lowercase, short.
  *
- * THE PICKUP (pass f3): a cube gives its item a card of its own, centre of the
- * view just above the cup. It rolls a `?` while items.js rolls, flips to the
- * decided item the moment items.js arms it (never earlier: Fake Shuffle),
- * holds, then flies into the item slot and leaves the slot lit until the item
- * is used. Under reduced motion the card fades in place instead of flying.
- *
- * Pass three: THE MIXER rail above the item slot shows the live ingredients
+ * Pass three: THE MIXER rail above the chips shows the live ingredients
  * of the mix (race/cocktail.js) as pixel chips with drain bars and charge
  * pips, and the served recipe's name while one is live. strobe() is the
  * white edge blink under a flash charge; setTint() pinks the chrome.
  * ==========================================================================*/
 
 import { COMBO_HOLD_SEC, MULT_LADDER, KART_MAX_SPEED, KART_BASE_SPEED } from './consts.js';
-import { wantsTouch } from './touch.js';
-
-/** A phone has no E key, so the item hint must not point at one. Same test race/touch.js
- *  uses to decide whether to build the layer at all, `?touch=1` / `?touch=0` included. */
-const TOUCH = wantsTouch();
 
 const FLICK_MS = 450;
 /**
@@ -132,22 +118,6 @@ export function createRaceHud(root) {
   const bannerName = el('rh-banner-name', banner);
   const bannerTag = el('rh-banner-tag', banner);
 
-  const item = el('rh-item', chrome);
-  const itemBox = el('rh-item-box', item, '·');
-  const itemName = el('rh-item-name', item, 'no item yet');
-  const itemKey = document.createElement('span');
-  itemKey.className = 'rh-item-key';
-  // on glass the badge is an instruction, not a key, and an empty slot has nothing to tap
-  itemKey.textContent = TOUCH ? 'tap to use' : 'E';
-  if (!TOUCH) itemName.appendChild(itemKey);
-
-  // THE PICKUP: the item's own card. No per-item art ships, so the tile IS the picture: the room
-  // colour, a soft glow and the glyph big. It rides in the chrome, so a freeze or a tape covers it.
-  const pickup = el('rh-pickup', chrome);
-  const pickTile = el('rh-pickup-tile', pickup);
-  const pickGlyph = el('rh-pickup-glyph', pickTile, '?');
-  const pickName = el('rh-pickup-name', pickup, '');
-
   const speed = el('rh-speed rh-plate', chrome);
   const speedRow = el('rh-speed-row', speed);
   const speedN = document.createElement('span');
@@ -163,45 +133,10 @@ export function createRaceHud(root) {
   el('rh-speed-tag', speed, 'boost');   // shown only while .is-boost is on
   let speedHot = false;
 
-  // ---- the pickup's own clock: roll -> flip -> hold -> flight -> the slot holds it ----
-  const PICK_HOLD_MS = 600, PICK_FLY_MS = 420;
-  let pickTimers = [], pickLive = false;
-  const pickLater = (fn, ms) => { const t = later(fn, ms); pickTimers.push(t); return t; };
-  /** Take the card off screen at once. A second cube may never stack a second card (no orphans). */
-  function endPickup() {
-    for (const t of pickTimers) { clearTimeout(t); timers.delete(t); }
-    pickTimers = [];
-    pickLive = false;
-    pickup.classList.remove('is-on', 'is-rolling', 'is-flip', 'is-fly');
-    pickup.style.transform = ''; pickup.style.transformOrigin = '';
-  }
-  /** The flight: the slot's rect is measured HERE, so the card lands right at any window size. */
-  function flyPickup(onLand) {
-    const land = () => {
-      pickLive = false;
-      item.classList.remove('is-inbound');
-      item.classList.add('is-held');
-      hit(item, 'is-bounce');
-      if (onLand) { try { onLand(); } catch (e) { /* a listener never breaks the run */ } }
-    };
-    if (reduced) { pickup.classList.add('is-fly'); pickLater(endPickup, 160); land(); return; }
-    try {
-      const from = pickTile.getBoundingClientRect(), to = itemBox.getBoundingClientRect(), card = pickup.getBoundingClientRect();
-      if (from.width > 0 && to.width > 0) {
-        const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
-        const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
-        pickup.style.transformOrigin = `${(from.left + from.width / 2 - card.left).toFixed(1)}px ${(from.top + from.height / 2 - card.top).toFixed(1)}px`;
-        pickup.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${(to.width / from.width).toFixed(3)})`;
-      }
-    } catch (e) { /* no layout yet: the card fades where it stands */ }
-    pickup.classList.add('is-fly');
-    pickLater(() => { endPickup(); land(); }, PICK_FLY_MS);
-  }
-
   const toasts = el('rh-toasts', chrome);
   const strobeEl = el('rh-strobe', chrome);
 
-  // ---- THE MIXER: the live ingredients, one chip per category, above the item slot ----
+  // ---- THE MIXER: the live ingredients, one chip per category, above the chips ----
   const mixer = el('rh-mixer', chrome);
   el('rh-mixer-label', mixer, 'the mix');
   const mixRow = el('rh-mixer-row', mixer);
@@ -384,41 +319,6 @@ export function createRaceHud(root) {
       } catch (e) { /* no layout yet: the CSS fallback top stands */ }
       later(() => banner.classList.add('is-on'), 40);
       later(() => banner.classList.remove('is-on'), 2600);
-    },
-    item(glyph, name) {
-      itemBox.textContent = glyph == null ? '·' : String(glyph);
-      itemName.firstChild.textContent = (name || (glyph == null ? 'no item yet' : '')).toLowerCase();
-      if (!TOUCH || glyph != null) itemName.appendChild(itemKey);
-      else if (itemKey.parentNode) itemKey.parentNode.removeChild(itemKey);
-      item.classList.toggle('is-armed', glyph != null);
-      item.classList.toggle('is-rolling', glyph === '?');
-      if (glyph == null) item.classList.remove('is-held', 'is-inbound');
-      hit(item, 'is-bounce');
-    },
-    /** THE PICKUP, on `itemRoll`: the card pops in near the cup with the rolling `?`. */
-    pickupRoll() {
-      endPickup();
-      pickGlyph.textContent = '?';
-      pickName.textContent = 'rolling';
-      void pickup.offsetWidth;                       // replay the pop when one card follows another
-      pickup.classList.add('is-on', 'is-rolling');
-      pickLive = true;
-    },
-    /** On `itemArm`: the card flips to the decided item, holds, then flies into the slot.
-     *  `onLand` fires as it lands, for the sound the run brain owns. */
-    pickupArm(glyph, name, onLand) {
-      if (!pickLive) { hud.pickupRoll(); }
-      pickup.classList.remove('is-rolling');
-      pickGlyph.textContent = glyph == null ? '?' : String(glyph);
-      pickName.textContent = String(name || '').toLowerCase();
-      hit(pickup, 'is-flip');
-      item.classList.add('is-inbound');              // the slot stays empty until the card lands in it
-      pickLater(() => flyPickup(onLand), reduced ? 200 : PICK_HOLD_MS);
-    },
-    /** On `itemUse` (or a reset): the card and the slot's highlight both go. */
-    pickupClear() {
-      endPickup();
-      item.classList.remove('is-held', 'is-inbound');
     },
     toast(text, kind) {
       kind = TOAST_HOLD[kind] ? kind : 'pop';

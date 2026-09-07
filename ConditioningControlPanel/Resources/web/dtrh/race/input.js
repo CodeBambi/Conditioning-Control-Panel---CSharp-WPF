@@ -2,16 +2,16 @@
  * race/input.js - the wheel. Implements CONTRACT.md "race/run.js + raceBoot.js"
  * (PR 5, integration): the one place keyboard, gamepad and touch are read.
  *
- * Keyboard: arrows / WASD steer + accel + brake, Shift drift, Space jump, E item,
+ * Keyboard: arrows / WASD steer + accel + brake, Shift drift, Space jump,
  * Esc brake, P cycles the pixel look.
  * Gamepad (navigator.getGamepads, standard map): left stick steer, RT accel,
- * LT brake, A drift, B jump, X item, Start brake.
+ * LT brake, A drift, B jump, Start brake.
  * Touch (race/touch.js, only on a touchable page): the left half drags the wheel,
- * the right half taps to jump and holds to drift, plus pause / mute / use buttons.
+ * the right half taps to jump and holds to drift, plus pause / mute buttons.
  * `createInput({ root })` needs the race root or the touch layer is never built.
  *
  *   read() -> { steer:-1..1, accel:0..1, brake:0..1, drift:bool, jump:bool }
- *   onAction(cb)   cb(action) for the ACTIONS table below ('item' | 'brake' | 'pixel' | 'mute'), edge-triggered, never repeats on hold
+ *   onAction(cb)   cb(action) for the ACTIONS table below ('brake' | 'pixel' | 'mute'), edge-triggered, never repeats on hold
  *   flush()        drop everything held or queued (run.js calls it as the run starts)
  *   dispose()
  *
@@ -24,9 +24,8 @@
  * Law II (input honesty): nothing here ever remaps an axis. accel defaults to 1
  * when nothing is pressed, so a player who only ever steers still cruises.
  * Digital steer is eased over ~80 ms so the cup leans on the first frame
- * (Law VIII) without a hard snap. The mirror item flips the picture, never
- * the hand: there is no flip/mirror API here and none may be added (the
- * owner's law: left stays left).
+ * (Law VIII) without a hard snap. There is no flip/mirror API here and none
+ * may be added (the owner's law: left stays left).
  *
  * THE MERGE: keys, pad and touch are three ADDITIVE sources, never a remap of
  * one another. steer takes whichever source has the larger magnitude (an analog
@@ -44,13 +43,12 @@ const KEYS = {
 };
 /** Edge-triggered actions by key code; append a line here to add one (fired once per press, never on hold). */
 const ACTIONS = {
-  KeyE: 'item',
   Escape: 'brake',
   KeyP: 'pixel',
   KeyM: 'mute',   // race/audio.js listens
 };
 const DEADZONE = 0.16;
-const PAD = { steer: 0, accelBtn: 7, brakeBtn: 6, drift: 0, jump: 1, item: 2, start: 9 };
+const PAD = { steer: 0, accelBtn: 7, brakeBtn: 6, drift: 0, jump: 1, start: 9 };
 /** Space is the jump: not a held KEY and not an ACTION, the kart reads one press per frame. */
 const JUMP_KEY = 'Space';
 /** A space that belongs to a focused control (menu buttons) is left alone. */
@@ -70,7 +68,7 @@ export function createInput({ target = window, root = null } = {}) {
   const out = { steer: 0, accel: 1, brake: 0, drift: false, jump: false };
   let steerE = 0, lastT = 0, disposed = false;
   let jumpQ = false, jumpHeld = false, aidLeft = AID_JUMP;
-  const padWas = { item: false, start: false, jump: false };
+  const padWas = { start: false, jump: false };
 
   const fire = (name) => { for (const cb of acts) { try { cb(name); } catch (e) { /* a listener never breaks the wheel */ } } };
 
@@ -134,11 +132,10 @@ export function createInput({ target = window, root = null } = {}) {
       accel = Math.max(accel, btn(g, PAD.accelBtn));
       brake = Math.max(brake, btn(g, PAD.brakeBtn));
       drift = drift || btn(g, PAD.drift) > 0.5;
-      const item = btn(g, PAD.item) > 0.5, start = btn(g, PAD.start) > 0.5, jmp = btn(g, PAD.jump) > 0.5;
-      if (item && !padWas.item) fire('item');
+      const start = btn(g, PAD.start) > 0.5, jmp = btn(g, PAD.jump) > 0.5;
       if (start && !padWas.start) fire('brake');
       if (jmp && !padWas.jump) jump = true;                    // pad B, edge-triggered like the key
-      padWas.item = item; padWas.start = start; padWas.jump = jmp;
+      padWas.start = start; padWas.jump = jmp;
     }
     if (touch) {
       const t = touch.read();
@@ -161,7 +158,7 @@ export function createInput({ target = window, root = null } = {}) {
    *  again once it has come up, so a space that closed the last card cannot jump twice either. */
   function flush() {
     down.clear(); jumpQ = false;
-    padWas.item = false; padWas.start = false; padWas.jump = false;
+    padWas.start = false; padWas.jump = false;
     if (touch) touch.flush();   // and a thumb still on the glass starts the run neutral
   }
 

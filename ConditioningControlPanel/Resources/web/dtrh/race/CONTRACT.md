@@ -169,7 +169,7 @@ Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
 |----|------|---------|--------|-------|
 | treat | treat | null | 10 | the common bubble, plain sprite |
 | golden | treat | null | 50 | rare, JACKPOT chime |
-| lucky | treat | null | 25 | rolls an item |
+| lucky | treat | null | 25 | a plain 25 point treat, nothing else |
 | prism | treat | null | 30 | rainbow, pops neighbours |
 | flash | effect | flash | 15 | flash media from the pool |
 | subliminal | effect | subliminal | 15 | |
@@ -211,7 +211,7 @@ Tea Garden gate (THE BANK). Events: `{ type:'pop'|'miss'|'combo'|'mult'|'bank'|'
 export function createKart({ scene, layout, reducedMotion }) -> kart
 kart.state           // { d, x, h, vh, speed, steer, drift, airborne, boostSec, slowMult, slowSec, lap }
 kart.update(dt, input, layout)   // input = { steer:-1..1, accel:0..1, brake:0..1, drift:bool }
-kart.applyBoost(sec)             // boost pad / item
+kart.applyBoost(sec)             // boost pad
 kart.applySlow(mult, sec)        // effect pops slow, never stop (speed floor = KART_MIN_SPEED)
 kart.setMood(id)                 // 'calm' | 'streamed' | 'fraught' | 'smug' | 'shock' | 'jackpot'
 kart.setFraught(v)               // 0..1, drives sweat + antenna kink
@@ -255,35 +255,11 @@ falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and 
 max of that and the run brain's. run.js only ever calls `kart.pose(...)`; the layer exists only
 while the glb is mounted (the primitive EMI has no limbs to pose).
 
-### `race/items.js` (PR 4)
-```js
-export const ITEMS;   // 10 items: { id, name, glyph, desc, durationSec }
-export function createItems({ kart, bubbles, score, fx, hud, payload }) -> { roll(position), current, use(), update(dt), onEvent(cb) }
-```
-Items: `sugar_rush` (boost), `tea_time` (slow-mo 4 s, world slows, kart does not), `magnet`
-(bubbles drift to the lane), `bubble_wand` (rain 12 treats), `lucky_star` (x2 mult 8 s),
-`parasol` (next effect pop is a treat instead), `mirror` (Hall of Mirrors flip 6 s: canvas flips,
-input does not), `spring` (instant ramp), `pocket_watch` (freeze the combo timer 10 s),
-`rabbit_foot` (jackpot chance up). `roll(position)` biases toward catch-up items when the
-multiplier is low (position-aware, Mario Kart style). `position` is a multiplier number or
-`{ mult }`; omitted, it reads `score.state.mult`. Extra options: `rng` (seeded, Law V) and
-`autoUseSec` (default 1.5, 0 = never auto-use). The cube rolls 0.9 s then arms.
-Items only touch `kart.applyBoost` and `bubbles.rain`; everything else is an event the run brain
-must handle: `{type:'itemRoll'|'itemArm'|'itemUse'|'itemEnd', id}`, `{type:'timeScale', value, sec}`
-(tea_time), `{type:'magnet', sec}`, `{type:'multBoost', mult, sec}` (lucky_star),
-`{type:'parasol', armed:true}` (run brain owns the flag: next effect pop scores as a treat, no
-payload), `{type:'flip', sec}` (mirror), `{type:'jump', vh}` (spring), `{type:'comboFreeze', sec}`
-(pocket_watch), `{type:'jackpotBias', mult, sec}` (rabbit_foot).
-
 ### `race/hud.js` + `race/race.css` (PR 4)
 ```js
 export function createRaceHud(root) -> hud
 hud.setScore(n) hud.setCombo(combo, mult) hud.setSpeed(ms) hud.setBank(n)
 hud.banner(name, tagline, colorHex)   // MARQUEE, once per gate
-hud.item(glyph | null, name)
-hud.pickupRoll()                      // THE PICKUP card: pops near the cup with the rolling '?' (on itemRoll)
-hud.pickupArm(glyph, name, onLand)    // flips to the decided item (on itemArm), holds, flies into the slot, onLand as it lands
-hud.pickupClear()                     // on itemUse or a reset: the card and the slot's highlight both go
 hud.toast(text, kind)                 // kind: 'pop' | 'almost' | 'jackpot' | 'bank' | 'item' | 'effect'
 hud.flicker()                         // Stat Flicker under glitch
 hud.setFraught(v)
@@ -315,7 +291,7 @@ goes in at `d = kart.d + kart.speed * max(dueIn + at, 0.25)`, gates and act chan
 room and name, and the run ends at `durationSec - 0.25`. Without one nothing changes.
 Composes everything: renderer, `createSpine`, `createTunnel(layout)` from `engine/tunnel.js`,
 `createFx` from `engine/fx.js`, `createRoomDresser`, `createBubbleField`, `createKart`,
-`createScore`, `createItems`, `createRaceHud`, `createPayloadFx` from `game/payloadFx.js`,
+`createScore`, `createRaceHud`, `createPayloadFx` from `game/payloadFx.js`,
 `createScreenShake` from `game/screenShake.js`. Intensity ramps 0..1 over `INTENSITY_RAMP_SEC`
 and gates which bubble kinds may appear. Treat pops go to score; effect pops call
 `payloadFx.applyPayload({ payload, strength }, { durationMult })`, `video`/`audio` go to the host
@@ -342,10 +318,9 @@ As built (PR 5 reality notes):
   width taps (under `TAP_MS` 220 and `TAP_PX` 14 of travel) for one jump press and holds for drift.
   A DOUBLE TAP is a jump on EITHER half: two taps inside `DOUBLE_TAP_MS` (320), so a thumb already
   mid-corner still has one. `TAP_ECHO_MS` (60) folds a lift reported twice into one tap. A press that
-  lands on a button is never a tap, so double tapping `use` spends the item twice and never jumps.
+  lands on a button is never a tap, so double tapping one never jumps.
   Accel is never touched: nothing pressed is cruise, and there is no brake pedal on glass. Three buttons
-  fire existing actions through `input.onAction`: pause (`'brake'`), mute (`'mute'`) and a use button
-  (`'item'`) that only appears while `.rh-item` carries `is-held`. Pointer Events drive steer and drift;
+  fire existing actions through `input.onAction`: pause (`'brake'`) and mute (`'mute'`). Pointer Events drive steer and drift;
   TouchEvent is a FLOOR under them, never a second scheme: `touchstart` preventDefault takes the gesture
   away from WebKit (without it Safari cancels our pointers to run its own and no tap ever lands), a
   `touchend` that looks like a tap raises the same tap, and the fingers still on the glass at a
@@ -357,8 +332,7 @@ As built (PR 5 reality notes):
   `touch-action: manipulation` (the layer itself `none`), so a double tap is a jump or a pick, never an
   iOS zoom. None of this is verified on a real iPhone: `race/smoke/touch-check.mjs` walks the logic only.
 - The how-to card (`race/menu.js`) leads with the THUMB rows on a touchable page and keeps the keys and
-  the pad below them, and `race/hud.js` drops the `E` badge from the item hint there: an empty slot reads
-  `no item yet`, a full one `<name> tap to use`.
+  the pad below them.
 - Space (pad B) is the jump: `read().jump` is true for exactly the frame of a fresh press, never on hold,
   and `kart.stepJump` turns it into 1.1 m of real height (`state.h`, so the pop box goes up with it).
   A press within 4 m of a ramp lip, or inside 0.12 s of one firing, boosts that launch by 1.3 and hands
@@ -373,12 +347,9 @@ As built (PR 5 reality notes):
   and the host refuses the message, so this path is dark at both ends.
 - The first Tea Garden gate sits at d = 9 (mid gate chunk), so it crosses ~0.4 s after start: that crossing
   shows the opening MARQUEE and never banks. Later Tea Garden gates bank only when the road score is > 0.
-- Magnet (the wand) is a known gap: the field's hit box is fixed at `POP_HIT_*` and exposes no widen API,
-  so `magnet` only flips a flag in the run brain. Wiring it needs a `field.setReach(mult)` in a later PR.
-- The mirror item flips the `<canvas>` only (`scaleX(-1)`); screen shake transforms the root, so the two
-  never fight over one `style.transform`.
-- `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart, score,
-  items) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
+- Nothing flips the canvas: screen shake owns the root's `style.transform` alone.
+- `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart,
+  score) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
 - The world is not built under the menu. `createRace` only resets the run state; `race.prepare()` builds it
   (raceBoot calls it once `race` is pressed, after `seedCheck`, before the intro plays) and warms the
   renderer's programs, and `start()` builds it if nothing did (`?autostart=1`). `reseed` on a world that was

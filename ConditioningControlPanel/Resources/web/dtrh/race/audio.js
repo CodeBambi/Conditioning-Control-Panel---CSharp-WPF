@@ -31,7 +31,7 @@
  * byte of that path runs and the host still plays them natively.
  *
  * Sources of truth. In-page sounds come from the world's own events (field
- * pops, score rungs, item roll/arm/use) and from per-frame edges (airborne,
+ * pops, score rungs) and from per-frame edges (airborne,
  * boost, drift, the Big Wheel span, the room). The `sfx(name)` calls in run.js
  * are the HOST legs; the router below swallows the ones an event already
  * covers so nothing sounds twice.
@@ -507,13 +507,6 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
       case 'jackpot': arpeggio(e.tier === 'major' ? LEVELS.chime : LEVELS.chime * 0.7, 0.08); if (e.tier === 'major') play('chime3', { level: LEVELS.chime * 0.8, semis: 12, at: 0.3 }); break;
     }
   }
-  function onItem(e) {
-    switch (e.type) {
-      case 'itemRoll': for (let i = 0; i < 6; i++) play('pop3', { level: LEVELS.tick, semis: 8 + i * 1.5, at: i * 0.14 }); break;
-      case 'itemArm': play('chime1', { level: LEVELS.chime * 0.8, semis: 4 }); break;
-      case 'itemUse': play('pop2', { level: LEVELS.pop, semis: -3 }); synth({ kind: 'noise', sec: 0.28, level: 0.16, filter: { f0: 600, f1: 2600 }, q: 1.2 }); break;
-    }
-  }
   function bankThud() { synth({ kind: 'sine', f0: 120, f1: 38, sec: 0.32, level: LEVELS.thud }); synth({ kind: 'noise', sec: 0.05, level: 0.14, filter: { f0: 1800, f1: 400 }, q: 0.7 }); }
   function arpeggio(level, gap) { ['chime1', 'chime2', 'chime3'].forEach((f, i) => play(f, { level, at: i * gap })); }
   function boostWhoosh() { synth({ kind: 'noise', sec: 0.7, level: 0.3, filter: { f0: 300, f1: 3200 }, q: 1.6 }); }
@@ -570,7 +563,7 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   function attach(world) {
     live.world = world;
     edge.d = null; edge.room = null; edge.airborne = false; edge.boost = 0; edge.drift = false;
-    try { world.field.onPop(onFieldPop); world.score.onEvent(onScore); world.items.onEvent(onItem); } catch (e) { log('attach: ' + e); }
+    try { world.field.onPop(onFieldPop); world.score.onEvent(onScore); } catch (e) { log('attach: ' + e); }
     music.seed = live.run ? live.run.seed : 1;
     music.order = Object.keys(ROOM_POOLS);
     try { if (world.dresser && world.dresser.spans) music.order = world.dresser.spans.map((s) => s.id); } catch (e) { /* default order */ }

@@ -37,11 +37,9 @@
  *              untouched: nothing pressed is cruise, and a phone never needs
  *              the brake pedal.
  *   BUTTONS    pause (fires 'brake', which opens the Brake screen and its own
- *              tappable buttons), mute, and an item button that only appears
- *              while the slot is `is-held`. 48 px minimum, anchored on the
+ *              tappable buttons) and mute. 48 px minimum, anchored on the
  *              existing --rh-in-* safe-area insets. A press that lands on a
- *              button is never a tap, so double tapping `use` spends the item
- *              twice and never jumps.
+ *              button is never a tap, so double tapping one never jumps.
  *
  * WHY THE TAP DIED ON AN IPHONE. A jump used to need one exact thing to happen:
  * a `pointerup`, on the right half, inside 180 ms, on a captured pointer. Every
@@ -146,18 +144,6 @@ export function createTouch({ root = null, fire = () => {}, win = null, doc = nu
   };
   button('rt-pause', 'II', 'brake', 'brake');
   button('rt-mute', 'sound', 'mute', 'mute');
-  const itemBtn = button('rt-item', 'use', 'use item', 'item');
-
-  // the item button only exists while there is something to spend: the slot already
-  // carries `is-held` (race/hud.js), so watch that rather than invent a second truth
-  const slot = root.querySelector('.rh-item');
-  const syncItem = () => itemBtn.classList.toggle('is-on', !!(slot && slot.classList.contains('is-held')));
-  let mo = null;
-  if (slot && w && typeof w.MutationObserver === 'function') {
-    mo = new w.MutationObserver(syncItem);
-    mo.observe(slot, { attributes: true, attributeFilter: ['class'] });
-  }
-  syncItem();
 
   const out = { steer: 0, drift: false, jump: false };
   let steerId = -1, steerX0 = 0, steerY0 = 0, steerT0 = 0, steerMoved = false, steer = 0;
@@ -341,7 +327,6 @@ export function createTouch({ root = null, fire = () => {}, win = null, doc = nu
       w.removeEventListener('pointerup', onUp, true);
       w.removeEventListener('pointercancel', onUp, true);
     }
-    if (mo) { try { mo.disconnect(); } catch (err) { /* observer already dead */ } mo = null; }
     if (layer.parentNode) layer.parentNode.removeChild(layer);
     flush();
   }
