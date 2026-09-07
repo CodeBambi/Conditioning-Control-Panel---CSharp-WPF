@@ -107,5 +107,33 @@ ok(found.every((m) => m.t >= 0 && m.t <= opening.durationSec), 'and every one of
 const all = TRIGGER_SETS.map((s) => detect(opening, s, [], { durationSec: opening.durationSec }).length).reduce((a, b) => a + b, 0);
 ok(all >= found.length, 'the whole catalogue over that file: ' + all + ' hits');
 
+/* ---- 5. the fingerprinted hits, in every file and through the loader ------- */
+const setIds = new Set(TRIGGER_SETS.map((s) => s.id));
+let fp = 0, kept = 0, filesWithHits = 0;
+for (const row of index.rows) {
+  const j = read('words/' + row.file);
+  if (!Array.isArray(j.hits)) continue;
+  filesWithHits++;
+  const h = j.hits;
+  const shaped = h.every((x) => typeof x.setId === 'string' && setIds.has(x.setId) && typeof x.t === 'number' && x.t >= 0 && x.t <= j.durationSec
+    && typeof x.dur === 'number' && x.dur >= 0 && typeof x.score === 'number' && x.score >= 0 && x.score <= 1 && (x.src === 'fp' || x.src === 'words')
+    && typeof x.conf === 'number' && x.conf >= 0 && x.conf <= 1 && Object.keys(x).length === 6);
+  const sorted = h.every((x, i) => i === 0 || x.t >= h[i - 1].t);
+  // the fingerprint refines the scan, it never invents: every hit sits within 0.6 s of a scan hit of its set
+  const scan = [];
+  for (const set of TRIGGER_SETS) for (const m of detect(j, set, [], { durationSec: j.durationSec })) scan.push({ setId: set.id, t: m.t });
+  const refined = h.every((x) => scan.some((s) => s.setId === x.setId && Math.abs(s.t - x.t) <= 0.6));
+  const whole = scan.every((s) => h.some((x) => x.setId === s.setId && Math.abs(s.t - x.t) <= 0.6));
+  fp += h.filter((x) => x.src === 'fp').length; kept += h.filter((x) => x.src === 'words').length;
+  ok(shaped && sorted && refined && whole, row.title + ': ' + h.length + ' hits, shaped, sorted, every one a scan hit refined and no scan hit lost');
+}
+eq(filesWithHits, index.rows.length, 'every transcript carries its fingerprinted hits');
+ok(fp > 0 && kept >= 0, 'between them: ' + fp + ' hits placed by the fingerprint, ' + kept + ' kept at the aligner\'s second');
+forgetWords();
+const withHits = await loadWords({ cloudId: first.cloudId, fetch: localFetch, indexUrl: INDEX_URL });
+ok(Array.isArray(withHits.hits) && withHits.hits.length === read('words/' + first.file).hits.length, 'the loader passes the hits through, every one');
+ok(withHits.hits.every((x) => Object.keys(x).length === 6), 'in the shape cloudChart.js reads (setId, t, dur, score, src, conf)');
+forgetWords();
+
 console.log(fails ? '\nwords-check: ' + fails + ' failed' : '\nwords-check: all good');
 process.exit(fails ? 1 : 0);
