@@ -38,6 +38,12 @@ public static class TrackChartCache
     /// <summary>
     /// Writes the chart under its source hash. Goes to a .tmp first and moves over the top, so a
     /// crash mid-write cannot leave a half chart where the next run will read one.
+    ///
+    /// Refuses, quietly, in the two cases that would put a generated chart where an authored one
+    /// belongs: the chart handed in is itself authored (nothing hand written is ever cached, it is
+    /// read from where its author put it), or a track already has an authored chart (a generated one
+    /// must not be sitting in the cache waiting for the day the authored one is moved). Refusing is
+    /// a log line, never an exception: a cache that will not take a write is not a failed analysis.
     /// </summary>
     public static void Save(TrackChart chart)
     {
@@ -45,6 +51,17 @@ public static class TrackChartCache
         string hash = chart.Source.Hash;
         if (string.IsNullOrWhiteSpace(hash))
             throw new ArgumentException("The chart has no source hash to key the cache by", nameof(chart));
+
+        if (AuthoredCharts.IsAuthored(chart))
+        {
+            App.Logger?.Information("race-chart: not caching {Hash}, it is an authored chart", hash);
+            return;
+        }
+        if (AuthoredCharts.ExistsFor(hash, chart.Source.CloudId))
+        {
+            App.Logger?.Information("race-chart: not caching {Hash}, an authored chart already answers for it", hash);
+            return;
+        }
 
         Directory.CreateDirectory(Root);
         string path = PathFor(hash);

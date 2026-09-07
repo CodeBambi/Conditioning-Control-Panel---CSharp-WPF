@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Models.Race;
 
@@ -24,6 +25,13 @@ public sealed class TrackChart
     [JsonProperty("acts")] public List<TrackAct> Acts { get; set; } = new();
     /// <summary>Sorted by <see cref="TrackEvent.T"/>; ids unique within the chart.</summary>
     [JsonProperty("events")] public List<TrackEvent> Events { get; set; } = new();
+    /// <summary>
+    /// True on a chart a person wrote. An authored chart always wins: it is used instead of anything
+    /// generated, it is never merged into, never written over and never charted again.
+    /// </summary>
+    [JsonProperty("hand", NullValueHandling = NullValueHandling.Ignore)] public bool? Hand { get; set; }
+    /// <summary>Anything the chart carries that this build has no property for. Round trips.</summary>
+    [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
 }
 
 public sealed class TrackSource
@@ -33,6 +41,11 @@ public sealed class TrackSource
     [JsonProperty("hash")] public string Hash { get; set; } = "";
     [JsonProperty("durationSec")] public double DurationSec { get; set; }
     [JsonProperty("sampleRate")] public int SampleRate { get; set; } = 16000;
+    /// <summary>Optional second key for an authored chart: the stable name of the file on the CDN,
+    /// derived from its url. Survives the file being renamed, which the hash does not.</summary>
+    [JsonProperty("cloudId", NullValueHandling = NullValueHandling.Ignore)] public string? CloudId { get; set; }
+    /// <summary>Anything the chart carries that this build has no property for. Round trips.</summary>
+    [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
 }
 
 public sealed class TrackAnalysis
@@ -45,6 +58,8 @@ public sealed class TrackAnalysis
     [JsonProperty("generatedAt")] public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
     /// <summary>True on the chart posted after the energy pass and before the word pass lands.</summary>
     [JsonProperty("partial")] public bool Partial { get; set; }
+    /// <summary>Anything the chart carries that this build has no property for. Round trips.</summary>
+    [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
 }
 
 /// <summary>kind: induction | deepening | triggers | mantra | build | silence | wake | free.</summary>
@@ -57,6 +72,8 @@ public sealed class TrackAct
     /// <summary>A room id from the page's consts.js ROOM_IDS.</summary>
     [JsonProperty("room")] public string Room { get; set; } = "";
     [JsonProperty("name")] public string Name { get; set; } = "";
+    /// <summary>Anything the chart carries that this build has no property for. Round trips.</summary>
+    [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
 }
 
 /// <summary>
@@ -84,4 +101,7 @@ public sealed class TrackEvent
     // chant
     [JsonProperty("reps", NullValueHandling = NullValueHandling.Ignore)] public int? Reps { get; set; }
     [JsonProperty("period", NullValueHandling = NullValueHandling.Ignore)] public double? Period { get; set; }
+    // The Track Maker's per-event author fields (`hand`, `cue`, `note`) ride along in Extra below.
+    /// <summary>Anything the chart carries that this build has no property for. Round trips.</summary>
+    [JsonExtensionData] public IDictionary<string, JToken> Extra { get; set; } = new Dictionary<string, JToken>();
 }

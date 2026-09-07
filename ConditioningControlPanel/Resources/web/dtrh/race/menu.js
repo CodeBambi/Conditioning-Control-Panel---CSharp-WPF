@@ -507,6 +507,8 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const trackName = el('div', 'rm-track-name', trackEl, '');
   const trackBar = el('div', 'rm-track-bar', trackEl); const trackFill = el('i', '', trackBar);
   const trackCap = el('div', 'rm-track-cap', trackEl, '');
+  // shown only for a chart a person wrote (host: track-chart authored:true)
+  const trackMark = el('div', 'rm-track-mark', trackEl, 'hand-tuned'); trackMark.hidden = true;
   el('div', 'rm-foot', col, 'arrows move · enter picks · esc back · p pixels · m mute');
   const stageEl = el('div', 'rm-stage', layer);
   const plate = el('div', 'rm-plate', stageEl);
@@ -675,8 +677,9 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   let trackState = null;
   /**
    * setTrack(state | null): the plate and the verbs follow the host. state = { stage, pct, name,
-   * durationSec, countable, partial, message }; stage 'ready' is a chart in hand (partial while the
-   * words are still landing). Null clears the plate and the verbs read as the seeded run again.
+   * durationSec, countable, partial, authored, message }; stage 'ready' is a chart in hand (partial
+   * while the words are still landing, authored when a person wrote it rather than the analysis).
+   * Null clears the plate and the verbs read as the seeded run again.
    */
   function setTrack(state) {
     trackState = state && state.stage ? state : null;
@@ -694,6 +697,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
         trackCap.textContent = st.partial ? `${mins} min · still listening for the words` : `${mins} min · ${n ? `${n} to take` : 'nothing spoken, the pulse drives'}`;
       } else trackCap.textContent = st.stage === 'error' ? (st.message || 'the track would not load') : (STAGE_CAP[st.stage] || st.stage);
     }
+    trackMark.hidden = !(ready && st && st.authored);
     verbEl('race').textContent = ready ? 'race the track' : 'race';
     verbEl('track').textContent = ready ? 'another track' : 'load a track';
     verbEl('clear').hidden = !ready;
