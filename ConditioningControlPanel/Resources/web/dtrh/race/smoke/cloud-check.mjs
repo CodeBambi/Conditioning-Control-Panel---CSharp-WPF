@@ -177,7 +177,11 @@ await sleep(3000);
   ok(st.at === 0 && st.busy === false, 'the first playable track is the one in hand');
   const words = await rowIds();
   ok(words.some((w) => w.indexOf('locked on bambicloud') >= 0), 'the locked row says why: ' + words.filter((w) => w.startsWith('trk-2'))[0]);
-  ok(hits.get('/stub/one.wav') >= 1 && !hits.has('/stub/two.wav'), 'only the track being played is fetched: the rest of the list waits');
+  ok(hits.get('/stub/one.wav') >= 1, 'the track being played is fetched');
+  // Lane W2 reads the NEXT playable track ahead while this one plays, so `two.wav` may
+  // already be on the wire here. The locked entry is the one that must never be touched,
+  // and it is checked on its own above.
+  ok(!hits.has('/playlist/aaaa'), 'and the rest of the list is walked without ever touching the locked entry');
 }
 
 /* ---- 5. the plate -------------------------------------------------------- */
@@ -222,8 +226,9 @@ for (let i = 0; i < 60; i++) {
 {
   const st = await json(`window.__race.cloud.state`);
   ok(st.at === 1, 'the end of the file rolls the player on to the next track');
-  ok(hits.get('/stub/two.wav') >= 1, 'which is fetched only now, when it is its turn');
-  ok((await ev(`window.__race.race.track.name`)) === 'two', 'and the run is holding the next track\'s chart, ready for the next lap');
+  ok(hits.get('/stub/two.wav') >= 1, 'which lane W2 had already read ahead, so the lap starts with its road in hand');
+  const held = await json(`(()=>{const t=window.__race.race.track; return { name: t ? t.name : null, dur: t ? t.durationSec : 0, ev: t ? t.chart.events.length : -1 };})()`);
+  ok(held.name === 'two', 'and the run holds the next chart, ready for the next lap ' + JSON.stringify(held));
 }
 
 /* ---- 9. nothing left this machine ---------------------------------------- */
