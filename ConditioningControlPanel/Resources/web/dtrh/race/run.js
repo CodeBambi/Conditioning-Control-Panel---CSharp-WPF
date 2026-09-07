@@ -55,6 +55,7 @@ import { cueFor, resultTag } from './cues.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
+import { createCaptions } from './captions.js';
 import { createMediaLane } from './mediaLane.js';
 import { createItems } from './items.js';
 import { createInput } from './input.js';
@@ -119,6 +120,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   // ---- the parts that outlive a run ----
   const hud = createRaceHud(hudRoot);
+  // the voice on the glass: the caption line under the chrome and the trigger plate over it.
+  // It reads the track clock and nothing else, so a pause, a resume and a seek all land for free.
+  const captions = hudRoot ? createCaptions(hudRoot) : null;
   const fxProxy = { pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
   // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
@@ -386,6 +390,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     audio.setRoute(routeOf(t));
     S.trackHold = 0; S.statsAt = 0;
     if (W) { W.field.setTracked(!!t); W.field.setSparse(TR.lyrics); W.field.setDensity(1); if (!t) applyFog(W, 0); }
+    if (captions) captions.setTrack(t ? t.chart : null);
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
     if (bridge.log) bridge.log(t ? `race track: ${t.name}, ${Math.round(t.durationSec)}s, ${TR.stats().countable} to take` : 'race track: cleared');
     return t;
@@ -428,7 +433,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (cue.mood) poke(cue.mood, Math.max(1.2, cue.holdSec));
     if (cue.pose) w.kart.pose(cue.pose);
     if (cue.toast) hud.toast(cue.toast.text, cue.toast.kind || 'effect');
-    if (cue.word) hud.toast(cue.word, 'effect');
+    // a sure trigger no longer whispers on the toast rail: it flies at the camera, themed off the
+    // preset its set carries (race/captions.js + race/triggerTheme.js). Everything else still toasts.
+    if (cue.word) { if (due.event.kind === 'trigger' && captions) captions.showPlate(due.event); else hud.toast(cue.word, 'effect'); }
     if (cue.fog != null) applyFog(w, cue.fog);
     if (cue.boost) w.kart.applyBoost(cue.boost);
     if (cue.density != null) w.field.setDensity(cue.density);
@@ -447,6 +454,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function trackFrame(w, ts) {
     const ks = w.kart.state;
     if (S.trackHold > 0) { S.trackHold -= ts.dt; if (S.trackHold <= 0) { applyFog(w, 0); w.field.setDensity(1); } }
+    if (captions) captions.update(ts.t);   // the phrase is a function of the second, never of the frame
     for (const due of TR.due(ks.d, ks.speed)) applyCue(w, due);
     if (ts.actChanged) actMoved(w, ts.act, ks);
     if (ts.dt > S.trackGap) S.trackGap = ts.dt;   // the worst frame the scheduler had to reach over
@@ -589,6 +597,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const w = W;
     S.ended = true; S.running = false; S.paused = false;
     try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
+    if (captions) captions.clear();   // nothing of the last phrase is left over the end card
     const st = w.score.state;
     const summary = { score: st.score, banked: st.banked, bestCombo: st.bestCombo, popped: st.popped, treats: st.treats, effects: st.effects,
       nearMisses: st.nearMisses, laps: w.kart.state.lap, durationSec: Math.round(S.elapsed), seed: S.seed,
@@ -664,7 +673,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (payoutResolve) payoutResolve(null);
     teardown();
     audio.dispose();
-    input.dispose(); hud.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    input.dispose(); hud.dispose(); if (captions) captions.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
     pixel.dispose();
     scene.clear(); renderer.dispose();
     setFlip(false);
@@ -719,7 +728,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
-    setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); }, trackClock: (t, playing) => TR.clock(t, playing),
+    setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); if (captions) captions.setTrack(TR.track ? TR.track.chart : null); }, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), debugItemBox,
     get track() { return TR.track; } };
 }
