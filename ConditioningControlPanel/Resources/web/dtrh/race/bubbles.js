@@ -4,7 +4,10 @@
  * BUBBLE_KINDS table, which lives in bubbleKinds.js and is re-exported here).
  *
  * Every bubble is a pooled THREE.Sprite in track space (d, x, h), placed
- * through layout.toWorld only. Four placements: lane (rests on the road and
+ * through layout.toWorld only. A bubble that carries a WORD wears it on its own face:
+ * race/wordFace.js paints the kind's sprite plus the word into one CanvasTexture and this
+ * layer hangs that on the sprite instead of the plain kind texture (the owner's call, after
+ * the plate over the bubble: "I want the word inside the bubble"). Four placements: lane (rests on the road and
  * bobs), air (threads a ramp's air line), spawn (materialises ahead and
  * wobbles), rain (falls from the ceiling, rests, fizzles). A ROW (spawnRow) is a
  * line of bubbles across the whole road at one depth: it goes down whole or not at
@@ -20,6 +23,7 @@ import * as THREE from 'three';
 import { CEILING_H, POP_HIT_D, POP_HIT_X, POP_HIT_H, LANE_H, LANE_X_MAX, TREATS_ONLY_SEC } from './consts.js';
 import { BUBBLE_KINDS, KIND_BY_ID, rollKind } from './bubbleKinds.js';
 import { CRISP_LAYER } from './pixel.js';
+import { createWordFaces } from './wordFace.js';
 import { Q } from '../shared/quality.js';
 
 export { BUBBLE_KINDS };
@@ -40,6 +44,8 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const sizeOf = (id) => (id === 'video' || id === 'gifrain') ? 1.5 : id === 'golden' ? 0.95 : id === 'lucky' ? 0.8 : 1.15;
+/** A trigger row's centre bubble, and an accent word, are drawn this much bigger than the rest. */
+const BIG_SCALE = 1.15;
 
 /** Soft radial dot: the fallback face while a sprite loads, and the shard face. */
 function makeDotTex() {
@@ -78,9 +84,14 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
       // onTexture (the pixel look's nearest-filter hook) is accepted for the contract but no longer
       // applied: the sprites draw on the crisp layer at full resolution and keep their own filters
       texOf[k.id] = tex;
-      for (const s of pool) if (s.alive && s.kindId === k.id) { s.mat.map = tex; s.mat.needsUpdate = true; }
+      // a faced bubble is repainted onto the real sprite; a plain one just swaps its map
+      for (const s of pool) if (s.alive && s.kindId === k.id) { if (s.w) wear(s, s.w, s.ink, s.big, s.rowN); else { s.mat.map = tex; s.mat.needsUpdate = true; } }
     }, undefined, () => { /* keep the dot */ });
   }
+  /** The word faces: one CanvasTexture per (kind, ink, word), held in an LRU (race/wordFace.js). */
+  const faces = createWordFaces();
+  /** Names the base a face is painted on, so the face is rebuilt once when the kind's PNG lands. */
+  const baseKey = (kindId) => kindId + (texOf[kindId] && texOf[kindId] !== dotTex ? ':png' : ':dot');
 
   // ---- pools ---------------------------------------------------------------
   const CAP = Q.bubbleCap || 160, SHARD_CAP = Q.bubbleShards || 64, VIEW_AHEAD = Q.bubbleViewAhead || 110;
@@ -97,7 +108,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     group.add(sprite);
     pool.push({ sprite, mat, slot: i, eventId: null, rowId: 0, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
       x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false,
-      w: '', ink: null, big: false, rowN: 0 });   // the word this bubble wears, for race/wordTags.js
+      w: '', ink: null, big: false, rowN: 0 });   // the word painted on this bubble's face (race/wordFace.js)
   }
   const shards = [];
   for (let i = 0; i < SHARD_CAP; i++) {
@@ -166,6 +177,21 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     layout.toWorld(s.d, s.x, s.h, s.sprite.position);
     s.sprite.visible = true;
     return s;
+  }
+
+  /** The bubble puts a word ON its face. The material goes white because the kind's tint is
+   *  already multiplied into the canvas: tinting a second time would drag the ink toward it.
+   *  `big` is the trigger row's centre bubble and the accent word, drawn BIG_SCALE larger. */
+  function wear(s, w, ink, big, rowN) {
+    const text = String(w || '');
+    if (!text) return;
+    const k = KIND_BY_ID[s.kindId] || KIND_BY_ID.treat;
+    const tex = faces.faceFor({ key: baseKey(k.id), word: text, ink: ink || undefined, image: texOf[k.id] && texOf[k.id].image, tint: k.tint });
+    s.w = text; s.ink = ink || null; s.big = !!big; s.rowN = rowN || 1;
+    s.size = sizeOf(k.id) * (s.big ? BIG_SCALE : 1);
+    if (!tex) return;
+    s.mat.map = tex; s.mat.color.set('#ffffff'); s.mat.needsUpdate = true;
+    s.sprite.scale.setScalar(s.size * s.scale);
   }
 
   // ---- placements ----------------------------------------------------------
@@ -242,7 +268,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
     const s = place(kindId, placement, d, x, top);
     s.eventId = eventId;
-    if (w) { s.w = String(w); s.ink = ink || null; s.big = !!big; }
+    if (w) wear(s, w, ink, big, 1);
     if (tracked && density > 1 && liveCount < CAP && Math.random() < density - 1) {
       place(kindId, placement, d + 2.4, x + (x > 0 ? -1.1 : 1.1), top).eventId = eventId;
     }
@@ -266,13 +292,15 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
     const id = ++rowSeq;
     // kindIds: one kind per x for a row that is not all one thing (the rabbit foot's golden centre)
-    // the word goes on the CENTRE bubble alone: five copies of it is a wall of text where a wall
-    // of bubbles was the point. A row of one (a word bubble, cues.js `case 'word'`) is its own centre.
+    // EVERY bubble of a row wears the set's word now that the word is the bubble's own face: five
+    // plates of text was a wall of text, five bubbles that each say the word is the wall the row
+    // already is. Only the centre one is drawn big. A row of one (a word bubble, cues.js
+    // `case 'word'`) is its own centre.
     const mid = list.length >> 1;
     list.forEach((x, i) => {
       const s = place((kindIds && kindIds[i]) || kindId, placement, d, Number(x), top);
       s.eventId = eventId; s.rowId = id;
-      if (w && i === mid) { s.w = String(w); s.ink = ink || null; s.big = !!big; s.rowN = list.length; }
+      if (w) wear(s, w, ink, big && i === mid, list.length);
     });
     return id;   // the row's id: run.js hands it to race/sync.js, which moveRow()s it onto its word
   }
@@ -294,13 +322,6 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
 
   // ---- pop -----------------------------------------------------------------
-  // ---- the word tags' scan (race/wordTags.js) -------------------------------
-  // A bubble wearing a word hands its world position out once a frame. The entries are reused and
-  // refilled in update(), sorted nearest-camera first: nothing here allocates or searches.
-  const TAG_SCAN = 24, TAG_AHEAD_M = 34;
-  const tagScratch = [], tagOut = [];
-  for (let i = 0; i < TAG_SCAN; i++) tagScratch.push({ key: '', w: '', ink: null, big: false, rowN: 0, pos: new THREE.Vector3(), alpha: 1, ahead: 0 });
-
   const _r = new THREE.Vector3(), _u = new THREE.Vector3();
   // burst frames come from a fixed ring (no per-pop allocation): one right/up pair per burst,
   // shared by its shards; 16 pairs outlive any shard (life <= 0.6 s, 64 shards, 7..12 per burst)
@@ -350,7 +371,6 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   // ---- per frame -----------------------------------------------------------
   function update(dt, t, kart) {
     lastKartD = kart.d;
-    tagOut.length = 0;
     for (const s of pool) {
       if (!s.alive) continue;
       s.age += dt;
@@ -392,11 +412,6 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         if (Math.abs(rel) < POP_HIT_D && (sweep || (Math.abs(s.x - kart.x) < (wide ? reachX : POP_HIT_X) && Math.abs(s.h - kart.h) < (wide ? reachH : POP_HIT_H)))) pop(s);
       }
       s.sprite.visible = rel > -DROP_BEHIND && rel < VIEW_AHEAD;
-      if (s.sprite.visible && s.w && s.popT < 0 && rel < TAG_AHEAD_M && tagOut.length < TAG_SCAN) {
-        const e = tagScratch[tagOut.length];
-        e.key = 'b' + s.slot; e.w = s.w; e.ink = s.ink; e.big = s.big; e.rowN = s.rowN; e.ahead = rel;
-        tagOut.push(e);   // pos + alpha are filled below, once this frame has moved the sprite
-      }
       if (s.sprite.visible) {
         layout.toWorld(s.d, s.x, s.h, s.sprite.position);
         // a bubble that slipped past the pop box fades and shrinks before it can balloon into the
@@ -404,8 +419,6 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         const gone = s.popT < 0 && rel < -POP_HIT_D ? clamp(1 + (rel + POP_HIT_D) / PASS_FADE_M, 0, 1) : 1;
         if (gone < 1) s.mat.opacity = Math.min(s.mat.opacity, gone);
         s.sprite.scale.setScalar(s.size * s.scale * (0.6 + 0.4 * gone));
-        const e = tagOut.length && tagOut[tagOut.length - 1];
-        if (e && e.key === 'b' + s.slot) { e.pos.copy(s.sprite.position); e.alpha = s.mat.opacity; }
       }
     }
     for (const sh of shards) {
@@ -433,6 +446,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     for (const sh of shards) sh.mat.dispose();
     for (const id of Object.keys(texOf)) if (texOf[id] && texOf[id] !== dotTex) texOf[id].dispose();
     if (dotTex) dotTex.dispose();
+    faces.dispose();
     popCbs.length = 0; missCbs.length = 0; seeded.clear(); chunkRecs.length = 0;
   }
 
@@ -452,8 +466,18 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     setSweep(on) { sweep = !!on; },
     /** riptide: while on, everything inside PULL_M ahead slides into the kart's lane. */
     setPull(on) { pull = !!on; },
-    /** The bubbles wearing a word this frame, nearest the camera first (race/wordTags.js). */
-    wordTagList() { tagOut.sort((a, b) => a.ahead - b.ahead); return tagOut; },
+    /** What race/smoke/face-check.mjs reads: the face cache, and what every live word bubble
+     *  is wearing this frame, nearest the kart first. Never read by the game itself. */
+    faceReport() {
+      const worn = [];
+      for (const s of pool) {
+        if (!s.alive || !s.w) continue;
+        worn.push({ w: s.w, ink: s.ink, big: s.big, rowN: s.rowN, rowId: s.rowId, kindId: s.kindId,
+          ahead: relD(s.d, lastKartD), size: s.size, popped: s.popT >= 0, faced: !!(s.mat.map && s.mat.map !== dotTex && s.mat.map.isCanvasTexture) });
+      }
+      worn.sort((a, b) => a.ahead - b.ahead);
+      return { ...faces.report(), pool: pool.length, live: liveCount, worn };
+    },
     get liveCount() { return liveCount; },
   };
 }

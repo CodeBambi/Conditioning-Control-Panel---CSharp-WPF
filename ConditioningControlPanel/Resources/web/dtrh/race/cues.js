@@ -35,9 +35,9 @@ import { LANE_H, CEILING_H, LANE_X_MAX, POP_HIT_X } from './consts.js';
 import { themeFor } from './triggerTheme.js';
 
 /**
- * The words a tag is drawn BIG for (race/wordTags.js): the ones the file is actually about. Every
- * other word wears the same plate at the same size, so these read as the beat of the line rather
- * than as sixteen shouts. A phrase that landed in one bubble counts if either half is on the list.
+ * The words whose bubble is drawn BIG (race/wordFace.js): the ones the file is actually about.
+ * Every other word rides an ordinary bubble, so these read as the beat of the line rather than as
+ * sixteen shouts. A phrase that landed in one bubble counts if either half is on the list.
  */
 export const ACCENT_WORDS = new Set(['drop', 'sink', 'deeper', 'down', 'relax', 'now', 'empty',
   'blank', 'bump', 'obey', 'pink', 'good', 'girl', 'bambi', 'sleep', 'bimbo']);
@@ -152,8 +152,8 @@ export function cueFor(event, ctx = {}) {
       }
       const kindId = triggerKind(label, ctx);
       const gold = typeof ctx.gold === 'function' && ctx.gold() === true;   // rabbit foot: a golden in the middle
-      // the row wears ONE tag, on its middle bubble (bubbles.js spawnRow), at 1.3x, inked in the
-      // set's own theme colour: five copies of one word is a wall of text.
+      // every bubble of the row wears the set's word on its own face (bubbles.js spawnRow), inked
+      // in the set's own theme colour, and the middle one is drawn bigger: the row IS the word.
       const ink = (themeFor(event) || {}).color || null;
       for (const x of ROW_X) cue.spawn.push({ kindId: gold && Math.abs(x) < 1e-6 ? 'golden' : kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
       cue.word = label || null;
@@ -171,11 +171,11 @@ export function cueFor(event, ctx = {}) {
       // it every frame off the speed the kart has NOW, so the kart meets the word when the voice
       // says it whatever the throttle did. A row of one is still a row of one.
       // It carries nothing on the chrome: six hundred words on the toast rail is exactly the noise
-      // the owner asked us to take off this road, and the word is read off the bubble's own tag.
+      // the owner asked us to take off this road, and the word is read off the bubble's own face.
       if (typeof event.w === 'string' && event.w) {
         const x = Number.isFinite(Number(event.x)) ? clamp(Number(event.x), -LANE_X_MAX, LANE_X_MAX) : 0;
-        // the tag: every word gets one, an accent word gets it bigger and in the colour of the set
-        // the road says this second belongs to (race/cloudChart.js stamps `cue` on it), else pink.
+        // the face: every word is painted on its bubble, an accent word on a bigger bubble and in
+        // the colour of the set this second belongs to (race/cloudChart.js stamps `cue`), else pink.
         const accent = accentOf(event.w);
         cue.spawn.push({ kindId: 'treat', placement: 'lane', x, h: LANE_H, at: 0, row: true, w: event.w,
           big: accent, ink: accent ? tagInk(event) : null });
