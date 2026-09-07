@@ -47,6 +47,7 @@ internal sealed class ScrolllerSource : IFeedSource
 
     private const string Endpoint = "https://api.scrolller.com/admin";
     private const int PageLimit = 30;
+    private const int NullStrikesBeforeDead = 3;   // a null answer is a bad minute until it repeats
     private const int MaxSourceWidth = 1920;          // don't stream 4K into a feed tile
     private const int MaxPosterWidth = 960;           // a poster is a placeholder, not the media
     private const int MaxSmallClipWidth = 640;        // Entry.SmallUrl: a card-sized clip (the web port's cap)
@@ -99,8 +100,31 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var sub = data["getSubreddit"];
         if (sub == null || sub.Type == JTokenType.Null)
         {
-            // The subreddit doesn't exist on scrolller (or was removed): not an error,
-            // a dead channel. Caller retires it for the session.
+            // A null getSubreddit is a bad minute first and a missing sub only once it keeps
+            // saying so: on 2026-09-06 the API answered null to EVERY request for over a
+            // minute, r/EroticHypnosis and r/sissyhypno included, and a feed warming up in
+            // that window used to lose every channel until restart.
+            //
+            // Mid-walk we already hold an iterator, so the sub demonstrably exists: the null is
+            // a bad minute and nothing else. Hand back the transport-failure answer without a
+            // strike (the iterator is proof enough), leaving the cursor untouched, so the
+            // channel cools on the usual ladder and resumes the same walk on the next try.
+            if (channel.Iterator != null)
+            {
+                App.Logger?.Debug("[FYP online] r/{Sub}: null answer mid-walk, retrying", channel.Name);
+                return null;
+            }
+
+            // First page: count a strike and hand back the transport-failure answer, so the
+            // caller's own backoff ladder cools the channel and brings it back by itself.
+            if (++channel.NullStrikes < NullStrikesBeforeDead)
+            {
+                App.Logger?.Debug("[FYP online] r/{Sub}: null answer, strike {N}/{Max}",
+                    channel.Name, channel.NullStrikes, NullStrikesBeforeDead);
+                return null;
+            }
+
+            // Three in a row across three cooldowns: the sub really isn't on scrolller.
             channel.Dead = true;
             App.Logger?.Information("[FYP online] r/{Sub} does not resolve on scrolller — channel retired", channel.Name);
             return new FeedPage();
@@ -134,9 +158,12 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
     /// <summary>
     /// Existence + size check for one subreddit, using the SAME query the fetch path uses so a
     /// name that probes green cannot fail to resolve a second later. <c>limit:1</c> because the
-    /// items are thrown away — only <c>videoCount</c> and "did getSubreddit come back null"
-    /// matter. A null <c>getSubreddit</c> is not an error: it is the API saying "no such sub",
-    /// and the picker must show that as a soft "not found", never as "we are offline".
+    /// items are thrown away, only <c>videoCount</c> and "did getSubreddit come back null"
+    /// matter. A null <c>getSubreddit</c> is asked again once before it is believed, because a
+    /// null is a bad minute far more often than a missing sub (2026-09-06: over a minute of
+    /// nulls for subs that exist). A second null is not an error either: it is the API saying
+    /// "no such sub", and the picker must show that as a soft "not found", never as "we are
+    /// offline".
     /// </summary>
     public async Task<SubProbe> ProbeSubAsync(string sub, CancellationToken ct)
     {
@@ -157,8 +184,16 @@ query SubredditQuery($url: String!, $iterator: String, $sortBy: GallerySortBy, $
         var node = data["getSubreddit"];
         if (node == null || node.Type == JTokenType.Null)
         {
-            App.Logger?.Debug("[FYP online] probe r/{Sub}: not on scrolller", sub);
-            return new SubProbe { Ok = false };
+            // Ask exactly once more. RequestGraphQlAsync holds the 1.1s politeness gap itself,
+            // so this second call is already paced without a delay of our own.
+            data = await RequestGraphQlAsync(SubredditQuery, variables, ct).ConfigureAwait(false);
+            if (data == null) return new SubProbe { Ok = false, Error = "offline" };
+            node = data["getSubreddit"];
+            if (node == null || node.Type == JTokenType.Null)
+            {
+                App.Logger?.Debug("[FYP online] probe r/{Sub}: not on scrolller (null twice)", sub);
+                return new SubProbe { Ok = false };
+            }
         }
 
         int? videos = (int?)node["videoCount"];
