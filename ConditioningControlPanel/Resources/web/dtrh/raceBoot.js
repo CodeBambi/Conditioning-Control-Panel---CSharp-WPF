@@ -72,6 +72,14 @@
  * `?chart=<url>` fetches one; `?audio=<url>` plays an <audio> element and its
  * currentTime is the clock, and without it the clock is wall time. Either way the
  * page ticks race.trackClock on the host's own 250 ms cadence.
+ *
+ * PLAY FROM BAMBICLOUD (web only, race/cloud.js). A host that says `cloud: true`
+ * in its init - and cannot pick a file itself, so `trackPick: false` - gets a
+ * menu verb that pastes a link and plays it through an <audio> element in this
+ * page. That element becomes the clock exactly the way `?audio=` does, and the
+ * mini-player answers the track frames run.js posts, so the Brake pauses the
+ * file and the end of the file is the end of the lap. `?cloud=1` turns it on
+ * for a page with no host at all, which is how the smoke drives it.
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
@@ -98,12 +106,30 @@ function resolveBack() {
   return null;
 }
 const standaloneExit = hosted ? null : resolveBack();
-const host = hosted ? bridge : {
+const rawHost = hosted ? bridge : {
   on: bridge.on,
   isHosted: false,
   send: (m) => { try { console.log('[race->host]', JSON.stringify(m)); } catch (e) { console.log('[race->host]', m); } },
   log: (m) => console.log('[race->host] log', String(m)),
   announceReady: () => console.log('[race->host] ready (standalone)'),
+};
+/**
+ * The one send in the page, with an OUTBOUND TAP on it. run.js posts the CHART.md track frames
+ * (track-play on a start, track-pause on the Brake, track-stop at the end) to whatever it thinks is
+ * hosting the file. On the web that is race/cloud.js, living in this page, so the frames are handed
+ * to it on their way past. Everything else is unchanged and still goes out to the real host.
+ */
+const host = {
+  on: rawHost.on,
+  isHosted: rawHost.isHosted,
+  log: (m) => rawHost.log(m),
+  announceReady: () => rawHost.announceReady(),
+  send: (m) => {
+    if (cloud && m && typeof m.type === 'string' && m.type.indexOf('track-') === 0) {
+      try { cloud.hostFrame(m); } catch (e) { rawHost.log('cloud frame: ' + e); }
+    }
+    rawHost.send(m);
+  },
 };
 
 const root = document.getElementById('race-root');
@@ -117,6 +143,7 @@ let localMedia = null;              // the last `local-media` push, replayed int
 const settingEchoes = [];           // `setting` echoes that landed before there was a menu to paint
 let settings = {}, seed = 0;
 let trackProgress = null, trackReady = null, errorTimer = 0, startTrackClock = null, trackTimer = 0, trackAudio = null;
+let cloud = null;                   // race/cloud.js, when the host says this build has it
 
 const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
 function fail(err) {
@@ -200,6 +227,7 @@ function surface() {
   exiting = true;
   stopTrackClock();
   if (errorTimer) clearTimeout(errorTimer);
+  try { if (cloud) cloud.dispose(); } catch (e) { host.log('cloud dispose: ' + e); }
   try { if (menu) menu.dispose(); } catch (e) { host.log('menu dispose: ' + e); }
   try { if (race) race.dispose(); } catch (e) { host.log('exit dispose: ' + e); }
   host.send({ type: 'exit' });
@@ -239,9 +267,17 @@ async function boot() {
     // hosted in every way the bridge can see and has no file dialog to open, and a verb that answers
     // nothing is worse than no verb at all.
     settings.trackPick = hosted && settings.trackPick !== false;
+    // `cloud` is the browser host's capability flag; `?cloud=1` is the same switch for a page with
+    // no host under it, and it can never turn on where a desktop host already owns track loading.
+    settings.cloud = settings.cloud === true || (!settings.trackPick && params.get('cloud') === '1');
+    cloud = await makeCloud();
+    // run.js posts the track frames only when it believes something is hosting the file. With the
+    // mini-player on, something is: this page. audio.js reads the same flag to decide where the
+    // eleven host cues play, so an unhosted page is told outright to keep playing them itself.
+    if (cloud && !hosted) settings.hostSfx = false;
     seed = settings.seedLock != null ? settings.seedLock : rollSeed();
     note('the road is drawing');
-    race = createRace({ root, bridge: host, media, settings, seed });
+    race = createRace({ root, bridge: cloud ? { ...host, isHosted: true } : host, media, settings, seed });
     // the persisted option sliders, before the first frame: the menu theme comes up at the right level
     try { if (race.audio && race.audio.setLevels) race.audio.setLevels({ music: opts.music, sfx: opts.sfx }); } catch (e) { host.log('levels: ' + e); }
     note('');
@@ -250,7 +286,7 @@ async function boot() {
     await standaloneTrack();
     if (params.get('autostart') === '1') { startRun(false); debugItemBox(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
-    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send });
+    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, cloud });
     if (localMedia) { try { menu.setLocalMedia(localMedia); } catch (e) { host.log('local-media: ' + e); } }
     while (settingEchoes.length) { try { menu.settingEcho(settingEchoes.shift()); } catch (e) { host.log('setting: ' + e); } }
     // Nowhere to surface to: no host and no `?back=`, or a host that says outright it cannot take
@@ -322,6 +358,56 @@ async function standaloneTrack() {
   };
   host.log(`track: ${chart.source.name}, ${Math.round(dur)}s, clock ${trackAudio ? 'audio' : 'wall'}`);
 }
+/**
+ * PLAY FROM BAMBICLOUD (race/cloud.js). Built before the race so the menu can be handed a live
+ * player, and wired to the run through hooks only: the mini-player never sees `race`, so it stays
+ * importable in node and the smoke can drive it with a stub element.
+ *
+ *   chart  the W2 SEAM. Lane W2 decodes the file and charts it for real; until then a demo chart
+ *          cut to the element's own duration keeps the road and the clock honest end to end.
+ *   track  the chart landing: the run takes it and the menu plate says which track, and where in
+ *          the list it is ("3 of 9"), with the next one named under it.
+ *   pause  the panel's own pause goes through the run, which posts track-pause straight back here,
+ *          so there is ONE pause path and the file and the road can never disagree.
+ */
+async function makeCloud() {
+  if (!settings.cloud) return null;
+  let mod = null;
+  try { mod = await import('./race/cloud.js'); } catch (err) { host.log('cloud: ' + ((err && err.message) || err)); return null; }
+  return mod.createCloud({
+    settings,
+    log: host.log,
+    ui: (n) => { try { if (race && race.audio && race.audio.ui) race.audio.ui(n); } catch (e) { /* audio gone */ } },
+    origin: (typeof location !== 'undefined' && location.origin) || null,
+    hooks: {
+      clock: (t, playing) => { if (race) race.trackClock(t, playing); },
+      ended: () => { if (race) race.trackEnded(); },
+      pause: (on) => { if (race) race.setPaused(!!on); },
+      async chart({ title, durationSec }) {
+        const mk = await import('./race/chart.js');
+        const demo = mk.demoChart({ durationSec });
+        // the shape is the demo road; the NAME is the real track, because the plate, the marquee
+        // and the results card all read source.name and none of them should say "the demo track".
+        return mk.normalizeChart({ ...demo, source: { ...demo.source, name: title || demo.source.name, hash: '' } });
+      },
+      track(chart, info) {
+        if (!race) return;
+        if (!chart) { race.setTrack(null); trackReady = null; plate(null); return; }
+        try { race.setTrack(chart); } catch (err) { trackError('chart: ' + ((err && err.message) || err)); return; }
+        const st = race.trackStats ? race.trackStats() : null;
+        const where = info && info.total > 1 ? ` · ${info.pos} of ${info.total}` : '';
+        trackReady = { stage: 'ready', name: chart.source.name + where, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false };
+        plate(trackReady);
+      },
+      toast(line) {
+        const msg = String(line || '').slice(0, 80).toLowerCase();
+        host.log('cloud toast: ' + msg);
+        try { if (race && race.hud) race.hud.toast(msg.slice(0, 60), 'effect'); } catch (e) { /* no hud yet */ }
+      },
+    },
+  });
+}
+
 function stopTrackClock() {
   if (trackTimer) { clearInterval(trackTimer); trackTimer = 0; }
   if (trackAudio) { try { trackAudio.pause(); } catch (e) { /* already gone */ } }
@@ -418,6 +504,15 @@ async function startRun(withIntro) {
     host.log('start: ' + ((err && err.stack) || err));
     try { race.setStage(null); race.start(); } catch (e) { fail(e); }
   }
+}
+
+// STANDALONE DEV HANDLE. With no host under the page there is nothing to ask the run's state of,
+// so the three live objects are hung on the window through getters (they are built inside boot()).
+// Gated on `hosted`: under a real host this is never defined and nothing can reach in.
+if (!hosted) {
+  try {
+    window.__race = { get race() { return race; }, get cloud() { return cloud; }, get menu() { return menu; }, get settings() { return settings; } };
+  } catch (e) { /* no window */ }
 }
 
 // ---- go ----
