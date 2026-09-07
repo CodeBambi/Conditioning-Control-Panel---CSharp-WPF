@@ -149,7 +149,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
   let list = [], at = -1, el = null, timer = 0, tries = 0, retry = 0, gen = 0;
   let played = false;                 // a run has actually played this element, so `pause` means something
   let rolled = false;                 // this element has already handed the lap on
-  let view = 'paste', busy = false, disposed = false;
+  let view = 'paste', busy = false, disposed = false, inner = false;
   let input = null, countEl = null, nextEl = null, rows = [], els = [], slotEl = null;
   let onPickRow = null, onClose = null, onRefresh = null;
 
@@ -221,7 +221,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     try { dur = await metadata(a); } catch (err) { return bail(i, err, mine); }
     if (disposed || mine !== gen) return false;
     let chart = null;
-    try { chart = await call('chart', { id: e.id, url: e.url, title: e.title, durationSec: dur, el: a }); }
+    try { chart = await call('chart', { id: e.id, url: e.url, title: e.title, durationSec: dur, bytes: e.bytes || 0, el: a }); }
     catch (err) { return bail(i, err, mine); }
     if (disposed || mine !== gen) return false;
     if (!chart) return bail(i, new Error('no chart'), mine);
@@ -244,7 +244,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
   function armPrefetch() {
     const nx = nextPlayable(at + 1);
     const e = nx >= 0 ? list[nx] : null;
-    call('prefetch', e ? { id: e.id, url: e.url, title: e.title } : null);
+    call('prefetch', e ? { id: e.id, url: e.url, title: e.title, bytes: e.bytes || 0 } : null);
   }
 
   /** One retry, then stop. Nothing here ever schedules a second one. */
@@ -345,13 +345,22 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     for (const e of Array.isArray(entries) ? entries : []) {
       if (!e || !e.id || have.has(e.id)) continue;
       have.add(e.id);
-      list.push({ id: String(e.id), url: e.url ? String(e.url) : null, title: String(e.title || 'track').slice(0, 60), locked: !e.url || e.locked === true, failed: false });
+      list.push({ id: String(e.id), url: e.url ? String(e.url) : null, title: String(e.title || 'track').slice(0, 60), bytes: Number(e.bytes) || 0, locked: !e.url || e.locked === true, failed: false });
     }
     if (list.some((e) => e.locked)) say(`${list.filter((e) => e.locked).length} locked, skipped`);
     view = list.length ? 'list' : 'paste';
     paint();
     if (at < 0) { const nx = nextPlayable(0); if (nx >= 0) load(nx); }
     else armPrefetch();                 // a link pasted mid run may be the next lap
+  }
+
+  /**
+   * Play exactly these and nothing else: forget whatever was in hand, take the new list
+   * and start its first playable track. This is what a level row is: one tap, one run.
+   */
+  function setTracks(entries) {
+    forget();
+    addTracks(entries);
   }
 
   function forget() {
@@ -369,7 +378,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     list.forEach((e, i) => out.push({ id: 'trk-' + i, label: e.title, press: () => { if (e.locked || e.failed) { call('toast', e.locked ? LOCKED_WORD : FAIL_LINE); return; } load(i); } }));
     if (el && played) out.push({ id: 'pause', label: paused() ? 'resume' : 'pause', press: () => call('pause', !paused()) });
     if (list.length) out.push({ id: 'forget', label: 'forget them', press: forget });
-    out.push({ id: 'back', label: 'back', press: () => { if (onClose) onClose(); } });
+    if (!inner) out.push({ id: 'back', label: 'back', press: () => { if (onClose) onClose(); } });
     return out;
   }
 
@@ -413,12 +422,13 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
    * finger, an arrow and the pad all land on the same line; `close` is the menu's way back to the
    * verbs; `refresh` repaints the menu's focus after the list has changed shape under it.
    */
-  function buildPanel({ slot, pick, close, refresh }) {
+  function buildPanel({ slot, pick, close, refresh, nested = false }) {
     slotEl = slot;
+    inner = !!nested;
     onPickRow = typeof pick === 'function' ? pick : null;
     onClose = typeof close === 'function' ? close : null;
     onRefresh = typeof refresh === 'function' ? refresh : null;
-    elm('h3', 'rm-h', slot, VERB_LABEL);
+    if (!inner) elm('h3', 'rm-h', slot, VERB_LABEL);
     elm('div', 'rm-hint rm-cloud-line', slot, CONSENT_LINE);
     input = elm('input', 'rm-seed rm-cloud-in', slot);
     input.type = 'text'; input.placeholder = PASTE_LABEL; input.setAttribute('aria-label', PASTE_LABEL);
@@ -436,6 +446,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     els: () => els,
     hostFrame,
     addTracks,
+    setTracks,
     paint,
     /** For the smoke and for anything that wants to know what is loaded. */
     get state() { return { view, at, busy, played, t: el ? Number(el.currentTime) || 0 : 0, playing: !!(el && !el.paused), list: list.map((e) => ({ ...e })) }; },

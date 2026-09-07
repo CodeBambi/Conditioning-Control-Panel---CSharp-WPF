@@ -163,6 +163,9 @@ for (let i = 0; i < 80 && !up; i++) {
 ok(up, 'the page boots to the menu with ?cloud=1');
 await click('.rm-list .rm-btn[data-id=cloud]');
 await sleep(400);
+// lane W4: the paste box lives in a drawer under the levels list
+await click('.rm-levels-btn[data-id=paste]');
+await sleep(300);
 await click('.rm-cloud .rm-cloud-btn[data-id=forget]');
 await sleep(300);
 await ev(`(()=>{const i=document.querySelector('.rm-cloud-in'); i.value=${JSON.stringify(URL_UNDER_TEST)}; return 1;})()`);
@@ -204,7 +207,7 @@ if (!REAL) {
  * ==========================================================================*/
 {
   // The chart loading is not the lap starting: leave the panel and drive.
-  await click('.rm-cloud .rm-cloud-btn[data-id=back]');
+  await click('.rm-levels-foot .rm-btn[data-id=back]');
   await click('.rm-list .rm-btn[data-id=race]');
   await sleep(2000);
   const a = await json(`({ t: window.__race.race.track.t, playing: window.__race.race.track.playing })`);

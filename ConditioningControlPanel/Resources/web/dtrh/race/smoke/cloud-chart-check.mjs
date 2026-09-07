@@ -259,7 +259,13 @@ async function play(links, wantName) {
   return false;
 }
 const site = `http://127.0.0.1:${PORT}`;
-const openPanel = async () => { await click('.rm-list .rm-btn[data-id=cloud]'); await sleep(400); };
+// Lane W4 put the levels list on top and folded lane W1's paste box into a drawer under it.
+// Everything below walks the drawer, so opening the panel means opening that too: while it is
+// collapsed its rows are not part of the panel's walk and a press cannot land on one.
+const openPanel = async () => {
+  await click('.rm-list .rm-btn[data-id=cloud]'); await sleep(400);
+  await click('.rm-levels-tail .rm-btn[data-id=paste]'); await sleep(300);
+};
 
 await cdp('Runtime.enable'); await cdp('Page.enable'); await cdp('Network.enable');
 

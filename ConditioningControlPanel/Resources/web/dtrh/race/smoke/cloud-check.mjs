@@ -141,15 +141,21 @@ await cdp('Runtime.enable'); await cdp('Page.enable'); await cdp('Network.enable
 
 /* ---- 1. the gate -------------------------------------------------------- */
 ok(await bootAt(`${site}/dtrh/race.html?cloud=1&intro=0&cards=0`), 'the page boots to the menu with ?cloud=1');
-ok((await verbs()).includes('cloud'), 'the `play from bambicloud` verb is on the list');
-ok(await ev(`document.querySelector('.rm-list .rm-btn[data-id=cloud]').textContent`) === 'play from bambicloud', 'and it is labelled in the menu\'s own lower case');
+ok((await verbs()).includes('cloud'), 'the `levels` verb is on the list');
+ok(await ev(`document.querySelector('.rm-list .rm-btn[data-id=cloud]').textContent`) === 'levels', 'and it is labelled in the menu\'s own lower case');
 
 /* ---- 2. the panel ------------------------------------------------------- */
 await click('.rm-list .rm-btn[data-id=cloud]');
 await sleep(400);
 ok(await ev(`!document.querySelector('.rm-cloud').hidden`), 'pressing the verb opens the panel');
+// Lane W4 put the levels list on top and folded this panel into a drawer under it. The drawer is
+// the whole of lane W1 and it is what the rest of this file walks, so open it first.
+ok(await ev(`document.querySelector('.rm-cloud-paste').hidden === true`), 'the paste box starts collapsed under the levels');
+await click('.rm-levels-btn[data-id=paste]');
+await sleep(300);
+ok(await ev(`!document.querySelector('.rm-cloud-paste').hidden`), '`or paste a link` opens it');
 ok(await ev(`!!document.querySelector('.rm-cloud-in')`), 'the panel carries the paste box');
-ok((await rowIds()).map((r) => r.split('=')[0]).join(',') === 'add,back', 'an empty panel is the add row and back, nothing else');
+ok((await rowIds()).map((r) => r.split('=')[0]).join(',') === 'add', 'an empty drawer is the add row and nothing else, the way back belongs to the panel around it');
 
 /* ---- 3. a link that will not load: loud, and once ------------------------ */
 await ev(`(()=>{const i=document.querySelector('.rm-cloud-in'); i.value='${site}/stub/missing.wav'; return 1;})()`);
@@ -192,7 +198,7 @@ await sleep(3000);
 }
 
 /* ---- 6. the run's clock follows the file --------------------------------- */
-await click('.rm-cloud .rm-cloud-btn[data-id=back]');
+await click('.rm-levels-foot .rm-btn[data-id=back]');
 await click('.rm-list .rm-btn[data-id=race]');
 await sleep(2000);
 {
