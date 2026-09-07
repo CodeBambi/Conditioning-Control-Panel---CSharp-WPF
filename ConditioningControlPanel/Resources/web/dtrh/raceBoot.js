@@ -29,7 +29,10 @@
  * false` takes `surface` off when there is nowhere to go, and `hostSfx: false`
  * (read by race/audio.js) plays the eleven host cues in page instead of posting
  * `sfx` frames nothing answers. `mediaControls: true` is the fourth: it turns on
- * the menu's `your media` panel.
+ * the menu's `your media` panel. `cloud: true` is the fifth: it puts the
+ * `levels` panel on the menu. On a host that can open a browser window of its
+ * own (the desktop has one: Services/Race/RaceCloudWindow.cs) tapping a level
+ * asks the host to open that track's page, and the player presses play there.
  *
  * STANDALONE DEV MODE (no WebView2): `bridge.isHosted` is false, so `init` is
  * synthesised (masterVolume 60, reducedMotion from matchMedia, empty manifest)
@@ -209,6 +212,10 @@ bridge.on('track-chart', (m) => {
 bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });
 bridge.on('track-ended', () => { if (race) race.trackEnded(); });
 bridge.on('track-error', (m) => trackError((m && m.message) || 'the track would not load'));
+// bambicloud: the host saw their player start, so the run starts too - the audio over there is the
+// clock, and a run that waited for a menu press would already be behind it. The chart lands after,
+// through track-chart, the same swap-in a picked file's partial chart makes.
+bridge.on('cloud-run', () => { if (!started && !exiting && race) startRun(false); });
 bridge.on('track-progress', (m) => {
   trackProgress = m || null;
   host.log(`track-progress: ${(m && m.stage) || '?'} ${Math.round(((m && m.pct) || 0) * 100)}% ${(m && m.name) || ''}`);
@@ -491,9 +498,11 @@ async function makeLevels() {
     settings, sets, index, cloud, log: host.log,
     hooks: {
       play: (entries) => { if (cloud) cloud.setTracks(entries); },
-      // D1's cloud-open, with the track's own page on it. A host that only knows the bare
-      // message opens its window and ignores the url until it learns to read one.
-      open: (url) => host.send({ type: 'cloud-open', url }),
+      // cloud-open, with the track's own page on it: the desktop host lands its browser
+      // window there (Services/Race/RaceCloudWindow.cs) and the player presses play over
+      // there. A host that only knows the bare message ignores the url and opens the front
+      // door, which is still a working answer.
+      open: (url) => { host.send({ type: 'cloud-open', url }); if (settings.trackPick) plate({ stage: 'opening' }); },
       toast,
     },
   });

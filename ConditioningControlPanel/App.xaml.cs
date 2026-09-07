@@ -2802,6 +2802,17 @@ namespace ConditioningControlPanel
                     Logger?.Information("--race-track ignored: no file path after the arg");
             }
 
+            // `--race-cloud`: open the race and then the BambiCloud window straight away. The
+            // cloud path starts from a menu verb, and a browser frame cannot be driven by synthetic
+            // clicks, so this is the only way to exercise it end to end. A dev rig like
+            // `--race-track`: it opens the same page `--race` opens and gates nothing.
+            if (e.Args.Contains("--race-cloud"))
+            {
+                var cloudGate = Services.TierGate.RequiresLab("Down the Rabbit Hole", "dtrh");
+                if (cloudGate.Allowed) Services.Chaos.CaucusHostService.Launch(null, openCloud: true);
+                else Logger?.Information("--race-cloud ignored: {Reason}", cloudGate.Reason);
+            }
+
             // Goon Game browser client, dev shortcut: `--goon` opens the web duel window straight
             // away (same shape as `--dtrh`). Needs MainWindow to exist first — the host owns its
             // window natively above main and ducks main out of the way at launch.

@@ -671,7 +671,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     for (let k = 0; k < VERBS.length; k++) { i = (i + dir + VERBS.length) % VERBS.length; if (!verbEls[i].hidden) return i; }
     return from;
   };
-  const STAGE_CAP = { picking: 'pick a file', decode: 'reading the file', energy: 'feeling the pulse', words: 'listening for the words', cancelled: '', error: '' };
+  const STAGE_CAP = { picking: 'pick a file', opening: 'over to bambicloud', fetching: 'pulling the audio down', decode: 'reading the file', energy: 'feeling the pulse', words: 'listening for the words', cancelled: '', error: '' };
   let trackState = null;
   /**
    * setTrack(state | null): the plate and the verbs follow the host. state = { stage, pct, name,
