@@ -84,6 +84,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
 
   // ---- pools ---------------------------------------------------------------
   const CAP = Q.bubbleCap || 160, SHARD_CAP = Q.bubbleShards || 64, VIEW_AHEAD = Q.bubbleViewAhead || 110;
+  /** riptide (race/pickups.js): bubbles this far ahead slide into the kart's lane over this long. */
+  const PULL_M = 40, PULL_SEC = 0.5;
   const group = new THREE.Group();
   group.name = 'race-bubbles';
   scene.add(group);
@@ -117,6 +119,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   let rowSeq = 0;
   let reachX = POP_HIT_X, reachH = POP_HIT_H;   // the pop box (setReach: poppers, the wand)
   let sweep = false;                            // the pump: the whole road pops (setSweep)
+  let reachAll = true;                          // false: the wider box is for treats alone (the wand)
+  let pull = false;                             // riptide: the road ahead slides into the lane (setPull)
   const popCbs = [], missCbs = [];
   const emit = (cbs, ev) => { for (const cb of cbs) { try { cb(ev); } catch (e) { /* listener bug, not ours */ } } };
 
@@ -247,7 +251,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
    *  rolled ONCE for the whole line rather than per bubble, and density over 1 never doubles it,
    *  because a doubled row is just a thicker wall and the wall was already unavoidable.
    *  Returns how many went down, 0 for a row that was gated out. */
-  function spawnRow({ kindId, placement = 'lane', d, h, xs, eventId = null } = {}) {
+  function spawnRow({ kindId, kindIds = null, placement = 'lane', d, h, xs, eventId = null } = {}) {
     const list = Array.isArray(xs) ? xs.filter((x) => Number.isFinite(Number(x))) : [];
     if (!list.length) return 0;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return 0;   // a dark kind: no chart may place one
@@ -258,7 +262,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     }
     const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
     const id = ++rowSeq;
-    for (const x of list) { const s = place(kindId, placement, d, Number(x), top); s.eventId = eventId; s.rowId = id; }
+    // kindIds: one kind per x for a row that is not all one thing (the rabbit foot's golden centre)
+    list.forEach((x, i) => { const s = place((kindIds && kindIds[i]) || kindId, placement, d, Number(x), top); s.eventId = eventId; s.rowId = id; });
     return id;   // the row's id: run.js hands it to race/sync.js, which moveRow()s it onto its word
   }
   /** A row goes to depth `d`: the kart's speed changed inside the lookahead, so the word will be said
@@ -339,6 +344,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         if (f >= 1) { freeSlot(s); continue; }
       } else {
         const bob = 0.12 * Math.sin(t * 2.2 + s.phase);
+        // riptide: x slides to the kart (x0 too, so a spawn's wobble rides along with it)
+        if (pull && rel > 0 && rel <= PULL_M) { const k = Math.min(1, dt / PULL_SEC); s.x += (kart.x - s.x) * k; s.x0 += (kart.x - s.x0) * k; }
         if (s.placement === 'lane') { s.h = s.baseH + bob; }
         else if (s.placement === 'air') { s.h = s.baseH + 0.08 * Math.sin(t * 2.6 + s.phase); }
         else if (s.placement === 'spawn') {
@@ -363,7 +370,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
           if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d, x: s.x, h: s.h, eventId: s.eventId });
         }
         if (rel < -DROP_BEHIND && rel > -DROP_BEHIND - 40) { freeSlot(s); continue; }
-        if (Math.abs(rel) < POP_HIT_D && (sweep || (Math.abs(s.x - kart.x) < reachX && Math.abs(s.h - kart.h) < reachH))) pop(s);
+        const wide = reachAll || KIND_BY_ID[s.kindId].kind === 'treat';   // the wand reaches for treats alone
+        if (Math.abs(rel) < POP_HIT_D && (sweep || (Math.abs(s.x - kart.x) < (wide ? reachX : POP_HIT_X) && Math.abs(s.h - kart.h) < (wide ? reachH : POP_HIT_H)))) pop(s);
       }
       s.sprite.visible = rel > -DROP_BEHIND && rel < VIEW_AHEAD;
       if (s.sprite.visible) {
@@ -412,10 +420,13 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     setTracked(on) { tracked = !!on; },
     /** The loaded track has a transcript under it: seedChunk stands down to the chunk's golden. */
     setSparse(on) { sparse = !!on; },
-    /** Poppers / the wand: widen the pop box (X and H) by mult; 1 restores it. */
-    setReach(mult) { const m = clamp(Number(mult) || 1, 0.5, 3); reachX = POP_HIT_X * m; reachH = POP_HIT_H * m; },
+    /** Poppers / the wand: widen the pop box (X and H) by mult; 1 restores it. treatsOnly keeps an
+     *  effect bubble at the plain box, so the wand is a magnet for treats and never a shortcut into a payload. */
+    setReach(mult, treatsOnly = false) { const m = clamp(Number(mult) || 1, 0.5, 3); reachX = POP_HIT_X * m; reachH = POP_HIT_H * m; reachAll = !treatsOnly; },
     /** The pump: while on, every bubble the kart's depth crosses pops, the whole road wide and high. */
     setSweep(on) { sweep = !!on; },
+    /** riptide: while on, everything inside PULL_M ahead slides into the kart's lane. */
+    setPull(on) { pull = !!on; },
     get liveCount() { return liveCount; },
   };
 }

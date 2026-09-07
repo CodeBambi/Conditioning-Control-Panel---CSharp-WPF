@@ -87,9 +87,11 @@ export function createTrackState(opts = {}) {
     : (typeof performance === 'object' && performance && performance.now) ? () => performance.now() : () => Date.now();
   let track = null, sched = null, triggerKinds = new Map();
   let intensity = FLOOR, act = null, ended = false, mark = 0, lyrics = false;
+  let gold = 0;   // rabbit foot (race/pickups.js): trigger rows still owed a golden centre (gild / takeGold)
 
   /** Load a chart (or null to go back to the seeded run). Returns the new `track`. */
   function setTrack(chart) {
+    gold = 0;
     if (!chart) { track = null; sched = null; triggerKinds = new Map(); intensity = FLOOR; act = null; ended = false; lyrics = false; return null; }
     sched = createScheduler(chart, leadSec != null ? { leadSec } : {});
     const ch = sched.chart;
@@ -161,6 +163,17 @@ export function createTrackState(opts = {}) {
     },
     /** The host said the file is over, wherever our clock had got to. */
     end() { ended = true; },
+    /** The first chart event at or after track second `t` (of one `kind` when given), or null. The
+     *  one door race/pickups.js has into the file: the scheduler is never read past this. */
+    nextEvent(t, kind) {
+      if (!track) return null;
+      const at = Number(t) || 0;
+      for (const e of track.chart.events) if (e.t >= at && (!kind || e.kind === kind)) return e;
+      return null;
+    },
+    /** rabbit foot on a worded road: the next `n` trigger rows carry a golden at their centre (cues.js takes one per row). */
+    gild(n) { gold = Math.max(0, Math.floor(Number(n) || 0)); },
+    takeGold() { if (gold <= 0) return false; gold--; return true; },
     get track() { return track; },
     get act() { return act; },
     get intensity() { return Math.max(FLOOR, clamp01(intensity)); },
