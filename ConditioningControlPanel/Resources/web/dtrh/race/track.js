@@ -41,6 +41,19 @@ const TRIGGER_KINDS = ['flash', 'subliminal', 'pink', 'spiral', 'glitch', 'freez
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /**
+ * Was this road built off a transcript? The run asks so the seeded dressing can stand down and the
+ * peak rains can halve: on a worded track the bubbles ARE the lyric, and anything else on the road
+ * is noise over it. Either half is enough on its own, because a partial chart can carry the
+ * analysis stamp a beat before the caption track lands on it.
+ */
+function hasWords(ch) {
+  if (!ch) return false;
+  if (Array.isArray(ch.words) && ch.words.length > 0) return true;
+  const w = ch.analysis && ch.analysis.words;
+  return typeof w === 'string' && w !== '' && w !== 'none';
+}
+
+/**
  * Every distinct trigger phrase in the chart gets its own bubble, the same one every time the file
  * is loaded: the lexicon and the spoken labels sorted, then dealt round robin. The player learns
  * "good girl is the pink one" over a track and that reading holds for the whole file.
@@ -73,14 +86,15 @@ export function createTrackState(opts = {}) {
   const now = typeof opts.now === 'function' ? opts.now
     : (typeof performance === 'object' && performance && performance.now) ? () => performance.now() : () => Date.now();
   let track = null, sched = null, triggerKinds = new Map();
-  let intensity = FLOOR, act = null, ended = false, mark = 0;
+  let intensity = FLOOR, act = null, ended = false, mark = 0, lyrics = false;
 
   /** Load a chart (or null to go back to the seeded run). Returns the new `track`. */
   function setTrack(chart) {
-    if (!chart) { track = null; sched = null; triggerKinds = new Map(); intensity = FLOOR; act = null; ended = false; return null; }
+    if (!chart) { track = null; sched = null; triggerKinds = new Map(); intensity = FLOOR; act = null; ended = false; lyrics = false; return null; }
     sched = createScheduler(chart, leadSec != null ? { leadSec } : {});
     const ch = sched.chart;
     triggerKinds = mapTriggers(ch);
+    lyrics = hasWords(ch);
     intensity = Math.max(FLOOR, sched.energyAt(0));
     act = sched.actAt(0);            // the opening act is where we already are, never a change
     ended = false; mark = 0;
@@ -96,6 +110,7 @@ export function createTrackState(opts = {}) {
     track.name = ch.source.name;
     track.durationSec = ch.source.durationSec;
     triggerKinds = mapTriggers(ch);
+    lyrics = hasWords(ch);
     return track;
   }
 
@@ -150,6 +165,8 @@ export function createTrackState(opts = {}) {
     get act() { return act; },
     get intensity() { return Math.max(FLOOR, clamp01(intensity)); },
     get triggerKinds() { return triggerKinds; },
+    /** True while the loaded road came out of a transcript (run.js thins the road for it). */
+    get lyrics() { return lyrics; },
     get ended() { return ended; },
   };
 }

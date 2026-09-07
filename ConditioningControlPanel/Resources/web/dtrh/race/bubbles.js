@@ -6,7 +6,10 @@
  * Every bubble is a pooled THREE.Sprite in track space (d, x, h), placed
  * through layout.toWorld only. Four placements: lane (rests on the road and
  * bobs), air (threads a ramp's air line), spawn (materialises ahead and
- * wobbles), rain (falls from the ceiling, rests, fizzles). Pops are pass-
+ * wobbles), rain (falls from the ceiling, rests, fizzles). A ROW (spawnRow) is a
+ * line of bubbles across the whole road at one depth: it goes down whole or not at
+ * all, and it spends as ONE thing (the first of them to pop or to slip past settles
+ * the row, so a row is one pop credit and at worst one broken combo, never five). Pops are pass-
  * through against the kart box; a pop is SILENT here (race/audio.js sounds it)
  * (engine/audioBus) and throws a few sparkle shards, the WPF BubbleService way.
  * Sprite textures come from the two locally mapped hosts (never remote media). Every sprite
@@ -90,7 +93,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const sprite = new THREE.Sprite(mat);
     sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
-    pool.push({ sprite, mat, slot: i, eventId: null, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
+    pool.push({ sprite, mat, slot: i, eventId: null, rowId: 0, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
       x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false });
   }
   const shards = [];
@@ -107,6 +110,11 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   // With a track loaded the density knob changes what it means: the seeded lanes must keep dressing
   // the road exactly as they do without one, so density gates the CUE spawns instead (CHART.md).
   let tracked = false;
+  // A track whose road came out of a transcript: seedChunk stops dressing the road at all, because
+  // the words are what the player is meant to read on it. The owner's law: too many bubbles is no
+  // bubbles, the fun is realising the bubbles are the lyric.
+  let sparse = false;
+  let rowSeq = 0;
   let reachX = POP_HIT_X, reachH = POP_HIT_H;   // the pop box, widened by the magnet item (setReach)
   const popCbs = [], missCbs = [];
   const emit = (cbs, ev) => { for (const cb of cbs) { try { cb(ev); } catch (e) { /* listener bug, not ours */ } } };
@@ -145,7 +153,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     s.kindId = k.id; s.placement = placement;
     s.d = layout.wrap(d); s.x = clamp(x, -LANE_X_MAX, LANE_X_MAX); s.x0 = s.x;
     s.h = h; s.baseH = h; s.phase = Math.random() * Math.PI * 2; s.age = 0;
-    s.size = sizeOf(k.id); s.scale = placement === 'spawn' ? 0 : 1; s.popT = -1; s.missed = false; s.eventId = null;
+    s.size = sizeOf(k.id); s.scale = placement === 'spawn' ? 0 : 1; s.popT = -1; s.missed = false; s.eventId = null; s.rowId = 0;
     s.mat.map = texOf[k.id]; s.mat.color.set(k.tint); s.mat.opacity = 1; s.mat.needsUpdate = true;
     s.sprite.scale.setScalar(s.size * s.scale);
     layout.toWorld(s.d, s.x, s.h, s.sprite.position);
@@ -177,6 +185,10 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     seeded.add(chunk.id);
     chunkRecs.push({ id: chunk.id, d0: chunk.d0, d1: chunk.d1 });
     const len = Math.max(0, chunk.d1 - chunk.d0);
+    if (sparse) {   // the file dresses this road, not us: one golden to say where the chunk ended, nothing else
+      if (chunk.kind !== 'gate' && len > 8) place('golden', 'lane', chunk.d1 - 2.5, 0, LANE_H);
+      return;
+    }
     if (chunk.id === 1 && chunk.room === 'teagarden' && chunk.kind === 'straight') seedStartStraight(chunk);
     else if (chunk.kind !== 'gate' && len > 8) {
       const lines = Math.max(1, Math.round((len / 26) * (tracked ? 1 : density)));
@@ -231,6 +243,32 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     }
     return s.slot;
   }
+  /** A ROW from a track cue: one bubble at every x the cue named, all at one depth, all carrying the
+   *  same eventId and one row id. All or nothing, three ways: a row that would not fit the pool is
+   *  not laid at all (a row with a hole in it is a row the kart drives through), the density gate is
+   *  rolled ONCE for the whole line rather than per bubble, and density over 1 never doubles it,
+   *  because a doubled row is just a thicker wall and the wall was already unavoidable.
+   *  Returns how many went down, 0 for a row that was gated out. */
+  function spawnRow({ kindId, placement = 'lane', d, h, xs, eventId = null } = {}) {
+    const list = Array.isArray(xs) ? xs.filter((x) => Number.isFinite(Number(x))) : [];
+    if (!list.length) return 0;
+    if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return 0;   // a dark kind: no chart may place one
+    if (liveCount + list.length > CAP) return 0;
+    if (tracked) {
+      if (density <= 0) return 0;
+      if (density < 1 && Math.random() >= density) return 0;
+    }
+    const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
+    const id = ++rowSeq;
+    for (const x of list) { const s = place(kindId, placement, d, Number(x), top); s.eventId = eventId; s.rowId = id; }
+    return list.length;
+  }
+  /** The row has been settled by one of its own: nobody else in it may report a miss. `missed` is
+   *  only ever read by the miss gate, so marking the siblings is all it takes. */
+  function spendRow(id) {
+    if (!id) return;
+    for (const o of pool) if (o.alive && o.rowId === id) o.missed = true;
+  }
 
   // ---- pop -----------------------------------------------------------------
   const _r = new THREE.Vector3(), _u = new THREE.Vector3();
@@ -264,6 +302,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     if (s.popT >= 0) return;
     const k = KIND_BY_ID[s.kindId];
     s.popT = 0;
+    spendRow(s.rowId);              // one of the row is the row: the rest may not be missed behind it
     const golden = k.id === 'golden';
     burst(s, golden);
     const strength = k.strength > 0 ? clamp(k.strength + 0.35 * intensity() + Math.random() * 0.1, 0, 1) : 0;
@@ -311,6 +350,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         // behind the kart: a treat that slipped by is a miss, further back it is gone
         if (rel < -MISS_BEHIND && rel > -DROP_BEHIND - 40 && !s.missed) {
           s.missed = true;
+          spendRow(s.rowId);        // a whole row that slipped by is one miss, not one per bubble
           const k = KIND_BY_ID[s.kindId];
           if (k.kind === 'treat') emit(missCbs, { id: k.id, points: k.points, d: s.d, x: s.x, h: s.h, eventId: s.eventId });
         }
@@ -356,12 +396,14 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
 
   return {
-    seedChunk, spawnAhead, rain, spawnAt, update, dispose,
+    seedChunk, spawnAhead, rain, spawnAt, spawnRow, update, dispose,
     onPop(cb) { if (typeof cb === 'function') popCbs.push(cb); },
     onMiss(cb) { if (typeof cb === 'function') missCbs.push(cb); },
     setDensity(mult) { const v = Number(mult); density = clamp(isFinite(v) ? v : 1, tracked ? 0 : 0.25, 3); },
     /** A track is loaded: setDensity now gates the cue spawns, not the seeded lanes. */
     setTracked(on) { tracked = !!on; },
+    /** The loaded track has a transcript under it: seedChunk stands down to the chunk's golden. */
+    setSparse(on) { sparse = !!on; },
     /** Magnet: widen the pop box (X and H) by mult; 1 restores it. */
     setReach(mult) { const m = clamp(Number(mult) || 1, 0.5, 3); reachX = POP_HIT_X * m; reachH = POP_HIT_H * m; },
     get liveCount() { return liveCount; },

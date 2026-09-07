@@ -7,6 +7,10 @@
  * knows how to spend an event is worth (a bubble, a jump, a mood, a pose, a boost)
  * and never HOW: run.js owns every verb, this file only names them.
  *
+ * A spawn marked `row: true` is one bubble of a ROW: the whole set is placed together
+ * or not at all (bubbles.js spawnRow), because half a row is a row the kart can drive
+ * around, and the point of a row is that it cannot be driven around.
+ *
  * `at` on a spawn is seconds relative to the event's own second: 0 puts the bubble
  * on the spoken word, 0.5 half a second behind it. run.js turns that into a depth
  * at the kart's current speed, which is why the pop lands on the word whatever the
@@ -27,7 +31,7 @@
  *              peak; the count and the drop word go on the chrome.
  * ==========================================================================*/
 
-import { LANE_H, CEILING_H, LANE_X_MAX } from './consts.js';
+import { LANE_H, CEILING_H, LANE_X_MAX, POP_HIT_X } from './consts.js';
 
 /** A trigger phrase nobody has assigned a bubble to wears the room's own effect, else this. */
 const FALLBACK_TRIGGER = 'flash';
@@ -52,6 +56,16 @@ const WAKE_ACTS = new Set(['wake', 'free']);
 const FLOAT_WORDS = new Set(['float', 'floating', 'up', 'open', 'light', 'rise', 'lift']);
 /** The lanes a spoken word may land in. Narrower than the road: the kart has to steer, not lunge. */
 const LANE_X = [-1.6, -0.8, 0, 0.8, 1.6];
+/** THE ROW. A trigger the spotter is sure of is not a bubble in a lane, it is a line of them
+ *  across the whole road, because the owner's read of the game is that a trigger word is a thing
+ *  that HAPPENS to you: you do not get to steer around the word she just said.
+ *  The widest gap the line may leave is ten percent inside the pop box's own width, so the box
+ *  cannot be threaded between two of them wherever the kart sits. */
+export const ROW_MAX_GAP = 2 * POP_HIT_X * 0.9;
+/** How many that takes edge to edge, always odd so one bubble sits dead centre. */
+const ROW_N = (() => { const n = Math.ceil((LANE_X_MAX * 2) / ROW_MAX_GAP) + 1; return n % 2 ? n : n + 1; })();
+/** The row's own x's: -LANE_X_MAX to +LANE_X_MAX, evenly spaced. */
+export const ROW_X = Array.from({ length: ROW_N }, (_, i) => -LANE_X_MAX + (i * LANE_X_MAX * 2) / (ROW_N - 1));
 /** Height of an air bubble over the road, how much each of a drop's rings climbs, a floating word's hang. */
 const AIR_H = 2.6, AIR_RISE = 0.6, FLOAT_H = 1.9;
 /** A drop is golden rings through the air, one on the word and the rest behind it. */
@@ -60,6 +74,9 @@ const DROP_AT = [0.2, 0.5, 0.8], DROP_X = [-1.1, 0, 1.1];
 const DROP_SOFT = 0.6;
 /** A peak rains between these many, by intensity, this far apart. */
 const PEAK_MIN = 4, PEAK_MAX = 8, PEAK_GAP = 0.25;
+/** On a track whose road came out of a transcript the rain is halved: the rows are the loud thing
+ *  now, and a peak that buries them takes the reading away. Too many bubbles is no bubbles. */
+const PEAK_LYRIC_MULT = 0.5;
 /** The chant's two lanes, and the fallback beat when the analyzer sent no period. */
 const CHANT_X = 1.2, CHANT_PERIOD = 1.2, CHANT_MAX = 16;
 /** Every this-many chant treats, one is gold. */
@@ -89,7 +106,7 @@ function triggerKind(label, ctx) {
 
 /**
  * @param event a chart event (race/chart.js normalizeChart shape)
- * @param ctx { energy, act, room, intensity, rng, triggerKinds }
+ * @param ctx { energy, act, room, intensity, rng, triggerKinds, lyrics }
  * @returns the cue, or null for an event this build has nothing to say about (an unknown
  *          kind, or a word the feel pass decided the spotter only guessed at).
  */
@@ -104,9 +121,14 @@ export function cueFor(event, ctx = {}) {
     // the voice said a trigger phrase: its own effect bubble in a lane, the word on the chrome, and
     // she reaches for it. A phrase the spotter only half heard is a plain treat and stays off the chrome.
     case 'trigger': {
-      const sure = conf01(event) >= TRIGGER_SURE;
-      cue.spawn.push({ kindId: sure ? triggerKind(label, ctx) : 'treat', placement: 'lane', x: laneX(rng), h: LANE_H, at: 0 });
-      if (sure) { cue.word = label || null; cue.pose = 'grab'; }
+      if (conf01(event) < TRIGGER_SURE) {   // a phrase half heard: one plain treat, off the chrome, easy to miss
+        cue.spawn.push({ kindId: 'treat', placement: 'lane', x: laneX(rng), h: LANE_H, at: 0 });
+        break;
+      }
+      const kindId = triggerKind(label, ctx);
+      for (const x of ROW_X) cue.spawn.push({ kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true });
+      cue.word = label || null;
+      cue.pose = 'grab';
       break;
     }
 
@@ -174,7 +196,8 @@ export function cueFor(event, ctx = {}) {
 
     // the top of the climb: the room's own bubbles out of the ceiling, more the louder the file is, and a cheer
     case 'peak': {
-      const n = Math.round(PEAK_MIN + (PEAK_MAX - PEAK_MIN) * intensity);
+      const lyric = ctx.lyrics ? PEAK_LYRIC_MULT : 1;
+      const n = Math.max(1, Math.round((PEAK_MIN + (PEAK_MAX - PEAK_MIN) * intensity) * lyric));
       const kindId = ROOM_RAIN[roomId(ctx)] || 'treat';
       for (let i = 0; i < n; i++) {
         cue.spawn.push({ kindId, placement: 'rain', x: spread(rng), h: CEILING_H, at: i * PEAK_GAP });
@@ -221,4 +244,5 @@ export function resultTag(taken, countable) {
   return 'you were not listening';
 }
 
-// self-check: node race/smoke/track-run-check.mjs walks every kind through this table.
+// self-check: node race/smoke/track-run-check.mjs walks every kind through this table, and
+// node race/smoke/rows-check.mjs holds the row's geometry against the pop box.

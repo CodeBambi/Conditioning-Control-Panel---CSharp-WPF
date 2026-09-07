@@ -132,16 +132,24 @@ with a negative `dueIn` and the run may drop them.
 ### `race/cues.js` (PR c2 builds the plain mapping, PR c3 makes it sing)
 ```js
 export function cueFor(event, ctx) -> cue | null
-// ctx = { energy: 0..1, act, room, intensity, rng, triggerKinds: Map(label -> bubbleKindId) }
+// ctx = { energy: 0..1, act, room, intensity, rng, triggerKinds: Map(label -> bubbleKindId), lyrics: bool }
 // cue = {
-//   spawn: [ { kindId, placement: 'spawn' | 'air' | 'rain', x, h, at } ],   // at = seconds relative to event.t (0 = on the word)
+//   spawn: [ { kindId, placement: 'spawn' | 'air' | 'rain', x, h, at, row? } ],  // at = seconds relative to event.t (0 = on the word)
 //   jump: vh | 0, mix: bubbleKindId | null, mood: 'calm'|'streamed'|'fraught'|'smug'|'shock'|'jackpot' | null,
 //   pose: name | null, toast: { text, kind } | null, word: label | null, fog: 0..1 | null, boost: sec | 0, density: mult | null,
 //   holdSec: 0
 // }
 ```
-The plain mapping (c2): `trigger` -> one effect bubble of `triggerKinds.get(label)` or `flash`, lane
-placement, `word: label`; `word` -> a treat bubble; `count` -> a golden air bubble, `last` adds
+THE ROW (PR L4). A `trigger` the spotter is sure of is not one bubble, it is a LINE of them across
+the whole road: every spawn carries `row: true`, they share one kind, one depth and `at: 0`, and
+their x's run `-LANE_X_MAX` to `+LANE_X_MAX` with no gap wider than `2 * POP_HIT_X * 0.9`, so the
+pop box cannot be threaded between two of them wherever the kart sits. A trigger word is a thing
+that happens to you, not a thing you steer around. `ROW_X` and `ROW_MAX_GAP` are exported for the
+smoke; `race/smoke/rows-check.mjs` holds the geometry against `consts.js`. `ctx.lyrics` says the
+road came out of a transcript: it halves the `peak` rain and nothing else, because on a worded
+track the rows are the loud thing and a rain over them takes the reading away.
+
+The plain mapping (c2): `trigger` -> the row above, lane placement, `word: label`; `word` -> a treat bubble; `count` -> a golden air bubble, `last` adds
 `jump: 6`; `drop` -> `jump: 7`, `mix: 'spiral'`, `mood: 'streamed'`, three golden air bubbles at
 `at = 0.2, 0.5, 0.8`; `chant` -> `reps` treats in lane placement alternating `x = +-1.2` at
 `at = k * period`; `build` -> `boost: min(dur, 4)`, `density: 1.6`; `peak` -> 6 rain treats; `release`
@@ -168,9 +176,18 @@ A loaded track ducks the room OST to `TRACK_DUCK` (0.12) and the bed to silence 
 ### `race/bubbles.js` additions (PR c2)
 ```js
 field.spawnAt({ kindId, placement, d, x, h, eventId })   // an explicit placement; returns the slot id or -1 when the pool is full
+field.spawnRow({ kindId, placement, d, h, xs, eventId }) // a whole row at one depth (PR L4); returns how many went down, 0 for none
 field.setDensity(mult)                                  // already in CONTRACT.md; with a track this scales only the cue spawns
+field.setSparse(on)                                     // the loaded road came out of a transcript (PR L4): seedChunk stands down
 ```
 Pop events carry `eventId` when the bubble came from a cue; `onMiss` events do too.
+
+A row goes down whole or not at all: a row that would not fit the pool is not laid, the density
+gate is rolled ONCE for the line rather than per bubble, and `density > 1` never doubles it. It
+also SPENDS as one thing: the first of its bubbles to pop or to slip past settles the row, so five
+bubbles are one `taken` on the scheduler (`takenIds` is a set) and at worst one broken combo. With
+`setSparse(true)` `seedChunk` lays only the chunk's own golden and no lanes, ramp lines or item
+box pairs, so what the player drives through is the lyric. Too many bubbles is no bubbles.
 
 ### `race/run.js` + `raceBoot.js` (PR c2)
 ```js
@@ -180,8 +197,12 @@ race.track                          // { chart, sched, t, playing, name, duratio
 ```
 - With a track: `S.intensity` follows `sched.energyAt(t)` smoothed over 2 s (floor 0.05); the random
   `spawnAhead` / `rain` timers are off; `seedChunk` still dresses chunks with plain treats at
-  `density` so the road never looks empty; every cue spawn goes through `field.spawnAt` at
+  `density` so the road never looks empty (unless the road has words on it: see `setSparse`); every
+  cue spawn goes through `field.spawnAt`, or `field.spawnRow` for the row, at
   `d = kart.d + kart.speed * max(dueIn + at, 0.25)`.
+- `TR.lyrics` is true while the loaded chart has a caption track or an `analysis.words` other than
+  `none`. It drives `field.setSparse` and `ctx.lyrics`, and is re-read on `replaceTrack` so a words
+  pass landing on a partial chart thins the road the moment it arrives.
 - Acts: at a gate crossing use the current act's room instead of the feature's room; if the act
   changed and no gate is within 6 s of road, call `dresser.applyRoom` with a 2.5 s fade right away
   and show the MARQUEE with the act's `name`.
