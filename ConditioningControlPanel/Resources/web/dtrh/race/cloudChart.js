@@ -43,13 +43,19 @@ import { demoChart, normalizeChart } from './chart.js';
 import { generate } from '../chart/maker/generate.js';
 import { peaksInto, binsPer, binCount } from '../chart/editor/audio.js';
 import { cloudIdFrom, hashUrl, hashBytes, loadIndex, findAuthored, isAuthored } from './chartSource.js';
+import { loadWords } from './words.js';
+import { TRIGGER_SETS } from '../chart/editor/triggerSets.js';
+import { detect } from '../chart/maker/triggers.js';
 
 /**
  * THE GENERATOR ID. It is the cache key's second half: change any knob below and
  * change this, and every chart the old road wrote is dropped on sight instead of
  * being played back at a player who is owed the new one.
+ *
+ * v2 (the lyrics wave): a road built on a transcript has words on it and a v1 road
+ * has none, so every v1 entry in the cache must regenerate rather than be served.
  */
-export const GENERATOR_ID = 'web-road-v1';
+export const GENERATOR_ID = 'web-road-v2';
 
 /* ---- the knobs, and why each one is what it is --------------------------- */
 /**
@@ -62,6 +68,22 @@ export const GENERATOR_ID = 'web-road-v1';
  * whichever of six rises happened to be loudest.
  */
 export const BIN_SEC = 0.25;
+/**
+ * And the bin the WORDED road uses, which is generate.js's own default. With a
+ * transcript the road is mostly words and the curve only has to carry the mood, so
+ * the reason BIN_SEC was halved does not apply: at 0.5 the build lands on the swell
+ * the way the maker's own roads have it, and the events the player meets are the
+ * ones the voice said.
+ */
+export const WORD_BIN_SEC = 0.5;
+/** A word this unsure is not a caption: the transcript guessed and the plate would lie. */
+export const CAPTION_CONF = 0.35;
+/**
+ * No two triggers land closer together than this: generate.js's own WORD_GAP, so a
+ * phrase said six times in ten seconds is a moment on the road and not a wall of them.
+ * The owner's law for this whole lane: too many bubbles is no bubbles.
+ */
+export const TRIGGER_GAP = 2.2;
 /** Peaks per second off the waveform. `energyFromPeaks` bins these down; this is the walk's own rate. */
 export const PEAKS_PER_SEC = 50;
 /** The rate everything is decoded at. Charts are timestamps: nothing here needs music bandwidth. */
@@ -190,6 +212,112 @@ export function roadFromPeaks({ peaks, perSec = PEAKS_PER_SEC, durationSec, name
   };
 }
 
+/* ---- the worded road ----------------------------------------------------- */
+
+/** The catalogue, by id, the way generate.js wants it for the labels on its events. */
+export const SET_BY_ID = new Map(TRIGGER_SETS.map((s) => [s.id, s]));
+
+/**
+ * Every trigger the transcript says, over the whole catalogue: the maker's own
+ * scan (chart/maker/words.js `scan`), in the shape generate.js reads, so a hit here
+ * means what a hit means on the Track Maker page.
+ *
+ * @returns [{ id, t, dur, setId, n }] sorted by t
+ */
+export function scanTriggers(words, durationSec) {
+  const list = (words && Array.isArray(words.words)) ? words.words : [];
+  // The phrase is only as sure as the least sure word in it: cues.js reads `conf` and
+  // spends anything under TRIGGER_SURE as a plain treat with no word on the chrome,
+  // which is the right answer for a phrase the transcript was guessing at.
+  const conf = (i0, i1) => {
+    let low = 1;
+    for (let i = i0; i <= i1 && i < list.length; i++) {
+      const c = list[i] && typeof list[i].conf === 'number' ? list[i].conf : 1;
+      if (c < low) low = c;
+    }
+    return Math.round(clamp01(low) * 100) / 100;
+  };
+  const out = [];
+  for (const set of TRIGGER_SETS) {
+    const ms = detect(words, set, [], { durationSec });
+    ms.forEach((m, n) => out.push({ id: 'h:' + set.id + ':' + n, t: m.t, dur: r3(Number(m.dur) || 0),
+      setId: set.id, n, conf: conf(m.i0, m.i1) }));
+  }
+  return out.sort((a, b) => a.t - b.t || a.setId.localeCompare(b.setId));
+}
+
+/**
+ * THE TRIGGERS OWN THEIR SECOND.
+ *
+ * generate.js spends a hit as a `word` event, because on the maker page the trigger
+ * itself is a hand-placed recipe sitting on top and the road underneath is only the
+ * road. Here there is no recipe: the trigger IS the road, and it is the whole point of
+ * this lane, so it is placed first and everything else gives way to it.
+ *
+ * That matters more than it sounds. `wordEvents` will not put a word inside 1.2 s of a
+ * count, a drop or a chant, and a trigger phrase is very often exactly where a drop is
+ * (the phrase contains a drop word, which is why it is a trigger at all), so the road
+ * generated straight out of generate.js loses most of them. Measured on the opening
+ * track: nineteen hits, four of them the phrase this whole road is built on, and not
+ * one of the four survived to be a trigger event.
+ *
+ * So: the hits are thinned against each other by TRIGGER_GAP, first one wins, and then
+ * every `word` event generate laid inside TRIGGER_GAP of one is dropped, because it was
+ * only ever filler standing where a trigger could not. Counts, drops and chants stay:
+ * a jump and a trigger on the same second is the file doing both, and cues.js spends
+ * them differently.
+ */
+export function triggersFromHits(events, hits, setById) {
+  const kept = [];
+  for (const h of hits) {
+    const set = setById.get(h.setId);
+    if (!set) continue;
+    const prev = kept[kept.length - 1];
+    if (prev && h.t - prev.t < TRIGGER_GAP) continue;
+    kept.push({ h, set });
+  }
+  const triggers = kept.map(({ h, set }) => ({
+    kind: 'trigger', t: r3(h.t), dur: r3(h.dur || 0), label: String(set.name).toLowerCase(),
+    conf: typeof h.conf === 'number' ? h.conf : 1, weight: 1, setId: set.id, cue: set.preset,
+  }));
+  const near = (t) => triggers.some((x) => Math.abs(x.t - t) < TRIGGER_GAP);
+  return events.filter((e) => !(e.kind === 'word' && near(e.t))).concat(triggers);
+}
+
+/** The caption track: what the voice says and when, and nothing the plate cannot show. */
+export function captionWords(words) {
+  const raw = (words && Array.isArray(words.words)) ? words.words : [];
+  return raw
+    .filter((w) => w && typeof w.w === 'string' && w.w && typeof w.t === 'number' && (typeof w.conf !== 'number' || w.conf >= CAPTION_CONF))
+    .map((w) => ({ t: r3(w.t), d: r3(Number(w.d) || 0), w: w.w }));
+}
+
+/**
+ * The road for a file we have the transcript of. generate.js does the whole of it -
+ * counts, drops, chants, the words themselves, the build/peak/release off the curve,
+ * the silences in the gaps between words and the acts off what is being said - because
+ * every one of those passes has the words it was written for. The two replacements the
+ * WORDLESS road needs are exactly the two that only exist because it has none.
+ *
+ * Then the trigger events, the caption track, and the lexicon the plate and the bubble
+ * mapping both read. Pure, so the smoke runs it in node.
+ */
+export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 'track', hash = '', words, now = new Date() }) {
+  const hits = scanTriggers(words, durationSec);
+  const g = generate({ peaks, perSec, durationSec, words, hits, setById: SET_BY_ID, binSec: WORD_BIN_SEC, now });
+  const energy = g.energy.map(clamp01);
+  const events = triggersFromHits(g.events, hits, SET_BY_ID)
+    .sort((a, b) => a.t - b.t)
+    .map((e, i) => ({ ...e, id: 'g' + i }));
+  const lexicon = [...new Set(events.filter((e) => e.kind === 'trigger').map((e) => e.label))].sort();
+  return {
+    version: 1, binSec: WORD_BIN_SEC, energy, events, acts: g.acts,
+    words: captionWords(words),
+    source: { name, hash, durationSec, sampleRate: DECODE_RATE },
+    analysis: { energy: 'web-rms-v1', words: 'script-align-v1', lexicon, generatedAt: g.generatedAt, partial: false },
+  };
+}
+
 /* ---- the decode ---------------------------------------------------------- */
 
 /**
@@ -270,7 +398,7 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
   const named = (chart, title) => normalizeChart({ ...chart, source: { ...chart.source, name: title || (chart.source && chart.source.name) || 'track' } });
 
   /** Fetch, decode, walk, lay a road. The only path that downloads the whole file. */
-  async function generated({ id, url, title, durationSec, head }) {
+  async function generated({ id, url, title, durationSec, head, cloudId }) {
     stage(id, 'reading');
     const res = await get(url, { mode: 'cors', credentials: 'omit' });
     if (!res || !res.ok) throw new Error('the file answered ' + (res ? res.status : 'nothing'));
@@ -289,7 +417,13 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
     stage(id, 'charting');
     const dur = durationSec > 0 ? durationSec : walked.durationSec;
     if (Math.abs(walked.durationSec - dur) > 1) say(`the element says ${Math.round(dur)}s and the file decodes to ${Math.round(walked.durationSec)}s; the element is the clock`);
-    const road = roadFromPeaks({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash });
+    // The transcript, if this track has one. Same origin, small, and never fatal: a track
+    // with no words gets exactly the road it got before this lane landed.
+    const words = await loadWords({ cloudId, hash, fetch: get, log });
+    const road = (words && words.words.length)
+      ? wordedRoad({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash, words })
+      : roadFromPeaks({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash });
+    if (words && words.words.length) say(`${title}: ${road.words.length} words and ${road.analysis.lexicon.length} triggers on the road`);
     if (hash && cache) await cache.put(hash, road, GENERATOR_ID);
     return { chart: normalizeChart(road), door: 'generated' };
   }
@@ -320,7 +454,7 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
       }
     }
     if (durationSec > MAX_DECODE_SEC) { shout(TOO_LONG_LINE); throw new Error(`${Math.round(durationSec / 60)} minutes is past the ${Math.round(MAX_DECODE_SEC / 60)} minute decode limit`); }
-    return generated({ id: info.id, url, title, durationSec, head });
+    return generated({ id: info.id, url, title, durationSec, head, cloudId });
   }
 
   /** Resolve, log the door, and fall back to the demo road rather than to a dead run. */

@@ -24,6 +24,7 @@
 
 import { createScheduler } from './chart.js';
 import { BUBBLE_KINDS } from './bubbleKinds.js';
+import { kindForPreset } from './triggerTheme.js';
 
 /** Intensity never quite reaches zero: even a silent stretch keeps the tube alive. */
 const FLOOR = 0.05;
@@ -43,6 +44,11 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
  * Every distinct trigger phrase in the chart gets its own bubble, the same one every time the file
  * is loaded: the lexicon and the spoken labels sorted, then dealt round robin. The player learns
  * "good girl is the pink one" over a track and that reading holds for the whole file.
+ *
+ * A trigger that names its own `cue` is not dealt at all: the trigger catalogue already said what
+ * that phrase looks like, and race/triggerTheme.js is the one table that reads it. So the freeze
+ * trigger is the freeze bubble on every track that says it, rather than whichever kind the round
+ * robin happened to land on in this file. The round robin still dresses everything else.
  */
 function mapTriggers(chart) {
   const m = new Map();
@@ -50,6 +56,11 @@ function mapTriggers(chart) {
   for (const w of chart.analysis.lexicon || []) if (w) words.add(String(w).toLowerCase());
   for (const e of chart.events) if (e.kind === 'trigger' && e.label) words.add(e.label);
   [...words].sort().forEach((w, i) => m.set(w, TRIGGER_KINDS[i % TRIGGER_KINDS.length]));
+  for (const e of chart.events) {
+    if (e.kind !== 'trigger' || !e.label || !e.cue) continue;
+    const kind = kindForPreset(e.cue);
+    if (kind) m.set(e.label, kind);
+  }
   return m;
 }
 

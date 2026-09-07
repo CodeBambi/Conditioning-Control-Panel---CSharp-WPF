@@ -80,6 +80,10 @@ export function normalizeChart(json) {
       energy: str(an.energy, ''), words: str(an.words, 'none'), generatedAt: str(an.generatedAt, ''), partial: an.partial === true,
       lexicon: Object.freeze((Array.isArray(an.lexicon) ? an.lexicon : []).filter((w) => typeof w === 'string')),
     }),
+    // THE TRANSCRIPT (race/words.js, CHART.md `chart.words`). The lines the voice says, with
+    // the second each word lands on: it is what the captions layer reads and what tells the
+    // player the bubbles are the lyrics. Optional, and a road built without one carries [].
+    words: normalizeWords(json.words, durationSec),
     // AUTHORED CHARTS (race/charts/README.md). A chart a person wrote carries `hand: true`
     // and may carry a `rules` object. Normalizing is a validation pass, not an edit, so both
     // come back untouched: strip them and an authored chart stops being one the moment it
@@ -87,6 +91,22 @@ export function normalizeChart(json) {
     hand: json.hand === true,
     rules: Object.freeze((json.rules && typeof json.rules === 'object') ? { ...json.rules } : null),
   });
+}
+
+/**
+ * `chart.words`: `[{ t, d, w }]`, sorted, and nothing else. `w` is kept exactly as the
+ * transcript spelt it, case and punctuation and all, because a caption is read and not
+ * matched: the matching was done before this, against the normalised form. Anything that
+ * is not a word with a time is dropped, so a malformed field is an empty caption track
+ * rather than a broken chart.
+ */
+function normalizeWords(raw, durationSec) {
+  const out = (Array.isArray(raw) ? raw : [])
+    .filter((w) => w && typeof w === 'object' && typeof w.w === 'string' && w.w && isFinite(num(w.t, NaN)))
+    .map((w) => ({ t: clamp(num(w.t, 0), 0, durationSec), d: Math.max(0, num(w.d, 0)), w: w.w }))
+    .sort((a, b) => a.t - b.t)
+    .map((w) => Object.freeze(w));
+  return Object.freeze(out);
 }
 
 function normalizeActs(raw, durationSec) {
@@ -127,6 +147,10 @@ function normalizeEvents(raw, durationSec) {
       // is kept above: this pass validates a chart, it does not rewrite one.
       if (e.hand === true) ev.hand = true;
       if (typeof e.cue === 'string' && e.cue) ev.cue = e.cue;
+      // The trigger catalogue set this event came out of (chart/editor/triggerSets.js). It is
+      // what race/triggerTheme.js looks the plate and the bubble up by, so a trigger that lost
+      // it falls back to matching on its label, which two sets may share.
+      if (typeof e.setId === 'string' && e.setId) ev.setId = e.setId.slice(0, 40);
       if (typeof e.note === 'string' && e.note) ev.note = e.note.slice(0, 200);
       return Object.freeze(ev);
     });
