@@ -34,10 +34,21 @@
  * Every three.js consumer in this game is on one of those roads. So remote
  * entries live in a SECOND pool that draw()/drawKind()/favorite()/urlByName()
  * cannot see - those four feed the WebGL layer and stay local-only forever - and
- * are handed out only through drawDom(), whose one consumer is game/payloadFx.js
- * (plain <img>/<video>/CSS background-image, no canvas, no texture). The DTRH
- * tube therefore stays local-media-only by design; the payload FX are where a
- * user with no library of their own actually sees something.
+ * are handed out only through the two DOM-only draws below, whose consumers use
+ * plain <img>/<video>/CSS background-image and nothing else (no canvas, no
+ * createImageBitmap, no fetch, no THREE texture):
+ *
+ *   drawDom(kind)        - game/payloadFx.js, the flash / cascade / subliminal cards.
+ *                          Mixes the two pools by `remoteShare`.
+ *   drawRemoteDom(kind)  - race/wallDom.js, the online feed hung on the race's tube
+ *                          wall as CSS-transformed elements. REMOTE ONLY: local media
+ *                          already has a texture road of its own in
+ *                          engine/wallPosters.js, and this one exists precisely
+ *                          because a remote image can never take that road.
+ *
+ * The DTRH tube therefore stays local-media-only by design; the payload FX and the
+ * race's DOM wall are where a user with no library of their own actually sees
+ * something. If you add a THIRD consumer, read this header first.
  *
  * Remote-ness is decided by the URL's ORIGIN, never by the host's name marker: a
  * marker is a hint, an origin is a fact, and only a fact belongs on the road that
@@ -106,6 +117,20 @@ export function createHostMediaSource() {
     // Nothing to read or revoke - the URL streams straight off the virtual host.
     return { url: entry.url, release() {} };
   };
+
+  /** The REMOTE draw, hoisted for the same reason as drawLocal: it is both the tail of
+   *  drawDom() and, exposed as drawRemoteDom(), the whole of race/wallDom.js's supply.
+   *  Small pool, no deck: pick at random and refuse the last few urls outright, so the
+   *  two callers cannot hand out the same picture back to back. */
+  function drawRemote(kind) {
+    const pool = remote.filter((e) => (!kind || e.kind === kind) && !remoteRecent.includes(e.url));
+    const from = pool.length ? pool : remote.filter((e) => !kind || e.kind === kind);
+    const e = from[(Math.random() * from.length) | 0];
+    if (!e) return null;
+    remoteRecent.push(e.url);
+    if (remoteRecent.length > 4) remoteRecent.shift();
+    return { kind: e.kind, name: e.name, remote: true, acquire: makeAcquire(e) };
+  }
 
   /** The LOCAL deck draw, hoisted so drawDom() can reach it without a `this` binding
    *  (callers routinely hold `media.drawDom` on its own). */
@@ -217,15 +242,20 @@ export function createHostMediaSource() {
       const wantLocal = entries.some((e) => !kind || e.kind === kind);
       if (!wantRemote && !wantLocal) return null;
       const useRemote = wantRemote && (!wantLocal || Math.random() < remoteShare);
-      if (!useRemote) return drawLocal(kind);
-      // Small pool, no deck: pick at random and refuse the last few urls outright.
-      const pool = remote.filter((e) => (!kind || e.kind === kind) && !remoteRecent.includes(e.url));
-      const from = pool.length ? pool : remote.filter((e) => !kind || e.kind === kind);
-      const e = from[(Math.random() * from.length) | 0];
-      if (!e) return null;
-      remoteRecent.push(e.url);
-      if (remoteRecent.length > 4) remoteRecent.shift();
-      return { kind: e.kind, name: e.name, remote: true, acquire: makeAcquire(e) };
+      return useRemote ? drawRemote(kind) : drawLocal(kind);
     },
+
+    /**
+     * THE SECOND DOM-ONLY DRAW, and the only REMOTE-ONLY one. Same {kind,name,remote,acquire}
+     * shape as drawDom(), with the same hard rule about how the caller may render it, but it
+     * never falls back to the local pool. Its one consumer, race/wallDom.js, hangs the feed on
+     * the race's tube wall as elements because a remote image cannot become a texture (this
+     * file's header has the reason); the player's own media does not need it, since
+     * engine/wallPosters.js already puts local pictures on that wall as real geometry.
+     *
+     * Null when the remote pool holds nothing of this kind, and a null there means the caller
+     * builds no layer at all. Shares drawDom()'s remoteRecent echo guard.
+     */
+    drawRemoteDom(kind) { return drawRemote(kind); },
   };
 }

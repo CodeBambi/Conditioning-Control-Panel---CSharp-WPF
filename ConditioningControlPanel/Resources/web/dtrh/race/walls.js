@@ -18,12 +18,13 @@
  *
  * Signage: one merged quad mesh per room, textured from a single pixel canvas atlas
  * of room words in the room's colours. A sparse "base" set is always up (diegetic
- * placards); the "fill" set only draws while media.hasUserMedia() is false, via
+ * placards); the "fill" set only draws while media.hasUserMedia() is false AND the
+ * feed's DOM posters are not up (hasDomPosters, race/wallDom.js), via
  * geometry drawRange, so an empty library still gets a dressed wall. 8 meshes, only
  * the rooms in view visible (2..3 draw calls at a time). The media posters live on
  * pixel.js's CRISP_LAYER (full resolution); the painted signs stay in the pixel world.
  *
- * createWalls({ scene, layout, media, renderer, camera, rng }) -> { update(d, dt), setRoom(id), dispose }
+ * createWalls({ scene, layout, media, renderer, camera, rng, hasDomPosters }) -> { update(d, dt), setRoom(id), dispose }
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -33,8 +34,11 @@ import { ROOMS, roomById } from './rooms.js';
 import { pixelTex } from './roomProps.js';
 import { CRISP_LAYER } from './pixel.js';
 
-const BAND_LO = 0.32, BAND_HI = 1.27;   // radians from the ceiling: the upper-wall poster band
-const SIGN_INSET = 0.16;                // signs sit just inside the wall, like the posters
+// radians from the ceiling: the upper-wall poster band. Exported with makeWallFrame below
+// because race/wallDom.js hangs the online feed's DOM posters in the very same band, with
+// the very same basis: one copy of the maths, two consumers.
+export const BAND_LO = 0.32, BAND_HI = 1.27;
+export const WALL_INSET = 0.16;         // signs and posters sit just inside the wall
 const SIGN_W = 3.2, SIGN_H = 2.4;
 const VIEW = 170;                       // metres: rooms farther than this hide their signs
 const CELL_W = 64, CELL_H = 48, ATLAS_COLS = 4;
@@ -49,6 +53,28 @@ const WORDS = {
 const SIGN_GAP = { loud: [40, 9], soft: [60, 15], teagarden: [70, 36] };
 
 function hex(c) { return '#' + c.toString(16).padStart(6, '0'); }
+
+/** Wall point + axes at (depth, angle from ceiling): the poster's own placement maths.
+ *  Hoisted out of createWalls so race/wallDom.js can put a DOM poster exactly where a
+ *  mesh would go. The returned function writes into its own four vectors and hands them
+ *  back on itself (`f.c` / `f.in` / `f.rt` / `f.up`), so a per-frame call allocates nothing. */
+export function makeWallFrame(layout) {
+  const c = new THREE.Vector3(), inward = new THREE.Vector3(), rt = new THREE.Vector3(), up = new THREE.Vector3();
+  function wallFrame(depth, angle, roll) {
+    const fr = layout.frameAtDepth(depth);
+    const ca = Math.cos(angle), sa = Math.sin(angle), R = RADIUS - WALL_INSET;
+    c.copy(fr.pos).addScaledVector(fr.normal, ca * R).addScaledVector(fr.binormal, sa * R);
+    inward.copy(fr.normal).multiplyScalar(-ca).addScaledVector(fr.binormal, -sa).normalize();
+    rt.copy(fr.tangent).normalize();
+    up.crossVectors(inward, rt).normalize();
+    rt.crossVectors(up, inward).normalize();
+    if (up.dot(fr.normal) < 0) { up.negate(); rt.negate(); }   // upright: words and faces read from the road
+    if (roll) { rt.applyAxisAngle(inward, roll); up.applyAxisAngle(inward, roll); }
+    return wallFrame;
+  }
+  wallFrame.c = c; wallFrame.in = inward; wallFrame.rt = rt; wallFrame.up = up;
+  return wallFrame;
+}
 
 /** The placard atlas: a 4x4 grid of 64x48 cells, two per room, drawn once. */
 function signAtlas() {
@@ -68,24 +94,12 @@ function signAtlas() {
   }, { clamp: true });
 }
 
-export function createWalls({ scene, layout, media, renderer, camera, rng }) {
+export function createWalls({ scene, layout, media, renderer, camera, rng, hasDomPosters }) {
   const total = layout.totalDepth;
   const wrapDist = (a, b) => { const w = layout.wrap(a - b); return Math.min(w, total - w); };
-  const _c = new THREE.Vector3(), _in = new THREE.Vector3(), _rt = new THREE.Vector3(), _up = new THREE.Vector3();
   const _m = new THREE.Matrix4();
-
-  /** Wall point + axes at (depth, angle from ceiling): the poster's own placement maths. */
-  function wallFrame(depth, angle, roll) {
-    const fr = layout.frameAtDepth(depth);
-    const ca = Math.cos(angle), sa = Math.sin(angle), R = RADIUS - SIGN_INSET;
-    _c.copy(fr.pos).addScaledVector(fr.normal, ca * R).addScaledVector(fr.binormal, sa * R);
-    _in.copy(fr.normal).multiplyScalar(-ca).addScaledVector(fr.binormal, -sa).normalize();
-    _rt.copy(fr.tangent).normalize();
-    _up.crossVectors(_in, _rt).normalize();
-    _rt.crossVectors(_up, _in).normalize();
-    if (_up.dot(fr.normal) < 0) { _up.negate(); _rt.negate(); }   // upright: words and faces read from the road
-    if (roll) { _rt.applyAxisAngle(_in, roll); _up.applyAxisAngle(_in, roll); }
-  }
+  const wallFrame = makeWallFrame(layout);
+  const _c = wallFrame.c, _in = wallFrame.in, _rt = wallFrame.rt, _up = wallFrame.up;
 
   // ---- the posters (engine/wallPosters.js, adapted) --------------------------------------
   const posters = createWallPosters({ scene, layout, media, renderer, camera });
@@ -108,7 +122,7 @@ export function createWalls({ scene, layout, media, renderer, camera, rng }) {
       slot.angle = side * (BAND_LO + rng() * (BAND_HI - BAND_LO));
       slot.roll = (rng() - 0.5) * 0.3;
       wallFrame(slot.depth, slot.angle, 0);
-      mesh.position.copy(_c).addScaledVector(_in, RADIUS - SIGN_INSET - slot.wallR); // keep the slot's own wall radius
+      mesh.position.copy(_c).addScaledVector(_in, RADIUS - WALL_INSET - slot.wallR); // keep the slot's own wall radius
       mesh.quaternion.setFromRotationMatrix(_m.makeBasis(_rt, _up, _in));
       mesh.rotateZ(slot.roll);
     }
@@ -179,7 +193,10 @@ export function createWalls({ scene, layout, media, renderer, camera, rng }) {
     setRoom(layout.roomAtDepth(w));
     posters.update(camera, odometer, dt);
     aimNewSlots();
-    const fill = !(media && typeof media.hasUserMedia === 'function' && media.hasUserMedia());
+    // the fill set is the EMPTY-WALL dressing: it stands down for the player's own media and
+    // equally for the feed's DOM posters (race/wallDom.js), so words never compete with images
+    const fill = !(media && typeof media.hasUserMedia === 'function' && media.hasUserMedia())
+      && !(typeof hasDomPosters === 'function' && hasDomPosters());
     for (const s of signs) {
       s.mesh.visible = wrapDist(w, s.d0) < VIEW || wrapDist(w, s.d1) < VIEW || (w >= s.d0 && w <= s.d1);
       s.mesh.geometry.setDrawRange(0, fill ? s.all : s.baseCount);

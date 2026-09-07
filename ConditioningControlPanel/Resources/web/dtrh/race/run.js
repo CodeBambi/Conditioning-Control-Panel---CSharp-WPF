@@ -6,7 +6,8 @@
  *
  * Composes renderer + spine + tunnel + fx + rooms + bubbles + kart + score + hud
  * + items + payloadFx + screen shake and runs the frame loop. `root` holds the
- * <canvas>, the `.race-hud` div and the `.sf-hud` layer payloadFx draws into.
+ * <canvas>, the `.race-hud` div, the `.sf-hud` layer payloadFx draws into and, when
+ * the online feed is on, race/wallDom.js's `.rh-wall3d` layer over the canvas.
  * Nothing here subtracts: the run ends only from the Brake (Esc) or the host.
  *
  * Host traffic owned here: sends heartbeat, run-started, sfx, fire-payload
@@ -47,6 +48,7 @@ import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, make
 import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
 import { createWalls } from './walls.js';
+import { createWallDomPosters } from './wallDom.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
@@ -175,7 +177,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     scene.add(tunnel.mesh);
     const fx = createFx({ scene, layout, tunnelMat: tunnel.material, particleFog: false });
     const dresser = createRoomDresser({ scene, layout });
-    const walls = createWalls({ scene, layout, media, renderer, camera, rng });
+    // the online feed cannot be a texture, so it rides a DOM layer over the canvas instead
+    // (race/wallDom.js); the painted fill placards stand down as soon as its pictures are in
+    let wallDom = null;
+    const walls = createWalls({ scene, layout, media, renderer, camera, rng, hasDomPosters: () => !!wallDom && wallDom.ready() });
+    wallDom = createWallDomPosters({ root, layout, camera, media, rng });
     const kart = createKart({ scene, layout, reducedMotion, pixel });
     const score = createScore();
     const getRoom = () => {
@@ -185,7 +191,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     };
     const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
     const items = createItems({ kart, bubbles: field, score, fx, hud, payload: payloadFx, rng });
-    const w = { layout, tunnel, fx, dresser, walls, kart, score, field, items, rng };
+    const w = { layout, tunnel, fx, dresser, walls, wallDom, kart, score, field, items, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     kart.onEvent((e) => onKart(w, e));
@@ -197,7 +203,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function teardown() {
     if (!W) return;
-    try { W.field.dispose(); W.kart.dispose(); W.walls.dispose(); W.dresser.dispose(); W.fx.dispose(); } catch (e) { /* half-built world */ }
+    try { W.field.dispose(); W.kart.dispose(); W.wallDom.dispose(); W.walls.dispose(); W.dresser.dispose(); W.fx.dispose(); } catch (e) { /* half-built world */ }
     scene.remove(W.tunnel.mesh); W.tunnel.dispose();
     W = null;
   }
@@ -535,6 +541,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (Math.abs(fovT - S.fov) > 0.05) { S.fov += (fovT - S.fov) * Math.min(1, dt * 6); camera.fov = S.fov; camera.updateProjectionMatrix(); }
     cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.6);
     speedFx.update(dt, ks, lay);
+    w.wallDom.update(ks.d);   // AFTER the camera: a DOM poster is transformed by THIS frame's lens
 
     // EMI: calm cruise, streamed on boost, fraught under a stack, pokes on top
     if (S.moodHold > 0) { S.moodHold -= dt; if (S.moodHold <= 0) S.moodHeld = null; }
@@ -553,6 +560,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (now - lastBeat > HEARTBEAT_MS) { lastBeat = now; send({ type: 'heartbeat', t: now }); }
     const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 0;
     last = now;
+    // the DOM wall is over the canvas and nothing in the scene can hide it, so it goes away
+    // whenever the world is not the thing on screen: the menu, the intro, the Brake, the host's pause
+    if (W) W.wallDom.setHidden(!!stage || S.paused || S.hostPaused || S.ended || !S.running);
     if (stage) { try { stage.update(dt); stage.render(); } catch (e) { bridge.log && bridge.log('race stage: ' + (e && e.stack || e)); } return; }
     if (!W) return;
     if (S.running && !S.paused && !S.hostPaused) {

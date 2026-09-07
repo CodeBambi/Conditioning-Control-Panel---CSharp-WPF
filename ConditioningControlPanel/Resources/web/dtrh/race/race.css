@@ -14,7 +14,8 @@
  * insets) so nothing is flush to an edge; the MARQUEE moved off top-centre to
  * a left ribbon; the numbers ride thin dark plates so they stay readable over
  * the big-pixel render. The tail of this file caps the payloadFx full-screen
- * overlays and styles the media lane (see race/mediaLane.js).
+ * overlays, styles the media lane (see race/mediaLane.js) and holds the DOM wall
+ * layer at z1 (see race/wallDom.js).
  * ==========================================================================*/
 
 .race-hud {
@@ -492,6 +493,26 @@
 }
 /* the ceiling strip is a shallower box, so a tall card reads as a banner */
 #race-root .rh-lane-ceiling { border-radius: 8px; }
+
+/* ---- THE DOM WALL (race/wallDom.js) ----
+   The online feed's pictures cannot be textures (that file's header says why), so
+   they ride here instead: elements transformed into the tube's own 3D space. The
+   layer sits at z1, ABOVE the canvas (z0, in flow) and BELOW the HUD chrome (z3),
+   the payload cards (z4 / z9), the menu (z25) and the splash (z30), and it never
+   takes a pointer: a thumb on a poster is a steer, exactly as it was.
+   NOT pixelated. The local-media posters already render on pixel.js's CRISP_LAYER
+   at full resolution, so a crisp feed poster is the look that is already there. */
+#race-root .rh-wall3d {
+  position: fixed; inset: 0; z-index: 1; overflow: hidden;
+  pointer-events: none; touch-action: none;
+}
+#race-root .rh-wall3d-cam { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform-style: preserve-3d; }
+#race-root .rh-wall3d-shot {
+  position: absolute; left: 0; top: 0; opacity: 0; visibility: hidden;
+  object-fit: cover; pointer-events: none; user-select: none;
+  border-radius: 3px; box-shadow: 0 0 0 2px rgba(20, 10, 26, 0.85), 0 6px 26px rgba(0, 0, 0, 0.55);
+  will-change: transform, opacity;
+}
 
 /* ---- the overlay cap ----
    The owner's second screenshot: a braindrain pop painted an opaque wash over
