@@ -47,6 +47,7 @@ import { loadWords } from './words.js';
 import { TRIGGER_SETS } from '../chart/editor/triggerSets.js';
 import { detect } from '../chart/maker/triggers.js';
 import { wordEventsFrom } from './wordBubbles.js';
+import { themeFor } from './triggerTheme.js';
 
 /**
  * THE GENERATOR ID. It is the cache key's second half: change any knob below and
@@ -343,7 +344,7 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
   // race/wordBubbles.js lays the whole script instead - one word a bubble, a phrase a lane, and
   // never within HIT_GUARD_SEC of a trigger, because those seconds belong to the row.
   const events = road.filter((e) => e.kind !== 'word')
-    .concat(wordEventsFrom(caps, triggers))
+    .concat(inkWords(wordEventsFrom(caps, triggers), triggers))
     .sort((a, b) => a.t - b.t)
     .map((e, i) => ({ ...e, id: 'g' + i }));
   const lexicon = [...new Set(events.filter((e) => e.kind === 'trigger').map((e) => e.label))].sort();
@@ -353,6 +354,27 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
     source: { name, hash, durationSec, sampleRate: DECODE_RATE },
     analysis: { energy: 'web-rms-v1', words: 'script-align-v1', lexicon, generatedAt: g.generatedAt, partial: false },
   };
+}
+
+/** How near a trigger a word has to be to be part of what that trigger is doing. */
+export const WORD_INK_SEC = 6;
+/**
+ * The colour a word bubble's tag is written in (race/cues.js reads it back through
+ * race/triggerTheme.js). A word inside WORD_INK_SEC of a trigger belongs to that set and wears its
+ * theme; everything else stays pink. The field is `cue`, which race/chart.js already carries for
+ * every kind, so it survives the round trip without a new one. Both lists are in time order.
+ */
+export function inkWords(words, triggers) {
+  const list = Array.isArray(triggers) ? triggers : [];
+  if (!list.length) return words;
+  let j = 0;
+  for (const e of words) {
+    while (j + 1 < list.length && Math.abs(list[j + 1].t - e.t) <= Math.abs(list[j].t - e.t)) j++;
+    if (Math.abs(list[j].t - e.t) > WORD_INK_SEC) continue;
+    const row = themeFor(list[j]);
+    if (row && row.preset) e.cue = row.preset;
+  }
+  return words;
 }
 
 /* ---- the decode ---------------------------------------------------------- */
