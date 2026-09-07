@@ -212,7 +212,7 @@ Tea Garden gate (THE BANK). Events: `{ type:'pop'|'miss'|'combo'|'mult'|'bank'|'
 export function createKart({ scene, layout, reducedMotion }) -> kart
 kart.state           // { d, x, h, vh, speed, steer, drift, airborne, boostSec, slowMult, slowSec, lap }
 kart.update(dt, input, layout)   // input = { steer:-1..1, accel:0..1, brake:0..1, drift:bool }
-kart.applyBoost(sec)             // boost pad
+kart.applyBoost(sec)             // boost pad / the pump
 kart.applySlow(mult, sec)        // effect pops slow, never stop (speed floor = KART_MIN_SPEED)
 kart.setMood(id)                 // 'calm' | 'streamed' | 'fraught' | 'smug' | 'shock' | 'jackpot'
 kart.setFraught(v)               // 0..1, drives sweat + antenna kink
@@ -256,11 +256,35 @@ falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and 
 max of that and the run brain's. run.js only ever calls `kart.pose(...)`; the layer exists only
 while the glb is mounted (the primitive EMI has no limbs to pose).
 
+### `race/pickups.js` (the passive pickups)
+```js
+export const TUNE;      // the one table of knobs: FIRST_SEC, GAP_SEC, AHEAD_M, TAKE_X, POINTS, DROP_M
+export const PICKUPS;   // rows { id, name, family, pool, sec, sprite, ...the effect's own numbers }; PICKUP_BY_ID by id
+export function weightFor(pickup, mult) / rollPickup(mult, rand, exclude)
+export function createPickups({ rng, spots, totalDepth }) -> { update(dt, frame), take(), light(id, spot), chips(), reset(), onEvent(cb), byId(id), live, active, spots }
+```
+A pickup is a picture standing on one of the road's `pickup` spots (rooms.js `showPickup`); you drive
+through it and it happens: no roll, no card, no slot, no key, no toast. Every one is a bonus that makes
+you take MORE of the road, never less. The gentle start holds (nothing in a track's first act or the
+first `FIRST_SEC` of a seeded run), one is on the road at a time, the next waits `GAP_SEC` of driving,
+and an untaken one goes away `DROP_M` behind the kart. The take is the cube's old crossing test
+(`|x - ks.x| <= TAKE_X`) and pays `POINTS` like a plain treat (the combo stays warm), with the white
+flash, `tunnel_powerup_collect` and EMI's `grab` as the beat. Two chips can be live at once, one per
+`family` (`bonus`, `sweep`): the same pickup again refreshes its bar, another of the family replaces it.
+The module never touches three or the DOM; effects are events the run brain applies (`onPickup` /
+`applyPickup` in run.js) off the row's numbers: `{type:'pickupSpawn', id, d, x}`, `{type:'pickupTake',
+id, p, refresh}`, `{type:'pickupEnd', id}`, `{type:'pickupDrop', id}`. The rows: `poppers` (the cup grows
+to `scale`, the pop box to `reach` and the seat slides back: `kart.setScale`, `field.setReach`,
+`kart.setReach`), `the_pump` (`field.setSweep(on)` pops the whole road for `sec` on a
+`kart.applyBoost(sec)`). `lucky` is a plain 25 point treat.
+
 ### `race/hud.js` + `race/race.css` (PR 4)
 ```js
 export function createRaceHud(root) -> hud
 hud.setScore(n) hud.setCombo(combo, mult) hud.setSpeed(ms) hud.setBank(n)
 hud.banner(name, tagline, colorHex)   // MARQUEE, once per gate
+hud.passive(id, { sprite, name, frac } | null)   // THE PICKUPS' chips, bottom-left: one per live effect; null takes it away
+hud.passiveClear()                    // a reset: every chip goes
 hud.toast(text, kind)                 // kind: 'pop' | 'almost' | 'jackpot' | 'bank' | 'item' | 'effect'
 hud.flicker()                         // Stat Flicker under glitch
 hud.setFraught(v)
@@ -292,7 +316,7 @@ goes in at `d = kart.d + kart.speed * max(dueIn + at, 0.25)`, gates and act chan
 room and name, and the run ends at `durationSec - 0.25`. Without one nothing changes.
 Composes everything: renderer, `createSpine`, `createTunnel(layout)` from `engine/tunnel.js`,
 `createFx` from `engine/fx.js`, `createRoomDresser`, `createBubbleField`, `createKart`,
-`createScore`, `createRaceHud`, `createPayloadFx` from `game/payloadFx.js`,
+`createScore`, `createPickups`, `createRaceHud`, `createPayloadFx` from `game/payloadFx.js`,
 `createScreenShake` from `game/screenShake.js`. Intensity ramps 0..1 over `INTENSITY_RAMP_SEC`
 and gates which bubble kinds may appear. Treat pops go to score; effect pops call
 `payloadFx.applyPayload({ payload, strength }, { durationMult })`, `video`/`audio` go to the host
@@ -348,9 +372,11 @@ As built (PR 5 reality notes):
   and the host refuses the message, so this path is dark at both ends.
 - The first Tea Garden gate sits at d = 9 (mid gate chunk), so it crosses ~0.4 s after start: that crossing
   shows the opening MARQUEE and never banks. Later Tea Garden gates bank only when the road score is > 0.
+- The pickups (race/pickups.js) widen the pop box through `field.setReach(mult)` + `kart.setReach(mult)`
+  (poppers, the wand) and open it to the whole road through `field.setSweep(on)` (the pump).
 - Nothing flips the canvas: screen shake owns the root's `style.transform` alone.
-- `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart,
-  score) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
+- `again` on the end screen rebuilds the world in place (spine, tunnel, fx, dresser, field, kart, score,
+  pickups) with a fresh seed; renderer, HUD, input, payloadFx and shake persist for the page's life.
 - The world is not built under the menu. `createRace` only resets the run state; `race.prepare()` builds it
   (raceBoot calls it once `race` is pressed, after `seedCheck`, before the intro plays) and warms the
   renderer's programs, and `start()` builds it if nothing did (`?autostart=1`). `reseed` on a world that was

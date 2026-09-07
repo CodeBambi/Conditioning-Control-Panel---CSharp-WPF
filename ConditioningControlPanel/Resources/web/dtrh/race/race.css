@@ -119,6 +119,18 @@
   overflow: hidden; overflow-wrap: anywhere;
 }
 
+/* ---- THE PICKUPS' chips, bottom-left where the item slot sat: a tile of the road picture, the name
+   and a drain bar (the mixer's chip, laid out wide). 70 percent so the road reads through; never a
+   pointer target. Two sit side by side, one per family. ---- */
+.race-hud .rh-passive {
+  position: absolute; left: var(--rh-in-l); bottom: var(--rh-in-b);
+  display: flex; align-items: flex-end; gap: 14px; opacity: 0.7; pointer-events: none;
+}
+.race-hud .rh-chip.rh-pchip { --c: #ff69b4; width: auto; height: auto; padding: 6px 8px 8px; gap: 4px; transition: opacity 0.25s; }
+.race-hud .rh-chip.rh-pchip.is-out { opacity: 0; }
+.race-hud .rh-pchip-tile { width: 44px; height: 44px; display: block; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)); }
+.race-hud .rh-pchip-name { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); white-space: nowrap; }
+
 /* ---- speed, bottom-right: the pace number, a fat gauge and a boost state ---- */
 .race-hud .rh-speed {
   position: absolute; right: var(--rh-in-r); bottom: var(--rh-in-b);

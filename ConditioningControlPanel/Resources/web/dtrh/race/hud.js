@@ -5,7 +5,7 @@
  * up on a short tween (tabular numerals), the multiplier pill pulses on every
  * rung (CHIME LADDER), the combo bar drains over COMBO_HOLD_SEC, the MARQUEE
  * banner rides in as a left ribbon under the score block once per gate in the
- * room's colour,
+ * room's colour, the passive chips (THE PICKUPS, below) drain bottom-left,
  * speed is a gauge with a boost state. Toasts each carry their own motion (ALMOST shivers,
  * JACKPOT is a gold flash and a REVEAL, BANK flies tokens into the score and
  * ticks the counter as they land). flicker() is the Stat Flicker: the face
@@ -15,6 +15,13 @@
  * pad and its pause / mute buttons) on a touchable page. It rides BELOW
  * the screens at z20, so a card still takes the tap first and nothing here has
  * to cooperate. Copy is DtRH voice: lowercase, short.
+ *
+ * THE PICKUPS (race/pickups.js) are passive: nothing to roll, arm or spend, so
+ * the only chrome they own is a chip. passive(id, { sprite, name, frac }) keeps
+ * one per live effect bottom-left where the item slot sat: a 44 px tile of its
+ * road picture, its lowercase name and a drain bar, at 70 percent so the road
+ * reads through it. Two can sit side by side (one per family); passive(id, null)
+ * takes one away.
  *
  * Pass three: THE MIXER rail above the chips shows the live ingredients
  * of the mix (race/cocktail.js) as pixel chips with drain bars and charge
@@ -117,6 +124,10 @@ export function createRaceHud(root) {
   const banner = el('rh-banner', chrome);
   const bannerName = el('rh-banner-name', banner);
   const bannerTag = el('rh-banner-tag', banner);
+
+  // THE PICKUPS' chips: one per live effect, bottom-left (passive() below)
+  const passiveRow = el('rh-passive', chrome);
+  const passives = new Map();   // id -> { el, fill, frac }
 
   const speed = el('rh-speed rh-plate', chrome);
   const speedRow = el('rh-speed-row', speed);
@@ -319,6 +330,35 @@ export function createRaceHud(root) {
       } catch (e) { /* no layout yet: the CSS fallback top stands */ }
       later(() => banner.classList.add('is-on'), 40);
       later(() => banner.classList.remove('is-on'), 2600);
+    },
+    /** THE PICKUPS' chip: `state` = { sprite, name, frac } keeps it (frac drains the bar), null takes it away. */
+    passive(id, state) {
+      let c = passives.get(id);
+      if (!state) {
+        if (!c) return;
+        passives.delete(id);
+        c.el.classList.remove('is-in'); c.el.classList.add('is-out');
+        later(() => { if (c.el.parentNode) c.el.parentNode.removeChild(c.el); }, reduced ? 0 : 260);
+        return;
+      }
+      if (!c) {
+        const node = el('rh-chip rh-pchip', passiveRow);
+        const tile = document.createElement('img');
+        tile.className = 'rh-pchip-tile'; tile.alt = ''; tile.draggable = false; tile.src = state.sprite || '';
+        node.appendChild(tile);
+        el('rh-pchip-name', node, String(state.name || id).toLowerCase());
+        const fill = el('rh-chip-fill', el('rh-chip-bar', node));
+        c = { el: node, fill, frac: -1 };
+        passives.set(id, c);
+        hit(node, 'is-in');
+      }
+      const frac = Math.max(0, Math.min(1, Number(state.frac) || 0));
+      if (Math.abs(frac - c.frac) > 0.004) { c.frac = frac; c.fill.style.transform = `scaleX(${frac.toFixed(3)})`; }
+    },
+    /** A reset: every chip goes at once. */
+    passiveClear() {
+      for (const c of passives.values()) if (c.el.parentNode) c.el.parentNode.removeChild(c.el);
+      passives.clear();
     },
     toast(text, kind) {
       kind = TOAST_HOLD[kind] ? kind : 'pop';

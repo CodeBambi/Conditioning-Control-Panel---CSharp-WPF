@@ -85,10 +85,11 @@ door's three. race/menu.js calls them; race/cards.js calls `ui`.
 | near miss | `score` almost | Pop2 at -4, 0.10 (the whisper) | - |
 | rung up | `score` mult (to > from) | chime ladder (above) | swallowed (`streak_milestone` 0.6) |
 | bank | `score` bank | thud (120>38 Hz sine + click) + chime1-2-3 arpeggio 90 ms | `streak_milestone` 0.9 or `pb_fanfare` 0.9 |
-| boost (pad) | `kart.boostSec` rising edge | noise whoosh, bandpass 300>3200 Hz, 0.7 s | `tunnel_powerup_collect` 0.8 |
+| boost (pad or the pump) | `kart.boostSec` rising edge | noise whoosh, bandpass 300>3200 Hz, 0.7 s | `tunnel_powerup_collect` 0.8 |
 | ramp launch | `kart.airborne` rising | sine rise 220>700 Hz, 0.36 s, soft | - |
 | ramp land | `kart.airborne` falling | thump 110>42 Hz + click | - |
 | Big Wheel | `layout.featuresBetween` loop | two noise sweeps up then down, 1.3 s + 1.0 s | - |
+| pickup take | run.js `pickupTake` | - | `tunnel_powerup_collect` 0.8 (and `chain_pop` 0.5 per pop while the pump sweeps) |
 | gate (room change) | `run.room.id` edge | chime2 at -3 + the crossfade | `depth_change` 0.7 |
 | brake open / close | `duck('brake')` | Pop at -7 / Pop2 at +3 | `ui_click` 0.5 (open) |
 | end card | `sfx('surface')` | chime arpeggio 130 ms + chime3 at +5 | `surface` 0.8 |

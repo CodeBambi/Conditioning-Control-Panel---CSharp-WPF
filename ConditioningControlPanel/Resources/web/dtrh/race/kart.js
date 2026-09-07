@@ -90,6 +90,9 @@ const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0);   //
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (k, dt) => 1 - Math.exp(-k * dt);
+/** setScale (poppers): the tween rate, and how far the seat slides back / up per unit of
+ *  (scale / KART_SCALE - 1), so poppers' 1.8 (a third bigger) is 1.2 m back and 0.4 m up. */
+const SIZE_EASE = 8, SIZE_CAM_BACK = 3.6, SIZE_CAM_UP = 1.2;
 const smooth = (u) => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
 const tierFor = (sec) => { let t = 0; for (const at of DRIFT_TIER_SEC) if (sec >= at) t++; return t; };
 
@@ -158,6 +161,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   ring.frustumCulled = false; ring.renderOrder = 2;
   scene.add(ring);
   let pulse = 0, reach = 1;
+  let size = KART_SCALE, sizeTarget = KART_SCALE;   // the rig's scale: poppers grows it (setScale)
 
   let vx = 0, lean = 0, pitch = 0, elapsed = 0, lastRampD = -1, driftSide = 1, camReady = false, camX = 0, camH = 0;
   let camBoost = 0, steerS = 0, hopT = 0, scrubSec = 0, sparkAcc = 0, driftWas = false;
@@ -289,13 +293,14 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     // soft wall: the last WALL_SOFT metres bleed the outward push away, no bounce shock. `edge` is
     // road left under the saucer's RIM now, not under the cup, so the bleed starts where the dish
     // starts running out of asphalt.
-    const edge = KART_X_MAX - Math.abs(state.x);
+    const xMax = KART_X_MAX - SAUCER_R_ROAD * (size / KART_SCALE - 1);   // a bigger saucer keeps its rim on the road
+    const edge = xMax - Math.abs(state.x);
     const outward = state.steer !== 0 && Math.sign(state.steer) === Math.sign(state.x);
     if (edge < WALL_SOFT && outward) vTarget *= clamp(edge / WALL_SOFT, 0, 1);
     vx += (vTarget - vx) * ease(state.drift ? 9 : 6, dt);
     state.x += vx * dt;
-    if (Math.abs(state.x) > KART_X_MAX) {
-      state.x = Math.sign(state.x) * KART_X_MAX;
+    if (Math.abs(state.x) > xMax) {
+      state.x = Math.sign(state.x) * xMax;
       if (Math.sign(vx) === Math.sign(state.x)) vx *= 0.25;
     }
     if (FORCE_X) { state.x = FORCE_X * KART_X_MAX; vx = 0; }           // screenshot aid, see the header
@@ -441,11 +446,12 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     const boostT = state.boostSec > 0 ? 1 : 0;
     camBoost += (boostT - camBoost) * ease(boostT ? 5 : 1.5, dt);
     const spd = clamp((state.speed - KART_BASE_SPEED) / (KART_MAX_SPEED - KART_BASE_SPEED), 0, 1);
-    const back = CAM_BACK + CAM_BOOST_BACK * camBoost;
+    const grown = size / KART_SCALE - 1;             // poppers: the seat slides back and up with the cup
+    const back = CAM_BACK + CAM_BOOST_BACK * camBoost + SIZE_CAM_BACK * grown;
     const lookAhead = CAM_LOOK_AHEAD + CAM_LOOK_SPEED * Math.max(spd, camBoost * 0.6);
     const turnLook = reducedMotion ? 0 : steerS * 0.7;
     const camD = lay.wrap(state.d - back), lookD = lay.wrap(state.d + lookAhead);
-    lay.toWorld(camD, camX * 0.45, CAM_UP + camH * 0.4, cam.pos);
+    lay.toWorld(camD, camX * 0.45, CAM_UP + camH * 0.4 + SIZE_CAM_UP * grown, cam.pos);
     lay.toWorld(lookD, camX * 0.3 + turnLook, LANE_H + camH * 0.5, cam.look);
     const cf = lay.frameAtDepth(camD);
     let rollT = 0;
@@ -471,6 +477,11 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     const inp = { steer: +input.steer || 0, accel: clamp(+input.accel || 0, 0, 1), brake: clamp(+input.brake || 0, 0, 1), drift: !!input.drift, jump: !!input.jump };
     elapsed += dt;
     if (pulse > 0) pulse = Math.max(0, pulse - pulse * ease(7, dt) - 0.2 * dt);
+    if (size !== sizeTarget) {                       // poppers: 1.35 -> 1.8 over ~0.4 s, and back
+      size += (sizeTarget - size) * ease(SIZE_EASE, dt);
+      if (Math.abs(size - sizeTarget) < 0.002) size = sizeTarget;
+      group.scale.setScalar(size);
+    }
     const driftPress = inp.drift && !driftWas;
     stepSpeed(dt, inp);
     stepSteer(dt, inp);
@@ -500,8 +511,10 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
 
   /** A pop landed: the target ring swells and brightens, then settles (run.js onPop). */
   function pulseTarget() { pulse = 1; }
-  /** Magnet: the ring grows with the field's reach so the wider pop box is visible. */
+  /** Poppers / the wand: the ring grows with the field's reach so the wider pop box is visible. */
   function setReach(mult) { reach = clamp(+mult || 1, 0.5, 3); }
+  /** Poppers: tween the rig to this scale (0 = back to KART_SCALE); the seat and the road clamp follow. */
+  function setScale(s) { sizeTarget = s > 0 ? clamp(+s, KART_SCALE * 0.5, KART_SCALE * 2) : KART_SCALE; }
   function onEvent(cb) { if (typeof cb === 'function') listeners.push(cb); return () => { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); }; }
 
   function dispose() {
@@ -513,7 +526,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   }
 
   return { state, update, applyBoost, applySlow, pace, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
-    pulseTarget, setReach, onEvent, dispose,
+    pulseTarget, setReach, setScale, onEvent, dispose,
     emiModel: () => rig.model(), emiReady: (cb) => rig.onReady(cb),
     setFace: (i) => rig.setFace(i), pose: (name, opts) => rig.pose(name, opts) };
 }

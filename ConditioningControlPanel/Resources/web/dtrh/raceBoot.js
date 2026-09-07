@@ -45,7 +45,8 @@
  * either they show once, gated on localStorage `race.cards`), and `?card=N`
  * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
- * the host init;
+ * the host init; `?pickup=<id>` stands that pickup up on the next spot ahead
+ * once the run is up, a screenshot aid for it (race/pickups.js);
  * `?panel=howto` opens the menu on the key card (race/menu.js).
  *
  * `?back=<same-origin path>` is WHERE THE MENU'S `surface` VERB GOES when there
@@ -301,7 +302,7 @@ async function boot() {
     host.log(`race booted: seed ${seed} (${opts.seed}), tier ${Q.tier}${tierParam ? ' (?tier)' : ''}, hosted ${hosted}, manifest ${haveManifest}`);
     if (params.get('perf') === '1') perfLog();
     await standaloneTrack();
-    if (params.get('autostart') === '1') { startRun(false); return; }
+    if (params.get('autostart') === '1') { startRun(false); debugPickup(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
     levels = await makeLevels();
     menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, levels });
@@ -528,6 +529,18 @@ function perfLog() {
   };
   setInterval(tick, PERF_LOG_MS);
 }
+/** `?pickup=<id>`: the screenshot aid. Waits for the run, then retries until a spot is ahead. */
+function debugPickup() {
+  const id = params.get('pickup');
+  if (!id || !race || !race.debugPickup) return;
+  setTimeout(function tick() {
+    let hit = false;
+    try { hit = race.debugPickup(id); } catch (e) { host.log('pickup: ' + e); return; }
+    if (hit) host.log('pickup: ' + id + ' lit at ' + Math.round(performance.now()) + ' ms');
+    else if (!exiting) setTimeout(tick, 90);
+  }, 600);
+}
+
 function hideSplash() {
   splash.classList.add('is-off');
   setTimeout(() => { splash.hidden = true; }, 600);
