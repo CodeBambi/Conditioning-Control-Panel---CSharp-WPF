@@ -109,7 +109,11 @@ function SelfChecks {
             # Run must reject before platform/job/child acquisition; no diagnostic contact.
             try { [OwnedTestJob]::Run('', '', $repo, 5, '', $null) | Out-Null }
             catch { if ($_.ToString() -notlike "*inherited override: $key*") { throw }; $rejected = $true }
-        } finally { [Environment]::SetEnvironmentVariable($key, $old) }
+        } finally {
+            # PowerShell converts an untyped $null string argument to an empty environment value.
+            if ($null -eq $old) { [Environment]::SetEnvironmentVariable($key, [NullString]::Value) }
+            else { [Environment]::SetEnvironmentVariable($key, $old) }
+        }
         if (!$rejected) { throw "BLOCKED: diagnostic rejection check $key" }
     }
     # Actual wrapper/application resolution, including in -SelfCheckOnly mode.
