@@ -628,11 +628,14 @@ internal static class CaucusHostService
 
     /// <summary>track-chart. The chart itself goes out whole; the dev log only gets a summary,
     /// since a full chart is thousands of lines of numbers.</summary>
-    private static void PostChart(TrackChart chart, bool partial)
+    /// <param name="authored">A person wrote this one. The plate says so, and the page knows not to
+    /// expect a fuller chart behind it: an authored chart is never partial and never replaced.</param>
+    private static void PostChart(TrackChart chart, bool partial, bool authored = false)
     {
         int events = chart.Events?.Count ?? 0;
-        PostTrack(new { type = "track-chart", chart, partial },
-            "{ type: track-chart, partial: " + (partial ? "true" : "false") + ", events: " + events + " }");
+        PostTrack(new { type = "track-chart", chart, partial, authored },
+            "{ type: track-chart, partial: " + (partial ? "true" : "false")
+                + (authored ? ", authored: true" : "") + ", events: " + events + " }");
     }
 
     /// <summary>track-pick: the file dialog on the UI thread. A cancelled dialog is not an error,
@@ -703,6 +706,37 @@ internal static class CaucusHostService
         }
     }
 
+    /// <summary>
+    /// Doors (a), (b) and (c) of the lookup: an authored chart the player wrote, an authored chart
+    /// we ship, or a generated one already in the cache. Answers true when one of them posted a
+    /// chart, in which case NOTHING is analysed: an authored chart is used exactly as it was
+    /// written, and a cache hit was that analysis already.
+    ///
+    /// A cached chart is only worth reusing if its word pass is as good as the one we could run now,
+    /// so a "none" chart is charted again once a Vosk model has appeared. An authored chart never is:
+    /// there is no better pass than the person who wrote it.
+    /// </summary>
+    private static bool TryChartWithoutAnalysis(string hash, string? cloudId, string name, string? displayName)
+    {
+        var authored = AuthoredCharts.Find(hash, cloudId, out string door);
+        if (authored != null)
+        {
+            if (string.IsNullOrWhiteSpace(authored.Source.Name) && !string.IsNullOrWhiteSpace(displayName))
+                authored.Source.Name = displayName!;
+            App.Logger?.Information("RaceHost: chart for {Name} via {Door}", name, door);
+            PostChart(authored, partial: false, authored: true);
+            return true;
+        }
+
+        var cached = TrackChartCache.TryLoad(hash);
+        if (cached == null) return false;
+        if (!AuthoredCharts.IsAuthored(cached) && cached.Analysis?.Words != "vosk-v1" && TrackWordSpotter.ModelAvailable)
+            return false;
+        App.Logger?.Information("RaceHost: chart for {Name} via {Door}", name, AuthoredCharts.DoorCache);
+        PostChart(cached, partial: false, authored: AuthoredCharts.IsAuthored(cached));
+        return true;
+    }
+
     /// <summary>The whole analysis, off the UI thread. Every call into the decoder, the analyzer,
     /// the cache and the word spotter sits inside this one try: a file NAudio hates, a missing
     /// Vosk model or a half-written cache entry becomes a track-error, never a crash.</summary>
@@ -710,8 +744,10 @@ internal static class CaucusHostService
     /// A cloud track lands in a temp file called a GUID, and its title is the better name for both
     /// the plate and the cache: pick the same audio up locally later and the chart still reads as
     /// the track, not as a download nobody kept.</param>
+    /// <param name="cloudId">The stable name of the file on the CDN, when the track came from
+    /// there. An authored chart may be keyed by it, and it survives the file being renamed.</param>
     private static void AnalyzeTrack(string path, string name, int gen, CancellationToken ct, CancellationTokenSource cts,
-        string? displayName = null)
+        string? displayName = null, string? cloudId = null)
     {
         try
         {
@@ -719,15 +755,8 @@ internal static class CaucusHostService
             PostProgress("decode", 0, name, force: true);
 
             string hash = TrackDecoder.HashFile(path);
-            var cached = TrackChartCache.TryLoad(hash);
-            // A cached chart is only worth reusing if its word pass is as good as the one we could
-            // run now: a "none" chart is charted again once a model has appeared.
-            if (cached != null && (cached.Analysis?.Words == "vosk-v1" || !TrackWordSpotter.ModelAvailable))
-            {
-                App.Logger?.Information("RaceHost: chart cache hit for {Name}", name);
-                PostChart(cached, partial: false);
-                return;
-            }
+            if (TryChartWithoutAnalysis(hash, cloudId, name, displayName)) return;
+            App.Logger?.Information("RaceHost: chart for {Name} via {Door}", name, AuthoredCharts.DoorGenerated);
 
             var pcm = TrackDecoder.Decode(path, new Progress<double>(v => PostProgress("decode", v, name)), ct);
             ct.ThrowIfCancellationRequested();
@@ -1078,11 +1107,16 @@ internal static class CaucusHostService
         string? temp = null;
         try
         {
+            // The doors before the download. (a) and (b) by cloudId need only the url, so an
+            // authored chart linked by cloudId costs no download at all.
+            string cloudId = AuthoredCharts.CloudIdFrom(src);
+            if (TryChartWithoutAnalysis("", cloudId, name, name)) return;
+
             temp = await DownloadCloudTrackAsync(src, name, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             // From here it is the ordinary path, cache and all - the hash is computed off these
             // bytes by TrackDecoder.HashFile, so it matches a local chart of the same file.
-            AnalyzeTrack(temp, name, gen, ct, cts, displayName: name);
+            AnalyzeTrack(temp, name, gen, ct, cts, displayName: name, cloudId: cloudId);
         }
         catch (OperationCanceledException)
         {

@@ -206,7 +206,9 @@ bridge.on('track-chart', (m) => {
   try { (race.track && started) ? race.replaceTrack(m.chart) : race.setTrack(m.chart); }
   catch (err) { host.log('track-chart: ' + ((err && err.message) || err)); trackError(String((err && err.message) || err)); return; }
   const t = race.track, st = race.trackStats ? race.trackStats() : null;
-  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial } : null;
+  // `authored` is the host saying a person wrote this chart: the plate marks it, and nothing
+  // fuller is coming behind it (an authored chart is never partial and never replaced).
+  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial, authored: !!m.authored } : null;
   plate(trackReady);
 });
 bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });

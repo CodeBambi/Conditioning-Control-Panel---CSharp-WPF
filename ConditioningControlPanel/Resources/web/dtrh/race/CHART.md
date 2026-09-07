@@ -207,9 +207,13 @@ Page -> host: `track-pick` (open the file dialog), `track-play` (the run started
 analysis in flight).
 
 Host -> page: `track-progress { stage: 'decode' | 'energy' | 'words', pct: 0..1, name }`,
-`track-chart { chart, partial }`, `track-clock { t, playing, durationSec }` every 250 ms while a
-track is loaded, `track-ended`, `track-error { message }` (dialog cancelled is not an error: the
-host posts `track-progress { stage: 'cancelled' }`).
+`track-chart { chart, partial, authored }`, `track-clock { t, playing, durationSec }` every 250 ms
+while a track is loaded, `track-ended`, `track-error { message }` (dialog cancelled is not an error:
+the host posts `track-progress { stage: 'cancelled' }`).
+
+`authored: true` on `track-chart` means a person wrote this chart. `raceBoot.js` puts it on the
+ready plate and `race/menu.js` shows it as a small `hand-tuned` mark. An authored chart is never
+partial and nothing fuller lands behind it.
 
 ## C# side
 
@@ -233,3 +237,40 @@ host posts `track-progress { stage: 'cancelled' }`).
   `WaveOutEvent`, master volume, `PositionSec`, `Play/Pause/Resume/Stop`, `Ended` event; the file
   dialog on the UI thread; the analysis on a worker with progress posts; the 250 ms clock timer;
   `track-stop` on `run-ended` and `exit`.
+
+### Authored charts on the desktop
+
+The shared rule, the index format and the `cloudId` derivation live in the **Authored charts**
+section above, written on `feat/race-cloud-w2-chart`; this is only what the C# host adds on top of
+it. If the two ever disagree, the shared section is right.
+
+- **Passthrough.** `TrackChart`, `TrackSource`, `TrackAnalysis`, `TrackAct` and `TrackEvent` each
+  carry a Newtonsoft `[JsonExtensionData]` bag, so a field this build has no property for survives
+  load -> post -> save untouched: the top level `rules`, the per-event `hand`, `cue` and `note`, and
+  whatever a newer chart version adds. `hand` and `source.cloudId` are typed as well, because the
+  lookup and the cache guard read them. A generated chart writes neither.
+- **A folder of your own.** `%LOCALAPPDATA%/ConditioningControlPanel/race/authored/*.json`. Any
+  chart file in there with `"hand": true` is indexed by `source.hash` and by `source.cloudId`, both
+  optional but not both missing, and matched case insensitively. The folder is re-scanned when it
+  changes and the chart is re-read on every hit, so dropping one in or editing one takes effect on
+  the next track without a restart.
+- **The order the host uses**, first answer wins, before anything is decoded:
+  1. your authored folder, by hash or `cloudId`
+  2. the shipped `race/charts/index.json`, by `cloudId` then hash (read off disk from
+     `Resources/web/dtrh/race/` next to the exe, the same tree the page is served out of)
+  3. `TrackChartCache`, by hash (the generated charts, under `race/charts/` in the user data folder)
+  4. chart the audio
+  The host logs one line per track: `RaceHost: chart for {Name} via {Door}`, where the door is
+  `authored (user folder)`, `authored by cloudId`, `authored by hash`, `cached` or `generated` - the
+  same four names the page logs, plus the one only the desktop has. An authored chart is posted with
+  `partial: false` and the analysis is never run for it.
+- **The cache cannot shadow an author.** `TrackChartCache.Save` refuses, with a log line and no
+  exception, when the chart handed to it is authored, or when an authored chart already answers for
+  that hash. The "re-chart a `none` chart once a Vosk model appears" rule skips authored charts too:
+  there is no better pass than the person who wrote it.
+
+**Known gap: no prefetch of the next track.** The desktop never reads the playlist over there, so it
+cannot know what is coming and cannot chart it early. Charting starts when the track does. In
+practice that is seconds of the seeded road before the partial chart swaps in, and none at all for a
+cache hit or an authored chart, which answer instantly. Closing it would mean reading their playlist
+UI, which this lane does not do.
