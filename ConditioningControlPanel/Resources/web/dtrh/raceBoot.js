@@ -416,6 +416,9 @@ async function makeCloud() {
   cloudSource = chartMod.createChartSource({
     indexUrl: new URL('race/charts/index.json', import.meta.url).href,
     cache, log: host.log, toast,
+    // Which of the four steps a track is on, landing on that track's own row in the levels
+    // panel. The panel is built after this one, so it is read at call time and not captured.
+    onStage: (id, word) => { try { if (levels) levels.setStage(id, word); } catch (e) { /* no panel yet */ } },
     // The road landing on a plain one: `replaceTrack` while a lap is live keeps everything
     // already fired and adopts only the future, which is CHART.md's partial rule.
     onUpgrade(chart) {
