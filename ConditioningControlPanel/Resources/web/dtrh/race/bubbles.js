@@ -96,7 +96,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
     pool.push({ sprite, mat, slot: i, eventId: null, rowId: 0, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
-      x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false });
+      x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false,
+      w: '', ink: null, big: false, rowN: 0 });   // the word this bubble wears, for race/wordTags.js
   }
   const shards = [];
   for (let i = 0; i < SHARD_CAP; i++) {
@@ -159,6 +160,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     s.d = layout.wrap(d); s.x = clamp(x, -LANE_X_MAX, LANE_X_MAX); s.x0 = s.x;
     s.h = h; s.baseH = h; s.phase = Math.random() * Math.PI * 2; s.age = 0;
     s.size = sizeOf(k.id); s.scale = placement === 'spawn' ? 0 : 1; s.popT = -1; s.missed = false; s.eventId = null; s.rowId = 0;
+    s.w = ''; s.ink = null; s.big = false; s.rowN = 0;
     s.mat.map = texOf[k.id]; s.mat.color.set(k.tint); s.mat.opacity = 1; s.mat.needsUpdate = true;
     s.sprite.scale.setScalar(s.size * s.scale);
     layout.toWorld(s.d, s.x, s.h, s.sprite.position);
@@ -230,7 +232,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
    *  the pool is full (a cue never steals a live bubble), when the kind is dark (bubbleKinds.js
    *  spawn:false), or when density has gated this one out.
    *  Over 1, density is the chance of a second bubble beside the first. */
-  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null } = {}) {
+  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null, w = '', ink = null, big = false } = {}) {
     if (liveCount >= CAP) return -1;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return -1;   // a dark kind: no chart may place one
     if (tracked) {
@@ -240,6 +242,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
     const s = place(kindId, placement, d, x, top);
     s.eventId = eventId;
+    if (w) { s.w = String(w); s.ink = ink || null; s.big = !!big; }
     if (tracked && density > 1 && liveCount < CAP && Math.random() < density - 1) {
       place(kindId, placement, d + 2.4, x + (x > 0 ? -1.1 : 1.1), top).eventId = eventId;
     }
@@ -251,7 +254,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
    *  rolled ONCE for the whole line rather than per bubble, and density over 1 never doubles it,
    *  because a doubled row is just a thicker wall and the wall was already unavoidable.
    *  Returns how many went down, 0 for a row that was gated out. */
-  function spawnRow({ kindId, kindIds = null, placement = 'lane', d, h, xs, eventId = null } = {}) {
+  function spawnRow({ kindId, kindIds = null, placement = 'lane', d, h, xs, eventId = null, w = '', ink = null, big = false } = {}) {
     const list = Array.isArray(xs) ? xs.filter((x) => Number.isFinite(Number(x))) : [];
     if (!list.length) return 0;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return 0;   // a dark kind: no chart may place one
@@ -263,7 +266,14 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const top = h == null ? (placement === 'rain' ? CEILING_H : placement === 'air' ? 2.6 : LANE_H) : h;
     const id = ++rowSeq;
     // kindIds: one kind per x for a row that is not all one thing (the rabbit foot's golden centre)
-    list.forEach((x, i) => { const s = place((kindIds && kindIds[i]) || kindId, placement, d, Number(x), top); s.eventId = eventId; s.rowId = id; });
+    // the word goes on the CENTRE bubble alone: five copies of it is a wall of text where a wall
+    // of bubbles was the point. A row of one (a word bubble, cues.js `case 'word'`) is its own centre.
+    const mid = list.length >> 1;
+    list.forEach((x, i) => {
+      const s = place((kindIds && kindIds[i]) || kindId, placement, d, Number(x), top);
+      s.eventId = eventId; s.rowId = id;
+      if (w && i === mid) { s.w = String(w); s.ink = ink || null; s.big = !!big; s.rowN = list.length; }
+    });
     return id;   // the row's id: run.js hands it to race/sync.js, which moveRow()s it onto its word
   }
   /** A row goes to depth `d`: the kart's speed changed inside the lookahead, so the word will be said
@@ -284,6 +294,13 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
 
   // ---- pop -----------------------------------------------------------------
+  // ---- the word tags' scan (race/wordTags.js) -------------------------------
+  // A bubble wearing a word hands its world position out once a frame. The entries are reused and
+  // refilled in update(), sorted nearest-camera first: nothing here allocates or searches.
+  const TAG_SCAN = 24, TAG_AHEAD_M = 34;
+  const tagScratch = [], tagOut = [];
+  for (let i = 0; i < TAG_SCAN; i++) tagScratch.push({ key: '', w: '', ink: null, big: false, rowN: 0, pos: new THREE.Vector3(), alpha: 1, ahead: 0 });
+
   const _r = new THREE.Vector3(), _u = new THREE.Vector3();
   // burst frames come from a fixed ring (no per-pop allocation): one right/up pair per burst,
   // shared by its shards; 16 pairs outlive any shard (life <= 0.6 s, 64 shards, 7..12 per burst)
@@ -333,6 +350,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   // ---- per frame -----------------------------------------------------------
   function update(dt, t, kart) {
     lastKartD = kart.d;
+    tagOut.length = 0;
     for (const s of pool) {
       if (!s.alive) continue;
       s.age += dt;
@@ -374,6 +392,11 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         if (Math.abs(rel) < POP_HIT_D && (sweep || (Math.abs(s.x - kart.x) < (wide ? reachX : POP_HIT_X) && Math.abs(s.h - kart.h) < (wide ? reachH : POP_HIT_H)))) pop(s);
       }
       s.sprite.visible = rel > -DROP_BEHIND && rel < VIEW_AHEAD;
+      if (s.sprite.visible && s.w && s.popT < 0 && rel < TAG_AHEAD_M && tagOut.length < TAG_SCAN) {
+        const e = tagScratch[tagOut.length];
+        e.key = 'b' + s.slot; e.w = s.w; e.ink = s.ink; e.big = s.big; e.rowN = s.rowN; e.ahead = rel;
+        tagOut.push(e);   // pos + alpha are filled below, once this frame has moved the sprite
+      }
       if (s.sprite.visible) {
         layout.toWorld(s.d, s.x, s.h, s.sprite.position);
         // a bubble that slipped past the pop box fades and shrinks before it can balloon into the
@@ -381,6 +404,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
         const gone = s.popT < 0 && rel < -POP_HIT_D ? clamp(1 + (rel + POP_HIT_D) / PASS_FADE_M, 0, 1) : 1;
         if (gone < 1) s.mat.opacity = Math.min(s.mat.opacity, gone);
         s.sprite.scale.setScalar(s.size * s.scale * (0.6 + 0.4 * gone));
+        const e = tagOut.length && tagOut[tagOut.length - 1];
+        if (e && e.key === 'b' + s.slot) { e.pos.copy(s.sprite.position); e.alpha = s.mat.opacity; }
       }
     }
     for (const sh of shards) {
@@ -427,6 +452,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     setSweep(on) { sweep = !!on; },
     /** riptide: while on, everything inside PULL_M ahead slides into the kart's lane. */
     setPull(on) { pull = !!on; },
+    /** The bubbles wearing a word this frame, nearest the camera first (race/wordTags.js). */
+    wordTagList() { tagOut.sort((a, b) => a.ahead - b.ahead); return tagOut; },
     get liveCount() { return liveCount; },
   };
 }

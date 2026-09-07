@@ -32,6 +32,28 @@
  * ==========================================================================*/
 
 import { LANE_H, CEILING_H, LANE_X_MAX, POP_HIT_X } from './consts.js';
+import { themeFor } from './triggerTheme.js';
+
+/**
+ * The words a tag is drawn BIG for (race/wordTags.js): the ones the file is actually about. Every
+ * other word wears the same plate at the same size, so these read as the beat of the line rather
+ * than as sixteen shouts. A phrase that landed in one bubble counts if either half is on the list.
+ */
+export const ACCENT_WORDS = new Set(['drop', 'sink', 'deeper', 'down', 'relax', 'now', 'empty',
+  'blank', 'bump', 'obey', 'pink', 'good', 'girl', 'bambi', 'sleep', 'bimbo']);
+/** What is stripped off a transcript word before it is held against that list. */
+const ACCENT_TRIM = /^["'(\[]+|[,.;:!?…"')\]]+$/g;
+
+/** Is this bubble's word one of them, and what colour does it want? */
+function accentOf(text) {
+  return String(text || '').toLowerCase().split(/\s+/).some((part) => ACCENT_WORDS.has(part.replace(ACCENT_TRIM, '')));
+}
+/** The theme colour of the set this word sits inside, when the road put one on the event. */
+function tagInk(event) {
+  if (!event || typeof event.cue !== 'string' || !event.cue) return null;
+  const row = themeFor(event);
+  return row && row.preset === event.cue ? row.color : null;
+}
 
 /** A trigger phrase nobody has assigned a bubble to wears the room's own effect, else this. */
 const FALLBACK_TRIGGER = 'flash';
@@ -130,7 +152,10 @@ export function cueFor(event, ctx = {}) {
       }
       const kindId = triggerKind(label, ctx);
       const gold = typeof ctx.gold === 'function' && ctx.gold() === true;   // rabbit foot: a golden in the middle
-      for (const x of ROW_X) cue.spawn.push({ kindId: gold && Math.abs(x) < 1e-6 ? 'golden' : kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true });
+      // the row wears ONE tag, on its middle bubble (bubbles.js spawnRow), at 1.3x, inked in the
+      // set's own theme colour: five copies of one word is a wall of text.
+      const ink = (themeFor(event) || {}).color || null;
+      for (const x of ROW_X) cue.spawn.push({ kindId: gold && Math.abs(x) < 1e-6 ? 'golden' : kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
       cue.word = label || null;
       cue.pose = 'grab';
       break;
@@ -149,7 +174,11 @@ export function cueFor(event, ctx = {}) {
       // the owner asked us to take off this road, and the word is read off the bubble's own tag.
       if (typeof event.w === 'string' && event.w) {
         const x = Number.isFinite(Number(event.x)) ? clamp(Number(event.x), -LANE_X_MAX, LANE_X_MAX) : 0;
-        cue.spawn.push({ kindId: 'treat', placement: 'lane', x, h: LANE_H, at: 0, row: true, w: event.w });
+        // the tag: every word gets one, an accent word gets it bigger and in the colour of the set
+        // the road says this second belongs to (race/cloudChart.js stamps `cue` on it), else pink.
+        const accent = accentOf(event.w);
+        cue.spawn.push({ kindId: 'treat', placement: 'lane', x, h: LANE_H, at: 0, row: true, w: event.w,
+          big: accent, ink: accent ? tagInk(event) : null });
         break;
       }
       if (conf01(event) < WORD_SURE) return null;

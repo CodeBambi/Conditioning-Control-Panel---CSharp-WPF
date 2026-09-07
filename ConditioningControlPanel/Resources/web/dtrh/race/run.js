@@ -54,6 +54,7 @@ import { createWallDomPosters } from './wallDom.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
+import { createWordTags } from './wordTags.js';
 import { createTrackState } from './track.js';
 import { cueFor, resultTag } from './cues.js';
 import { createKart } from './kart.js';
@@ -202,7 +203,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     };
     const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
     const pickups = createPickups({ rng, spots: layout.chunks.flatMap((c) => c.features || []).filter((f) => f.type === 'pickup'), totalDepth: layout.totalDepth });
-    const w = { layout, tunnel, fx, dresser, walls, wallDom, kart, score, field, pickups, rng };
+    // the words get a readable tag over the bubble (race/wordTags.js): the sprite itself is 20 px
+    // tall at 20 m on a phone, which is no size at all to read four letters in
+    const wordTags = createWordTags({ scene, camera, viewport: () => ({ w: root.clientWidth || window.innerWidth, h: root.clientHeight || window.innerHeight }) });
+    const w = { layout, tunnel, fx, dresser, walls, wallDom, kart, score, field, pickups, wordTags, rng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     kart.onEvent((e) => onKart(w, e));
@@ -215,7 +219,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function teardown() {
     if (!W) return;
-    try { W.field.dispose(); W.kart.dispose(); W.wallDom.dispose(); W.walls.dispose(); W.dresser.dispose(); W.fx.dispose(); } catch (e) { /* half-built world */ }
+    try { W.wordTags.dispose(); W.field.dispose(); W.kart.dispose(); W.wallDom.dispose(); W.walls.dispose(); W.dresser.dispose(); W.fx.dispose(); } catch (e) { /* half-built world */ }
     scene.remove(W.tunnel.mesh); W.tunnel.dispose();
     W = null;
   }
@@ -450,7 +454,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const row = cue.spawn.filter((sp) => sp.row), loose = cue.spawn.filter((sp) => !sp.row);
     if (row.length) {
       const at = e.t + (row[0].at || 0), d = sync.depthFor(t, ks.d, ks.speed, at);
-      const rowId = w.field.spawnRow({ kindId: row[0].kindId, kindIds: row.map((sp) => sp.kindId), placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id });
+      const rowId = w.field.spawnRow({ kindId: row[0].kindId, kindIds: row.map((sp) => sp.kindId), placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id,
+        w: row[0].w || '', ink: row[0].ink || null, big: !!row[0].big });   // the tag, on the middle bubble alone
       if (rowId) sync.trackRow(rowId, e, at, d, t);
     }
     for (const sp of loose) {
@@ -598,6 +603,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     cupLight.position.copy(k.group.position).addScaledVector(_v.copy(camOut.up), 1.6);
     speedFx.update(dt, ks, lay);
     w.wallDom.update(ks.d);   // AFTER the camera: a DOM poster is transformed by THIS frame's lens
+    w.wordTags.update(w.field.wordTagList());   // and so is a tag: it is placed in camera space
 
     // EMI: calm cruise, streamed on boost, fraught under a stack, pokes on top
     if (S.moodHold > 0) { S.moodHold -= dt; if (S.moodHold <= 0) S.moodHeld = null; }
@@ -778,6 +784,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); if (captions) captions.setTrack(TR.track ? TR.track.chart : null); }, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugPickup,
+    /** What race/smoke/label-px-check.mjs measures: every word tag on the glass this frame. */
+    wordTags: () => (W ? W.wordTags.measure() : null),
     get track() { return TR.track; } };
 }
 
