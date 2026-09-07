@@ -44,7 +44,7 @@ import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
 import { setBundledSpiralPool, prefetchSpirals, LEAN_SPIRALS } from '../engine/loomSpirals.js';
 import { createScreenShake } from '../game/screenShake.js';
-import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, makeRng } from './consts.js';
+import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, COMBO_HOLD_SEC, makeRng } from './consts.js';
 import { createPace } from './pace.js';
 import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
@@ -143,6 +143,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   /** The word a word bubble wears, by the event that spawned it. race/bubbles.js is the layer that
    *  DRAWS a bubble and it stays that: the pop and the ghost read the text off here instead. */
   const wordOf = new Map();
+  // THE LINE LEDGER. A road built off a transcript lays three word bubbles a second, so a ladder
+  // that stepped on every one of them would hand out an 8x for twenty seconds of a chant. The rung
+  // is a LINE instead: `lineN` is how many bubbles each phrase of the file has (built with the
+  // track), `lineGot` how many of them the kart has taken this run, and the pop that finishes one
+  // calls race/score.js chain(). A phrase left half-taken simply never pays.
+  const lineN = new Map(), lineGot = new Map(), lineDone = new Set();
   const fxProxy = { pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
   // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
@@ -165,7 +171,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1, jackpotBias: 1, sweep: false, tide: 1,
     spawnT: SPAWN_T0, rainT: RAIN_T0, tunnelTime: 0, rush: 0, fov: fovBase, fovBoost: 0, gates: 0, room: null,
     wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', bestAtStart: 0, seed, wobble: 0,
-    trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0,   // trackHold: the track second a fog/density hold ends, 0 for none
+    trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0, quiet: false, quietAt: -9,   // trackHold: the track second a fog/density hold ends, 0 for none
   };
   fovLive = true;   // S exists: resize() may shift S.fov from here on
   const mix = createCocktail({ now: () => S.elapsed });   // THE MIX: one live effect per category (cocktail.js); S.effects mirrors its live slots
@@ -239,9 +245,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     Object.assign(S, { running: false, paused: false, ended: false, elapsed: 0, t: 0, intensity: intensityFloor, timeScale: 1,
       jackpotBias: 1, sweep: false, tide: 1, spawnT: SPAWN_T0, rainT: RAIN_T0, rush: 0, fovBoost: 0, gates: 0, room: null,
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
-      trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
+      trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0, quiet: false, quietAt: -9 });
     trailClear();
-    mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear();
+    mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
 
@@ -261,8 +267,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
 
   // ---- pops ----
-  function treat(w, p) {
-    w.score.pop(p.points, p.id);
+  function treat(w, p, word) {
+    w.score.pop(p.points, p.id, word ? { combo: false } : undefined);   // a word is worth its treat and no rung
     if (p.id === 'golden') {
       w.score.jackpot(S.jackpotBias > 1 ? 'major' : 'minor');
       sfx('golden_pop', 0.9); shake.shake(0.35, 240); poke('jackpot', 1.4); w.kart.pose('cheer');
@@ -274,19 +280,32 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
    * of word bubbles taken clean reads back as the sentence the voice said.
    * @param eventId the chart event that spawned the bubble, @param ghost true for a miss
    */
-  function flashWord(eventId, ghost) {
-    if (!captions || !eventId) return;
+  function spendWord(w, eventId, ghost) {
+    if (!eventId) return;
     const rec = wordOf.get(eventId);
     if (!rec) return;
     wordOf.delete(eventId);                       // one bubble, one flash: it is popped or it is past
-    if (ghost && !GHOST_MISSES) return;
-    captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
+    if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
+    if (ghost || rec.p == null || lineDone.has(rec.p)) return;
+    const n = lineN.get(rec.p) || 0, got = (lineGot.get(rec.p) || 0) + 1;
+    lineGot.set(rec.p, got);
+    if (n > 0 && got >= n) { lineDone.add(rec.p); w.score.chain(); }   // the whole line, read clean: one rung
+  }
+  /** THE PLATE, ON THE POP. The player took the row before the voice reached it, so the word flies
+   *  at the camera NOW rather than on a second they already beat. race/sync.js claim() marks the
+   *  held cue, so the frame that reaches event.t still fires the mix, the mood and the fog and just
+   *  leaves the plate alone. A row nobody takes plates on its second exactly as it always did. */
+  function platePop(eventId) {
+    if (!captions) return;
+    const early = sync.claim(eventId);
+    if (early && early.event.kind === 'trigger' && early.cue.word) captions.showPlate(early.event);
   }
   function onPop(w, p) {
-    if (p.eventId) { TR.taken(p.eventId); flashWord(p.eventId, false); }
+    const word = !!p.eventId && wordOf.has(p.eventId);   // a bubble off the transcript, not a chunk golden
+    if (p.eventId) { TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false); }
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (S.sweep) sfx('chain_pop', 0.5);          // the pump: every pop on the road sounds like the chain
-    if (p.kind === 'treat') return treat(w, p);
+    if (p.kind === 'treat') return treat(w, p, word);
     // THE MIX: one live effect per category, each with its own re-pop rule (cocktail.js); 'held' scores as a treat
     const durationMult = 0.5 + 0.5 * S.intensity;
     const r = mix.add(p.id, { durationMult });
@@ -369,17 +388,19 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
   function onMiss(w, m) {
-    flashWord(m.eventId, true);   // the script is never hostage to the steering: the word still lands, grey
+    const word = !!m.eventId && wordOf.has(m.eventId);
+    spendWord(w, m.eventId, true);   // the script is never hostage to the steering: the word still lands, grey
     // ALMOST: the treat slid past inside NEAR_MISS_M but outside the hit box; else the streak lets go
     let best = null, bestGap = Infinity;
     for (const s of trail) { if (!s.ok) continue; const g = Math.abs(w.layout.wrap(s.d - m.d + w.layout.totalDepth / 2) - w.layout.totalDepth / 2); if (g < bestGap) { bestGap = g; best = s; } }
     const near = best && m.x != null && Math.abs(m.x - best.x) < NEAR_MISS_M && Math.abs((m.h || 0) - best.h) < NEAR_MISS_M;
-    if (near) w.score.nearMiss(); else w.score.miss();
+    // a word driven past is a word unread, never a broken streak: only a missed ROW lets the ladder go
+    if (near) w.score.nearMiss(); else if (!word) w.score.miss();
   }
   function onScore(w, e) {
     switch (e.type) {
       case 'pop': hud.setScore(e.score); hud.setCombo(e.combo, e.mult); hud.toast(`+${e.gain}`, 'pop'); break;
-      case 'combo': if (!e.combo) hud.setCombo(0, w.score.state.mult); break;
+      case 'combo': hud.setCombo(e.combo, e.mult != null ? e.mult : w.score.state.mult); break;   // a rung off a whole line moves it too
       case 'mult': hud.setCombo(w.score.state.combo, e.to); if (e.to > e.from) { hud.toast(`x${e.to}`, 'pop'); sfx('streak_milestone', 0.6); poke('smug', 1.0); } break;
       case 'miss': hud.setCombo(0, e.mult); break;
       case 'almost': hud.setScore(e.score); hud.toast(`almost +${e.gain}`, 'almost'); break;
@@ -441,7 +462,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function setTrack(chart) {
     const t = TR.setTrack(chart);
     audio.setRoute(routeOf(t));
-    S.trackHold = 0; S.statsAt = 0; sync.reset(); wordOf.clear();
+    S.trackHold = 0; S.statsAt = 0; S.quiet = false; S.quietAt = -9; sync.reset(); wordOf.clear();
+    lineN.clear(); lineGot.clear(); lineDone.clear();
+    for (const e of (t && t.chart && Array.isArray(t.chart.events) ? t.chart.events : [])) {
+      if (e.kind === 'word' && e.p != null) lineN.set(e.p, (lineN.get(e.p) || 0) + 1);
+    }
     if (W) { W.field.setTracked(!!t); W.field.setSparse(TR.lyrics); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     if (captions) captions.setTrack(t ? t.chart : null);
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
@@ -488,7 +513,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       // A trigger ROW is not one of these: its word flies at the camera on the plate instead.
       if (rowId && e.kind === 'word' && row[0].w) {
         if (wordOf.size >= WORD_MEM) wordOf.delete(wordOf.keys().next().value);
-        wordOf.set(e.id, { w: row[0].w, ink: row[0].ink || null, accent: !!row[0].big });
+        wordOf.set(e.id, { w: row[0].w, ink: row[0].ink || null, accent: !!row[0].big, p: e.p == null ? null : e.p });
       }
     }
     for (const sp of loose) {
@@ -497,7 +522,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     sync.defer(e, cue, t);
   }
   /** The visible half of a cue, on the word: trackFrame fires it the frame the clock reaches event.t. */
-  function spendCue(w, event, cue) {
+  function spendCue(w, event, cue, plated) {
     const ks = w.kart.state;
     if (cue.jump) { ks.vh = Math.max(ks.vh, cue.jump); ks.h = Math.max(ks.h, 0.06); ks.airborne = true; w.kart.pose('air'); }
     if (cue.mix) cueMix(w, cue.mix);
@@ -506,7 +531,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (cue.toast) hud.toast(cue.toast.text, cue.toast.kind || 'effect');
     // a sure trigger no longer whispers on the toast rail: it flies at the camera, themed off the
     // preset its set carries (race/captions.js + race/triggerTheme.js). Everything else still toasts.
-    if (cue.word) { if (event.kind === 'trigger' && captions) captions.showPlate(event); else hud.toast(cue.word, 'effect'); }
+    if (cue.word) {
+      if (event.kind === 'trigger' && captions) { if (!plated) captions.showPlate(event); }   // an early pop already flew it
+      else hud.toast(cue.word, 'effect');
+    }
     if (cue.fog != null) applyFog(w, cue.fog);
     if (cue.boost) w.kart.applyBoost(cue.boost);
     if (cue.density != null) w.field.setDensity(cue.density);
@@ -532,7 +560,17 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // the sync: rows nudged onto their word off the speed the kart has now, held cues fired on the second
     const held = sync.update(ts.t, ks.d, ks.speed);
     for (const m of held.move) w.field.moveRow(m.rowId, m.d);
-    for (const f of held.fire) spendCue(w, f.event, f.cue);
+    for (const f of held.fire) spendCue(w, f.event, f.cue, f.plated);
+    // THE QUIET. A stretch of file with no word due for longer than the streak's own patience holds
+    // the ladder where it is: the voice stopped, the player did not. Re-read four times a second
+    // rather than every frame (TR.nextEvent walks the file), and fed a step bigger than the frame so
+    // race/score.js tick() stands the hold timer still exactly while the quiet lasts.
+    if (TR.lyrics && Math.abs(ts.t - S.quietAt) >= 0.25) {
+      S.quietAt = ts.t;
+      const nx = TR.nextEvent(ts.t, 'word');
+      S.quiet = !nx || nx.t - ts.t > COMBO_HOLD_SEC;
+    }
+    if (S.quiet) w.score.freezeCombo(ts.dt * 2);
     if (ts.actChanged) actMoved(w, ts.act, ks);
     if (ts.dt > S.trackGap) S.trackGap = ts.dt;   // the worst frame the scheduler had to reach over
     if (!hosted && ts.t - S.statsAt >= TRACK_STATS_SEC) {   // standalone dev aid: the scheduler on the console

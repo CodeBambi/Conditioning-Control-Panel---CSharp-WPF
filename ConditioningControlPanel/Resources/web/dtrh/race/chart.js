@@ -148,6 +148,9 @@ function normalizeEvents(raw, durationSec) {
       if (e.kind === 'word' && typeof e.w === 'string' && e.w) {
         ev.w = e.w.slice(0, 40);
         ev.x = clamp(num(e.x, 0), -LANE_X_MAX, LANE_X_MAX);
+        // and the LINE it belongs to (race/wordBubbles.js wordEventsFrom). A phrase is what the
+        // ladder and the end card count in, so losing this turns a sentence back into loose words.
+        if (isFinite(num(e.p, NaN))) ev.p = Math.max(0, Math.round(num(e.p, 0)));
       }
       if (e.kind === 'chant') { ev.reps = Math.max(1, Math.round(num(e.reps, 3))); ev.period = Math.max(0, num(e.period, 0)); }
       // An author marks the events they placed by hand inside a road, names the cue they
@@ -318,10 +321,29 @@ export function createScheduler(chart, opts = {}) {
     taken(id) { if (id) takenIds.add(id); },
     /** cues.js had nothing to put on the road for this one (a word the spotter only guessed at): it leaves the count. */
     skip(id) { if (id) skipped.add(id); },
+    /**
+     * The end card's "you took N of M". A PHRASE of word bubbles is ONE thing to take, not one per
+     * word: a road built off a transcript lays three bubbles a second and "you took 412 of 987" is
+     * a number nobody drove for. So every word event carrying a phrase index (`p`) folds into its
+     * line, and the line counts as taken only when every one of its bubbles was. Everything else
+     * (a trigger row, a count, a drop) is one thing to take, exactly as before, and so is a word
+     * event with no phrase index on it (the demo chart, a hand-written one).
+     */
     stats() {
-      let countable = 0;
-      for (const e of ch.events) if (COUNTABLE.has(e.kind) && !skipped.has(e.id)) countable++;
-      return { total: ch.events.length, fired: fired.size, countable, taken: takenIds.size, missed };
+      let countable = 0, taken = 0;
+      const lines = new Map();
+      for (const e of ch.events) {
+        if (!COUNTABLE.has(e.kind) || skipped.has(e.id)) continue;
+        if (e.kind === 'word' && e.p != null) {
+          let r = lines.get(e.p);
+          if (!r) { r = { n: 0, got: 0 }; lines.set(e.p, r); }
+          r.n++; if (takenIds.has(e.id)) r.got++;
+          continue;
+        }
+        countable++; if (takenIds.has(e.id)) taken++;
+      }
+      for (const r of lines.values()) { countable++; if (r.got >= r.n) taken++; }
+      return { total: ch.events.length, fired: fired.size, countable, taken, phrases: lines.size, missed };
     },
     reset() { fired.clear(); takenIds.clear(); skipped.clear(); cursor = 0; lastT = 0; missed = 0; },
     get chart() { return ch; },
