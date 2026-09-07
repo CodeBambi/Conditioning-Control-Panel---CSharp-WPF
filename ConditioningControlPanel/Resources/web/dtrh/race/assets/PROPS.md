@@ -28,8 +28,8 @@ Source of truth for the geometry: `ConditioningControlPanel/tools/blender/props/
 |---|---:|---:|---|---|
 | `kart_cup` | 1720 | 3000 | 1.35 x 0.69 x 1.11 | JS lathe profile; rim = pink glaze band in the wall; handle roots start inside the wall with a boss each. Sit it 0.09 above the saucer like the JS rig. Handle on +x. |
 | `kart_saucer` | 488 | 600 | 1.90 x 0.12 x 1.90 | pink glaze rim band + mark at +x |
-| `item_cube` | 448 | 600 | 1.25 x 1.25 x 1.25 | 1.2 cube, gold "?" raised 0.025 on all six faces |
-| `item_shard_00..11` | 24 each | 40 | 0.52 or 0.68 x 0.34/0.40/0.46 x 0.72/0.48 | 2 x 2 x 3 uneven split; each node's `translation` is its centroid in cube space, so the twelve reassemble the cube exactly (checked: -0.6..0.6, 0..1.2, -0.6..0.6). 01, 06, 10 are gold. |
+| `item_cube` | 448 | 600 | 1.25 x 1.25 x 1.25 | 1.2 cube, gold "?" raised 0.025 on all six faces RETIRED with the passive pickups (race/pickups.js): still in the file, never drawn, no Blender regen. |
+| `item_shard_00..11` | 24 each | 40 | 0.52 or 0.68 x 0.34/0.40/0.46 x 0.72/0.48 | 2 x 2 x 3 uneven split; each node's `translation` is its centroid in cube space, so the twelve reassemble the cube exactly (checked: -0.6..0.6, 0..1.2, -0.6..0.6). 01, 06, 10 are gold. RETIRED with the passive pickups (race/pickups.js): still in the file, never drawn, no Blender regen. |
 | `boost_pad` | 280 | 600 | 5.75 x 0.11 x 3.00 | dark plate, edge strips, three chevron rib pairs pointing +z, ribs and strips in `boost_strip` |
 | `ramp_lip` | 160 | 600 | 7.10 x 0.31 x 0.34 | cream kerb block + pink roll |
 | `air_marker` | 88 | 600 | 0.35 x 0.35 x 0.35 | gold sugar lump |

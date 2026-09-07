@@ -186,8 +186,8 @@ A row goes down whole or not at all: a row that would not fit the pool is not la
 gate is rolled ONCE for the line rather than per bubble, and `density > 1` never doubles it. It
 also SPENDS as one thing: the first of its bubbles to pop or to slip past settles the row, so five
 bubbles are one `taken` on the scheduler (`takenIds` is a set) and at worst one broken combo. With
-`setSparse(true)` `seedChunk` lays only the chunk's own golden and no lanes, ramp lines or item
-box pairs, so what the player drives through is the lyric. Too many bubbles is no bubbles.
+`setSparse(true)` `seedChunk` lays only the chunk's own golden and no lanes or ramp lines,
+so what the player drives through is the lyric. Too many bubbles is no bubbles.
 
 ### `race/run.js` + `raceBoot.js` (PR c2)
 ```js

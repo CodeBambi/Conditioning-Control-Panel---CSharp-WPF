@@ -5,8 +5,8 @@ on the dive's shared context (`engine/audioBus.js`, so the DtRH master colour ap
 fanfares the host already ships (`Resources/sounds/chaos/*.mp3`) go out as `sfx` bridge messages.
 `run.js` only calls `audio.sfx(name, scale)`, `audio.update(dt, { world, run, kart })` once per
 step, `audio.duck(on, why)` on brake / host pause / end, and `audio.dispose()`. Everything else
-audio.js reads off the live world it is handed: it subscribes to `field.onPop`, `score.onEvent`
-and `items.onEvent` itself (re-subscribing when "again" builds a new world) and watches
+audio.js reads off the live world it is handed: it subscribes to `field.onPop` and `score.onEvent`
+itself (re-subscribing when "again" builds a new world) and watches
 per-frame edges (airborne, boost, drift, the Big Wheel span, the room).
 
 `bubbles.js` plays its own kind-blind pop through `makeSfxPlayer`; that player honours
@@ -77,7 +77,7 @@ door's three. race/menu.js calls them; race/cards.js calls `ui`.
 | beat | source | in-page (WebAudio) | host leg (`sfx` name) |
 |------|--------|--------------------|-----------------------|
 | treat pop | `field.onPop` treat | Pop / Pop2 / Pop3 round-robin, combo pitch, panned, 0.34 | - |
-| lucky pop | `field.onPop` lucky | Pop2 + chime1 at +5 (item incoming) | - |
+| lucky pop | `field.onPop` lucky | Pop2 + chime1 at +5 (the 25 point treat) | - |
 | prism pop | `field.onPop` prism | Pop2 at +3 + chime1 at +5 (its chained pops sound themselves) | - |
 | golden pop | `field.onPop` golden | Pop3 at +2, chime3 at +7 (50 ms), chime3 at +12 (140 ms) | swallowed (`golden_pop` 0.9) |
 | jackpot | `score` jackpot | chime1-2-3 arpeggio 80 ms (minor 0.7), major adds chime3 at +12 (300 ms) | - |
@@ -85,14 +85,10 @@ door's three. race/menu.js calls them; race/cards.js calls `ui`.
 | near miss | `score` almost | Pop2 at -4, 0.10 (the whisper) | - |
 | rung up | `score` mult (to > from) | chime ladder (above) | swallowed (`streak_milestone` 0.6) |
 | bank | `score` bank | thud (120>38 Hz sine + click) + chime1-2-3 arpeggio 90 ms | `streak_milestone` 0.9 or `pb_fanfare` 0.9 |
-| boost (pad or sugar_rush) | `kart.boostSec` rising edge | noise whoosh, bandpass 300>3200 Hz, 0.7 s | `tunnel_powerup_collect` 0.8 |
+| boost (pad) | `kart.boostSec` rising edge | noise whoosh, bandpass 300>3200 Hz, 0.7 s | `tunnel_powerup_collect` 0.8 |
 | ramp launch | `kart.airborne` rising | sine rise 220>700 Hz, 0.36 s, soft | - |
 | ramp land | `kart.airborne` falling | thump 110>42 Hz + click | - |
 | Big Wheel | `layout.featuresBetween` loop | two noise sweeps up then down, 1.3 s + 1.0 s | - |
-| item roll | `items` itemRoll | 6 Pop3 ticks over 0.85 s, pitch rising | swallowed (`ui_click` 0.5) |
-| item arm | `items` itemArm | chime1 at +4 | swallowed (`ui_click` 0.4) |
-| item use | `items` itemUse | Pop2 at -3 + noise puff | `tunnel_powerup_collect` 0.7 |
-| tea time in / out | run.js | lowpass 1.4 kHz on the music while timeScale < 1 | `time_slow_in` / `time_slow_out` |
 | gate (room change) | `run.room.id` edge | chime2 at -3 + the crossfade | `depth_change` 0.7 |
 | brake open / close | `duck('brake')` | Pop at -7 / Pop2 at +3 | `ui_click` 0.5 (open) |
 | end card | `sfx('surface')` | chime arpeggio 130 ms + chime3 at +5 | `surface` 0.8 |
