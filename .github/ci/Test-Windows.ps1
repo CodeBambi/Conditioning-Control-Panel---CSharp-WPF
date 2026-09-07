@@ -1,5 +1,9 @@
 # Only CI test orchestration. No product startup, browser flag changes, or host-wide cleanup.
-param([switch]$SelfCheckOnly)
+param(
+    [Parameter(Mandatory)][ValidateSet('SupportOnly', 'RequireNative')][string]$Mode,
+    [string]$Receipts,
+    [switch]$SelfCheckOnly
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $PSNativeCommandUseErrorActionPreference = $false
@@ -11,20 +15,22 @@ $testBin = 'Tests/ConditioningControlPanel.Tests/bin/Release/net8.0-windows10.0.
 $fact = 'ConditioningControlPanel.Tests.RaceFullscreenNativeTests.NotificationsDoNotEcho_ExplicitRequestsReceiveNativeAcknowledgements'
 $nativePath = 'Tests/ConditioningControlPanel.Tests/RaceFullscreenNativeTests.cs'
 $asset = 'ConditioningControlPanel/Resources/web/dtrh/raceBoot.js'
-$out = Join-Path ([IO.Path]::GetTempPath()) ('ccp-ci-' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory $out | Out-Null
+$out = if ($Receipts) { (Resolve-Path -LiteralPath $Receipts).Path } else {
+    $directory = Join-Path ([IO.Path]::GetTempPath()) ('ccp-ci-' + [guid]::NewGuid().ToString('N'))
+    (New-Item -ItemType Directory $directory).FullName
+}
 # Publish the receipt location before any capability check can fail. Never delete failed profiles.
 if ($env:GITHUB_OUTPUT) { "receipts=$out" >> $env:GITHUB_OUTPUT }
 Write-Host "Test-only receipts: $out"
 function Quote([string]$s) { "'" + $s.Replace("'", "''") + "'" }
 function Save($name, $value) { $value | ConvertTo-Json -Depth 12 | Set-Content "$out/$name.json" }
-function Git([string[]]$a) {
-    $text = & git -C $repo @a
+function InvokeRepoGit([string[]]$a) {
+    $text = & $gitExe -C $repo @a
     if ($LASTEXITCODE) { throw "BLOCKED: git $a exit=$LASTEXITCODE" }
     return $text
 }
 function Hash([string]$path) { (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
-function Owned([string]$name, [string]$body, [string]$cwd, [int]$seconds = 90) {
+function Owned([string]$name, [string]$body, [string]$cwd, [int]$seconds = 90, [scriptblock]$Proof) {
     # Parent sets the absent child before CreateProcess; no test/module has initialized yet.
     $root = Join-Path $out ($name + '-userdata')
     if (Test-Path -LiteralPath $root) { throw 'BLOCKED: profile is not absent' }
@@ -33,21 +39,53 @@ function Owned([string]$name, [string]$body, [string]$cwd, [int]$seconds = 90) {
         $env:CCP_USERDATA_DIR = $root
         $command = "`$ErrorActionPreference='Stop'; `$PSNativeCommandUseErrorActionPreference=`$false; " + $body
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-        $r = [OwnedTestJob]::Run($pwsh, $encoded, $cwd, $seconds, "$out/$name-job.log")
-        Save "$name-job" $r
+        $r = [OwnedTestJob]::Run($pwsh, $encoded, $cwd, $seconds, "$out/$name-job.log", {
+            param($receipt)
+            Save "$name-job" $receipt
+            if ($Proof) { & $Proof $receipt }
+        })
         if (!$r.Reaped) { throw "BLOCKED: $name not reaped" }
         return $r
     } finally { $env:CCP_USERDATA_DIR = $old }
 }
-function TestCommand([string]$filter, [string]$directory, [string]$name, [switch]$List) {
-    # Direct VSTest avoids an out-of-job reusable MSBuild node launching the test host.
-    # Build remains a separate non-test operation. No VSTest session/testhost reuse is requested.
-    $argsText = "vstest $(Quote "$directory/$testBin/ConditioningControlPanel.Tests.dll")"
-    if ($filter) { $argsText += " $(Quote "/TestCaseFilter:$filter")" }
-    if ($List) { $argsText += ' /ListTests' }
-    else { $argsText += " '/Logger:trx;LogFileName=tests.trx' $(Quote "/ResultsDirectory:$out/$name")" }
-    Owned $name "& dotnet $argsText *> $(Quote "$out/$name.log"); exit `$LASTEXITCODE" $directory
+function TestCommand([string]$filter, [string]$directory, [string]$name, [switch]$List, [switch]$Ordinary) {
+    # Native discovery/execution uses VSTest directly. Ordinary coverage keeps the standard
+    # project invocation, with build-server reuse disabled inside the inherited job.
+    if ($Ordinary) {
+        $argsText = "test $(Quote $project) -c Release --no-build --disable-build-servers -p:ValidateExecutableReferencesMatchSelfContained=false"
+        if ($filter) { $argsText += " --filter $(Quote $filter)" }
+        $argsText += " --logger 'trx;LogFileName=tests.trx' --results-directory $(Quote "$out/$name")"
+    } else {
+        $argsText = "vstest $(Quote "$directory/$testBin/ConditioningControlPanel.Tests.dll")"
+        if ($filter) { $argsText += " $(Quote "/TestCaseFilter:$filter")" }
+        if ($List) { $argsText += ' /ListTests' }
+        else { $argsText += " '/Logger:trx;LogFileName=tests.trx' $(Quote "/ResultsDirectory:$out/$name")" }
+    }
+    Save "$name-invocation" @{ mode = $Mode; cwd = $directory; executable = 'dotnet'; arguments = $argsText; filter = $filter }
+    $proof = if (!$List -and !$Ordinary) { {
+        param($receipt)
+        if ($receipt.TimedOut) { throw "BLOCKED: $name external timeout (not regression)" }
+        $members = $receipt.ObservedMembers
+        $text = (Trx $name).Xml.InnerText
+        $browser = [regex]::Match($text, 'runtime=\S+ browser=(\d+)')
+        $owned = @([regex]::Matches($text, 'owned-process=(\d+)') | ForEach-Object { [uint]$_.Groups[1].Value })
+        if (!$browser.Success -or !$owned.Count) { throw "BLOCKED: $name missing browser identities" }
+        foreach ($id in @([uint]$browser.Groups[1].Value) + $owned) {
+            if ($id -notin $members) { throw "BLOCKED: $name browser outside retained job identities (no escape fallback)" }
+        }
+        # Observed membership is not proof of every pre-core/late-startup WebView launch path.
+        Save "$name-membership" @{ proof = 'job-queried handles retained through this comparison'; browser = $browser.Groups[1].Value; owned = $owned }
+    } } else { $null }
+    Owned $name "`$env:MSBUILDDISABLENODEREUSE='1'; & dotnet $argsText *> $(Quote "$out/$name.log"); exit `$LASTEXITCODE" $directory -Proof $proof
 }
+function AssertComposition([string]$root, [string]$expectation) {
+    $markers = @($nativePath, 'Tests/ConditioningControlPanel.Tests/NativeFixtureLifetimeTests.cs',
+        'ConditioningControlPanel/Resources/web/dtrh/race/smoke/fullscreen-check.mjs')
+    $count = @($markers | Where-Object { Test-Path "$root/$_" }).Count
+    $required = if ($expectation -eq 'RequireNative') { 3 } else { 0 }
+    if ($count -ne $required) { throw "BLOCKED: $expectation fixture markers expected=$required actual=$count" }
+}
+
 function Trx([string]$name) {
     [xml]$xml = Get-Content -Raw "$out/$name/tests.trx"
     $results = @($xml.SelectNodes("//*[local-name()='UnitTestResult']"))
@@ -56,6 +94,27 @@ function Trx([string]$name) {
     [pscustomobject]@{ Xml = $xml; Results = $results; Counters = $counters }
 }
 function SelfChecks {
+    # Actual nonexecuting gate: removing every marker cannot downgrade the upper invocation.
+    $empty = (New-Item -ItemType Directory "$out/missing-markers").FullName
+    $rejected = $false
+    try { AssertComposition $empty 'RequireNative' }
+    catch { if ($_.ToString() -notlike '*RequireNative fixture markers expected=3 actual=0*') { throw }; $rejected = $true }
+    if (!$rejected) { throw 'BLOCKED: missing-all-markers check' }
+    [OwnedTestJob]::CheckReleaseFailures()
+    foreach ($key in 'DOTNET_DiagnosticPorts', 'DOTNET_DefaultDiagnosticPortSuspend') {
+        $old = [Environment]::GetEnvironmentVariable($key)
+        $rejected = $false
+        try {
+            [Environment]::SetEnvironmentVariable($key, 'support-rejection-check')
+            # Run must reject before platform/job/child acquisition; no diagnostic contact.
+            try { [OwnedTestJob]::Run('', '', $repo, 5, '', $null) | Out-Null }
+            catch { if ($_.ToString() -notlike "*inherited override: $key*") { throw }; $rejected = $true }
+        } finally { [Environment]::SetEnvironmentVariable($key, $old) }
+        if (!$rejected) { throw "BLOCKED: diagnostic rejection check $key" }
+    }
+    # Actual wrapper/application resolution, including in -SelfCheckOnly mode.
+    if ((InvokeRepoGit @('rev-parse', '--show-toplevel')) -ne $repo.Replace('\', '/')) { throw 'BLOCKED: Git wrapper root' }
+    Save 'git-check' @{ application = $gitExe; status = @(InvokeRepoGit @('status', '--porcelain=v1')) }
     foreach ($mode in 'normal', 'early-failure', 'hang', 'post-parent') {
         $marker = "$out/$mode-child.pid"
         $sleep = if ($mode -eq 'normal') { 1 } else { 30 }
@@ -70,9 +129,11 @@ function SelfChecks {
         elseif ($mode -eq 'hang') { $body += 'Start-Sleep 30' }
         else { $body += 'exit 0' }
         $seconds = 5
-        $r = Owned "self-$mode" $body $repo $seconds
-        $childPid = [uint](Get-Content $marker)
-        if ($childPid -notin $r.ObservedMembers -or $r.TotalProcesses -lt 2 -or $r.ActiveAfterReap -ne 0) {
+        $r = Owned "self-$mode" $body $repo $seconds -Proof {
+            param($receipt)
+            if ([uint](Get-Content $marker) -notin $receipt.ObservedMembers) { throw "BLOCKED: $mode retained child identity" }
+        }
+        if ($r.TotalProcesses -lt 2 -or $r.ActiveAfterReap -ne 0) {
             throw "BLOCKED: $mode descendant ownership/reap"
         }
         if ($r.TimedOut -ne ($mode -eq 'hang')) { throw "BLOCKED: $mode timeout classification" }
@@ -80,12 +141,28 @@ function SelfChecks {
         if (!$r.TimedOut -and $r.ExitCode -ne $expected) { throw "BLOCKED: $mode exit" }
         if ($mode -ne 'normal' -and $r.ResidueBeforeReap -lt 1) { throw "BLOCKED: $mode did not exercise residue" }
     }
-    Save 'self-checks' @{ outcome = 'passed'; ownerStillRunning = $PID; modes = 4 }
+    $failed = $false
+    try { [OwnedTestJob]::Run($pwsh, [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('exit 0')), $repo, 5, $out, $null) | Out-Null }
+    catch {
+        $errorObject = $_.Exception
+        while ($errorObject -isnot [AggregateException] -and $errorObject.InnerException) { $errorObject = $errorObject.InnerException }
+        if ($errorObject -isnot [AggregateException] -or $errorObject.InnerExceptions.Count -ne 2 -or
+            $errorObject.InnerExceptions[0] -isnot [UnauthorizedAccessException] -or
+            $errorObject.InnerExceptions[1] -isnot [UnauthorizedAccessException]) { throw }
+        $failed = $true
+        Save 'self-cleanup-failure' @{ error = $_.ToString(); faults = @($errorObject.InnerExceptions | ForEach-Object { $_.ToString() }) }
+    }
+    if (!$failed) { throw 'BLOCKED: exceptional journal path did not fail' }
+    Save 'self-checks' @{ outcome = 'passed'; ownerStillRunning = $PID; modes = 4; gates = 'composition,diagnostics,git,release-dispatch,journal-failure' }
 }
 try {
     # Reject rather than silently rewrite inherited runtime behavior. Policies are READ only.
-    $unsafe = @(Get-ChildItem Env: | Where-Object { $_.Name -match '^(WEBVIEW2_|COREWEBVIEW2_|COMPLUS_|CORECLR_|VSTEST_|TESTHOST_|DOTNET_STARTUP_HOOKS$|DOTNET_ADDITIONAL_DEPS$|DOTNET_SHARED_STORE$|COR_|CCP_BROWSER_SINK_TEST_LABEL$)' })
-    if ($unsafe.Count) { throw ('BLOCKED: inherited overrides: ' + ($unsafe.Name -join ',')) }
+    Add-Type -Path "$PSScriptRoot/OwnedTestJob.cs"
+    [OwnedTestJob]::AssertEnvironment()
+    AssertComposition $repo $Mode # caller-bound gate before ANY owned child or discovery
+    $present = $Mode -eq 'RequireNative'
+    Save 'mode' @{ expectation = $Mode; nativeRequired = $present }
+    $gitExe = (Get-Command git -CommandType Application -ErrorAction Stop).Source
     foreach ($hive in 'LocalMachine', 'CurrentUser') {
         foreach ($view in 'Registry64', 'Registry32') {
             $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hive, $view)
@@ -96,18 +173,11 @@ try {
             } finally { $registry.Dispose() }
         }
     }
-    Add-Type -Path "$PSScriptRoot/OwnedTestJob.cs"
     SelfChecks
     if ($SelfCheckOnly) { return }
-    if (Git @('status', '--porcelain=v1', '--untracked-files=all')) { throw 'BLOCKED: dirty CI checkout' }
-    $head = Git @('rev-parse', 'HEAD')
-    Save 'checkout' @{ head = $head; tree = (Git @('rev-parse', 'HEAD^{tree}')); os = [Environment]::OSVersion.ToString(); session = (Get-Process -Id $PID).SessionId; pwsh = $PSVersionTable.PSVersion.ToString(); sdk = (& dotnet --version) }
-    $present = Test-Path "$repo/$nativePath"
-    # The lower support layer has none of these fixture-layer markers. Partial composition blocks.
-    $markers = @($nativePath, 'Tests/ConditioningControlPanel.Tests/NativeFixtureLifetimeTests.cs',
-        'ConditioningControlPanel/Resources/web/dtrh/race/smoke/fullscreen-check.mjs')
-    $markerCount = @($markers | Where-Object { Test-Path "$repo/$_" }).Count
-    if ($markerCount -ne 0 -and $markerCount -ne 3) { throw 'BLOCKED: incomplete fixture composition' }
+    if (InvokeRepoGit @('status', '--porcelain=v1', '--untracked-files=all')) { throw 'BLOCKED: dirty CI checkout' }
+    $head = InvokeRepoGit @('rev-parse', 'HEAD')
+    Save 'checkout' @{ head = $head; tree = (InvokeRepoGit @('rev-parse', 'HEAD^{tree}')); os = [Environment]::OSVersion.ToString(); session = (Get-Process -Id $PID).SessionId; pwsh = $PSVersionTable.PSVersion.ToString(); sdk = (& dotnet --version) }
     # Inventory discovers but NEVER executes tests. Job/profile protections still apply to module init.
     $inventory = TestCommand '' $repo 'inventory' -List
     if ($inventory.TimedOut -or $inventory.ExitCode) { throw 'BLOCKED: inventory' }
@@ -123,23 +193,23 @@ try {
     if ($present) {
         $inverse = "$PSScriptRoot/race-callback-inverse.patch"
         if ((Hash $inverse) -ne '3C0416B2B37DBD957E4C6F120148EE703680B8B774FE8693F9CA548356374B2B') { throw 'BLOCKED: inverse provenance' }
-        $stat = Git @('apply', '--numstat', $inverse)
+        $stat = InvokeRepoGit @('apply', '--numstat', $inverse)
         if ($stat -cne "1`t1`t$asset") { throw 'BLOCKED: inverse must change raceBoot.js only +1/-1' }
         # Copy tracked checkout bytes only: archive would change CRLF checkout bytes to blob LF.
         # No obj/bin reuse, no history manipulation and no second fixture revision.
         $red = "$out/red-source"
         New-Item -ItemType Directory $red | Out-Null
-        $sources = @(Git @('ls-files'))
+        $sources = @(InvokeRepoGit @('ls-files'))
         foreach ($path in $sources) {
             $destination = Join-Path $red $path
             New-Item -ItemType Directory -Force (Split-Path $destination) | Out-Null
             Copy-Item -LiteralPath "$repo/$path" -Destination $destination
         }
-        & git -C $red apply --ignore-space-change --check $inverse
+        & $gitExe -C $red apply --ignore-space-change --check $inverse
         if ($LASTEXITCODE) { throw 'BLOCKED: inverse applicability' }
-        & git -C $red apply --ignore-space-change $inverse
+        & $gitExe -C $red apply --ignore-space-change $inverse
         if ($LASTEXITCODE) { throw 'BLOCKED: inverse application' }
-        $actualStat = & git diff --no-index --numstat -- "$repo/$asset" "$red/$asset"
+        $actualStat = & $gitExe diff --no-index --numstat -- "$repo/$asset" "$red/$asset"
         if ($LASTEXITCODE -ne 1 -or $actualStat -notmatch '^1\t1\t') {
             throw 'BLOCKED: actual inverse diff is not +1/-1'
         }
@@ -180,12 +250,6 @@ try {
                 $text -match 'TEARDOWN/ORACLE-FAILED|TEARDOWN-BLOCKED') {
                 throw "BLOCKED: $member capability/teardown"
             }
-            $browser = [regex]::Match($text, 'runtime=\S+ browser=(\d+)')
-            $owned = @([regex]::Matches($text, 'owned-process=(\d+)') | ForEach-Object { [uint]$_.Groups[1].Value })
-            if (!$browser.Success -or !$owned.Count) { throw "BLOCKED: $member missing browser identities" }
-            foreach ($id in @([uint]$browser.Groups[1].Value) + $owned) {
-                if ($id -notin $r.ObservedMembers) { throw "BLOCKED: $member browser outside observed job (no escape fallback)" }
-            }
             if ($member -eq 'red') {
                 $errorText = $t.Results[0].SelectSingleNode(".//*[local-name()='ErrorInfo']").InnerText
                 if ($r.ExitCode -ne 1 -or $t.Results[0].outcome -ne 'Failed' -or
@@ -201,12 +265,15 @@ try {
     }
     # Exactly one ordinary execution; only the separately mandatory native Fact is excluded.
     $filter = if ($present) { "FullyQualifiedName!=$fact" } else { '' }
-    $r = TestCommand $filter $repo 'compatibility'
+    $r = TestCommand $filter $repo 'compatibility' -Ordinary
     $t = Trx 'compatibility'
     if ($r.TimedOut -or $r.ExitCode -or [int]$t.Counters.failed -ne 0) { throw 'BLOCKED: compatibility' }
-    $expected = @($names | Where-Object { !$present -or $_ -cne $fact } | Sort-Object)
-    $actual = @($t.Results | ForEach-Object { $_.testName } | Sort-Object)
-    if (!$expected.Count -or (Compare-Object $expected $actual) -or $expected.Count -ne $actual.Count) { throw 'BLOCKED: aggregate discovery/compatibility coverage mismatch' }
+    # Deferred theories can expand after discovery: inventory names are diagnostic, not a TRX bijection.
+    if (!$t.Results.Count -or [int]$t.Counters.executed -ne $t.Results.Count -or
+        [int]$t.Counters.notExecuted -ne 0 -or [int]$t.Counters.passed -ne $t.Results.Count -or
+        @($t.Results | Where-Object { $_.outcome -ne 'Passed' -or $_.testName -ceq $fact }).Count) {
+        throw 'BLOCKED: compatibility failed/skipped/invalid results or native overlap'
+    }
     if ($present -and !$nativePassed) { throw 'BLOCKED: ordinary exclusion without mandatory pair' }
     if ($present) {
         foreach ($identity in $identities) {
@@ -216,8 +283,8 @@ try {
             }
         }
     }
-    if (Git @('status', '--porcelain=v1', '--untracked-files=all')) { throw 'BLOCKED: final checkout changed' }
-    Save 'summary'  @{ outcome = 'passed'; nativeVerified = $nativePassed; supportOnly = !$present; compatibility = $t.Counters; aggregateDiscovered = $names.Count; head = $head }
+    if (InvokeRepoGit @('status', '--porcelain=v1', '--untracked-files=all')) { throw 'BLOCKED: final checkout changed' }
+    Save 'summary'  @{ outcome = 'passed'; nativeVerified = $nativePassed; supportOnly = !$present; compatibility = $t.Counters; diagnosticDiscovered = $names.Count; mode = $Mode; head = $head }
 } catch {
     Save 'blocked' @{ outcome = 'blocked'; error = $_.ToString(); stack = $_.ScriptStackTrace }
     throw

@@ -71,6 +71,8 @@ public static class OwnedTestJob
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool member);
     [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll", SetLastError = true)]
     static extern uint ResumeThread(IntPtr thread);
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
@@ -86,11 +88,17 @@ public static class OwnedTestJob
         public uint Pid, ExitCode, TotalProcesses, ResidueBeforeReap, ActiveAfterReap;
         public bool TimedOut, Reaped, RunnerNested;
         public long ElapsedMilliseconds;
-        public uint[] ObservedMembers;
+        public uint[] ObservedMembers; // descriptive after Run; prove membership only in its callback
     }
     static void Check(bool ok, string operation)
     {
         if (!ok) throw new Win32Exception(Marshal.GetLastWin32Error(), operation);
+    }
+    static void RequireRunning(IntPtr process)
+    {
+        uint wait = WaitForSingleObject(process, 0);
+        if (wait == uint.MaxValue) Check(false, "member identity wait");
+        if (wait != 258) throw new InvalidOperationException("member exited during identity proof");
     }
     static Accounting Counts(IntPtr job)
     {
@@ -99,13 +107,54 @@ public static class OwnedTestJob
         return a;
     }
 
+    public static void AssertEnvironment()
+    {
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            if (System.Text.RegularExpressions.Regex.IsMatch((string)entry.Key,
+                "^(WEBVIEW2_|COREWEBVIEW2_|COMPLUS_|CORECLR_|VSTEST_|TESTHOST_|DOTNET_STARTUP_HOOKS$|DOTNET_ADDITIONAL_DEPS$|DOTNET_SHARED_STORE$|DOTNET_DiagnosticPorts$|DOTNET_DefaultDiagnosticPortSuspend$|COR_|CCP_BROWSER_SINK_TEST_LABEL$)",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                throw new InvalidOperationException("BLOCKED: inherited override: " + entry.Key);
+    }
+    static void ReleaseAll(Exception primary, params Action[] releases)
+    {
+        var faults = new List<Exception>();
+        if (primary != null) faults.Add(primary);
+        foreach (var release in releases)
+            try { release(); }
+            catch (Exception error) { faults.Add(error); }
+        if (faults.Count > (primary == null ? 0 : 1))
+            throw new AggregateException("Owned job cleanup failed; primary first if present", faults);
+    }
+    // Managed-only check of the actual release dispatcher; no child or Windows API calls.
+    public static void CheckReleaseFailures()
+    {
+        var primary = new IOException("primary");
+        var secondary = new IOException("secondary");
+        int attempted = 0;
+        try
+        {
+            ReleaseAll(primary, () => { ++attempted; throw secondary; },
+                () => { ++attempted; throw secondary; }, () => { ++attempted; });
+        }
+        catch (AggregateException error)
+        {
+            if (attempted == 3 && error.InnerExceptions.Count == 3 &&
+                ReferenceEquals(error.InnerExceptions[0], primary) &&
+                ReferenceEquals(error.InnerExceptions[1], secondary) &&
+                ReferenceEquals(error.InnerExceptions[2], secondary)) return;
+            throw;
+        }
+        throw new InvalidOperationException("release failure check did not exercise all releases");
+    }
+
     // Windows 10+ JOB_LIST assigns membership AT creation, before even a suspended thread exists.
     // No breakaway/silent-breakaway limits, no inherited handles, no CREATE_BREAKAWAY_FROM_JOB.
     // A runner's outer job remains intact. Incompatible nested-job/sandbox constraints BLOCK;
     // never retry outside the job or change browser flags. Descendants inherit this job even
     // when they create nested sandbox jobs. Kill-on-close covers coordinator cancellation too.
-    public static Receipt Run(string exe, string encodedCommand, string cwd, int seconds, string journal)
+    public static Receipt Run(string exe, string encodedCommand, string cwd, int seconds, string journal, Action<Receipt> proveMembers)
     {
+        AssertEnvironment();
         if (!OperatingSystem.IsWindows() || IntPtr.Size != 8 || seconds < 2)
             throw new PlatformNotSupportedException("64-bit Windows 10+ owned test job required");
         var clock = Stopwatch.StartNew();
@@ -113,13 +162,15 @@ public static class OwnedTestJob
         IntPtr job = IntPtr.Zero, attributes = IntPtr.Zero, jobValue = IntPtr.Zero;
         var process = new ProcessInfo();
         bool initialized = false;
-        var members = new HashSet<uint>();
-        IntPtr inventory = Marshal.AllocHGlobal(4096);
+        var members = new Dictionary<uint, IntPtr>();
+        Exception primary = null;
+        IntPtr inventory = IntPtr.Zero;
         Action<string> log = text => File.AppendAllText(journal, clock.ElapsedMilliseconds + "ms " + text + "\n");
         try
         {
-            Check(IsProcessInJob(Process.GetCurrentProcess().Handle, IntPtr.Zero, out result.RunnerNested),
-                "runner job query");
+            inventory = Marshal.AllocHGlobal(4096);
+            using (var current = Process.GetCurrentProcess())
+                Check(IsProcessInJob(current.Handle, IntPtr.Zero, out result.RunnerNested), "runner job query");
             job = CreateJobObjectW(IntPtr.Zero, null); // unnamed, non-inheritable, only this owner holds it
             Check(job != IntPtr.Zero, "CreateJobObject");
             var limits = new Limits { Basic = new BasicLimits { Flags = 0x2000 } }; // KILL_ON_JOB_CLOSE only
@@ -145,7 +196,8 @@ public static class OwnedTestJob
             if (!member || Counts(job).Active != 1) throw new InvalidOperationException("root membership not proven");
             log("assigned-before-execution pid=" + result.Pid + " runner-nested=" + result.RunnerNested);
             Check(ResumeThread(process.Thread) != uint.MaxValue, "ResumeThread");
-            // Reserve the final second of the external bound for reaping, including post-Fact work.
+            // Soft coordinator budget (90s for tests), not an independent owner-stall watchdog.
+            // Reserve the final second for reaping, including post-Fact work.
             long deadline = seconds * 1000L;
             uint wait;
             do
@@ -153,11 +205,22 @@ public static class OwnedTestJob
                 // Bounded job-only inventory, not a PID/name sweep. Overflow blocks rather than truncates.
                 Check(QueryPids(job, 3, inventory, 4096, IntPtr.Zero), "job PID inventory");
                 int count = Marshal.ReadInt32(inventory, 4);
-                if (count > 511) throw new InvalidOperationException("job inventory overflow");
+                if (count < 0 || count > 511 || Marshal.ReadInt32(inventory) != count) throw new InvalidOperationException("job inventory overflow");
                 for (int i = 0; i < count; ++i)
                 {
                     uint pid = checked((uint)Marshal.ReadInt64(inventory, 8 + i * 8));
-                    if (members.Add(pid)) log("owned-member=" + pid);
+                    if (!members.TryGetValue(pid, out var handle))
+                    {
+                        handle = OpenProcess(0x101000, false, pid); // SYNCHRONIZE | QUERY_LIMITED_INFORMATION
+                        Check(handle != IntPtr.Zero, "acquire job member identity pid=" + pid);
+                        members.Add(pid, handle); // retain even on a subsequent proof failure
+                    }
+                    // A retained handle pins the process object/PID through the proof callback.
+                    // Fail closed if it exited during acquisition/query, not historical PID equality.
+                    RequireRunning(handle);
+                    Check(IsProcessInJob(handle, job, out var owned), "member job query pid=" + pid);
+                    if (!owned) throw new InvalidOperationException("job member identity changed");
+                    RequireRunning(handle);
                 }
                 wait = WaitForSingleObject(process.Process, 10);
             } while (wait == 258 && clock.ElapsedMilliseconds < deadline - 1000);
@@ -174,34 +237,39 @@ public static class OwnedTestJob
             result.ActiveAfterReap = Counts(job).Active;
             result.Reaped = result.ActiveAfterReap == 0 && clock.ElapsedMilliseconds <= deadline;
             result.ElapsedMilliseconds = clock.ElapsedMilliseconds;
-            result.ObservedMembers = new List<uint>(members).ToArray();
+            result.ObservedMembers = new List<uint>(members.Keys).ToArray();
             log("reaped=" + result.Reaped + " active=" + result.ActiveAfterReap + " total=" + result.TotalProcesses);
             if (!result.Reaped) throw new InvalidOperationException("BLOCKED: job reap not proven inside external bound");
+            // Proof runs before releasing any retained identity. Missing observations block.
+            proveMembers?.Invoke(result);
             return result;
         }
+        catch (Exception error) { primary = error; throw; }
         finally
         {
-            // Error paths also attempt owned reap; closing remains the last-resort kernel guarantee.
-            if (job != IntPtr.Zero)
+            // Each release is independent, including logging and CloseHandle failures.
+            // Job close remains the kernel kill-on-close backstop; never terminate by PID.
+            var releases = new List<Action> { () =>
             {
-                try
+                if (job != IntPtr.Zero && !result.Reaped && process.Process != IntPtr.Zero)
                 {
-                    if (!result.Reaped && process.Process != IntPtr.Zero)
-                    {
-                        Check(TerminateJobObject(job, 125), "exceptional owned termination");
-                        while (Counts(job).Active != 0 && clock.ElapsedMilliseconds < seconds * 1000L)
-                            Thread.Sleep(10);
-                        log("exceptional-reap active=" + Counts(job).Active);
-                    }
+                    Check(TerminateJobObject(job, 125), "exceptional owned termination");
+                    while (Counts(job).Active != 0 && clock.ElapsedMilliseconds < seconds * 1000L)
+                        Thread.Sleep(10);
+                    log("exceptional-reap active=" + Counts(job).Active);
                 }
-                finally { Check(CloseHandle(job), "close owned job"); }
-            }
-            if (process.Thread != IntPtr.Zero) CloseHandle(process.Thread);
-            if (process.Process != IntPtr.Zero) CloseHandle(process.Process);
-            if (initialized) DeleteProcThreadAttributeList(attributes);
-            if (attributes != IntPtr.Zero) Marshal.FreeHGlobal(attributes);
-            if (jobValue != IntPtr.Zero) Marshal.FreeHGlobal(jobValue);
-            Marshal.FreeHGlobal(inventory);
+            },
+                () => { if (job != IntPtr.Zero) Check(CloseHandle(job), "close owned job"); },
+                () => { if (process.Thread != IntPtr.Zero) Check(CloseHandle(process.Thread), "close root thread"); },
+                () => { if (process.Process != IntPtr.Zero) Check(CloseHandle(process.Process), "close root process"); },
+                () => { if (initialized) DeleteProcThreadAttributeList(attributes); },
+                () => { if (attributes != IntPtr.Zero) Marshal.FreeHGlobal(attributes); },
+                () => { if (jobValue != IntPtr.Zero) Marshal.FreeHGlobal(jobValue); },
+                () => { if (inventory != IntPtr.Zero) Marshal.FreeHGlobal(inventory); }
+            };
+            foreach (var handle in members.Values)
+                releases.Add(() => Check(CloseHandle(handle), "close retained member"));
+            ReleaseAll(primary, releases.ToArray());
         }
     }
 }
