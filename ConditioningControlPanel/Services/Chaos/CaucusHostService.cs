@@ -1107,10 +1107,15 @@ internal static class CaucusHostService
         string? temp = null;
         try
         {
-            // The doors before the download. (a) and (b) by cloudId need only the url, so an
-            // authored chart linked by cloudId costs no download at all.
+            // The doors before the download. (a) and (b) by cloudId need only the url, and all three
+            // of (a), (b) and (c) answer off the hash, which is a length and a megabyte. An authored
+            // or already charted track therefore costs no download at all.
             string cloudId = AuthoredCharts.CloudIdFrom(src);
             if (TryChartWithoutAnalysis("", cloudId, name, name)) return;
+
+            string? hash = await ProbeCloudHashAsync(src, name, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            if (hash != null && TryChartWithoutAnalysis(hash, cloudId, name, name)) return;
 
             temp = await DownloadCloudTrackAsync(src, name, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
@@ -1135,6 +1140,78 @@ internal static class CaucusHostService
             if (ReferenceEquals(_analysisCts, cts)) _analysisCts = null;
             try { cts.Dispose(); } catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud cts: {E}", ex.Message); }
         }
+    }
+
+    /// <summary>
+    /// The CHART.md hash of a track without downloading it: a HEAD for the length and a Range for
+    /// the first 1 MiB. <see cref="TrackDecoder.HashBytes"/> is the same recipe HashFile uses over a
+    /// file, so the number matches the one a local copy of the same audio would give.
+    ///
+    /// Null means "ask the ordinary way": no length, no ranges, a short read, anything. The caller
+    /// falls back to the full download and hashes the file, which is exactly what it did before this
+    /// existed. ONE retry and no more, the same bargain the download makes.
+    /// </summary>
+    private static async Task<string?> ProbeCloudHashAsync(string src, string name, CancellationToken ct)
+    {
+        if (!RaceCloudWindow.IsSiteUri(src)) return null;
+        try
+        {
+            long? length = await CloudLengthAsync(src, ct).ConfigureAwait(false);
+            if (length is not > 0) return null;
+
+            int want = (int)Math.Min(TrackDecoder.HashHead, length.Value);
+            using var req = new HttpRequestMessage(HttpMethod.Get, src);
+            req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, want - 1);
+            using var resp = await CloudHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            // A 200 here is the CDN ignoring the range and offering the whole file. Walk away: the
+            // download path is about to ask for it properly, with progress.
+            if (resp.StatusCode != System.Net.HttpStatusCode.PartialContent) return null;
+
+            var head = new byte[want];
+            using (var body = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
+            {
+                int filled = 0, got;
+                while (filled < want && (got = await body.ReadAsync(head.AsMemory(filled, want - filled), ct).ConfigureAwait(false)) > 0)
+                    filled += got;
+                if (filled != want) return null;
+            }
+
+            string hash = TrackDecoder.HashBytes(length.Value, head);
+            App.Logger?.Information("RaceHost: cloud hash for {Name} off {Bytes} bytes of {Total}: {Hash}", name, want, length.Value, hash);
+            return hash;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            App.Logger?.Information("RaceHost: cloud hash probe failed for {Name} ({E}), downloading instead", name, ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>The file's length: a HEAD, or the total out of a one-byte range's Content-Range for
+    /// a CDN that will not answer HEAD. Null when neither says.</summary>
+    private static async Task<long?> CloudLengthAsync(string src, CancellationToken ct)
+    {
+        try
+        {
+            using var head = new HttpRequestMessage(HttpMethod.Head, src);
+            using var resp = await CloudHttp.SendAsync(head, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode && resp.Content.Headers.ContentLength is > 0)
+                return resp.Content.Headers.ContentLength;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud head: {E}", ex.Message); }
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, src);
+            req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+            using var resp = await CloudHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            return resp.Content.Headers.ContentRange?.Length;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.cloud range probe: {E}", ex.Message); }
+        return null;
     }
 
     /// <summary>Stream the audio to a temp file, reporting bytes as track-progress. ONE retry and no

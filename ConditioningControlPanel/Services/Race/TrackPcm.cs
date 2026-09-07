@@ -94,11 +94,14 @@ public static class TrackDecoder
         }
     }
 
+    /// <summary>CHART.md: the hash reads the first 1 MiB and nothing else.</summary>
+    public const int HashHead = 1024 * 1024;
+
     /// <summary>The cache key: SHA1 of the length prefix + the first 1 MiB, so a rename keeps its chart.</summary>
     public static string HashFile(string path)
     {
         long length = new FileInfo(path).Length;
-        var head = new byte[1024 * 1024];
+        var head = new byte[HashHead];
         int filled = 0;
         using (var file = File.OpenRead(path))
         {
@@ -106,13 +109,26 @@ public static class TrackDecoder
             while (filled < head.Length && (got = file.Read(head, filled, head.Length - filled)) > 0)
                 filled += got;
         }
+        return HashBytes(length, filled == head.Length ? head : head[..filled]);
+    }
+
+    /// <summary>
+    /// The same number as <see cref="HashFile"/> from a length and the head bytes on their own, for
+    /// the caller that has those without having the file: the cloud path asks the CDN for a length
+    /// and one megabyte so an authored or already charted track costs no download. Pass at most the
+    /// first <see cref="HashHead"/> bytes, and fewer when the file is shorter than that.
+    /// </summary>
+    public static string HashBytes(long length, byte[] head)
+    {
+        if (head == null) throw new ArgumentNullException(nameof(head));
+        int count = Math.Min(head.Length, HashHead);
 
         var prefix = BitConverter.GetBytes(length);
         if (!BitConverter.IsLittleEndian) Array.Reverse(prefix);
 
         using var sha = SHA1.Create();
         sha.TransformBlock(prefix, 0, prefix.Length, null, 0);
-        sha.TransformFinalBlock(head, 0, filled);
+        sha.TransformFinalBlock(head, 0, count);
         return Convert.ToHexString(sha.Hash ?? Array.Empty<byte>()).ToLowerInvariant();
     }
 

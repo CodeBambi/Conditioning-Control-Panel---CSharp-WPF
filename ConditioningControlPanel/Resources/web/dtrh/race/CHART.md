@@ -289,6 +289,13 @@ it. If the two ever disagree, the shared section is right.
   exception, when the chart handed to it is authored, or when an authored chart already answers for
   that hash. The "re-chart a `none` chart once a Vosk model appears" rule skips authored charts too:
   there is no better pass than the person who wrote it.
+- **Hash before download.** On the cloud path the host resolves doors 1 and 2 off the `cloudId` with
+  no request at all, then asks the CDN for a `Content-Length` (HEAD, or the total out of a one byte
+  range's `Content-Range`) and a `Range: bytes=0-1048575`, and hashes those with
+  `TrackDecoder.HashBytes(length, head)` - the same recipe `HashFile` uses over a whole file. Doors
+  1, 2 and 3 are all resolved off that hash before a byte of audio is fetched, so an authored or
+  already charted track costs no download. If ranges are refused, or anything else goes sideways,
+  the probe answers nothing and the full download happens as before. One retry, never more.
 
 **Known gap: no prefetch of the next track.** The desktop never reads the playlist over there, so it
 cannot know what is coming and cannot chart it early. Charting starts when the track does. In
