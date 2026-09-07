@@ -99,8 +99,14 @@ function totalFromRange(v) {
 /**
  * The file's hash without downloading the file.
  *
- *   1. HEAD for `content-length` (a CORS safelisted response header, so it reads
- *      cross origin whenever the HEAD itself is allowed).
+ *   0. `byteLength`, when the caller already knows it. race/levels.json writes the
+ *      length of every level down, and a length in hand is a HEAD not sent: the
+ *      real cdn answers a HEAD with no `Access-Control-Allow-Origin` on it, so a
+ *      cross origin HEAD from a browser fails there no matter what we ask.
+ *   1. Otherwise HEAD for `content-length` (a CORS safelisted response header, so
+ *      it reads cross origin whenever the HEAD itself is allowed). A HEAD that is
+ *      refused is ONE log line and an unknown length, never a thrown error: step 2
+ *      still has a `Content-Range` to try and the 200 case still works.
  *   2. GET with `Range: bytes=0-<1 MiB - 1>`. A 206 gives the head bytes, and its
  *      `Content-Range` gives the total length when step 1 could not.
  *   3. If the server ignored the range and sent 200, that body IS the file: its
@@ -111,15 +117,18 @@ function totalFromRange(v) {
  * Answers `{ hash, bytes, total, ranged }` or null when it could not be worked
  * out at all. Never throws: every failure is a null and a log line.
  */
-export async function hashUrl(url, { fetch: f = null, log = null, signal = null } = {}) {
+export async function hashUrl(url, { fetch: f = null, log = null, signal = null, byteLength = 0 } = {}) {
   const get = f || (typeof fetch !== 'undefined' ? fetch : null);
   const say = (m) => { try { if (log) log('hash: ' + m); } catch (e) { /* no log */ } };
   if (!get || !url) return null;
-  let total = null;
-  try {
-    const h = await get(url, { method: 'HEAD', mode: 'cors', credentials: 'omit', signal });
-    if (h && h.ok) { const n = Number(h.headers.get('content-length')); if (n > 0) total = n; }
-  } catch (e) { say('no HEAD (' + ((e && e.message) || e) + ')'); }
+  let total = Number(byteLength) > 0 ? Number(byteLength) : null;
+  if (total) say('length in hand (' + total + '), no HEAD needed');
+  else {
+    try {
+      const h = await get(url, { method: 'HEAD', mode: 'cors', credentials: 'omit', signal });
+      if (h && h.ok) { const n = Number(h.headers.get('content-length')); if (n > 0) total = n; }
+    } catch (e) { say('no HEAD (' + ((e && e.message) || e) + '), reading the length off the range instead'); }
+  }
   let res = null;
   try {
     res = await get(url, { method: 'GET', mode: 'cors', credentials: 'omit', signal, headers: { Range: `bytes=0-${HASH_HEAD - 1}` } });

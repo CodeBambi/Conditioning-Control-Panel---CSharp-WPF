@@ -3,8 +3,10 @@
 What the web build of Racing Thoughts does with audio hosted on bambicloud.com,
 what it was allowed to find out, and where lane W2 plugs in.
 
-Code: `race/cloud.js` (the player and the panel), `race/menu.js` (the verb),
-`raceBoot.js` (the hooks and the outbound tap), `race/smoke/cloud-check.mjs`.
+Code: `race/levels.js` + `race/levels.json` (the levels panel and its list),
+`race/cloud.js` (the player and the paste box), `race/menu.js` (the verb),
+`raceBoot.js` (the hooks and the outbound tap), `race/smoke/levels-check.mjs`
+and `race/smoke/cloud-check.mjs`.
 
 ## The shape that shipped
 
@@ -18,7 +20,84 @@ loaded and charted, so the next track is the next lap.
 **There is no playlist browser.** See "what discovery found" below: the response
 shape of the site's public playlist collection was never confirmed, and a
 browser built against an unconfirmed shape is a screen of guesses that breaks in
-front of the player. The paste box is the whole door in this lane.
+front of the player. What shipped instead is a STATIC list, written down once and
+carried in the repo: see "the levels" below. The paste box is still there, folded
+under it, for a track that is not on the list.
+
+## The levels
+
+The verb is `levels` and it sits directly under `race`, because on a phone this is
+the whole happy path: open the race, see the tracks, tap one, drive. No pasting, no
+login, no search box.
+
+`race/levels.json` is where the list lives. It ships with the game, it is read off
+our own origin, and it is NEVER refreshed off the site: a set that is not written
+down is not on the screen.
+
+```json
+{ "version": 1, "sets": [ { "id": "...", "title": "...", "source": "bambicloud",
+  "playlistId": "...", "playlistUrl": "https://bambicloud.com/playlist/<id>",
+  "levels": [ { "n": 1, "id": "<file uuid>", "title": "...",
+                "url": "https://cdn.bambicloud.com/<uuid>.mp3",
+                "durationSec": 162, "bytes": 3581627, "trackNum": 0 } ] } ] }
+```
+
+| field | what it is |
+| --- | --- |
+| `n` | the number on the row, 1 up. The order the set is played in. |
+| `id` | the file's own id. It is the entry id the player keys on, and it is what a desktop host is asked to open (`https://bambicloud.com/file/<id>`, a PAGE, never a file). |
+| `title` | what the row and the plate say. |
+| `url` | the audio file on the cdn. The only url this page ever hands to an `<audio>` element or a `fetch`. |
+| `durationSec` | the length, for the `m:ss` on the row. The element is still the clock. |
+| `bytes` | the file's `Content-Length`. **Carried on purpose:** see below. |
+
+**Adding a set** is editing that file and nothing else. Append an object to `sets`
+with its own `levels`, keep `n` contiguous from 1, and give every level a real
+`bytes`. The panel shows the FIRST set; a second one is a list the panel can be
+taught to switch between later, and it costs no code to write it down now.
+
+**Why `bytes` is written down.** The `CHART.md` hash is the byte length plus the
+first 1 MiB, and the two lookups that can answer without downloading the file (the
+authored index by hash, and the generated-chart cache) both need that hash. A
+length already in hand is a `HEAD` request never sent, and on this cdn that matters
+(the facts are below). `hashUrl(url, { byteLength })` skips the HEAD outright when
+it is given one.
+
+**What a row says.** Its number, its title, its length as `m:ss`, and one small
+mark: `hand-tuned` when `race/charts/index.json` has a row for that track,
+`road` when it does not, `again` on the last level played (kept in `localStorage`
+under `race.level`, an id and nothing else), and the live word while it is being
+worked on (`naming`, `reading`, `decoding`, `charting`, then `playing` / `paused`).
+Deciding `hand-tuned` costs NO NETWORK: the index is same origin and already
+fetched, and the key is the `cloudId` off the url.
+
+**Two hosts, one panel.** On the web a tap hands that one track to `race/cloud.js`
+and the run follows the element. On a desktop host (`trackPick: true`) the desktop
+owns playback, so a tap posts `cloud-open { url }` with the track's PAGE url and
+toasts "press play over there"; this page loads no audio at all in that mode, and
+`play the set` is not offered because the playlist is not this page's to hold.
+
+> As of this lane the C# host's `cloud-open` handler takes no `url`: it opens its
+> window and ignores the field. The message carries it anyway so the host can learn
+> to read it without the page changing.
+
+**The cdn facts this is built on** (checked 2026-09-07 with `Origin:
+https://app.cclabs.app`):
+
+- `HEAD` answers 200 with `Accept-Ranges: bytes` and a `Content-Length`, but with
+  **no** `Access-Control-Allow-Origin`, so a cross origin HEAD from a browser
+  fails. That failure is one log line and an unknown length, never a thrown error.
+- `GET` with `Range: bytes=0-1048575` answers 206 with
+  `Access-Control-Allow-Origin: *`, so it works from the browser (a simple `Range`
+  value is a CORS-safelisted request header and needs no preflight). But there is
+  no `Access-Control-Expose-Headers`, so `Content-Range` and the total length are
+  **not** readable from JS, and the 206's `Content-Length` reads as the part size.
+- `OPTIONS` answers 403, so anything that would trigger a preflight fails.
+
+Which is exactly why the length is written down: for a level the hash is
+`SHA1(8-byte LE bytes + first 1 MiB)` off ONE ranged GET and no HEAD at all. A
+pasted link with no known length falls back to lane W2's other road: the length off
+`Content-Range` if the server exposes it, else off the full body.
 
 ## The rules this holds
 
@@ -232,17 +311,42 @@ track a new lap.
 ## Switches
 
 - `cloud: true` in the host's `init.settings` turns the verb on. The browser
-  host (cclabs-web `scripts/race-web-ext/host/index.js`) sets it; a desktop host
-  does not, and `trackPick: true` (a host that can open a file dialog) turns it
-  off outright - `cloudEnabled()` in `race/cloud.js` is the whole rule, exported
-  so the menu and the smoke read one predicate.
+  host (cclabs-web `scripts/race-web-ext/host/index.js`) sets it, and a desktop
+  host that carries it gets the levels panel in its desktop shape.
+  `levelsEnabled()` in `race/levels.js` is the whole rule for the verb, exported
+  so the menu and the smoke read one predicate; `cloudEnabled()` in
+  `race/cloud.js` is the narrower one for the mini-player, and `trackPick: true`
+  still turns THAT off outright, so a desktop host never streams audio here.
 - `?cloud=1` is the same switch for a page with no host under it. Dev and the
-  smoke use it; it can never turn on where a desktop host owns track loading.
+  smokes use it.
+- `?levels=<url>` swaps the level list for another one, **same origin only**, so a
+  query string can never point the panel at somebody else's file. It exists for
+  `race/smoke/levels-check.mjs`, which serves its own two-level list.
+- `?trackpick=1` makes an unhosted page claim the desktop host's track door, so
+  the check can walk the `cloud-open` branch. A check aid, nothing else.
 - `?panel=cloud` opens the menu on the panel, the way `?panel=howto` does.
-- `window.__race` is a standalone-only handle on `{ race, cloud, menu, settings }`
-  so a headless check can read the run's state. It is never defined under a host.
+- `window.__race` is a standalone-only handle on
+  `{ race, cloud, levels, menu, settings }` so a headless check can read the run's
+  state. It is never defined under a host.
 
 ## The check
+
+```
+node race/smoke/levels-check.mjs
+```
+
+The levels half. Serves `Resources/web` itself plus its OWN two-level list, its own
+authored index and its two WAV tracks (all in memory, so no binary and no test row
+is committed), and drives headless Chrome at 390x844, a phone, because that is who
+this panel is for. It holds: the verb is `levels` and sits under `race`; the panel
+lists the set title and one row per level with number, name and `m:ss`, every row
+at least 48 px tall and full width; `hand-tuned` and `road` land on the right rows
+and cost no request; a tap is a ONE TRACK run whose clock is the file's clock;
+`again` lands on the last level played and survives a reload; `play the set` is the
+whole list in order, the first one coming through the authored door, and the end of
+a file rolls the lap on; `or paste a link` opens lane W1's box unchanged; on a
+desktop host the row posts `cloud-open` with the page url and no byte of audio is
+asked for; and nothing left localhost.
 
 ```
 node race/smoke/cloud-check.mjs

@@ -233,15 +233,18 @@ function plainRoad(name, durationSec) {
  * @param {string}   o.indexUrl        where race/charts/index.json lives
  * @param {object}   [o.cache]         race/chartCache.js, or null for none
  * @param {function} [o.onUpgrade]     (chart) -> void, the real road landing on a partial one
+ * @param {function} [o.onStage]       (id, word) -> void, which of the four steps this track is on
  * @param {function} [o.toast]         (line) -> void
  * @param {function} [o.log]
  * @param {function} [o.fetch]         the smoke's seam
  * @param {number}   [o.partialMs]
  */
-export function createChartSource({ indexUrl, cache = null, onUpgrade = null, toast = null, log = null, fetch: f = null, partialMs = PARTIAL_MS } = {}) {
+export function createChartSource({ indexUrl, cache = null, onUpgrade = null, onStage = null, toast = null, log = null, fetch: f = null, partialMs = PARTIAL_MS } = {}) {
   const get = f || (typeof fetch !== 'undefined' ? fetch : null);
   const say = (m) => { try { if (log) log('chart: ' + m); } catch (e) { /* no log */ } };
   const shout = (m) => { try { if (toast) toast(m); } catch (e) { /* no toast */ } };
+  /** Which step a track is on, for whatever is drawing its row. '' takes the word back off. */
+  const stage = (id, word) => { try { if (onStage) onStage(id, word); } catch (e) { /* nobody listening */ } };
   // README: a row's `chart` is written relative to `race/`, not to the index beside it, so
   // `charts/x.chart.json` is one readable path in the file instead of `./x.chart.json`.
   const chartUrl = (rel) => new URL(String(rel), new URL('../', indexUrl)).href;
@@ -267,7 +270,8 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, to
   const named = (chart, title) => normalizeChart({ ...chart, source: { ...chart.source, name: title || (chart.source && chart.source.name) || 'track' } });
 
   /** Fetch, decode, walk, lay a road. The only path that downloads the whole file. */
-  async function generated({ url, title, durationSec, head }) {
+  async function generated({ id, url, title, durationSec, head }) {
+    stage(id, 'reading');
     const res = await get(url, { mode: 'cors', credentials: 'omit' });
     if (!res || !res.ok) throw new Error('the file answered ' + (res ? res.status : 'nothing'));
     let bytes = new Uint8Array(await res.arrayBuffer());
@@ -280,7 +284,9 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, to
     }
     const buf = bytes.buffer;
     bytes = null;
+    stage(id, 'decoding');
     const walked = await peaksFromBytes(buf);
+    stage(id, 'charting');
     const dur = durationSec > 0 ? durationSec : walked.durationSec;
     if (Math.abs(walked.durationSec - dur) > 1) say(`the element says ${Math.round(dur)}s and the file decodes to ${Math.round(walked.durationSec)}s; the element is the clock`);
     const road = roadFromPeaks({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash });
@@ -293,6 +299,7 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, to
     const { url, title } = info;
     const durationSec = Number(info.durationSec) || 0;
     const cloudId = cloudIdFrom(url);
+    stage(info.id, 'naming');
     const index = await loadIndex(indexUrl, { fetch: get, log });
 
     const byId = findAuthored(index, { cloudId });
@@ -301,7 +308,8 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, to
     // The hash is a length and the first megabyte, so both remaining lookups that can
     // answer without the file get their chance BEFORE anything is downloaded.
     let head = null;
-    try { head = await hashUrl(url, { fetch: get, log }); } catch (e) { say('hash: ' + ((e && e.message) || e)); }
+    // race/levels.json wrote this file's length down, so the hash is ONE ranged GET and no HEAD.
+    try { head = await hashUrl(url, { fetch: get, log, byteLength: Number(info.bytes) || 0 }); } catch (e) { say('hash: ' + ((e && e.message) || e)); }
     const hash = head && head.hash ? head.hash : '';
     if (hash) {
       const byHash = findAuthored(index, { hash });
@@ -312,7 +320,7 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, to
       }
     }
     if (durationSec > MAX_DECODE_SEC) { shout(TOO_LONG_LINE); throw new Error(`${Math.round(durationSec / 60)} minutes is past the ${Math.round(MAX_DECODE_SEC / 60)} minute decode limit`); }
-    return generated({ url, title, durationSec, head });
+    return generated({ id: info.id, url, title, durationSec, head });
   }
 
   /** Resolve, log the door, and fall back to the demo road rather than to a dead run. */
@@ -321,10 +329,12 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, to
     try {
       const { chart, door } = await resolve(info);
       say(`${info.title}: ${door} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      stage(info.id, '');
       return chart;
     } catch (err) {
       say(`${info.title}: ${(err && err.message) || err}`);
       shout(FALLBACK_LINE);
+      stage(info.id, '');
       const dur = Number(info.durationSec) > 0 ? Number(info.durationSec) : 240;
       const demo = demoChart({ durationSec: dur });
       return normalizeChart({ ...demo, source: { ...demo.source, name: info.title || demo.source.name, hash: '' } });
