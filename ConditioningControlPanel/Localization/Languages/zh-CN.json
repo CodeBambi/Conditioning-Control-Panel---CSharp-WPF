@@ -3914,6 +3914,8 @@
   "intake_nudge_action": "开始我的测验",
   "intake_nudge_later": "以后再说",
   "intake_nudge_body": "仪表盘上正等着一次新的评分测验。它会根据你的回答草拟一份疗程 - 跑完之后还会为你的集章卡盖章。",
+  "banner_pool_enabled": "在顶部横幅中轮播额外的句子",
+  "tooltip_banner_pool_enabled": "每隔几分钟从写好的句库里抽一句，加进顶部横幅。关闭则横幅只保留原有的句子。",
   "label_intake_nudge_enabled": "每周测验通行证就绪时提醒我",
   "label_suppress_perk_notifications": "关闭 XP 特权与任务提示",
   "tooltip_suppress_perk_notifications": "关闭 10x / 20x XP 幸运触发、Pink Rush 和任务完成的弹窗与提示音。加成本身照常生效，只是不再播报。",

@@ -3115,6 +3115,8 @@
   "intake_nudge_action": "インテークを始める",
   "intake_nudge_later": "また今度",
   "intake_nudge_body": "新しい査定インテークがダッシュボードで待っています。あなたの答え方に合わせたセッションを組み立て、走らせるとパンチカードにスタンプが押されます。",
+  "banner_pool_enabled": "上部バナーに追加の一文を巡回表示する",
+  "tooltip_banner_pool_enabled": "数分ごとに、書き置きのプールから一文をヘッダーバナーに追加します。オフならバナーはいつもの文だけになります。",
   "label_intake_nudge_enabled": "ウィークリーインテークパスが届いたら知らせる",
   "label_suppress_perk_notifications": "XPパークとクエストの通知をオフにする",
   "tooltip_suppress_perk_notifications": "10x / 20x XPのラッキー発動、ピンクラッシュ、クエスト達成のポップアップと効果音をオフにします。ボーナス自体はこれまでどおり機能し、お知らせだけが静かになります。",

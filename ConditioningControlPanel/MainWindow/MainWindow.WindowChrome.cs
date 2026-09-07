@@ -175,6 +175,7 @@ namespace ConditioningControlPanel
                 _remoteNotificationTimer?.Stop();
                 _remoteSessionInfoTimer?.Stop();
                 _bannerRotationTimer?.Stop();
+                _bannerPoolTimer?.Stop();
                 _marqueeRefreshTimer?.Stop();
                 _statPillUpdateTimer?.Stop();
                 _conditioningTimeTimer?.Stop();
