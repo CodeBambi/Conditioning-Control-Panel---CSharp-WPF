@@ -172,6 +172,8 @@ ConditioningControlPanel/tools/*
 !ConditioningControlPanel/tools/asset_gen/
 !ConditioningControlPanel/tools/bark/
 !ConditioningControlPanel/tools/GenerateAwarenessSounds/
+!ConditioningControlPanel/tools/racechart/
+ConditioningControlPanel/tools/racechart/__pycache__/
 
 # Redistributables (re-downloadable from Microsoft; do not bloat the repo).
 # VC_redist.x64.exe is 25 MB and build-installer.bat fetches it on demand.

@@ -67,6 +67,21 @@ and `hash` still finds the track if it ever moves to another url.
 
 ## The link step
 
+Steps 2 to 4 are what `tools/racechart/link.py` is for. It computes both keys,
+copies the chart in and writes the row, so nobody types a SHA1 by hand:
+
+```
+python tools/racechart/link.py my.chart.json --url https://<cdn>/<path>.mp3 \
+    [--local my.mp3] [--title "the settle"] [--name the-settle]
+```
+
+It sets `"hand": true` if the chart is missing it, takes `cloudId` off the url by
+the rule above, and takes `hash` from the url with one HEAD and one ranged GET of
+the first megabyte. Add `--local` and it hashes your copy too and holds the two
+numbers up next to each other: when they disagree the local copy is a different
+encode, and the row gets the **cloud** hash, because the cloud copy is the one
+players hear. It prints which number it used either way.
+
 1. Write the chart. `chart/editor/` builds one; so does hand editing a generated
    chart out of the browser's cache. Set `"hand": true` at the top level.
 2. Save it as `race/charts/<name>.chart.json`.
@@ -74,7 +89,12 @@ and `hash` still finds the track if it ever moves to another url.
    `hash` is what `race/chartSource.js` `hashUrl()` logs for that track, and
    `tools/racechart/align.py` computes the same number from a local copy.
 4. Add the row to `index.json`.
-5. Load the track. The log says which door it came through:
+5. Check the index: `python tools/racechart/link.py --check`. It reads every row
+   and exits non-zero if a chart file is missing or unparseable, if one is missing
+   `hand: true`, if a hash is not 40 hex characters, if a row has neither key, or
+   if two rows fight over the same `cloudId`, `hash` or chart file. It never
+   touches the network, so it is safe to run anywhere.
+6. Load the track. The log says which door it came through:
    `chart: authored by cloudId`, `authored by hash`, `cached` or `generated`.
 
 ## The order every track is looked up in
