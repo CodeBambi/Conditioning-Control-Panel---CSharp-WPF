@@ -533,3 +533,172 @@
 @media (prefers-reduced-motion: reduce) {
   #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
 }
+
+/* ============================================================================
+ * THE VOICE ON THE GLASS (race/captions.js): the caption line and the zoom plate.
+ *
+ * One layer above .rh-chrome, click-through like the rest of it. The caption is a
+ * lower third that clears the item slot, the mixer stack and the speed bar, so it
+ * can never sit on a plate; the score plate is top-left and is never in reach of
+ * it at any size. The plate flies out of the vanishing point in the middle of the
+ * glass, one at a time, wearing the theme race/triggerTheme.js named for its
+ * trigger's preset. THIRTEEN THEMES, one class each, listed in the table there.
+ * ==========================================================================*/
+.race-hud .rc-layer { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.race-hud .rc-layer * { pointer-events: none; }
+.race-hud.is-lobby .rc-layer { display: none; }
+
+/* ---- the caption: low, fleeting, one phrase, typed by the voice ---- */
+.race-hud .rc-cap {
+  position: absolute; left: var(--rh-in-l); right: var(--rh-in-r);
+  /* above the item slot (bottom), the mixer column (bottom + 72px) and the speed bar */
+  bottom: calc(var(--rh-in-b) + 148px);
+  display: flex; justify-content: center;
+  opacity: var(--rc-out, 1); transition: opacity 0.18s linear;
+}
+.race-hud .rc-line {
+  max-width: min(94%, 900px); text-align: center; text-wrap: balance;
+  font-size: clamp(1.05rem, 4.4vw, 1.55rem); font-weight: 800; line-height: 1.28; letter-spacing: 0.02em;
+  /* two lines at most: a third would climb into the road */
+  max-height: 2.6em; overflow: hidden;
+  text-shadow: 0 0 14px rgba(0, 0, 0, 0.9), 0 2px 5px rgba(0, 0, 0, 0.95);
+}
+/* every word of the phrase is in the DOM from the start so the line never reflows as it types;
+   a word the voice has not reached holds its space and nothing else */
+.race-hud .rc-word { color: var(--rc-ink, #fff); opacity: 0; transition: opacity 0.16s linear, text-shadow 0.16s linear; }
+.race-hud .rc-word.is-said { opacity: 0.82; }
+.race-hud .rc-word.is-said.is-now { opacity: 1; text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
+
+/* ---- the plate: out of the vanishing point, into your face ---- */
+.race-hud .rc-plates { position: absolute; inset: 0; perspective: 900px; }
+.race-hud .rc-plate {
+  position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) scale(0.15);
+  max-width: 92vw; text-align: center; white-space: nowrap;
+  font-size: 12vw; font-weight: 900; line-height: 1; letter-spacing: 0.06em; text-transform: lowercase;
+  color: var(--rc-glow, #fff);
+  text-shadow: 0 0 30px var(--rc-glow, #fff), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcZoom 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+@media (min-width: 700px) { .race-hud .rc-plate { font-size: 7vw; } }
+.race-hud .rc-plate-sparks { display: none; }
+/* zoom 0.15 to 1.35 over 700 ms, hold 400 ms, then away */
+@keyframes rcZoom {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.15); }
+  8%   { opacity: 1; }
+  50%  { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
+  78%  { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.62); }
+}
+/* the ink theme takes the room away for 300 ms */
+.race-hud .rc-dim { position: absolute; inset: 0; background: #05050a; opacity: 0; }
+.race-hud .rc-dim.is-on { animation: rcDim 300ms ease-out forwards; }
+@keyframes rcDim { 0% { opacity: 0; } 30% { opacity: 0.62; } 100% { opacity: 0; } }
+
+/* ---- the thirteen themes (race/triggerTheme.js THEME_BY_PRESET) ---- */
+/* blackout: a near black card, white letters, and the room goes with it */
+.race-hud .rc-plate--ink {
+  color: var(--rc-ink, #f4f2ff); padding: 0.18em 0.5em; border-radius: 0.12em;
+  background: rgba(9, 9, 16, 0.94); border: 2px solid rgba(244, 242, 255, 0.22);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.95);
+}
+/* pink-blink: hot pink, twice */
+.race-hud .rc-plate--blink { animation: rcZoom 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards, rcBlink 1400ms steps(1) forwards; }
+@keyframes rcBlink { 0%, 44% { filter: none; } 48% { filter: brightness(0.2); } 52% { filter: brightness(1.7); } 60% { filter: brightness(0.2); } 64%, 100% { filter: none; } }
+/* pink-wall: the letters come in from both sides and close up */
+.race-hud .rc-plate--wall { animation: rcZoom 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards, rcWall 700ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards; }
+@keyframes rcWall { 0% { letter-spacing: 0.9em; } 100% { letter-spacing: 0.06em; } }
+/* freeze-snap: ice, a crackle, and a hard stop with no overshoot */
+.race-hud .rc-plate--frost { animation: rcFrost 1400ms cubic-bezier(0.2, 0.9, 0.2, 1) forwards, rcCrackle 260ms steps(3) 480ms; }
+@keyframes rcFrost {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.15); }
+  8% { opacity: 1; }
+  46%, 78% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.04); }
+}
+@keyframes rcCrackle {
+  0% { text-shadow: 0 0 30px var(--rc-glow), 0 4px 10px rgba(0, 0, 0, 0.9); }
+  50% { text-shadow: 0 0 6px #fff, 2px -2px 0 var(--rc-glow), -2px 2px 0 #fff; }
+  100% { text-shadow: 0 0 30px var(--rc-glow), 0 4px 10px rgba(0, 0, 0, 0.9); }
+}
+/* snap-shake: one violent shake, white */
+.race-hud .rc-plate--snap { animation: rcZoom 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards, rcShake 130ms steps(2) 460ms 3; }
+@keyframes rcShake { 0% { margin-left: 0; } 25% { margin-left: -0.09em; } 50% { margin-left: 0.11em; } 75% { margin-left: -0.05em; } 100% { margin-left: 0; } }
+/* glitch-shake: yellow, split into its channels */
+.race-hud .rc-plate--split { animation: rcZoom 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards, rcSplit 900ms steps(4) 420ms forwards; }
+@keyframes rcSplit {
+  0% { text-shadow: 0 0 30px var(--rc-glow), 0 4px 10px rgba(0, 0, 0, 0.9); }
+  35% { text-shadow: 0.08em 0 0 rgba(255, 40, 90, 0.95), -0.08em 0 0 rgba(60, 230, 255, 0.95), 0 0 26px var(--rc-glow); }
+  70% { text-shadow: -0.06em 0 0 rgba(255, 40, 90, 0.95), 0.06em 0 0 rgba(60, 230, 255, 0.95), 0 0 26px var(--rc-glow); }
+  100% { text-shadow: 0 0 30px var(--rc-glow), 0 4px 10px rgba(0, 0, 0, 0.9); }
+}
+/* flash-pulse: three white flashes behind the word */
+.race-hud .rc-plate--pulse::before {
+  content: ''; position: absolute; inset: -18vh -30vw; z-index: -1;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+  animation: rcPulse 300ms steps(1) 260ms 3;
+}
+@keyframes rcPulse { 0%, 40% { opacity: 0.9; } 41%, 100% { opacity: 0; } }
+/* golden-rain: gold, with shards coming off the letters */
+.race-hud .rc-plate--gold { color: #ffe27a; text-shadow: 0 0 34px rgba(255, 215, 0, 0.95), 0 4px 10px rgba(0, 0, 0, 0.9); }
+.race-hud .rc-plate--gold .rc-plate-sparks {
+  display: block; position: absolute; left: 50%; top: 62%; width: 6px; height: 6px; border-radius: 50%;
+  background: #ffe27a;
+  box-shadow: -3.2em 0 0 #ffd700, -1.4em 0.3em 0 #fff2b8, 1.2em -0.2em 0 #ffd700, 3.1em 0.4em 0 #fff2b8;
+  animation: rcShards 900ms ease-in 420ms forwards;
+}
+@keyframes rcShards { 0% { opacity: 0.95; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(2.4em) scale(0.5); } }
+/* spiral-air: lilac, turning slowly the whole way in */
+.race-hud .rc-plate--spiral { animation: rcSpiral 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards; }
+@keyframes rcSpiral {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.15) rotate(-26deg); }
+  8% { opacity: 1; }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.35) rotate(-6deg); }
+  78% { opacity: 1; transform: translate(-50%, -50%) scale(1.35) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.62) rotate(7deg); }
+}
+/* melt: deep blue, the letters sag and go soft on the way down */
+.race-hud .rc-plate--melt {
+  color: #cfe0ff; text-shadow: 0 0 30px #4060c0, 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcMelt 1400ms cubic-bezier(0.3, 0.6, 0.2, 1) forwards;
+}
+@keyframes rcMelt {
+  0% { opacity: 0; filter: blur(0); transform: translate(-50%, -50%) scale(0.15); }
+  8% { opacity: 1; }
+  50% { opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1.35) skewY(0deg); }
+  78% { opacity: 1; filter: blur(1px); transform: translate(-50%, -44%) scale(1.35) skewY(2.5deg); }
+  100% { opacity: 0; filter: blur(9px); transform: translate(-50%, -34%) scale(1.4) skewY(6deg); }
+}
+/* video: red, behind a set of scanlines */
+.race-hud .rc-plate--scan { color: #ffd9dd; text-shadow: 0 0 30px #ff5c6c, 0 4px 10px rgba(0, 0, 0, 0.9); }
+.race-hud .rc-plate--scan::after {
+  content: ''; position: absolute; inset: -0.2em -0.4em;
+  background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0 2px, rgba(0, 0, 0, 0) 2px 5px);
+  mix-blend-mode: multiply;
+}
+/* treats: warm pink, and it lands on a bounce rather than a glide */
+.race-hud .rc-plate--bounce { animation: rcZoom 1400ms cubic-bezier(0.2, 1.7, 0.35, 1) forwards; }
+/* mark: a marked word, not a trigger moment. Small, and it does not come at you. */
+.race-hud .rc-plate--mark {
+  font-size: clamp(1.4rem, 5vw, 2.2rem); letter-spacing: 0.22em; color: #ece8ff;
+  text-shadow: 0 0 16px rgba(236, 232, 255, 0.7), 0 2px 6px rgba(0, 0, 0, 0.9);
+  animation: rcMark 1100ms ease-out forwards;
+}
+@keyframes rcMark {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+  14%, 62% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* reduced motion (Law VI): nothing comes at you. The plate fades in place at full size, and the
+   caption still types itself, because that is the voice and not an animation. */
+@keyframes rcHold { 0% { opacity: 0; } 10%, 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .race-hud .rc-plate, .race-hud .rc-plate--blink, .race-hud .rc-plate--wall, .race-hud .rc-plate--frost,
+  .race-hud .rc-plate--snap, .race-hud .rc-plate--split, .race-hud .rc-plate--spiral, .race-hud .rc-plate--melt,
+  .race-hud .rc-plate--bounce, .race-hud .rc-plate--mark {
+    animation: rcHold 1400ms linear forwards; transform: translate(-50%, -50%) scale(1); filter: none;
+  }
+  .race-hud .rc-plate--pulse::before, .race-hud .rc-plate--gold .rc-plate-sparks { animation: none; opacity: 0; }
+  .race-hud .rc-dim.is-on { animation: none; }
+}
