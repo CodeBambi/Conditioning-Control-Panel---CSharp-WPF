@@ -86,7 +86,7 @@ import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 import { createMenuFlashes } from './menuFlashes.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createFeedGroup } from './feedGroup.js';
-import { cloudEnabled, VERB_ID as CLOUD_VERB, VERB_LABEL as CLOUD_LABEL } from './cloud.js';
+import { levelsEnabled, VERB_ID as CLOUD_VERB, VERB_LABEL as CLOUD_LABEL } from './levels.js';
 
 export const OPTIONS_KEY = 'race.options';
 export const PROPS_URL = '/dtrh/race/assets/props.glb';
@@ -478,7 +478,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
 }
 
 // ---- the menu ------------------------------------------------------------------------------------
-export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null, send = null, cloud = null }) {
+export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null, send = null, levels = null }) {
   const options = loadOptions();
   const systemReduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const reduced = () => wantsReducedMotion(options, settings.reducedMotion != null ? settings.reducedMotion : systemReduced);
@@ -499,8 +499,8 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const optPanel = el('div', 'rm-panel rm-options', col); optPanel.hidden = true;
   const mediaPanel = el('div', 'rm-panel rm-media', col); mediaPanel.hidden = true;
   const howPanel = el('div', 'rm-panel rm-how', col); howPanel.hidden = true;
-  // The BambiCloud mini-player's panel (race/cloud.js). The node is always built - one empty
-  // div costs nothing - and stays empty on any host that does not carry the `cloud` flag.
+  // The levels panel (race/levels.js, with race/cloud.js's paste box nested inside it). The node
+  // is always built - one empty div costs nothing - and stays empty on a build without the levels.
   const cloudPanel = el('div', 'rm-panel rm-cloud', col); cloudPanel.hidden = true;
   // ---- the track plate: what the host is doing with the file, then what it found ----
   const trackEl = el('div', 'rm-track', col); trackEl.hidden = true; trackEl.setAttribute('aria-live', 'polite');
@@ -645,11 +645,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   // ---- the verbs. `track` only under a host (the file dialog is its), `clear` only once a file is in ----
   const canTrack = !!settings.trackPick;
-  // `cloud` is web only and its rule lives in race/cloud.js, so this file and the smoke read one
-  // predicate rather than two copies of it. A desktop host resolves it false and the verb never
-  // reaches the list.
-  const canCloud = cloudEnabled(settings) && !!cloud;
-  const VERBS = [['race', 'race'], ['track', 'load a track'], [CLOUD_VERB, CLOUD_LABEL], ['clear', 'just the road'], ['options', 'options'], ['media', 'your media'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
+  // `levels` rides on the build's own `cloud` flag and its rule lives in race/levels.js, so this
+  // file and the smoke read one predicate rather than two copies of it. It sits directly under
+  // `race` because on a phone it is the whole happy path: open, see the levels, tap one.
+  const canCloud = levelsEnabled(settings) && !!levels;
+  const VERBS = [['race', 'race'], [CLOUD_VERB, CLOUD_LABEL], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['media', 'your media'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
     b.addEventListener('click', (e) => { e.stopPropagation(); idx.main = i; act('press'); });
@@ -705,7 +705,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   let panel = 'main', shown = false, disposed = false, viewHeld = false;
   const idx = { main: 0, options: 0, media: 0, cloud: 0 };
   if (canCloud) {
-    cloudUi = cloud.buildPanel({
+    cloudUi = levels.buildPanel({
       slot: cloudPanel,
       pick: (i) => { idx.cloud = i; act('press'); },
       close: () => open('main'),

@@ -131,7 +131,30 @@
    consent is a real thing to want and it costs no network. */
 #race-root .rm-feed-btn.is-off .rm-feed-label, #race-root .rm-feed-btn.is-off .rm-feed-val { opacity: 0.5; }
 
-/* ---- play from bambicloud: the paste box and the pasted list (race/cloud.js) ---- */
+/* ---- the levels list (race/levels.js): the first thing a player sees ---- */
+/* One row per track, full width, and never under 48 px anywhere: this is the whole happy path on
+   a phone and a thumb has to be able to hit it without aiming. */
+#race-root .rm-levels { display: flex; flex-direction: column; gap: 4px; }
+#race-root .rm-levels-set { margin-top: 0; margin-bottom: 6px; color: #ffd6ea; letter-spacing: 0.08em; text-transform: uppercase; }
+#race-root .rm-level-btn {
+  display: grid; grid-template-columns: 2.4em 1fr auto; grid-template-areas: 'n title len' 'n mark mark';
+  gap: 0 10px; align-items: center; width: 100%; min-height: 48px; text-align: left;
+  padding: 7px 14px 7px 28px; font-size: 16px;
+}
+#race-root .rm-level-n { grid-area: n; color: rgba(255, 214, 234, 0.6); font-weight: 800; font-variant-numeric: tabular-nums; }
+#race-root .rm-level-title { grid-area: title; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#race-root .rm-level-len { grid-area: len; color: rgba(255, 214, 234, 0.75); font-variant-numeric: tabular-nums; }
+#race-root .rm-level-mark { grid-area: mark; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 214, 234, 0.55); }
+/* a hand-made road is the one thing on this list worth pointing at, so it is the one thing lit */
+#race-root .rm-level-btn.is-hand .rm-level-mark { color: var(--pink, #ff69b4); }
+#race-root .rm-level-btn.is-on .rm-level-title { color: #fff; }
+#race-root .rm-level-btn.is-on .rm-level-mark { color: #ffd6ea; }
+#race-root .rm-levels-tail, #race-root .rm-levels-foot { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+#race-root .rm-levels-btn { align-self: flex-start; }
+#race-root .rm-cloud-paste { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 105, 180, 0.22); }
+#race-root .rm-cloud-paste[hidden] { display: none; }
+
+/* ---- the paste box and the pasted list (race/cloud.js), nested under the levels ---- */
 #race-root .rm-cloud-line { margin-top: 0; margin-bottom: 6px; max-width: 42ch; line-height: 1.45; }
 #race-root .rm-cloud-in { width: 100%; max-width: 42ch; margin: 0 0 6px; }
 #race-root .rm-cloud-next { margin: 2px 0 6px 2px; color: rgba(255, 214, 234, 0.75); }
@@ -304,6 +327,9 @@
   #race-root .rm-feed-sub { margin-top: 5px; }
   #race-root .rm-cloud-line { line-height: 1.35; }
   #race-root .rm-cloud-in { margin-bottom: 4px; }
+  /* the rows keep their 48 px: a short screen scrolls the column, it does not shrink the target */
+  #race-root .rm-level-btn { font-size: 15px; padding: 5px 14px 5px 28px; }
+  #race-root .rm-level-mark { font-size: 10px; }
   #race-root .rm-h { margin-bottom: 2px; font-size: 16px; }
   #race-root .rm-row { padding: 5px 12px; font-size: 15px; }
   #race-root .rm-row-hint, #race-root .rm-hint { font-size: 10px; margin-top: 2px; }

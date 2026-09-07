@@ -144,6 +144,7 @@ const settingEchoes = [];           // `setting` echoes that landed before there
 let settings = {}, seed = 0;
 let trackProgress = null, trackReady = null, errorTimer = 0, startTrackClock = null, trackTimer = 0, trackAudio = null;
 let cloud = null;                   // race/cloud.js, when the host says this build has it
+let levels = null;                  // race/levels.js, the panel the mini-player hangs under
 let cloudSource = null;             // race/cloudChart.js, the thing that answers hooks.chart
 let cloudWhere = '';                // ' · 3 of 9', kept so an upgraded chart repaints the same plate
 
@@ -229,6 +230,7 @@ function surface() {
   exiting = true;
   stopTrackClock();
   if (errorTimer) clearTimeout(errorTimer);
+  try { if (levels) levels.dispose(); } catch (e) { host.log('levels dispose: ' + e); }
   try { if (cloud) cloud.dispose(); } catch (e) { host.log('cloud dispose: ' + e); }
   try { if (cloudSource) cloudSource.dispose(); } catch (e) { host.log('cloud source dispose: ' + e); }
   try { if (menu) menu.dispose(); } catch (e) { host.log('menu dispose: ' + e); }
@@ -270,9 +272,13 @@ async function boot() {
     // hosted in every way the bridge can see and has no file dialog to open, and a verb that answers
     // nothing is worse than no verb at all.
     settings.trackPick = hosted && settings.trackPick !== false;
+    // `?trackpick=1` is a CHECK AID, nothing else: it makes an unhosted page claim the desktop
+    // host's track door so race/smoke/levels-check.mjs can walk that branch of the levels panel.
+    if (params.get('trackpick') === '1') settings.trackPick = true;
     // `cloud` is the browser host's capability flag; `?cloud=1` is the same switch for a page with
-    // no host under it, and it can never turn on where a desktop host already owns track loading.
-    settings.cloud = settings.cloud === true || (!settings.trackPick && params.get('cloud') === '1');
+    // no host under it. A desktop host that carries it gets the LEVELS panel (which hands a track
+    // to the desktop) and never the mini-player: race/cloud.js's own rule still refuses that.
+    settings.cloud = settings.cloud === true || params.get('cloud') === '1';
     cloud = await makeCloud();
     // run.js posts the track frames only when it believes something is hosting the file. With the
     // mini-player on, something is: this page. audio.js reads the same flag to decide where the
@@ -289,7 +295,8 @@ async function boot() {
     await standaloneTrack();
     if (params.get('autostart') === '1') { startRun(false); debugItemBox(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
-    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, cloud });
+    levels = await makeLevels();
+    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, levels });
     if (localMedia) { try { menu.setLocalMedia(localMedia); } catch (e) { host.log('local-media: ' + e); } }
     while (settingEchoes.length) { try { menu.settingEcho(settingEchoes.shift()); } catch (e) { host.log('setting: ' + e); } }
     // Nowhere to surface to: no host and no `?back=`, or a host that says outright it cannot take
@@ -441,6 +448,54 @@ async function makeCloud() {
   });
 }
 
+/**
+ * THE LEVELS PANEL (race/levels.js). The first thing a player sees: the tracks of the set that
+ * ships in race/levels.json, one big row each, and a tap plays one.
+ *
+ * Both files it reads are OURS and SAME ORIGIN - the level list and the authored-chart index -
+ * so the list, the lengths and the `hand-tuned` marks are all decided before anything touches a
+ * cdn. `?levels=` swaps the list for the check's own, same origin only, so a query string can
+ * never point the panel at somebody else's file.
+ *
+ *   play  the web path: race/cloud.js takes exactly these tracks and starts the first one.
+ *   open  the desktop path: the host is asked to open the track's PAGE and the player presses
+ *         play over there. This page loads no audio at all in that mode.
+ */
+async function makeLevels() {
+  if (!settings.cloud) return null;
+  let mod = null, src = null;
+  try {
+    mod = await import('./race/levels.js');
+    src = await import('./race/chartSource.js');
+  } catch (err) { host.log('levels: ' + ((err && err.message) || err)); return null; }
+  let listUrl = new URL('race/levels.json', import.meta.url).href;
+  const want = params.get('levels');
+  if (want) {
+    try { const u = new URL(want, location.href); if (u.origin === location.origin) listUrl = u.href; else host.log('levels: ?levels is off origin, ignored'); }
+    catch (e) { host.log('levels: ?levels is not a url, ignored'); }
+  }
+  const indexUrl = new URL('race/charts/index.json', import.meta.url).href;
+  const [sets, index] = await Promise.all([
+    mod.loadLevels(listUrl, { log: host.log }),
+    src.loadIndex(indexUrl, { log: host.log }),
+  ]);
+  const toast = (line) => {
+    const msg = String(line || '').slice(0, 80).toLowerCase();
+    host.log('levels toast: ' + msg);
+    try { if (race && race.hud) race.hud.toast(msg.slice(0, 60), 'effect'); } catch (e) { /* no hud yet */ }
+  };
+  return mod.createLevels({
+    settings, sets, index, cloud, log: host.log,
+    hooks: {
+      play: (entries) => { if (cloud) cloud.setTracks(entries); },
+      // D1's cloud-open, with the track's own page on it. A host that only knows the bare
+      // message opens its window and ignores the url until it learns to read one.
+      open: (url) => host.send({ type: 'cloud-open', url }),
+      toast,
+    },
+  });
+}
+
 function stopTrackClock() {
   if (trackTimer) { clearInterval(trackTimer); trackTimer = 0; }
   if (trackAudio) { try { trackAudio.pause(); } catch (e) { /* already gone */ } }
@@ -544,7 +599,7 @@ async function startRun(withIntro) {
 // Gated on `hosted`: under a real host this is never defined and nothing can reach in.
 if (!hosted) {
   try {
-    window.__race = { get race() { return race; }, get cloud() { return cloud; }, get menu() { return menu; }, get settings() { return settings; } };
+    window.__race = { get race() { return race; }, get cloud() { return cloud; }, get levels() { return levels; }, get menu() { return menu; }, get settings() { return settings; } };
   } catch (e) { /* no window */ }
 }
 
