@@ -131,6 +131,18 @@
    consent is a real thing to want and it costs no network. */
 #race-root .rm-feed-btn.is-off .rm-feed-label, #race-root .rm-feed-btn.is-off .rm-feed-val { opacity: 0.5; }
 
+/* ---- play from bambicloud: the paste box and the pasted list (race/cloud.js) ---- */
+#race-root .rm-cloud-line { margin-top: 0; margin-bottom: 6px; max-width: 42ch; line-height: 1.45; }
+#race-root .rm-cloud-in { width: 100%; max-width: 42ch; margin: 0 0 6px; }
+#race-root .rm-cloud-next { margin: 2px 0 6px 2px; color: rgba(255, 214, 234, 0.75); }
+#race-root .rm-cloud-next[hidden] { display: none; }
+#race-root .rm-cloud-btn { display: flex; gap: 10px; align-items: baseline; }
+#race-root .rm-cloud-val { color: #ffd6ea; font-weight: 800; letter-spacing: 0.06em; }
+/* a locked or a broken link is dimmed, never removed: the player has to be able to see which of
+   their links did nothing and why. The row is still pressable, and says so again when pressed. */
+#race-root .rm-cloud-btn.is-off .rm-cloud-label, #race-root .rm-cloud-btn.is-off .rm-cloud-val { opacity: 0.5; }
+#race-root .rm-cloud-btn.is-on .rm-cloud-label { color: #fff; }
+
 /* ---- the track plate: a file in hand, or the host still reading it ---- */
 #race-root .rm-track {
   margin-top: 14px; padding: 10px 14px; background: rgba(18, 11, 36, 0.82);
@@ -290,6 +302,8 @@
   #race-root .rm-feed-h { margin-top: 8px; padding-top: 6px; font-size: 13px; }
   #race-root .rm-feed-line { line-height: 1.35; }
   #race-root .rm-feed-sub { margin-top: 5px; }
+  #race-root .rm-cloud-line { line-height: 1.35; }
+  #race-root .rm-cloud-in { margin-bottom: 4px; }
   #race-root .rm-h { margin-bottom: 2px; font-size: 16px; }
   #race-root .rm-row { padding: 5px 12px; font-size: 15px; }
   #race-root .rm-row-hint, #race-root .rm-hint { font-size: 10px; margin-top: 2px; }

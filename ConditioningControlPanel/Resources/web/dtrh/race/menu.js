@@ -86,6 +86,7 @@ import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 import { createMenuFlashes } from './menuFlashes.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createFeedGroup } from './feedGroup.js';
+import { cloudEnabled, VERB_ID as CLOUD_VERB, VERB_LABEL as CLOUD_LABEL } from './cloud.js';
 
 export const OPTIONS_KEY = 'race.options';
 export const PROPS_URL = '/dtrh/race/assets/props.glb';
@@ -149,11 +150,11 @@ const CLIP_PIN = (() => {
     return v && v !== 'idle' ? v : null;
   } catch (e) { return null; }           // no location (a node import), no pin
 })();
-/** Screenshot aid: `?panel=howto | options | media` opens the menu on that panel instead of the verbs. */
+/** Screenshot aid: `?panel=howto | options | media | cloud` opens the menu on that panel instead of the verbs. */
 const PANEL_PIN = (() => {
   try {
     const v = (new URLSearchParams(location.search).get('panel') || '').toLowerCase();
-    return v === 'howto' || v === 'how' ? 'how' : v === 'options' ? 'options' : v === 'media' ? 'media' : null;
+    return v === 'howto' || v === 'how' ? 'how' : v === 'options' ? 'options' : v === 'media' ? 'media' : v === 'cloud' ? 'cloud' : null;
   } catch (e) { return null; }           // no location (a node import), no pin
 })();
 /** A media button paints pending until its `setting` echo lands. This is how long it waits for one
@@ -477,7 +478,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
 }
 
 // ---- the menu ------------------------------------------------------------------------------------
-export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null, send = null }) {
+export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null, send = null, cloud = null }) {
   const options = loadOptions();
   const systemReduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const reduced = () => wantsReducedMotion(options, settings.reducedMotion != null ? settings.reducedMotion : systemReduced);
@@ -498,6 +499,9 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const optPanel = el('div', 'rm-panel rm-options', col); optPanel.hidden = true;
   const mediaPanel = el('div', 'rm-panel rm-media', col); mediaPanel.hidden = true;
   const howPanel = el('div', 'rm-panel rm-how', col); howPanel.hidden = true;
+  // The BambiCloud mini-player's panel (race/cloud.js). The node is always built - one empty
+  // div costs nothing - and stays empty on any host that does not carry the `cloud` flag.
+  const cloudPanel = el('div', 'rm-panel rm-cloud', col); cloudPanel.hidden = true;
   // ---- the track plate: what the host is doing with the file, then what it found ----
   const trackEl = el('div', 'rm-track', col); trackEl.hidden = true; trackEl.setAttribute('aria-live', 'polite');
   const trackName = el('div', 'rm-track-name', trackEl, '');
@@ -641,7 +645,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   // ---- the verbs. `track` only under a host (the file dialog is its), `clear` only once a file is in ----
   const canTrack = !!settings.trackPick;
-  const VERBS = [['race', 'race'], ['track', 'load a track'], ['clear', 'just the road'], ['options', 'options'], ['media', 'your media'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
+  // `cloud` is web only and its rule lives in race/cloud.js, so this file and the smoke read one
+  // predicate rather than two copies of it. A desktop host resolves it false and the verb never
+  // reaches the list.
+  const canCloud = cloudEnabled(settings) && !!cloud;
+  const VERBS = [['race', 'race'], ['track', 'load a track'], [CLOUD_VERB, CLOUD_LABEL], ['clear', 'just the road'], ['options', 'options'], ['media', 'your media'], ['how', 'how to drive'], ['story', 'the story'], ['surface', 'surface']];
   const verbEls = VERBS.map(([id, label], i) => {
     const b = el('button', 'rm-btn', list, label); b.type = 'button'; b.dataset.id = id; b.setAttribute('role', 'menuitem');
     b.addEventListener('click', (e) => { e.stopPropagation(); idx.main = i; act('press'); });
@@ -650,6 +658,14 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   });
   const verbEl = (id) => verbEls[VERBS.findIndex(([v]) => v === id)];
   verbEl('track').hidden = !canTrack; verbEl('clear').hidden = true; verbEl('media').hidden = !webMedia;
+  verbEl(CLOUD_VERB).hidden = !canCloud;
+  // The panel builds itself into its own node and hands back its live rows: the list of tracks
+  // changes as links are pasted, so the menu asks for the rows each time it walks them.
+  // The panel is BUILT further down, after the focus index exists: buildPanel paints itself once,
+  // that paint asks the menu to refresh, and refresh reads idx and these two readers.
+  let cloudUi = null;
+  const cloudRows = () => (cloudUi ? cloudUi.rows() : []);
+  const cloudEls = () => (cloudUi ? cloudUi.els() : []);
   const stepVerb = (from, dir) => {   // the next visible verb in that direction, wrapping
     let i = from;
     for (let k = 0; k < VERBS.length; k++) { i = (i + dir + VERBS.length) % VERBS.length; if (!verbEls[i].hidden) return i; }
@@ -687,11 +703,20 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
 
   // ---- navigation: one focus index per panel, every input path lands on act() ----
   let panel = 'main', shown = false, disposed = false, viewHeld = false;
-  const idx = { main: 0, options: 0, media: 0 };
+  const idx = { main: 0, options: 0, media: 0, cloud: 0 };
+  if (canCloud) {
+    cloudUi = cloud.buildPanel({
+      slot: cloudPanel,
+      pick: (i) => { idx.cloud = i; act('press'); },
+      close: () => open('main'),
+      refresh: () => { const n = cloudRows().length; idx.cloud = n ? clamp(idx.cloud, 0, n - 1) : 0; refresh(); },
+    });
+  }
   // onResize re-reads the band: a panel opening or closing moves the edge she is framed against.
   function open(p) {
     panel = p; list.hidden = p !== 'main'; optPanel.hidden = p !== 'options'; mediaPanel.hidden = p !== 'media'; howPanel.hidden = p !== 'how';
-    if (p === 'options') idx.options = 0; if (p === 'media') idx.media = 0;
+    cloudPanel.hidden = p !== CLOUD_VERB;
+    if (p === 'options') idx.options = 0; if (p === 'media') idx.media = 0; if (p === CLOUD_VERB) idx.cloud = 0;
     refresh(); if (p !== 'options') seedIn.blur(); onResize();
   }
   function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); ui('tick'); refresh(); }
@@ -699,12 +724,16 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     verbEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'main' && i === idx.main));
     ROWS.forEach((r, i) => { const v = r.get(); if (r.valEl.textContent !== v) r.valEl.textContent = v; rowEls[i].classList.toggle('is-focus', panel === 'options' && i === idx.options); });
     mediaEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'media' && i === idx.media));
+    cloudEls().forEach((b, i) => b.classList.toggle('is-focus', panel === CLOUD_VERB && i === idx.cloud));
     if (feed) feed.paint();   // equality-guarded, like the options rows above
     // The feed's niche rows make this panel taller than the column, which scrolls (menu.css
     // .rm-col). A pad or an arrow walking past the fold has to bring the row with it; `nearest` is
     // a no-op while the row is already on screen, so a finger scrolling by hand is left alone.
     if (panel === 'media' && mediaEls[idx.media]) {
       try { mediaEls[idx.media].scrollIntoView({ block: 'nearest' }); } catch (e) { /* jsdom, old webview */ }
+    }
+    if (panel === CLOUD_VERB && cloudEls()[idx.cloud]) {
+      try { cloudEls()[idx.cloud].scrollIntoView({ block: 'nearest' }); } catch (e) { /* jsdom, old webview */ }
     }
   }
   function pick(id) { for (const cb of picks) { try { cb(id); } catch (e) { /* a listener never breaks the menu */ } } }
@@ -716,11 +745,24 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       const id = VERBS[idx.main][0];
       if (verbEls[idx.main].hidden) return;
       hit(verbEls[idx.main], 'is-hit'); ui('pick');
-      if (id === 'options' || id === 'how' || id === 'media') open(id); else pick(id);
+      if (id === 'options' || id === 'how' || id === 'media' || id === CLOUD_VERB) open(id); else pick(id);
       return;
     }
     if (what === 'back') { ui('back'); open('main'); return; }
     if (panel === 'how') { if (what === 'press') open('main'); return; }
+    if (panel === CLOUD_VERB) {
+      const r = cloudRows();
+      if (!r.length) { if (what === 'press') open('main'); return; }
+      idx.cloud = clamp(idx.cloud, 0, r.length - 1);
+      if (what === 'up' || what === 'down') { idx.cloud = clamp(idx.cloud + (what === 'up' ? -1 : 1), 0, r.length - 1); ui('tick'); refresh(); return; }
+      if (what !== 'press') return;
+      const node = cloudEls()[idx.cloud];
+      if (node) hit(node, 'is-hit');
+      ui(r[idx.cloud].id === 'back' ? 'back' : 'pick');
+      // the row's own press may rebuild the list under us, so nothing is read off `r` after it
+      if (typeof r[idx.cloud].press === 'function') r[idx.cloud].press();
+      return;
+    }
     if (panel === 'media') {
       if (what === 'up' || what === 'down') { idx.media = clamp(idx.media + (what === 'up' ? -1 : 1), 0, MEDIA_ROWS.length - 1); ui('tick'); refresh(); return; }
       if (what !== 'press') return;
@@ -739,9 +781,11 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     else if (what === 'press') { if (r.press) r.press(); else if (r.move) r.move(1); ui(r.id === 'back' ? 'back' : 'pick'); hit(rowEls[idx.options], 'is-hit'); }
     saveOptions(options); refresh();
   }
+  /** A focused text box owns the keyboard: the seed row's number, and the cloud panel's paste box. */
+  const typing = () => { const a = document.activeElement; return !!a && (a === seedIn || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA'); };
   const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Enter: 'press', Space: 'press', Escape: 'back', Backspace: 'back' };
   function onKey(e) {
-    if (!shown || e.repeat || e.altKey || e.ctrlKey || e.metaKey || document.activeElement === seedIn) return;
+    if (!shown || e.repeat || e.altKey || e.ctrlKey || e.metaKey || typing()) return;
     const what = KEYMAP[e.code]; if (!what) return;
     e.preventDefault(); act(what);
   }
@@ -826,6 +870,13 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       if (feed && feed.settingEcho(m)) { refresh(); return; }
       if (m.key.indexOf('media.') === 0) clearPending();
     },
+    /** race/cloud.js repaints its own rows as links are pasted; the menu re-reads them and moves
+     *  its focus back inside the list when it shrank. */
+    cloudRefresh() {
+      const n = cloudRows().length;
+      idx.cloud = n ? clamp(idx.cloud, 0, n - 1) : 0;
+      refresh();
+    },
     /** Where PR C3 builds its `online feed` group: inside the media panel, under the pickers and
      *  above `back`. null on the desktop, where the panel is never built. */
     get mediaSlot() { return mediaMore; },
@@ -839,7 +890,8 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     },
     show() {
       shown = true; viewHeld = false; layer.hidden = false; stage.setMode('menu');
-      open(PANEL_PIN === 'media' && !webMedia ? 'main' : (PANEL_PIN || 'main'));
+      const pin = (PANEL_PIN === 'media' && !webMedia) || (PANEL_PIN === CLOUD_VERB && !canCloud) ? 'main' : PANEL_PIN;
+      open(pin || 'main');
       onResize(); hit(layer, 'is-in'); theme(true);
     },
     hide() { shown = false; layer.hidden = true; stage.setViewFraction(0.5); stage.setBand(null); layer.classList.remove('is-band'); },
