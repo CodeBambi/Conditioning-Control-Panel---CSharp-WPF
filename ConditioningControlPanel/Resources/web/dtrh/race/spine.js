@@ -183,11 +183,11 @@ export function createSpine({ seed = 1, roomOrder } = {}) {
       features.push({ type: 'ramp', d: d0 + 14, airLen: range(rng, [22, 30]), height: range(rng, [3, 4]) });
     } else {
       if (rng() < boostOdds) features.push({ type: 'boost', d: d0 + len * 0.5, x: range(rng, [-1.2, 1.2]) });
-      if (rng() < 0.5) features.push({ type: 'itembox', d: d0 + len * (rng() < 0.5 ? 0.28 : 0.76), x: range(rng, [-1.8, 1.8]) });
+      if (rng() < 0.5) features.push({ type: 'pickup', d: d0 + len * (rng() < 0.5 ? 0.28 : 0.76), x: range(rng, [-1.8, 1.8]) });
     }
     return { id: i, kind: c.kind, d0, d1, room: c.room, features };
   });
-  // a boost pad on the run-up to the wheel, and one sugar cube per room at least
+  // a boost pad on the run-up to the wheel, and one pickup spot per room at least (race/pickups.js)
   chunks.forEach((ch, i) => {
     if (ch.kind !== 'loop' || i === 0) return;
     const prev = chunks[i - 1];
@@ -195,9 +195,9 @@ export function createSpine({ seed = 1, roomOrder } = {}) {
   });
   for (const room of new Set(chunks.map((c) => c.room))) {
     const mine = chunks.filter((c) => c.room === room);
-    if (mine.some((c) => c.features.some((f) => f.type === 'itembox'))) continue;
+    if (mine.some((c) => c.features.some((f) => f.type === 'pickup'))) continue;
     const host = mine.find((c) => c.kind !== 'gate' && c.kind !== 'loop' && c.kind !== 'ramp') || mine[1] || mine[0];
-    host.features.push({ type: 'itembox', d: host.d0 + (host.d1 - host.d0) * 0.6, x: 0 });
+    host.features.push({ type: 'pickup', d: host.d0 + (host.d1 - host.d0) * 0.6, x: 0 });
   }
   chunks.forEach((c) => c.features.sort((a, b) => (a.d ?? a.d0) - (b.d ?? b.d0)));
   const allFeatures = chunks.flatMap((c) => c.features);

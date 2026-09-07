@@ -179,7 +179,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     place('golden', 'lane', chunk.d1 - 2.5, 0, LANE_H);
   }
 
-  /** Lane lines the kart can thread, ramp air lines, and a pair flanking each sugar cube. */
+  /** Lane lines the kart can thread and ramp air lines. */
   function seedChunk(chunk) {
     if (!chunk || seeded.has(chunk.id)) return;
     seeded.add(chunk.id);
@@ -210,9 +210,6 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
           const u = (i + 0.5) / n;
           place(roll('air'), 'air', f.d + f.airLen * u, x, 2 + 3 * (4 * u * (1 - u)));
         }
-      } else if (f.type === 'itembox') {
-        place(roll('lane'), 'lane', f.d, f.x - 1.5, LANE_H);
-        place(roll('lane'), 'lane', f.d, f.x + 1.5, LANE_H);
       }
     }
   }

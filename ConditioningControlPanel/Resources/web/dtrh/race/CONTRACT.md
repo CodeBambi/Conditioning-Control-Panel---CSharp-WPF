@@ -96,7 +96,7 @@ Returns a `layout` object that is ALSO a valid argument to `engine/tunnel.js cre
   - `{ type:'boost', d, x }` - boost pad centre
   - `{ type:'loop', d0, d1 }` - the Big Wheel occupies `d0..d1`
   - `{ type:'gate', d, room }` - room boundary; MARQUEE fires here
-  - `{ type:'itembox', d, x }` - sugar cube (item roll)
+  - `{ type:'pickup', d, x }` - a pickup spot (race/pickups.js lights one at a time)
 - `featuresBetween(d0, d1)` -> features whose `d` (or `d0`) falls in the wrapped range.
 - `roomAtDepth(d)` -> room id.
 - `rampAt(d)` -> the ramp feature whose air line covers `d`, else `null`.
@@ -107,7 +107,7 @@ thing closes back onto the start (closed curve, `spine.closed = true`). The loop
 laterally by more than `2*RADIUS` so the tube never self-intersects (see the demo in the pitch).
 Each room's FIRST chunk is its `gate` chunk (the gate feature sits mid-chunk); the Tea Garden gate
 is `chunks[0]` at `d = 0`, so THE BANK fires on every lap crossing, and the start straight follows.
-Every room also carries at least one `itembox`, and a `boost` pad sits on the run-up to the loop.
+Every room also carries at least one `pickup` spot, and a `boost` pad sits on the run-up to the loop.
 
 ### `race/rooms.js` (PR 1)
 ```js
@@ -134,7 +134,8 @@ hemisphere (the pink sky the props and the cup are painted for; a directional in
 purple and flat) and EMI's cupLight are that tier's whole bill. Desktop is untouched.
 A crossed cube hides, throws its splits and puts a BILLBOARD flash on its spot: never a solid mesh,
 which used to read as a second, empty white box standing beside the shards.
-Road furniture (item box and its twelve splits, boost pad, ramp lip, air marker) takes its geometry
+Road furniture (boost pad, ramp lip, air marker; the pack's `item_cube` and its twelve splits are
+retired, see assets/PROPS.md) takes its geometry
 from `props.glb` through `race/propPack.js` once the pack resolves; before that, and forever if the
 pack or a node is missing, the hand-built voxel primitives stay. Placement, physics and animation
 are untouched by the swap: only geometry and material change. `roadMatrix` builds a LEFT handed
@@ -145,7 +146,7 @@ the right way round.
 ```js
 export const BUBBLE_KINDS;   // see table below
 export function createBubbleField({ scene, layout, media, getIntensity, getRoom }) -> field
-field.seedChunk(chunk)                  // place lane/air/itembox-adjacent bubbles for a chunk (idempotent per chunk id)
+field.seedChunk(chunk)                  // place lane/air bubbles for a chunk (idempotent per chunk id)
 field.spawnAhead(kartD, n)              // 'spawn' placement: appear 35..60 m ahead on the road
 field.rain(kartD, n)                    // 'rain' placement: fall from the ceiling ahead of the kart
 field.update(dt, t, kart)               // kart = { d, x, h, speed }; runs motion + collision

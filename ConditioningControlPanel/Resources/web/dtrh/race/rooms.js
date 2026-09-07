@@ -7,13 +7,13 @@
  * everything that sits on or around the road: the pixel-tiled road ribbon with its
  * chequered kerbs and centre dash (one draw call, room-tinted through an alpha mask),
  * tiled ramp wedges with a pink lip and gold air-line cubes, lane-wide boost pads
- * with running chevrons, bobbing sugar-cube item boxes, and the diegetic props from
+ * with running chevrons, and the diegetic props from
  * race/roomProps.js. The furniture is drawn from the Blender pack (race/assets/props.glb,
  * race/propPack.js) as soon as it loads; the primitives below are the shape of every mesh
  * until then and the fallback forever if the pack is missing. update(d) culls rooms out of sight and animates what is near
  * the kart; applyRoom(fx, roomId, fadeSec) hands the room's biome style to
- * fx.applyRegionGrade; breakItemBox(feature) smashes a crossed sugar cube (pooled
- * shards, a white flash, regrowth after RESPAWN_SEC); dispose() tears it all down.
+ * fx.applyRegionGrade; dispose() tears it all down. The sugar cube and its shards are retired
+ * (the white take flash stays, for race/pickups.js).
  *
  * Every position goes through layout.toWorld(d, x, h) and every orientation through
  * layout.frameAtDepth(d). Draw calls: 6 for the furniture + 21 for the props (27).
@@ -236,11 +236,10 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
     return mesh;
   })();
 
-  // ---- ramps: tiled wedge + pink lip + gold air cubes; boost pads; sugar cubes ---------
+  // ---- ramps: tiled wedge + pink lip + gold air cubes; boost pads; the take flash ---------
   const feats = layout.chunks.flatMap((c) => c.features);
   const ramps = feats.filter((f) => f.type === 'ramp');
   const pads = feats.filter((f) => f.type === 'boost');
-  const cubes = feats.filter((f) => f.type === 'itembox');
   const wedgeTex = pixelTex(32, 32, (c, w, h) => {
     c.fillStyle = '#d8d8d8'; c.fillRect(0, 0, w, h);
     for (let y = 0; y < h; y += 8) for (let x = 0; x < w; x += 8) { c.fillStyle = (((x + y) / 8) & 1) ? '#e8e8e8' : '#cfcfcf'; c.fillRect(x, y, 8, 8); }
@@ -288,32 +287,10 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   const padMesh = new THREE.InstancedMesh(padGeo, padMat, Math.max(1, pads.length));
   pads.forEach((p, i) => padMesh.setMatrixAt(i, roadMatrix(p.d, p.x, 0.03, 0, 1, _m)));
   padMesh.count = pads.length;
-  // sugar cube: 1.2 m, pixel "?" on every face, bobbing + turning, gold glow
-  const cubeTex = pixelTex(16, 16, (c, w, h) => {
-    c.fillStyle = '#fff6ea'; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#e9d9c4'; c.fillRect(0, 0, w, 1); c.fillRect(0, 0, 1, h); c.fillRect(0, h - 1, w, 1); c.fillRect(w - 1, 0, 1, h);
-    c.fillStyle = '#e23c9c';
-    const Q = ['.####.', '##..##', '....##', '...##.', '..##..', '......', '..##..', '..##..'];
-    Q.forEach((row, y) => [...row].forEach((ch, x) => { if (ch === '#') c.fillRect(5 + x, 3 + y, 1, 1); }));
-  });
-  if (cubeTex) texes.push(cubeTex);
-  const cubeMat = mat(new THREE.MeshLambertMaterial({ map: cubeTex, color: 0xffffff, emissive: 0xf2c14e, emissiveIntensity: 0.25 }));
-  const CUBE = 1.2;
-  const cubeMesh = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE, CUBE, CUBE)), cubeMat, Math.max(1, cubes.length));
-  cubes.forEach((c, i) => cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75, 0, 1, _m)));
-  cubeMesh.count = cubes.length;
-  // a crossed cube BREAKS: it hides, throws SHARDS_PER pieces of itself (pooled, world space,
-  // gravity along the local up) with a white flash on its spot, and grows back after RESPAWN_SEC.
-  const cubeIndex = new Map(cubes.map((c, i) => [c, i]));
-  const cubeBrokenAt = new Float64Array(Math.max(1, cubes.length)).fill(-1);   // -1 = intact
-  const RESPAWN_SEC = 8, REGROW_SEC = 0.5, SHARD_TTL = 0.65, SHARDS_PER = 8, SHARD_N = 48, FLASH_N = 4, FLASH_SEC = 0.22;
-  const shards = new THREE.InstancedMesh(track(new THREE.BoxGeometry(CUBE * 0.24, CUBE * 0.24, CUBE * 0.24)), cubeMat, SHARD_N);
-  const shard = []; for (let i = 0; i < SHARD_N; i++) shard.push({ life: 0, age: 0, spin: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), g: new THREE.Vector3(), axis: new THREE.Vector3(0, 1, 0) });
-  let shardCursor = 0, shardsLive = 0;
-  // The break flash used to be a full-size CUBE of opaque white: it swelled past the box for a
-  // fifth of a second and read as a SECOND, empty white box standing beside the shards. A flash is
-  // light, not furniture, so it is now a billboard that always faces the seat, additive over the
-  // road and fading as it swells. It can never draw an edge, so it can never read as a box.
+  const FLASH_N = 4, FLASH_SEC = 0.22, FLASH_SIZE = 1.2;
+  // The take flash (race/pickups.js) is light, not furniture: a billboard that always faces the seat,
+  // additive over the road and fading as it swells. It can never draw an edge, so it can never read
+  // as a box. flashAt(d, x, h) lights one on that spot.
   const flashTex = pixelTex(24, 24, (c, w, h) => {
     c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
     const mid = (w - 1) / 2;
@@ -332,65 +309,20 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   for (let i = 0; i < FLASH_N; i++) {
     const fm = mat(new THREE.SpriteMaterial({ map: flashTex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
     const sprite = new THREE.Sprite(fm);
-    sprite.name = 'race-cube-flash'; sprite.visible = false; sprite.frustumCulled = false;
+    sprite.name = 'race-take-flash'; sprite.visible = false; sprite.frustumCulled = false;
     group.add(sprite);
     flash.push({ life: 0, sprite, fm });
   }
   let flashCursor = 0, flashesLive = 0;
-  const _q = new THREE.Quaternion(), _up = new THREE.Vector3(), _hide = new THREE.Vector3(0, -999, 0);
-  const hideAll = (mesh, n) => { for (let i = 0; i < n; i++) mesh.setMatrixAt(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); };
-  hideAll(shards, SHARD_N);
   let lastT = -1;
-  /** Break the cube for feature f (or its index). Returns true when it was intact, false when
-   *  it was already broken (the run brain hands out an item only on true). */
-  function breakItemBox(f) {
-    const i = typeof f === 'number' ? f : cubeIndex.get(f);
-    if (i == null || cubeBrokenAt[i] >= 0) return false;
-    const c = cubes[i];
-    cubeBrokenAt[i] = now() - t0;
-    cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75, 0, 0.0001, _m)); cubeMesh.instanceMatrix.needsUpdate = true;
-    const fr = layout.frameAtDepth(c.d); _up.copy(fr.up);
-    layout.toWorld(c.d, c.x, CUBE * 0.75, _p);
-    // with the pack in, a break throws the cube's OWN twelve splits from where they were
-    // authored, so the box comes apart instead of shedding generic crumbs
-    const per = shardKinds ? shardKinds.length : SHARDS_PER;
-    if (shardKinds) shardSet = (shardSet + 1) % SHARD_SETS;
-    for (let k = 0; k < per; k++) {
-      const kind = shardKinds ? shardKinds[k] : null;
-      const j = kind ? shardSet * shardKinds.length + k : shardCursor;
-      if (!kind) shardCursor = (shardCursor + 1) % SHARD_N;
-      const s = shard[j];
-      if (s.life <= 0) shardsLive++;
-      s.life = SHARD_TTL; s.age = 0;
-      const ox = kind ? kind.off.x : (rng() - 0.5) * CUBE * 0.6, oy = kind ? kind.off.y : (rng() - 0.5) * CUBE * 0.6, oz = kind ? kind.off.z : (rng() - 0.5) * CUBE * 0.6;
-      s.p.copy(_p).addScaledVector(fr.right, ox).addScaledVector(_up, oy).addScaledVector(fr.tangent, oz);
-      if (kind) s.v.copy(fr.right).multiplyScalar(ox * 7 + (rng() - 0.5) * 2).addScaledVector(_up, 2.5 + oy * 4 + rng() * 2).addScaledVector(fr.tangent, oz * 7 + 1 + rng() * 3);
-      else s.v.copy(fr.right).multiplyScalar((rng() - 0.5) * 7).addScaledVector(_up, 2.5 + rng() * 4).addScaledVector(fr.tangent, 1 + rng() * 5);
-      s.g.copy(_up).multiplyScalar(-14);
-      s.axis.set(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize(); s.spin = (rng() - 0.5) * 24;
-    }
+  function flashAt(d, x, h) {
+    layout.toWorld(d, x, h, _p);
     const fl = flash[flashCursor]; flashCursor = (flashCursor + 1) % FLASH_N;
     if (fl.life <= 0) flashesLive++;
     fl.life = FLASH_SEC; fl.sprite.position.copy(_p); fl.sprite.visible = true;
-    return true;
   }
-  function updateBreaks(t) {
+  function updateFlashes(t) {
     const dt = lastT < 0 ? 0 : Math.min(0.05, t - lastT); lastT = t;
-    if (shardsLive > 0) {                   // shards fly, spin and shrink out
-      let live = 0;
-      for (let i = 0; i < SHARD_N; i++) {
-        const s = shard[i];
-        if (s.life <= 0) continue;
-        s.life -= dt; s.age += dt;
-        if (s.life <= 0) { setShard(i, _m.compose(_hide, _q.identity(), _s.setScalar(0.0001))); continue; }
-        live++;
-        s.v.addScaledVector(s.g, dt); s.p.addScaledVector(s.v, dt);
-        setShard(i, _m.compose(s.p, _q.setFromAxisAngle(s.axis, s.spin * s.age), _s.setScalar(0.4 + 0.6 * (s.life / SHARD_TTL))));
-      }
-      shardsLive = live;
-      if (shardKinds) for (const k of shardKinds) { k.mesh.visible = live > 0; k.mesh.instanceMatrix.needsUpdate = true; }
-      else shards.instanceMatrix.needsUpdate = true;
-    }
     if (flashesLive > 0) {                  // the flash: a burst of light on the spot that swells and fades out
       let live = 0;
       for (let i = 0; i < FLASH_N; i++) {
@@ -401,17 +333,17 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
         live++;
         const u = fl.life / FLASH_SEC;       // 1 on the break, 0 as it goes
         fl.fm.opacity = 0.9 * u;
-        fl.sprite.scale.setScalar(CUBE * (1.7 + 2.0 * (1 - u)));
+        fl.sprite.scale.setScalar(FLASH_SIZE * (1.7 + 2.0 * (1 - u)));
       }
       flashesLive = live;
     }
   }
-  for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
+  for (const m of [wedges, lips, airDots, padMesh]) { m.frustumCulled = false; m.instanceMatrix.needsUpdate = true; group.add(m); }
   if (wedges.instanceColor) wedges.instanceColor.needsUpdate = true;
 
   // ---- the Blender pack takes the furniture over (race/assets/props.glb) -----------------
-  // Geometry and material only: every instance matrix written above stays valid, so the bob,
-  // the turn, the break, the regrow and the air-line fade all carry across untouched. The pack
+  // Geometry and material only: every instance matrix written above stays valid, so the pad
+  // pulse and the air-line fade carry across untouched. The pack
   // is authored base-centre on the ground, so each geometry is nudged to sit where the
   // primitive's origin was. No pack, a slow pack or a broken node: the primitives stay.
   // roadMatrix builds its basis from (right, up, tangent), which is LEFT handed, so every road
@@ -419,18 +351,12 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   // from the instance one, so an authored prop would rasterise inside out: its faces cull away and
   // the inverted hull shows as a solid dark block. Mirroring the geometry on x cancels that: the
   // pair of flips is a plain rotation, the prop reads the right way round and the hull is a
-  // silhouette again. The shards compose their own matrices, so they stay as authored.
+  // silhouette again.
   const ROAD_MIRROR = -1;
-  const SHARD_KINDS = 12, SHARD_SETS = Math.max(1, Math.floor(SHARD_N / SHARD_KINDS));
   const packGeos = [], packMeshes = [];
-  let itemMat = cubeMat, lipMat = pinkGlow, padPulse = null, shardKinds = null, shardSet = -1, dead = false;
-  const setShard = (i, m) => {
-    if (shardKinds) shardKinds[i % SHARD_KINDS].mesh.setMatrixAt((i / SHARD_KINDS) | 0, m);
-    else shards.setMatrixAt(i, m);
-  };
+  let lipMat = pinkGlow, padPulse = null, dead = false;
   const litMat = (emissive, intensity) => mat(new THREE.MeshLambertMaterial({ vertexColors: true, emissive, emissiveIntensity: intensity }));
   const swapMesh = (mesh, geo, material) => { packGeos.push(geo); mesh.geometry = geo; if (material) mesh.material = material; };
-  const hideMatrix = () => _m.compose(_hide, _q.identity(), _s.setScalar(0.0001));
 
   /** The colour of the material named `name` anywhere under pack node `node`, or null. */
   function packColor(pack, node, name) {
@@ -472,28 +398,6 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
     return m;
   }
 
-  /** One InstancedMesh per authored split, SHARD_SETS deep, hidden while nothing is flying: the
-   *  steady-state draw count matches the single pooled shard mesh these replace. */
-  function packShards(pack, cy) {
-    const out = [];
-    for (let k = 0; k < SHARD_KINDS; k++) {
-      const name = `item_shard_${String(k).padStart(2, '0')}`;
-      const node = pack.byName(name), geo = packGeo(pack, name);
-      if (!node || !geo) {
-        for (const it of out) { group.remove(it.mesh); it.mesh.dispose(); it.geo.dispose(); }
-        if (geo) geo.dispose();
-        return null;
-      }
-      const mesh = new THREE.InstancedMesh(geo, itemMat, SHARD_SETS);
-      mesh.frustumCulled = false; mesh.visible = false; mesh.name = `race-shard-${k}`;
-      for (let j = 0; j < SHARD_SETS; j++) mesh.setMatrixAt(j, hideMatrix());
-      group.add(mesh); packMeshes.push(mesh);
-      out.push({ mesh, geo, off: new THREE.Vector3(node.position.x, node.position.y - cy, node.position.z) });
-    }
-    shards.visible = false;
-    return out;
-  }
-
   function dressFurniture(pack) {
     const lip = packGeo(pack, 'ramp_lip', [0, -0.07, 0], ROAD_MIRROR);       // base lands on the wedge crest
     if (lip) { lipMat = litMat(0xff69b4, 0.7); swapMesh(lips, lip, lipMat); }
@@ -506,15 +410,6 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
       pad.boundingBox = null; pad.computeBoundingSphere();
       padPulse = { value: 0 };
       swapMesh(padMesh, pad, stripMaterial(pack, pad, padPulse));
-    }
-    const cube = packGeo(pack, 'item_cube', null, ROAD_MIRROR);
-    if (cube) {
-      const cy = geoSize(cube).cy;                                          // the shards are authored in cube space
-      cube.translate(0, -cy, 0); cube.boundingBox = null;
-      itemMat = litMat(0xf2c14e, 0.25);
-      swapMesh(cubeMesh, cube, itemMat);
-      shardKinds = packShards(pack, cy);
-      if (shardKinds) { for (const s of shard) s.life = 0; shardsLive = 0; }
     }
   }
   propPack().then((pack) => { if (pack && !dead) dressFurniture(pack); });
@@ -536,21 +431,7 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
   function update(d) {
     const t = now() - t0;
     props.update(d, t);
-    let dirty = false;
-    for (let i = 0; i < cubes.length; i++) {
-      const c = cubes[i], since = cubeBrokenAt[i] >= 0 ? t - cubeBrokenAt[i] : -1;
-      if (since >= 0 && since < RESPAWN_SEC) continue;                       // hidden, matrix already written
-      let scale = 1;
-      if (since >= 0) {                                                       // growing back
-        const u = Math.min(1, (since - RESPAWN_SEC) / REGROW_SEC);
-        scale = u < 1 ? Math.max(0.0001, 1.12 * Math.sin(u * Math.PI * 0.5)) : 1;
-        if (u >= 1) cubeBrokenAt[i] = -1;
-      } else if (wrapDist(c.d, d) > ANIM) continue;
-      cubeMesh.setMatrixAt(i, roadMatrix(c.d, c.x, CUBE * 0.75 + 0.18 * Math.sin(t * 2 + i), t * 1.1 + i, scale, _m));
-      dirty = true;
-    }
-    if (dirty) cubeMesh.instanceMatrix.needsUpdate = true;
-    updateBreaks(t);
+    updateFlashes(t);
     // air-line dots: gone while they would sit between the seat and the cup, back over DOT_NEAR..DOT_FAR
     let adirty = false;
     for (let i = 0; i < airD.length; i++) {
@@ -563,7 +444,6 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
       adirty = true;
     }
     if (adirty) airDots.instanceMatrix.needsUpdate = true;
-    itemMat.emissiveIntensity = 0.25 + 0.2 * (0.5 + 0.5 * Math.sin(t * 3));
     if (padPulse) padPulse.value = t * 7;                 // the pack's ribs glow and the glow runs
     else {
       if (padTex) padTex.offset.y = (t * 1.6) % 1;        // the chevrons run forward
@@ -590,8 +470,8 @@ ${sh.fragmentShader}`.replace('#include <emissivemap_fragment>', `#include <emis
     for (const t of texes) t.dispose();
     props.dispose();
     for (const fl of flash) group.remove(fl.sprite);
-    for (const m of [wedges, lips, airDots, padMesh, cubeMesh, shards]) m.dispose();
+    for (const m of [wedges, lips, airDots, padMesh]) m.dispose();
   }
 
-  return { update, applyRoom, breakItemBox, dispose, group, spans, rooms: specs };
+  return { update, applyRoom, dispose, group, spans, rooms: specs };
 }

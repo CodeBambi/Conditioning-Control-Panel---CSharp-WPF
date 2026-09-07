@@ -512,7 +512,6 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track features crossed this frame
     for (const f of lay.featuresBetween(prevD, ks.d)) {
       if (f.type === 'boost' && !ks.airborne && Math.abs(f.x - ks.x) <= 1.2) { k.applyBoost(1.6); sfx('tunnel_powerup_collect', 0.8); shake.shake(0.25, 200); poke('streamed', 1.2); k.pose('boost'); }
-      else if (f.type === 'itembox' && Math.abs(f.x - ks.x) <= 1.2 && w.dresser.breakItemBox(f)) shake.shake(0.2, 120);
       else if (f.type === 'gate') enterRoom(w, ts && ts.act ? ts.act.room : f.room, ts && ts.act ? ts.act.name : null);
     }
     if (ks.airborne) S.airH = Math.max(S.airH, ks.h);
@@ -669,26 +668,6 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     scene.clear(); renderer.dispose();
   }
 
-  /** Screenshot aid (`?itembox=<ms>` on the standalone page): break the nearest sugar cube ahead the
-   *  way a crossing does, so a headless shot catches the break without anyone steering. A cube too
-   *  far to read is pulled into view first (the kart's depth jumps): a dev-only warp, and the reason
-   *  this is never reachable from the host. Returns false when there is no cube to break. */
-  function debugItemBox() {
-    if (!W || !S.running || S.paused) return false;
-    const ks = W.kart.state, lay = W.layout, half = lay.totalDepth / 2;
-    let best = null, bestRel = Infinity;
-    for (const c of lay.chunks) for (const f of c.features || []) {
-      if (f.type !== 'itembox') continue;
-      const rel = lay.wrap(f.d - ks.d + half) - half;
-      if (rel > 5 && rel < bestRel) { bestRel = rel; best = f; }
-    }
-    if (!best) return false;
-    if (bestRel > 16) { ks.d = lay.wrap(best.d - 16); trailClear(); }
-    if (!W.dresser.breakItemBox(best)) return false;
-    shake.shake(0.2, 120);
-    return true;
-  }
-
   resetRunState(seed);          // the world waits for prepare() / start(): frame() draws the stage until then
   raf = requestAnimationFrame(frame);
   function setCameraOverride(fn) { camOverride = typeof fn === 'function' ? fn : null; }
@@ -720,7 +699,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); if (captions) captions.setTrack(TR.track ? TR.track.chart : null); }, trackClock: (t, playing) => TR.clock(t, playing),
-    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugItemBox,
+    trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(),
     get track() { return TR.track; } };
 }
 
