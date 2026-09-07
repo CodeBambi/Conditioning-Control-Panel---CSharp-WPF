@@ -85,8 +85,26 @@ export const BIN_SEC = 0.25;
  * ones the voice said.
  */
 export const WORD_BIN_SEC = 0.5;
-/** A word this unsure is not a caption: the transcript guessed and the plate would lie. */
+/**
+ * A word this unsure is not a caption: the transcript guessed and the plate would lie.
+ * THE FALLBACK ONLY. On a SCRIPT-ALIGNED file this cut is the wrong question and it is
+ * not asked: see isAligned() and captionWords() below.
+ */
 export const CAPTION_CONF = 0.35;
+/**
+ * The aligner stamp that says a transcript was written against a SCRIPT rather than
+ * heard cold. Every file on race/words/ is whisper large-v3 run over the audio and then
+ * aligned to the written script, so the text of every word is the script's text and a low
+ * `conf` on one of them means the aligner was unsure of its SECOND, not of the word. That
+ * is why the confidence cut has to go for these files: 790 words on the shelf, four
+ * percent of everything the voice says, were being thrown away for being hard to time.
+ *
+ * The stamp is read off the words file's own `engine` when it carries one, and off the
+ * race/words/index.json row otherwise (the race copies of these transcripts drop every
+ * field the road does not read, `engine` among them, so the row is where it lives here).
+ * A file with no stamp, or with an engine that never saw a script, keeps CAPTION_CONF.
+ */
+export const ALIGNED_ENGINE = /script/i;
 /**
  * No two triggers land closer together than this: generate.js's own WORD_GAP, so a
  * phrase said six times in ten seconds is a moment on the road and not a wall of them.
@@ -314,11 +332,30 @@ export function triggersFromHits(events, hits, setById) {
   return events.filter((e) => !(e.kind === 'word' && near(e.t))).concat(triggers);
 }
 
-/** The caption track: what the voice says and when, and nothing the plate cannot show. */
+/**
+ * Was this transcript aligned to a script? The file's own `engine` stamp answers first,
+ * the race/words/index.json row (which race/words.js hands along on the loaded file)
+ * second. Anything else is a transcript somebody heard cold, and its `conf` is a real
+ * measure of whether the word is the word.
+ */
+export function isAligned(words) {
+  const e = words && typeof words.engine === 'string' ? words.engine : '';
+  return !!e && ALIGNED_ENGINE.test(e);
+}
+
+/**
+ * The caption track: what the voice says and when, and nothing the plate cannot show.
+ * On a script-aligned file that is EVERY word, because the aligner's `conf` is its
+ * confidence in the timing and the text came off the script either way. A word that
+ * was hard to place is still the word she said, and it is inked and sized like any
+ * other: the road makes nothing of a low `conf` and shows no sign of one.
+ */
 export function captionWords(words) {
   const raw = (words && Array.isArray(words.words)) ? words.words : [];
+  const aligned = isAligned(words);
   return raw
-    .filter((w) => w && typeof w.w === 'string' && w.w && typeof w.t === 'number' && (typeof w.conf !== 'number' || w.conf >= CAPTION_CONF))
+    .filter((w) => w && typeof w.w === 'string' && w.w && typeof w.t === 'number'
+      && (aligned || typeof w.conf !== 'number' || w.conf >= CAPTION_CONF))
     .map((w) => ({ t: r3(w.t), d: r3(Number(w.d) || 0), w: w.w }));
 }
 
@@ -343,7 +380,8 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
   // random lanes, which was the right answer while the road had no transcript on it and is the
   // wrong one now: the transcript has every word the voice says, so those few are dropped and
   // race/wordBubbles.js lays the whole script instead - one word a bubble, a phrase a lane, and
-  // never within HIT_GUARD_SEC of a trigger, because those seconds belong to the row.
+  // never inside a trigger's own span (plus the pop box margin either side), because those
+  // seconds are the phrase the row of five is already saying on all its faces.
   const events = road.filter((e) => e.kind !== 'word')
     .concat(inkWords(wordEventsFrom(caps, triggers), triggers))
     .sort((a, b) => a.t - b.t)

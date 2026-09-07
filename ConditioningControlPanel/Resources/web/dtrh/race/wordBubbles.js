@@ -23,10 +23,27 @@
  * inherit the lane they were already in. The cut is there so a tag never has to
  * hold a whole sentence, not to move the road.
  *
- * WHAT THE ROW OWNS. A fingerprinted trigger keeps its row of five across the whole
- * road (race/cues.js `case 'trigger'`). A word bubble never lands on top of one, so
- * every word inside HIT_GUARD_SEC of a trigger event is left to the row, and the
- * phrase is cut there rather than straddling it.
+ * WHAT THE ROW OWNS: ITS OWN SPAN, AND NOT THE SENTENCE AROUND IT. A fingerprinted
+ * trigger keeps its row of five across the whole road (race/cues.js `case 'trigger'`)
+ * and every face of that row already wears the phrase. So the row owns the seconds
+ * the phrase is being said, `hit.t` to `hit.t + hit.dur`, plus a physical margin
+ * either side, and nothing else. The words leading INTO the phrase and the words
+ * coming out of it are not the row's and they stay on the road.
+ *
+ * That is the whole of this fix. The guard used to reach HIT_GUARD_SEC (0.4 s) either
+ * side of the whole span, which took the sentence around every drop, sleep and good
+ * girl on the shelf: 2,270 words, eleven percent of every transcript we have, and
+ * 274 s of Bubble Acceptance where the road could only say set labels. The phrase is
+ * still CUT at a row rather than straddling it, so a line that runs into a trigger
+ * stops there and the words on the far side start a new line in a new lane.
+ *
+ * THE MARGIN IS PHYSICS, not taste. race/consts.js POP_HIT_D is 1.4 m, and the pop
+ * test in race/bubbles.js is `|rel| < POP_HIT_D`, so two bubbles less than 2.8 m of
+ * road apart can sit in the box together and one pass takes both. The slowest the
+ * road ever cruises is the opening ramp at OPEN_PACE of KART_BASE_SPEED, 15.4 m/s,
+ * where HIT_GUARD_PRE_SEC buys 3.1 m; at cruise it is 4.4 m and at the boost cap
+ * 6.8 m. Only a held brake (KART_MIN_SPEED, 8 m/s) gets under the 2.8 m, and a kart
+ * on the brake is not driving a line anyway.
  *
  * THE MERGE. Two words closer together than MERGE_SEC share one bubble, because at
  * 22 m/s the pop box is only poppable for 0.06 s and two bubbles that close are one
@@ -58,8 +75,19 @@ export const WORD_RULE = Object.freeze({
   PHRASE_GAP_SEC: 0.3,
   /** And so does a fourth bubble, so a tag never has to hold a sentence. */
   PHRASE_MAX_WORDS: 4,
-  /** No word bubble this near a trigger event: those words belong to the row. */
-  HIT_GUARD_SEC: 0.4,
+  /**
+   * THE GUARD, which is the trigger's own span and a margin. No word bubble in the
+   * seconds `hit.t - HIT_GUARD_PRE_SEC` to `hit.t + hit.dur + HIT_GUARD_POST_SEC`:
+   * the words inside the span are the phrase the row is already saying, and the two
+   * margins are the road that keeps a word bubble out of the pop box the row's line
+   * is in. PRE is the wider of the two because the player meets it first, at speed,
+   * with the row filling the glass behind it: 0.2 s is 3.1 m at the slowest cruise
+   * the road has (opening ramp, 15.4 m/s) against the 2.8 m two bubbles need to be
+   * apart not to share the box. A hit with no length of its own still keeps PRE
+   * behind it, so the far side of the line is cleared by the same margin.
+   */
+  HIT_GUARD_PRE_SEC: 0.2,
+  HIT_GUARD_POST_SEC: 0.1,
   /** The silence a line needs before the next one may sit in another lane. */
   LANE_MOVE_SEC: 0.3,
   /** And how many lanes it may move when it does. One. */
@@ -82,15 +110,21 @@ function readWords(raw) {
 }
 
 /**
- * The seconds a trigger row owns: its own second, its length, and HIT_GUARD_SEC of
- * quiet either side. `hits` may be the chart's trigger EVENTS or the raw hits off
- * the words file; both carry `t` and both may carry `dur`.
+ * The seconds a trigger row owns: the span of the phrase itself, `hit.t` to
+ * `hit.t + hit.dur`, with PRE of road in front of it and POST behind. A hit with no
+ * length of its own is held open to PRE on the far side too, so the line is cleared
+ * by the same margin whichever way the kart meets it. `hits` may be the chart's
+ * trigger EVENTS or the raw hits off the words file; both carry `t` and `dur`.
  */
-export function guardWindows(hits, guardSec = WORD_RULE.HIT_GUARD_SEC) {
-  const g = Math.max(0, num(guardSec, WORD_RULE.HIT_GUARD_SEC));
+export function guardWindows(hits, pre = WORD_RULE.HIT_GUARD_PRE_SEC, post = WORD_RULE.HIT_GUARD_POST_SEC) {
+  const p = Math.max(0, num(pre, WORD_RULE.HIT_GUARD_PRE_SEC));
+  const q = Math.max(0, num(post, WORD_RULE.HIT_GUARD_POST_SEC));
   return (Array.isArray(hits) ? hits : [])
     .filter((h) => h && isFinite(num(h.t, NaN)))
-    .map((h) => ({ t0: num(h.t, 0) - g, t1: num(h.t, 0) + Math.max(0, num(h.dur, 0)) + g }))
+    .map((h) => {
+      const t = num(h.t, 0), dur = Math.max(0, num(h.dur, 0));
+      return { t0: t - p, t1: t + Math.max(dur + q, p) };
+    })
     .sort((a, b) => a.t0 - b.t0);
 }
 
@@ -105,7 +139,8 @@ function inGuard(windows, i, t) {
  * The road's script.
  *
  * @param words  the caption track: [{ t, d, w }], the shape `chart.words` is in
- *               (race/cloudChart.js captionWords, already cut at CAPTION_CONF)
+ *               (race/cloudChart.js captionWords, which on a script-aligned file is
+ *               every word the voice says and on any other one is cut at CAPTION_CONF)
  * @param hits   the trigger events (or the words file's own hits): [{ t, dur }]
  * @param opts   { rng, rule } - rng seeds the lane walk, rule overrides WORD_RULE
  * @returns phrases, in order: `{ t, t1, lane, x, words }` where `words` are the
@@ -116,11 +151,14 @@ export function phrasesFrom(words, hits = [], opts = {}) {
   const R = { ...WORD_RULE, ...(opts.rule || {}) };
   const rng = typeof opts.rng === 'function' ? opts.rng : Math.random;
   const list = readWords(words);
-  const windows = guardWindows(hits, R.HIT_GUARD_SEC);
+  const windows = guardWindows(hits, R.HIT_GUARD_PRE_SEC, R.HIT_GUARD_POST_SEC);
 
   // ---- 1. the bubbles: guarded words dropped, close words merged ------------
   // `cut` on a bubble means "the phrase ends here": a row took the words that
-  // followed, or the word itself closed a clause.
+  // followed, or the word itself closed a clause. `guarded` is the same flag it
+  // always was, only on the narrower window: it rides to the next word that gets
+  // through so the line RESUMES on the far side of the row instead of running
+  // through it as if the trigger had never been said.
   const bubbles = [];
   let gi = 0, guarded = false, collided = 0;
   for (const w of list) {

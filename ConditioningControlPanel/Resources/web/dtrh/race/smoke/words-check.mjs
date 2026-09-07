@@ -81,6 +81,10 @@ const shape = (g) => !!g && g.version === 1 && Array.isArray(g.words) && g.words
 forgetWords();
 const byCloudId = await loadWords({ cloudId: first.cloudId.toUpperCase(), fetch: localFetch, indexUrl: INDEX_URL });
 ok(shape(byCloudId) && byCloudId.hash === first.hash, 'the loader answers by cloudId, whatever case it is given');
+// the aligner stamp: the race copy of a transcript carries none, so the row's rides along with it,
+// and race/cloudChart.js isAligned() reads it to tell a doubtful SECOND from a doubtful word
+ok(!!first.engine && byCloudId.engine === first.engine,
+  'and hands the aligner stamp off the index row along with it (' + byCloudId.engine + ')');
 
 forgetWords();
 const byHash = await loadWords({ hash: first.hash, fetch: localFetch, indexUrl: INDEX_URL });

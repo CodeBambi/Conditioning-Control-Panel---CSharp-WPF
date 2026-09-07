@@ -36,7 +36,9 @@ const RACE = resolve(fileURLToPath(import.meta.url), '../..');
 const read = (rel) => JSON.parse(readFileSync(resolve(RACE, rel), 'utf8'));
 const index = read('words/index.json');
 const ROW = index.rows[0];                                  // the opening track: short, and it says the phrase
-const WORDS = read('words/' + ROW.file);
+// the aligner stamp lives on the index row, not on the race copy of the transcript, and
+// race/words.js loadWords() hands it to the road: the fixture is read the same way here.
+const WORDS = { ...read('words/' + ROW.file), engine: ROW.engine };
 const DUR = WORDS.durationSec;
 
 /** A curve shaped like a spoken track: a speaking level throughout, swelling every 40 s. */

@@ -76,7 +76,9 @@ ok(!existsSync(resolve(RACE, 'wordTags.js')), 'the tag plate over the bubble is 
  * ==========================================================================*/
 const rows = read('words/index.json').rows;
 const ROW = rows.find((r) => /bubble induction/i.test(String(r.title || ''))) || rows[0];
-const WORDS = read('words/' + ROW.file);
+// the aligner stamp lives on the index row, not on the race copy of the transcript, and
+// race/words.js loadWords() hands it to the road: the fixture is read the same way here.
+const WORDS = { ...read('words/' + ROW.file), engine: ROW.engine };
 /** A curve shaped like a spoken track, the same swell the other road checks use. */
 function swell(durationSec, perSec = PEAKS_PER_SEC) {
   const n = Math.ceil(durationSec * perSec);
@@ -299,6 +301,19 @@ if (process.env.RACE_SHOTS) {
   // near enough to read: a row at 30 m is a true picture of nothing much
   const row = await shotWhen('words-row.png', (b) => b.filter((x) => !x.popped && x.rowN > 1 && x.ahead > 3 && x.ahead < 18).length >= 3);
   ok(!!row.file, `shot: a trigger row, every bubble wearing the word -> ${row.file}`);
+  // THE GUARD, in one frame: a row with the script still running on BOTH sides of it. The old rule
+  // took every word within 0.4 s of a trigger and left the row standing on empty road; it owns the
+  // seconds its own phrase is being said now, and the sentence around it is there to be driven.
+  const guard = await shotWhen('guard.png', (b) => {
+    const on = b.filter((x) => !x.popped);
+    // the row near enough to read, and a word bubble close on either side of it: both of them
+    // inside the metres the guard clears, which is the whole picture being asked for
+    const at = on.filter((x) => x.rowN > 1 && x.ahead > 7 && x.ahead < 17).map((x) => x.ahead).sort((p, q) => p - q)[0];
+    if (at == null) return false;
+    return on.some((x) => x.rowN <= 1 && x.ahead > 3 && x.ahead < at - 1)
+      && on.some((x) => x.rowN <= 1 && x.ahead > at + 1 && x.ahead < at + 9);
+  });
+  ok(!!guard.file, `shot: a row with the words either side of it still on the road -> ${guard.file}`);
 }
 
 console.log(fails ? `\nface-check: ${fails} failed` : '\nface-check: all good');

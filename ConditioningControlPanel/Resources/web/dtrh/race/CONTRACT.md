@@ -204,7 +204,9 @@ export function createScore() -> { state, pop(points, kindId), miss(), nearMiss(
 ```
 `state = { score, combo, mult, bank, banked, best, popped, treats, effects, nearMisses }`.
 Multiplier ladder = `MULT_LADDER` from consts (`[[0,1],[5,2],[12,3],[22,4],[36,6],[50,8]]`).
-Combo drops to 0 after `COMBO_HOLD_SEC` without a pop. `bank()` moves `score` into `banked` at the
+Combo drops to 0 after `COMBO_HOLD_SEC` with no word DUE: a pop resets that clock and so does
+`unread()`, the word bubble the kart drove past (no rung, no release), so a line read with one word
+missed cannot time the ladder out on two gaps that are each inside the hold. `bank()` moves `score` into `banked` at the
 Tea Garden gate (THE BANK). Events: `{ type:'pop'|'miss'|'combo'|'mult'|'bank'|'jackpot'|'almost', ... }`.
 
 ### `race/kart.js` (PR 3)
