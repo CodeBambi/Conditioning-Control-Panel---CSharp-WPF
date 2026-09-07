@@ -50,12 +50,13 @@ import { createSpine } from './spine.js';
 import { roomById, rollRoomOrder, createRoomDresser } from './rooms.js';
 import { createWalls } from './walls.js';
 import { createCueSync, CUE_AHEAD_SEC } from './sync.js';
+import { createPopLog, createSyncOverlay, readNudge, writeNudge, shiftRoad, exportOf, trackIdOf, fmtSec, NUDGE_SEC, NUDGE_BIG_SEC, SHOW_MS } from './wordSync.js';
 import { createWallDomPosters } from './wallDom.js';
 import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
 import { createTrackState } from './track.js';
-import { cueFor, resultTag } from './cues.js';
+import { cueFor, resultTag, LANE_X } from './cues.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
@@ -149,7 +150,70 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // track), `lineGot` how many of them the kart has taken this run, and the pop that finishes one
   // calls race/score.js chain(). A phrase left half-taken simply never pays.
   const lineN = new Map(), lineGot = new Map(), lineDone = new Set();
-  const fxProxy = { pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
+  // THE SYNC WIN (race/wordSync.js). Every word bubble and every trigger row popped or driven past
+  // writes how far from its second it landed into a ring in localStorage; `[` `]` move this track's
+  // offset; `\` copies the numbers. `rowOf` is the trigger rows still on the road (a row is not in
+  // wordOf: its pop is a rung and its word flies on the plate); `rowWatch` is the rows whose second
+  // has passed unpopped, so a missed row is logged at its pass time. Nothing here runs on a track
+  // without words, and the panel is only built for `?wsync=1` or the first nudge.
+  const popLog = createPopLog();
+  const rowOf = new Map(), rowWatch = [];
+  const WSYNC = flag('wsync') === '1';
+  const ROW_LATE_SEC = 0.6;
+  let syncHud = null;
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+  const eventIndex = (id) => { const m = /(\d+)$/.exec(String(id)); return m ? +m[1] : String(id); };
+  const laneOf = (x) => { let b = 0; LANE_X.forEach((v, i) => { if (Math.abs(v - x) < Math.abs(LANE_X[b] - x)) b = i; }); return b; };
+  const trackKey = () => (TR.track && TR.lyrics ? trackIdOf(TR.track.chart) : '');
+  const offsetOf = () => (TR.track ? Number(TR.track.chart.analysis.offsetSec) || 0 : 0);
+  function refreshSync() { if (syncHud) syncHud.update({ rows: popLog.rows(trackKey()), offsetSec: offsetOf(), name: TR.track ? TR.track.name : '' }); }
+  function showSync(ms) {
+    if (!syncHud && hudRoot) syncHud = createSyncOverlay(hudRoot, { buttons: WSYNC, onNudge: nudge, onExport: exportSync });
+    if (!syncHud) return;
+    refreshSync(); syncHud.show(WSYNC ? 0 : ms);
+  }
+  /** The track second the kart's nose was level with depth `d`: a pop fires a frame early or late and
+   *  the miss is called MISS_BEHIND metres past the bubble, so the log reads the road, not the frame. */
+  function passTime(w, d) {
+    const t = TR.track ? TR.track.t : 0;
+    if (!w || d == null) return t;
+    const ks = w.kart.state, half = w.layout.totalDepth / 2;
+    return t + (w.layout.wrap(d - ks.d + half) - half) / Math.max(1, ks.speed);
+  }
+  function logWord(rec, popT, missed) {
+    const key = trackKey();
+    if (!key) return;
+    popLog.push({ trackId: key, i: rec.i, p: rec.p, w: rec.w, t: rec.t, popT: r3(popT), dt: r3(popT - rec.t), lane: rec.lane, missed: !!missed });
+    if (syncHud && !syncHud.el.hidden) refreshSync();
+  }
+  /** Move this track's offset by `deltaSec`: stored per track, and applied to the road NOW. The ids are
+   *  kept, so sched.replace adopts only the words not yet handed over; a bubble already on the road stays. */
+  function nudge(deltaSec) {
+    const key = trackKey();
+    if (!key || !deltaSec) return false;
+    writeNudge(key, readNudge(key) + deltaSec);
+    replaceTrack(shiftRoad(TR.track.chart, deltaSec));
+    showSync(SHOW_MS); syncHud.say('offset ' + fmtSec(offsetOf()));
+    return true;
+  }
+  function copyText(text) {
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).catch(() => copyFallback(text)); return; } } catch (e) { /* fall through */ }
+    copyFallback(text);
+  }
+  function copyFallback(text) {
+    try { const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } catch (e) { /* no clipboard here */ }
+  }
+  /** The line words/index.json wants for this track, to the clipboard. Returns the JSON text, '' with no words. */
+  function exportSync() {
+    const key = trackKey();
+    if (!key) return '';
+    const text = JSON.stringify(exportOf({ cloudId: key, offsetSec: offsetOf(), rows: popLog.rows(key) }));
+    copyText(text);
+    hud.toast('offset copied', 'item');
+    showSync(SHOW_MS); syncHud.say('copied ' + fmtSec(offsetOf()));
+    return text;
+  }
+  const fxProxy ={ pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
   // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
   // (warmFx) rather than 2-5 MB mid-lap; the desktop pool and the Loom's own spirals are untouched
@@ -280,11 +344,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
    * of word bubbles taken clean reads back as the sentence the voice said.
    * @param eventId the chart event that spawned the bubble, @param ghost true for a miss
    */
-  function spendWord(w, eventId, ghost) {
+  function spendWord(w, eventId, ghost, passT) {
     if (!eventId) return;
     const rec = wordOf.get(eventId);
     if (!rec) return;
     wordOf.delete(eventId);                       // one bubble, one flash: it is popped or it is past
+    logWord(rec, passT == null ? (TR.track ? TR.track.t : 0) : passT, ghost);
     if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
     if (ghost || rec.p == null || lineDone.has(rec.p)) return;
     const n = lineN.get(rec.p) || 0, got = (lineGot.get(rec.p) || 0) + 1;
@@ -302,7 +367,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function onPop(w, p) {
     const word = !!p.eventId && wordOf.has(p.eventId);   // a bubble off the transcript, not a chunk golden
-    if (p.eventId) { TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false); }
+    if (p.eventId) {
+      const at = passTime(w, p.d);
+      TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false, at);
+      const row = rowOf.get(p.eventId);   // a trigger row: one log line for the row, on its first pop
+      if (row) { rowOf.delete(p.eventId); logWord(row, at, false); }
+    }
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (S.sweep) sfx('chain_pop', 0.5);          // the pump: every pop on the road sounds like the chain
     if (p.kind === 'treat') return treat(w, p, word);
@@ -389,7 +459,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
   function onMiss(w, m) {
     const word = !!m.eventId && wordOf.has(m.eventId);
-    spendWord(w, m.eventId, true);   // the script is never hostage to the steering: the word still lands, grey
+    spendWord(w, m.eventId, true, passTime(w, m.d));   // the script is never hostage to the steering: the word still lands, grey
     // ALMOST: the treat slid past inside NEAR_MISS_M but outside the hit box; else the streak lets go
     let best = null, bestGap = Infinity;
     for (const s of trail) { if (!s.ok) continue; const g = Math.abs(w.layout.wrap(s.d - m.d + w.layout.totalDepth / 2) - w.layout.totalDepth / 2); if (g < bestGap) { bestGap = g; best = s; } }
@@ -463,7 +533,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const t = TR.setTrack(chart);
     audio.setRoute(routeOf(t));
     S.trackHold = 0; S.statsAt = 0; S.quiet = false; S.quietAt = -9; sync.reset(); wordOf.clear();
-    lineN.clear(); lineGot.clear(); lineDone.clear();
+    lineN.clear(); lineGot.clear(); lineDone.clear(); rowOf.clear(); rowWatch.length = 0;
+    if (WSYNC && t && TR.lyrics) showSync(0); else refreshSync();
     for (const e of (t && t.chart && Array.isArray(t.chart.events) ? t.chart.events : [])) {
       if (e.kind === 'word' && e.p != null) lineN.set(e.p, (lineN.get(e.p) || 0) + 1);
     }
@@ -472,6 +543,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
     if (bridge.log) bridge.log(t ? `race track: ${t.name}, ${Math.round(t.durationSec)}s, ${TR.stats().countable} to take` : 'race track: cleared');
     return t;
+  }
+  /** The words pass landing live, or a nudge: keep the clock, adopt only what is still ahead (track.js replace). */
+  function replaceTrack(chart) {
+    TR.replace(chart); audio.setRoute(routeOf(TR.track));
+    if (W) W.field.setSparse(TR.lyrics);
+    if (captions) captions.setTrack(TR.track ? TR.track.chart : null);
+    refreshSync();
   }
   /** The chart's fog knob rides the tunnel weather: fx.update writes scene.fog every frame, so the
    *  zone is the only fog dial the run may hold. 0 hands the organic roll back. */
@@ -513,7 +591,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       // A trigger ROW is not one of these: its word flies at the camera on the plate instead.
       if (rowId && e.kind === 'word' && row[0].w) {
         if (wordOf.size >= WORD_MEM) wordOf.delete(wordOf.keys().next().value);
-        wordOf.set(e.id, { w: row[0].w, ink: row[0].ink || null, accent: !!row[0].big, p: e.p == null ? null : e.p });
+        wordOf.set(e.id, { w: row[0].w, ink: row[0].ink || null, accent: !!row[0].big, p: e.p == null ? null : e.p, t: e.t, i: eventIndex(e.id), lane: laneOf(row[0].x || 0) });
+      } else if (rowId && e.kind === 'trigger' && TR.lyrics) {   // the sync log's line for a row: w is the set's label
+        if (rowOf.size >= WORD_MEM) rowOf.delete(rowOf.keys().next().value);
+        rowOf.set(e.id, { w: e.label, p: null, t: e.t, i: eventIndex(e.id), lane: null });
       }
     }
     for (const sp of loose) {
@@ -560,7 +641,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     // the sync: rows nudged onto their word off the speed the kart has now, held cues fired on the second
     const held = sync.update(ts.t, ks.d, ks.speed);
     for (const m of held.move) w.field.moveRow(m.rowId, m.d);
-    for (const f of held.fire) spendCue(w, f.event, f.cue, f.plated);
+    for (const f of held.fire) { spendCue(w, f.event, f.cue, f.plated); if (rowOf.has(f.event.id)) rowWatch.push(f.event); }
+    // a row whose second went by unpopped is a miss, logged at the second the kart was on it
+    for (let k = rowWatch.length - 1; k >= 0; k--) {
+      const e = rowWatch[k];
+      if (!rowOf.has(e.id)) { rowWatch.splice(k, 1); continue; }
+      if (ts.t - e.t >= ROW_LATE_SEC || ts.t < e.t - 1) { const rec = rowOf.get(e.id); rowOf.delete(e.id); rowWatch.splice(k, 1); if (ts.t >= e.t) logWord(rec, e.t, true); }
+    }
     // THE QUIET. A stretch of file with no word due for longer than the streak's own patience holds
     // the ladder where it is: the voice stopped, the player did not. Re-read four times a second
     // rather than every frame (TR.nextEvent walks the file), and fed a step bigger than the frame so
@@ -771,7 +858,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   bridge.on('pause', (m) => setPaused(!!(m && m.on)));
   bridge.on('payout-result', (m) => { if (payoutResolve) payoutResolve(m); });
   function cyclePixel() { pixel.cycle(); pixel.retexture(scene); hud.toast(pixel.label(), 'item'); }
-  input.onAction((a) => { if (a === 'brake') brake(); else if (a === 'pixel') cyclePixel(); });
+  input.onAction((a, shift) => {
+    if (a === 'brake') brake(); else if (a === 'pixel') cyclePixel();
+    else if (a === 'nudgeUp' || a === 'nudgeDown') nudge((a === 'nudgeUp' ? 1 : -1) * (shift ? NUDGE_BIG_SEC : NUDGE_SEC));
+    else if (a === 'export') exportSync();
+  });
   const onVis = () => { last = 0; };
   document.addEventListener('visibilitychange', onVis);
 
@@ -796,6 +887,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (raf) cancelAnimationFrame(raf);
     unbindResize();
     document.removeEventListener('visibilitychange', onVis);
+    if (syncHud) { syncHud.dispose(); syncHud = null; }
     if (payoutResolve) payoutResolve(null);
     teardown();
     audio.dispose();
@@ -852,7 +944,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
-    setTrack, replaceTrack: (chart) => { TR.replace(chart); audio.setRoute(routeOf(TR.track)); if (W) W.field.setSparse(TR.lyrics); if (captions) captions.setTrack(TR.track ? TR.track.chart : null); }, trackClock: (t, playing) => TR.clock(t, playing),
+    setTrack, replaceTrack, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugPickup,
     /** What race/smoke/face-check.mjs reads: the word faces on the road this frame. */
     wordFaces: () => (W ? W.field.faceReport() : null),
@@ -860,6 +952,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     debugWord: (text, o) => (captions ? captions.showWord(text, o || {}) != null : false),
     /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */
     capMode: () => CAP_MODE,
+    /** THE SYNC WIN, for race/smoke/wsync-check.mjs: the log rows, the offset, a nudge, the export. */
+    wordSync: { rows: () => popLog.rows(trackKey()), size: () => popLog.size, offset: offsetOf, nudge, exportJson: exportSync, overlay: () => (syncHud ? syncHud.el : null) },
     get track() { return TR.track; } };
 }
 

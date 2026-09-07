@@ -46,6 +46,8 @@ const ACTIONS = {
   Escape: 'brake',
   KeyP: 'pixel',
   KeyM: 'mute',   // race/audio.js listens
+  // the words offset (race/run.js, race/wordSync.js); the callback's second argument is whether shift was held
+  BracketLeft: 'nudgeDown', BracketRight: 'nudgeUp', Backslash: 'export',
 };
 const DEADZONE = 0.16;
 const PAD = { steer: 0, accelBtn: 7, brakeBtn: 6, drift: 0, jump: 1, start: 9 };
@@ -70,7 +72,7 @@ export function createInput({ target = window, root = null } = {}) {
   let jumpQ = false, jumpHeld = false, aidLeft = AID_JUMP;
   const padWas = { start: false, jump: false };
 
-  const fire = (name) => { for (const cb of acts) { try { cb(name); } catch (e) { /* a listener never breaks the wheel */ } } };
+  const fire = (name, shift = false) => { for (const cb of acts) { try { cb(name, shift); } catch (e) { /* a listener never breaks the wheel */ } } };
 
   /** The third source. null on a mouse desktop: not one node is built there. */
   const touch = createTouch({ root, fire: (name) => fire(name) });
@@ -89,7 +91,7 @@ export function createInput({ target = window, root = null } = {}) {
     }
     if (e.type === 'keydown') {
       if (e.repeat) { if (KEYS[code]) e.preventDefault(); return; }
-      if (ACTIONS[code]) { fire(ACTIONS[code]); return; }
+      if (ACTIONS[code]) { const t = e.target; if (t && t.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return; fire(ACTIONS[code], !!e.shiftKey); return; }   // a field being typed in keeps its letters
       if (!KEYS[code]) return;
       down.add(KEYS[code]);
       e.preventDefault();

@@ -43,7 +43,8 @@ import { demoChart, normalizeChart } from './chart.js';
 import { generate } from '../chart/maker/generate.js';
 import { peaksInto, binsPer, binCount } from '../chart/editor/audio.js';
 import { cloudIdFrom, hashUrl, hashBytes, loadIndex, findAuthored, isAuthored } from './chartSource.js';
-import { loadWords } from './words.js';
+import { loadWords, loadWordsRow } from './words.js';
+import { shiftRoad, readNudge } from './wordSync.js';
 import { TRIGGER_SETS } from '../chart/editor/triggerSets.js';
 import { detect } from '../chart/maker/triggers.js';
 import { wordEventsFrom } from './wordBubbles.js';
@@ -456,6 +457,23 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
    */
   const named = (chart, title) => normalizeChart({ ...chart, source: { ...chart.source, name: title || (chart.source && chart.source.name) || 'track' } });
 
+  /**
+   * THE OFFSET (race/wordSync.js), applied ONCE, here, as a worded road leaves the source: the
+   * words/index.json row's `offsetSec` plus the `[` `]` nudge kept in localStorage for this track.
+   * Every word-derived second moves together (bubbles, rows, plates, band) and the cache holds the
+   * road at offset 0, so a nudge made after a road was cached still lands. `row` may be handed in
+   * by the generated door; the cached doors look it up (one index read, no transcript fetched).
+   */
+  async function tuned(chart, { cloudId, hash, row = null }) {
+    if (!chart.words || !chart.words.length) return chart;
+    let r = row;
+    if (!r) { try { r = await loadWordsRow({ cloudId, hash, fetch: get, log }); } catch (e) { r = null; } }
+    const key = (r && r.cloudId) || cloudId || hash || '';
+    const sec = (r ? r.offsetSec : 0) + readNudge(key);
+    if (!key) return chart;
+    return normalizeChart(shiftRoad(chart, sec, { trackId: key }));
+  }
+
   /** Fetch, decode, walk, lay a road. The only path that downloads the whole file. */
   async function generated({ id, url, title, durationSec, head, cloudId }) {
     stage(id, 'reading');
@@ -467,7 +485,7 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
     const hash = head && head.hash ? head.hash : await hashBytes(bytes, bytes.length);
     if (hash && cache) {
       const hit = await cache.get(hash, GENERATOR_ID);
-      if (hit) { say('cached (late hash) ' + hash.slice(0, 8)); return { chart: named(hit, title), door: 'cached' }; }
+      if (hit) { say('cached (late hash) ' + hash.slice(0, 8)); return { chart: await tuned(named(hit, title), { cloudId, hash }), door: 'cached' }; }
     }
     const buf = bytes.buffer;
     bytes = null;
@@ -483,8 +501,8 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
       ? wordedRoad({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash, words })
       : roadFromPeaks({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash });
     if (words && words.words.length) say(`${title}: ${road.words.length} words and ${road.analysis.lexicon.length} triggers on the road`);
-    if (hash && cache) await cache.put(hash, road, GENERATOR_ID);
-    return { chart: normalizeChart(road), door: 'generated' };
+    if (hash && cache) await cache.put(hash, road, GENERATOR_ID);   // at offset 0: tuned() shifts on the way out
+    return { chart: await tuned(normalizeChart(road), { cloudId, hash, row: words }), door: 'generated' };
   }
 
   /** The four doors, in order, for one track. Throws only when every one of them failed. */
@@ -509,7 +527,7 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
       if (byHash) return { chart: await authoredChart(byHash.row, title), door: 'authored by hash' };
       if (cache) {
         const hit = await cache.get(hash, GENERATOR_ID);
-        if (hit) return { chart: named(hit, title), door: 'cached' };
+        if (hit) return { chart: await tuned(named(hit, title), { cloudId, hash }), door: 'cached' };
       }
     }
     if (durationSec > MAX_DECODE_SEC) { shout(TOO_LONG_LINE); throw new Error(`${Math.round(durationSec / 60)} minutes is past the ${Math.round(MAX_DECODE_SEC / 60)} minute decode limit`); }

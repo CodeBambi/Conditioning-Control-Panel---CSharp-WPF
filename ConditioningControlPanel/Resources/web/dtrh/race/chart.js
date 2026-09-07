@@ -75,9 +75,11 @@ export function normalizeChart(json) {
     version: CHART_VERSION, binSec, energy: Object.freeze(energy),
     acts: normalizeActs(Array.isArray(json.acts) ? json.acts : [], durationSec),
     events: normalizeEvents(Array.isArray(json.events) ? json.events : [], durationSec),
-    source: Object.freeze({ name: str(src.name, 'track'), hash: str(src.hash, ''), durationSec, sampleRate: num(src.sampleRate, 16000) }),
+    // `cloudId` is the key race/wordSync.js files a track's pop log and offset under; `offsetSec` is the
+    // words offset this road already carries (race/cloudChart.js applies it, the sync overlay reads it)
+    source: Object.freeze({ name: str(src.name, 'track'), hash: str(src.hash, ''), durationSec, sampleRate: num(src.sampleRate, 16000), cloudId: str(src.cloudId, '').slice(0, 64) }),
     analysis: Object.freeze({
-      energy: str(an.energy, ''), words: str(an.words, 'none'), generatedAt: str(an.generatedAt, ''), partial: an.partial === true,
+      energy: str(an.energy, ''), words: str(an.words, 'none'), generatedAt: str(an.generatedAt, ''), partial: an.partial === true, offsetSec: num(an.offsetSec, 0),
       lexicon: Object.freeze((Array.isArray(an.lexicon) ? an.lexicon : []).filter((w) => typeof w === 'string')),
     }),
     // THE TRANSCRIPT (race/words.js, CHART.md `chart.words`). The lines the voice says, with
