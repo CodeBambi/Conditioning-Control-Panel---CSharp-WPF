@@ -85,14 +85,14 @@ export async function loadWords({ cloudId = '', hash = '', fetch: f = null, log 
   if (cache.has(key)) return cache.get(key);
   const work = (async () => {
     try {
-      if (!cache.has(indexUrl)) cache.set(indexUrl, readIndex(get, say, indexUrl));
-      const rows = await cache.get(indexUrl);
-      const row = (id && rows.find((r) => norm(r.cloudId) === id)) || (h && rows.find((r) => norm(r.hash) === h)) || null;
+      const row = await loadWordsRow({ cloudId, hash, fetch: get, log, indexUrl });
       if (!row) return null;
       const res = await get(new URL(row.file, indexUrl).href, { credentials: 'omit' });
       if (!res || !res.ok) throw new Error('the transcript answered ' + (res ? res.status : 'nothing'));
       const got = readFile(await res.json());
       say('words: ' + (got ? got.words.length + ' words for ' + (row.title || row.cloudId) : 'nothing readable in ' + row.file));
+      // the row's own key and offset ride along, so the road can be filed and shifted by them
+      if (got) { got.cloudId = row.cloudId; got.offsetSec = row.offsetSec; }
       return got;
     } catch (err) {
       say('words: ' + ((err && err.message) || err));
@@ -101,6 +101,27 @@ export async function loadWords({ cloudId = '', hash = '', fetch: f = null, log 
   })();
   cache.set(key, work);
   return work;
+}
+
+/**
+ * The index ROW for one track, or null: `{ cloudId, hash, title, file, offsetSec }`, with
+ * `offsetSec` (seconds added to every word of the file, default 0) read off the row so
+ * race/cloudChart.js can shift a CACHED road without fetching its transcript again.
+ * Same keys, same doors, never throws.
+ */
+export async function loadWordsRow({ cloudId = '', hash = '', fetch: f = null, log = null, indexUrl = INDEX_URL } = {}) {
+  const get = f || (typeof fetch !== 'undefined' ? fetch : null);
+  const say = (m) => { try { if (log) log(m); } catch (e) { /* no log */ } };
+  const id = norm(cloudId), h = norm(hash);
+  if (!get || (!id && !h)) return null;
+  try {
+    if (!cache.has(indexUrl)) cache.set(indexUrl, readIndex(get, say, indexUrl));
+    const rows = await cache.get(indexUrl);
+    const row = (id && rows.find((r) => norm(r.cloudId) === id)) || (h && rows.find((r) => norm(r.hash) === h)) || null;
+    if (!row) return null;
+    const off = Number(row.offsetSec);
+    return { cloudId: norm(row.cloudId), hash: norm(row.hash), title: String(row.title || ''), file: row.file, offsetSec: isFinite(off) ? off : 0 };
+  } catch (err) { say('words: ' + ((err && err.message) || err)); return null; }
 }
 
 /** The smoke starts over between sections; nothing in the game ever calls this. */
