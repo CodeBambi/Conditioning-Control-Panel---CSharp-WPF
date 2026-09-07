@@ -15,8 +15,11 @@
  *   3. two consecutive bubbles are never closer than MERGE_SEC, because at 22 m/s
  *      the pop box is only poppable for 0.06 s and two bubbles that close are one
  *      pop the player cannot take twice
- *   4. no word bubble lands within HIT_GUARD_SEC of a trigger event: those seconds
- *      belong to the row of five (race/cues.js `case 'trigger'`)
+ *   4. no word bubble lands inside a trigger's own SPAN plus its margins, which is
+ *      all the row of five owns now (race/cues.js `case 'trigger'`): hit.t minus
+ *      HIT_GUARD_PRE_SEC to hit.t + hit.dur + HIT_GUARD_POST_SEC. The words leading
+ *      into the phrase and the words coming out of it are on the road, and this
+ *      prints what share of each transcript reaches it
  *   5. no phrase straddles a row, so a line is never cut in half by one
  *   6. one word a bubble, two at the most, never three
  *   7. every phrase sits in ONE lane, one of the five in cues.js LANE_X, and the
@@ -34,7 +37,7 @@ import { phrasesFrom, wordEventsFrom, rateOf, WORD_RULE, LANE_MID } from '../wor
 import { triggerHits, triggersFromHits, captionWords, SET_BY_ID, TRIGGER_GAP } from '../cloudChart.js';
 import { cueFor, LANE_X } from '../cues.js';
 import { normalizeChart } from '../chart.js';
-import { LANE_X_MAX, LANE_H, makeRng } from '../consts.js';
+import { LANE_X_MAX, LANE_H, POP_HIT_D, KART_BASE_SPEED, OPEN_PACE, makeRng } from '../consts.js';
 
 let fails = 0;
 const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -50,7 +53,8 @@ const WORDS = resolve(HERE, '../words');
 eq(WORD_RULE.MERGE_SEC, 0.12, 'two words closer than 0.12 s share one bubble');
 eq(WORD_RULE.PHRASE_GAP_SEC, 0.3, 'a silence over 0.3 s ends the phrase');
 eq(WORD_RULE.PHRASE_MAX_WORDS, 4, 'and so does a fourth bubble');
-eq(WORD_RULE.HIT_GUARD_SEC, 0.4, 'no word bubble within 0.4 s of a trigger');
+eq(WORD_RULE.HIT_GUARD_PRE_SEC, 0.2, 'a trigger owns 0.2 s of road in front of its phrase');
+eq(WORD_RULE.HIT_GUARD_POST_SEC, 0.1, 'and 0.1 s behind the end of it, and nothing more');
 eq(WORD_RULE.LANE_STEP_MAX, 1, 'a phrase may step one lane, never two');
 eq(LANE_X.length, 5, 'and there are five lanes to step between');
 eq(LANE_MID, 2, 'a track opens in the middle one');
@@ -62,10 +66,17 @@ ok(rows.length === 11, 'the shelf has all eleven transcripts on it (' + rows.len
 
 const table = [];
 let worstChangeWindow = 0, worstChangeTrack = '', tightest = Infinity, guardBreaks = 0, straddles = 0,
-  laneJumps = 0, offLane = 0, tripled = 0, collisions = 0;
+  laneJumps = 0, offLane = 0, tripled = 0, collisions = 0, shelfWords = 0, shelfOnRoad = 0, shelfGuarded = 0;
+
+/** Every word the file has to offer, before any rule of ours has been near it. */
+const spoken = (file) => (Array.isArray(file.words) ? file.words : [])
+  .filter((w) => w && typeof w.w === 'string' && w.w && typeof w.t === 'number').length;
 
 for (const row of rows) {
-  const file = JSON.parse(readFileSync(resolve(WORDS, row.file), 'utf8'));
+  // read the way race/words.js hands a transcript to the road: the file, wearing the aligner
+  // stamp off its index row. On a script-aligned file captionWords keeps every word, because a
+  // low `conf` there is the aligner unsure of the SECOND, never of the word.
+  const file = { ...JSON.parse(readFileSync(resolve(WORDS, row.file), 'utf8')), engine: row.engine };
   const durationSec = Number(file.durationSec) || 0;
   // the trigger events the road will actually carry: the fingerprinted hits, thinned against each
   // other by TRIGGER_GAP exactly the way cloudChart.js lays them (no events, so only the triggers
@@ -79,41 +90,69 @@ for (const row of rows) {
   if (m.worstChanges > worstChangeWindow) { worstChangeWindow = m.worstChanges; worstChangeTrack = row.title; }
   tightest = Math.min(tightest, m.minGap);
 
-  // 4 + 5: the row owns its seconds, and no line is cut in half by one
+  // 4 + 5: the row owns the span of its own phrase and a margin, and no line is cut in half by one
+  let onRoad = 0;
   for (const p of phrases) {
     if (p.lane < 0 || p.lane >= LANE_X.length || p.x !== LANE_X[p.lane]) offLane++;
     for (const b of p.words) {
-      if (b.w.trim().split(/\s+/).length > 2) tripled++;
+      const n = b.w.trim().split(/\s+/).length;
+      onRoad += n;
+      if (n > 2) tripled++;
       for (const h of triggers) {
-        const t1 = h.t + Math.max(0, Number(h.dur) || 0);
-        if (b.t > h.t - WORD_RULE.HIT_GUARD_SEC && b.t < t1 + WORD_RULE.HIT_GUARD_SEC) guardBreaks++;
+        const dur = Math.max(0, Number(h.dur) || 0);
+        // the window race/wordBubbles.js guardWindows draws, written out here so the rule and its
+        // measure are two separate sentences: a hit with no length of its own still keeps PRE behind it
+        const t0 = h.t - WORD_RULE.HIT_GUARD_PRE_SEC;
+        const t1 = h.t + Math.max(dur + WORD_RULE.HIT_GUARD_POST_SEC, WORD_RULE.HIT_GUARD_PRE_SEC);
+        if (b.t > t0 && b.t < t1) guardBreaks++;
       }
     }
     for (const h of triggers) if (p.t < h.t && p.words[p.words.length - 1].t > h.t) straddles++;
+  }
+  const said = spoken(file);
+  shelfWords += said; shelfOnRoad += onRoad;
+  for (const w of file.words) {
+    for (const h of triggers) {
+      const dur = Math.max(0, Number(h.dur) || 0);
+      if (w.t > h.t - WORD_RULE.HIT_GUARD_PRE_SEC
+        && w.t < h.t + Math.max(dur + WORD_RULE.HIT_GUARD_POST_SEC, WORD_RULE.HIT_GUARD_PRE_SEC)) { shelfGuarded++; break; }
+    }
   }
   // 7: one step at a time
   for (let i = 1; i < phrases.length; i++) {
     if (Math.abs(phrases[i].lane - phrases[i - 1].lane) > WORD_RULE.LANE_STEP_MAX) laneJumps++;
   }
   table.push({ title: String(row.title || row.cloudId).slice(0, 24), durationSec, triggers: triggers.length,
-    bubbles: m.bubbles, phrases: m.phrases, perPhrase: m.perPhrase, minGap: m.minGap,
+    bubbles: m.bubbles, phrases: m.phrases, perPhrase: m.perPhrase, minGap: m.minGap, kept: said ? onRoad / said : 0,
     changes: m.changes, worstBubbles: m.worstBubbles, worstChanges: m.worstChanges, worstAt: m.worstAt });
 }
 
-console.log('\n  track                    |  dur | trig | bubbles | phrases | w/phr | min gap | lane chg | worst 5 s');
-console.log('  -------------------------+------+------+---------+---------+-------+---------+----------+-----------');
+console.log('\n  track                    |  dur | trig | bubbles | phrases | w/phr | kept | min gap | lane chg | worst 5 s');
+console.log('  -------------------------+------+------+---------+---------+-------+------+---------+----------+-----------');
 for (const r of table) {
   console.log('  ' + r.title.padEnd(24) + ' | ' + String(Math.round(r.durationSec)).padStart(4)
     + ' | ' + String(r.triggers).padStart(4) + ' | ' + String(r.bubbles).padStart(7)
     + ' | ' + String(r.phrases).padStart(7) + ' | ' + r.perPhrase.toFixed(2).padStart(5)
-    + ' | ' + r.minGap.toFixed(3).padStart(7) + ' | ' + String(r.changes).padStart(8)
+    + ' | ' + (100 * r.kept).toFixed(1).padStart(4) + ' | ' + r.minGap.toFixed(3).padStart(7)
+    + ' | ' + String(r.changes).padStart(8)
     + ' | ' + String(r.worstBubbles).padStart(2) + ' bub, ' + r.worstChanges + ' chg @ ' + Math.round(r.worstAt) + 's');
 }
 console.log('');
 
 ok(worstChangeWindow <= MAX_CHANGES, `no five second window on the shelf asks for more than ${MAX_CHANGES} lane changes (worst ${worstChangeWindow}, on ${worstChangeTrack})`);
 ok(tightest >= WORD_RULE.MERGE_SEC - 1e-9, `two bubbles are never closer than ${WORD_RULE.MERGE_SEC} s (tightest ${tightest.toFixed(3)} s)`);
-eq(guardBreaks, 0, 'not one word bubble lands inside a trigger row\'s seconds');
+eq(guardBreaks, 0, 'not one word bubble lands inside a trigger row\'s own span or its margins');
+ok(shelfOnRoad / shelfWords >= 0.85,
+  `${(100 * shelfOnRoad / shelfWords).toFixed(1)} percent of every word on the shelf reaches the road `
+  + `(${shelfOnRoad} of ${shelfWords}; ${shelfGuarded} are inside a trigger's span, and the rest merged or collided)`);
+// the margin is a distance, not a taste: two bubbles closer than 2 x POP_HIT_D of road can sit in
+// the pop box together and one pass takes both. The slowest the road cruises is the opening ramp.
+{
+  const slowest = OPEN_PACE * KART_BASE_SPEED;
+  const clear = WORD_RULE.HIT_GUARD_PRE_SEC * slowest;
+  ok(clear >= 2 * POP_HIT_D, `the guard's front margin is ${clear.toFixed(2)} m at the slowest cruise `
+    + `(${slowest.toFixed(1)} m/s), clear of the ${(2 * POP_HIT_D).toFixed(1)} m two bubbles need not to share the pop box`);
+}
 eq(straddles, 0, 'and not one phrase straddles a row');
 eq(tripled, 0, 'no bubble carries three words');
 eq(offLane, 0, 'every phrase sits in one of the five lanes');
@@ -121,7 +160,7 @@ eq(laneJumps, 0, 'and no phrase steps more than one lane from the last');
 console.log('  --  ' + collisions + ' transcript collisions dropped across the shelf (three or more words on one second)');
 
 /* ---- 8. the events survive the chart and cues.js lays them ---------------- */
-const sample = JSON.parse(readFileSync(resolve(WORDS, rows[0].file), 'utf8'));
+const sample = { ...JSON.parse(readFileSync(resolve(WORDS, rows[0].file), 'utf8')), engine: rows[0].engine };
 const sampleTriggers = triggersFromHits([], triggerHits(sample, sample.durationSec), SET_BY_ID);
 const events = wordEventsFrom(captionWords(sample), sampleTriggers, { rng: makeRng(7) });
 ok(events.length > 50, 'the opening track turns into ' + events.length + ' word events');

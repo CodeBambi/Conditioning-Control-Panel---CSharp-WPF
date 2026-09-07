@@ -152,7 +152,8 @@ console.log('track.js');
 console.log('the lyric placement rule');
 {
   const read = (rel) => JSON.parse(readFileSync(resolve(RACE, rel), 'utf8'));
-  const ROW = read('words/index.json').rows[0], WORDS = read('words/' + ROW.file);
+  // the aligner stamp rides on the index row (race/words.js loadWords hands it to the road)
+  const ROW = read('words/index.json').rows[0], WORDS = { ...read('words/' + ROW.file), engine: ROW.engine };
   const n = Math.ceil(WORDS.durationSec * PEAKS_PER_SEC), peaks = new Float32Array(n * 2);
   for (let i = 0; i < n; i++) { const a = 0.22 + 0.5 * Math.max(0, Math.sin(((i / PEAKS_PER_SEC) / 40) * Math.PI * 2)) ** 2; peaks[i * 2] = -a; peaks[i * 2 + 1] = a; }
   const road = wordedRoad({ peaks, durationSec: WORDS.durationSec, name: ROW.title, hash: ROW.hash, words: WORDS });

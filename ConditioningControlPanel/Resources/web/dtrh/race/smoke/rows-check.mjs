@@ -34,7 +34,7 @@
 
 import { cueFor, ROW_X, ROW_MAX_GAP } from '../cues.js';
 import { createScheduler, normalizeChart } from '../chart.js';
-import { KART_X_MAX, LANE_X_MAX, POP_HIT_X, LANE_H, COMBO_HOLD_SEC, makeRng } from '../consts.js';
+import { KART_X_MAX, LANE_X_MAX, POP_HIT_X, POP_HIT_D, LANE_H, COMBO_HOLD_SEC, KART_BASE_SPEED, OPEN_PACE, makeRng } from '../consts.js';
 import { createScore } from '../score.js';
 import { THEME_BY_PRESET, kindForPreset } from '../triggerTheme.js';
 import { KIND_BY_ID } from '../bubbleKinds.js';
@@ -46,6 +46,13 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** A transcript as the ROAD sees it: race/words.js hands the index row's aligner stamp along with
+ *  the file, and race/cloudChart.js keeps every word of a script-aligned one, whatever its `conf`. */
+const WORDS_ROWS = JSON.parse(readFileSync(resolve(HERE, '../words/index.json'), 'utf8')).rows;
+const wordsFile = (row) => ({ ...JSON.parse(readFileSync(resolve(HERE, '../words/' + row.file), 'utf8')), engine: row.engine });
+/** The opening track: short, and the one the sync numbers have always been read off. */
+const openingWords = () => wordsFile(WORDS_ROWS[0]);
 
 let fails = 0;
 const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -213,7 +220,7 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
 // boost. Driven off the REAL opening transcript rather than a made-up one, because the thing being
 // measured is whether the road holds three words a second, not whether the arithmetic closes.
 {
-  const file = JSON.parse(readFileSync(resolve(HERE, '../words/a15c22e0-d347-4d92-9f78-0fb37099e549.json'), 'utf8'));
+  const file = openingWords();
   const triggers = triggersFromHits([], triggerHits(file, file.durationSec), SET_BY_ID);
   const events = wordEventsFrom(captionWords(file), triggers, { rng: makeRng(7) })
     .sort((a, b) => a.t - b.t)
@@ -293,7 +300,7 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
 // Driven off the REAL opening transcript, because the number that matters is how long an x8 takes
 // on a road that lays three bubbles a second, and no made-up chart has that shape.
 {
-  const file = JSON.parse(readFileSync(resolve(HERE, '../words/a15c22e0-d347-4d92-9f78-0fb37099e549.json'), 'utf8'));
+  const file = openingWords();
   const triggers = triggersFromHits([], triggerHits(file, file.durationSec), SET_BY_ID);
   const events = wordEventsFrom(captionWords(file), triggers, { rng: makeRng(7) }).sort((a, b) => a.t - b.t);
   const lines = new Map();
@@ -314,7 +321,7 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
       const gap = Math.max(0, e.t - last); last = e.t;
       if (gap > COMBO_HOLD_SEC) score.freezeCombo(gap * 2);   // run.js trackFrame: the quiet holds it
       score.tick(gap);
-      if (missEvery && ++i % missEvery === 0) continue;       // driven past
+      if (missEvery && ++i % missEvery === 0) { score.unread(); continue; }   // driven past, run.js onMiss
       if (perBubble) score.pop(10, 'treat');                  // the OLD rule, kept here to be measured
       else {
         score.pop(10, 'treat', { combo: false });
@@ -338,6 +345,21 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
   const sloppy = drive(3, false);
   eq(sloppy.released, 0, 'a word bubble driven past never lets the ladder go');
   ok(sloppy.lines < now.lines, 'it just costs the line it was in (' + sloppy.lines + ' lines of ' + now.lines + ')');
+
+  // THE CASE THE ALIGNER LANE FOUND, with true word times on Rapid Induction: "bambi" at 152.32 pops,
+  // "as" at 155.86 is driven past, "as" at 157.74 pops. Neither gap reaches COMBO_HOLD_SEC, so the
+  // quiet rule never freezes the hold, and the two of them add to 5.42 s. The word that went by has to
+  // start the patience again (race/score.js unread(), run.js onMiss) or the ladder times out mid-line.
+  const carried = createScore(), naive = createScore();
+  let letGoMid = 0;
+  carried.onEvent((e) => { if (e.type === 'combo' && e.lost > 0) letGoMid++; });
+  carried.chain(); naive.chain();
+  carried.tick(3.54); carried.unread();   // the word driven past: no rung, no release, a fresh hold
+  naive.tick(3.54);
+  carried.tick(1.88); naive.tick(1.88);
+  eq(letGoMid, 0, 'a word driven past between two pops 3.54 s and 1.88 s apart never lets the ladder go');
+  eq(carried.state.combo, 1, 'the ladder stands exactly where it stood: the missed word stepped nothing');
+  eq(naive.state.combo, 0, 'and without it touching the hold clock those two gaps would have timed out');
 
   const solo = createScore();
   solo.pop(10, 'treat', { combo: false });
@@ -368,6 +390,60 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
   eq(sc.stats().taken, 0, 'half a line read is nothing taken');
   sc.taken(two.events[1].id);
   eq(sc.stats().taken, 1, 'and the whole of it is one');
+}
+
+/* ---- 10. the row's line and the words either side of it never share the pop box ---- */
+// The guard used to be 0.4 s of quiet either side of a trigger, which took the whole sentence
+// around it off the road. It is the phrase's own span now, and the margins either side of that
+// span are here for exactly one reason: race/bubbles.js pops on `|rel| < POP_HIT_D`, so two
+// bubbles less than 2 x POP_HIT_D of road apart can sit in the box together and one pass takes
+// both. Held on the DENSEST transcript on the shelf (202 rows) at the SLOWEST pace the road ever
+// cruises (the opening ramp, OPEN_PACE of the base), where a second of file is the fewest metres
+// of road and a row and the words either side of it are closest together.
+{
+  const row = WORDS_ROWS.find((r) => /bubble acceptance/i.test(String(r.title || ''))) || WORDS_ROWS[0];
+  const file = wordsFile(row);
+  const triggers = triggersFromHits([], triggerHits(file, file.durationSec), SET_BY_ID);
+  const words = wordEventsFrom(captionWords(file), triggers, { rng: makeRng(7) });
+  ok(triggers.length > 100 && words.length > 2000,
+    'the densest road on the shelf: ' + triggers.length + ' rows and ' + words.length + ' word bubbles');
+  const events = words.concat(triggers).sort((a, b) => a.t - b.t).map((e, i) => ({ ...e, id: 'e' + i }));
+
+  const speed = OPEN_PACE * KART_BASE_SPEED;
+  const sy = createCueSync();
+  const live = new Map();                       // rowId -> { d, kind } while it is on the road
+  let cursor = 0, t = events[0].t - LEAD - 1, d = 0, seq = 0, sharing = 0, sharedAt = 0, nearest = Infinity, nearestAt = 0;
+  for (let i = 0; i < 60 * 60 * 40 && (cursor < events.length || live.size); i++) {
+    while (cursor < events.length && events[cursor].t - LEAD <= t) {   // the scheduler's handover
+      const e = events[cursor++], id = ++seq, dd = sy.depthFor(t, d, speed, e.t);
+      live.set(id, { d: dd, kind: e.kind });
+      sy.trackRow(id, e, e.t, dd, t);
+    }
+    for (const m of sy.update(t, d, speed).move) { const r = live.get(m.rowId); if (r) r.d = m.d; }
+    let inBoxWords = 0, rowD = null;
+    for (const [id, r] of live) {
+      const rel = r.d - d;
+      // dropped a whole box behind the box, which is well inside the metres race/bubbles.js keeps
+      // a passed bubble for: the word BEFORE a row has to still be here to be measured against it
+      if (rel < -3 * POP_HIT_D) { live.delete(id); continue; }
+      if (Math.abs(rel) < POP_HIT_D) { if (r.kind === 'trigger') rowD = r.d; else inBoxWords++; }
+    }
+    if (rowD != null) {
+      if (inBoxWords) { sharing++; sharedAt = t; }
+      for (const r of live.values()) {
+        if (r.kind === 'trigger') continue;
+        const gap = Math.abs(r.d - rowD);
+        if (gap < nearest) { nearest = gap; nearestAt = t; }
+      }
+    }
+    d += speed * DT; t += DT;
+  }
+  eq(sharing, 0, 'not one frame has a word bubble and a row bubble in the pop box together'
+    + (sharing ? ' (first at ' + sharedAt.toFixed(1) + 's)' : ''));
+  ok(nearest >= 2 * POP_HIT_D, 'the nearest a word bubble ever comes to a row is ' + nearest.toFixed(2)
+    + ' m of road (at ' + Math.round(nearestAt) + 's), and the pop box is ' + (2 * POP_HIT_D).toFixed(1) + ' m deep');
+  console.log('  --  ' + words.length + ' word bubbles around ' + triggers.length + ' rows at '
+    + speed.toFixed(1) + ' m/s: nearest approach ' + nearest.toFixed(2) + ' m');
 }
 
 console.log(fails ? '\nrows-check: ' + fails + ' failed' : '\nrows-check: all good');

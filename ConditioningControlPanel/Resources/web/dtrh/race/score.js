@@ -124,6 +124,14 @@ export function createScore() {
     if (JACKPOT_COMBOS.includes(state.combo)) jackpot('major');
     return state.combo;
   }
+  /**
+   * A word bubble the kart DROVE PAST. It steps nothing and it lets nothing go, but the voice
+   * still said that word, so the streak's patience starts again from it: the hold measures time
+   * since the last word DUE, never time since the last pop. Without this a line read with one
+   * word missed in the middle can time the ladder out on two gaps that are each inside the hold
+   * and only add up past it (bambi 152.32, as 155.86 driven past, as 157.74: 3.54 + 1.88).
+   */
+  function unread() { hold = COMBO_HOLD_SEC; }
   /** kart.js says the road rolled past 120 degrees (on) or back (off). Off pays the full circle. */
   function setInverted(on) {
     on = !!on;
@@ -202,7 +210,7 @@ export function createScore() {
   }
 
   return {
-    state, pop, chain, miss, nearMiss, bank, jackpot, tick, reset, setInverted, trick, lap, pace,
+    state, pop, chain, unread, miss, nearMiss, bank, jackpot, tick, reset, setInverted, trick, lap, pace,
     onEvent(cb) { if (typeof cb === 'function') cbs.push(cb); },
     /** Pending HUD notes (upside down, full circle, ...), oldest first; the queue empties. */
     drainNotes() { return notes.splice(0, notes.length); },
@@ -241,5 +249,8 @@ if (typeof process !== 'undefined' && process.env && process.env.RACE_SELFCHECK)
   console.assert(s.pace(0.5, 50.5) === true && s.state.hotlap && s.pace(0.75, 80) === false, 'pace: hot at half, cold at three quarters');
   s.pace(0.75, 75.5); s.drainNotes(); const sc = s.state.score; s.pop(50, 'golden'); s.pop(50, 'golden');
   console.assert(s.drainNotes().filter((n) => n.text.startsWith('hot lap')).length === 1 && s.state.score >= sc + 300, 'hot lap once a lap');
+  // a word driven past keeps the hold alive: two gaps each inside it never add up past it
+  const u = createScore(); u.chain(); u.tick(3.5); u.unread(); u.tick(1.9);
+  console.assert(u.state.combo === 1 && u.state.mult === 1, 'a word driven past holds without stepping');
   console.log('score.js self-check ok', s.state);
 }

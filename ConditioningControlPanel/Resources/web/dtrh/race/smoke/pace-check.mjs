@@ -43,7 +43,9 @@ const RACE = resolve(HERE, '..');
 const WEB = resolve(RACE, '../..');                        // Resources/web
 const read = (rel) => JSON.parse(readFileSync(resolve(RACE, rel), 'utf8'));
 const ROW = read('words/index.json').rows[0];             // the opening level
-const WORDS = read('words/' + ROW.file);
+// the aligner stamp lives on the index row, not on the race copy of the transcript, and
+// race/words.js loadWords() hands it to the road: the fixture is read the same way here.
+const WORDS = { ...read('words/' + ROW.file), engine: ROW.engine };
 
 /** A curve shaped like a spoken track, the same swell the other road smokes use. */
 function swell(durationSec, perSec = PEAKS_PER_SEC) {

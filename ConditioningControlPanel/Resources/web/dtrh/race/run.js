@@ -464,7 +464,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     let best = null, bestGap = Infinity;
     for (const s of trail) { if (!s.ok) continue; const g = Math.abs(w.layout.wrap(s.d - m.d + w.layout.totalDepth / 2) - w.layout.totalDepth / 2); if (g < bestGap) { bestGap = g; best = s; } }
     const near = best && m.x != null && Math.abs(m.x - best.x) < NEAR_MISS_M && Math.abs((m.h || 0) - best.h) < NEAR_MISS_M;
-    // a word driven past is a word unread, never a broken streak: only a missed ROW lets the ladder go
+    // a word driven past is a word unread, never a broken streak: only a missed ROW lets the ladder
+    // go. It still starts the streak's patience again where it went by, because the hold clock reads
+    // time since the last word DUE and not time since the last pop (race/score.js unread()).
+    if (word) w.score.unread();
     if (near) w.score.nearMiss(); else if (!word) w.score.miss();
   }
   function onScore(w, e) {

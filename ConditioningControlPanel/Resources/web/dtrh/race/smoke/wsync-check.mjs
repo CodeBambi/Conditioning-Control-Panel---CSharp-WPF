@@ -45,7 +45,9 @@ eq(((src('menu.js') + src('cards.js') + src('intro.js')).match(KEYS) || []).leng
 /* ---- 2. the shift: every word-derived second moves, ids stay ---- */
 const rows = read('words/index.json').rows;
 const ROW = rows.find((r) => /rapid induction/i.test(String(r.title || ''))) || rows[0];
-const WORDS = read('words/' + ROW.file);
+// the aligner stamp lives on the index row, not on the race copy of the transcript, and
+// race/words.js loadWords() hands it to the road: the fixture is read the same way here.
+const WORDS = { ...read('words/' + ROW.file), engine: ROW.engine };
 function swell(durationSec, perSec = PEAKS_PER_SEC) {
   const n = Math.ceil(durationSec * perSec), peaks = new Float32Array(n * 2);
   for (let i = 0; i < n; i++) { const a = 0.22 + 0.5 * Math.max(0, Math.sin(((i / perSec) / 40) * Math.PI * 2)) ** 2; peaks[i * 2] = -a; peaks[i * 2 + 1] = a; }

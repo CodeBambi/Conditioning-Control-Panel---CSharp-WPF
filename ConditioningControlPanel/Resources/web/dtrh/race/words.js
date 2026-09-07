@@ -1,7 +1,7 @@
 /* ============================================================================
  * race/words.js - the transcript for a track, if there is one.
  *
- *   loadWords({ cloudId, hash }) -> Promise<{ version, hash, durationSec, words, hits? } | null>
+ *   loadWords({ cloudId, hash }) -> Promise<{ version, hash, durationSec, words, hits?, engine? } | null>
  *
  * `hits`, when the file has them, are the trigger seconds tools/racechart/fingerprint.py
  * refined against the audio itself: { setId, t, dur, score, src: 'fp' | 'words', conf },
@@ -13,6 +13,8 @@
  * beside it: a row per track that has an aligned transcript, keyed by the file's
  * own cloud id first and by its CHART.md hash second. One file can sit at two urls
  * under two names, so the hash is the door that still answers when the id does not.
+ * The row also carries what the file itself was stripped of on the way here: `offsetSec`,
+ * the seconds the road is shifted by, and `engine`, the aligner that wrote the transcript.
  *
  * WHAT THIS IS FOR. Without words the road is the energy curve and nothing else,
  * which is why the bubbles the owner saw had nothing to do with the voice. With a
@@ -54,6 +56,12 @@ function readFile(json) {
   const words = json.words.filter((w) => w && typeof w.t === 'number' && typeof w.w === 'string');
   if (!words.length) return null;
   const out = { version: 1, hash: String(json.hash || ''), durationSec: Number(json.durationSec) || 0, words };
+  // THE ALIGNER STAMP, when the export carries one ('whisper-large-v3+script' and the like).
+  // race/cloudChart.js isAligned() reads it to tell a doubt about the WORD (a transcript heard
+  // cold: keep the CAPTION_CONF cut) from a doubt about its SECOND (a transcript aligned to the
+  // script: every word is the word, and every one of them goes on the road). The race copies on
+  // race/words/ carry no `engine`, so their index row carries it and loadWords() hands it along.
+  if (typeof json.engine === 'string' && json.engine) out.engine = json.engine;
   // the fingerprinted trigger seconds, when tools/racechart/fingerprint.py has been over this file:
   // { setId, t, dur, score, src: 'fp' | 'words', conf }. cloudChart.js prefers them to its own scan.
   // Only a well-formed row gets through; a file without them is exactly the file it was.
@@ -91,8 +99,13 @@ export async function loadWords({ cloudId = '', hash = '', fetch: f = null, log 
       if (!res || !res.ok) throw new Error('the transcript answered ' + (res ? res.status : 'nothing'));
       const got = readFile(await res.json());
       say('words: ' + (got ? got.words.length + ' words for ' + (row.title || row.cloudId) : 'nothing readable in ' + row.file));
-      // the row's own key and offset ride along, so the road can be filed and shifted by them
-      if (got) { got.cloudId = row.cloudId; got.offsetSec = row.offsetSec; }
+      // the row's own key, offset and aligner stamp ride along, so the road can be filed, shifted
+      // and read at its true confidence by them. The file's own `engine` wins when it has one.
+      if (got) {
+        got.cloudId = row.cloudId;
+        got.offsetSec = row.offsetSec;
+        if (!got.engine && row.engine) got.engine = row.engine;
+      }
       return got;
     } catch (err) {
       say('words: ' + ((err && err.message) || err));
@@ -104,10 +117,11 @@ export async function loadWords({ cloudId = '', hash = '', fetch: f = null, log 
 }
 
 /**
- * The index ROW for one track, or null: `{ cloudId, hash, title, file, offsetSec }`, with
- * `offsetSec` (seconds added to every word of the file, default 0) read off the row so
- * race/cloudChart.js can shift a CACHED road without fetching its transcript again.
- * Same keys, same doors, never throws.
+ * The index ROW for one track, or null: `{ cloudId, hash, title, file, offsetSec, engine }`,
+ * with `offsetSec` (seconds added to every word of the file, default 0) read off the row so
+ * race/cloudChart.js can shift a CACHED road without fetching its transcript again, and
+ * `engine` the aligner stamp for a file whose own copy does not carry one ('' when the table
+ * says nothing, which leaves the CAPTION_CONF cut in place). Same keys, same doors, never throws.
  */
 export async function loadWordsRow({ cloudId = '', hash = '', fetch: f = null, log = null, indexUrl = INDEX_URL } = {}) {
   const get = f || (typeof fetch !== 'undefined' ? fetch : null);
@@ -120,7 +134,8 @@ export async function loadWordsRow({ cloudId = '', hash = '', fetch: f = null, l
     const row = (id && rows.find((r) => norm(r.cloudId) === id)) || (h && rows.find((r) => norm(r.hash) === h)) || null;
     if (!row) return null;
     const off = Number(row.offsetSec);
-    return { cloudId: norm(row.cloudId), hash: norm(row.hash), title: String(row.title || ''), file: row.file, offsetSec: isFinite(off) ? off : 0 };
+    return { cloudId: norm(row.cloudId), hash: norm(row.hash), title: String(row.title || ''), file: row.file,
+      offsetSec: isFinite(off) ? off : 0, engine: String(row.engine || '') };
   } catch (err) { say('words: ' + ((err && err.message) || err)); return null; }
 }
 
