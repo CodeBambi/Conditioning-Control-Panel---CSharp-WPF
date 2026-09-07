@@ -9,6 +9,14 @@
  * things this layer can get wrong that no unit test sees are "the caption sits on
  * the score plate" and "the plate never actually reached the DOM".
  *
+ * The browser half boots the same fixture TWICE, because the band has two halves of
+ * its own now. `?cap=type` is the old word-timed typewriter (sections 2, 3 and 7);
+ * the default build is THE FLASH (section 7b), where the words are on the road and
+ * the band answers a pop instead of typing the file. The flash section holds the
+ * whole rule: within 50 ms of a pop, joined inside 0.3 s, a fresh line after the
+ * fade, a ghost at 0.35 for a word driven past, two lines at most, no typewriter,
+ * and never a pixel on the score plate, the toast rail or the plate's rest spot.
+ *
  * The browser half builds one fixture chart off the real transcript, serves it to
  * `?chart=<url>`, then drives `race.trackClock(t, false)` straight at the seconds
  * it wants to look at. That is the host's own door, it is how a pause looks from
@@ -27,7 +35,8 @@ import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildPhrases, paintTriggers, MAX_WORDS, GAP_SEC, HOLD_SEC, PLATE_MS } from '../captions.js';
+import { buildPhrases, paintTriggers, MAX_WORDS, GAP_SEC, HOLD_SEC, PLATE_MS,
+  FLASH_HOLD_MS, FLASH_FADE_MS, FLASH_JOIN_MS, GHOST_ALPHA } from '../captions.js';
 import { THEME_BY_PRESET, themeFor } from '../triggerTheme.js';
 import { wordedRoad, PEAKS_PER_SEC } from '../cloudChart.js';
 
@@ -154,12 +163,18 @@ await cdp('Runtime.enable'); await cdp('Page.enable');
 await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
 
 const site = `http://127.0.0.1:${PORT}`;
-await cdp('Page.navigate', { url: `${site}/dtrh/race.html?autostart=1&intro=0&cards=0&chart=${encodeURIComponent(`${site}/fixture.json`)}` });
-let up = false;
-for (let i = 0; i < 120 && !up; i++) {
-  await sleep(250);
-  up = await ev(`!!(window.__race && window.__race.race && window.__race.race.track && document.querySelector('.rc-layer'))`);
+const FIXTURE_URL = `${site}/dtrh/race.html?autostart=1&intro=0&cards=0&chart=${encodeURIComponent(`${site}/fixture.json`)}`;
+/** Boot the fixture road and wait for the caption layer. Returns false if it never came up. */
+async function boot(url) {
+  await cdp('Page.navigate', { url });
+  for (let i = 0; i < 120; i++) {
+    await sleep(250);
+    if (await ev(`!!(window.__race && window.__race.race && window.__race.race.track && document.querySelector('.rc-layer'))`)) return true;
+  }
+  return false;
 }
+// sections 2, 3 and 7 are the TYPEWRITER, which is one release behind ?cap=type now
+const up = await boot(`${FIXTURE_URL}&cap=type`);
 ok(up, 'the page boots the fixture road and builds the caption layer');
 if (!up) {
   console.error('    boot: ' + await ev(`JSON.stringify({ race: !!window.__race, run: !!(window.__race&&window.__race.race), track: !!(window.__race&&window.__race.race&&window.__race.race.track), layer: !!document.querySelector('.rc-layer'), hud: !!document.querySelector('.race-hud'), body: document.body.className, url: location.href, title: document.title, html: document.documentElement.outerHTML.length })`));
@@ -336,6 +351,126 @@ eq(lines3, 0, `no phrase of the ${phrases.length} on this track draws a third li
 eq(clipped, 0, 'and none of them is cut off by its own box');
 ok(!!worst && worst.cap.y + worst.cap.h <= worst.vh, `the tallest band on the track is whole on the glass (${widest}px, bottom ${worst ? worst.cap.y + worst.cap.h : '?'} of ${shot.vh})`);
 ok(!!worst && !hits(worst.cap, worst.score), 'and even the tallest keeps off the score plate');
+
+/* ============================================================================
+ * 7b. THE FLASH: the band answers the pops, and nothing types
+ *
+ * The default build. The words are on the road (race/wordBubbles.js), so the band
+ * is where a POP is answered: the word lands whole, holds, joins the line if
+ * another pop is inside 0.3 s, and a word the kart drove past still lands as a
+ * grey ghost. `race.debugWord` is the same call race/run.js onPop makes, so the
+ * timings below are the layer's own and not a re-implementation of them.
+ *
+ * It never prints a word of the transcript: everything here is counted, measured
+ * or read off a class, and the one word it puts on the glass itself is 'ok'.
+ * ==========================================================================*/
+const upFlash = await boot(FIXTURE_URL);
+ok(upFlash, 'the default build boots the same road');
+if (!upFlash) await done(1);
+eq(await ev(`window.__race.race.capMode()`), 'flash', 'and the band is the flash, not the typewriter');
+
+/** What the band is holding right now: the words, their classes, and the boxes around them. */
+const band = () => json(`(()=>{ const cap=document.querySelector('.rc-cap');
+  const r=(el)=>{ if(!el) return null; const b=el.getBoundingClientRect(); return { x:Math.round(b.left), y:Math.round(b.top), w:Math.round(b.width), h:Math.round(b.height) }; };
+  const words=[...document.querySelectorAll('.rc-flash-word')];
+  const tops=new Set(); for(const w of words){ const b=w.getBoundingClientRect(); if(b.height>0) tops.add(Math.round(b.top)); }
+  const cs=(w)=>getComputedStyle(w);
+  return { n: words.length, typed: document.querySelectorAll('.rc-cap-word:not(.rc-flash-word)').length,
+    ghosts: words.filter(w=>w.classList.contains('is-ghost')).length,
+    accents: words.filter(w=>w.classList.contains('is-accent')).length,
+    alpha: words.map(w=>Math.round(+cs(w).opacity*100)/100), fs: words.map(w=>Math.round(parseFloat(cs(w).fontSize))),
+    lines: tops.size, hidden: !cap || cap.hidden, capOut: +getComputedStyle(cap).opacity,
+    cap: cap&&!cap.hidden?r(cap):null, score: r(document.querySelector('.rh-score-wrap')),
+    rail: r(document.querySelector('.rh-toasts')), plateY: parseFloat(getComputedStyle(document.querySelector('.rc-layer')).getPropertyValue('--rc-plate-y'))||0,
+    vw: innerWidth, vh: innerHeight };})()`);
+
+// Everything from here to the plate runs on the WORDLESS opening this file has (the road's own
+// first word is a minute and a half in), so no real bubble can land on the band mid-measurement.
+const quiet = await band();
+ok(quiet.hidden || quiet.n === 0, 'the band is off the glass until something pops: nothing types itself');
+
+// 1. a pop puts the whole word on the band, now
+const first = await json(`(()=>{ const t0=performance.now(); window.__race.race.debugWord('ok');
+  return { ms: Math.round(performance.now()-t0), n: document.querySelectorAll('.rc-flash-word').length,
+    len: (document.querySelector('.rc-flash-word')||{}).textContent?.length||0 };})()`);
+ok(first.ms <= 50, `the word is on the band ${first.ms}ms after the pop (50ms is the bar)`);
+eq(first.n, 1, 'and it is one whole word, not a letter of one');
+eq(first.len, 2, 'with the whole of it in the DOM at once: no typing');
+
+// 2. pops inside FLASH_JOIN_MS join the line; the sentence is what a clean line reads back as.
+// All three go in ONE evaluate: the join window is 0.3 s and a debug round trip is not free.
+await sleep(FLASH_HOLD_MS + FLASH_FADE_MS + 250);
+const joined = await json(`(()=>{ const r=window.__race.race; r.debugWord('ok'); r.debugWord('ok'); r.debugWord('ok');
+  const words=[...document.querySelectorAll('.rc-flash-word')], tops=new Set();
+  for (const w of words) { const b=w.getBoundingClientRect(); if (b.height>0) tops.add(Math.round(b.top)); }
+  return { n: words.length, lines: tops.size };})()`);
+eq(joined.n, 3, `three pops inside ${FLASH_JOIN_MS}ms are one line of three`);
+ok(joined.lines <= 2, `and the line is ${joined.lines} row(s), never more than 2`);
+
+// 3. a pop after the line has gone starts a fresh one
+await sleep(FLASH_HOLD_MS + FLASH_FADE_MS + 250);
+const gone = await band();
+ok(gone.hidden || gone.n === 0, `the line lets go ${FLASH_HOLD_MS}ms after the last pop and fades over ${FLASH_FADE_MS}ms`);
+await ev(`window.__race.race.debugWord('ok')`);
+const restarted = await band();
+eq(restarted.n, 1, 'and the next pop starts a fresh line rather than joining a dead one');
+
+// 4. the ghost: a word the kart drove past is still read, faint and grey
+await ev(`window.__race.race.debugWord('ok', { ghost: true })`);
+await sleep(220);        // past its 160ms fade in: an alpha read mid-animation is the animation's, not the rule's
+const ghosted = await band();
+eq(ghosted.ghosts, 1, 'a word the kart drove past still writes itself');
+ok(Math.abs(ghosted.alpha[ghosted.alpha.length - 1] - GHOST_ALPHA) < 0.02,
+  `and it sits at ${GHOST_ALPHA} where a popped word sits at 1 (got ${ghosted.alpha[ghosted.alpha.length - 1]})`);
+
+// 5. an accent word is bigger and wears the set's ink
+await sleep(FLASH_HOLD_MS + FLASH_FADE_MS + 250);
+await ev(`window.__race.race.debugWord('ok'); window.__race.race.debugWord('ok', { accent: true, ink: '#ff69b4' })`);
+const accented = await band();
+eq(accented.accents, 1, 'an accent word is marked as one');
+ok(accented.fs[1] > accented.fs[0], `and drawn bigger than the plain word beside it (${accented.fs[0]}px -> ${accented.fs[1]}px)`);
+
+// 6. a long chain never spills a third line, and never leaves the band's own box
+await sleep(FLASH_HOLD_MS + FLASH_FADE_MS + 250);
+await ev(`for (let i = 0; i < 12; i++) window.__race.race.debugWord('conditioning')`);
+const chain = await band();
+ok(chain.lines <= 2, `twelve long pops in a row still draw ${chain.lines} line(s), never a third`);
+ok(!!chain.cap && chain.cap.y >= 0 && chain.cap.y + chain.cap.h <= chain.vh, 'and the band is whole on the glass');
+const hitB = (a, b) => !!a && !!b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+ok(!hitB(chain.cap, chain.score), `it never touches the score plate (band ${chain.cap.y}..${chain.cap.y + chain.cap.h}, plate ${chain.score.y}..${chain.score.y + chain.score.h})`);
+ok(!hitB(chain.cap, chain.rail), 'nor the toast rail');
+ok(chain.plateY > chain.cap.y + chain.cap.h, `and the plate's rest spot is still clear under it (band bottom ${chain.cap.y + chain.cap.h}, plate y ${chain.plateY})`);
+
+// 7. the typewriter really is behind ?cap=type: the clock inside a phrase writes nothing
+await sleep(FLASH_HOLD_MS + FLASH_FADE_MS + 250);
+await ev(`window.__race.race.trackClock(${target.words[1].t}, false)`);
+await sleep(300);
+eq((await band()).typed, 0, 'the clock inside a phrase types nothing: the typewriter only lives behind ?cap=type');
+
+// 8. the plate owns the glass: a trigger clears the band under it. The count is taken AT the frame
+// the plate reaches the DOM, because the kart is still driving and a real pop is 60ms away.
+await ev(`window.__race.race.debugWord('ok')`);
+ok((await band()).n >= 1, 'a word is on the band');
+await ev(`(()=>{ window.__atPlate = -1;
+  new MutationObserver((ms)=>{ for (const m of ms) for (const n of m.addedNodes) {
+    if (n.classList && n.classList.contains('rc-plate') && window.__atPlate < 0) window.__atPlate = document.querySelectorAll('.rc-flash-word').length;
+  } }).observe(document.querySelector('.rc-plates'), { childList: true });
+  window.__race.race.debugWord('ok'); window.__race.race.trackClock(${trig.t}, false); })()`);
+await sleep(500);
+eq(await ev(`window.__atPlate`), 0, 'and the trigger plate clears it: one thing at a time on the glass');
+eq(await json(`document.querySelectorAll('.rc-plate').length`), 1, 'with the plate itself flying');
+
+// 9. THE WIRING: real pops on the real road, counted as they land
+await ev(`(()=>{ window.__flash = 0; window.__ghost = 0;
+  const line = document.querySelector('.rc-cap-line');
+  new MutationObserver((ms)=>{ for (const m of ms) for (const n of m.addedNodes) {
+    if (!n.classList || !n.classList.contains('rc-flash-word')) continue;
+    window.__flash++; if (n.classList.contains('is-ghost')) window.__ghost++; } }).observe(line, { childList: true });
+  window.__race.race.trackClock(${Math.max(0, road.words[0].t - 0.7)}, true); })()`);
+await sleep(6000);
+const live = await json(`({ flash: window.__flash, ghost: window.__ghost, t: window.__race.race.track.t })`);
+ok(live.t > road.words[0].t, `the road rolled through the first spoken words (to ${live.t.toFixed(1)}s)`);
+ok(live.flash > 0, `and ${live.flash} of them reached the band off real pops and passes (${live.ghost} as ghosts)`);
 
 /* ============================================================================
  * 8. the demo road still runs, and nothing shouted

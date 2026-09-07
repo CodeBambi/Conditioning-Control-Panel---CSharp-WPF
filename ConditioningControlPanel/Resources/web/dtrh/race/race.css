@@ -534,6 +534,37 @@
 .race-hud .rc-cap-word.is-said { opacity: 0.82; }
 .race-hud .rc-cap-word.is-said.is-now { opacity: 1; text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
 
+/* ---- THE FLASH: the word you just popped, on the same band ----
+   The words live on the ROAD now, so the band is the ANSWER to a pop rather than the script:
+   the word lands whole, holds half a second, then lets go over 0.3s. A pop inside 0.3s of the
+   last one joins the line, so a line driven clean reads back as the sentence that was said. A
+   word the kart drove past writes itself grey and faint, and is still read. Same band, same
+   box, same two line cap: captions.js measures this one exactly as it measures the typed one. */
+.race-hud .rc-cap.is-flash { transition: opacity 300ms linear; }
+.race-hud .rc-cap-word.rc-flash-word {
+  display: inline-block; opacity: 1;
+  animation: rcFlashIn 160ms cubic-bezier(0.16, 0.9, 0.3, 1) both;
+}
+/* the ghost fades to its OWN alpha, so it needs its own keyframes: an `animation-fill-mode: both`
+   holds whatever the last keyframe said, and rcFlashIn's last word on opacity is 1. */
+.race-hud .rc-flash-word.is-ghost {
+  opacity: 0.35; color: #d6d0dd; text-shadow: 0 2px 5px rgba(0, 0, 0, 0.95);
+  animation: rcGhostIn 160ms ease-out both;
+}
+@keyframes rcGhostIn { from { opacity: 0; } to { opacity: 0.35; } }
+.race-hud .rc-flash-word.is-accent {
+  font-size: 1.3em; color: var(--rc-ink, #ff69b4);
+  animation: rcFlashIn 160ms cubic-bezier(0.16, 0.9, 0.3, 1) both, rcFlashGlow 160ms ease-out both;
+}
+/* reduced motion (captions.js hangs `is-still` on the word itself): it fades in place, never zooms */
+.race-hud .rc-flash-word.is-still { animation: none; }
+.race-hud .rc-flash-word.is-accent.is-still { text-shadow: 0 0 18px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
+@keyframes rcFlashIn { from { opacity: 0; transform: scale(1.14); } to { opacity: 1; transform: scale(1); } }
+@keyframes rcFlashGlow {
+  from { text-shadow: 0 0 30px var(--rc-ink, rgba(255, 105, 180, 0.95)), 0 2px 5px rgba(0, 0, 0, 0.95); }
+  to { text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
+}
+
 /* ---- the plate: out of the vanishing point, into your face ---- */
 .race-hud .rc-plates { position: absolute; inset: 0; perspective: 900px; }
 .race-hud .rc-plate {
@@ -669,5 +700,8 @@
     animation: rcHold 1400ms linear forwards; transform: translate(-50%, -50%) scale(1); filter: none;
   }
   .race-hud .rc-plate--pulse::before, .race-hud .rc-plate--gold .rc-plate-sparks { animation: none; opacity: 0; }
+  /* the flash fades in place too; the ghost keeps its own faintness, which is a reading and not a motion */
+  .race-hud .rc-cap-word.rc-flash-word, .race-hud .rc-flash-word.is-accent,
+  .race-hud .rc-flash-word.is-ghost { animation: none; }
   .race-hud .rc-dim.is-on { animation: none; }
 }

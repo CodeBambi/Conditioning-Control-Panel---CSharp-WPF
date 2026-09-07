@@ -79,6 +79,13 @@ const SPAWN_T0 = 2.5, RAIN_T0 = 20, EARLY_SLOW = 1.5;   // the opening drips slo
 // track cues: an act only re-dresses the world when no gate is this many seconds of road away, and
 // the standalone page logs the scheduler this often (track time). CUE_AHEAD_SEC lives in race/sync.js.
 const ACT_GATE_SEC = 6, TRACK_STATS_SEC = 10;
+/** How many word bubbles may be in the air at once, at most. The word each one wears is kept by
+ *  the event that spawned it until the bubble is popped or driven past; the ring never grows. */
+const WORD_MEM = 256;
+/** One query flag, lowercased, never throwing (a page with no location is a smoke, not a player). */
+function flag(key) {
+  try { return (new URLSearchParams(location.search).get(key) || '').toLowerCase(); } catch (e) { return ''; }
+}
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
 
@@ -124,9 +131,18 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
 
   // ---- the parts that outlive a run ----
   const hud = createRaceHud(hudRoot);
-  // the voice on the glass: the caption line under the chrome and the trigger plate over it.
-  // It reads the track clock and nothing else, so a pause, a resume and a seek all land for free.
-  const captions = hudRoot ? createCaptions(hudRoot) : null;
+  // the voice on the glass: the band under the chrome and the trigger plate over it.
+  // The band ANSWERS THE POPS now (race/captions.js showWord): the words are on the road, so the
+  // word the kart just took is what lands, and the word it drove past lands as a ghost. The old
+  // word-timed typewriter is one release behind `?cap=type`; a track with no words file had no
+  // caption either way and is untouched.
+  const CAP_MODE = flag('cap') === 'type' ? 'type' : 'flash';
+  /** `?words=unread`: a word the kart drove past writes nothing. Ghost is the default. */
+  const GHOST_MISSES = flag('words') !== 'unread';
+  const captions = hudRoot ? createCaptions(hudRoot, { mode: CAP_MODE }) : null;
+  /** The word a word bubble wears, by the event that spawned it. race/bubbles.js is the layer that
+   *  DRAWS a bubble and it stays that: the pop and the ghost read the text off here instead. */
+  const wordOf = new Map();
   const fxProxy = { pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
   // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
@@ -225,7 +241,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       wasAirborne: false, airH: 0, effects: [], moodHeld: null, moodHold: 0, mood: 'calm', seed: runSeed,
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0 });
     trailClear();
-    mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset();
+    mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
 
@@ -252,8 +268,22 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       sfx('golden_pop', 0.9); shake.shake(0.35, 240); poke('jackpot', 1.4); w.kart.pose('cheer');
     }
   }
+  /**
+   * THE FLASH. The word that bubble wore goes on the band: bright on a pop, a grey ghost on a
+   * word the kart drove past. Pops inside race/captions.js FLASH_JOIN_MS join one line, so a line
+   * of word bubbles taken clean reads back as the sentence the voice said.
+   * @param eventId the chart event that spawned the bubble, @param ghost true for a miss
+   */
+  function flashWord(eventId, ghost) {
+    if (!captions || !eventId) return;
+    const rec = wordOf.get(eventId);
+    if (!rec) return;
+    wordOf.delete(eventId);                       // one bubble, one flash: it is popped or it is past
+    if (ghost && !GHOST_MISSES) return;
+    captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
+  }
   function onPop(w, p) {
-    if (p.eventId) TR.taken(p.eventId);
+    if (p.eventId) { TR.taken(p.eventId); flashWord(p.eventId, false); }
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (S.sweep) sfx('chain_pop', 0.5);          // the pump: every pop on the road sounds like the chain
     if (p.kind === 'treat') return treat(w, p);
@@ -339,6 +369,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     }
   }
   function onMiss(w, m) {
+    flashWord(m.eventId, true);   // the script is never hostage to the steering: the word still lands, grey
     // ALMOST: the treat slid past inside NEAR_MISS_M but outside the hit box; else the streak lets go
     let best = null, bestGap = Infinity;
     for (const s of trail) { if (!s.ok) continue; const g = Math.abs(w.layout.wrap(s.d - m.d + w.layout.totalDepth / 2) - w.layout.totalDepth / 2); if (g < bestGap) { bestGap = g; best = s; } }
@@ -410,7 +441,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   function setTrack(chart) {
     const t = TR.setTrack(chart);
     audio.setRoute(routeOf(t));
-    S.trackHold = 0; S.statsAt = 0; sync.reset();
+    S.trackHold = 0; S.statsAt = 0; sync.reset(); wordOf.clear();
     if (W) { W.field.setTracked(!!t); W.field.setSparse(TR.lyrics); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     if (captions) captions.setTrack(t ? t.chart : null);
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
@@ -453,6 +484,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       const rowId = w.field.spawnRow({ kindId: row[0].kindId, kindIds: row.map((sp) => sp.kindId), placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id,
         w: row[0].w || '', ink: row[0].ink || null, big: !!row[0].big });   // the tag, on the middle bubble alone
       if (rowId) sync.trackRow(rowId, e, at, d, t);
+      // the word this bubble wears, kept until it is popped or driven past (flashWord spends it).
+      // A trigger ROW is not one of these: its word flies at the camera on the plate instead.
+      if (rowId && e.kind === 'word' && row[0].w) {
+        if (wordOf.size >= WORD_MEM) wordOf.delete(wordOf.keys().next().value);
+        wordOf.set(e.id, { w: row[0].w, ink: row[0].ink || null, accent: !!row[0].big });
+      }
     }
     for (const sp of loose) {
       w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d: sync.depthFor(t, ks.d, ks.speed, e.t + (sp.at || 0)), x: sp.x, h: sp.h, eventId: e.id });
@@ -781,6 +818,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugPickup,
     /** What race/smoke/face-check.mjs reads: the word faces on the road this frame. */
     wordFaces: () => (W ? W.field.faceReport() : null),
+    /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. */
+    debugWord: (text, o) => (captions ? captions.showWord(text, o || {}) != null : false),
+    /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */
+    capMode: () => CAP_MODE,
     get track() { return TR.track; } };
 }
 

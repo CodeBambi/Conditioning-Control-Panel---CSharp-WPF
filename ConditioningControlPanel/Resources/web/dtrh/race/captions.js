@@ -11,15 +11,23 @@
  * Two layers, one file, because they are one idea: the road says the word, the
  * glass says the word, and the plate says it loudly.
  *
- *   THE CAPTION. `chart.words` (the caption track L2 puts on the road) is cut into
- *   phrases, one on screen at a time, low on the glass. Every word of the phrase is
- *   in the DOM from the moment the phrase opens but only INKED when the clock
- *   reaches its own timestamp, so the line types itself at the speed the voice
- *   actually spoke it and never reflows while it does. That is the typewriter: the
- *   voice is the timer, not a timer.
+ *   THE FLASH (`mode: 'flash'`, what a worded road runs). The words are on the ROAD
+ *   now, one to a bubble (race/wordBubbles.js), so the band is no longer where the
+ *   script is read: it is where a POP is answered. The word the kart just took hits
+ *   the band whole, holds FLASH_HOLD_MS, fades over FLASH_FADE_MS, and a pop inside
+ *   FLASH_JOIN_MS of the last one joins the same line, so a line driven clean reads
+ *   back as the sentence that was said. A word the kart drove past writes itself as
+ *   a GHOST, grey and faint: the script is never hostage to the steering.
+ *
+ *   THE CAPTION (`mode: 'type'`, behind `?cap=type`). The old typewriter: `chart.words`
+ *   cut into phrases, one on screen at a time, every word in the DOM from the moment
+ *   the phrase opens but only INKED when the clock reaches its own timestamp, so the
+ *   line types itself at the speed the voice actually spoke it and never reflows
+ *   while it does. The voice is the timer, not a timer.
  *
  *   THE PLATE. A sure trigger flies at the camera from the vanishing point, themed
  *   off race/triggerTheme.js, one at a time, a new one taking the old one's place.
+ *   It owns the glass while it flies: the plate clears the band under it.
  *
  * EVERYTHING IS A FUNCTION OF THE CLOCK. `update(t)` reads the track second and
  * nothing else: no elapsed frames, no timers of its own. A seek, a pause, a resume
@@ -46,6 +54,15 @@ export const CLEAR_SEC = 0.15;
 export const END_PUNCT = /[.?!]["')\]]?$/;
 /** The plate: the zoom, the hold, and the fade, in milliseconds (race.css runs the same numbers). */
 export const PLATE_MS = 1400;
+
+/** THE FLASH. A popped word stands on the band this long before it starts to go. */
+export const FLASH_HOLD_MS = 500;
+/** And it takes this long to go (race.css `.rc-cap.is-flash` runs the same number). */
+export const FLASH_FADE_MS = 300;
+/** A pop this soon after the last one JOINS its line, so a clean line reads back as the sentence. */
+export const FLASH_JOIN_MS = 300;
+/** A word the kart drove past: the ghost's own opacity (race.css `.rc-flash-word.is-ghost`). */
+export const GHOST_ALPHA = 0.35;
 
 /** Two lines and no more. A third is shrunk into the two, never cut off the glass. */
 export const MAX_LINES = 2;
@@ -157,9 +174,11 @@ function phraseAt(phrases, t) {
  *   --rc-plate-fs  how big the plate may be and still fit that air, whatever its theme adds
  * and `--rc-cap-b` on the hud root, which is where hud.js parks the act ribbon out of the way.
  */
-export function createCaptions(root) {
+export function createCaptions(root, opts = {}) {
   const doc = root && root.ownerDocument;
   if (!doc) return null;
+  /** 'flash' (the pops write the band) or 'type' (the old typewriter, behind `?cap=type`). */
+  const mode = (opts && opts.mode) === 'type' ? 'type' : 'flash';
   const reduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const el = (cls, parent) => { const d = doc.createElement('div'); d.className = cls; parent.appendChild(d); return d; };
 
@@ -256,6 +275,71 @@ export function createCaptions(root) {
     cap.hidden = true;
   }
 
+  // ---- THE FLASH: the word the kart just took, on the band ------------------
+  // Nothing here reads the track clock, and it must not: a pop is a thing the PLAYER did, at the
+  // wall's own second, and the band answers it at that second. (The typewriter above is the exact
+  // opposite and for the exact opposite reason: it says what the VOICE is doing, so it is a
+  // function of the file's clock and of nothing else.)
+  let flashN = 0, flashAt = 0, flashOut = false, holdTimer = 0, goneTimer = 0;
+  const nowMs = () => (win && win.performance && win.performance.now ? win.performance.now() : Date.now());
+
+  function clearFlash() {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
+    if (goneTimer) { clearTimeout(goneTimer); goneTimer = 0; }
+    flashN = 0; flashOut = false;
+    cap.classList.remove('is-flash');
+    cap.style.removeProperty('--rc-out');
+    clearPhrase();
+  }
+
+  /** The hold is up: let the line go over FLASH_FADE_MS, then take it off the glass. */
+  function fadeFlash() {
+    holdTimer = 0; flashOut = true;
+    cap.style.setProperty('--rc-out', '0');
+    goneTimer = setTimeout(() => { goneTimer = 0; clearFlash(); }, FLASH_FADE_MS + 40);
+  }
+
+  /**
+   * One word on the band, whole, now.
+   * @param text the word the bubble wore (a merged bubble's two words are one string)
+   * @param o { ghost, accent, ink }: a word the kart drove past is grey and faint; an accent word
+   *          is bigger, in the ink of the set the road says this second belongs to, and glows.
+   * @returns the span, or null when this build is not the one that flashes
+   */
+  function showWord(text, o = {}) {
+    if (mode !== 'flash') return null;
+    const said = String(text == null ? '' : text).trim();
+    if (!said) return null;
+    const at = nowMs();
+    // a fresh line: the first pop, one after the line began to go, or one the last line cannot hold
+    if (!flashN || flashOut || at - flashAt > FLASH_JOIN_MS) clearFlash();
+    if (goneTimer) { clearTimeout(goneTimer); goneTimer = 0; }
+    flashOut = false;
+    const s = doc.createElement('span');
+    s.className = 'rc-cap-word rc-flash-word is-said'
+      + (o.ghost ? ' is-ghost' : (o.accent ? ' is-accent' : ''))
+      + (reduced ? ' is-still' : '');
+    s.textContent = said;
+    if (o.ink && !o.ghost) s.style.setProperty('--rc-ink', o.ink);
+    const add = () => { line.appendChild(s); line.appendChild(doc.createTextNode(' ')); };
+    add();
+    spans.push(s); flashN++;
+    cap.hidden = false;
+    cap.classList.add('is-flash');
+    cap.style.setProperty('--rc-out', '1');
+    // MAX_LINES and not one more. A word that spilled the line into a third row does not get
+    // shrunk to fit (the sentence is already read; this is the answer to a pop): it starts again.
+    if (flashN > 1 && lineCount() > MAX_LINES) {
+      line.textContent = ''; spans = [s]; flashN = 1;
+      add();
+    }
+    flashAt = at;
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = setTimeout(fadeFlash, FLASH_HOLD_MS);
+    measure();      // the plate under the band goes wherever this left room
+    return s;
+  }
+
   function draw(i) {
     clearPhrase();
     const p = phrases[i];
@@ -280,6 +364,7 @@ export function createCaptions(root) {
    * needs no telling: the same second always draws the same line.
    */
   function update(t) {
+    if (mode !== 'type') return;   // the flash is answered by the pops, not typed by the second
     if (!phrases.length) { if (shown >= 0) clearPhrase(); return; }
     const sec = num(t, 0);
     const i = phraseAt(phrases, sec);
@@ -311,6 +396,7 @@ export function createCaptions(root) {
     const row = themeFor(event);
     const text = (event && typeof event.label === 'string' ? event.label : '').trim();
     if (!row || !text) return null;
+    clearFlash();   // the plate owns the glass: the band under it goes quiet for the flight
     measure();      // it lands in the air the band and the toast rail left, never on either
     if (plateTimer) { clearTimeout(plateTimer); plateTimer = 0; }
     if (plate) plate.remove();
@@ -342,7 +428,7 @@ export function createCaptions(root) {
     /** The loaded chart, or null to go quiet. Reads `words` and the trigger events, nothing else. */
     setTrack(chart) {
       phrases = chart ? paintTriggers(buildPhrases(chart.words), chart.events) : [];
-      clearPhrase();
+      clearFlash();
       // hud.js reads this: with words on the glass the act ribbon's old spot under the score
       // plate belongs to the caption band, so the ribbon takes the clear air lower down instead
       root.classList.toggle('has-rc-cap', phrases.length > 0);
@@ -351,9 +437,14 @@ export function createCaptions(root) {
     },
     update,
     showPlate,
+    showWord,
+    /** Which half of this file is driving the band: 'flash' (the pops) or 'type' (the clock). */
+    get mode() { return mode; },
+    /** How many words the flash line is holding right now. The smoke reads it; the game does not. */
+    get flashWords() { return mode === 'flash' ? flashN : 0; },
     /** The run is over or the file was cleared: nothing of the last one stays on the glass. */
     clear() {
-      clearPhrase();
+      clearFlash();
       if (plateTimer) { clearTimeout(plateTimer); plateTimer = 0; }
       if (plate) { plate.remove(); plate = null; }
       if (dimTimer) { clearTimeout(dimTimer); dimTimer = 0; }
@@ -373,4 +464,5 @@ export function createCaptions(root) {
   };
 }
 
-// self-check: node race/smoke/captions-check.mjs cuts the real caption track and drives the layer.
+// self-check: node race/smoke/captions-check.mjs cuts the real caption track, pops words at the
+// band and drives the typewriter behind ?cap=type.
