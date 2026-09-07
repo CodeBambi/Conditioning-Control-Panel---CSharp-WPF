@@ -10,6 +10,7 @@
 import { loadAudio, createPlayer, isAudioFile } from './audio.js';
 import * as pick from './pick.js';
 import * as preview from './preview.js';
+import * as run from './run.js';
 import * as save from './save.js';
 import { findWords, hashNote, isWords, scan } from './words.js';
 import { generate, roadLine } from './generate.js';
@@ -24,7 +25,7 @@ const $ = (id) => document.getElementById(id);
 export const state = {
   audio: null, words: null, rows: [], setById: new Map(),
   hits: [], bubs: [], sel: new Set(), road: null,
-  cfg: {}, minGap: MIN_GAP_DEF, durationSec: 0, peaks: null, perSec: 50,
+  cfg: {}, minGap: MIN_GAP_DEF, offsetSec: 0, durationSec: 0, peaks: null, perSec: 50,
 };
 
 const player = createPlayer();
@@ -228,6 +229,7 @@ function restoreSaved() {
   if (!saved) { $('startover').hidden = true; return false; }
   save.restoreInto(state, saved);
   setGap(saved.minGap || state.minGap);
+  run.setOffset(state.offsetSec);
   renderPanel();
   tl.render();
   bar();
@@ -301,8 +303,15 @@ export function seekTo(t) {
   if (pv) pv.seek(at, player.playing);
 }
 
+/** Scroll the lines to a time that is off screen, centred; leave them be when it is on. */
+function reveal(t) {
+  const x = tl.xOf(t);
+  if (x < 0 || x > tl.width()) tl.setView(t - tl.spanSec() * 0.5);
+}
+
 function init() {
   tl.init(state);
+  run.init(state);
   setGap(MIN_GAP_DEF);
   renderPanel();
   $('pick').addEventListener('click', () => $('file').click());
@@ -359,10 +368,11 @@ function init() {
 
   const shared = {
     state, status, bar, renderPanel, replaceSet, setGap, startOver, generateRoad,
-    beads, render, pps: () => tl.view.pps, time: () => player.time, modal: () => card.open,
+    beads, render, seekTo, reveal, pps: () => tl.view.pps, time: () => player.time, modal: () => card.open,
   };
   pick.install(shared);
   save.install(shared);
+  run.install(shared);
   pv = preview.install(shared);
   if (state.road) pv.ensure();            // a restored track already has a road to watch
   requestAnimationFrame(loop);
@@ -371,5 +381,5 @@ function init() {
 init();
 
 /* the headless checks drive the page through this, exactly as a hand would. */
-window.trackMaker = { state, tl, player, pick, save, status, replaceSet, renderPanel, seekTo, bar, startOver,
+window.trackMaker = { state, tl, player, pick, save, run, status, replaceSet, renderPanel, seekTo, bar, startOver,
   generateRoad, card, preview: () => pv, RECIPE_BY_ID };

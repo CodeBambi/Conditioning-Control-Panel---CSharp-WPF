@@ -9,7 +9,7 @@ the author plays it and slides what is off.
 
 | file | what |
 |------|------|
-| `maker.html` | the whole page: a top bar, three lines under one ruler, a side panel, a bottom bar |
+| `maker.html` | the whole page: a top bar, the run, three lines under one ruler, a side panel, a bottom bar |
 | `maker.css` | the look. Its own tokens, shared with nothing. Nothing on the page is under 13 px |
 | `maker/model.js` | pure: recipes, placement, the min gap clamp, the pick line, the chart it writes |
 | `maker/generate.js` | pure: the road. the energy curve, the acts, the analyzer events |
@@ -19,6 +19,8 @@ the author plays it and slides what is off.
 | `maker/pick.js` | picking, sliding, walls, the effect grid, undo |
 | `maker/save.js` | the chart file it writes, and the autosave that survives a reload |
 | `maker/preview.js` | the race in the bottom row: the frame, the bridge, the letterbox |
+| `maker/run.js` | the run on one line: the whole file at one scale, EMI on the clock, the offset |
+| `maker/emi-mini.png` | the EMI that walks it, 52 px, cut from the Arcademy mascot |
 | `smoke/maker-check.mjs` | the pure half under node: placement, clamping, the export shape |
 
 Shared, never copied: `editor/audio.js` (`peaksFromChannels`, `hashFile`),
@@ -105,6 +107,29 @@ every play or pause, and `seek` the moment the author scrubs. The frame answers 
   around it. It follows the row through a `ResizeObserver`.
 - **No WebGL, no preview.** The row says `no preview here` and everything above it carries
   on, the same if the frame never answers within 24 s.
+
+## The run (`maker/run.js`)
+
+The lines under the ruler zoom and scroll, which is right for putting a bubble on a word
+and wrong for "where are we". The line on top is the whole file at one scale, start at
+the left, end at the right, with a small EMI walking it on the audio's clock and every
+bubble and wall the author placed drawn where the run will meet it: a dot per bubble in
+its colour, a pink post per wall. The window the lines below are showing sits on it as a
+faint violet band. Click or drag anywhere on it and the audio goes there, EMI with it;
+the same as the audio line, at a scale where 2:00 is always in the same place.
+
+Per frame it writes one transform, EMI's. The marks are a canvas repainted with the
+rest of the page, on an edit or a pan, never on the clock.
+
+**Everything lands ... early / late.** The one knob this line adds, at the bottom of the
+side panel. When the effects land a beat early or late against the voice, the offset
+slides all of them at once: `+` / `-` step 0.05 s (shift: 0.5 s), `[` and `]` on the
+keyboard, click the value to put it back on time, capped at 5 s either way. It is
+applied when the chart is built, so the file `save track` writes, the preview in the
+bottom row and the marks on the run all move together, while the bubbles line stays
+where the author put things. It slides every event, hand cues and the generated road
+alike; the energy curve and the acts are the audio's own timing and stay put. It goes
+into the autosave and comes back with the track.
 
 ## Picking and sliding
 

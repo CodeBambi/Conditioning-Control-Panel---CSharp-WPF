@@ -8,10 +8,12 @@
  * two things, the playhead transform and the time, and the time only when the
  * string it would write is different from the one already there. Only what is
  * on screen is built, so a forty minute file has the same row count as a one
- * minute one.
+ * minute one. The run lane on top (run.js) is drawn here too, so it follows
+ * every edit and every pan, and its EMI moves with the playhead.
  * ==========================================================================*/
 
 import { KINDS, EFFECTS, fmt, fmtShort, groupsOf, clamp } from './model.js';
+import * as run from './run.js';
 
 export const GUTTER = 120;              // the gutter column, in px (maker.css --gutter)
 export const PPS_LO = 6, PPS_HI = 120;
@@ -209,6 +211,7 @@ export function render() {
   if (!S) return;
   W = seqs.clientWidth;
   drawRuler(); drawBubbles(); drawTags(); drawWave(); drawShowing();
+  run.draw({ t0: Math.max(0, view.t0), t1: view.t0 + spanSec() });
 }
 
 /* ---- the one thing that moves per frame ---------------------------------- */
@@ -220,6 +223,7 @@ export function moveHead(t) {
   if (on !== headOn) { head.style.visibility = on ? '' : 'hidden'; headOn = on; }
   const s = fmt(t);
   if (s !== lastTime) { timeEl.textContent = s; lastTime = s; }
+  run.moveEmi(t);
 }
 
 /** True when the playhead has walked far enough right that the view should follow. */
