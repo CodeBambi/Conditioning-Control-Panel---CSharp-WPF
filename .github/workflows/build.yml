@@ -91,6 +91,23 @@ jobs:
       - name: Test app suite
         run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
 
+      # Frozen lower-layer real-dialog regression: same tests, original guard then repaired guard.
+      - name: URL dialogs on Windows / .NET 8 (RED then GREEN)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        timeout-minutes: 25
+        run: ./.github/scripts/url-dialog-pair.ps1
+      - name: Preserve URL pair evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-url-dialog-pair-${{ github.sha }}
+          if-no-files-found: error
+          include-hidden-files: true
+          path: |
+            ${{ runner.temp }}/url-dialog-pair/
+            !${{ runner.temp }}/url-dialog-pair/packages/**
+
   # Greps the compiler cannot do: APIs that compile fine in a net8.0 library and only fail at
   # runtime, plus the XAML clr-namespace tripwire. See the script for what and why.
   core-guards:
