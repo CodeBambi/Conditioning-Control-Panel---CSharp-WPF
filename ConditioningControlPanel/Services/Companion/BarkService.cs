@@ -1477,6 +1477,7 @@ namespace ConditioningControlPanel.Services
                 case "pauses_this_session": return (double)_state.PauseCount;
                 case "refocus_this_session": return (double)_state.RefocusCount;
                 case "session_planned_min": return _state.SessionPlannedMinutes;
+                case "is_late_hour": { int h = DateTime.Now.Hour; return h >= 23 || h < 4; }
 
                 default:
                     return ctx.Values.TryGetValue(field, out var v) ? v : null;
