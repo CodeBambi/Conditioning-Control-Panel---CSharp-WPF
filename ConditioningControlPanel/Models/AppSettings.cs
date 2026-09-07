@@ -6261,6 +6261,51 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Racing Thoughts - the BambiCloud window
+
+        // Where the on-demand browser frame the race can follow audio from was last left. There is
+        // no toggle to go with these: the window is opened from the race menu and never on its own,
+        // so the only thing worth remembering about it is where the player put it. 0 means "never
+        // placed", which opens it centred at a default size.
+
+        private double _raceCloudWindowLeft;
+        /// <summary>Last left edge of the BambiCloud window, 0 when it has never been placed.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowLeft
+        {
+            get => _raceCloudWindowLeft;
+            set { _raceCloudWindowLeft = value; OnPropertyChanged(); }
+        }
+
+        private double _raceCloudWindowTop;
+        /// <summary>Last top edge of the BambiCloud window, 0 when it has never been placed.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowTop
+        {
+            get => _raceCloudWindowTop;
+            set { _raceCloudWindowTop = value; OnPropertyChanged(); }
+        }
+
+        private double _raceCloudWindowWidth;
+        /// <summary>Last width of the BambiCloud window, 0 for the default.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowWidth
+        {
+            get => _raceCloudWindowWidth;
+            set { _raceCloudWindowWidth = value; OnPropertyChanged(); }
+        }
+
+        private double _raceCloudWindowHeight;
+        /// <summary>Last height of the BambiCloud window, 0 for the default.</summary>
+        [JsonProperty]
+        public double RaceCloudWindowHeight
+        {
+            get => _raceCloudWindowHeight;
+            set { _raceCloudWindowHeight = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Web XP claim (claim-on-sync handshake)
 
         private string? _lastWebXpClaimId = null;
