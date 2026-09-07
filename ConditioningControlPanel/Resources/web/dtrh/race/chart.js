@@ -15,7 +15,7 @@
  * after its second is dropped and counted as missed, never spawned behind the kart.
  * ==========================================================================*/
 
-import { ROOM_IDS, KART_BASE_SPEED, makeRng } from './consts.js';
+import { ROOM_IDS, KART_BASE_SPEED, LANE_X_MAX, makeRng } from './consts.js';
 
 export const CHART_VERSION = 1;
 
@@ -141,6 +141,14 @@ function normalizeEvents(raw, durationSec) {
         dur: clamp(num(e.dur, 0), 0, durationSec - t), weight: clamp01(num(e.weight, 1)) };
       if (e.kind === 'count') { ev.n = num(e.n, 0); ev.of = num(e.of, 0); ev.last = e.last === true; }
       if (e.kind === 'drop') ev.strength = clamp01(num(e.strength, 1));
+      // A WORD BUBBLE off the transcript (race/wordBubbles.js): the word this bubble wears and the
+      // lane its phrase put it in. Kept for the same reason `cue` below is kept - this pass
+      // validates a chart, it does not rewrite one - and without the pair the road loses the lyric
+      // it was laid on and every word falls back into a random lane.
+      if (e.kind === 'word' && typeof e.w === 'string' && e.w) {
+        ev.w = e.w.slice(0, 40);
+        ev.x = clamp(num(e.x, 0), -LANE_X_MAX, LANE_X_MAX);
+      }
       if (e.kind === 'chant') { ev.reps = Math.max(1, Math.round(num(e.reps, 3))); ev.period = Math.max(0, num(e.period, 0)); }
       // An author marks the events they placed by hand inside a road, names the cue they
       // want on one, and leaves a note for the next author. Kept, for the same reason `hand`

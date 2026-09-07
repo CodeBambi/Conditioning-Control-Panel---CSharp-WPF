@@ -142,7 +142,7 @@ eq(plain.analysis.words, 'none', 'a track with no transcript still gets the road
 eq(plain.binSec, BIN_SEC, 'at the quarter second bin it was tuned to');
 ok(!plain.events.some((e) => e.kind === 'trigger'), 'and it has no triggers on it, because nobody heard one');
 eq(normalizeChart(plain).words.length, 0, 'and no caption track');
-eq(GENERATOR_ID, 'web-road-v3', 'the cache key moved again, so a v2 road (laid on the aligner\'s seconds) can never be served');
+eq(GENERATOR_ID, 'web-road-v4', 'the cache key moved again, so a v3 road (a handful of loose treats where the new one carries the whole script) can never be served');
 
 console.log(fails ? '\nlyrics-road-check: ' + fails + ' failed' : '\nlyrics-road-check: all good');
 process.exit(fails ? 1 : 0);

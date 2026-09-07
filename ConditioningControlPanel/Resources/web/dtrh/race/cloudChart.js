@@ -46,6 +46,7 @@ import { cloudIdFrom, hashUrl, hashBytes, loadIndex, findAuthored, isAuthored } 
 import { loadWords } from './words.js';
 import { TRIGGER_SETS } from '../chart/editor/triggerSets.js';
 import { detect } from '../chart/maker/triggers.js';
+import { wordEventsFrom } from './wordBubbles.js';
 
 /**
  * THE GENERATOR ID. It is the cache key's second half: change any knob below and
@@ -57,8 +58,11 @@ import { detect } from '../chart/maker/triggers.js';
  * v3 (the sync wave): the trigger seconds come off the fingerprinted `hits` in the
  * words file (tools/racechart/fingerprint.py) when it has them, so a v2 road, laid
  * on the aligner's guess, must regenerate too.
+ * v4 (the word bubbles): the whole script is on the road now, one word a bubble in
+ * its phrase's lane (race/wordBubbles.js), so a v3 road carries a few dozen loose
+ * treats where the new one carries the lyric and cannot be served in its place.
  */
-export const GENERATOR_ID = 'web-road-v3';
+export const GENERATOR_ID = 'web-road-v4';
 
 /* ---- the knobs, and why each one is what it is --------------------------- */
 /**
@@ -330,13 +334,22 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
   const hits = triggerHits(words, durationSec);
   const g = generate({ peaks, perSec, durationSec, words, hits, setById: SET_BY_ID, binSec: WORD_BIN_SEC, now });
   const energy = g.energy.map(clamp01);
-  const events = triggersFromHits(g.events, hits, SET_BY_ID)
+  const caps = captionWords(words);
+  const road = triggersFromHits(g.events, hits, SET_BY_ID);
+  const triggers = road.filter((e) => e.kind === 'trigger');
+  // THE SCRIPT IS THE ROAD. generate.js spends a handful of STRUCTURE words as loose treats in
+  // random lanes, which was the right answer while the road had no transcript on it and is the
+  // wrong one now: the transcript has every word the voice says, so those few are dropped and
+  // race/wordBubbles.js lays the whole script instead - one word a bubble, a phrase a lane, and
+  // never within HIT_GUARD_SEC of a trigger, because those seconds belong to the row.
+  const events = road.filter((e) => e.kind !== 'word')
+    .concat(wordEventsFrom(caps, triggers))
     .sort((a, b) => a.t - b.t)
     .map((e, i) => ({ ...e, id: 'g' + i }));
   const lexicon = [...new Set(events.filter((e) => e.kind === 'trigger').map((e) => e.label))].sort();
   return {
     version: 1, binSec: WORD_BIN_SEC, energy, events, acts: g.acts,
-    words: captionWords(words),
+    words: caps,
     source: { name, hash, durationSec, sampleRate: DECODE_RATE },
     analysis: { energy: 'web-rms-v1', words: 'script-align-v1', lexicon, generatedAt: g.generatedAt, partial: false },
   };
