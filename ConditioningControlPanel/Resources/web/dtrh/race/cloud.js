@@ -59,6 +59,14 @@ export const REFUSED_LINE = 'that is a page link, not a track link. open it over
 
 /** The host's own cadence (CHART.md), and the two waits a load is allowed. */
 export const TICK_MS = 250;
+/**
+ * How close to the end of the file counts AS the end of it. run.js ends a tracked run
+ * at `durationSec - 0.25` (CHART.md), which is BEFORE the element fires `ended`, and
+ * ending the run posts `track-stop`, which pauses the element so `ended` never comes at
+ * all. So a stop this close to the end is the file running out, and the lap rolls on to
+ * the next track; a stop anywhere else is a player leaving, and it does not.
+ */
+export const END_SLOP = 1.2;
 export const LOAD_TIMEOUT_MS = 15000;
 export const RETRY_MS = 900;
 
@@ -124,7 +132,8 @@ const elm = (tag, cls, parent, text) => {
  * @param {object}   o
  * @param {object}   o.settings   the host's `init.settings`
  * @param {object}   o.hooks      clock(t, playing), ended(), chart(info)->Promise<chart>,
- *                                track(chart|null, info|null), toast(line), pause(on), refresh()
+ *                                track(chart|null, info|null), prefetch(info|null), toast(line),
+ *                                pause(on), refresh()
  * @param {function} [o.log]
  * @param {function} [o.ui]       the menu blips
  * @param {function} [o.makeAudio] url -> element. The smoke's seam; the page uses `new Audio`.
@@ -139,6 +148,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
 
   let list = [], at = -1, el = null, timer = 0, tries = 0, retry = 0, gen = 0;
   let played = false;                 // a run has actually played this element, so `pause` means something
+  let rolled = false;                 // this element has already handed the lap on
   let view = 'paste', busy = false, disposed = false;
   let input = null, countEl = null, nextEl = null, rows = [], els = [], slotEl = null;
   let onPickRow = null, onClose = null, onRefresh = null;
@@ -198,7 +208,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     if (!e || !e.url || e.locked || e.failed || disposed) return false;
     const mine = ++gen;
     dropEl();
-    at = i; busy = true; played = false; paint();
+    at = i; busy = true; played = false; rolled = false; paint();
     let a = null;
     try {
       a = makeAudio ? makeAudio(e.url) : new Audio();
@@ -221,8 +231,20 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     blip('tick');
     say(`${e.title}: ${Math.round(dur)}s, ${at + 1} of ${list.length}`);
     call('track', chart, info());
+    armPrefetch();
     paint();
     return true;
+  }
+
+  /**
+   * Name the next playable track while this one is being driven, so whatever charts
+   * it can start now rather than at the moment the lap rolls over. `null` means
+   * there is nothing after this one and anything in flight can be let go.
+   */
+  function armPrefetch() {
+    const nx = nextPlayable(at + 1);
+    const e = nx >= 0 ? list[nx] : null;
+    call('prefetch', e ? { id: e.id, url: e.url, title: e.title } : null);
   }
 
   /** One retry, then stop. Nothing here ever schedules a second one. */
@@ -244,8 +266,10 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     return false;
   }
 
-  /** The file ran out: end this lap, then walk to the next playable track. */
+  /** The file ran out: end this lap, then walk to the next playable track. Once per element. */
   function onEnded() {
+    if (rolled) return;                 // the run ended AND the element ended: one rollover, not two
+    rolled = true;
     stopTick();
     call('clock', el ? Number(el.duration) || 0 : 0, false);
     call('ended');
@@ -275,7 +299,9 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
       call('clock', Number(el.currentTime) || 0, m.on === false);
     } else if (t === 'track-stop') {
       stopTick();
+      const left = Number(el.duration) - (Number(el.currentTime) || 0);
       try { el.pause(); } catch (e) { /* already gone */ }
+      if (played && isFinite(left) && left <= END_SLOP) { onEnded(); return; }
     }
     paint();
   }
@@ -325,12 +351,14 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     view = list.length ? 'list' : 'paste';
     paint();
     if (at < 0) { const nx = nextPlayable(0); if (nx >= 0) load(nx); }
+    else armPrefetch();                 // a link pasted mid run may be the next lap
   }
 
   function forget() {
     dropEl();
     gen++; list = []; at = -1; tries = 0; busy = false; view = 'paste';
     call('track', null, null);
+    call('prefetch', null);
     paint();
   }
 
@@ -414,6 +442,7 @@ export function createCloud({ settings = {}, hooks = {}, log = null, ui = null, 
     dispose() {
       disposed = true;
       if (retry) { clearTimeout(retry); retry = 0; }
+      call('prefetch', null);
       dropEl();
       list = []; els = []; rows = [];
     },

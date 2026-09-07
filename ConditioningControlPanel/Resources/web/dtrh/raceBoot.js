@@ -144,6 +144,8 @@ const settingEchoes = [];           // `setting` echoes that landed before there
 let settings = {}, seed = 0;
 let trackProgress = null, trackReady = null, errorTimer = 0, startTrackClock = null, trackTimer = 0, trackAudio = null;
 let cloud = null;                   // race/cloud.js, when the host says this build has it
+let cloudSource = null;             // race/cloudChart.js, the thing that answers hooks.chart
+let cloudWhere = '';                // ' · 3 of 9', kept so an upgraded chart repaints the same plate
 
 const note = (t) => { if (waitEl) waitEl.textContent = t || ''; };
 function fail(err) {
@@ -228,6 +230,7 @@ function surface() {
   stopTrackClock();
   if (errorTimer) clearTimeout(errorTimer);
   try { if (cloud) cloud.dispose(); } catch (e) { host.log('cloud dispose: ' + e); }
+  try { if (cloudSource) cloudSource.dispose(); } catch (e) { host.log('cloud source dispose: ' + e); }
   try { if (menu) menu.dispose(); } catch (e) { host.log('menu dispose: ' + e); }
   try { if (race) race.dispose(); } catch (e) { host.log('exit dispose: ' + e); }
   host.send({ type: 'exit' });
@@ -363,17 +366,58 @@ async function standaloneTrack() {
  * player, and wired to the run through hooks only: the mini-player never sees `race`, so it stays
  * importable in node and the smoke can drive it with a stub element.
  *
- *   chart  the W2 SEAM. Lane W2 decodes the file and charts it for real; until then a demo chart
- *          cut to the element's own duration keeps the road and the clock honest end to end.
+ *   chart  race/cloudChart.js: an authored chart if one is written for this track, else the one
+ *          this browser cached for it, else a road decoded and generated from the file itself.
+ *          It answers inside a couple of seconds whatever happens, on a plain road if it has
+ *          to, and swaps the real one in through onUpgrade when it lands.
  *   track  the chart landing: the run takes it and the menu plate says which track, and where in
  *          the list it is ("3 of 9"), with the next one named under it.
+ *   prefetch  the next playable track, named while this one plays, so the next lap starts with
+ *          its road already in hand. One at a time; closing the panel lets it go.
  *   pause  the panel's own pause goes through the run, which posts track-pause straight back here,
  *          so there is ONE pause path and the file and the road can never disagree.
  */
+/**
+ * The plate for a cloud track: the name, where it sits in the list, and how much of
+ * the file the road actually found. A partial road says so, because "0 treats" on a
+ * plain road is a number the player would otherwise read as a broken track.
+ */
+function showTrack(chart) {
+  const st = race && race.trackStats ? race.trackStats() : null;
+  const partial = !!(chart.analysis && chart.analysis.partial);
+  trackReady = { stage: 'ready', name: chart.source.name + cloudWhere, durationSec: chart.source.durationSec,
+    countable: st ? st.countable : 0, partial };
+  plate(trackReady);
+}
+
 async function makeCloud() {
   if (!settings.cloud) return null;
-  let mod = null;
-  try { mod = await import('./race/cloud.js'); } catch (err) { host.log('cloud: ' + ((err && err.message) || err)); return null; }
+  let mod = null, chartMod = null, cacheMod = null;
+  try {
+    mod = await import('./race/cloud.js');
+    chartMod = await import('./race/cloudChart.js');
+    cacheMod = await import('./race/chartCache.js');
+  } catch (err) { host.log('cloud: ' + ((err && err.message) || err)); return null; }
+  const toast = (line) => {
+    const msg = String(line || '').slice(0, 80).toLowerCase();
+    host.log('cloud toast: ' + msg);
+    try { if (race && race.hud) race.hud.toast(msg.slice(0, 60), 'effect'); } catch (e) { /* no hud yet */ }
+  };
+  // The cache is the only piece here that can be missing (a private window, blocked site
+  // data): it opens to a stub that answers null, and every track is charted fresh.
+  const cache = await cacheMod.openCache({ log: host.log });
+  cloudSource = chartMod.createChartSource({
+    indexUrl: new URL('race/charts/index.json', import.meta.url).href,
+    cache, log: host.log, toast,
+    // The road landing on a plain one: `replaceTrack` while a lap is live keeps everything
+    // already fired and adopts only the future, which is CHART.md's partial rule.
+    onUpgrade(chart) {
+      if (!race) return;
+      try { (race.track && started) ? race.replaceTrack(chart) : race.setTrack(chart); }
+      catch (err) { host.log('cloud upgrade: ' + ((err && err.message) || err)); return; }
+      showTrack(chart);
+    },
+  });
   return mod.createCloud({
     settings,
     log: host.log,
@@ -383,27 +427,16 @@ async function makeCloud() {
       clock: (t, playing) => { if (race) race.trackClock(t, playing); },
       ended: () => { if (race) race.trackEnded(); },
       pause: (on) => { if (race) race.setPaused(!!on); },
-      async chart({ title, durationSec }) {
-        const mk = await import('./race/chart.js');
-        const demo = mk.demoChart({ durationSec });
-        // the shape is the demo road; the NAME is the real track, because the plate, the marquee
-        // and the results card all read source.name and none of them should say "the demo track".
-        return mk.normalizeChart({ ...demo, source: { ...demo.source, name: title || demo.source.name, hash: '' } });
-      },
+      chart: (info) => cloudSource.chartFor(info),
+      prefetch: (info) => (info ? cloudSource.prefetch(info) : cloudSource.cancel()),
       track(chart, info) {
         if (!race) return;
+        cloudWhere = info && info.total > 1 ? ` · ${info.pos} of ${info.total}` : '';
         if (!chart) { race.setTrack(null); trackReady = null; plate(null); return; }
         try { race.setTrack(chart); } catch (err) { trackError('chart: ' + ((err && err.message) || err)); return; }
-        const st = race.trackStats ? race.trackStats() : null;
-        const where = info && info.total > 1 ? ` · ${info.pos} of ${info.total}` : '';
-        trackReady = { stage: 'ready', name: chart.source.name + where, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false };
-        plate(trackReady);
+        showTrack(chart);
       },
-      toast(line) {
-        const msg = String(line || '').slice(0, 80).toLowerCase();
-        host.log('cloud toast: ' + msg);
-        try { if (race && race.hud) race.hud.toast(msg.slice(0, 60), 'effect'); } catch (e) { /* no hud yet */ }
-      },
+      toast,
     },
   });
 }
