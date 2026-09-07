@@ -16,7 +16,8 @@
  *
  * against `event.t` off the chart. The owner heard the effect ~2 s before the
  * word; the scheduler's lookahead is 2.5 s. This is where that number is held down:
- * the plate inside PLATE_TOL of the word, the row under the kart inside ROW_TOL,
+ * the plate inside PLATE_TOL of the word (or on the pop, if the kart reached the row
+ * first: the plate travels with whichever came first), the row under the kart inside ROW_TOL,
  * through a build (the boost ramps the speed mid-lookahead) and a drop (a jump).
  *
  * Nothing leaves this machine: the web folder is served off localhost and the demo
@@ -147,13 +148,13 @@ console.log(`  --  ${probe.plates.length} plates seen, ${probe.taken.length} eve
 
 const nearest = (list, t0, win) => { let best = null; for (const x of list) { const d = x.t - t0; if (Math.abs(d) <= win && (!best || Math.abs(d) < Math.abs(best.t - t0))) best = x; } return best; };
 console.log('  event         t      plate    row(pop)  handed   fired    rowAt');
-const plateDs = [], rowDs = [], handDs = [];
+const plateDs = [], rowDs = [], handDs = [], pairs = [];
 for (const e of triggers) {
   const p = nearest(probe.plates.filter((x) => x.word === e.label), e.t, 3.5);
   const k = nearest(probe.taken, e.t, 3.5);
   const tr = byId.get(e.id) || {};
   const pd = p ? p.t - e.t : null, kd = k ? k.t - e.t : null;
-  if (pd != null) plateDs.push(pd);
+  if (pd != null) { plateDs.push(pd); pairs.push({ pd, kd }); }
   if (kd != null) rowDs.push(kd);
   if (tr.handedAt != null) handDs.push(tr.handedAt - e.t);
   console.log(`  ${e.label.padEnd(12)} ${e.t.toFixed(2).padStart(6)}  ${f2(pd).padStart(7)}  ${f2(kd).padStart(8)}  ${f2(tr.handedAt == null ? null : tr.handedAt - e.t).padStart(7)}  ${f2(tr.firedAt == null ? null : tr.firedAt - e.t).padStart(7)}  ${f2(tr.rowAt == null ? null : tr.rowAt - e.t).padStart(7)}`);
@@ -162,7 +163,11 @@ const stat = (a) => (a.length ? `median ${f2(a.slice().sort((x, y) => x - y)[a.l
 console.log(`  --  plate - t: ${stat(plateDs)};  row pop - t: ${stat(rowDs)};  handover - t: ${stat(handDs)}`);
 
 ok(plateDs.length === triggers.length, `every sure trigger flew a plate (${plateDs.length} of ${triggers.length})`);
-ok(plateDs.every((d) => d >= -0.02 && d <= PLATE_TOL), `every plate reached the DOM ON its word, never early, at most a frame late (within ${PLATE_TOL}s)`);
+ok(plateDs.every((d) => d <= PLATE_TOL), `no plate reached the DOM later than a frame after its word (within ${PLATE_TOL}s)`);
+// The plate travels with whichever came first, the pop or the word, so a row taken a frame early
+// plates a frame early. What it may never do is arrive before the player has done anything at all.
+ok(pairs.every(({ pd, kd }) => pd >= Math.min(0, kd == null ? 0 : kd) - 0.05),
+  'and none of them before the pop that bought it: the plate flies on the row or on the word, whichever the player reaches first');
 ok(rowDs.length === triggers.length, `every row was met by the kart (${rowDs.length} of ${triggers.length})`);
 ok(rowDs.every((d) => Math.abs(d) <= ROW_TOL), `every row was under the kart within ${ROW_TOL}s of its word, through the build's boost`);
 ok(trace.length > 0, 'the standalone sync trace is on (race.syncTrace)');

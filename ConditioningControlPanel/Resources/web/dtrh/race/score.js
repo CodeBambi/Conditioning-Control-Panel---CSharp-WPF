@@ -77,12 +77,22 @@ export function createScore() {
     return lost;
   }
 
+  /**
+   * A pop in the ledger. `opts.combo === false` pays for it and steps NOTHING: that is a WORD
+   * BUBBLE, which is worth its treat but must not walk the ladder, because a transcript road lays
+   * three of them a second and an 8x arriving in twenty seconds of a chant is a multiplier nobody
+   * drove for. The ladder counts LINES on those roads instead, through `chain()` below.
+   */
   function pop(points, kindId, opts) {
     const k = KIND_BY_ID[kindId];
     const inverted = opts && 'inverted' in opts ? !!opts.inverted : state.inverted;
-    state.combo++; hold = COMBO_HOLD_SEC;
-    if (state.combo > state.bestCombo) state.bestCombo = state.combo;
-    const step = setMult() || ladderStep(state.combo);
+    const steps = !(opts && opts.combo === false);
+    hold = COMBO_HOLD_SEC;   // a word pop still keeps the streak breathing; only the RUNG is a phrase
+    if (steps) {
+      state.combo++;
+      if (state.combo > state.bestCombo) state.bestCombo = state.combo;
+    }
+    const step = steps ? (setMult() || ladderStep(state.combo)) : false;
     const gain = Math.round((Number(points) || 0) * state.mult);
     const bonus = inverted ? gain : 0;                     // upside down: the pop counts twice
     state.score += gain + bonus; state.popped++;
@@ -95,9 +105,24 @@ export function createScore() {
       note(`hot lap +${hot}`, 'jackpot', 'smug', 'streak_milestone');
     }
     emit({ type: 'pop', kindId, points, gain, bonus, inverted, combo: state.combo, mult: state.mult, score: state.score });
+    // a word bubble stepped nothing, so it says nothing about the ladder: the `pop` above already
+    // carried the combo and the mult the HUD draws, and the hold ring reads holdLeft() per frame.
+    if (steps) emit({ type: 'combo', combo: state.combo, step, mult: state.mult, hold });
+    if (steps && JACKPOT_COMBOS.includes(state.combo)) jackpot('major');
+    return gain + bonus;
+  }
+  /**
+   * A LINE of word bubbles taken whole: one rung of the ladder and no points of its own. run.js
+   * keeps the ledger of which bubbles belong to which phrase (race/wordBubbles.js hands every word
+   * event its phrase index) and calls this on the pop that finishes one.
+   */
+  function chain() {
+    state.combo++; hold = COMBO_HOLD_SEC;
+    if (state.combo > state.bestCombo) state.bestCombo = state.combo;
+    const step = setMult() || ladderStep(state.combo);
     emit({ type: 'combo', combo: state.combo, step, mult: state.mult, hold });
     if (JACKPOT_COMBOS.includes(state.combo)) jackpot('major');
-    return gain + bonus;
+    return state.combo;
   }
   /** kart.js says the road rolled past 120 degrees (on) or back (off). Off pays the full circle. */
   function setInverted(on) {
@@ -177,7 +202,7 @@ export function createScore() {
   }
 
   return {
-    state, pop, miss, nearMiss, bank, jackpot, tick, reset, setInverted, trick, lap, pace,
+    state, pop, chain, miss, nearMiss, bank, jackpot, tick, reset, setInverted, trick, lap, pace,
     onEvent(cb) { if (typeof cb === 'function') cbs.push(cb); },
     /** Pending HUD notes (upside down, full circle, ...), oldest first; the queue empties. */
     drainNotes() { return notes.splice(0, notes.length); },

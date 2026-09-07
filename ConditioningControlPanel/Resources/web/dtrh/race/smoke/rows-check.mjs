@@ -24,13 +24,18 @@
  *      kart whose speed changes inside the lookahead, the row is under the kart
  *      within 0.15 s of event.t, and the visible half of the cue fires on the
  *      second, never at the scheduler's 2.5 s early handover
+ *   8. the plate flies on the POP or on the second, whichever the player reaches
+ *      first, and only ever once
+ *   9. the ladder counts LINES: a rung per phrase taken whole, no rung for a
+ *      single word, no release for a word driven past, and the quiet holds it
  *
  * It never prints a line of a transcript. Everything below is counted.
  * ==========================================================================*/
 
 import { cueFor, ROW_X, ROW_MAX_GAP } from '../cues.js';
 import { createScheduler, normalizeChart } from '../chart.js';
-import { KART_X_MAX, LANE_X_MAX, POP_HIT_X, LANE_H, makeRng } from '../consts.js';
+import { KART_X_MAX, LANE_X_MAX, POP_HIT_X, LANE_H, COMBO_HOLD_SEC, makeRng } from '../consts.js';
+import { createScore } from '../score.js';
 import { THEME_BY_PRESET, kindForPreset } from '../triggerTheme.js';
 import { KIND_BY_ID } from '../bubbleKinds.js';
 import { createCueSync, CUE_AHEAD_SEC, LATE_SEC } from '../sync.js';
@@ -256,6 +261,113 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
   ok(loose.worst > kept.worst, `left where it was placed a bubble is ${loose.worst.toFixed(2)}s off its word at worst, which is what the tracking is for`);
   console.log('  --  ' + kept.laid + ' word bubbles, median ' + kept.median.toFixed(3) + 's, worst '
     + kept.worst.toFixed(3) + 's tracked, ' + loose.worst.toFixed(2) + 's loose');
+}
+
+/* ---- 8. the plate flies once: on the pop, or on the second ---------------- */
+// A row used to plate only when the clock reached event.t, so a player who took it a beat early
+// watched the word arrive after they had already popped it. The plate now travels with whichever
+// came first. Nothing else in the cue moves: the mix, the mood and the fog still land on the word,
+// because those are the file talking and the plate is the player being answered.
+{
+  const sy = createCueSync();
+  const trig = (id, t) => ({ id, kind: 'trigger', t, label: 'a phrase' });
+  const cue = { word: 'a phrase', mix: 'blackout' };
+
+  sy.defer(trig('a', 30), cue, 27.5);
+  const early = sy.claim('a');
+  ok(!!early && early.event.id === 'a' && early.cue.word === 'a phrase', 'a row popped early hands its held cue back to be plated');
+  eq(sy.claim('a'), null, 'and the next bubble of the same row claims nothing: one plate, one row');
+  const fired = sy.update(30, 0, 22).fire;
+  eq(fired.length, 1, 'the rest of that cue still fires on the word, never at the pop');
+  eq(fired[0].plated, true, 'and carries word that the plate already flew');
+
+  sy.defer(trig('b', 40), cue, 37.5);
+  const onTime = sy.update(40, 0, 22).fire;
+  eq(onTime.length, 1, 'a row nobody took still fires on its second');
+  eq(onTime[0].plated, false, 'with its plate unspent: a row driven past is still read out');
+  eq(sy.claim('b'), null, 'and once a cue has fired there is nothing left to claim');
+  eq(sy.claim('never-deferred'), null, 'an id that was never held claims nothing');
+}
+
+/* ---- 9. the ladder counts LINES, not words ------------------------------- */
+// Driven off the REAL opening transcript, because the number that matters is how long an x8 takes
+// on a road that lays three bubbles a second, and no made-up chart has that shape.
+{
+  const file = JSON.parse(readFileSync(resolve(HERE, '../words/a15c22e0-d347-4d92-9f78-0fb37099e549.json'), 'utf8'));
+  const triggers = triggersFromHits([], triggerHits(file, file.durationSec), SET_BY_ID);
+  const events = wordEventsFrom(captionWords(file), triggers, { rng: makeRng(7) }).sort((a, b) => a.t - b.t);
+  const lines = new Map();
+  for (const e of events) lines.set(e.p, (lines.get(e.p) || 0) + 1);
+  ok(events.every((e) => e.p != null), 'every word bubble knows the line it belongs to');
+  ok(lines.size > 20 && events.length / lines.size > 1.4,
+    events.length + ' word bubbles across ' + lines.size + ' lines (' + (events.length / lines.size).toFixed(1) + ' a line)');
+
+  /** One run over the file. `missEvery` drives past every nth bubble; the quiet holds the ladder. */
+  function drive(missEvery, perBubble) {
+    const score = createScore();
+    let released = 0;
+    score.onEvent((e) => { if (e.type === 'combo' && e.lost > 0) released++; });
+    const got = new Map(), done = new Set();
+    const at = {};
+    let i = 0, last = events[0].t;
+    for (const e of events) {
+      const gap = Math.max(0, e.t - last); last = e.t;
+      if (gap > COMBO_HOLD_SEC) score.freezeCombo(gap * 2);   // run.js trackFrame: the quiet holds it
+      score.tick(gap);
+      if (missEvery && ++i % missEvery === 0) continue;       // driven past
+      if (perBubble) score.pop(10, 'treat');                  // the OLD rule, kept here to be measured
+      else {
+        score.pop(10, 'treat', { combo: false });
+        const g = (got.get(e.p) || 0) + 1;
+        got.set(e.p, g);
+        if (g >= (lines.get(e.p) || 0) && !done.has(e.p)) { done.add(e.p); score.chain(); }
+      }
+      for (const m of [4, 8]) if (at[m] == null && score.state.mult >= m) at[m] = e.t - events[0].t;
+    }
+    return { at, released, mult: score.state.mult, lines: done.size, score: score.state.score };
+  }
+
+  const was = drive(0, true), now = drive(0, false);
+  ok(was.at[8] != null && was.at[8] < 30, 'a rung per bubble reached x8 in ' + (was.at[8] || 0).toFixed(1) + ' s of the file, which is the thing being fixed');
+  ok(now.at[4] != null && was.at[4] != null && now.at[4] > was.at[4] * 2,
+    'a rung per line takes ' + now.at[4].toFixed(1) + ' s to reach x4 where a rung per bubble took ' + was.at[4].toFixed(1) + ' s');
+  ok(now.at[8] == null, 'and x8 is not something this opening hands out for reading along: the rows and the goldens on the road are the rest of it');
+  eq(now.mult, 6, 'a clean read of every line in the file is worth x' + now.mult);
+  ok(now.score >= events.length * 10, 'every word still pays its treat (' + now.score + ' points over ' + events.length + ' bubbles)');
+
+  const sloppy = drive(3, false);
+  eq(sloppy.released, 0, 'a word bubble driven past never lets the ladder go');
+  ok(sloppy.lines < now.lines, 'it just costs the line it was in (' + sloppy.lines + ' lines of ' + now.lines + ')');
+
+  const solo = createScore();
+  solo.pop(10, 'treat', { combo: false });
+  eq(solo.state.combo, 0, 'one word on its own is no rung at all');
+  eq(solo.state.score, 10, 'and is still worth its treat');
+
+  // the wordless opening: this file says nothing for over a minute, and a streak carried into it has
+  // to survive the drive rather than time out on an empty road
+  ok(events[0].t > COMBO_HOLD_SEC * 4, 'the file opens with ' + events[0].t.toFixed(0) + ' s of road before the first word');
+  const held = createScore(), letGo = createScore();
+  held.chain(); held.chain(); letGo.chain(); letGo.chain();
+  for (let t = 0; t < events[0].t; t += 1 / 60) { held.freezeCombo(2 / 60); held.tick(1 / 60); letGo.tick(1 / 60); }
+  eq(held.state.combo, 2, 'and the ladder is where the player left it when the first word lands');
+  eq(letGo.state.combo, 0, 'unheld it would have let go long before');
+
+  // and the end card counts the same way the ladder does
+  const two = normalizeChart({
+    version: 1, binSec: 0.5, energy: [0.4, 0.4, 0.4, 0.4],
+    acts: [{ kind: 'induction', room: 'teagarden', t0: 0, t1: 5, name: 'induction' }],
+    events: [{ kind: 'word', t: 1, w: 'aa', x: 0, p: 0 }, { kind: 'word', t: 1.2, w: 'bb', x: 0, p: 0 },
+      { kind: 'word', t: 3, w: 'cc', x: 0, p: 1 }, { kind: 'word', t: 3.2, w: 'dd', x: 0, p: 1 }],
+    source: { name: 'lines', hash: 'lines', durationSec: 5, sampleRate: 16000 },
+    analysis: { energy: 'x', words: 'script-align-v1', lexicon: [], generatedAt: '', partial: false },
+  });
+  const sc = createScheduler(two);
+  eq(sc.stats().countable, 2, 'four word bubbles in two lines is TWO things to take on the end card');
+  sc.taken(two.events[0].id);
+  eq(sc.stats().taken, 0, 'half a line read is nothing taken');
+  sc.taken(two.events[1].id);
+  eq(sc.stats().taken, 1, 'and the whole of it is one');
 }
 
 console.log(fails ? '\nrows-check: ' + fails + ' failed' : '\nrows-check: all good');

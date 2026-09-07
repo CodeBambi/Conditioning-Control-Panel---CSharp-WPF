@@ -185,8 +185,14 @@ export function phrasesFrom(words, hits = [], opts = {}) {
  */
 export function wordEventsFrom(words, hits = [], opts = {}) {
   const out = [];
+  let n = 0;
   for (const p of phrasesFrom(words, hits, opts)) {
-    for (const b of p.words) out.push({ kind: 'word', t: b.t, dur: b.d, label: '', conf: 1, weight: 1, w: b.w, x: p.x });
+    // `p` is the index of the LINE this bubble belongs to, and it is the only thing that tells the
+    // rest of the game where one thing said ends and the next begins: race/score.js steps the combo
+    // ladder once per phrase taken whole (forty word pops is twenty seconds of a chant and an 8x
+    // nobody drove for) and race/chart.js stats() counts a phrase as one thing to take.
+    for (const b of p.words) out.push({ kind: 'word', t: b.t, dur: b.d, label: '', conf: 1, weight: 1, w: b.w, x: p.x, p: n });
+    n++;
   }
   return out;
 }

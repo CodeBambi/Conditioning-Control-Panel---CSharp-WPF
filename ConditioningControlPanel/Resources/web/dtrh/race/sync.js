@@ -1,7 +1,7 @@
 /* ============================================================================
  * race/sync.js - the visible half of a cue waits for the word.
  *
- *   createCueSync({ aheadSec, lateSec, trace }) -> { depthFor, defer, trackRow, update, reset, trace }
+ *   createCueSync({ aheadSec, lateSec, trace }) -> { depthFor, defer, claim, trackRow, update, reset, trace }
  *
  * WHY THIS EXISTS. The scheduler (race/chart.js createScheduler) hands an event
  * over LEAD_SEC (2.5 s) before its second, on purpose: a bubble has to be placed
@@ -82,6 +82,25 @@ export function createCueSync({ aheadSec = CUE_AHEAD_SEC, lateSec = LATE_SEC, tr
       rec(event, { handedAt: num(t, null) });
     },
 
+    /**
+     * THE PLATE, ON THE POP. A row taken EARLY: the deferred cue is marked plated and handed back,
+     * so run.js can fly the word at the camera the moment the player takes it rather than making
+     * them wait for a second they already beat. Everything else in that cue (the mix, the mood, the
+     * fog, the boost) still fires at `event.t` and nothing here moves it: only the plate travels.
+     * Returns the held `{ event, cue }` the FIRST time an id is claimed and null every time after,
+     * so a row of five popped bubbles plates once and a row nobody takes still plates on its second.
+     */
+    claim(eventId) {
+      if (!eventId) return null;
+      for (const q of queue) {
+        if (q.event.id !== eventId) continue;
+        if (q.plated) return null;
+        q.plated = true;
+        return { event: q.event, cue: q.cue };
+      }
+      return null;
+    },
+
     /** A row went down at depth `d` for the word at `at`: keep it under the word until the kart is on it. */
     trackRow(rowId, event, at, d, t) {
       if (!rowId || !event) return;
@@ -106,7 +125,7 @@ export function createCueSync({ aheadSec = CUE_AHEAD_SEC, lateSec = LATE_SEC, tr
         for (const q of queue) {
           if (now < q.at) { keep.push(q); continue; }
           if (now - q.at > late) { dropped++; rec(q.event, { dropped: true }); continue; }   // the voice already said it
-          fire.push({ event: q.event, cue: q.cue, late: now - q.at });
+          fire.push({ event: q.event, cue: q.cue, late: now - q.at, plated: !!q.plated });
           rec(q.event, { firedAt: now });
         }
         queue = keep;
