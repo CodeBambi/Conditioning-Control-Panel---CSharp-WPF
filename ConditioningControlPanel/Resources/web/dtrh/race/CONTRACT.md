@@ -175,14 +175,24 @@ Pop event: `{ id, kind, payload, strength, points, placement, x, d, eventId, wor
 where relevant (`spiral | braindrain | pink_filter`). `strength` is 0..1.
 
 Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
-`/dtrh/assets/bubbles/effects/*.png` and `https://ccp.art/bubbles/*.png`):
+`/dtrh/assets/bubbles/effects/*.png` and `https://ccp.art/bubbles/*.png`).
+GOLD IS THE JACKPOT, NOT THE FILLER (2026-09-08): every effect is colour coded, so a coloured
+bubble has to mean "something happens here". The three gold rows are rare and pay like it, and
+the frequency they gave up went to the effect kinds. Measured over five 3-minute seeded runs,
+gold went 13.0% -> 2.2% of what is laid and effects 21.8% -> 30.9%; over the track cues it went
+44.4% -> 5.2% gold and 35.8% -> 57.5% effects. Every gold source in the game is in that count:
+the roll's weights, the room `bubbleBias` leans, the air line (which favours EFFECTS now), the
+chunk-end marker on a transcript road, and the cue tables in `race/cues.js` - a peak rains the
+room's own colour with at most ONE gold on the end, a hard drop's rings are the room's effect
+with one gold at the top of the climb, a countdown golds only its last ring, and a chant golds
+one bubble in twelve, so only the longest chant carries one at all:
 
 | id | kind | payload | points | notes |
 |----|------|---------|--------|-------|
-| treat | treat | null | 10 | the common bubble, plain sprite |
-| golden | treat | null | 50 | rare, JACKPOT chime |
-| lucky | treat | null | 25 | a plain 25 point treat, nothing else |
-| prism | treat | null | 30 | rainbow, pops neighbours |
+| treat | treat | null | 10 | the common bubble, plain sprite; the filler, and nothing but |
+| golden | treat | null | 300 | THE JACKPOT: weight 0.16, the rarest thing on the road, biggest burst, its own chime stack and a `jackpot +N` toast |
+| lucky | treat | null | 150 | weight 0.22, a smaller gold take with a toast of its own |
+| prism | treat | null | 180 | weight 0.3, rainbow, pops neighbours |
 | flash | effect | flash | 15 | DARK since 2026-09-08, never spawns; the WORD carries the flash now (see below) |
 | subliminal | effect | subliminal | 15 | |
 | pink | effect | overlay/pink_filter | 20 | |

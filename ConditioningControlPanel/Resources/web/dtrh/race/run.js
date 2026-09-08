@@ -363,11 +363,19 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   }
 
   // ---- pops ----
+  /** THE TAKE the jackpot toast is owed: gold is rare and pays like it now, so the rail says what
+   *  the bubble AND its bonus were worth, not just the bonus. A jackpot off a combo rung leaves
+   *  this at 0 and reads exactly as it always did. */
+  let goldTake = 0;
   function treat(w, p, word) {
-    w.score.pop(p.points, p.id, word ? { combo: false } : undefined);   // a word is worth its treat and no rung
+    const gain = w.score.pop(p.points, p.id, word ? { combo: false } : undefined);   // a word is worth its treat and no rung
     if (p.id === 'golden') {
+      goldTake = gain;
       w.score.jackpot(S.jackpotBias > 1 ? 'major' : 'minor');
-      sfx('golden_pop', 0.9); shake.shake(0.35, 240); poke('jackpot', 1.4); w.kart.pose('cheer');
+      sfx('golden_pop', 0.9); shake.shake(0.55, 320); poke('jackpot', 1.6); w.kart.pose('cheer');
+    } else if (p.id === 'lucky' || p.id === 'prism') {
+      hud.toast(`${p.id} +${gain}`, 'jackpot');
+      shake.shake(0.3, 220); poke('smug', 1.2);
     }
   }
   /**
@@ -533,7 +541,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       case 'miss': hud.setCombo(0, e.mult); break;
       case 'almost': hud.setScore(e.score); hud.toast(`almost +${e.gain}`, 'almost'); break;
       case 'bank': hud.setBank(e.banked); hud.setScore(0); hud.toast(`kept +${e.amount}`, 'bank'); break;
-      case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain}`, 'jackpot'); break;
+      case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain + goldTake}`, 'jackpot'); goldTake = 0; break;
     }
   }
   // ---- THE PICKUPS (race/pickups.js): passive, taken by driving through them ----

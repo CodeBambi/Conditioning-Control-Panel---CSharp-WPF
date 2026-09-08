@@ -39,7 +39,7 @@ export const ROOMS = [
   { id: 'teagarden', name: 'The Tea Garden', tagline: 'nothing here fights you', biome: 'mirrorlake',
     colors: { road: 0x2f6e50, edge: 0xf6e7c8, prop: 0xffb6d9, fog: 0x12261f, banner: 0x5fa98a },
     propKind: 'teacup', loud: false,
-    bubbleBias: { treat: 1.4, golden: 0.8, lucky: 1.2, subliminal: 0.5, video: 0 },
+    bubbleBias: { treat: 1.4, subliminal: 0.5, video: 0 },
     ambient: { kind: 'petals', colors: [[255, 182, 217], [191, 235, 216], [246, 231, 200]] } },
   { id: 'toybox', name: 'The Toybox', tagline: 'the floor bounces. so do you', biome: 'toybox',
     colors: { road: 0x33307f, edge: 0xffd23f, prop: 0xffd23f, fog: 0x14103a, banner: 0x6c63d8 },
@@ -49,7 +49,7 @@ export const ROOMS = [
   { id: 'casino', name: "The Fool's Casino", tagline: 'the wheel always pays. eventually', biome: 'casino',
     colors: { road: 0x5c1128, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x0b0508, banner: 0xa3122e },
     propKind: 'chip', loud: true, propAlt: [0xa3122e],
-    bubbleBias: { golden: 2.0, lucky: 2.0, glitch: 1.3, treat: 0.9 },
+    bubbleBias: { golden: 2.5, lucky: 2.5, glitch: 1.4, pink: 1.2, treat: 0.9 },
     ambient: { kind: 'coins', colors: [[242, 193, 78], [255, 240, 160]] } },
   { id: 'undertow', name: 'The Undertow', tagline: 'the lane drifts. let it', biome: 'undertow',
     colors: { road: 0x15446c, edge: 0x7fe7f0, prop: 0x1fa9b5, fog: 0x06202a, banner: 0x2a8fa8 },
@@ -74,7 +74,7 @@ export const ROOMS = [
   { id: 'coronation', name: 'The Coronation', tagline: 'the run remembers. so will you', biome: 'coronation',
     colors: { road: 0x661838, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x3a0716, banner: 0x7a0f2b },
     propKind: 'crown', loud: true,
-    bubbleBias: { golden: 1.5, video: 1.6, gifrain: 1.4, pink: 1.2 },
+    bubbleBias: { golden: 2.0, video: 1.6, gifrain: 1.6, pink: 1.4, spiral: 1.2 },
     ambient: { kind: 'goldleaf', colors: [[242, 193, 78], [255, 105, 180]] } },
 ];
 const ROOM_BY_ID = Object.fromEntries(ROOMS.map((r) => [r.id, r]));

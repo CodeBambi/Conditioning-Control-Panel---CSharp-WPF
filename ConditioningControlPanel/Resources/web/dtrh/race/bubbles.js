@@ -172,7 +172,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
       if (k.kind === 'effect' && gate < 1) { if (gate <= 0) return 0; return gate * (placement === 'rain' ? 0.5 : 1); }
       if (k.id === 'video' && liveOf('video') > 0) return 0;      // one video on the road at a time
       if (k.id === 'freeze' && liveOf('freeze') > 1) return 0;
-      if (placement === 'air' && k.id === 'golden') return 3;     // gold favours the air line
+      if (placement === 'air' && k.kind === 'effect') return 1.6;  // the air line is where the effects live
       if (placement === 'rain' && k.kind === 'effect') return 0.5;
       return 1;
     };
@@ -242,8 +242,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     seeded.add(chunk.id);
     chunkRecs.push({ id: chunk.id, d0: chunk.d0, d1: chunk.d1 });
     const len = Math.max(0, chunk.d1 - chunk.d0);
-    if (sparse) {   // the file dresses this road, not us: one golden to say where the chunk ended, nothing else
-      if (chunk.kind !== 'gate' && len > 8) place('golden', 'lane', chunk.d1 - 2.5, 0, LANE_H);
+    if (sparse) {   // the file dresses this road, not us: one bubble to say where the chunk ended, nothing else
+      if (chunk.kind !== 'gate' && len > 8) place(roll('lane'), 'lane', chunk.d1 - 2.5, 0, LANE_H);
       return;
     }
     if (chunk.id === 1 && chunk.room === 'teagarden' && chunk.kind === 'straight') seedStartStraight(chunk);
@@ -357,14 +357,14 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const f = layout.frameAtDepth(s.d);
     const dirs = dirRing[dirNext]; dirNext = (dirNext + 1) % DIR_RING;
     dirs.r.copy(f.right); dirs.u.copy(f.up);
-    const n = golden ? 12 : 7;
+    const n = golden ? 16 : 7;
     for (let i = 0; i < n; i++) {
       // next free shard scanning from where the last burst stopped; a full ring steals the oldest slot
       let sh = null;
       for (let j = 0; j < SHARD_CAP; j++) { const c = shards[(shardNext + j) % SHARD_CAP]; if (!c.alive) { sh = c; shardNext = (shardNext + j + 1) % SHARD_CAP; break; } }
       if (!sh) { sh = shards[shardNext]; shardNext = (shardNext + 1) % SHARD_CAP; }
       const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
-      const v = rand(2.2, 4.6) * (golden ? 1.3 : 1);
+      const v = rand(2.2, 4.6) * (golden ? 1.5 : 1);
       sh.alive = true; sh.age = 0; sh.life = rand(0.35, 0.6);
       sh.p0.copy(s.sprite.position); sh.r = dirs.r; sh.u = dirs.u;
       sh.vr = Math.cos(ang) * v; sh.vu = Math.sin(ang) * v + 1.2;
@@ -379,7 +379,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const k = KIND_BY_ID[s.kindId];
     s.popT = 0;
     spendRow(s.rowId);              // one of the row is the row: the rest may not be missed behind it
-    const golden = k.id === 'golden';
+    const golden = k.id === 'golden' || k.id === 'lucky' || k.id === 'prism';   // a gold take is the loud one now
     burst(s, golden);
     const strength = k.strength > 0 ? clamp(k.strength + 0.35 * intensity() + Math.random() * 0.1, 0, 1) : 0;
     emit(popCbs, { id: k.id, kind: k.kind, payload: k.payload, overlayKind: k.overlayKind, strength,
