@@ -240,6 +240,11 @@ Combo drops to 0 after `COMBO_HOLD_SEC` with no word DUE: a pop resets that cloc
 missed cannot time the ladder out on two gaps that are each inside the hold. `bank()` moves `score` into `banked` at the
 Tea Garden gate (THE BANK). Events: `{ type:'pop'|'miss'|'combo'|'mult'|'bank'|'jackpot'|'almost', ... }`.
 
+A word event may also carry `est: true`: the second is this build's estimate, not the aligner's,
+because the run it is in was collapsed onto one instant and `race/wordBubbles.js` put it back over
+the silence it was said in. Nothing in the game reads it yet; it is there so a bad transcript is
+visible in the chart rather than only on the road.
+
 ### `race/kart.js` (PR 3)
 ```js
 export function createKart({ scene, layout, reducedMotion }) -> kart
