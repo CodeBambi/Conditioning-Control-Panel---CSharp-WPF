@@ -24,6 +24,10 @@
  *      not, and neither of them cost a request
  *   4. a tap is a ONE TRACK run: that track and nothing else, and the run's
  *      clock is the file's clock
+ *  4b. the tapped row IS the status: it alone is `is-picked`, it alone grows a
+ *      progress bar, a road in hand fills that bar and reads `loaded`, the old
+ *      bottom plate stays down for a listed level, and `back` is pinned to the
+ *      bottom of the column (still the last row the arrows walk)
  *   5. `again` lands on the last level played, and it survives a reload
  *   6. `play the set` is the whole list in order, the first one is the authored
  *      chart, and the end of a file rolls the lap on to the next level
@@ -225,6 +229,29 @@ await sleep(3000);
   ok(st.list.length === 1 && st.list[0].id === 'stub-two', 'a tap plays that level and NOTHING else: ' + JSON.stringify(st.list.map((e) => e.id)));
   ok(st.at === 0 && st.busy === false, 'and it is the track in hand');
   ok(await ev(`document.querySelector('.rm-track-name').textContent`) === 'The Second One', 'the plate names it');
+}
+
+/* ---- 4b. the picked row IS the status, and `back` never leaves the screen ---- */
+{
+  const rows = await json(`[...document.querySelectorAll('.rm-levels .rm-level-btn')].map(b=>({
+    id: b.dataset.id, picked: b.classList.contains('is-picked'), loaded: b.classList.contains('is-loaded'),
+    bar: b.querySelector('.rm-level-bar') ? getComputedStyle(b.querySelector('.rm-level-bar')).display : 'none',
+    fill: b.querySelector('.rm-level-bar > i') ? b.querySelector('.rm-level-bar > i').style.width : '',
+    mark: b.querySelector('.rm-level-mark').textContent,
+  }))`);
+  const two = rows.find((r) => r.id === 'lv-2'), one = rows.find((r) => r.id === 'lv-1');
+  ok(two.picked && !one.picked, 'the row that was tapped is the picked one, and it is the only one');
+  ok(two.bar === 'block' && one.bar === 'none', 'the picked row grew its own progress bar and no other row has one');
+  ok(two.fill === '100%' && two.loaded, `the road is in hand, so the bar is full and the row reads loaded (${two.fill}, mark "${two.mark}")`);
+  ok(await ev(`window.__race.levels.state.picked`) === 'stub-two', 'and the panel names that level as the picked one');
+  // the plate under the list is exactly what the picked row replaces: it stays down for a level
+  ok(await ev(`document.querySelector('.rm-track').hidden === true`), 'the old bottom row (the track plate) is NOT shown for a listed level');
+  const back = await json(`(()=>{const col=document.querySelector('.rm-col'); col.scrollTop = 99999;
+    const b=document.querySelector('.rm-levels-foot .rm-btn[data-id=back]'), f=document.querySelector('.rm-levels-foot'), r=b.getBoundingClientRect();
+    return { pos: getComputedStyle(f).position, top: Math.round(r.top), bottom: Math.round(r.bottom), h: innerHeight, last: b === [...document.querySelectorAll('.rm-cloud [role=menuitem]')].pop() };})()`);
+  ok(back.pos === 'sticky', 'the foot is pinned to the bottom of the scrolling column');
+  ok(back.top >= 0 && back.bottom <= back.h, `so back is on the screen with the column scrolled to the end (${back.top}..${back.bottom} of ${back.h})`);
+  ok(back.last === true, 'and it is still the LAST row, so the arrows and the pad walk the order they always did');
 }
 await click('.rm-levels-foot .rm-btn[data-id=back]');
 await click('.rm-list .rm-btn[data-id=race]');

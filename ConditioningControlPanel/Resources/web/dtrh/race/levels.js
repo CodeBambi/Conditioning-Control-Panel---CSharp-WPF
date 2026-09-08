@@ -31,6 +31,23 @@
  * costs NO NETWORK: the index is same-origin and already fetched, and the key is
  * the cloudId off the url.
  *
+ * THE PICKED ROW IS THE STATUS. Tapping a level opens no second panel anywhere:
+ * THAT ROW lights (`is-picked`, a pink plate a thumb cannot miss) and grows a
+ * progress bar under its title, and the bar carries the same number the menu's
+ * track plate used to - the web lane's chart steps (reading, decoding, charting,
+ * naming) through `setStage`, a host's `track-progress` pct through `setTrack`.
+ * `setTrack(state)` answers TRUE when it painted that state on a row, and
+ * raceBoot hides the plate for exactly that answer: a pasted link and a picked
+ * file still get the plate, a listed level never does. WHICH row is picked is
+ * read live off the player on the web (`play the set` rolling on to level 4
+ * lights level 4; a pasted link playing lights nothing) and off the last tap on
+ * a desktop host, which owns playback and reports back through track-progress.
+ *
+ * `back` IS ALWAYS ON SCREEN. Eleven rows are taller than a phone, so the foot
+ * is `position: sticky` against the bottom of the scrolling column (menu.css).
+ * It rides the bottom edge at every scroll position and is still the LAST row
+ * the keyboard and the pad walk to, so no index math moved.
+ *
  * THE PASTE BOX IS STILL THERE. `or paste a link` opens lane W1's panel under
  * the list, unchanged, so a track that is not one of the levels is still one
  * paste away.
@@ -58,6 +75,22 @@ export const ROAD_MARK = 'road';
 export const AGAIN_MARK = 'again';
 export const OVER_THERE_LINE = 'press play over there';
 export const EMPTY_LINE = 'no levels on this build, paste a link instead';
+
+/**
+ * How full the picked row's bar is on each step, so one number can come from two
+ * very different places. The four on the left are race/cloudChart.js's own words
+ * (the web lane, through setStage); the rest are the host's `track-progress`
+ * stages (CHART.md), which also carry a real pct and use it when they do.
+ */
+export const STAGE_PCT = {
+  reading: 0.3, decoding: 0.55, charting: 0.75, naming: 0.9,
+  opening: 0.08, fetching: 0.35, decode: 0.55, energy: 0.75, words: 0.9, loading: 0.15,
+};
+/** The mark a host's stage puts on the picked row. The web lane's own words are already marks. */
+export const STAGE_MARK = {
+  opening: 'over there', fetching: 'loading', decode: 'reading', energy: 'charting', words: 'naming',
+  ready: 'loaded', error: 'would not load',
+};
 
 /** The verb's whole visibility rule: a build that carries the levels, host or no host. */
 export function levelsEnabled(settings) {
@@ -149,6 +182,8 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
   let levelRows = [], tailRows = [], backRow = null;
   let pasteOpen = false, disposed = false;
   let stageId = '', stageWord = '';
+  let pickedId = '';                 // the last level TAPPED here; the web player below can outvote it
+  let prog = null;                   // { pct, mark } from a host's track-progress, or null
   let last = '';
   let onPick = null, onClose = null, onRefresh = null;
 
@@ -176,10 +211,40 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
     return st.playing ? 'playing' : 'paused';
   }
 
-  /** The small mark on the right of a row. State first, then memory, then the road it will get. */
+  /**
+   * WHICH ROW IS THE PICKED ONE. On the web the player is the truth: whatever race/cloud.js
+   * holds right now is what the panel lights, so `play the set` rolling on lights the next
+   * row by itself and a pasted link playing lights NOTHING (it is not on this list, and its
+   * status belongs to the menu's plate). With no player here - a desktop host, which owns
+   * playback outright - the last tap is all there is, and the host's progress lands on it.
+   */
+  function pickedLevel() {
+    if (!desktop && cloud) {
+      let st = null;
+      try { st = cloud.state; } catch (e) { st = null; }
+      if (st && st.at >= 0) {
+        const cur = st.list[st.at];
+        return (cur && levels.find((l) => l.id === cur.id)) || null;
+      }
+    }
+    return (pickedId && levels.find((l) => l.id === pickedId)) || null;
+  }
+
+  /** How full the picked row's bar is, 0..1. -1 means this row carries no bar at all. */
+  function pctOf(lv) {
+    if (lv !== pickedLevel()) return -1;
+    const live = playerState(lv);
+    if (live === 'loaded' || live === 'playing' || live === 'paused') return 1;
+    if (live && STAGE_PCT[live] != null) return STAGE_PCT[live];
+    if (prog) return prog.pct;
+    return live ? STAGE_PCT.loading : 0;
+  }
+
+  /** The small mark on the right of a row. State first, then the host's, then memory, then the road it will get. */
   function markOf(lv) {
     const live = playerState(lv);
     if (live) return live;
+    if (prog && prog.mark && lv === pickedLevel()) return prog.mark;
     if (lv.id === last) return AGAIN_MARK;
     return authored(lv) ? HAND_MARK : ROAD_MARK;
   }
@@ -188,6 +253,7 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
   /** A tap on a level. One track, one run. On a desktop it is a door, not a download. */
   function tap(lv) {
     remember(lv.id);
+    pickedId = lv.id; prog = null;   // the row itself is the answer from here on
     if (desktop) {
       call('open', FILE_PAGE + lv.id, lv.title);
       call('toast', OVER_THERE_LINE);
@@ -204,6 +270,7 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
   function playSet() {
     if (!levels.length) return;
     remember(levels[0].id);
+    pickedId = levels[0].id; prog = null;
     say(set.title + ': all ' + levels.length);
     call('play', levels.map(entry));
     paint();
@@ -233,12 +300,20 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
 
   function paint() {
     if (!slotEl || disposed) return;
+    const picked = pickedLevel();
     for (let i = 0; i < levels.length; i++) {
       const b = levelEls[i]; if (!b) continue;
       const lv = levels[i], mark = markOf(lv), m = b.querySelector('.rm-level-mark');
       if (m && m.textContent !== mark) m.textContent = mark;
       b.classList.toggle('is-on', !!playerState(lv));
       b.classList.toggle('is-hand', authored(lv));
+      // the picked row IS the status: it lights, and the bar under its title is the load
+      const pct = pctOf(lv), on = pct >= 0;
+      b.classList.toggle('is-picked', on);
+      b.classList.toggle('is-loaded', pct >= 1);
+      if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+      const fill = b.querySelector('.rm-level-bar > i');
+      if (fill) fill.style.width = `${Math.round(Math.max(0, Math.min(1, pct)) * 100)}%`;
     }
     const pasteBtn = tailEls[tailEls.length - 1];
     if (pasteBtn && cloudUi) {
@@ -270,6 +345,8 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
       elm('span', 'rm-level-title', b, lv.title);
       elm('span', 'rm-level-len', b, mmss(lv.durationSec));
       elm('span', 'rm-level-mark', b, '');
+      // the bar lives IN the row, under the title, and only the picked row ever shows it
+      const bar = elm('i', 'rm-level-bar', b); elm('i', '', bar);
       b.addEventListener('click', (ev) => { ev.stopPropagation(); if (onPick) onPick(i); });
       levelEls.push(b);
       levelRows.push({ id: 'lv-' + lv.n, label: lv.title, press: () => tap(lv) });
@@ -314,7 +391,32 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
     paint,
     /** Lane W2's progress, landing on the row it belongs to. '' takes the stage word off again. */
     setStage(id, word) { stageId = String(id || ''); stageWord = String(word || ''); paint(); },
-    get state() { return { desktop, sets: sets.length, levels: levels.length, pasteOpen, last, stage: stageWord }; },
+    /**
+     * The state the menu's track plate would have shown. TRUE when this panel painted it on a
+     * picked row instead, which is raceBoot's whole rule for hiding the plate.
+     *   picking  a file dialog: not a level at all, so the pick is dropped and the plate takes it
+     *   null     nothing loaded any more: the row goes back to being a row
+     * A state with no picked row under it (a pasted link, a file) is never claimed.
+     */
+    setTrack(state) {
+      const st = state && state.stage ? state : null;
+      if (!st || st.stage === 'picking' || st.stage === 'cancelled') {
+        if (!st || st.stage === 'picking') { pickedId = ''; prog = null; }
+        paint();
+        return false;
+      }
+      if (!pickedLevel()) { prog = null; paint(); return false; }
+      const pct = Number(st.pct);
+      prog = {
+        pct: st.stage === 'ready' ? 1 : (isFinite(pct) && pct > 0 ? Math.max(0, Math.min(1, pct)) : (STAGE_PCT[st.stage] || 0)),
+        mark: STAGE_MARK[st.stage] || '',
+      };
+      paint();
+      return true;
+    },
+    /** Which level the panel is lit on right now, or ''. The smoke's window on the pick. */
+    get picked() { const lv = pickedLevel(); return lv ? lv.id : ''; },
+    get state() { return { desktop, sets: sets.length, levels: levels.length, pasteOpen, last, stage: stageWord, picked: (pickedLevel() || {}).id || '' }; },
     dispose() { disposed = true; try { if (cloud) cloud.dispose(); } catch (e) { /* already gone */ } },
   };
 }

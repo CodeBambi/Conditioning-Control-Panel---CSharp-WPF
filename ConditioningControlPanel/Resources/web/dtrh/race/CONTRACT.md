@@ -443,6 +443,12 @@ createIntro({ stage, hud, audio, reducedMotion, log }) -> { play(): Promise, ski
 cameraWhip(sec) / resultsCamera({ tier, reducedMotion }) / preRollCamera() -> fn(camera, dt, w, camOut), `false` when done
 resultTier(total, best, personalBest) -> 0..4 (the face index)
 ```
+- THE LEVELS PANEL owns its own status (race/levels.js, CLOUD.md "the picked row IS the status"): the row a
+  player tapped lights and carries the load bar itself, so `menu.setTrack(state, onRow)` takes a second
+  argument - `onRow` true (raceBoot got it from `levels.setTrack(state)`) keeps the verbs following the state
+  and holds the plate down, because the row is already saying it. A pasted link or a picked file is claimed by
+  nobody and still gets the plate. `.rm-levels-foot` is `position: sticky` at the bottom of `.rm-col` so `back`
+  is on screen at every scroll position, and it is still the last row `rows()` / `els()` hand over.
 - Boot order: splash (a 1 s title flash) -> menu (the resting state) -> `race` -> intro on the menu stage -> run under the
   camera whip. `?autostart=1` skips menu and intro (the headless checks depend on it), `?intro=0` skips the intro only,
   `?scene=intro` boots straight into the intro. `surface` from the menu sends the same `exit` + `exit-done` the End screen does.

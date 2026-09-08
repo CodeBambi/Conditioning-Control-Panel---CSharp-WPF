@@ -3,8 +3,10 @@
  *
  *   createMenu({ root, renderer, pixel, audio, settings, log, send }) ->
  *     { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose() }, dispose() }
- *   onPick yields 'race' | 'track' | 'clear' | 'story' | 'surface'; setTrack(state | null) drives the
- *   track plate (CHART.md: the host's track-progress and the chart that lands). refreshView() parks
+ *   onPick yields 'race' | 'track' | 'clear' | 'story' | 'surface'; setTrack(state | null, onRow) drives the
+ *   track plate (CHART.md: the host's track-progress and the chart that lands) - `onRow` is the levels
+ *   panel saying it painted that state on the picked row itself, so only the verbs follow it and the
+ *   plate stays down (a pasted link and a picked file still get the plate). refreshView() parks
  *   the stage where the column would park it even while the menu is hidden (race/cards.js borrows it).
  *   setLocalMedia(frame) and settingEcho(frame) feed the media panel below; `send` is the only way out
  *   to the host from in here, and only that panel uses it.
@@ -679,11 +681,15 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
    * durationSec, countable, partial, authored, message }; stage 'ready' is a chart in hand (partial
    * while the words are still landing, authored when a person wrote it rather than the analysis).
    * Null clears the plate and the verbs read as the seeded run again.
+   *
+   * `onRow` is raceBoot saying the LEVELS panel already painted this state on the picked row
+   * (race/levels.js): the verbs still follow it - `race the track` is the whole point of knowing -
+   * but the plate stays down, because two places saying the same thing is one place too many.
    */
-  function setTrack(state) {
+  function setTrack(state, onRow) {
     trackState = state && state.stage ? state : null;
     const st = trackState, ready = !!st && st.stage === 'ready';
-    trackEl.hidden = !st || st.stage === 'cancelled';
+    trackEl.hidden = !st || st.stage === 'cancelled' || !!onRow;
     trackEl.classList.toggle('is-ready', ready); trackEl.classList.toggle('is-error', !!st && st.stage === 'error');
     trackEl.classList.toggle('is-busy', !!st && !ready && st.stage !== 'error');
     if (st) {

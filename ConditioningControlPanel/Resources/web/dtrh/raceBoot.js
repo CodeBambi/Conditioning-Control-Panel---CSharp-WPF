@@ -228,8 +228,17 @@ bridge.on('track-progress', (m) => {
   // a cancelled dialog leaves whatever was loaded before in place; any other stage is the host at work
   plate(m.stage === 'cancelled' ? trackReady : { stage: m.stage, pct: m.pct, name: m.name });
 });
-/** The menu's plate, when there is a menu to show it on (the run has the toast instead). */
-function plate(state) { try { if (menu && !started) menu.setTrack(state); } catch (e) { host.log('plate: ' + e); } }
+/**
+ * Where a track's progress goes while the menu is up (the run has the toast instead). The LEVELS
+ * panel gets first refusal: a state that belongs to a row picked in there is painted ON that row,
+ * bar and all, and the plate stays down. Anything the panel does not claim - a pasted link, a file
+ * the host picked, the seeded road - is the plate's, exactly as it always was.
+ */
+function plate(state) {
+  let onRow = false;
+  try { onRow = !!(levels && levels.setTrack(state)); } catch (e) { host.log('levels plate: ' + e); }
+  try { if (menu && !started) menu.setTrack(state, onRow); } catch (e) { host.log('plate: ' + e); }
+}
 function trackError(message) {
   host.log('track-error: ' + message);
   try { if (race && race.hud) race.hud.toast(String(message).slice(0, 60).toLowerCase(), 'effect'); } catch (e) { /* no hud yet */ }
