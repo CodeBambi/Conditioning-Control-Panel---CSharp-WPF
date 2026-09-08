@@ -14,10 +14,12 @@
  *   3. the hold timer returns to `cruise` on its own;
  *   4. sided presets mirror (L and R swap, y and z and the root lean negate);
  *   5. the tuck's antDown is exactly zero upright and non-zero inverted, and the
- *      layer never touches a pivot the model does not have.
+ *      layer never touches a pivot the model does not have;
+ *   6. the countdown chain (ready -> grip -> cruise, launch -> cruise), the `amp`
+ *      dial for reduced motion, and snapshotRest surviving a mixer frame.
  * ==========================================================================*/
 
-import { POSES, PIVOTS, resolvePose, createPoseLayer } from '../emiPoses.js';
+import { POSES, PIVOTS, resolvePose, createPoseLayer, snapshotRest } from '../emiPoses.js';
 
 let fails = 0;
 const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -123,6 +125,58 @@ ok(!!POSES.cruise && !POSES.cruise.hold, 'cruise is the resting pose and never t
   B.set('cheer'); run(B, 1);
   ok(Number.isFinite(bare.kids.get('shoulderL').rotation.x), 'a pack missing three pivots still drives the one it has');
   ok(createPoseLayer(null).update(1 / 60, CTX) === undefined, 'no model at all is a no-op, not a throw');
+}
+
+/* ---- 6. the countdown idle, `amp` and the banked rest ------------------- */
+{
+  // 3 2 1: every number bobs her up (`ready`) and drops her back onto the brim (`grip`), and the
+  // grip's own hold is the safety net for a count that is skipped and never says GO.
+  const m = makeModel(), L = createPoseLayer(m);
+  ok(L.set('ready', { side: 1 }), 'set("ready") takes');
+  run(L, POSES.ready.hold + 0.05);
+  ok(L.name === 'grip', 'a countdown beat drops back into grip');
+  run(L, POSES.grip.hold + 0.2);
+  ok(L.name === 'cruise', 'and an abandoned count walks itself back to cruise');
+  L.set('launch');
+  run(L, 0.25);
+  ok(m.scale.y < 0.95 && m.position.y < 0, 'GO crouches: the root squashes and drops');
+  run(L, POSES.launch.hold + 2.5);
+  ok(L.name === 'cruise', 'and the launch hands over to cruise for the run');
+
+  const a = resolvePose('ready', { side: 1 }), b = resolvePose('ready', { side: -1 });
+  ok(near(b.footL[0], a.footR[0]), 'the countdown tap alternates: side -1 swaps the feet');
+  ok(near(a.shoulderL[0], b.shoulderR[0]) && near(a.shoulderL[2], -b.shoulderR[2]), 'but both hands stay on the brim either way');
+
+  // `amp` is the reduced-motion dial: the gesture survives, the bounce does not.
+  const full = resolvePose('ready'), quiet = resolvePose('ready', { amp: 0.3 }), flat = resolvePose('ready', { amp: 0 });
+  ok(Math.abs(quiet.root.lift) < Math.abs(full.root.lift) && Math.abs(quiet.root.lift) > 0, 'amp 0.3 keeps a smaller bob');
+  ok(near(flat.root.lift, 0) && near(flat.root.tilt, 0) && near(flat.root.squash, 1), 'amp 0 flattens the root entirely');
+  ok(near(flat.shoulderL[0], full.shoulderL[0]), 'and never touches the arms');
+
+  // `arms` is the other dial: the intro's cup is bigger and she sits higher in it, so it asks for a
+  // fraction of the swing - and the fraction has to survive the chain into `next`.
+  const half = resolvePose('ready', { arms: 0.5 });
+  ok(near(half.shoulderL[0], full.shoulderL[0] * 0.5) && near(half.footL[0], full.footL[0] * 0.5), 'arms 0.5 halves every limb');
+  ok(near(resolvePose('ready', { arms: 0 }).shoulderL[2], 0), 'arms 0 leaves her exactly as the pack authored her');
+  const m2 = makeModel(), L2 = createPoseLayer(m2);
+  L2.set('ready', { arms: 0.3 });
+  run(L2, POSES.ready.hold + 0.05);
+  ok(L2.name === 'grip', 'the beat still chains');
+  run(L2, 0.8);
+  ok(near(m2.kids.get('shoulderL').rotation.x, POSES.grip.shoulderL[0] * 0.3, 0.02), 'and grip inherits the arms dial instead of snapping to a full swing');
+}
+{
+  // snapshotRest: a mixer-driven model has moved by the time anyone asks for a layer, so the rest
+  // the layer offsets from must be the one banked while the stance was still the pack's.
+  const m = makeModel();
+  m.kids.get('shoulderL').rotation.set(-0.2443, 0, 0.5);
+  const kept = snapshotRest(m);
+  ok(!!kept && near(kept.shoulderL[2], 0.5), 'snapshotRest banks the authored rotation');
+  m.kids.get('shoulderL').rotation.set(1.1, 0, -2.2);        // the mixer, mid-clip
+  const L = createPoseLayer(m);
+  L.set('cruise'); run(L, 3);
+  ok(near(m.kids.get('shoulderL').rotation.z, 0.5 + POSES.cruise.shoulderL[2], 5e-3), 'and the layer offsets from the bank, not the mixer frame');
+  ok(snapshotRest(null) === null, 'snapshotRest(null) is null, not a throw');
 }
 
 console.log(fails ? `\n${fails} failure(s)` : '\nposes-smoke: all good');

@@ -84,6 +84,7 @@
 import * as THREE from 'three';
 import { wantsTouch } from './touch.js';
 import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
+import { snapshotRest } from './emiPoses.js';
 import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
 import { createMenuFlashes } from './menuFlashes.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
@@ -339,6 +340,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     });
     preparePixel(model, pixel);
     emi.root.add(model); emi.model = model;
+    snapshotRest(model);   // the authored stance, banked before the mixer below ever moves a shoulder
     // her real silhouette, for the band framing: the box the idle pose sits in, taken once.
     emi.root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);

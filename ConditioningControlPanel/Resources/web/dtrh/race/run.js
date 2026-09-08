@@ -836,6 +836,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (!W) return;
     if (S.running && !S.paused && !S.hostPaused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
+    } else if (!S.running && !S.ended) {
+      // the pre-roll count: the world is parked but she is not. Her pose springs only, no physics.
+      try { W.kart.idle(dt); } catch (e) { /* an old kart without idle() just stands there */ }
     }
     if (camOverride && camOverride(camera, dt, W, camOut) === false) camOverride = null;
     pixel.render(scene, camera);
@@ -892,10 +895,19 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     W = build(S.seed);
     try { renderer.compile(scene, camera); } catch (e) { /* a warm-up only: the first frame compiles what this missed */ }
   }
+  /** The same tick idle the intro plays, on the run's own rig: a bob per number, a shove on GO. */
+  function countTick() {
+    let beat = 0;
+    const amp = reducedMotion ? 0.3 : 1;
+    return (s) => {
+      if (!W || !W.kart.pose) return;
+      try { W.kart.pose(s === 'go' ? 'launch' : 'ready', { side: (beat++ % 2) ? -1 : 1, amp }); } catch (e) { /* no glb, no pose */ }
+    };
+  }
   function again() {
     reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
-    hud.countdown().then(start);
+    hud.countdown({ onTick: countTick() }).then(start);
   }
   /**
    * `surface` on the End screen: the way back to the MENU. The world goes (the menu does not need

@@ -241,6 +241,7 @@ kart.emiModel()                  // the mounted race/assets/emi.glb root, or nul
 kart.emiReady(cb)                // cb(root) when she is mounted (fires at once if she already is)
 kart.setFace(i)                  // face atlas frame 0..4 (menus and results; never seen in race)
 kart.pose(name, opts)            // the pose layer, race/emiPoses.js
+kart.idle(dt)                    // the rider only, world parked (the `again` count: no physics, no camera)
 kart.dispose()
 ```
 `createKart` also takes `pixel` (race/pixel.js): the glb's textures land after the run's one
@@ -265,9 +266,12 @@ emoticons only, never a drawn face, never a speech line.
 export const POSES, PIVOTS;   // the pure preset table, and the four glb pivots a preset may name
 export function resolvePose(name, opts) -> flattened target
 export function createPoseLayer(model) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
+export function snapshotRest(model)     // bank the authored stance before a mixer moves it
 ```
 Poses: `cruise` (the rest), `drift`, `boost` -> `boostOut`, `air`, `landing` / `landingKerb`,
-`grab`, `clamp`, `tuck`, `throw`, `cheer`. `opts` = `{ side:-1|1, tier:1..3, hold:sec }`; sided
+`grab`, `clamp`, `tuck`, `throw`, `cheer`, and the countdown set `ready` -> `grip` and `launch`.
+`opts` = `{ side:-1|1, tier:1..3, hold:sec, amp:0..1 }` (`amp` scales the whole-body part only, so
+reduced motion keeps the gesture and loses the bounce); sided
 presets are authored for +1 and mirrored for -1. Every value is an offset on the pack's authored
 rest rotation, blended on damped springs (Law XI, never a linear tween), and a pose with a `hold`
 falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and emi.js takes the
@@ -281,6 +285,13 @@ degrees around from dead ahead, and the forward half of that arc hides behind he
 chase camera, so the grips sit at 66..79 degrees. Re-solve, do not eyeball: a hand that drops below
 the lip vanishes inside the cup. The hands ride the cup through the steer lean for free - the seat
 and `kart_cup` share the body group that tips.
+
+**The countdown.** `ready` -> `grip` is one beat of the 3 2 1 and `launch` is GO. Both counts drive
+them off the HUD's own ticks, never a hand-timed script: `intro.js` builds a layer over the menu
+stage's glb inside `count()` (written after `stage.update`, so it beats the idle clip, and disposed
+with the intro), and `run.js`'s `again` passes an `onTick` and leans on `kart.idle(dt)` to turn the
+springs while the world is still parked. `menu.js` calls `snapshotRest` the moment the glb lands so
+the layer offsets from the pack's stance and not from whatever frame the mixer was on.
 
 ### `race/pickups.js` (the passive pickups)
 ```js
