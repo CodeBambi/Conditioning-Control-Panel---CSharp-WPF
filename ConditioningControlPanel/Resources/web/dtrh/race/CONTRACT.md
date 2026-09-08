@@ -92,7 +92,9 @@ Returns a `layout` object that is ALSO a valid argument to `engine/tunnel.js cre
 - `chunks` -> ordered array of `{ id, kind, d0, d1, room, features }`.
   `kind` in `straight | bendL | bendR | sCurve | climb | dip | ramp | chicane | loop | gate`.
   `features` is an array of:
-  - `{ type:'ramp', d, airLen, height }` - lip at `d`, air line from `d` to `d + airLen`, apex `height`
+  - `{ type:'ramp', d, airLen, height, vh, airSec }` - lip at `d`, apex `height`; `vh`/`airSec` are
+    the launch speed and the hang time the kart really flies at cruise, and `airLen` is that
+    flight's own length, so the air line ends where the saucer lands
   - `{ type:'boost', d, x }` - boost pad centre
   - `{ type:'loop', d0, d1 }` - the Big Wheel occupies `d0..d1`
   - `{ type:'gate', d, room }` - room boundary; MARQUEE fires here
@@ -100,6 +102,15 @@ Returns a `layout` object that is ALSO a valid argument to `engine/tunnel.js cre
 - `featuresBetween(d0, d1)` -> features whose `d` (or `d0`) falls in the wrapped range.
 - `roomAtDepth(d)` -> room id.
 - `rampAt(d)` -> the ramp feature whose air line covers `d`, else `null`.
+- THE REACHABLE LINE, the one height everything on the road is measured from:
+  - `surfaceH(d)` -> the asphalt at `d`. 0 on open road; over the `RAMP_LEN` metres of wedge in
+    front of a lip it climbs to `RAMP_H` (consts.js owns both, rooms.js draws the wedge to them).
+  - `surfaceSlope(d)` -> that wedge's gradient, 0 elsewhere (kart.js pitches the saucer to it).
+  - `airLineAt(d)` -> `{ ramp, u, h }` inside a flight window, else `null`: the kart's own
+    ballistic arc off the lip at cruise.
+  - `rideH(d)` -> the arc where there is one, else the asphalt. NOTHING may hang at a flat height
+    over a ramp: bubbles.js measures every height off `rideH(d)`, so a bubble is never drawn
+    inside the wedge nor left metres under a kart in the air.
 
 Track shape rules: one Tea Garden start straight, then the rooms in `roomOrder`, each room = 4..7
 chunks, exactly one loop somewhere after the first two rooms, at least one ramp per room, the whole
@@ -224,9 +235,13 @@ since 2026-09-08, having pointed at the dark `video` bubble since that one went 
 `race/smoke/gifrain-row-check.mjs` drives a real run and holds the cascades against the rain
 bubbles that were laid, reading `race.fxStats()` - every payload the mixer has poured.
 
-Placements: `lane` (rests on the road, h ~0.9, bobbing), `air` (along a ramp air line, h rises
-2..5), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` to the road in
-about 4 s, rests 2 s, then fizzles). Collision is pass-through: pop when
+Placements, ALL of them measured off `layout.rideH(d)` (the spine's reachable line) and never off
+the flat road plane: `lane` (rests `LANE_H` over the line, bobbing), `air` (`LANE_H` over the
+flight arc, one every 2 m for the first 10 m of it, the stretch every pace in the band can still
+reach), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` and lands ON
+the line, rests 2 s, then fizzles). A row that walks onto a ramp climbs the wedge with it.
+`race/smoke/slope-check.mjs` walks every chart and seed through the real placement and holds it:
+nothing inside a slope, nothing outside the pop box of the line, at every pace. Collision is pass-through: pop when
 `|dd| < POP_HIT_D && |dx| < POP_HIT_X && |dh| < POP_HIT_H`.
 
 ### `race/score.js` (PR 2)
@@ -273,7 +288,8 @@ lathe cup, its rim torus, the handle tube, the saucer cylinder and its rim are t
 the tea disc, the pink saucer mark, `cupLight`, the seat and `TEA_Y` are shared by both paths.
 Speed: cruise `KART_BASE_SPEED`, cap `KART_MAX_SPEED`, floor `KART_MIN_SPEED`. Ramps: when
 `layout.rampAt(d)` matches the lip, give `vh` an upward impulse scaled by speed; `GRAVITY` pulls
-back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `KART_X_MAX` (soft wall,
+back. The saucer RIDES THE WEDGE up to the lip (`layout.surfaceH`) and is airborne while it is
+above it, so the ground under the kart is the same line the bubbles hang off. Steering moves `x` with inertia, clamped to `KART_X_MAX` (soft wall,
 no bounce-off shock): THE KERB HOLDS THE SAUCER, NOT THE CUP, so the limit is measured from the
 saucer's outer rim (`KERB_INNER_W - SAUCER_R_ROAD - KERB_KISS` = 1.775 m) and the dish stops on the
 kerb line instead of hanging a metre and a half past it. Drift = tighter steer + sparks, no penalty. EMI: CRT body seen

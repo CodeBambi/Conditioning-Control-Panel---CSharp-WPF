@@ -22,7 +22,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W, LANE_H } from './consts.js';
+import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W, LANE_H, RAMP_LEN, RAMP_H } from './consts.js';
 import { CRISP_LAYER } from './pixel.js';
 import { Q } from '../shared/quality.js';
 import { biomeById } from '../game/biomes.js';
@@ -258,17 +258,20 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   const AIR_DOTS = 10, AIR_X = 2.4;
   const DOT_NEAR = 6, DOT_FAR = 11, DOT_BEHIND = -(CAM_BACK + 2.5);
   const airBase = [], airD = [];   // per dot: its resting matrix and wrapped depth
-  const wedges = new THREE.InstancedMesh(track(wedgeGeometry(KERB_OUT, 4, 0.8)), wedgeMat, Math.max(1, ramps.length));
+  // the wedge's length and crest are consts.js's, because spine.js measures the reachable line off
+  // the same two numbers and kart.js stands the kart on them (see consts.js RAMP_LEN / RAMP_H)
+  const wedges = new THREE.InstancedMesh(track(wedgeGeometry(KERB_OUT, RAMP_LEN, RAMP_H)), wedgeMat, Math.max(1, ramps.length));
   const lips = new THREE.InstancedMesh(track(new THREE.BoxGeometry(KERB_OUT * 2 + 0.1, 0.2, 0.3)), pinkGlow, Math.max(1, ramps.length));
   const airDots = new THREE.InstancedMesh(track(new THREE.BoxGeometry(0.3, 0.3, 0.3)), gold, Math.max(1, ramps.length * AIR_DOTS));
   ramps.forEach((r, i) => {
     wedges.setMatrixAt(i, roadMatrix(r.d, 0, 0.01, 0, 1, _m));
     wedges.setColorAt(i, roomColorAt(r.d, 'road', _c).lerp(_c2.set(0xffffff), 0.45));
-    lips.setMatrixAt(i, roadMatrix(r.d, 0, 0.85, 0, 1, _m));
+    lips.setMatrixAt(i, roadMatrix(r.d, 0, RAMP_H + 0.05, 0, 1, _m));
     for (let k = 0; k < AIR_DOTS; k++) {
       const prog = (Math.floor(k / 2) + 1) / (AIR_DOTS / 2 + 1), side = k & 1 ? AIR_X : -AIR_X;
       const dd = r.d + prog * r.airLen;
-      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(dd, side, 0.5 + r.height * Math.sin(Math.PI * prog), prog * 2, 1, _m));
+      // the dots mark the flight ITSELF (spine.js rideH), which is the line the bubbles ride too
+      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(dd, side, layout.rideH ? layout.rideH(dd) + 0.4 : 0.5 + r.height * Math.sin(Math.PI * prog), prog * 2, 1, _m));
       airBase.push(_m.clone()); airD.push(layout.wrap(dd));
     }
   });
