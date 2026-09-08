@@ -16,7 +16,9 @@
  *   5. the tuck's antDown is exactly zero upright and non-zero inverted, and the
  *      layer never touches a pivot the model does not have;
  *   6. the countdown chain (ready -> grip -> cruise, launch -> cruise), the `amp`
- *      dial for reduced motion, and snapshotRest surviving a mixer frame.
+ *      dial for reduced motion, and snapshotRest surviving a mixer frame;
+ *   7. `reach`: a holding arm stretches along its own axis, the hand under it is
+ *      counter-scaled, the mirror swaps the pair and dispose() puts it all back.
  * ==========================================================================*/
 
 import { POSES, PIVOTS, resolvePose, createPoseLayer, snapshotRest } from '../emiPoses.js';
@@ -26,9 +28,13 @@ const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++
 const near = (a, b, eps = 1e-3) => Math.abs(a - b) <= eps;
 
 /* ---- a fake glb root ---------------------------------------------------- */
-const NODES = ['shoulderL', 'shoulderR', 'footL', 'footR', 'ant0'];
+const NODES = ['shoulderL', 'shoulderR', 'footL', 'footR', 'ant0', 'handL', 'handR', 'thumbL', 'thumbR'];
 function makeNode(name) {
-  return { name, rotation: { x: 0, y: 0, z: 0, set(a, b, c) { this.x = a; this.y = b; this.z = c; } } };
+  return {
+    name,
+    rotation: { x: 0, y: 0, z: 0, set(a, b, c) { this.x = a; this.y = b; this.z = c; } },
+    scale: { x: 1, y: 1, z: 1, set(a, b, c) { this.x = a; this.y = b; this.z = c; } },
+  };
 }
 function makeModel(names = NODES) {
   const kids = new Map(names.map((n) => [n, makeNode(n)]));
@@ -47,10 +53,13 @@ const run = (layer, sec, ctx = CTX, pre = null) => {
 };
 
 /* ---- 1. the table ------------------------------------------------------- */
-const KEYS = new Set(['sided', 'w', 'zeta', 'hold', 'next', 'breath', 'fraught', 'antDown', 'root', ...PIVOTS]);
+const KEYS = new Set(['sided', 'w', 'zeta', 'hold', 'next', 'breath', 'fraught', 'antDown', 'reach', 'root', ...PIVOTS]);
 for (const [name, p] of Object.entries(POSES)) {
   const bad = Object.keys(p).filter((k) => !KEYS.has(k));
   ok(bad.length === 0, `${name}: names only contract keys${bad.length ? ' (stray: ' + bad.join(', ') + ')' : ''}`);
+  if (p.reach !== undefined) {
+    ok(Array.isArray(p.reach) && p.reach.length === 2 && p.reach.every((v) => v >= 0.5 && v <= 2), `${name}.reach: [L, R] inside 0.5..2`);
+  }
   for (const k of PIVOTS) {
     if (p[k] === undefined) continue;
     ok(Array.isArray(p[k]) && p[k].length === 3 && p[k].every((v) => typeof v === 'number' && isFinite(v)), `${name}.${k}: three finite radians`);
@@ -164,6 +173,42 @@ ok(!!POSES.cruise && !POSES.cruise.hold, 'cruise is the resting pose and never t
   ok(L2.name === 'grip', 'the beat still chains');
   run(L2, 0.8);
   ok(near(m2.kids.get('shoulderL').rotation.x, POSES.grip.shoulderL[0] * 0.3, 0.02), 'and grip inherits the arms dial instead of snapping to a full swing');
+}
+/* ---- 7. the arm stretch that reaches the side of the brim --------------- */
+{
+  const m = makeModel(), L = createPoseLayer(m);
+  const grip = POSES.cruise.reach[0];
+  ok(grip > 1, 'cruise stretches both arms out to the brim');
+  L.set('cruise'); run(L, 3);
+  ok(near(m.kids.get('shoulderL').scale.y, grip, 5e-3), 'and the shoulder settles on that stretch');
+  ok(near(m.kids.get('handL').scale.y, 1 / grip, 5e-3), 'with the hand counter-scaled, so the glove stays a ball not an egg');
+  ok(near(m.kids.get('thumbR').scale.y, 1 / grip, 5e-3), 'and the thumb with it');
+  const sl = m.kids.get('shoulderL').scale;
+  ok(sl.x === 1 && sl.z === 1, 'an arm only ever grows along its own axis');
+  L.set('cheer', { hold: 99 }); run(L, 3);
+  ok(near(m.kids.get('shoulderL').scale.y, 1, 5e-3) && near(m.kids.get('handL').scale.y, 1, 5e-3), 'a pose off the brim (cheer) comes back to the authored arm');
+  L.dispose();
+  ok(m.kids.get('shoulderR').scale.y === 1 && m.kids.get('handR').scale.y === 1, 'dispose puts every scale back to 1');
+
+  // one hand on the brim, one hand off it: the mirror has to swap the pair with everything else
+  const g = resolvePose('grab', { side: 1 }), gm = resolvePose('grab', { side: -1 });
+  ok(g.reach[0] > 1 && g.reach[1] === 1, 'grab stretches only the hand that stays on the brim');
+  ok(gm.reach[0] === 1 && near(gm.reach[1], g.reach[0]), 'and side -1 swaps which arm that is');
+  ok(near(resolvePose('cruise', { arms: 0 }).reach[0], 1), 'arms 0 drops the stretch along with the swing');
+  ok(near(resolvePose('cruise', { arms: 0.5 }).reach[0], 1 + (grip - 1) * 0.5), 'and arms 0.5 takes half of it');
+
+  const bare = makeModel(['shoulderL', 'shoulderR', 'footL', 'footR']), B = createPoseLayer(bare);
+  B.set('cruise'); run(B, 3);
+  ok(near(bare.kids.get('shoulderL').scale.y, grip, 5e-3), 'a pack with no hand nodes still stretches, with nothing to counter and nothing to throw');
+
+  // emi.js mounts the mitts scaled up so they read at 8 px: the counter-scale divides that, never replaces it
+  const big = makeModel();
+  big.kids.get('handL').scale.set(1.4, 1.4, 1.4);
+  const G = createPoseLayer(big);
+  G.set('cruise'); run(G, 3);
+  ok(near(big.kids.get('handL').scale.y, 1.4 / grip, 5e-3) && near(big.kids.get('handL').scale.x, 1.4), 'a hand mounted larger keeps its size under the counter-scale');
+  G.dispose();
+  ok(near(big.kids.get('handL').scale.y, 1.4), 'and dispose hands it back at the size it was mounted');
 }
 {
   // snapshotRest: a mixer-driven model has moved by the time anyone asks for a layer, so the rest

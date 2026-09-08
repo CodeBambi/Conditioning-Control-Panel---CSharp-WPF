@@ -57,6 +57,8 @@ const SAUCER_R_GLB = 0.95, DISH_SQUEEZE = SAUCER_R / SAUCER_R_GLB;
 // This is geometry, not a transition, so reduced motion keeps every bit of it.
 const CUP_FOOT_R = 0.3, CUP_PIVOT_Y = CUP_Y, CUP_TIP_MAX = 0.38, CUP_SLIDE = 0.07;
 const OUTLINE = 'outline';   // the inverted hull's material name (gltf.js header, assets/README.md)
+const GLOVE_NODES = ['handL', 'handR', 'thumbL', 'thumbR'];   // repainted white, see gloveHands()
+const GLOVE_SCALE = 1.4;     // a mitt the chase camera can see on the brim, not an 8 px knuckle
 // The glb is metres, sole centre at the origin, +Z forward, case top at 1.00 m. 0.64 puts the case
 // at the old 1.25-scaled CRT's 0.525 m; with the sole on the tea (y 0.66) the case bottom lands at
 // 0.775, just clear of the cup rim at 0.75, so the legs stay in the cup and the case reads as before.
@@ -65,7 +67,12 @@ const OUTLINE = 'outline';   // the inverted hull's material name (gltf.js heade
 // the model) sits 0.30 below the rim: the tea disc cuts her at the chest and the legs are never seen.
 const GLB_SCALE = 0.8;        // owner call 2026-09-06: full size read too big in the bore
 const GLB_SINK = 0.28;       // metres below TEA_Y the sole rests; the case bottom lands 0.28 m under the rim
-const GLB_SEAT_Z = 0.25;     // the case spans z -0.59..0.08 in the model, so this centres it in the bore
+// The case spans z -0.59..0.08 in the model, so seated it runs -0.472..0.064 and a seat at 0.204
+// is the one that puts its middle on the bore's axis: 0.25 sat it 0.046 PROUD of centre. 0.22 is
+// inside that slack (0.016 proud, better centred than before) and buys the arms 30 mm of reach
+// backward: the shoulders come back to z 0.196, which is what lets a glove hold the SIDE of the
+// brim (z 0.03, the widest point) instead of the far arc, where the chase camera cannot read it.
+const GLB_SEAT_Z = 0.22;
 const CASE_TOP = [0.36, 0.99, -0.2];   // EMI_case local: the top corner sweat comes off
 const GLOW_Y = 0.62, GLOW_Z = 0.9;     // the screen light, model local (0.58 m ahead of the glass)
 
@@ -271,12 +278,46 @@ export function createEmiRig({ scene, reducedMotion = false, pixel = null }) {
    *  left to dispose() (the ones that go unshared are pushed onto `owned` at the call site). */
   const retire = (m) => { if (m.parent) m.parent.remove(m); if (m.geometry) m.geometry.dispose(); };
 
+  /**
+   * MAKE THE GLOVES GLOVES. The glb hands and thumbs ship on the case's own navy material, and
+   * against a pink brim from the chase camera that is two dark knobs the owner has to be told
+   * about. This repaints them cream BEFORE flattenRig, which is the whole trick: the merge keys on
+   * (pivot, material), so the pair leaves it as ONE white mesh per shoulder hosted on handL / handR
+   * - the same node emiPoses counter-scales when it stretches an arm out to the brim. The case
+   * material is never touched.
+   *
+   * Their outline hulls get a CLONE of the outline material for the same reason: it keeps them out
+   * of the arm's merged hull, so the black keyline is hosted on handL too and grows with the glove
+   * instead of hiding inside it. blackOutline() still catches both, the clone being named `outline`.
+   *
+   * Then the pair is scaled up. The cup's mouth is about 113 px across in a 1280 frame, so an
+   * authored hand lands on 8 of them: a cartoon mitt at GLOVE_SCALE is what the owner can actually
+   * see holding the brim. emiPoses reads the scale it finds here as the base it counter-scales from.
+   */
+  function gloveHands(root) {
+    const glove = new THREE.MeshStandardMaterial({ name: 'emi_glove', color: 0xFFFFFF, roughness: 0.45 });
+    let hull = null, hit = 0;
+    for (const n of GLOVE_NODES) {
+      const node = root.getObjectByName(n);
+      if (!node) continue;
+      node.traverse((o) => {
+        if (!o.isMesh || Array.isArray(o.material) || !o.material) return;
+        if (isOutline(o)) { o.material = hull || (hull = o.material.clone()); return; }
+        o.material = glove; hit++;
+      });
+    }
+    if (hull) owned.push(hull);
+    if (hit) owned.push(glove); else glove.dispose();   // a pack without hands: nothing painted, nothing leaked
+  }
+
   function mountGlb(pack) {
     if (dead || G) return;
     const root = pack.clone('EMI_root');
     const ant0 = root && root.getObjectByName('ant0'), ballpiv = root && root.getObjectByName('ballpiv');
     if (!root || !ant0 || !ballpiv) return;         // a pack without the contract pivots: the primitive stays
+    gloveHands(root);                                 // before the merge: the paint is what splits them off
     flattenRig(root, pack.animations);                // 69 draws a frame down to ~30: one per pivot and material
+    for (const n of ['handL', 'handR']) { const h = root.getObjectByName(n); if (h) h.scale.setScalar(GLOVE_SCALE); }
     blackOutline(root);
     const ballMats = [], glassMats = [];
     ownMaterials(root.getObjectByName('ball') || ballpiv, ballMats);

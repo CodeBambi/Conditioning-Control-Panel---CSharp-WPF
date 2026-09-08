@@ -276,7 +276,7 @@ emoticons only, never a drawn face, never a speech line.
 
 ### `race/emiPoses.js` (pass four, EMI's body)
 ```js
-export const POSES, PIVOTS;   // the pure preset table, and the four glb pivots a preset may name
+export const POSES, PIVOTS;   // the pure preset table (rotations + per-arm `reach`), and the four glb pivots a preset may name
 export function resolvePose(name, opts) -> flattened target
 export function createPoseLayer(model) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
 export function snapshotRest(model)     // bank the authored stance before a mixer moves it
@@ -291,13 +291,23 @@ falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and 
 max of that and the run brain's. run.js only ever calls `kart.pose(...)`; the layer exists only
 while the glb is mounted (the primitive EMI has no limbs to pose).
 
-**The rim grip.** Every pose that is meant to be *holding on* parks the glove on the cup's brim:
-lip top y 0.785, lip radius 0.500 in kart-body metres, the shoulder pivot at (-+0.312, 0.787,
-0.226) and a glove reach of 0.206 m. That short reach only meets the lip between about 32 and 77
-degrees around from dead ahead, and the forward half of that arc hides behind her own case from the
-chase camera, so the grips sit at 66..79 degrees. Re-solve, do not eyeball: a hand that drops below
-the lip vanishes inside the cup. The hands ride the cup through the steer lean for free - the seat
-and `kart_cup` share the body group that tips.
+**The rim grip.** Every pose that is meant to be *holding on* parks the glove on the SIDE of the
+cup's brim, the widest point of the lip on screen: lip top y 0.785, lip radius 0.500 in kart-body
+metres, the seat at (0, 0.395, 0.22) and the shoulder pivot at (-+0.312, 0.787, 0.196). The
+authored glove reach is only 0.206 m, which meets the lip between about 32 and 77 degrees around
+from dead ahead - the far arc, where the case hides the hands from the chase camera. So a holding
+pose also carries `reach: [L, R]`: `GRIP` = 1.28 stretches that arm along its own axis (a y-scale
+on the shoulder pivot, with `handL`/`thumbL` counter-scaled off their mounted base so the mitt does
+not go egg-shaped), which walks the grip out to 82..87 degrees, x -+0.51, z +0.02..0.07. A free
+hand keeps `reach` 1 (`grab`, `throw` right; `cheer` has no `reach` at all), and `opts.arms` fades
+the stretch with the angles. Re-solve, do not eyeball, and solve each pose against its OWN root
+attitude - lean, tilt, lift and squash move the shoulder, which is why `drift`'s two arms differ
+and `landingKerb` is asymmetric. A hand that drops below the lip vanishes inside the cup. The hands
+ride the cup through the steer lean for free - the seat and `kart_cup` share the body group that
+tips. So the mitts read at the game's real scale (the cup mouth is only ~113 px wide in a 1280
+frame), emi.js repaints `handL`/`handR`/`thumbL`/`thumbR` with their own white `emi_glove` material
+BEFORE `flattenRig` (the repaint is what splits them out of the merge) and scales the two hand
+nodes by `GLOVE_SCALE` 1.4. The case material is untouched.
 
 **The countdown.** `ready` -> `grip` is one beat of the 3 2 1 and `launch` is GO. Both counts drive
 them off the HUD's own ticks, never a hand-timed script: `intro.js` builds a layer over the menu
