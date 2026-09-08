@@ -4,13 +4,17 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Moderation;
@@ -59,6 +63,7 @@ namespace ConditioningControlPanel.Avalonia
 
             CheckUrlPrompt(Check);
             CheckTextEditor(Check);
+            CheckTriggerControls(Check);
             Console.WriteLine();
             Console.WriteLine(failures == 0
                 ? "Linux head can produce every value it renders."
@@ -487,6 +492,91 @@ namespace ConditioningControlPanel.Avalonia
             {
                 owner?.Close();
                 if (owner is not null) Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        /// <summary>
+        /// #493 checks for the L2 controls, at public seams only. Both controls are inert (XAML
+        /// load, FindControl, a Loc-backed string view model); no timer, file, network or service
+        /// path is reached and no fixture file is created. The headless platform is already set up
+        /// by <see cref="CheckUrlPrompt"/>.
+        /// </summary>
+        private static void CheckTriggerControls(Action<string, bool, string?> check)
+        {
+            Window? host = null;
+            try
+            {
+                // S4 - pulse lifetime. Infinite Avalonia animations are documented to be illegal
+                // on the Run path ("Looping animations must not use the Run method."), so the
+                // fire-and-forget RunAsync may throw or may silently never animate. The check
+                // covers both, plus the stop path.
+                var pulse = new AttentionCheckControl();
+                host = new Window { Content = pulse };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var scale = ((TransformGroup)pulse.FindControl<Ellipse>("DotRingFg")!.RenderTransform!)
+                    .Children.OfType<ScaleTransform>().First();
+
+                string? thrown = null;
+                try { pulse.StartPulse(); }
+                catch (Exception ex) { thrown = ex.ToString(); }
+                check("attention pulse starts without throwing", thrown is null, thrown);
+
+                double moved = scale.ScaleX;
+                for (var i = 0; i < 20 && Math.Abs(moved - 1.0) < 0.0001; i++)
+                {
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick(10);
+                    Dispatcher.UIThread.RunJobs();
+                    moved = scale.ScaleX;
+                }
+                check("attention pulse animates the ring scale off 1.0",
+                    Math.Abs(moved - 1.0) > 0.0001, $"scaleX={moved}");
+
+                pulse.StopPulse();
+                Dispatcher.UIThread.RunJobs();
+                var stopped = scale.ScaleX;
+                for (var i = 0; i < 10; i++)
+                {
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick(10);
+                    Dispatcher.UIThread.RunJobs();
+                }
+                check("attention pulse stops at scale 1.0 and stays there",
+                    Math.Abs(stopped - 1.0) < 0.0001 && Math.Abs(scale.ScaleX - 1.0) < 0.0001,
+                    $"atStop={stopped}, afterTicks={scale.ScaleX}");
+
+                host.Close();
+                Dispatcher.UIThread.RunJobs();
+
+                // S5 - the trigger cell consumes ToggleStyle, PinkSlider and DarkComboBoxStyle by
+                // DynamicResource. Reference equality with the resource found from the control is
+                // what proves the definitions are actually reachable in this layer.
+                var cell = new WorkshopTriggersCell();
+                host = new Window { Content = cell };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                foreach (var (name, key, theme) in new (string, string, ControlTheme?)[]
+                {
+                    ("ChkTriggerModeCompanion", "ToggleStyle", cell.FindControl<CheckBox>("ChkTriggerModeCompanion")?.Theme),
+                    ("SliderTriggerIntervalCompanion", "PinkSlider", cell.FindControl<Slider>("SliderTriggerIntervalCompanion")?.Theme),
+                    ("CmbPhrasePresets", "DarkComboBoxStyle", cell.FindControl<ComboBox>("CmbPhrasePresets")?.Theme)
+                })
+                {
+                    var resource = cell.FindResource(key) as ControlTheme;
+                    check($"trigger cell {name} resolves the {key} theme",
+                        theme is not null && resource is not null && ReferenceEquals(theme, resource),
+                        $"theme={(theme is null ? "<null>" : "set")}, resource={(resource is null ? "<null>" : "found")}, same={ReferenceEquals(theme, resource)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                check("trigger-control fixture executes", false, ex.ToString());
+            }
+            finally
+            {
+                host?.Close();
+                if (host is not null) Dispatcher.UIThread.RunJobs();
             }
         }
     }

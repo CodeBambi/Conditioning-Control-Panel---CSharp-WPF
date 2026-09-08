@@ -8,7 +8,7 @@ function Test-SmokeResult($Mode, $Code, [string]$Output, [string]$Errors) {
     $fails = @([regex]::Matches($Output, '(?m)^  \[FAIL\] (.*)\r?$') | ForEach-Object { $_.Groups[1].Value.TrimEnd("`r") })
     if ($Errors.Trim() -or $Output -notmatch '(?m)^  \[PASS\] URL prompt bootstrap has no desktop lifetime\r?$') { return $false }
     if ($Mode -eq 'green') {
-        return $Code -eq 0 -and $passes -eq 105 -and $fails.Count -eq 0 -and
+        return $Code -eq 0 -and $passes -eq 111 -and $fails.Count -eq 0 -and
             $Output.TrimEnd().EndsWith('Linux head can produce every value it renders.')
     }
     $expected = @(
@@ -23,12 +23,12 @@ function Test-SmokeResult($Mode, $Code, [string]$Output, [string]$Errors) {
             "URL prompt $dismiss (invalid first: True): rejects without completing  (Result=not a URL, visible=False, completed=True, errorVisible=False, error=)"
         }
     )
-    return $Code -eq 1 -and $passes -eq 81 -and $fails.Count -eq 18 -and
+    return $Code -eq 1 -and $passes -eq 87 -and $fails.Count -eq 18 -and
         ($fails -join "`n") -ceq ($expected -join "`n") -and $Output.TrimEnd().EndsWith('18 assertion(s) failed.')
 }
 
 if ($SelfCheck) {
-    $ok = "  [PASS] URL prompt bootstrap has no desktop lifetime`n" + ("  [PASS] fixture`n" * 104) + 'Linux head can produce every value it renders.'
+    $ok = "  [PASS] URL prompt bootstrap has no desktop lifetime`n" + ("  [PASS] fixture`n" * 110) + 'Linux head can produce every value it renders.'
     if (!(Test-SmokeResult green 0 $ok '') -or (Test-SmokeResult red 1 $ok '') -or
         (Test-SmokeResult green 0 $ok 'startup error') -or (Test-SmokeResult green 1 $ok '') -or
         (Test-SmokeResult green 0 ($ok.Replace('no desktop lifetime', 'desktop lifetime')) '') -or
@@ -122,7 +122,7 @@ try {
     $commit = Require-Success (Invoke-Owned $git @('-C', $repo, 'cat-file', '-p', 'HEAD') $repo 'commit-object') # Real parents even with shallow checkout.
     Save-Json "$root/identity.json" @{ checkout = $identity; commitObject = $commit; githubSha = $env:GITHUB_SHA; os = [Environment]::OSVersion.VersionString; powershell = "$($PSVersionTable.PSVersion)" }
     # Freeze the reviewed safe Program/App/null-lifetime route and every product dependency.
-    foreach ($entry in @(@('CCP.Avalonia', '414c743d35bcd0589b58655cc27d944ad57ba615'), @('CCP.Core', '125429304e1d6251f8a5a0c8a5cd87287f8b472f'))) {
+    foreach ($entry in @(@('CCP.Avalonia', '72c3382d7dada6ee7957d7b8e894c4aab4e7ca70'), @('CCP.Core', '125429304e1d6251f8a5a0c8a5cd87287f8b472f'))) {
         $tree = Require-Success (Invoke-Owned $git @('-C', $repo, 'rev-parse', "HEAD:$($entry[0])") $repo "tree-$($entry[0])")
         if ($tree -ne $entry[1]) { throw "Unreviewed source tree: $($entry[0])" }
     }
@@ -144,7 +144,7 @@ try {
             Require-Success (Invoke-Owned $git @('-C', $source, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '--unidiff-zero', $patch) $source 'inverse-apply') | Out-Null
         }
         $testHash = (Get-FileHash "$source/$tests" -Algorithm SHA256).Hash
-        if ($testHash -ne '3e6789308073fcd61df40304fd0e70703d01c4338ac72dd24b8fbfd4deeef092') { throw 'Test bytes changed' }
+        if ($testHash -ne '6d0b5d59dcea00a7a4c3cee2f39987894a9b200de438aeebd5012483d46995b1') { throw 'Test bytes changed' }
         $expectedDialog = if ($mode -eq 'red') { '4e135e6f3261b2ced8389ac5a584628afa19c00132b072a4cc1230ab0d3a0437' } else { 'e3944bb609bc6d110b3f362bb98043ccdb3fd6266d26475aeaa5c5329f0b5381' }
         if ((Get-FileHash "$source/$dialog" -Algorithm SHA256).Hash -ne $expectedDialog) { throw 'Dialog bytes changed' }
         $before = @(Manifest $source)
