@@ -101,6 +101,50 @@ html, body {
   background: rgba(245, 230, 200, 0.16); transition: background-color 200ms ease;
 }
 .dots i.lit { background: var(--pbp-pink); }
+/* the move list. Right edge, so it never crosses the ramp's card, which is
+   centred and min(72vmin, 88vw) wide; only the list and its tab take a click,
+   the rest of the HUD stays click-through. */
+.moves {
+  position: absolute; right: 18px; top: 22px; width: 186px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  max-height: calc(100vh - 150px);
+}
+.moves-tab {
+  pointer-events: auto; cursor: pointer;
+  display: flex; align-items: center; gap: 7px; padding: 5px 10px; border-radius: 10px;
+  font: 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--pbp-ink); opacity: 0.5;
+  background: rgba(20, 20, 46, 0.55); border: 1px solid rgba(245, 230, 200, 0.12);
+  backdrop-filter: blur(3px); transition: opacity 160ms ease;
+}
+.moves-tab:hover { opacity: 0.9; }
+.moves-tab:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.moves .chev {
+  width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor; transition: transform 180ms ease;
+}
+.moves.open .chev { transform: rotate(90deg); }
+.moves-list {
+  pointer-events: auto; overflow-y: auto; overscroll-behavior: contain;
+  margin: 0; padding: 6px; list-style: none; width: 100%; min-height: 0;
+  border-radius: 12px; background: rgba(20, 20, 46, 0.55);
+  border: 1px solid rgba(245, 230, 200, 0.12); backdrop-filter: blur(3px);
+  scrollbar-width: thin; scrollbar-color: rgba(255, 105, 180, 0.5) transparent;
+}
+.moves.closed .moves-list { display: none; }
+.mv {
+  display: grid; grid-template-columns: 26px 1fr 1fr; gap: 3px; align-items: baseline;
+  font-size: 12px; letter-spacing: 0.04em;
+}
+.mv .n { opacity: 0.32; font-variant-numeric: tabular-nums; }
+.mv .m {
+  padding: 2px 5px; border-radius: 6px; cursor: pointer; opacity: 0.85;
+  transition: background-color 160ms ease, opacity 160ms ease;
+}
+.mv .m:hover { opacity: 1; background: rgba(245, 230, 200, 0.08); }
+.mv .m.gap { cursor: default; }
+.mv .m.sel { background: rgba(255, 105, 180, 0.34); color: #FFF3FA; opacity: 1; }
+.mv.empty { display: block; padding: 2px 5px; font-size: 11px; letter-spacing: 0.12em; opacity: 0.3; }
 /* --- end the HUD ---------------------------------------------------------- */
 
 /* Owned by the effects layer. Never written to by the board code. */

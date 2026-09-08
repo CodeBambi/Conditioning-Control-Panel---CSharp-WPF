@@ -266,12 +266,20 @@ export function createHud(opts = {}) {
     if (el.dots && params.get('debug') === '1') el.dots.hidden = false;
   } catch { /* no location: the dots stay hidden, which is the default */ }
 
+  // The list is HUD furniture too, but it is the only part that takes a click,
+  // so it lives in its own file and is loaded late and guarded like the rest.
+  let moves = null;
+  import('./movelist.js').then((m) => {
+    moves = m.createMoveList({ bus, game, board: opts.board || null, root: pick('moves') });
+  }).catch((e) => console.warn('[pbp] move list missing', e));
+
   setActive(game && game.turn ? game.turn() : 'w', true);
   paintTally();
   paintCheck();
   setMeter(0);
 
   function dispose() {
+    if (moves) { try { moves.dispose(); } catch { /* already gone */ } moves = null; }
     for (const off of unbind) { try { off(); } catch { /* already gone */ } }
     unbind.length = 0;
     for (const id of timers) clearTimeout(id);
@@ -298,6 +306,7 @@ export function createHud(opts = {}) {
         tally: { w: el.tally.w ? el.tally.w.textContent : null, b: el.tally.b ? el.tally.b.textContent : null },
         line: el.line ? el.line.style.transform : null,
         reducedMotion: reducedMotion(),
+        moves: moves ? moves.debug() : null,
       };
     },
   };
