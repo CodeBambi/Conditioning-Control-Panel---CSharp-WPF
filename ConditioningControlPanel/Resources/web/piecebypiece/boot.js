@@ -119,6 +119,28 @@ function main() {
     board.sfx = m.createSfx({ bus, game, group: view.pieceGroup, squareOf: sc.worldToSquare, root: dom.fx });
   }).catch((e) => console.warn('[pbp] sfx missing', e));
   // --- end J ---
+  // --- K: a room to reflect, and where he just came from ---
+  // The room is rendered once off the live renderer and hung on the scene; the
+  // sweep re-dresses a man who was rebuilt (the art arriving, a promotion).
+  import('./board/env.js').then((m) => {
+    board.env = m.createEnv({ renderer: view.renderer, scene: view.scene });
+    board.env.dressBoard(view.boardGroup);
+    board.env.dress(view.pieceGroup);
+    feelLate.push((dt) => board.env.update(dt, view.pieceGroup));
+  }).catch((e) => console.warn('[pbp] env missing', e));
+  // A turn carries no squares, so the referee is asked which move it was. A new
+  // game forgets, and so does a take-back, when one turns up.
+  {
+    const marks = board.drag && board.drag.markers;
+    const remember = () => {
+      const played = game.rules.chess.history({ verbose: true }).pop();
+      if (marks) marks.setLastMove(played ? played.from : null, played ? played.to : null);
+    };
+    bus.on('turn', remember);
+    bus.on('gameover', remember);
+    bus.on('local', () => { if (marks) marks.setLastMove(null); });
+  }
+  // --- end K ---
 
   let last = performance.now();
   function frame(now) {

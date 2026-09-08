@@ -31,6 +31,11 @@ export const LIGHT = Object.freeze({
   fill: 0.58,               // low: it is there to stop a flank going black
   rimColor: 0xFF69B4,
   rim: 1.15,
+  // board/env.js hangs a little studio room on scene.environment. The men take
+  // it at their own strength; the board sets its own here, because a square is
+  // paint under a clearcoat and taking the room whole simply washes it out.
+  envSquares: 0.16,        // a hint in the gloss, not a second light
+  envPlinth: 0.55,         // the dark box wants it: it is what gives it an edge
 });
 
 /** Square name ("e4") to the world position of its centre. */
@@ -102,7 +107,9 @@ export function createScene({ canvas }) {
   const pieceGroup = new THREE.Group();
   scene.add(boardGroup, pieceGroup);
 
-  const plinthMat = new THREE.MeshPhysicalMaterial({ color: 0x241F45, roughness: 0.45, clearcoat: 0.35 });
+  const plinthMat = new THREE.MeshPhysicalMaterial({
+    color: 0x241F45, roughness: 0.45, clearcoat: 0.35, envMapIntensity: LIGHT.envPlinth,
+  });
   const plinth = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.5, 9.4), plinthMat);
   plinth.position.y = -0.33;
   plinth.receiveShadow = true;
@@ -114,7 +121,8 @@ export function createScene({ canvas }) {
     for (let r = 0; r < 8; r++) {
       const light = (f + r) % 2 === 1; // a1 is dark, h1 is light
       const mat = new THREE.MeshPhysicalMaterial({
-        color: light ? CREAM : PINK, roughness: light ? 0.42 : 0.34, clearcoat: 0.5, clearcoatRoughness: 0.3,
+        color: light ? CREAM : PINK, roughness: light ? 0.42 : 0.34, clearcoat: 0.5,
+        clearcoatRoughness: 0.3, envMapIntensity: LIGHT.envSquares,
       });
       const mesh = new THREE.Mesh(squareGeo, mat);
       mesh.position.set((f - 3.5) * SQUARE, -0.08, (3.5 - r) * SQUARE);
