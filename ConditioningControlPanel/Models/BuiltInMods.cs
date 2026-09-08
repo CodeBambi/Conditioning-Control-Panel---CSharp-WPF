@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace ConditioningControlPanel.Models
 {
@@ -1937,6 +1937,43 @@ namespace ConditioningControlPanel.Models
                     RankSubject = "Infection Level",
                     PetName = "patient",
                     Collective = "patients"
+                },
+
+                // The FEATURE renames only, lifted from the pack's mod.json. The stub is not a
+                // transcription of all 125 replacements (achievements, flavour lines and the
+                // enhancement tree arrive with the pack), but the feature labels are what a user
+                // sees on the dashboard the moment the mod is activated, and "Goon Fuel" going
+                // missing is exactly what the port ticket reported. Both the singular and the
+                // plural spelling are listed because the UI probes BOTH (the dashboard card asks
+                // for "Mandatory Video", the preset detail row for "Mandatory Videos").
+                TextReplacements = new Dictionary<string, string>
+                {
+                    { "Lockdown", "Quarantine" },
+                    { "Flash Images", "Temptations" },
+                    { "Flash Image", "Temptations" },
+                    { "Subliminals", "Intrusive Thoughts" },
+                    { "Bouncing Text", "Persistent Urges" },
+                    { "Mandatory Videos", "Goon Fuel" },
+                    { "Mandatory Video", "Goon Fuel" },
+                    { "Bubble Pop", "Pharmacy" },
+                    { "Bubble Count", "Prescription Management" },
+                    { "Lock Cards", "Affirmations" },
+                    { "Lock Card", "Affirmations" },
+                    { "Mind Wipe", "Hypnotherapy" },
+                    { "Pink Filter", "Arousal Alert" },
+                    { "Spiral Overlay", "Hypnotic Resistance Overlay" }
+                },
+
+                // The nurse sits lower and smaller in her tube than the default avatar. Same five
+                // values the pack ships, so the fit does not jump when the pack finishes
+                // extracting (and is right on first activation if it never does).
+                TubeLayout = new ModTubeLayout
+                {
+                    AvatarOffsetX = 0,
+                    AvatarDetachedOffsetX = 0,
+                    AvatarScale = 0.9,
+                    AvatarOffsetY = 40,
+                    AvatarDetachedOffsetY = 40
                 },
 
                 SubliminalPool = new Dictionary<string, bool>

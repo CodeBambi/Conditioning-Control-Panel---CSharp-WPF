@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -584,6 +584,7 @@ namespace ConditioningControlPanel.Services
 
                     sanitized[key] = val;
                 }
+                FillFeatureLabelAliases(sanitized);
                 manifest.TextReplacements = sanitized;
             }
 
@@ -1253,6 +1254,42 @@ namespace ConditioningControlPanel.Services
         public string MakeModAware(string text)
         {
             return ApplyTextReplacements(_activeMod.Manifest.TextReplacements, text);
+        }
+
+        /// <summary>
+        /// Feature labels the UI probes in BOTH a singular and a plural spelling. The English
+        /// literal in the code IS the lookup key (see MainWindow.UiUpdates ModAwareLabel), so a
+        /// manifest that renames only one spelling renames only some of the surfaces: Infection
+        /// Control ships "Mandatory Videos": "Goon Fuel" and the dashboard card, which probes
+        /// "Mandatory Video", kept saying Mandatory Video. That is the lost rename in the port
+        /// ticket, and it cannot be fixed in the pack alone because the pack is a downloaded
+        /// artifact, so the twin is filled in here for every mod, built-in or user-installed.
+        /// </summary>
+        private static readonly (string A, string B)[] FeatureLabelTwins =
+        {
+            ("Mandatory Videos", "Mandatory Video"),
+            ("Lock Cards", "Lock Card"),
+            ("Flash Images", "Flash Image"),
+            ("Bubble Pops", "Bubble Pop"),
+        };
+
+        /// <summary>
+        /// Copies a feature rename onto its missing singular/plural twin. Only ever ADDS a key,
+        /// so an author who spelled both forms out (and gave them different wording) is untouched.
+        /// Runs after the author's own entries are counted against the 200 cap: these are ours,
+        /// not theirs, and refusing a mod for a key it did not write would be nonsense.
+        /// </summary>
+        internal static void FillFeatureLabelAliases(IDictionary<string, string> replacements)
+        {
+            if (replacements == null) return;
+
+            foreach (var (a, b) in FeatureLabelTwins)
+            {
+                if (replacements.TryGetValue(a, out var valA) && !replacements.ContainsKey(b))
+                    replacements[b] = valA;
+                else if (replacements.TryGetValue(b, out var valB) && !replacements.ContainsKey(a))
+                    replacements[a] = valB;
+            }
         }
 
         /// <summary>
