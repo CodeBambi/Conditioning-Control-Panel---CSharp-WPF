@@ -1086,18 +1086,23 @@ export function createVoice(o) {
     return false;
   }
 
-  function eligiblePool(name, c) {
-    let best = null;
+  /** Every pool that may answer this moment, best first. Priority is the data's
+   * own word; a tie goes to the more specific gate. */
+  function eligiblePools(name, c) {
+    const out = [];
     for (const p of POOLS) {
       if (p.on.indexOf(name) < 0) continue;
       if (poolBlocked(p, c)) continue;
       if (!holds(p.when, c)) continue;
-      // Priority is the data's own word; a tie goes to the more specific gate.
-      if (!best
-        || p.priority > best.priority
-        || (p.priority === best.priority && p.when.length > best.when.length)) best = p;
+      out.push(p);
     }
-    return best;
+    out.sort((a, b) => (b.priority - a.priority) || (b.when.length - a.when.length));
+    return out;
+  }
+
+  function eligiblePool(name, c) {
+    const pools = eligiblePools(name, c);
+    return pools.length ? pools[0] : null;
   }
 
   /** No-repeat, the rations, and unheard lines weighted `FRESH_WEIGHT`x. */
@@ -1147,7 +1152,20 @@ export function createVoice(o) {
      * afterwards): a one-second face on her own glass is the tension mirror,
      * a sentence is a distraction with a fanbase. */
     if (S.holdWords && (isGameNote(name) || name === 'heartbeat')) return false;
-    const pool = eligiblePool(name, c);
+    /* THE FALL-THROUGH (2026-09-07). The best pool by priority is not always a
+     * pool with something to say: `smallHolidays` sits on greet at 35 with every
+     * line gated by a date, so on an ordinary day it won the beat, found no
+     * usable line and returned false, and every greet pool under it went silent
+     * all year. The SPEAKING pool is now the best one whose pickLine actually
+     * answers; the floor, the ceiling and the odds are then charged to THAT
+     * pool, exactly as before. A failed odds roll still means silence: a pool
+     * that rolled and lost was meant to stay quiet, not be replaced. */
+    const pools = eligiblePools(name, c);
+    let pool = null, line = null;
+    for (const p of pools) {
+      const l = pickLine(p, c);
+      if (l) { pool = p; line = l; break; }
+    }
     if (!pool) return false;
     /* THE FLOOR, and since the heartbeat wave there are two of them: 40s on the
      * campus, 20s mid-class. A ceremony is rare by nature and is exempt from
@@ -1159,8 +1177,6 @@ export function createVoice(o) {
     let odds = typeof pool.odds === 'number' ? pool.odds : D.BARK_ODDS;
     if (!mid && !S.inClass) odds = Math.min(1, odds * D.CAMPUS_ODDS_MULT);
     if (odds < 1 && rng() >= odds) return false;
-    const line = pickLine(pool, c);
-    if (!line) return false;
     if (!perform(line, c)) return false;
 
     if (mid) S.classBarks += 1;
