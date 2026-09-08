@@ -56,7 +56,9 @@ import { Q } from '../shared/quality.js';
 import { createTunnel, FOG_DENSITY } from '../engine/tunnel.js';
 import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
-import { setBundledSpiralPool, prefetchSpirals, LEAN_SPIRALS } from '../engine/loomSpirals.js';
+import { setBundledSpiralPool, prefetchSpirals, setLoomBook, LEAN_SPIRALS } from '../engine/loomSpirals.js';
+import { createLoomBook } from './loomBook.js';
+import { createLoomSpiralFx } from './loomSpiralFx.js';
 import { createScreenShake } from '../game/screenShake.js';
 import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, COMBO_HOLD_SEC, makeRng } from './consts.js';
 import { createPace } from './pace.js';
@@ -261,10 +263,24 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     return text;
   }
   const fxProxy ={ pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
+  // OUR OWN SPIRALS (race/loomBook.js + race/loomSpiralFx.js). The owner's law is that every
+  // game's spirals come out of the Loom, so a spiral pop is WOVEN for this seed and this room
+  // and drawn live on a canvas inside payloadFx's hold - not one of seven stock gifs. The book
+  // reads the live room and the road's last phrase off this closure, so the picker downstream
+  // (engine/loomSpirals.js pickSpiral) never has to know what a room is.
+  const loomBook = createLoomBook({
+    seed,
+    room: () => (S.room && S.room.id) || '',
+    // the phrase the voice just said, while it is still worth echoing - the spiral wears it
+    word: () => (S.elapsed - echoAt <= ECHO_SEC ? echoWord : ''),
+  });
+  setLoomBook(loomBook.draw);
+  const spiralFx = createLoomSpiralFx({ reducedMotion, log: bridge.log });
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media,
-    subliminalFx: subl ? ({ text }) => subl.show({ text }) : null });
-  // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
-  // (warmFx) rather than 2-5 MB mid-lap; the desktop pool and the Loom's own spirals are untouched
+    subliminalFx: subl ? ({ text }) => subl.show({ text }) : null, spiralFx });
+  // Q.leanSpirals (mobile): the GIF FLOOR under a live spiral (and the wash's own fallback) draws
+  // from the two lightest bundled gifs, fetched while the intro plays (warmFx) rather than 2-5 MB
+  // mid-lap. With WebGL up nothing here is ever fetched at all; this is what a lost context lands on.
   setBundledSpiralPool(Q.leanSpirals ? LEAN_SPIRALS : null);
   let fxWarm = false;
   function warmFx() { if (fxWarm || !Q.leanSpirals) return; fxWarm = true; prefetchSpirals(LEAN_SPIRALS); }
@@ -370,6 +386,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
     wordyRows.clear(); lastFlashAt = -1e9; flashStats.pops = 0; flashStats.capped = 0; flashStats.rolls = 0; flashStats.flashes = 0;
     echoWord = ''; echoAt = -1e9; if (subl) subl.clear();   // "again" starts with nothing said and a clear glass
+    // the spiral book is the run's, not the page's: "again" on the same seed weaves the same
+    // spirals in the same order, and a new seed opens a new book (race/loomBook.js)
+    loomBook.reseed(runSeed); spiralFx.cancel();
     fxFired.clear();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
@@ -1059,6 +1078,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     teardown();
     audio.dispose();
     input.dispose(); hud.dispose(); if (captions) captions.dispose(); if (subl) subl.dispose(); shutter.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    setLoomBook(null); spiralFx.dispose();   // the page may go back to the menu: leave no weaver and no GL context behind
     pixel.dispose();
     scene.clear(); renderer.dispose();
   }
@@ -1133,6 +1153,15 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     },
     /** race/smoke/subliminal-check.mjs: how many cards were painted and how many the queue held. */
     subliminalStats: () => (subl ? subl.stats() : null),
+    /** race/smoke/loom-spiral-check.mjs + the shot harness: the live Loom canvases, and a way to
+     *  ask the book for one spiral by hand (a named room, a chosen phrase) without a world under it. */
+    loom: {
+      stats: () => spiralFx.diagnostics(),
+      draw: (o) => loomBook.draw(o || {}),
+      count: () => loomBook.count(),
+      /** Pretend the context went: the gif floor takes every hold from here on. */
+      breakGl: () => spiralFx.loseContext(),
+    },
     /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */
     capMode: () => CAP_MODE,
     /** THE SYNC WIN, for race/smoke/wsync-check.mjs: the log rows, the offset, a nudge, the export. */
