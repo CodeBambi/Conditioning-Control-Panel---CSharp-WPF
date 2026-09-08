@@ -293,8 +293,11 @@ module's bundled pool to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the ot
 `start()` covers `?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full
 pool and the Descent never calls the setter.
 
-On the web there is no account library (the site Loom is anonymous), so the web gets the race book
-only; the desktop hand-off that puts the player's own weaves on the road lands in the next PR.
+On the desktop `raceBoot.js` answers the host's `loom-list` the way `boot.js` does and
+`CaucusHostService` posts it on ready and again on every `DtrhLoomStore.Changed`, so a spiral woven
+in the Boudoir mid-session is on the road at the next pop. An entry with a `params` sidecar is
+woven live; one without is still its gif, so nothing fetches multiple MB mid-lap. On the web there
+is no account library (the site Loom is anonymous), so the web gets the race book only.
 Checks: `race/smoke/loom-book-check.mjs` (the book per room, the seed replay, the mantra),
 `race/smoke/spiral-pool-check.mjs` (the picker mix and the floor under it) and
 `race/smoke/loom-spiral-check.mjs` (the live canvas in the hold, the backing sizes, the
@@ -582,7 +585,7 @@ As built (PR 5 reality notes):
 - `bridge.isHosted` is a BOOLEAN export, not a function. `raceBoot.js` reads it to pick standalone dev mode
   (synthesised `init`, every would-be host message logged as `[race->host]`).
 - `run.js` registers the `pause` and `payout-result` bridge handlers itself; `raceBoot.js` owns `init`,
-  `manifest`, `favorites`, `ping`, `exit-request`, `fullscreen`.
+  `manifest`, `favorites`, `loom-list`, `ping`, `exit-request`, `fullscreen`.
 - Only `video` pops go to the host (`fire-payload {kind:'video', strength 0..100, durationMult}`);
   `payloadFx` never sends it. There is no `audio` bubble kind. Since 2026-09-06 no video bubble spawns
   and the host refuses the message, so this path is dark at both ends.
@@ -777,6 +780,8 @@ and with a track loaded (PR c2): `track-play {name}` (the run started, start the
 
 Host -> page: `init {protocol, settings:{masterVolume, reducedMotion}, modId, modContent}`,
 `manifest {images:[{name,url}], videos, skipped, truncated}`, `favorites {names}`,
+`loom-list {spirals:[{slug, url, params}]}` (the player's own woven spirals; `CaucusHostService`
+posts it on ready and on every `DtrhLoomStore.Changed`),
 `payout-result {baseXp, skillMult, finalXp, sparksEarned, previousBest, dryRun}`, `pause {on}`,
 `ping`, `exit-request`, and the track messages (PR c2): `track-progress {stage, pct, name}`,
 `track-chart {chart, partial}`, `track-clock {t, playing, durationSec}`, `track-ended`,
