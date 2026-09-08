@@ -1,5 +1,5 @@
 /* ============================================================================
- * board/scene.js - renderer, camera rig, lights and the board itself.
+ * board/scene.js - renderer, camera rig, lights, and the board and its plinth.
  *
  * Coordinate law for the whole game: one square is 1.0 world unit, the board is
  * centred on the origin, +Y is up. File a..h maps to x -3.5..3.5, rank 1..8 maps
@@ -37,6 +37,31 @@ export const LIGHT = Object.freeze({
   envSquares: 0.16,        // a hint in the gloss, not a second light
   envPlinth: 0.55,         // the dark box wants it: it is what gives it an edge
 });
+
+/** The plinth the board is bedded into. */
+const PLINTH = Object.freeze({
+  half: 4.7,        // out to the widest point, which is halfway up the wall
+  corner: 0.26,     // rounded, so the four corners are not a knife
+  deep: 0.40,       // plus a bevel at each end: 0.5 of plinth in total
+  bevel: 0.05,
+  top: 0x2E2757,    // the face the board sits on, lighter than the walls
+  side: 0x1B1738,   // and the walls, which are what the room falls away into
+});
+
+/** A square with rounded corners, centred on the origin, as a THREE.Shape. */
+function roundedSquare(half, r) {
+  const s = new THREE.Shape();
+  s.moveTo(-half + r, -half);
+  s.lineTo(half - r, -half);
+  s.quadraticCurveTo(half, -half, half, -half + r);
+  s.lineTo(half, half - r);
+  s.quadraticCurveTo(half, half, half - r, half);
+  s.lineTo(-half + r, half);
+  s.quadraticCurveTo(-half, half, -half, half - r);
+  s.lineTo(-half, -half + r);
+  s.quadraticCurveTo(-half, -half, -half + r, -half);
+  return s;
+}
 
 /** Square name ("e4") to the world position of its centre. */
 export function squareToWorld(sq, y = 0, out = new THREE.Vector3()) {
@@ -107,11 +132,33 @@ export function createScene({ canvas }) {
   const pieceGroup = new THREE.Group();
   scene.add(boardGroup, pieceGroup);
 
-  const plinthMat = new THREE.MeshPhysicalMaterial({
-    color: 0x241F45, roughness: 0.45, clearcoat: 0.35, envMapIntensity: LIGHT.envPlinth,
+  // The plinth. It used to be a plain box, which from any angle read as a
+  // shadow with a board floating on it. It is an extruded rounded square now,
+  // bevelled top and bottom: the bevel is a real facet, so the key light finds
+  // the far corner and the rim light draws a line down the near edge, and the
+  // top face is its own material a shade lighter than the walls, which is what
+  // tells you the board is standing ON something.
+  const plinthShape = roundedSquare(PLINTH.half, PLINTH.corner);
+  const plinthGeo = new THREE.ExtrudeGeometry(plinthShape, {
+    depth: PLINTH.deep, curveSegments: 8, bevelEnabled: true, bevelSegments: 2,
+    bevelThickness: PLINTH.bevel, bevelSize: PLINTH.bevel, bevelOffset: 0,
   });
-  const plinth = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.5, 9.4), plinthMat);
-  plinth.position.y = -0.33;
+  plinthGeo.rotateX(-Math.PI / 2);      // extruded along +Z, stood up along +Y
+  const plinthTopMat = new THREE.MeshPhysicalMaterial({
+    color: PLINTH.top, roughness: 0.38, clearcoat: 0.45, clearcoatRoughness: 0.25,
+    envMapIntensity: LIGHT.envPlinth,
+  });
+  const plinthSideMat = new THREE.MeshPhysicalMaterial({
+    color: PLINTH.side, roughness: 0.52, clearcoat: 0.3,
+    envMapIntensity: LIGHT.envPlinth * 0.8,
+  });
+  // ExtrudeGeometry groups the two lids as material 0 and the walls, bevel and
+  // all, as material 1. The bottom lid is never seen, so the top face and the
+  // one nobody looks at can happily share.
+  const plinth = new THREE.Mesh(plinthGeo, [plinthTopMat, plinthSideMat]);
+  // The geometry runs from -bevel to deep + bevel, so its top lands on -0.08:
+  // the height the squares are bedded into, exactly where the old box top was.
+  plinth.position.y = -(PLINTH.deep + PLINTH.bevel) - 0.08;
   plinth.receiveShadow = true;
   boardGroup.add(plinth);
 
