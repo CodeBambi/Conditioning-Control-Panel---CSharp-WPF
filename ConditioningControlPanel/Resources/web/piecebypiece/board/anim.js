@@ -20,6 +20,12 @@ const SINK = 0.7;
 
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
+// A man is not always one material: a modelled king wears a metal crown over
+// his silicone. The sink fade and the check glow belong to the whole man, so
+// they go through every material he owns.
+const skins = (piece) => piece.userData.materials
+  || (piece.userData.material ? [piece.userData.material] : []);
+
 export function createAnim({ group, jiggle = null }) {
   const slides = [];
   const tumbles = [];
@@ -77,8 +83,7 @@ export function createAnim({ group, jiggle = null }) {
       if (t.t > FALL) {
         const sink = Math.min(1, (t.t - FALL) / SINK);
         t.piece.position.y = t.start - sink * 1.1;
-        const mat = t.piece.userData.material;
-        if (mat) { mat.transparent = true; mat.opacity = 1 - sink; }
+        for (const mat of skins(t.piece)) { mat.transparent = true; mat.opacity = 1 - sink; }
         if (sink >= 1) { group.remove(t.piece); tumbles.splice(i, 1); }
       }
     }
@@ -97,11 +102,10 @@ export function createAnim({ group, jiggle = null }) {
         const fa = TUNE.buzzAmp * (1 - p);
         jiggle.drive(b.piece, Math.sin(b.t * TUNE.buzzFastX) * fa, Math.cos(b.t * TUNE.buzzFastZ) * fa * 0.6);
       }
-      const mat = b.piece.userData.material;
-      if (mat) mat.emissiveIntensity = 0.55 * (1 - p);
+      for (const mat of skins(b.piece)) mat.emissiveIntensity = 0.55 * (1 - p);
       if (p >= 1) {
         b.piece.position.set(b.home.x, b.piece.position.y, b.home.z);
-        if (mat) mat.emissiveIntensity = 0;
+        for (const mat of skins(b.piece)) mat.emissiveIntensity = 0;
         buzzes.splice(i, 1);
       }
     }

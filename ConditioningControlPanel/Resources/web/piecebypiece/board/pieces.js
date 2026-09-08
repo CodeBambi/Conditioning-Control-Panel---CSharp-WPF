@@ -3,9 +3,20 @@
  *
  * Placeholder art: every type is a lathed profile (turned on a lathe, like real
  * wooden chessmen) in a glossy silicone material. If a matching glb turns up in
- * assets/pieces/ it is used instead, per type, without a reload. A glb must be a
- * single mesh, +Y up, origin at the centre of its base, height exactly 1.0; it
- * gets scaled to the type height below.
+ * assets/pieces/ it is used instead, per type AND side, without a reload:
+ * `<name>.glb` dresses white, `<name>_purple.glb` dresses black, and a missing
+ * purple file falls back to the white glb.
+ *
+ * A glb is +Y up, origin at the centre of its base, front facing -Z (the way
+ * white looks down the board), and it carries its OWN height: one board square
+ * is 1.0, so a 1.25-tall king glb is a king a square and a quarter tall.
+ * Nothing rescales it.
+ *
+ * The body is the mesh carrying vertex colours (COLOR_0): those hold the
+ * piece's scheme, so it is lit through a white base colour with vertexColors
+ * on. Any other mesh in the file is jewellery (the king's crown, the queen's
+ * tiara) and keeps the material it was exported with, metal and all. The lathe
+ * placeholders keep the flat SKIN colours and the HEIGHT table.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -13,11 +24,12 @@ import { squareToWorld } from './scene.js';
 
 export const TYPES = ['p', 'n', 'b', 'r', 'q', 'k'];
 export const GLB_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+// Heights for the lathe placeholders only. A glb brings its own.
 export const HEIGHT = { p: 0.62, n: 0.80, b: 0.90, r: 0.70, q: 1.02, k: 1.15 };
 
 // Lathe profiles in NORMALISED space: y runs 0 (base) to 1 (crown), x is the
-// radius at that height. A piece is built at height 1 and then scaled by
-// HEIGHT[type], which is exactly the contract a supplied glb has to meet.
+// radius at that height. A placeholder is built at height 1 and then scaled by
+// HEIGHT[type].
 const PROFILE = {
   p: [[0,0],[0.34,0],[0.36,0.06],[0.26,0.14],[0.16,0.22],[0.145,0.46],[0.22,0.53],[0.13,0.58],[0.10,0.66],[0.17,0.74],[0.19,0.84],[0.14,0.94],[0.06,0.99],[0,1]],
   r: [[0,0],[0.38,0],[0.40,0.07],[0.30,0.15],[0.26,0.58],[0.30,0.68],[0.38,0.72],[0.38,1.0],[0.30,1.0],[0.30,0.86],[0,0.84]],
@@ -29,16 +41,26 @@ const PROFILE = {
 
 const SKIN = { w: { color: 0xFFF0F5, sheen: 0xFF9EC4 }, b: { color: 0x3B2A63, sheen: 0x7B6CFF } };
 
+// A glb node is allowed a transform of its own; if it has one it is baked into
+// the geometry, because only the geometry travels out of the file.
+const IDENTITY = new THREE.Matrix4();
+
 function lathe(points, segments = 40) {
   const geo = new THREE.LatheGeometry(points.map(([x, y]) => new THREE.Vector2(Math.max(x, 0.0001), y)), segments);
   geo.computeVertexNormals();
   return geo;
 }
 
-function material(side) {
+/**
+ * The silicone. `painted` is a piece whose geometry brings its own COLOR_0: the
+ * base colour goes white and the vertex colours do the tinting, but the sheen,
+ * the clearcoat and the emissive the buzz drives are the side's either way.
+ */
+function material(side, painted = false) {
   const skin = SKIN[side] || SKIN.w;
   return new THREE.MeshPhysicalMaterial({
-    color: skin.color, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.22, metalness: 0.0,
+    color: painted ? 0xFFFFFF : skin.color, vertexColors: painted,
+    roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.22, metalness: 0.0,
     sheen: 0.5, sheenColor: new THREE.Color(skin.sheen), sheenRoughness: 0.6,
     emissive: new THREE.Color(skin.sheen), emissiveIntensity: 0,
   });
@@ -79,28 +101,45 @@ function trim(type, mat) {
 
 export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {}, jiggle = null }) {
   const geoCache = new Map();
-  const glb = new Map();          // type -> geometry from a supplied glb
+  const glb = new Map();          // "type:side" -> art from a supplied glb
   const bySquare = new Map();     // square -> piece object
   let wobble = 0;
   let clock = 0;
 
-  function geometryFor(type) {
-    if (glb.has(type)) return glb.get(type);
+  const artKey = (type, side) => type + ':' + side;
+  const artFor = (type, side) => glb.get(artKey(type, side)) || null;
+
+  function geometryFor(type, side) {
+    const art = artFor(type, side);
+    if (art) return art.geometry;
     if (!geoCache.has(type)) geoCache.set(type, lathe(PROFILE[type]));
     return geoCache.get(type);
   }
 
   function build(type, side) {
     const root = new THREE.Group();
-    const mat = material(side);
-    const body = new THREE.Mesh(geometryFor(type), mat);
+    const art = artFor(type, side);
+    const mat = material(side, !!art && art.painted);
+    const mats = [mat];
+    const body = new THREE.Mesh(geometryFor(type, side), mat);
     body.castShadow = true;
     body.receiveShadow = true;
     root.add(body);
+    // Jewellery: every mesh in the glb that is not the body is metal, not
+    // silicone, so it keeps the material it was exported with. It shares the
+    // body's origin, so it needs no offset, and jiggle installs the flex on its
+    // material too - the crown bends with the head instead of hovering over it.
+    if (art) for (const bit of art.trims) {
+      const jewel = new THREE.Mesh(bit.geometry, bit.material ? bit.material.clone() : mat);
+      jewel.castShadow = true;
+      jewel.receiveShadow = true;
+      root.add(jewel);
+      mats.push(jewel.material);
+    }
     // Trim is baked into the body's own space before it joins the piece: the
     // flex shader reads position.y as a height up the piece, so a part that
     // carried its own offset would bend around the wrong origin.
-    if (!glb.has(type)) for (const part of trim(type, mat)) {
+    if (!art) for (const part of trim(type, mat)) {
       part.updateMatrix();
       part.geometry = part.geometry.clone().applyMatrix4(part.matrix);
       part.position.set(0, 0, 0);
@@ -108,10 +147,16 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
       part.castShadow = true;
       root.add(part);
     }
-    root.scale.setScalar(HEIGHT[type]);
+    // A lathe is normalised, so it is scaled to its type height; a glb already
+    // stands the height it was modelled at and is left alone at scale 1.
+    root.scale.setScalar(art ? 1 : HEIGHT[type]);
     // Knights (and any modelled piece) look at the far side.
     root.rotation.y = side === 'w' ? 0 : Math.PI;
-    root.userData = { type, side, material: mat, scaleBase: HEIGHT[type], phase: Math.random() * Math.PI * 2 };
+    root.userData = {
+      type, side, material: mat, materials: mats,
+      scaleBase: art ? art.height : HEIGHT[type],
+      phase: Math.random() * Math.PI * 2,
+    };
     if (jiggle) jiggle.attach(root);
     return root;
   }
@@ -183,34 +228,79 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
 
   // --- optional glb art ------------------------------------------------------
   // Probed with HEAD first so a missing file is a quiet 404, not a loader throw.
+  let loader = null;
+
+  /**
+   * One piece's art. The body is the mesh carrying COLOR_0, because that is
+   * what the silicone material is for; every other mesh is a jewel (the king's
+   * crown, the queen's tiara) and keeps the material it was exported with.
+   * Order is NOT the test: the crowned king export lists its crown first.
+   * Each geometry is baked into its node's transform, because only geometry
+   * travels out of the file.
+   *   -> { geometry, trims: [{geometry, material}], height }
+   */
+  async function loadArt(url) {
+    const head = await fetch(url, { method: 'HEAD' });
+    if (!head.ok) return null;
+    if (!loader) {
+      const mod = await import('three/addons/loaders/GLTFLoader.js');
+      loader = new mod.GLTFLoader();
+    }
+    const gltf = await loader.loadAsync(url);
+    const meshes = [];
+    gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      let geo = o.geometry;
+      if (!o.matrixWorld.equals(IDENTITY)) geo = geo.clone().applyMatrix4(o.matrixWorld);
+      geo.computeBoundingBox();
+      meshes.push({ geometry: geo, material: Array.isArray(o.material) ? o.material[0] : o.material });
+    });
+    if (!meshes.length) return null;
+    let body = meshes.findIndex((m) => m.geometry.attributes.color);
+    if (body < 0) body = 0;
+    let height = 0;
+    for (const m of meshes) if (m.geometry.boundingBox) height = Math.max(height, m.geometry.boundingBox.max.y);
+    return {
+      geometry: meshes[body].geometry,
+      trims: meshes.filter((_, i) => i !== body),
+      height: height > 0.05 ? height : 1,
+      // vertexColors on a geometry with no COLOR_0 renders the piece black, so
+      // a glb that brought no vertex colours is lit with the flat side colour.
+      painted: !!meshes[body].geometry.attributes.color,
+    };
+  }
+
+  /** Re-dress every man of this type and side that is already standing. */
+  function redress(type, side) {
+    for (const [sq, piece] of [...bySquare]) {
+      if (piece.userData.type !== type || piece.userData.side !== side) continue;
+      group.remove(piece);
+      bySquare.delete(sq);
+      const next = build(type, side);
+      place(next, sq);
+      group.add(next);
+      bySquare.set(sq, next);
+    }
+  }
+
   async function tryLoadGlb() {
-    let loader = null;
     for (const type of TYPES) {
-      const url = assetsBase + GLB_NAMES[type] + '.glb';
-      try {
-        const head = await fetch(url, { method: 'HEAD' });
-        if (!head.ok) continue;
-        if (!loader) {
-          const mod = await import('three/addons/loaders/GLTFLoader.js');
-          loader = new mod.GLTFLoader();
-        }
-        const gltf = await loader.loadAsync(url);
-        let geo = null;
-        gltf.scene.traverse((o) => { if (!geo && o.isMesh) geo = o.geometry; });
-        if (!geo) continue;
-        glb.set(type, geo);
-        // Swap the art under any piece of this type already on the board.
-        for (const [sq, piece] of [...bySquare]) {
-          if (piece.userData.type !== type) continue;
-          const side = piece.userData.side;
-          group.remove(piece);
-          bySquare.delete(sq);
-          const next = build(type, side);
-          place(next, sq);
-          group.add(next);
-          bySquare.set(sq, next);
-        }
-      } catch { /* no art for this type, the lathe stands in */ }
+      const name = GLB_NAMES[type];
+      let white = null;
+      try { white = await loadArt(assetsBase + name + '.glb'); }
+      catch { /* no art for this type, the lathe stands in */ }
+      if (!white) continue;
+      glb.set(artKey(type, 'w'), white);
+      redress(type, 'w');
+      // Black wears the purple cut of the same model. Without one it borrows
+      // white's art, which still reads as the other side: it is turned to face
+      // back down the board and lit with black's sheen.
+      let purple = null;
+      try { purple = await loadArt(assetsBase + name + '_purple.glb'); }
+      catch { /* fall through to white's art */ }
+      glb.set(artKey(type, 'b'), purple || white);
+      redress(type, 'b');
     }
   }
 
