@@ -1,0 +1,37 @@
+<!-- PORTED from ConditioningControlPanel/Dialogs/UpdateProgressDialog.xaml.
+     Structure, spacing and every resource key preserved. Deviations, all forced:
+       WindowStyle="ToolWindow"  -> SystemDecorations="BorderOnly"
+       ResizeMode="NoResize"     -> CanResize="False"
+       {loc:Str key}             -> a binding (LocExtension is a WPF MarkupExtension) -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.UpdateProgressDialog"
+        x:DataType="d:UpdateProgressViewModel"
+        xmlns:d="clr-namespace:ConditioningControlPanel.Avalonia.Views.Dialogs"
+        Title="{Binding LocTitle}"
+        Height="150" Width="400"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        SystemDecorations="BorderOnly"
+        Background="{DynamicResource DarkerBgBrush}">
+
+  <Grid Margin="20" RowDefinitions="Auto,Auto,Auto">
+
+    <!-- Title -->
+    <TextBlock Grid.Row="0" Text="{Binding LocHeading}"
+               Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+
+    <!-- Progress Bar -->
+    <Border Grid.Row="1" Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Height="20" Padding="2">
+      <Grid>
+        <Border x:Name="ProgressFill" Background="{DynamicResource PinkBrush}" CornerRadius="3"
+                HorizontalAlignment="Left" Width="0"/>
+      </Grid>
+    </Border>
+
+    <!-- Progress Text -->
+    <TextBlock x:Name="TxtProgress" Grid.Row="2" Text="0%"
+               Foreground="#E0E0E0" FontSize="13"
+               HorizontalAlignment="Center" Margin="0,10,0,0"/>
+  </Grid>
+</Window>

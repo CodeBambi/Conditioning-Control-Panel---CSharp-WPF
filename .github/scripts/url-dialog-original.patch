@@ -1,0 +1,10 @@
+diff --git a/CCP.Avalonia/Views/Dialogs/UrlPromptDialog.axaml.cs b/CCP.Avalonia/Views/Dialogs/UrlPromptDialog.axaml.cs
+index a908d910..27210f53 100644
+--- a/CCP.Avalonia/Views/Dialogs/UrlPromptDialog.axaml.cs
++++ b/CCP.Avalonia/Views/Dialogs/UrlPromptDialog.axaml.cs
+@@ -1 +0,0 @@
+-using System;
+@@ -36,2 +35 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
+-            if (!Uri.TryCreate(text, UriKind.Absolute, out var uri)
+-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
++            if (string.IsNullOrWhiteSpace(text))
