@@ -34,3 +34,61 @@
 @media (prefers-reduced-motion: reduce) {
   .pbp-fx *, .pbp-fx-front * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ===========================================================================
+ * ONE-SHOTS
+ * ==========================================================================*/
+
+/* flash pops: an image punched over the board or ringing its edges. Sized and
+ * timed from custom properties the layer sets, so the animation is shared. */
+.pbp-flash {
+  position: absolute;
+  width: var(--pbp-size, 22vmin);
+  max-width: 38vmin; max-height: 38vmin;
+  border-radius: 10px;
+  filter: drop-shadow(0 0 26px rgba(255, 105, 180, 0.85));
+  animation: pbp-flash-pop var(--pbp-dur, 1600ms) ease forwards;
+  will-change: transform, opacity;
+}
+@keyframes pbp-flash-pop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(0.8); }
+  13%  { opacity: var(--pbp-peak, 0.85); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1); }
+  70%  { opacity: var(--pbp-peak, 0.85); transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1.02); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pbp-rot, 0deg)) scale(1.07); }
+}
+
+/* falling gifs: one sprite per spawn, drifting sideways as it goes. */
+.pbp-rain {
+  position: absolute; top: -28vh;
+  width: var(--pbp-size, 14vmin);
+  border-radius: 8px;
+  filter: drop-shadow(0 0 14px rgba(255, 105, 180, 0.7));
+  animation: pbp-rain-fall var(--pbp-fall, 3200ms) linear forwards;
+  will-change: transform, opacity;
+}
+@keyframes pbp-rain-fall {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.5) rotate(0deg); }
+  12%  { opacity: var(--pbp-peak, 0.85); }
+  88%  { opacity: var(--pbp-peak, 0.85); }
+  100% { opacity: 0; transform: translate(var(--pbp-drift, 0), 145vh) scale(1) rotate(var(--pbp-spin, 0deg)); }
+}
+
+/* ===========================================================================
+ * SUSTAINED
+ * ==========================================================================*/
+
+/* the melt veil: a pink wash that breathes. ONE element for the whole game -
+ * a retune writes opacity, it never appends a second veil. */
+.pbp-melt {
+  position: absolute; inset: -12%;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 150, 205, 0.62) 0%, rgba(255, 20, 147, 0.7) 62%, rgba(120, 0, 70, 0.55) 100%);
+  mix-blend-mode: screen;
+  opacity: 0; transition: opacity 520ms ease;
+  will-change: opacity, transform;
+}
+.pbp-melt.is-on { animation: pbp-melt-drift var(--pbp-melt-ms, 9000ms) ease-in-out infinite alternate; }
+@keyframes pbp-melt-drift {
+  from { transform: translate(-1.5%, -1%) scale(1.02); }
+  to   { transform: translate(1.5%, 1.6%) scale(1.09); }
+}
