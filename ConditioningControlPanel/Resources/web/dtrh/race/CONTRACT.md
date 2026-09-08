@@ -153,7 +153,9 @@ field.update(dt, t, kart)               // kart = { d, x, h, speed }; runs motio
 field.onPop(cb)                         // cb(popEvent)
 field.onMiss(cb)                        // cb({ id, points, d, x, h }) when a treat passes behind the kart unpopped
 field.setDensity(mult)
-field.spawnAt({ kindId, placement, d, x, h, eventId })   // PR c2: an explicit placement from a track cue; the slot id, or -1 when the pool is full
+field.spawnAt({ kindId, placement, d, x, h, eventId, script })   // PR c2: an explicit placement from a track cue; the slot id, or -1 when it was refused
+                                        // `script: true` is a spawn the FILE asked for (a word bubble, a trigger row): no density roll, and a
+                                        // full pool recycles the farthest bubble rather than refusing the line (see CHART.md, 2026-09-08)
 field.setTracked(on)                    // PR c2: a track is loaded, so setDensity gates the CUE spawns and leaves the seeded lanes alone
 field.dispose()
 ```

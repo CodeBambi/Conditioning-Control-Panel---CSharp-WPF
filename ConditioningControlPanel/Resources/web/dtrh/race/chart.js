@@ -81,6 +81,10 @@ export function normalizeChart(json) {
     analysis: Object.freeze({
       energy: str(an.energy, ''), words: str(an.words, 'none'), generatedAt: str(an.generatedAt, ''), partial: an.partial === true, offsetSec: num(an.offsetSec, 0),
       lexicon: Object.freeze((Array.isArray(an.lexicon) ? an.lexicon : []).filter((w) => typeof w === 'string')),
+      // how much of the transcript reached the road (race/wordBubbles.js coverageOf), stamped by
+      // cloudChart.js wordedRoad and kept here so the cache, the host log and window.__race read
+      // the same number. null on a road with no transcript under it.
+      coverage: (an.coverage && typeof an.coverage === 'object') ? Object.freeze({ ...an.coverage }) : null,
     }),
     // THE TRANSCRIPT (race/words.js, CHART.md `chart.words`). The lines the voice says, with
     // the second each word lands on: it is what the captions layer reads and what tells the

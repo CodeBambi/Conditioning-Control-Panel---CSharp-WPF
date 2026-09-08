@@ -47,7 +47,7 @@ import { loadWords, loadWordsRow } from './words.js';
 import { shiftRoad, readNudge } from './wordSync.js';
 import { TRIGGER_SETS } from '../chart/editor/triggerSets.js';
 import { detect } from '../chart/maker/triggers.js';
-import { wordEventsFrom } from './wordBubbles.js';
+import { wordEventsFrom, coverageOf, coverageLine } from './wordBubbles.js';
 import { themeFor } from './triggerTheme.js';
 
 /**
@@ -387,11 +387,15 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
     .sort((a, b) => a.t - b.t)
     .map((e, i) => ({ ...e, id: 'g' + i }));
   const lexicon = [...new Set(events.filter((e) => e.kind === 'trigger').map((e) => e.label))].sort();
+  // THE COVERAGE CHECK (2026-09-08, the owner's "recheck after generating the track that actually
+  // all the words gets displayed"). Counted here, where the road is finished and the transcript is
+  // still in hand, and carried on the chart so the cache keeps it and window.__race can read it back.
+  const coverage = coverageOf(caps, triggers, events);
   return {
     version: 1, binSec: WORD_BIN_SEC, energy, events, acts: g.acts,
     words: caps,
     source: { name, hash, durationSec, sampleRate: DECODE_RATE },
-    analysis: { energy: 'web-rms-v1', words: 'script-align-v1', lexicon, generatedAt: g.generatedAt, partial: false },
+    analysis: { energy: 'web-rms-v1', words: 'script-align-v1', lexicon, coverage, generatedAt: g.generatedAt, partial: false },
   };
 }
 
@@ -538,7 +542,10 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
     const road = (words && words.words.length)
       ? wordedRoad({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash, words })
       : roadFromPeaks({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash });
-    if (words && words.words.length) say(`${title}: ${road.words.length} words and ${road.analysis.lexicon.length} triggers on the road`);
+    if (words && words.words.length) {
+      say(`${title}: ${road.words.length} words and ${road.analysis.lexicon.length} triggers on the road`);
+      if (road.analysis.coverage) say(coverageLine(title, road.analysis.coverage));   // the owner's recheck
+    }
     if (hash && cache) await cache.put(hash, road, GENERATOR_ID);   // at offset 0: tuned() shifts on the way out
     return { chart: await tuned(normalizeChart(road), { cloudId, hash, row: words }), door: 'generated' };
   }

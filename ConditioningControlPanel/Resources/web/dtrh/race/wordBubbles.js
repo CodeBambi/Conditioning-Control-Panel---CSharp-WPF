@@ -261,6 +261,77 @@ export function rateOf(phrases, winSec = 5) {
     perPhrase: phrases.length ? flat.length / phrases.length : 0 };
 }
 
+/* ---- THE COVERAGE CHECK -------------------------------------------------- *
+ * "we should recheck after generating the track that actually all the words gets
+ * displayed" - the owner, 2026-09-08. So every road built off a transcript counts
+ * itself as it leaves race/cloudChart.js wordedRoad, stamps the count on
+ * `analysis.coverage`, and says one line to the host log.
+ *
+ * A word is ON THE ROAD if it is either wearing a bubble of its own (`placed`) or
+ * inside a trigger row's own span (`rows`), because the row of five is a line of
+ * faces all saying that phrase - the words of a `good girl` hit are not missing, they
+ * are what the whole width of the road says for those seconds.
+ *
+ * A word is DROPPED three ways, and the line names each so nobody has to guess:
+ *   margin - inside HIT_GUARD_PRE/POST_SEC of a row but not in its span. This is the
+ *            pop box, not taste: two bubbles under 2 x POP_HIT_D of road apart sit in
+ *            the box together and one pass takes both, so a word this close to the
+ *            wall could not be taken separately anyway. 3.3 percent of the shelf.
+ *   piled  - three or more words the aligner collapsed onto one instant (see
+ *            MERGE_SEC). Physically impossible speech; race/wordBubbles.js un-piles
+ *            what it can and merges the rest.
+ *   short  - anything else, which should be nothing.
+ */
+
+/** The one number: how much of what she said the player can read, and what took the rest. */
+export function coverageOf(words, hits = [], events = [], opts = {}) {
+  const R = { ...WORD_RULE, ...(opts.rule || {}) };
+  const list = readWords(words);
+  const windows = guardWindows(hits, R.HIT_GUARD_PRE_SEC, R.HIT_GUARD_POST_SEC);
+  const spans = (Array.isArray(hits) ? hits : [])
+    .filter((h) => h && isFinite(num(h.t, NaN)))
+    .map((h) => ({ t0: num(h.t, 0), t1: num(h.t, 0) + Math.max(0, num(h.dur, 0)) }));
+
+  let placed = 0, lines = 0, singles = 0;
+  const seen = new Set();
+  for (const e of Array.isArray(events) ? events : []) {
+    if (!e || e.kind !== 'word' || typeof e.w !== 'string' || !e.w) continue;
+    placed += e.w.trim().split(/\s+/).length;
+    const key = e.p == null ? 'e' + e.t : 'p' + e.p;
+    if (!seen.has(key)) { seen.add(key); lines++; }
+  }
+  // a line of ONE bubble: the thing the owner saw when the field was thinning them
+  const perLine = new Map();
+  for (const e of Array.isArray(events) ? events : []) {
+    if (!e || e.kind !== 'word' || typeof e.w !== 'string' || !e.w) continue;
+    const key = e.p == null ? 'e' + e.t : 'p' + e.p;
+    perLine.set(key, (perLine.get(key) || 0) + 1);
+  }
+  for (const n of perLine.values()) if (n === 1) singles++;
+
+  let rows = 0, margin = 0, gi = 0;
+  for (const w of list) {
+    const g = inGuard(windows, gi, w.t);
+    gi = g.i;
+    if (!g.hit) continue;
+    if (spans.some((s) => w.t >= s.t0 && w.t <= s.t1)) rows++; else margin++;
+  }
+  const said = list.length;
+  const onRoad = placed + rows;
+  const short = Math.max(0, said - onRoad - margin);
+  return { said, placed, rows, onRoad, margin, piled: short, lines, singles,
+    pct: said ? onRoad / said : 1 };
+}
+
+/** The line the host log gets, and the one race/smoke/coverage-check.mjs prints. Never quotes a word. */
+export function coverageLine(name, cov) {
+  const pc = (100 * (cov.pct || 0)).toFixed(1);
+  return `[race-coverage] ${name || 'track'}: ${pc}% (${cov.onRoad}/${cov.said}) - ${cov.placed} on their own bubble, `
+    + `${cov.rows} said by a trigger row; dropped ${cov.said - cov.onRoad}: ${cov.margin} in a row's margin, `
+    + `${cov.piled} piled; ${cov.lines} lines, ${cov.singles} of one word`;
+}
+
 export default phrasesFrom;
 
-// self-check: node race/smoke/words-rate-check.mjs holds all eleven transcripts against WORD_RULE.
+// self-check: node race/smoke/words-rate-check.mjs holds all eleven transcripts against WORD_RULE,
+// and node race/smoke/coverage-check.mjs drives the whole shelf through the field's own refusals.

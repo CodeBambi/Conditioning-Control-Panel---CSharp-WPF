@@ -219,8 +219,12 @@ export function cueFor(event, ctx = {}) {
       const rain = !gold && !cue.mix && gifRainRow(kindId, intensity, rng);
       for (const x of ROW_X) {
         const mid = Math.abs(x) < 1e-6;
+        // `script: true`: the row is the file talking, not the road being dressed, so race/bubbles.js
+        // lays it whatever the density knob is on. "A trigger row that never lands is the one thing
+        // this road may not do" was already written above the fallback kind; a density of 0 through a
+        // silence used to be able to do exactly that.
         cue.spawn.push({ kindId: mid ? (gold ? 'golden' : (rain ? GIFRAIN_KIND : kindId)) : kindId,
-          placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
+          placement: 'lane', x, h: LANE_H, at: 0, row: true, script: true, w: label || '', ink, big: true });
       }
       cue.word = label || null;
       cue.pose = 'grab';
@@ -238,12 +242,15 @@ export function cueFor(event, ctx = {}) {
       // says it whatever the throttle did. A row of one is still a row of one.
       // It carries nothing on the chrome: six hundred words on the toast rail is exactly the noise
       // the owner asked us to take off this road, and the word is read off the bubble's own face.
+      // `script: true` is the other half of what makes it a word rather than dressing: race/bubbles.js
+      // never rolls one against the density knob and never refuses one for a full pool, so a line the
+      // voice is saying cannot come out as one bubble on its own (see spawnRow).
       if (typeof event.w === 'string' && event.w) {
         const x = Number.isFinite(Number(event.x)) ? clamp(Number(event.x), -LANE_X_MAX, LANE_X_MAX) : 0;
         // the face: every word is painted on its bubble, an accent word on a bigger bubble and in
         // the colour of the set this second belongs to (race/cloudChart.js stamps `cue`), else pink.
         const accent = accentOf(event.w);
-        cue.spawn.push({ kindId: 'treat', placement: 'lane', x, h: LANE_H, at: 0, row: true, w: event.w,
+        cue.spawn.push({ kindId: 'treat', placement: 'lane', x, h: LANE_H, at: 0, row: true, script: true, w: event.w,
           big: accent, ink: accent ? tagInk(event) : null });
         break;
       }

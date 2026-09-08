@@ -643,7 +643,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (row.length) {
       const at = e.t + (row[0].at || 0), d = sync.depthFor(t, ks.d, ks.speed, at);
       const rowId = w.field.spawnRow({ kindId: row[0].kindId, kindIds: row.map((sp) => sp.kindId), placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id,
-        w: row[0].w || '', ink: row[0].ink || null, big: !!row[0].big });   // the tag, on the middle bubble alone
+        w: row[0].w || '', ink: row[0].ink || null, big: !!row[0].big, script: !!row[0].script });   // the tag, on the middle bubble alone
       if (rowId) sync.trackRow(rowId, e, at, d, t);
       // the word this bubble wears, kept until it is popped or driven past (flashWord spends it).
       // A trigger ROW is not one of these: its word flies at the camera on the plate instead.
@@ -663,7 +663,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       }
     }
     for (const sp of loose) {
-      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d: sync.depthFor(t, ks.d, ks.speed, e.t + (sp.at || 0)), x: sp.x, h: sp.h, eventId: e.id });
+      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d: sync.depthFor(t, ks.d, ks.speed, e.t + (sp.at || 0)), x: sp.x, h: sp.h, eventId: e.id, script: !!sp.script });
     }
     sync.defer(e, cue, t);
   }
