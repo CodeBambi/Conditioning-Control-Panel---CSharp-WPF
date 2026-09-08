@@ -340,7 +340,7 @@ below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own sta
 
 ### `race/run.js` + `raceBoot.js` + `race.html` (PR 5, integration)
 ```js
-export function createRace({ root, bridge, media, settings, seed }) ->
+export function createRace({ root, bridge, media, settings, seed, onExit }) ->
   { start(), prepare(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera,
     setTrack(chart | null), replaceTrack(chart), trackClock(t, playing), trackEnded(), track }
 ```
@@ -358,6 +358,19 @@ and gates which bubble kinds may appear. Treat pops go to score; effect pops cal
 `payloadFx.applyPayload({ payload, strength }, { durationMult })`, `video`/`audio` go to the host
 through the `fire-payload` bridge message exactly like `chaosRun.js` does today. ESC = Brake
 (pause + end screen). Run end sends `run-ended` (below).
+
+**The End screen's `surface` goes BACK TO THE MENU, it never closes the page.** `onExit` is the way
+home: run.js stops the file, drops the world (`teardown`), resets the run state, re-arms the same
+chart at `t = 0` (so picking that level again replays it) and calls `onExit()`. raceBoot's
+`backToMenu` puts the lobby chrome, the menu stage, the menu theme and the levels panel's picked row
+back, clears `started` so `race` (and a host `cloud-run`) can fire again, and answers `true`. It
+answers `false` when there is no menu to go back to (`?autostart=1`, `?scene=intro`), and only then
+does the End screen fall through to `exit()` and close the page. `run-ended` is still sent exactly
+once per run, before any of this, and `payout-result` still resolves against it. The two REAL exits
+are unchanged: the host's `exit-request` and the menu's own `surface` verb, both of which post
+`exit` + `exit-done`. No host-protocol change: a host that only ever saw `exit` after a run now
+simply does not see one until the player asks to leave. `node race/smoke/menu-return-check.mjs`
+drives that whole path through the real page and holds it down.
 
 As built (PR 5 reality notes):
 - `race/input.js` is the single reader of keyboard + gamepad + touch:

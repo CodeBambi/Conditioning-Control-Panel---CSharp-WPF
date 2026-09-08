@@ -11,8 +11,10 @@
  * module import, the world build and the glb fetch, and hosts the wait note
  * and boot errors) -> on a first open the four introduction cards
  * (race/cards.js) -> the MENU is the resting state -> `race` plays the intro
- * on the menu stage -> the run starts under the camera whip. `surface` from
- * the menu is the same exit the End screen takes.
+ * on the menu stage -> the run starts under the camera whip. The End
+ * screen's `surface` comes BACK HERE (backToMenu, run.js `onExit`): the menu is
+ * the resting state either side of a run, and only the menu's own `surface`
+ * verb and the host's exit-request take the page away.
  *
  * Host messages owned here: init, manifest, favorites, ping, exit-request,
  * fullscreen, local-media, setting (run.js owns pause + payout-result). Sent
@@ -245,7 +247,28 @@ function trackError(message) {
   plate({ stage: 'error', message: String(message).slice(0, 80).toLowerCase() });
   errorTimer = setTimeout(() => plate(trackReady), 4000);
 }
-/** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes through run.js). */
+/**
+ * THE WAY BACK FROM THE END SCREEN (run.js `leave()` calls this through `onExit`). The run has
+ * already stopped the file, dropped its world and reset itself; this puts the front door back:
+ * the lobby chrome, the menu stage, the menu theme (menu.show -> theme(true)) and the levels
+ * panel's picked row. `started` goes false so `race` can fire again (race.prepare() rebuilds the
+ * world it just dropped) and a `cloud-run` from the host is heard again.
+ * Answers false when there is no menu to go back to (`?autostart=1` never built one, `?scene=intro`
+ * is on its way into a run) and run.js then closes the page the old way.
+ */
+function backToMenu() {
+  if (exiting || !race || !menu) return false;
+  started = false;
+  stopTrackClock();
+  if (errorTimer) { clearTimeout(errorTimer); errorTimer = 0; }
+  if (hudRoot) hudRoot.classList.add('is-lobby');
+  try { race.setStage(menu.stage); } catch (e) { host.log('to menu stage: ' + e); }
+  menu.show();
+  if (trackReady) plate(trackReady);
+  host.log('back to the menu');
+  return true;
+}
+/** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes back to the menu). */
 function surface() {
   if (exiting) return;
   exiting = true;
@@ -307,7 +330,7 @@ async function boot() {
     if (cloud && !hosted) settings.hostSfx = false;
     seed = settings.seedLock != null ? settings.seedLock : rollSeed();
     note('the road is drawing');
-    race = createRace({ root, bridge: cloud ? { ...host, isHosted: true } : host, media, settings, seed });
+    race = createRace({ root, bridge: cloud ? { ...host, isHosted: true } : host, media, settings, seed, onExit: backToMenu });
     // the persisted option sliders, before the first frame: the menu theme comes up at the right level
     try { if (race.audio && race.audio.setLevels) race.audio.setLevels({ music: opts.music, sfx: opts.sfx }); } catch (e) { host.log('levels: ' + e); }
     note('');
@@ -377,7 +400,9 @@ async function standaloneTrack() {
   const dur = chart.source.durationSec;
   startTrackClock = () => {
     if (trackTimer) return;
-    if (trackAudio) { const p = trackAudio.play(); if (p && p.catch) p.catch((e) => host.log('track audio: ' + e)); }
+    // from the top every time, the way race/cloud.js starts its element on `track-play`: a run
+    // taken again after the End screen sent us back to the menu is a replay, not a resume.
+    if (trackAudio) { try { trackAudio.currentTime = 0; } catch (e) { /* not seekable yet */ } const p = trackAudio.play(); if (p && p.catch) p.catch((e) => host.log('track audio: ' + e)); }
     race.trackClock(0, true);
     trackTimer = setInterval(() => {
       // with audio the file is the authority and its currentTime snaps the clock. Without it the run
