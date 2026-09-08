@@ -25,8 +25,9 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUBBLE_KINDS, KIND_BY_ID } from '../bubbleKinds.js';
 import { normalizeChart } from '../chart.js';
+import { TRIGGER_SETS, laysRow } from '../../chart/editor/triggerSets.js';
 import { THEME_BY_PRESET, PRESETS_IN_USE, kindForPreset, themeFor, FALLBACK_KIND } from '../triggerTheme.js';
-import { GENERATOR_ID, WORD_BIN_SEC, BIN_SEC, CAPTION_CONF, captionWords, scanTriggers, triggerHits, wordedRoad, roadFromPeaks, PEAKS_PER_SEC } from '../cloudChart.js';
+import { GENERATOR_ID, WORD_BIN_SEC, BIN_SEC, CAPTION_CONF, FP_SNAP_SEC, captionWords, scanTriggers, triggerHits, wordedRoad, roadFromPeaks, PEAKS_PER_SEC } from '../cloudChart.js';
 
 let fails = 0;
 const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -35,6 +36,7 @@ const eq = (got, want, what) => ok(got === want, what + ' (got ' + JSON.stringif
 const RACE = resolve(fileURLToPath(import.meta.url), '../..');
 const read = (rel) => JSON.parse(readFileSync(resolve(RACE, rel), 'utf8'));
 const index = read('words/index.json');
+const TRIGGER_SET_BY_ID = new Map(TRIGGER_SETS.map((t) => [t.id, t]));
 const ROW = index.rows[0];                                  // the opening track: short, and it says the phrase
 // the aligner stamp lives on the index row, not on the race copy of the transcript, and
 // race/words.js loadWords() hands it to the road: the fixture is read the same way here.
@@ -52,6 +54,9 @@ function swell(durationSec, perSec = PEAKS_PER_SEC) {
   }
   return peaks;
 }
+
+/** the seconds a words file carries are rounded to the hundredth, so the fixtures are too. */
+const r2 = (v) => Math.round(v * 100) / 100;
 
 /* ---- 1. the theme table --------------------------------------------------- */
 const rows = Object.entries(THEME_BY_PRESET);
@@ -82,30 +87,49 @@ ok(hits.every((h, i) => i === 0 || h.t >= hits[i - 1].t), 'the hits come out sor
 ok(hits.every((h) => h.setId && h.id && h.t >= 0 && h.t <= DUR), 'every hit names its set and sits inside the file');
 ok(hits.some((h) => h.setId === 'bambi-sleep'), 'and the opening track really does say the phrase the road is built on');
 
-/* ---- 2b. the fingerprinted seconds win over the scan ------------------------ */
+/* ---- 2b. the scan is the roll call, the fingerprint is the clock ------------ */
 {
+  // Until 2026-09-08 a words file that shipped `hits` was taken INSTEAD of the scan, so a
+  // catalogue set the file had never been fingerprinted for could never reach the road: the
+  // catalogue could grow and nothing would change, quietly. Now the scan says WHICH phrases are
+  // said and the fingerprint only moves the ones it recognises onto their truer second.
   const bare = { ...WORDS }; delete bare.hits;
   const scanned = scanTriggers(bare, DUR);
-  eq(JSON.stringify(triggerHits(bare, DUR)), JSON.stringify(scanned), 'a words file with no hits gets the live scan, exactly');
-  const fp = { ...bare, hits: [{ setId: 'bambi-sleep', t: 10, dur: 0.6, score: 0.9, src: 'fp', conf: 0.7 }, { setId: 'good-girl', t: 20.5, dur: 0.5, score: 0.5, src: 'words', conf: 1 },
-    { setId: 'bambi-sleep', t: 30, dur: 0.6, score: 0.95, src: 'fp' }, { setId: 'not-a-set', t: 40, dur: 1, score: 1, src: 'fp' }] };
+  ok(JSON.stringify(triggerHits(bare, DUR)) === JSON.stringify(scanned), 'a words file with no hits gets the live scan, exactly');
+  const sleep0 = scanned.find((h) => h.setId === 'bambi-sleep');
+  const good0 = scanned.find((h) => h.setId === 'good-girl');
+  ok(!!sleep0 && !!good0, 'the transcript says both of the two the merge is tested on');
+  const fp = { ...bare, hits: [
+    { setId: 'bambi-sleep', t: r2(sleep0.t + 0.4), dur: 0.6, score: 0.9, src: 'fp', conf: 0.7 },
+    { setId: 'good-girl', t: r2(good0.t - 0.3), dur: 0.5, score: 0.5, src: 'words', conf: 1 },
+    { setId: 'bambi-sleep', t: r2(sleep0.t + 400), dur: 0.6, score: 0.95, src: 'fp' },
+    { setId: 'not-a-set', t: 40, dur: 1, score: 1, src: 'fp' }] };
   const got = triggerHits(fp, DUR);
-  eq(got.length, 3, 'a words file with hits gets its hits, and a set the catalogue no longer has is dropped');
-  eq(got.map((h) => h.t).join(','), '10,20.5,30', 'in time order, at the fingerprinted seconds, not the scan\'s');
-  eq(got.map((h) => h.id).join(','), 'h:bambi-sleep:0,h:good-girl:0,h:bambi-sleep:1', 'numbered per set in the scan\'s own shape');
-  eq(got[0].conf, 0.7, 'the phrase keeps the confidence the transcript gave it');
-  eq(got[2].conf, 1, 'and a hit with no conf is sure');
-  eq(triggerHits({ ...bare, hits: [{ setId: 'not-a-set', t: 1, dur: 1, score: 1, src: 'fp' }] }, DUR).length, scanned.length, 'hits that are all for unknown sets fall back to the scan');
+  eq(got.length, scanned.length, "the merge lays the scan's roll call, no more and no less");
+  ok(got.every((h, i) => i === 0 || h.t >= got[i - 1].t), 'still in time order after the snap');
+  const moved = got.find((h) => h.setId === 'bambi-sleep' && Math.abs(h.t - (sleep0.t + 0.4)) < 1e-6);
+  ok(!!moved, 'a fingerprinted phrase moves onto the second the audio gave it');
+  eq(moved.conf, 0.7, 'and keeps the confidence the fingerprint gave it');
+  eq(moved.src, 'fp', 'and says where that second came from');
+  ok(got.some((h) => h.setId === 'good-girl' && Math.abs(h.t - (good0.t - 0.3)) < 1e-6), 'in both directions');
+  ok(!got.some((h) => h.t > sleep0.t + 300), 'a fingerprinted second with no phrase anywhere near it is dropped, not laid');
+  ok(got.every((h) => scanned.some((s) => s.setId === h.setId && Math.abs(s.t - h.t) <= FP_SNAP_SEC + 1e-6)), 'no row moved further than the snap window (' + FP_SNAP_SEC + ' s)');
+  eq(triggerHits({ ...bare, hits: [{ setId: 'not-a-set', t: 1, dur: 1, score: 1, src: 'fp' }] }, DUR).length, scanned.length, 'hits that are all for unknown sets change nothing');
   const road2 = wordedRoad({ peaks: swell(DUR), durationSec: DUR, name: ROW.title, hash: ROW.hash, words: fp });
   const tr2 = road2.events.filter((e) => e.kind === 'trigger');
-  ok(tr2.some((e) => e.setId === 'bambi-sleep' && e.t === 10) && tr2.some((e) => e.setId === 'bambi-sleep' && e.t === 30), 'and the worded road lays its triggers at the fingerprinted seconds');
+  ok(tr2.length > 0 && tr2.every((e) => got.some((h) => Math.abs(h.t - e.t) < 1e-6)), 'and the worded road lays its triggers on the merged seconds');
   ok(Array.isArray(WORDS.hits) && WORDS.hits.length > 0, ROW.title + ' ships with ' + (WORDS.hits || []).length + ' fingerprinted hits');
-  // The fingerprint refines the scan, it never invents. Since the 2026-09-08 catalogue wave a hit may
-  // be heard by a DIFFERENT set than the one it was fingerprinted for (the precedence rule hands an
-  // overlap to the longer phrase), and a set that clusters folds several seconds into one span, so
-  // what has to hold is that the second is still heard, not that it is still heard by the same name.
+  // A shipped hit for a set that no longer lays a row (the accent words) is not a miss, it is the
+  // catalogue saying that phrase is said too often to stop the road; and a shipped second the scan
+  // hears nowhere near is dropped by the merge rather than laid on trust.
   const near = (h, sp) => Math.abs(sp.t - h.t) <= 0.6 || (h.t >= sp.t - 0.6 && h.t <= sp.t + sp.dur + 0.6);
-  ok(WORDS.hits.every((h) => scanned.some((sp) => near(h, sp))), 'every shipped hit is a second the scan hears too (the fingerprint refines, it does not invent)');
+  const shipped = WORDS.hits.filter((h) => laysRow(TRIGGER_SET_BY_ID.get(h.setId)));
+  ok(shipped.every((h) => scanned.some((sp) => near(h, sp))), 'every one of the ' + shipped.length + ' shipped row hits is a second the scan hears too (the fingerprint refines, it does not invent)');
+  ok(WORDS.hits.length > shipped.length, 'and the ones it no longer lays are the accent words, on purpose');
+  // the real file, merged: every set the fingerprint never carried still reaches the road
+  const live = triggerHits(WORDS, DUR);
+  const fpSets = new Set(WORDS.hits.map((h) => h.setId));
+  ok(live.filter((h) => !fpSets.has(h.setId)).length > 0, 'and the sets the fingerprint never saw are on the road now, not lost');
 }
 
 /* ---- 3. the worded road --------------------------------------------------- */
@@ -154,7 +178,7 @@ eq(plain.analysis.words, 'none', 'a track with no transcript still gets the road
 eq(plain.binSec, BIN_SEC, 'at the quarter second bin it was tuned to');
 ok(!plain.events.some((e) => e.kind === 'trigger'), 'and it has no triggers on it, because nobody heard one');
 eq(normalizeChart(plain).words.length, 0, 'and no caption track');
-eq(GENERATOR_ID, 'web-road-v4', 'the cache key moved again, so a v3 road (a handful of loose treats where the new one carries the whole script) can never be served');
+eq(GENERATOR_ID, 'web-road-v5', 'the cache key moved again, so a v4 road (a dozen phrases a track where the new one hears the whole catalogue) can never be served');
 
 console.log(fails ? '\nlyrics-road-check: ' + fails + ' failed' : '\nlyrics-road-check: all good');
 process.exit(fails ? 1 : 0);
