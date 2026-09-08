@@ -4375,6 +4375,7 @@
   "modmgr_pack_installing": "Installing...",
   "modmgr_pack_ready": "Media downloaded. Restart the app if anything still looks missing.",
   "modmgr_pack_failed": "Download failed. Check your connection and try again.",
+  "modmgr_pack_offline": "Offline mode is on, so nothing can download. Turn it off in Settings > Data, then come back.",
   "modmgr_pack_unavailable": "Download server unreachable. Try again later.",
   "modmgr_badge_needs_download": "⬇ media",
   "_comment_companion_memory": "\"What she knows about you\" companion memory panel (AI rework Train 1)",

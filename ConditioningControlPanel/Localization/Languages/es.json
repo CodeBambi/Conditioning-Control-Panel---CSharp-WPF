@@ -3078,6 +3078,7 @@
   "modmgr_pack_installing": "Instalando...",
   "modmgr_pack_ready": "Contenido descargado. Reinicia la app si algo sigue faltando.",
   "modmgr_pack_failed": "Falló la descarga. Revisa tu conexión e inténtalo de nuevo.",
+  "modmgr_pack_offline": "El modo sin conexión está activado, así que no se puede descargar nada. Desactívalo en Ajustes > Datos y vuelve.",
   "modmgr_pack_unavailable": "Servidor de descargas inaccesible. Inténtalo más tarde.",
   "modmgr_badge_needs_download": "⬇ contenido",
   "_comment_intake_pass": "Weekly Intake Pass + punch card (intake onboarding)",

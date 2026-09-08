@@ -3078,6 +3078,7 @@
   "modmgr_pack_installing": "インストール中...",
   "modmgr_pack_ready": "メディアをダウンロードしました。まだ足りないものがあればアプリを再起動してください。",
   "modmgr_pack_failed": "ダウンロードに失敗しました。接続を確認してやり直してください。",
+  "modmgr_pack_offline": "オフラインモードがオンなので何もダウンロードできません。設定 > データ でオフにしてから戻ってきてください。",
   "modmgr_pack_unavailable": "ダウンロードサーバーに接続できません。しばらくしてからお試しください。",
   "modmgr_badge_needs_download": "⬇ 未取得",
   "_comment_intake_pass": "Weekly Intake Pass + punch card (intake onboarding)",

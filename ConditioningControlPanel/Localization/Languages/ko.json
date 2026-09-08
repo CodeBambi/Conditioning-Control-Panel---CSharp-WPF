@@ -3085,6 +3085,7 @@
   "modmgr_pack_installing": "설치 중...",
   "modmgr_pack_ready": "미디어를 받았어요. 아직 빠진 게 있으면 앱을 다시 시작해 주세요.",
   "modmgr_pack_failed": "다운로드에 실패했어요. 연결을 확인하고 다시 시도해 주세요.",
+  "modmgr_pack_offline": "오프라인 모드가 켜져 있어서 아무것도 내려받을 수 없어요. 설정 > 데이터에서 끄고 다시 와 주세요.",
   "modmgr_pack_unavailable": "다운로드 서버에 연결할 수 없어요. 나중에 다시 시도해 주세요.",
   "modmgr_badge_needs_download": "⬇ 미다운로드",
   "_comment_intake_pass": "Weekly Intake Pass + punch card (intake onboarding)",

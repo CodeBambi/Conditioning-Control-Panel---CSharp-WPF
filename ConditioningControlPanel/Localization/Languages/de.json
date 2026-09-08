@@ -3086,6 +3086,7 @@
   "modmgr_pack_installing": "Wird installiert...",
   "modmgr_pack_ready": "Medien heruntergeladen. Starte die App neu, falls noch etwas fehlt.",
   "modmgr_pack_failed": "Download fehlgeschlagen. Prüfe deine Verbindung und versuche es erneut.",
+  "modmgr_pack_offline": "Offline-Modus ist an, es kann also nichts heruntergeladen werden. Schalte ihn unter Einstellungen > Daten aus und komm dann zurück.",
   "modmgr_pack_unavailable": "Download-Server nicht erreichbar. Versuche es später erneut.",
   "modmgr_badge_needs_download": "⬇ Medien",
 

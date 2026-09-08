@@ -3085,6 +3085,7 @@
   "modmgr_pack_installing": "Установка...",
   "modmgr_pack_ready": "Медиа скачаны. Если чего-то всё ещё не хватает, перезапусти приложение.",
   "modmgr_pack_failed": "Не удалось скачать. Проверь соединение и попробуй снова.",
+  "modmgr_pack_offline": "Включён офлайн-режим, поэтому ничего не скачается. Выключи его в Настройки > Данные и вернись сюда.",
   "modmgr_pack_unavailable": "Сервер загрузок недоступен. Попробуй позже.",
   "modmgr_badge_needs_download": "⬇ медиа",
   "_comment_intake_pass": "Weekly Intake Pass + punch card (intake onboarding)",

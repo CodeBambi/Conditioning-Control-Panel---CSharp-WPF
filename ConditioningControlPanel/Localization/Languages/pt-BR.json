@@ -3085,6 +3085,7 @@
   "modmgr_pack_installing": "Instalando...",
   "modmgr_pack_ready": "Mídia baixada. Reinicie o app se ainda parecer faltar algo.",
   "modmgr_pack_failed": "Falha no download. Verifique sua conexão e tente de novo.",
+  "modmgr_pack_offline": "O modo offline está ativado, então nada pode ser baixado. Desative em Configurações > Dados e volte aqui.",
   "modmgr_pack_unavailable": "Servidor de download inacessível. Tente mais tarde.",
   "modmgr_badge_needs_download": "⬇ mídia",
 
