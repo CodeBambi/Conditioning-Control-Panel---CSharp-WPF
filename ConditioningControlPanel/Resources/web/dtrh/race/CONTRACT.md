@@ -206,6 +206,8 @@ one bubble in twelve, so only the longest chant carries one at all:
 | video | effect | video | 40 | DARK since 2026-09-06, never spawns (see below) |
 | gifwash | effect | gifWash | 20 | weight 7, minIntensity 0.1, THE MIX slot `wash` (see below) |
 | blackout | effect | blackout | 30 | weight 1.8, minIntensity 0.5, THE MIX slot `overlay` (see below) |
+| lock | effect | bambiLock | 30 | weight 1.8, minIntensity 0.5, THE MIX slot `freeze`, says the road's phrase (see below) |
+| melt | effect | melt | 20 | weight 3, minIntensity 0.15, THE MIX slot `tint` (see below) |
 
 THE GIF TAKES THE SCREEN (`gifwash`, 2026-09-08, the owner's ask: "we should also use often the
 fullscreen gif overlay, the one we use for the glitch bubble in the dtrh"). `payloadFx.showGifWash`
@@ -231,6 +233,30 @@ dark. It rides the `overlay` slot (its `overlayKind` is `braindrain`, which is w
 to) and `fire()` in run.js refuses it unless `S.running && !S.ended`, so it never lands on the
 countdown or once the End card is owed - the pop still scores, only the picture is withheld.
 Both layers live inside `.sf-pfx` (z4), under the countdown (z21) and the End card (z25).
+
+THE DOLL (`lock`, 2026-09-08). The freeze card and the freeze timing (`.sf-pfx-freeze`, in at
+0.25 s, out at 1.2 s, gone at 1.7 s, `w.kart.applySlow(0.92, 2.0)` under it), with two differences.
+It wears `.is-lacquer`: satin sheen over a poured pink frame instead of the frost tint, the phrase
+allowed to wrap. And it SPEAKS the road's own words - `payloadFx.bambiFreeze(text, lacquer)` takes
+an optional phrase the same way `subliminal` took `p.text`, and run.js's `SPEAKING` set (`subliminal`,
+`bambiLock`) hands it the popped bubble's word, else the road's last line inside `ECHO_SEC`, else
+nothing, which drops it back on payloadFx's own pool. It shares the solo `freeze` slot with the
+plain freeze, so two cards can never talk over each other, and the `freeze` row is untouched: that
+one still says the literal BAMBI FREEZE, in the tube as well as on the road.
+
+MELTING (`melt`, 2026-09-08). The pink filter that sags. Same `tint` slot and the same
+`.sf-pfx-pink` layer a pink pop uses, so one colour on the glass stays one colour, but
+`payloadFx.showMelt` retimes the layer's opacity ease to the whole hold (`2-4 s` by strength, then
+`durationMult`) and ramps from whatever the tint already is up to `0.30-0.78`, so the colour arrives
+instead of snapping. `.is-melting` re-centres the gradient high, sinks and stretches the layer
+(`sf-pfx-sag`, transform and filter only) and runs the wash slowly downward (`sf-pfx-drip`, on
+`background-position` over a `145%`-tall background). `showPink` takes the class, the retimed
+transition and `--pfx-sag` back off the shared layer, so a plain pink still snaps. `cocktail.js
+KIND_LIFE` gives it 3.4 s rather than the tint's 4.5, since a good part of its life is the ramp.
+
+Reduced motion (run.js stamps `#race-root[data-rm="1"]` from the run's own toggle; race.css also
+answers `prefers-reduced-motion`) keeps every colour and every word and drops only movement: no
+wash shudder, no sag or drip, no breathing on the lacquer card.
 
 Spiral pops (`payloadFx.showSpiral`, untouched) take their url from `engine/loomSpirals.js`
 `pickSpiralUrl()`. On the mobile tier `Q.leanSpirals` has run.js narrow that module's bundled pool

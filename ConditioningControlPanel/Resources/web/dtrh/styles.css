@@ -2970,6 +2970,27 @@ img.rh-fx-spiralspin {
   background: radial-gradient(circle at 50% 45%, rgba(var(--fx-accent-rgb), 0.5) 0%, rgba(255, 20, 147, 0.62) 100%);
   mix-blend-mode: screen;
 }
+/* MELTING (race `melt`): the same layer, sagging. payloadFx retimes the opacity ease to --pfx-sag
+   so the colour ramps up across the whole hold, and this sinks the wash while it does: a slow
+   drop and a lazy wobble on TRANSFORM ONLY (plus a saturate, which is cheap), never on layout.
+   The gradient is re-centred high so the heavy pink pools toward the bottom of the screen as it
+   goes, like something running down the glass. Only .is-melting differs; a plain pink pop takes
+   the class off again in showPink. */
+.sf-pfx-pink.is-melting {
+  background-image: radial-gradient(ellipse 120% 90% at 50% 22%, rgba(var(--fx-accent-rgb), 0.42) 0%, rgba(255, 20, 147, 0.68) 62%, rgba(214, 8, 122, 0.82) 100%);
+  background-size: 100% 145%;   /* taller than the screen, so the drip has somewhere to run to */
+  background-repeat: no-repeat;
+  transform-origin: 50% 0%;
+  animation: sf-pfx-sag var(--pfx-sag, 3000ms) ease-in both, sf-pfx-drip 3.6s ease-in-out infinite alternate;
+}
+@keyframes sf-pfx-sag {
+  from { transform: translateY(-2.5%) scaleY(1);     filter: saturate(1); }
+  to   { transform: translateY(1.5%)  scaleY(1.075); filter: saturate(1.35); }
+}
+@keyframes sf-pfx-drip {
+  0%   { background-position: 50% 46%; }
+  100% { background-position: 50% 54%; }
+}
 /* #647 pinned centre spiral: an OPTIONAL persistent spiral fixed at the tunnel's
    visual centre. It lives inside .sf-pfx (z4), so it inherits pointer-events:none
    and sits BELOW the bubble field (.cf-layer z6) and HUD (z10) - it can never eat a
@@ -3051,6 +3072,28 @@ img.rh-fx-spiralspin {
   text-shadow: 0 0 40px rgba(255, 20, 147, 1), 0 0 10px #fff; animation: sf-pfx-throb 0.5s ease-in-out infinite alternate;
 }
 .sf-pfx-freeze.sf-pfx-out { opacity: 0; transition: opacity 0.5s ease; }
+/* THE DOLL (race `lock`): the freeze card, same timing, in lacquer. The frost tint is replaced by
+   a satin sheen that runs top-left to bottom-right, and the whole thing sits inside a poured pink
+   frame - a lid coming down on the road rather than a word shouted over it. The phrase is the
+   road's own (payloadFx bambiFreeze reads it off the pop), so this is the only card in the file
+   whose text changes shape run to run: it wraps, and the frame has to hold whatever it is given. */
+.sf-pfx-freeze.is-lacquer {
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0) 26%, rgba(255, 255, 255, 0) 62%, rgba(255, 214, 240, 0.3) 100%),
+    radial-gradient(ellipse 92% 78% at 50% 46%, rgba(255, 122, 196, 0.56) 0%, rgba(214, 8, 122, 0.5) 68%, rgba(96, 4, 56, 0.62) 100%);
+  box-shadow: inset 0 0 0 0.9vmin rgba(255, 190, 226, 0.8), inset 0 0 12vmin rgba(120, 6, 70, 0.72);
+  padding: 0 8vmin;
+}
+.sf-pfx-freeze.is-lacquer span {
+  font-size: 10vmin; letter-spacing: 0.1em; text-align: center; white-space: normal; max-width: 84vw;
+  color: #fff2fa;
+  text-shadow: 0 0.5vmin 0 rgba(160, 12, 92, 0.9), 0 0 40px rgba(255, 20, 147, 1), 0 0 10px #fff;
+  animation: sf-pfx-lacquer 0.9s ease-in-out infinite alternate;
+}
+@keyframes sf-pfx-lacquer {
+  from { transform: scale(1);     filter: brightness(1); }
+  to   { transform: scale(1.035); filter: brightness(1.18); }
+}
 
 .sf-pfx-bounce {
   position: fixed; left: 0; top: 0; font-weight: 900; font-size: 6vmin; letter-spacing: 0.05em;

@@ -150,7 +150,46 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
     h.el.style.backgroundImage = `url('${pickSpiralUrl()}')`;
   }
   function showPink(strength, durMult) {
-    holdOn('pink', 'sf-pfx-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    const h = holdOn('pink', 'sf-pfx-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    // a plain pink SNAPS on, so take back anything a melt left on the shared layer (see showMelt)
+    h.el.classList.remove('is-melting');
+    h.el.style.transitionDuration = '';
+    h.el.style.removeProperty('--pfx-sag');
+  }
+  /**
+   * MELTING. The same pink wash on the same layer - so the tint slot still means one colour on the
+   * glass - except the colour does not arrive, it SAGS in: opacity ramps from wherever the tint
+   * already is up to its peak across the whole hold (the layer's own 0.45 s ease, retimed), while
+   * styles.css sinks and wobbles the layer on transform/filter only. 2-4 s by strength.
+   *
+   * Racing Thoughts is the only caller (bubbleKinds.js `melt`, THE MIX slot 'tint'); the tube deals
+   * no bubble that fires it, so the pink dtrh.html draws still snaps on exactly as it did.
+   */
+  function showMelt(strength, durMult) {
+    const dur = Math.round(scale(2000, 4000, strength) * clamp(durMult, 0.3, 3));
+    const peak = scaleD(0.30, 0.78, strength);
+    const h = ensureHold('pink', 'sf-pfx-pink');
+    if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
+    const from = Math.max(0.06, parseFloat(h.el.style.opacity || '0') || 0);   // deepen what is there
+    h.el.style.transitionDuration = '0ms';
+    h.el.style.opacity = String(from);
+    h.el.style.setProperty('--pfx-sag', dur + 'ms');
+    h.el.classList.add('is-melting');
+    // FLUSH, or there is no ramp. The first melt of a run is also the moment ensureHold makes the
+    // pink layer, and a brand-new element has no before-change style for a transition to start
+    // from: without this the browser's first recalc sees the peak and snaps straight to it. One
+    // forced reflow per melt pop, which is a pop every few seconds at most.
+    void h.el.offsetWidth;
+    h.el.style.transitionDuration = dur + 'ms';
+    h.el.style.opacity = String(peak);
+    h.hideTimer = setTimeout(() => {
+      h.hideTimer = 0;
+      if (disposed) return;
+      h.el.classList.remove('is-melting');
+      h.el.style.transitionDuration = '';   // back to the layer's own 0.45 s release
+      h.el.style.removeProperty('--pfx-sag');
+      h.el.style.opacity = '0';
+    }, dur);
   }
   async function showBraindrain(strength, durMult) {
     // full-screen dim + blur-behind (the iconic "drain") with a faint random-image
@@ -276,11 +315,17 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
     setTimeout(() => el.remove(), dur + 300);
   }
 
-  function bambiFreeze() {
+  /**
+   * The freeze card. `text` is the road's own phrase when the caller has one (race only; the tube
+   * never passes it, so dtrh.html still reads BAMBI FREEZE off the same two words it always has).
+   * `lacquer` is the race's `lock` kind: the same card and the same timing behind a pink lacquer
+   * frame, because a doll being posed is not the same beat as a freeze being called.
+   */
+  function bambiFreeze(text, lacquer) {
     const el = document.createElement('div');
-    el.className = 'sf-pfx-freeze';
+    el.className = lacquer ? 'sf-pfx-freeze is-lacquer' : 'sf-pfx-freeze';
     const word = document.createElement('span');
-    word.textContent = 'BAMBI FREEZE';
+    word.textContent = String(text || '').trim().toUpperCase() || (lacquer ? pick(WORDS).toUpperCase() : 'BAMBI FREEZE');
     el.appendChild(word);
     root.appendChild(el);
     setTimeout(() => { if (!disposed) el.classList.add('sf-pfx-out'); }, 1200);
@@ -480,7 +525,8 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
     const p = spec.payload;
     switch (p.kind) {
       case 'flash':        flash(strength, durMult); break;
-      // p.text: the road's own phrase when the caller has one (race only; the tube never sets it)
+      // p.text: the road's own phrase when the caller has one, read by the two kinds that SAY
+      // something (race only; the tube never sets it, so both fall back to their own pools)
       case 'subliminal':   subliminal(strength, p.text); break;
       case 'overlay':
         if (p.overlay === 'spiral') showSpiral(strength, durMult);
@@ -488,10 +534,12 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
         else showPink(strength, durMult);   // pink_filter (default)
         break;
       case 'glitch':       showGlitch(strength, durMult); break;
-      // race-only kinds (bubbleKinds.js): the tube deals no bubble that fires either of these
+      // race-only kinds (bubbleKinds.js): the tube deals no bubble that fires any of these
       case 'gifWash':      showGifWash(strength, durMult); break;
       case 'blackout':     blackout(strength, durMult); break;
-      case 'bambiFreeze':  bambiFreeze(); break;
+      case 'bambiLock':    bambiFreeze(p.text, true); break;
+      case 'melt':         showMelt(strength, durMult); break;
+      case 'bambiFreeze':  bambiFreeze(p.text); break;
       case 'bouncingText': bouncingText(durMult); break;
       case 'gifCascade':   gifCascade(durMult); break;
       case 'video':        videoCard(); break;
