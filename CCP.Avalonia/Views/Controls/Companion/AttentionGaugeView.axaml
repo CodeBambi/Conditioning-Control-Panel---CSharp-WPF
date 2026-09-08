@@ -1,0 +1,190 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/Companion/AttentionGaugeView.xaml.
+     Structure, ordering, spacing, comments and every resource key are preserved so the two diff
+     directly. Deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource X}"      ->  Theme="{StaticResource X}"
+       <Style x:Key TargetType>        ->  <ControlTheme x:Key TargetType>
+       Style.Triggers / DataTrigger    ->  a class binding + a nested <Style Selector="^.class">
+                                           Avalonia has no triggers; Classes.foo="{Binding Bool}"
+                                           is the supported way to drive one off viewmodel state.
+       ControlTemplate.Triggers        ->  <Style Selector="...:pointerover /template/ ...">
+                                           A ControlTemplate cannot carry a Style, so the upsell
+                                           button's hover rule moved to UserControl.Styles and
+                                           the button had to be named to keep the rule targeted.
+       <ContentPresenter/>             ->  Name="PART_ContentPresenter" + TemplateBindings
+       Visibility=/{CmpBoolToVis}      ->  IsVisible bound straight to the bool
+       ToolTip="..."                   ->  ToolTip.Tip="..."
+       {loc:Str key}                   ->  a binding (LocExtension is a WPF MarkupExtension and
+                                           stays in the head; the strings still come from
+                                           CCP.Core's LocalizationManager, via the viewmodel)
+       <Image {CmpEmojiToImage}>       ->  <TextBlock Text="💗"/>; Avalonia draws colour emoji
+                                           natively, so the Twemoji pipeline is not needed.
+
+     Verified rather than assumed: an Avalonia ColumnDefinition is NOT a StyledElement (its base
+     chain is DefinitionBase -> AvaloniaObject, no DataContext property), so the star-width
+     binding below looked like it could not resolve. It does - measured headless on 12.1.1, the
+     0.72/0.28 pair lands on 288px/112px of a 400px track. The Trainer Card recipe survives the
+     port unchanged; no ActualWidth arithmetic was introduced. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.Companion.AttentionGaugeView"
+             xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
+             x:DataType="local:AttentionGaugeViewModel"
+             mc:Ignorable="d"
+             d:DesignWidth="430" d:DesignHeight="170">
+
+    <!-- ================================================================
+         Z6 — HER ATTENTION (the daily budget meter).
+         Elegant, not scary. Copy rules, non-negotiable:
+           · never the word "tokens" — the ladder is in chats, in her voice
+           · the floor is not mute: barks keep playing, and the card says
+             so OUT LOUD — FloorNote is a resting line, never hover-gated
+           · the Patreon line appears below 40% only, once, quietly
+           · the numeric detail is on demand (hover or click), never resting
+
+         The bar is the Trainer Card recipe: a star-width fill column, no
+         ActualWidth arithmetic. At zero it keeps a 4% sliver so a spent
+         meter reads as empty rather than broken. This XAML knows no
+         numbers at all: the spent styling asks IsSpent and the floor note
+         asks ShowFloorNote, both computed in AttentionCopy where the
+         thresholds live and are unit-tested.
+
+         Thresholds live in AttentionCopy, not here, so they are
+         unit-tested and exist in exactly one place.
+         ================================================================ -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- the spent bar: same geometry, no heat. Keyed off IsSpent (intent), never off
+                 BarFraction == 0.04 — the sliver and a real 4% are the same double, and a user
+                 with 4 chats left was getting the "she'll be all yours tomorrow" treatment while
+                 the copy beside it said otherwise. -->
+            <ControlTheme x:Key="CmpZ6AttentionFillStyle" TargetType="Border"
+                          BasedOn="{StaticResource CmpGaugeFillAttentionStyle}">
+                <Style Selector="^.spent">
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="Opacity" Value="0.70"/>
+                </Style>
+            </ControlTheme>
+
+            <!-- detail-on-demand: revealed by the toggle command OR by hovering the card.
+                 The WPF original was two DataTriggers on one style. Only the first survives as a
+                 class here; the second asked an ANCESTOR Button for IsMouseOver, which a nested
+                 style cannot reach, so it lives in UserControl.Styles below as a descendant
+                 selector. Both still resolve to "visible", and the un-hovered, un-toggled state
+                 still falls back to this theme's IsVisible="False". -->
+            <ControlTheme x:Key="CmpZ6DetailLineStyle" TargetType="TextBlock"
+                          BasedOn="{StaticResource CmpFaintTextStyle}">
+                <Setter Property="FontSize" Value="10"/>
+                <Setter Property="Margin" Value="0,4,0,0"/>
+                <Setter Property="IsVisible" Value="False"/>
+                <Style Selector="^.shown">
+                    <Setter Property="IsVisible" Value="True"/>
+                </Style>
+            </ControlTheme>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <!-- the second half of the detail line's trigger pair: hovering the gauge button.
+             A Style outranks a ControlTheme, so this wins over the theme's IsVisible="False"
+             while the pointer is over the card and releases it again on exit. -->
+        <Style Selector="Button:pointerover TextBlock#Z6DetailLine">
+            <Setter Property="IsVisible" Value="True"/>
+        </Style>
+        <!-- ControlTemplate.Triggers replacement for the upsell link's hover colour. -->
+        <Style Selector="Button#Z6UpsellButton:pointerover /template/ TextBlock#Txt">
+            <Setter Property="Foreground" Value="#FFFF9CCE"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Theme="{StaticResource CmpCardStyle}">
+        <StackPanel>
+
+            <!-- ========== header ========== -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="💗" FontSize="16" Margin="0,0,9,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding LocTitle}" Theme="{StaticResource CmpSectionTitleStyle}"/>
+                </StackPanel>
+                <Border Grid.Column="2" Theme="{StaticResource CmpTrainTagLiveStyle}">
+                    <TextBlock Text="{Binding LocTagTrain1}" Theme="{StaticResource CmpTrainTagLiveTextStyle}"/>
+                </Border>
+            </Grid>
+
+            <!-- ========== the gauge (the whole block hovers/clicks to reveal the numbers) ========== -->
+            <!-- HorizontalAlignment="Stretch" is NOT in the WPF original and is not decoration:
+                 Avalonia's Fluent Button theme defaults HorizontalAlignment to Left, where WPF's
+                 Button inherits Stretch. Without it the whole gauge collapsed to the natural
+                 width of the state-copy line - 194px inside a 388px card, measured headless. -->
+            <Button Command="{Binding ToggleDetailCommand}" HorizontalContentAlignment="Stretch"
+                    HorizontalAlignment="Stretch"
+                    ToolTip.Tip="{Binding LocDetailTip}" Margin="0,13,0,0">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Cursor="Hand">
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+
+                <StackPanel>
+                    <Border Theme="{StaticResource CmpGaugeTrackThickStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{Binding BarFraction, Converter={StaticResource CmpFractionToStar}}"/>
+                                <ColumnDefinition Width="{Binding BarFraction, Converter={StaticResource CmpFractionToRemainderStar}}"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Theme="{StaticResource CmpZ6AttentionFillStyle}"
+                                    Classes.spent="{Binding IsSpent}"/>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="{Binding StateCopy}" Margin="0,8,0,0" FontSize="12.5"
+                               Foreground="#FFFFD9EC" TextWrapping="Wrap"/>
+
+                    <!-- the floor promise. ALWAYS visible once she is low — never behind hover.
+                         The numbers are detail-on-demand; "her voice never runs out" is the card
+                         answering the only question a shrinking meter actually raises, and a
+                         drained card that says nothing but "tomorrow~" reads as a ration. -->
+                    <TextBlock Text="{Binding FloorNote}" Margin="0,5,0,0" FontSize="11"
+                               FontStyle="Italic" Foreground="#FFCBA9C4" TextWrapping="Wrap"
+                               IsVisible="{Binding ShowFloorNote}"/>
+
+                    <!-- the numbers, for the curious only -->
+                    <TextBlock x:Name="Z6DetailLine" Text="{Binding DetailLine}"
+                               Theme="{StaticResource CmpZ6DetailLineStyle}"
+                               Classes.shown="{Binding IsDetailShown}"/>
+                </StackPanel>
+            </Button>
+
+            <!-- ========== the one quiet upsell, below 40% only ========== -->
+            <Button x:Name="Z6UpsellButton" Theme="{StaticResource CmpLinkButtonStyle}" Margin="0,8,0,0"
+                    Command="{Binding UpsellCommand}"
+                    IsVisible="{Binding ShowUpsell}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Cursor="Hand" Padding="0,2,0,2">
+                            <TextBlock x:Name="Txt" Text="{Binding UpsellCopy}"
+                                       Theme="{StaticResource CmpFlavorTextStyle}" FontSize="11"/>
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </StackPanel>
+    </Border>
+</UserControl>
