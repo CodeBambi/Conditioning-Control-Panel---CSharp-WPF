@@ -258,12 +258,36 @@ Reduced motion (run.js stamps `#race-root[data-rm="1"]` from the run's own toggl
 answers `prefers-reduced-motion`) keeps every colour and every word and drops only movement: no
 wash shudder, no sag or drip, no breathing on the lacquer card.
 
-Spiral pops (`payloadFx.showSpiral`, untouched) take their url from `engine/loomSpirals.js`
-`pickSpiralUrl()`. On the mobile tier `Q.leanSpirals` has run.js narrow that module's bundled pool
-to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the other five are 2.2-5.3 MB) with
-`setBundledSpiralPool` and prefetch both in `prepare()` (while the intro plays; `start()` covers
-`?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full pool and the Descent
-never calls the setter.
+**SPIRALS ARE WOVEN, NOT SHIPPED (2026-09-09).** A race spiral is drawn live by the Loom now, not
+loaded as one of seven stock gifs. `engine/loomSpirals.js` grew a second picker beside the old one:
+`pickSpiral()` returns either a gif url (what the Descent still gets) or a weave
+`{loom:true, params, id, href}`, and `setLoomBook(fn)` is the seam the race fills. The mix is the
+player's own saved spirals ~50% of the time (params-first: a `loom-list` entry with a `params`
+sidecar renders live, one without stays its gif), the race's BOOK otherwise; `href` is always a
+bundled gif, kept only as the floor for a lost GL context. `pickSpiralUrl()` is unchanged, so the
+Descent is byte-identical: it never sets a book and never sees a weave.
+
+THE BOOK (`race/loomBook.js`) is the race's own spiral set, seeded off the run seed so a seed
+replays. `paletteFor(roomId)` reads `rooms.js` `colors.edge/prop/banner` + `propAlt` for the thread
+colours and darkens `colors.fog` for ground and outer, so a ninth room needs no edit here.
+`ROOM_CHARACTER` then hand-tunes style/glow/pulse/wobble/speed/arms per room - tea garden soft log
+and arch, toybox loud petals, casino golden, undertow wobbling ribbon and tunnel, mirrors tunnel,
+chapel high-glow log and golden, greyward dim arch, coronation golden and petal. Every draw snaps
+`turns` to 1.5-4, takes two threads (three one draw in four) rotated off a `lead` index, sets
+`hueCycles: 0` (a race spiral does not rainbow), and, when the road phrase is still echoing, puts
+that word in the centrepiece as a `mantra` - the spiral says what the voice said.
+
+The bundled gifs still ship as that floor. On the mobile tier `Q.leanSpirals` has run.js narrow the
+module's bundled pool to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the other five are
+2.2-5.3 MB) with `setBundledSpiralPool` and prefetch both in `prepare()` (while the intro plays;
+`start()` covers `?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full
+pool and the Descent never calls the setter.
+
+A weave is only params until something draws it; `race/loomSpiralFx.js` and the payloadFx seam
+that mounts it land in the next PR, so until then a picked weave falls to its `href` gif. On the web
+there is no account library (the site Loom is anonymous), so the web gets the race book only. Checks:
+`race/smoke/loom-book-check.mjs` (the book per room, the seed replay, the mantra) and
+`race/smoke/spiral-pool-check.mjs` (the picker mix and the floor under it).
 A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
 of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
 one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its

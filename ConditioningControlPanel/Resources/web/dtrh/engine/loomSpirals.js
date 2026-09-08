@@ -8,6 +8,20 @@
  * (bubbles.fireEffect) and the in-run payload fx (payloadFx.showSpiral) - so a
  * woven spiral shows up everywhere from one source of truth. Deliberately dumb:
  * all file authority/validation is C#-side (DtrhLoomStore).
+ *
+ * THE BOOK (2026-09-09). Racing Thoughts does not want a stock gif at all - the
+ * owner's law is "on ALL the games the spirals should be generated with the
+ * Loom". `setLoomBook(fn)` hands this module a weaver (race/loomBook.js), and
+ * `pickSpiral()` - a SECOND picker beside the url one, which is untouched -
+ * answers with a PARAMS WRAPPER `{loom:true, params, id, href}` for a caller
+ * that can draw one live, or a plain url for a caller that cannot. `href` is
+ * always a real gif, so the wrapper carries its own floor.
+ *
+ * A SAVED SPIRAL IS PREFERRED AS PARAMS TOO: loom-list entries carry the `.json`
+ * sidecar, so the player's own weave is redrawn from its params rather than
+ * fetched as a multi-megabyte gif. Only the race sets a book and only the race
+ * passes payloadFx a `spiralFx`, so the Descent still draws exactly the gifs it
+ * always has.
  * ==========================================================================*/
 
 let spirals = [];   // [{ slug, url, params }]
@@ -53,4 +67,50 @@ export function pickSpiralUrl() {
     return spirals[Math.floor(Math.random() * spirals.length)].url;
   }
   return bundledPool[Math.floor(Math.random() * bundledPool.length)];
+}
+
+/* ----------------------------------------------------------------------------
+ * THE BOOK: live-woven spirals (race/loomBook.js)
+ * -------------------------------------------------------------------------- */
+
+/** () => { loom:true, params, id } | null - set by the race, null everywhere else. */
+let book = null;
+
+/** Hand this module a weaver, or null to take it away again (run teardown).
+ *  Only race/run.js calls this; with no book, pickSpiral() is pickSpiralUrl(). */
+export function setLoomBook(fn) { book = typeof fn === 'function' ? fn : null; }
+export function hasLoomBook() { return !!book; }
+
+/** A bundled gif, always: the floor under every wrapper. */
+const anyBundled = () => bundledPool[Math.floor(Math.random() * bundledPool.length)];
+
+/**
+ * ONE SPIRAL, as either a live-Loom wrapper or a url.
+ *
+ * The mix is the same ~50/50 pickSpiralUrl has always drawn: the player's own
+ * woven spirals first when they have any, the race's book otherwise. A saved
+ * spiral that kept its params sidecar comes back as a wrapper too (drawn live,
+ * no gif fetched) with its own gif as the `href` floor; one without params is
+ * still just its url.
+ *
+ * @param {Object} [ctx] passed straight to the book ({ room?, word? }); the
+ *   race's book reads the live room and the road's last phrase on its own, so
+ *   this is only for smokes and shot harnesses.
+ * @returns {{loom:true, params:Object, id:string, href:string}|string}
+ */
+export function pickSpiral(ctx = undefined) {
+  if (spirals.length && Math.random() < 0.5) {
+    const s = spirals[Math.floor(Math.random() * spirals.length)];
+    if (s.params && typeof s.params === 'object') {
+      return { loom: true, params: s.params, id: 'saved:' + (s.slug || '?'), href: s.url, saved: true };
+    }
+    return s.url;
+  }
+  if (book) {
+    try {
+      const drawn = book(ctx);
+      if (drawn && drawn.params) return { loom: true, params: drawn.params, id: String(drawn.id || 'loom:0'), href: anyBundled(), saved: false };
+    } catch (e) { /* a book that throws is a book that is not there */ }
+  }
+  return anyBundled();
 }
