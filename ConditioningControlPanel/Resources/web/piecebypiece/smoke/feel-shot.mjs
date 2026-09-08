@@ -129,8 +129,12 @@ async function open(pageUrl) {
 
 async function drag(from, to) {
   const a = await at(from, 0.45);
-  const b = await at(to, 0);
   await mouse('mousePressed', a.x, a.y);
+  // The man hangs under the cursor at the height he was grabbed at, so the
+  // release is aimed at that height over the target square, not at the board.
+  const held = Number(await evalJs(
+    'window.PBP.board.drag && window.PBP.board.drag.holdHeight ? window.PBP.board.drag.holdHeight() : 0')) || 0;
+  const b = await at(to, held);
   for (let i = 1; i <= 8; i++) {
     await mouse('mouseMoved', a.x + (b.x - a.x) * (i / 8), a.y + (b.y - a.y) * (i / 8));
     await beat(35);
