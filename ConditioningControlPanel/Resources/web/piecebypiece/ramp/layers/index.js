@@ -15,6 +15,10 @@ import { createFlash } from './flash.js';
 import { createGifRain } from './gifrain.js';
 import { createMelt } from './melt.js';
 import { createBlur } from './blur.js';
+import { createSpiral } from './spiral.js';
+import { createOverlay } from './overlay.js';
+import { createVideoCard } from './videocard.js';
+import { createGlitchGrab } from './glitchgrab.js';
 
 /** A layer that has not been built yet: every call is a safe no-op. */
 const NOOP = Object.freeze({ set() {}, fire() {}, show() {}, grab() {}, move() {}, drop() {}, clear() {}, dispose() {} });
@@ -92,11 +96,11 @@ export function createLayerStack(ctx = {}) {
   const sustained = {
     melt: safe(() => createMelt(base)),
     blur: safe(() => createBlur(base)),
-    spiral: NOOP,     // b2b
-    overlay: NOOP,    // b2b
+    spiral: safe(() => createSpiral(base)),
+    overlay: safe(() => createOverlay(base)),
   };
-  const card = NOOP;  // b2b: the video card
-  const drag = NOOP;  // b2b: the glitch tile under a dragged piece
+  const card = safe(() => createVideoCard(base));
+  const drag = safe(() => createGlitchGrab(base));
 
   const counts = { flash: 0, gifRain: 0, burst: 0, videoCard: 0, grab: 0, drop: 0 };
   let disposed = false;

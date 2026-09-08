@@ -187,7 +187,15 @@ meterEl.addEventListener('input', applyMeter);
 /* ?meter=, ?fire= and ?prime= drive the screenshot pass */
 if (qs.has('meter')) { meterEl.value = Math.round(Number(qs.get('meter')) * 100); applyMeter(); }
 if (qs.has('prime')) ramp.debug().prime(Number(qs.get('prime')) || 5);
-if (qs.has('fire')) for (const kind of qs.get('fire').split(',')) ramp.debug().fire(kind.trim());
+/* a fire name is either a harness event (grab, cap-w, check, ...) or a layer
+   the ramp can fire directly (flash, gifRain, videoCard) */
+if (qs.has('fire')) {
+  for (const raw of qs.get('fire').split(',')) {
+    const kind = raw.trim();
+    if (actions[kind]) actions[kind]();
+    else ramp.debug().fire(kind);
+  }
+}
 
 const out = document.getElementById('out');
 setInterval(() => {
