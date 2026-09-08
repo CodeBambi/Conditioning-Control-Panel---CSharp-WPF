@@ -377,7 +377,16 @@ export function triggerHits(words, durationSec) {
  * a jump and a trigger on the same second is the file doing both, and cues.js spends
  * them differently.
  */
-export function triggersFromHits(events, hits, setById) {
+/**
+ * THE CONFIDENCE ON A SCRIPT-ALIGNED FILE IS A TIMING DOUBT, NOT A WORD DOUBT (2026-09-08).
+ * `aligned` says the transcript was aligned to a script that already had the words in it, so a low
+ * `conf` means the aligner was unsure WHEN it was said and never whether it was said. captionWords
+ * above has lifted CAPTION_CONF for those files since the words road landed; the trigger rows never
+ * got the same lift, and race/cues.js was quietly throwing 37 of them away set-wide - eleven of the
+ * twelve "bimbo doll" rows of Bubble Induction among them. The flag rides the event so the cue pass
+ * can tell the two kinds of doubt apart without knowing where the file came from.
+ */
+export function triggersFromHits(events, hits, setById, { aligned = false } = {}) {
   const kept = [];
   for (const h of hits) {
     const set = setById.get(h.setId);
@@ -395,6 +404,7 @@ export function triggersFromHits(events, hits, setById) {
   const triggers = kept.map(({ h, set }) => ({
     kind: 'trigger', t: r3(h.t), dur: r3(h.dur || 0), label: String(set.name).toLowerCase(),
     conf: typeof h.conf === 'number' ? h.conf : 1, weight: 1, setId: set.id, cue: set.preset,
+    ...(aligned ? { aligned: true } : null),
   }));
   const near = (t) => triggers.some((x) => Math.abs(x.t - t) < TRIGGER_GAP);
   return events.filter((e) => !(e.kind === 'word' && near(e.t))).concat(triggers);
@@ -442,7 +452,7 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
   const g = generate({ peaks, perSec, durationSec, words, hits, setById: SET_BY_ID, binSec: WORD_BIN_SEC, now });
   const energy = g.energy.map(clamp01);
   const caps = captionWords(words);
-  const road = triggersFromHits(g.events, hits, SET_BY_ID);
+  const road = triggersFromHits(g.events, hits, SET_BY_ID, { aligned: isAligned(words) });
   const triggers = road.filter((e) => e.kind === 'trigger');
   // THE SCRIPT IS THE ROAD. generate.js spends a handful of STRUCTURE words as loose treats in
   // random lanes, which was the right answer while the road had no transcript on it and is the

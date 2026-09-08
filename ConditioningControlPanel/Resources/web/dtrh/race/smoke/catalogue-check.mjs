@@ -17,6 +17,8 @@
  *      still reaches the road, and one it was keeps the truer second
  *   5. the road: how many rows, how many of them wear an effect, and no one kind
  *      swallowing a track
+ *   6. the wiring: the confidence lift on a script-aligned file, the accent words,
+ *      and which picture a plain word row pours
  *
  * It never prints a line of a transcript. Everything below is counted, never quoted.
  * ==========================================================================*/
@@ -28,6 +30,7 @@ import { TRIGGER_SETS, SET_RANK, rankOf, laysRow, compareHits } from '../../char
 import { findMatches, COUNTDOWN } from '../../chart/maker/triggers.js';
 import { KIND_BY_ID } from '../bubbleKinds.js';
 import { THEME_BY_PRESET, themeFor, kindForPreset } from '../triggerTheme.js';
+import { cueFor, ACCENT_WORDS, gifRowKind, GIFWASH_KIND, GIFRAIN_KIND } from '../cues.js';
 import { scanTriggers, triggerHits, wordedRoad, TRIGGER_GAP, FP_SNAP_SEC, PEAKS_PER_SEC } from '../cloudChart.js';
 
 let fails = 0;
@@ -202,6 +205,45 @@ for (const r of table) {
   const cap = ONE_NOTE.has(r.title) ? ONE_NOTE_CAP : SHARE_CAP;
   const top = Math.max(...Object.values(r.by)), kind = Object.keys(r.by).find((k) => r.by[k] === top);
   ok(top / r.rows <= cap, r.title + ': no kind past ' + (100 * cap).toFixed(0) + ' percent (' + kind + ' ' + (100 * top / r.rows).toFixed(0) + ')');
+}
+
+/* ---- 6. the wiring -------------------------------------------------------- */
+{
+  const row = index.rows.find((r) => r.title === 'Bubble Induction');
+  const words = loadWords(row), dur = durOf(words);
+  const road = wordedRoad({ peaks: swell(dur), durationSec: dur, name: row.title, hash: row.hash, words });
+  const trig = road.events.filter((e) => e.kind === 'trigger');
+  ok(trig.every((e) => e.aligned === true), 'a script-aligned transcript says so on every trigger it lays');
+
+  /** What cueFor actually puts on the road for one event: the kind of the row, or 'treat' for the
+   *  lone bubble a phrase it did not believe gets. */
+  const laid = (e, over = {}) => {
+    const cue = cueFor({ ...e, ...over }, { intensity: 0.5, rng: () => 0.99, triggerKinds: new Map() });
+    if (!cue || !cue.spawn.length) return null;
+    return cue.spawn.some((sp) => sp.row === true) ? cue.spawn[0].kindId : 'treat';
+  };
+  const low = trig.filter((e) => Number(e.conf) < 0.55);
+  ok(low.length > 0, low.length + ' of this track\'s rows carry a confidence under the old cut');
+  eq(low.filter((e) => laid(e) === 'treat').length, 0, 'and not one of them is dressed down to a loose treat any more');
+  eq(low.filter((e) => laid(e, { aligned: false }) === 'treat').length, low.length,
+    'while the same rows on a file nobody aligned still are, which is what the cut is for');
+
+  // the phrase the survey called out by name: eleven of the twelve were being thrown away
+  const doll = trig.filter((e) => e.setId === 'bimbo-doll');
+  ok(doll.length >= 10, 'the track says "bimbo doll" ' + doll.length + ' times');
+  eq(doll.filter((e) => laid(e) === 'treat').length, 0, 'and every one of them wears its own bubble now');
+
+  // the accents: the words said too often to stop the road are still the ones drawn big
+  for (const w of ['accept', 'bambi', 'relax', 'sleep', 'cock', 'bubble', 'deep'])
+    ok(ACCENT_WORDS.has(w), '"' + w + '" is an accent word, not a row');
+  ok(ACCENT_WORDS.size > 40, ACCENT_WORDS.size + ' accent words in all');
+
+  // the picture a plain word row pours: the rain everywhere, the wash on a track that is about it
+  const washy = new Map([['takes over', GIFWASH_KIND]]);
+  ok(gifRowKind({}) === GIFRAIN_KIND || gifRowKind({}) === GIFWASH_KIND, 'a plain track pours a picture a plain word row can wear');
+  ok(!!KIND_BY_ID[gifRowKind(washy)], 'and a track with a wash on it pours one the road can lay (' + gifRowKind(washy) + ')');
+  ok(gifRowKind({ triggerKinds: new Map([['good girl', 'subliminal']]) }) === gifRowKind({}),
+    'a track with no picture of its own pours what it always did');
 }
 
 console.log('');

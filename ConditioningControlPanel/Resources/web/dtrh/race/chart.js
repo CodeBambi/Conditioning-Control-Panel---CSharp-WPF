@@ -172,6 +172,10 @@ function normalizeEvents(raw, durationSec) {
       // what race/triggerTheme.js looks the plate and the bubble up by, so a trigger that lost
       // it falls back to matching on its label, which two sets may share.
       if (typeof e.setId === 'string' && e.setId) ev.setId = e.setId.slice(0, 40);
+      // The transcript was aligned to a script that already held the words, so this event's `conf`
+      // is the aligner's doubt about WHEN and never about WHAT (race/cloudChart.js triggersFromHits).
+      // race/cues.js reads it to decide whether a low confidence is worth taking the effect away for.
+      if (e.aligned === true) ev.aligned = true;
       if (typeof e.note === 'string' && e.note) ev.note = e.note.slice(0, 200);
       return Object.freeze(ev);
     });
