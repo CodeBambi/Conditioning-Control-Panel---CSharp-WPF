@@ -71,6 +71,16 @@ export function createClock({ perSideMs = DEFAULT_MS, onTick, onFlag, now = () =
     remaining(side) { drain(); return left[side]; },
     flagged: () => flagged,
     isRunning: () => active !== null,
+    /**
+     * Give time back, for a ply that was taken back. It is the only way time
+     * ever goes up, and a side that has already flagged keeps its flag: the
+     * game is over by then and nothing is owed.
+     */
+    credit(side, ms) {
+      if (flagged || !(ms > 0)) return;
+      drain();
+      left[side] = Math.min(perSideMs, left[side] + ms);
+    },
     /** Only for tests: charge a side without waiting in real time. */
     debit(side, ms) {
       drain();

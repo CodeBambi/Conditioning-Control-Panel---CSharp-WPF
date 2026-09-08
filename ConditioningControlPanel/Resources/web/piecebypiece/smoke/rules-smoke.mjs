@@ -157,6 +157,91 @@ eq('the clock reads like a clock', [formatClock(DEFAULT_MS), formatClock(64000),
   ok('auto play left a legal position behind', game.rules.ply() > 0 && game.rules.ply() <= 6);
 }
 
+// --- taking it back --------------------------------------------------------
+{
+  const r = createRules();
+  ok('nothing to take back at the start', r.undo() === null);
+  r.move('e2', 'e4');
+  const back = r.undo();
+  eq('the ply that came off', [back.from, back.to, back.side], ['e2', 'e4', 'w']);
+  eq('the position is the one before it', r.fen().split(' ')[0], 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR');
+  eq('and white has the move again', r.turn(), 'w');
+}
+{
+  // A capture, taken back, puts the man that came off back on the board.
+  const r = createRules();
+  r.move('e2', 'e4'); r.move('d7', 'd5'); r.move('e4', 'd5');
+  eq('the pawn was taken', Object.keys(r.position()).length, 31);
+  const back = r.undo();
+  eq('the take-back names the man that came off', back.captured, 'p');
+  eq('and he is back on the board', Object.keys(r.position()).length, 32);
+  eq('standing where he stood', r.pieceAt('d5'), { type: 'p', color: 'b' });
+}
+{
+  // A promotion, taken back, is a pawn again.
+  const r = createRules('8/P7/8/8/8/8/8/k6K w - - 0 1');
+  r.move('a7', 'a8', 'q');
+  eq('he came up a queen', r.pieceAt('a8').type, 'q');
+  const back = r.undo();
+  eq('the take-back knows it was a promotion', back.promotion, 'q');
+  eq('and he is a pawn on his own square again', r.pieceAt('a7'), { type: 'p', color: 'w' });
+  ok('with nothing left on the eighth', r.pieceAt('a8') === null);
+}
+{
+  // Castling, taken back, brings the rook home too.
+  const r = createRules('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1');
+  r.move('e1', 'g1');
+  eq('the rook castled with him', r.pieceAt('f1').type, 'r');
+  r.undo();
+  eq('the king is home', r.pieceAt('e1').type, 'k');
+  eq('and so is the rook', r.pieceAt('h1').type, 'r');
+  ok('with nothing left on f1', r.pieceAt('f1') === null);
+}
+{
+  const bus = createBus();
+  const board = stubBoard();
+  const game = createHotseat({ bus, board, clockMs: 60000 });
+  game.start();
+  let turns = [];
+  let backs = [];
+  bus.on('turn', (p) => turns.push(p.side));
+  bus.on('takeback', (p) => backs.push(p));
+  game.tryMove('e2', 'e4');
+  eq('black to move after the ply', game.turn(), 'b');
+  const undone = game.takeBack(1000);
+  ok('the ply came back', !!undone);
+  eq('white has the move again', game.turn(), 'w');
+  eq('the takeback event names the ply', backs, [{ from: 'e2', to: 'e4', ply: 0 }]);
+  eq('and the turn event says who moves', turns[turns.length - 1], 'w');
+  eq('the man slid home', board.moves[board.moves.length - 1], ['e4', 'e2']);
+  ok('a second take-back inside the gap is refused', game.takeBack(1200) === null);
+  ok('and with no ply left there is nothing to take', game.takeBack(3000) === null);
+}
+{
+  // The clocks go back to what they read before the ply.
+  const bus = createBus();
+  const board = stubBoard();
+  const game = createHotseat({ bus, board, clockMs: 60000 });
+  game.start();
+  game.clock.debit('w', 9000);
+  const before = game.clock.remaining('w');
+  game.tryMove('e2', 'e4');
+  game.clock.debit('b', 4000);
+  game.takeBack(1000);
+  ok('white got his thinking time back', Math.abs(game.clock.remaining('w') - before) < 200);
+  ok('and black is not charged for a ply he never had', Math.abs(game.clock.remaining('b') - 60000) < 200);
+}
+{
+  // A finished game is a record, not a board.
+  const bus = createBus();
+  const board = stubBoard();
+  const game = createHotseat({ bus, board, clockMs: 60000 });
+  game.start();
+  game.tryMove('f2', 'f3'); game.tryMove('e7', 'e5'); game.tryMove('g2', 'g4'); game.tryMove('d8', 'h4');
+  ok('mate ended it', game.isOver());
+  ok('and there is no taking that back', game.takeBack(9000) === null);
+}
+
 // --- report ----------------------------------------------------------------
 function stubBoard() {
   const moves = [];
