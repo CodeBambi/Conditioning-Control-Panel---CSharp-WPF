@@ -90,6 +90,27 @@ function main() {
   // them. It ticks itself off the renderer, so the frame loop stays as it was.
   window.PBP.glyphs = createGlyphs({ view, pieces });
   // --- end camera ---
+  // --- J: the feel (outline, dust, sound) ---
+  // Settings are merged, never replaced: the host bridge may have filled some.
+  window.PBP.settings = Object.assign({ outline: true, sfxVolume: 0.6 }, window.PBP.settings || {});
+  // Loaded late and guarded, so a missing module never holds the game. The
+  // per-frame updates ride on view.render, which the loop calls last, after
+  // jiggle.update has written the flex the outline reads.
+  const feelLate = [];
+  let feelLast = performance.now();
+  const renderBase = view.render;
+  view.render = () => {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - feelLast) / 1000);
+    feelLast = now;
+    for (const fn of feelLate) fn(dt);
+    renderBase();
+  };
+  import('./board/outline.js').then((m) => {
+    board.outline = m.createOutline({ group: view.pieceGroup, bus });
+    feelLate.push((dt) => board.outline.update(dt, view.camera, view.renderer));
+  }).catch((e) => console.warn('[pbp] outline missing', e));
+  // --- end J ---
 
   let last = performance.now();
   function frame(now) {
