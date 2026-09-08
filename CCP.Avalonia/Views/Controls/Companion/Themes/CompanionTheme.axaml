@@ -1,0 +1,212 @@
+<!-- PORTED (PARTIAL) from ConditioningControlPanel/Views/Controls/Companion/Themes/CompanionTheme.xaml.
+
+     PARTIAL ON PURPOSE. The WPF original is 1605 lines covering every zone of the Companion tab.
+     Only the keys the ported zone controls actually reach for live here, carrying their original
+     names, values, order and section headings so the two diff cleanly. Ported so far: everything
+     Z6 (AttentionGaugeView) needs. Adding a zone means copying its keys down in the same order,
+     never renaming or "tidying" one.
+
+     Deviations, all forced by real WPF/Avalonia differences:
+
+       <Style x:Key TargetType>          ->  <ControlTheme x:Key TargetType>
+       Style="{StaticResource X}"        ->  Theme="{StaticResource X}"   (at the call site)
+       ControlTemplate.Triggers          ->  nested <Style Selector="^:pointerover">
+       <ContentPresenter/>               ->  Name="PART_ContentPresenter"
+       DropShadowEffect ShadowDepth="0"  ->  OffsetX="0" OffsetY="0"
+       SnapsToDevicePixels="True"        ->  dropped; Avalonia rounds layout by default
+                                             (UseLayoutRounding, on for every Control)
+       cmp:CompanionCapsule.IsCapsule    ->  CornerRadius="999"           (see the tag section)
+       LinearGradientBrush "0,0"/"1,0"   ->  "0%,0%"/"100%,0%"
+                                             Avalonia's StartPoint/EndPoint are RelativePoint and
+                                             BARE NUMBERS ARE ABSOLUTE PIXELS, so the WPF values
+                                             would paint a 1px-wide gradient in the top-left
+                                             corner and flat-fill everything after it.
+
+     Consumers merge this with
+       <ResourceInclude Source="avares://CCP.Avalonia/Views/Controls/Companion/Themes/CompanionTheme.axaml"/>
+     in place of the WPF pack:// URI. -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:cmp="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion">
+
+    <!-- ============================ 0. converters ============================ -->
+    <cmp:FractionToStarConverter x:Key="CmpFractionToStar"/>
+    <cmp:FractionToStarConverter x:Key="CmpFractionToRemainderStar" Invert="True"/>
+    <!-- CmpBoolToVis and friends are NOT ported: Avalonia binds IsVisible to a bool directly.
+         CmpEmojiToImage is not ported either - Avalonia draws colour emoji natively, so an
+         <Image> through the Twemoji pipeline becomes a plain <TextBlock Text="💗"/>. -->
+
+    <!-- ============================ 1. spacing tokens ============================
+         The mockup's rhythm: 6/8/12/16/22. Cards sit 16 apart, card padding is 18x20,
+         the room breathes 22/26. Use these instead of typing margins by hand. -->
+    <Thickness x:Key="CmpCardPadding">20,18,20,18</Thickness>
+    <Thickness x:Key="CmpCardMargin">0,0,0,16</Thickness>
+
+    <CornerRadius x:Key="CmpRadiusCard">14</CornerRadius>
+
+    <!-- ============================ 2. palette ============================
+         :root of the mockup. Colours are exposed as both Color (for gradient stops and
+         animations) and Brush (for direct use). -->
+    <Color x:Key="CmpPinkColor">#FFFF69B4</Color>
+    <Color x:Key="CmpPinkLightColor">#FFFF8FCB</Color>
+    <Color x:Key="CmpPurpleColor">#FFB478FF</Color>
+    <Color x:Key="CmpLiveColor">#FF6EE7A7</Color>
+
+    <!-- .card background is #1A1A2Eee — 93% opaque over the room. -->
+    <SolidColorBrush x:Key="CmpCardBrush" Color="#EE1A1A2E"/>
+    <SolidColorBrush x:Key="CmpPurpleBrush" Color="{StaticResource CmpPurpleColor}"/>
+    <SolidColorBrush x:Key="CmpLiveBrush" Color="{StaticResource CmpLiveColor}"/>
+
+    <!-- text ramp: the mockup's txt / dim / muted / faint custom properties -->
+    <SolidColorBrush x:Key="CmpTextBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="CmpDimBrush" Color="#FFB8B1CC"/>
+    <SolidColorBrush x:Key="CmpMutedBrush" Color="#FF9A93B8"/>
+    <SolidColorBrush x:Key="CmpFaintBrush" Color="#FF6C6689"/>
+
+    <!-- borders & hairlines -->
+    <SolidColorBrush x:Key="CmpCardBorderBrush" Color="#66FF69B4"/>
+    <SolidColorBrush x:Key="CmpTrackBrush" Color="#22FFFFFF"/>
+    <SolidColorBrush x:Key="CmpTrackSoftBrush" Color="#14FFFFFF"/>
+
+    <!-- gradients -->
+    <LinearGradientBrush x:Key="CmpPinkPurpleBrush" StartPoint="0%,0%" EndPoint="100%,0%">
+        <GradientStop Color="{StaticResource CmpPinkColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource CmpPurpleColor}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Z6 attention bar: pink → light pink → purple. -->
+    <LinearGradientBrush x:Key="CmpAttentionBrush" StartPoint="0%,0%" EndPoint="100%,0%">
+        <GradientStop Color="{StaticResource CmpPinkColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource CmpPinkLightColor}" Offset="0.5"/>
+        <GradientStop Color="{StaticResource CmpPurpleColor}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- ============================ 3. glows ============================
+         House glow = DropShadowEffect with zero offset. Budget (design §7.4): hero title,
+         portrait ring, active constellation node, section titles. Never on a scrolling item
+         container — fact cards get their emphasis from BorderBrush instead. -->
+    <DropShadowEffect x:Key="CmpSectionGlow" Color="{StaticResource CmpPinkColor}" BlurRadius="14"
+                      OffsetX="0" OffsetY="0" Opacity="0.70"/>
+
+    <!-- ============================ 4. text styles ============================ -->
+    <!-- .card h2 — the zone header. Glow is on the title only, not the whole row. -->
+    <ControlTheme x:Key="CmpSectionTitleStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="16.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Effect" Value="{StaticResource CmpSectionGlow}"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </ControlTheme>
+
+    <ControlTheme x:Key="CmpFaintTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpFaintBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </ControlTheme>
+
+    <!-- in-character italic copy: dormant promises, flavor lines, veil sell copy -->
+    <ControlTheme x:Key="CmpFlavorTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="LineHeight" Value="18"/>
+    </ControlTheme>
+
+    <!-- quiet expert-door link.
+         NOTE: Text="{TemplateBinding Content}" is the WPF original verbatim. Z6 overrides this
+         template locally (as the WPF view does), so the object->string conversion is not
+         exercised by the ported view; the first zone that DOES use this template should check
+         it renders before trusting it. -->
+    <ControlTheme x:Key="CmpLinkButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Padding" Value="0,2,10,2"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Template">
+            <ControlTemplate TargetType="Button">
+                <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" Margin="{TemplateBinding Padding}"
+                           Foreground="{TemplateBinding Foreground}" FontSize="{TemplateBinding FontSize}"
+                           TextDecorations="Underline" Background="Transparent"/>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ TextBlock#Txt">
+            <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        </Style>
+    </ControlTheme>
+
+    <!-- ============================ 5. cards ============================ -->
+    <ControlTheme x:Key="CmpCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CmpCardBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CmpCardBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CmpRadiusCard}"/>
+        <Setter Property="Padding" Value="{StaticResource CmpCardPadding}"/>
+        <Setter Property="Margin" Value="{StaticResource CmpCardMargin}"/>
+    </ControlTheme>
+
+    <!-- ============================ 6. train microtags ============================
+         WPF needed cmp:CompanionCapsule.IsCapsule="True" here because WPF's Border clamps the X
+         and Y corner radii INDEPENDENTLY, so border-radius:999px drew a full ellipse (78% fill,
+         i.e. pi/4, on a 110x26 box) instead of a stadium. Avalonia does not have that bug: it
+         scales the radii proportionally the way CSS does. Measured headless on the same 110x26
+         box, CornerRadius="999" and CornerRadius="13" (an exact half-height capsule) both fill
+         95.1% - so the attached property has no work left to do and is not ported. -->
+    <ControlTheme x:Key="CmpTrainTagStyle" TargetType="Border">
+        <Setter Property="Background" Value="#14B478FF"/>
+        <Setter Property="BorderBrush" Value="#55B478FF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="999"/>
+        <Setter Property="Padding" Value="8,2,8,2"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpTrainTagTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="9"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{StaticResource CmpPurpleBrush}"/>
+    </ControlTheme>
+    <!-- .ttag.live — green, "this is real right now" -->
+    <ControlTheme x:Key="CmpTrainTagLiveStyle" TargetType="Border" BasedOn="{StaticResource CmpTrainTagStyle}">
+        <Setter Property="Background" Value="#126EE7A7"/>
+        <Setter Property="BorderBrush" Value="#556EE7A7"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpTrainTagLiveTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CmpTrainTagTextStyle}">
+        <Setter Property="Foreground" Value="{StaticResource CmpLiveBrush}"/>
+    </ControlTheme>
+
+    <!-- ============================ 8. gauge primitives ============================
+         Every bar on this page is the Trainer Card recipe: a rounded track Border with a
+         two-column Grid inside, the fill column bound to a star GridLength. No ActualWidth
+         maths anywhere, so nothing thrashes layout while the page scrolls. -->
+    <ControlTheme x:Key="CmpGaugeTrackStyle" TargetType="Border">
+        <Setter Property="Height" Value="10"/>
+        <Setter Property="CornerRadius" Value="5"/>
+        <Setter Property="Background" Value="{StaticResource CmpTrackBrush}"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+    </ControlTheme>
+    <!-- .att-track — the 12px attention gauge -->
+    <ControlTheme x:Key="CmpGaugeTrackThickStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeTrackStyle}">
+        <Setter Property="Height" Value="12"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Background" Value="{StaticResource CmpTrackSoftBrush}"/>
+    </ControlTheme>
+
+    <!-- The heat used to be a DropShadowEffect on every fill. Gauges live inside PageScroll and
+         there are a dozen of them once the Workshop is open, so the glow is a brush now: a
+         lighter top edge inside the fill reads as "lit" without a bitmap effect. -->
+    <ControlTheme x:Key="CmpGaugeFillStyle" TargetType="Border">
+        <Setter Property="CornerRadius" Value="5"/>
+        <Setter Property="Background" Value="{StaticResource CmpPinkPurpleBrush}"/>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
+        <Setter Property="BorderBrush" Value="#59FFB8DC"/>
+    </ControlTheme>
+    <ControlTheme x:Key="CmpGaugeFillAttentionStyle" TargetType="Border" BasedOn="{StaticResource CmpGaugeFillStyle}">
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Background" Value="{StaticResource CmpAttentionBrush}"/>
+        <Setter Property="BorderBrush" Value="#66FFD0E6"/>
+    </ControlTheme>
+</ResourceDictionary>
