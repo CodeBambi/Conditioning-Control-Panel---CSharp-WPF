@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -2226,6 +2226,12 @@ namespace ConditioningControlPanel
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
             KeywordTriggers = new KeywordTriggerService();
             KeywordPresets = new KeywordTriggerPresetService();
+
+            // ccp-bugs#1185: repair any installed CUSTOM preset whose source trigger list has
+            // drifted from its live clones before the user can deactivate it. After a deactivate
+            // the clones are gone and the edits are unrecoverable, so this has to run at launch.
+            try { KeywordPresets.SyncInstalledCustomSources(); }
+            catch (Exception ex) { Logger?.Warning("Custom preset source sync failed: {Error}", ex.Message); }
 
             // Drain any preset re-installs queued by SettingsService.MergeBuiltInAwarenessPresets
             // when a built-in preset's version was bumped on this launch. This re-clones the

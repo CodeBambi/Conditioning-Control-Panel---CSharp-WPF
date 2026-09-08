@@ -192,26 +192,14 @@ namespace ConditioningControlPanel
         private void MirrorLiveClonesToCustomSource()
         {
             if (_preset.IsBuiltIn) return;
-            var installed = App.KeywordPresets?.IsInstalled(_preset.Id) == true;
-            if (!installed) return;
+            if (App.KeywordPresets?.IsInstalled(_preset.Id) != true) return;
 
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            var prefix = "preset:" + _preset.Id + ":";
-            var live = settings.KeywordTriggers
-                .Where(t => t?.Id?.StartsWith(prefix, StringComparison.Ordinal) == true)
-                .ToList();
-
-            var synced = new List<KeywordTrigger>();
-            foreach (var clone in live)
-            {
-                var copy = clone.Clone();
-                copy.Id = clone.Id!.Substring(prefix.Length);
-                copy.LastTriggeredAt = DateTime.MinValue;
-                synced.Add(copy);
-            }
-            _preset.Triggers = synced;
+            // One shared implementation with the service (ccp-bugs#1185): the card's Activate
+            // pill uninstalls without ever opening this dialog, so the mirror cannot live here.
+            Services.KeywordTriggerPresetService.SyncCustomSourceFromClones(_preset, settings.KeywordTriggers);
         }
 
         // ============================================================
