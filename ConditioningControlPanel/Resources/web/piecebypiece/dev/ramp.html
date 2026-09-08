@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piece by Piece - ramp harness</title>
+<!--
+  A board-free harness for the conditioning ramp. It fakes the bus the real
+  game exposes as window.PBP.bus, so every layer can be built, watched and
+  screenshotted without the 3D board existing.
+
+  URL params:  ?meter=0.6   pin the meter (overrides the fake game)
+               ?fire=flash  fire one layer once on load
+               ?quiet=1     hide the control panel (clean screenshots)
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0b0714; color: #f3e8ff; font: 13px/1.45 system-ui, sans-serif; }
+  #wrap { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  /* the placeholder board: a plain dark square with a chequer so blur and melt
+     have something legible to ruin */
+  #stage {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 50% 42%, #23193a 0%, #0b0714 72%),
+      repeating-conic-gradient(from 0deg at 50% 50%, #2b2145 0deg 90deg, #171029 90deg 180deg);
+    background-size: auto, 13vmin 13vmin;
+    display: grid; place-items: center;
+  }
+  #stage .plate {
+    width: 62vmin; height: 62vmin; border-radius: 10px;
+    background: repeating-conic-gradient(#efe3ff 0deg 90deg, #4b3a72 90deg 180deg) 0 0 / 15.5vmin 15.5vmin;
+    box-shadow: 0 24px 80px rgba(0,0,0,.65), 0 0 0 2px rgba(255,105,180,.35);
+  }
+  #stage .plate span {
+    display: block; text-align: center; padding-top: 26vmin;
+    font: 900 5vmin/1 system-ui, sans-serif; color: #120a20; letter-spacing: .04em;
+  }
+  #panel {
+    position: fixed; left: 10px; top: 10px; z-index: 40; width: 320px; max-height: 96vh; overflow: auto;
+    background: rgba(16,10,28,.92); border: 1px solid rgba(255,105,180,.35); border-radius: 10px; padding: 10px;
+  }
+  #panel.hidden { display: none; }
+  h1 { font-size: 13px; margin: 0 0 8px; color: #ff8ac4; letter-spacing: .04em; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  button {
+    background: #2a1c40; color: #f3e8ff; border: 1px solid rgba(255,105,180,.4);
+    border-radius: 6px; padding: 4px 7px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #3b2758; }
+  label { display: block; margin: 6px 0 2px; color: #c8b3e8; }
+  input[type=range] { width: 100%; accent-color: #ff69b4; }
+  pre { margin: 6px 0 0; font: 11px/1.35 ui-monospace, Consolas, monospace; color: #b9a7d8; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><div class="plate"><span>BOARD</span></div></div>
+  <div id="fx" class="pbp-fx"></div>
+</div>
+
+<div id="panel">
+  <h1>ramp harness</h1>
+  <div class="row">
+    <button data-ev="turn-w">turn w</button>
+    <button data-ev="turn-b">turn b</button>
+    <button data-ev="check">check</button>
+    <button data-ev="gameover">gameover</button>
+  </div>
+  <div class="row">
+    <button data-ev="cap-w">capture by w</button>
+    <button data-ev="cap-b">capture by b</button>
+  </div>
+  <div class="row">
+    <button data-ev="grab">grab</button>
+    <button data-ev="dragmove">dragmove</button>
+    <button data-ev="drop">drop</button>
+  </div>
+  <div class="row">
+    <button data-ev="reset">reset</button>
+    <button data-ev="toggle">enable/disable</button>
+  </div>
+  <label>clock scrub <span id="clockLbl">100%</span></label>
+  <input id="clock" type="range" min="0" max="100" value="100">
+  <label>meter override <span id="meterLbl">off</span></label>
+  <input id="meter" type="range" min="-1" max="100" value="-1">
+  <pre id="out">booting...</pre>
+</div>
+<!-- headless runs read this: the page has no devtools, so errors are put in the
+     DOM where a --dump-dom pass can grep them. Empty text means a clean run. -->
+<div id="errors" data-count="0" style="display:none"></div>
+
+<script>
+/* the error sink has to be a classic script so it is installed BEFORE the
+   module below is fetched: a module that fails to import still lands here */
+(function () {
+  const sink = () => document.getElementById('errors');
+  window.__pbpErrors = [];
+  function record(kind, text) {
+    window.__pbpErrors.push(kind + ': ' + text);
+    const el = sink();
+    if (el) { el.textContent = window.__pbpErrors.join('\n'); el.dataset.count = String(window.__pbpErrors.length); }
+  }
+  window.addEventListener('error', (e) => record('error', (e && e.message) || String(e)));
+  window.addEventListener('unhandledrejection', (e) => record('rejection', String((e && e.reason) || e)));
+  const realError = console.error.bind(console);
+  console.error = (...a) => { record('console.error', a.map(String).join(' ')); realError(...a); };
+}());
+</script>
+
+<script type="module">
+import { attachRamp } from '../ramp/index.js';
+import { createFixtureMedia, loadFixtureList } from '../ramp/media.js';
+
+const qs = new URLSearchParams(location.search);
+if (qs.get('quiet') === '1') document.getElementById('panel').classList.add('hidden');
+
+/* ---- the fake bus: the same three-method surface the real game exposes ---- */
+function createBus() {
+  const map = new Map();
+  return {
+    on(type, fn) { if (!map.has(type)) map.set(type, new Set()); map.get(type).add(fn); },
+    off(type, fn) { const s = map.get(type); if (s) s.delete(fn); },
+    emit(type, payload) { const s = map.get(type); if (s) for (const fn of [...s]) fn(payload); },
+  };
+}
+
+/* ---- a fake game: just enough state to make the events coherent ---------- */
+const TOTAL = 300000;   // 5 minutes a side
+const game = { ply: 0, side: 'w', clocks: { w: TOTAL, b: TOTAL } };
+const bus = createBus();
+window.PBP = { bus, game, board: null };
+
+const list = await loadFixtureList(new URL('./media.json', import.meta.url).href);
+const media = createFixtureMedia(list);
+const ramp = attachRamp({ bus, root: document.getElementById('fx'), stage: document.getElementById('stage'), media });
+window.PBP.ramp = ramp;
+
+bus.emit('local', { sides: ['w', 'b'] });
+const emitClock = () => bus.emit('clock', { ...game.clocks, total: TOTAL, active: game.side });
+const emitTurn = (side) => {
+  game.side = side; game.ply += 1;
+  bus.emit('turn', { side, ply: game.ply, clocks: { ...game.clocks }, total: TOTAL });
+  emitClock();
+};
+emitTurn('w');
+setInterval(emitClock, 250);
+
+const PIECES = ['p', 'n', 'b', 'r', 'q'];
+const pick = (a) => a[(Math.random() * a.length) | 0];
+const square = () => 'abcdefgh'[(Math.random() * 8) | 0] + (1 + ((Math.random() * 8) | 0));
+
+const actions = {
+  'turn-w': () => emitTurn('w'),
+  'turn-b': () => emitTurn('b'),
+  'check': () => bus.emit('check', { side: game.side }),
+  'gameover': () => bus.emit('gameover', { result: '1-0', winner: 'w' }),
+  'cap-w': () => bus.emit('capture', { by: 'w', piece: pick(PIECES), square: square(), victimSide: 'b' }),
+  'cap-b': () => bus.emit('capture', { by: 'b', piece: pick(PIECES), square: square(), victimSide: 'w' }),
+  'grab': () => bus.emit('grab', { square: square(), piece: pick(PIECES), screen: { x: innerWidth * 0.5, y: innerHeight * 0.55 } }),
+  'dragmove': () => bus.emit('dragmove', { screen: { x: innerWidth * (0.3 + Math.random() * 0.4), y: innerHeight * (0.3 + Math.random() * 0.4) } }),
+  'drop': () => bus.emit('drop', { ok: true }),
+  'reset': () => { game.ply = 0; game.clocks = { w: TOTAL, b: TOTAL }; location.reload(); },
+  'toggle': () => ramp.setEnabled(!ramp.debug().enabled),
+};
+for (const btn of document.querySelectorAll('#panel button')) {
+  btn.addEventListener('click', () => { const fn = actions[btn.dataset.ev]; if (fn) fn(); });
+}
+
+const clockEl = document.getElementById('clock');
+clockEl.addEventListener('input', () => {
+  const frac = clockEl.value / 100;
+  document.getElementById('clockLbl').textContent = Math.round(frac * 100) + '%';
+  game.clocks.w = game.clocks.b = Math.round(TOTAL * frac);
+  emitClock();
+});
+
+const meterEl = document.getElementById('meter');
+function applyMeter() {
+  const v = Number(meterEl.value);
+  const on = v >= 0;
+  document.getElementById('meterLbl').textContent = on ? (v / 100).toFixed(2) : 'off';
+  ramp.debug().setMeter(on ? v / 100 : null);
+}
+meterEl.addEventListener('input', applyMeter);
+
+/* ?meter= and ?fire= drive the screenshot pass */
+if (qs.has('meter')) { meterEl.value = Math.round(Number(qs.get('meter')) * 100); applyMeter(); }
+if (qs.has('fire')) ramp.debug().fire(qs.get('fire'));
+
+const out = document.getElementById('out');
+setInterval(() => {
+  const d = ramp.debug();
+  const m = d.model.sides;
+  out.textContent = [
+    'side ' + d.side + '  ply ' + d.model.ply + '  enabled ' + d.enabled + '  ticks ' + d.ticks,
+    'meter ' + d.meter.toFixed(3) + '  heat ' + d.heat.toFixed(3),
+    'w  meter ' + m.w.meter.toFixed(2) + ' took ' + m.w.captures + ' lost ' + m.w.losses,
+    'b  meter ' + m.b.meter.toFixed(2) + ' took ' + m.b.captures + ' lost ' + m.b.losses,
+    'media ' + JSON.stringify(d.media),
+    'layers ' + JSON.stringify(d.layers && d.layers.counts),
+  ].join('\n');
+}, 200);
+</script>
+</body>
+</html>
