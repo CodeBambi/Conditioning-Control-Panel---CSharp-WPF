@@ -61,19 +61,127 @@ function lathe(points, segments = 40) {
   return geo;
 }
 
+/** Every number the silicone and its contact patch are made of. */
+export const SKIN_TUNING = Object.freeze({
+  roughness: 0.33,
+  clearcoat: 0.42,          // was 0.6: a hard gloss over a dark body is a shell
+  clearcoatRoughness: 0.28,
+  sheen: 0.72,
+  sheenRoughness: 0.52,
+  // Fake subsurface. Not transmission and not thickness: those two are what
+  // make a soft body read as glass, which is the hollow look we are getting
+  // rid of. This is the two things a thick soft body actually does. It never
+  // goes to black in its own shade, because light that went in came back out,
+  // and it lights up along an edge where the body is thin.
+  fillFloor: 0.16,          // how much of its own colour a shaded face keeps
+  fillKnee: 0.30,           // the light level that floor has faded out by
+  rimGain: 0.16,            // how bright a thin edge gets
+  rimPower: 2.4,            // how tight to the edge that is
+  rimMix: 0.5,              // how far the rim leans off the body colour
+  // The contact patch: a disc of shade under the man, so he sits ON the board.
+  contactSpread: 2.15,      // disc width, in widths of the man's own footprint
+  contactAlpha: 0.46,
+  contactLiftFade: 0.62,    // world units of lift the patch fades out over
+  contactLiftGrow: 0.45,    // and how far it spreads while it goes
+  contactLean: 0.55,        // how far it slides under a leaning man
+  contactSquash: 0.7,       // and how far it spreads under a squatting one
+  contactUpright: 0.72,     // below this much "up" (a tumble) it is gone
+});
+
+const SK = SKIN_TUNING;
+const n2 = (v) => v.toFixed(4);
+
+// Fake subsurface, injected after <opaque_fragment> so it lands on the lit
+// colour and before the tone mapping. Everything it reads (outgoingLight,
+// diffuseColor, geometryNormal, geometryViewDir) is in scope there in
+// meshphysical_frag; diffuseColor already carries the vertex colours, so a
+// purple man is lifted by purple and a pink one by pink.
+const SKIN_PRELUDE = `
+uniform vec3 uSkinTint;
+`;
+const SKIN_FRAGMENT = `#include <opaque_fragment>
+{
+  float pbpLum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+  float pbpShade = 1.0 - smoothstep(0.0, ${n2(SK.fillKnee)}, pbpLum);
+  gl_FragColor.rgb += diffuseColor.rgb * (${n2(SK.fillFloor)} * pbpShade);
+  float pbpFres = pow(1.0 - clamp(dot(geometryNormal, geometryViewDir), 0.0, 1.0), ${n2(SK.rimPower)});
+  gl_FragColor.rgb += mix(diffuseColor.rgb, uSkinTint, ${n2(SK.rimMix)}) * (pbpFres * ${n2(SK.rimGain)});
+}`;
+
 /**
  * The silicone. `painted` is a piece whose geometry brings its own COLOR_0: the
  * base colour goes white and the vertex colours do the tinting, but the sheen,
  * the clearcoat and the emissive the buzz drives are the side's either way.
+ *
+ * The patch is left on onBeforeCompile for jiggle.js to chain the flex onto,
+ * and `userData.pbpPatch` tells jiggle to key this program apart from a plain
+ * material's, so a jewel can never be handed the silicone's shader.
  */
 function material(side, painted = false) {
   const skin = SKIN[side] || SKIN.w;
-  return new THREE.MeshPhysicalMaterial({
+  const mat = new THREE.MeshPhysicalMaterial({
     color: painted ? 0xFFFFFF : skin.color, vertexColors: painted,
-    roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.22, metalness: 0.0,
-    sheen: 0.5, sheenColor: new THREE.Color(skin.sheen), sheenRoughness: 0.6,
+    roughness: SK.roughness, clearcoat: SK.clearcoat,
+    clearcoatRoughness: SK.clearcoatRoughness, metalness: 0.0,
+    sheen: SK.sheen, sheenColor: new THREE.Color(skin.sheen), sheenRoughness: SK.sheenRoughness,
     emissive: new THREE.Color(skin.sheen), emissiveIntensity: 0,
   });
+  const uSkinTint = { value: new THREE.Color(skin.sheen) };
+  mat.userData.pbpPatch = 'skin';
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSkinTint = uSkinTint;
+    shader.fragmentShader = SKIN_PRELUDE + shader.fragmentShader
+      .replace('#include <opaque_fragment>', SKIN_FRAGMENT);
+  };
+  return mat;
+}
+
+// --- the contact patch ------------------------------------------------------
+// One radial gradient, drawn once into a canvas and shared by every man. It is
+// a picture of shade, not a shadow map: it casts nothing, receives nothing, and
+// its raycast is stubbed out so it can never be the thing a pointer picks up.
+let contactTex = null;
+let contactGeo = null;
+
+function contactTexture() {
+  if (contactTex) return contactTex;
+  const N = 128;
+  const cv = document.createElement('canvas');
+  cv.width = N; cv.height = N;
+  const g = cv.getContext('2d');
+  const grad = g.createRadialGradient(N / 2, N / 2, 0, N / 2, N / 2, N / 2);
+  grad.addColorStop(0.00, 'rgba(0,0,0,1)');
+  grad.addColorStop(0.34, 'rgba(0,0,0,0.78)');
+  grad.addColorStop(0.68, 'rgba(0,0,0,0.24)');
+  grad.addColorStop(1.00, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, N, N);
+  contactTex = new THREE.CanvasTexture(cv);
+  contactTex.colorSpace = THREE.SRGBColorSpace;
+  return contactTex;
+}
+
+/** The disc that goes under one man. `foot` is his own width in local units. */
+function contactPatch(foot) {
+  if (!contactGeo) {
+    contactGeo = new THREE.PlaneGeometry(1, 1);
+    contactGeo.rotateX(-Math.PI / 2);
+  }
+  const mat = new THREE.MeshBasicMaterial({
+    map: contactTexture(), transparent: true, opacity: SK.contactAlpha,
+    depthWrite: false, toneMapped: false, fog: false,
+  });
+  const disc = new THREE.Mesh(contactGeo, mat);
+  disc.position.y = 0.005;
+  // No renderOrder of its own: it has to draw in the transparent pass, AFTER
+  // the board. Drawn early with depthWrite off, the squares simply paint over
+  // it and the patch is never seen.
+  disc.castShadow = false;
+  disc.receiveShadow = false;
+  disc.raycast = () => {};        // never the thing a pointer picks up
+  disc.userData.foot = Math.max(0.12, foot) * SK.contactSpread;
+  disc.scale.setScalar(disc.userData.foot);
+  return disc;
 }
 
 /** Extra bits a lathe cannot turn, also in normalised space. */
@@ -168,6 +276,16 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
       phase: Math.random() * Math.PI * 2,
     };
     if (jiggle) jiggle.attach(root);
+    // The contact patch goes on AFTER the flex, on purpose: it must not be
+    // handed the vertex shader or a depth material, because it is a picture of
+    // shade lying on the board and not a part of the man. It is kept out of
+    // userData.materials for the same reason, so the capture fade and the buzz
+    // never touch it.
+    body.geometry.computeBoundingBox();
+    const bb = body.geometry.boundingBox;
+    const disc = contactPatch(Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z));
+    root.add(disc);
+    root.userData.contact = disc;
     return root;
   }
 
@@ -224,8 +342,40 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     return piece || null;
   }
 
+  // The contact patches. Every man on the board, every frame, because a patch
+  // has to follow a drag and a drag happens with the wobble turned all the way
+  // down. It stays welded to the board while the man goes up, fades over the
+  // first two thirds of a square of lift, spreads as it fades, and slides and
+  // widens with whatever the spring is doing to him.
+  const upVec = new THREE.Vector3();
+  function updateContacts() {
+    for (const piece of group.children) {
+      const disc = piece.userData && piece.userData.contact;
+      if (!disc) continue;
+      const scale = piece.scale.y || 1;
+      const lift = Math.abs(piece.position.y);
+      const t = Math.min(1, lift / SK.contactLiftFade);
+      upVec.set(0, 1, 0).applyQuaternion(piece.quaternion);
+      const upright = THREE.MathUtils.smoothstep(upVec.y, SK.contactUpright, 1);
+      const body = piece.userData.material;
+      const fade = body && body.transparent ? body.opacity : 1;
+      const j = piece.userData.jiggleUniforms;
+      const bendX = j ? j.uBend.value.x : 0;
+      const bendZ = j ? j.uBend.value.y : 0;
+      const squash = j ? j.uSquash.value : 0;
+      disc.material.opacity = SK.contactAlpha * (1 - t) * upright * fade;
+      disc.visible = disc.material.opacity > 0.002;
+      if (!disc.visible) continue;
+      disc.scale.setScalar(disc.userData.foot * (1 + t * SK.contactLiftGrow) * (1 + squash * SK.contactSquash));
+      disc.position.set(bendX * SK.contactLean, 0.005 - piece.position.y / scale, bendZ * SK.contactLean);
+      // Flat on the board whatever the man is doing above it.
+      disc.quaternion.copy(piece.quaternion).invert();
+    }
+  }
+
   function update(dt) {
     clock += dt;
+    updateContacts();
     if (wobble <= 0.001) return;
     for (const piece of bySquare.values()) {
       if (piece.userData.held || piece.userData.busy) continue;

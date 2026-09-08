@@ -21,6 +21,15 @@ export const LIGHT = Object.freeze({
   shadowHalfExtent: 5.2,    // the frustum, in squares from the middle out
   shadowBias: -0.0006,      // pulls the comparison off the surface it came from
   shadowNormalBias: 0.02,   // and walks the lookup out along the normal
+  skyColor: 0x9E93E8,       // the room over the board
+  groundColor: 0x4A3A5E,    // and the bounce off the plinth, warmer than it was
+  hemi: 0.72,
+  keyColor: 0xFFF3E4,
+  key: 2.05,
+  fillColor: 0xCBB9FF,      // cool lavender, opposite the key
+  fill: 0.58,               // low: it is there to stop a flank going black
+  rimColor: 0xFF69B4,
+  rim: 1.15,
 });
 
 /** Square name ("e4") to the world position of its centre. */
@@ -55,9 +64,14 @@ export function createScene({ canvas }) {
 
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 120);
 
-  // --- lights: one soft key over the board, one pink rim from behind ---------
-  scene.add(new THREE.HemisphereLight(0x8f86d6, 0x141433, 0.55));
-  const key = new THREE.DirectionalLight(0xFFF3E4, 2.1);
+  // --- lights: a soft key over the board, a fill facing it, a pink rim behind -
+  // A body this thick has no truly black side. The hemisphere is warmer and
+  // brighter at the ground than it was, so an underside picks up the plinth
+  // instead of the void, and the fill stands opposite the key at about a
+  // quarter of its strength: enough to find the far edge of a man, not enough
+  // to flatten the modelling the key is doing. The fill casts nothing.
+  scene.add(new THREE.HemisphereLight(LIGHT.skyColor, LIGHT.groundColor, LIGHT.hemi));
+  const key = new THREE.DirectionalLight(LIGHT.keyColor, LIGHT.key);
   key.position.set(4.5, 9.5, 5.5);
   key.castShadow = true;
   // 2048 over a frustum drawn to the board, instead of 1024 over one with three
@@ -76,7 +90,11 @@ export function createScene({ canvas }) {
   cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half;
   cam.near = 1; cam.far = 26;
   scene.add(key, key.target);
-  const rim = new THREE.DirectionalLight(PINK, 1.15);
+  const fill = new THREE.DirectionalLight(LIGHT.fillColor, LIGHT.fill);
+  fill.position.set(-5.0, 4.0, 4.5);
+  fill.castShadow = false;
+  scene.add(fill, fill.target);
+  const rim = new THREE.DirectionalLight(LIGHT.rimColor, LIGHT.rim);
   rim.position.set(-5.5, 3.2, -6.5);
   scene.add(rim, rim.target);
 
