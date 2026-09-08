@@ -164,8 +164,14 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     return rollKind(intensity(), roomBias(), extra).id;
   }
 
+  /** Every kind this field has PUT ON THE ROAD, counted. Never read by the game: it is the one
+   *  honest answer to "did a darkened kind ever spawn" (race/smoke/word-flash-check.mjs), because
+   *  place() is the single door every roll, lane line, rain, cue and row goes through. */
+  const placed = new Map();
+
   function place(kindId, placement, d, x, h) {
     const k = KIND_BY_ID[kindId] || KIND_BY_ID.treat;
+    placed.set(k.id, (placed.get(k.id) || 0) + 1);
     const s = takeSlot();
     s.kindId = k.id; s.placement = placement;
     s.d = layout.wrap(d); s.x = clamp(x, -LANE_X_MAX, LANE_X_MAX); s.x0 = s.x;
@@ -467,7 +473,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     /** riptide: while on, everything inside PULL_M ahead slides into the kart's lane. */
     setPull(on) { pull = !!on; },
     /** What race/smoke/face-check.mjs reads: the face cache, and what every live word bubble
-     *  is wearing this frame, nearest the kart first. Never read by the game itself. */
+     *  is wearing this frame, nearest the kart first, plus `placed`, every kind this run has put
+     *  on the road counted by id. Never read by the game itself. */
     faceReport() {
       const worn = [];
       for (const s of pool) {
@@ -476,7 +483,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
           ahead: relD(s.d, lastKartD), size: s.size, popped: s.popT >= 0, faced: !!(s.mat.map && s.mat.map !== dotTex && s.mat.map.isCanvasTexture) });
       }
       worn.sort((a, b) => a.ahead - b.ahead);
-      return { ...faces.report(), pool: pool.length, live: liveCount, worn };
+      return { ...faces.report(), pool: pool.length, live: liveCount, worn, placed: Object.fromEntries(placed) };
     },
     get liveCount() { return liveCount; },
   };

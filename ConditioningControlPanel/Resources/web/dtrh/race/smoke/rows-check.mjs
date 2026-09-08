@@ -14,6 +14,9 @@
  *      you steer around.
  *   2. the row wears the preset's own bubble, and a treats or mark preset is a
  *      row of treats rather than an effect
+ *   2b. the flash bubble is dark and the WORD carries the flash instead: half the
+ *      word pops, off the run's seeded rng, one flash per 250 ms, and the one
+ *      preset that meant the flash pours a real one through THE MIX
  *   3. a trigger the spotter only half heard is the single treat it always was
  *   4. one event is one credit however many of its bubbles were popped
  *   5. a worded track halves the peak rain; nothing else on the road moves
@@ -32,7 +35,7 @@
  * It never prints a line of a transcript. Everything below is counted.
  * ==========================================================================*/
 
-import { cueFor, ROW_X, ROW_MAX_GAP } from '../cues.js';
+import { cueFor, ROW_X, ROW_MAX_GAP, wordFlash, WORD_FLASH, WORD_FLASH_CHANCE, WORD_FLASH_GAP_MS } from '../cues.js';
 import { createScheduler, normalizeChart } from '../chart.js';
 import { KART_X_MAX, LANE_X_MAX, POP_HIT_X, POP_HIT_D, LANE_H, COMBO_HOLD_SEC, KART_BASE_SPEED, OPEN_PACE, makeRng } from '../consts.js';
 import { createScore } from '../score.js';
@@ -115,6 +118,32 @@ for (const preset of ['treats', 'mark']) {
   const c = cueFor({ kind: 'trigger', t: 4, label: 'a phrase', conf: 0.9, cue: preset }, ctxFor({ 'a phrase': kindForPreset(preset) }));
   eq(c.spawn.filter((s) => s.row && s.kindId === 'treat').length, ROW_X.length, 'a ' + preset + ' trigger is a row of treats, not an effect');
 }
+
+/* ---- 2b. THE FLASH: the bubble is dark, the word carries it -------------- */
+// The flash bubble went dark on 2026-09-08 (bubbleKinds.js). Two things have to hold after it:
+// nothing may dress a row as one, and the preset that MEANT the flash still fires a real one.
+eq(KIND_BY_ID.flash.spawn, false, 'the flash bubble is darkened');
+ok(Object.keys(THEME_BY_PRESET).every((p) => kindForPreset(p) !== 'flash'), 'and no preset puts one on the road');
+const pulse = cueFor({ kind: 'trigger', t: 4, label: 'zap cock drain', conf: 0.9, cue: 'flash-pulse' },
+  ctxFor({ 'zap cock drain': kindForPreset('flash-pulse') }));
+eq(pulse.spawn.filter((s) => s.row && s.kindId === 'treat').length, ROW_X.length, 'the flash-pulse row is a full line of plain word faces');
+eq(pulse.mix, 'flash', 'and its beat pours a real flash through THE MIX, so the strobe recipes keep a door');
+eq(cueFor({ kind: 'trigger', t: 4, label: 'good girl', conf: 0.9, cue: 'pink-blink' }, ctxFor({ 'good girl': 'pink' })).mix, null,
+  'no other trigger row pours one');
+// the odds themselves: half the words the player takes, off the run's own seeded rng, and two
+// words taken inside the gap share one flash rather than double-flashing.
+const frng = makeRng(0x51ede5);
+const N = 20000;
+let fired = 0;
+for (let i = 0; i < N; i++) if (wordFlash(frng, WORD_FLASH_GAP_MS)) fired++;
+ok(Math.abs(fired / N - WORD_FLASH_CHANCE) < 0.02, 'a word pop flashes ' + Math.round((fired / N) * 100) + '% of the time (want ' + Math.round(WORD_FLASH_CHANCE * 100) + '%)');
+let capped = 0;
+for (let i = 0; i < 500; i++) if (wordFlash(frng, WORD_FLASH_GAP_MS - 1)) capped++;
+eq(capped, 0, 'and a word taken inside ' + WORD_FLASH_GAP_MS + ' ms of the last flash takes none');
+const seedA = makeRng(7), seedB = makeRng(7);
+ok(Array.from({ length: 200 }, () => wordFlash(seedA, 999)).join() === Array.from({ length: 200 }, () => wordFlash(seedB, 999)).join(),
+  'one seed, one sequence: a replay of a run flashes on the same words');
+ok(WORD_FLASH.durationMult < 0.3 && WORD_FLASH.strength < 30, 'and what it hands payloadFx is a blink, not the old flash bubble');
 
 /* ---- 3. the unsure trigger is what it always was ------------------------- */
 const unsure = cueFor({ kind: 'trigger', t: 10, label: 'a phrase', conf: 0.3, cue: 'blackout' },

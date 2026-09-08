@@ -26,6 +26,11 @@ const PLAIN_SPRITE = '/dtrh/assets/bubbles/bubble.png';   // the classic soap bu
 //   place one, so no roll, lane line, rain or track cue can put it on the road. 'video' is dark
 //   since 2026-09-06: the tape bubble fired a real mandatory video mid-run and the owner has
 //   another use in mind for the slot. The host refuses a video fire-payload too.
+//   'flash' is dark since 2026-09-08: the flash is a beat on a WORD now, not a bubble of its own.
+//   Half the word bubbles the player takes pop a brief flash with them (race/cues.js WORD_FLASH,
+//   fired from run.js onPop), so the light comes off the thing the voice said rather than off a
+//   sprite that happened to roll. The row keeps its strobe slot, so THE MIX still knows the kind
+//   when a flash arrives from a `flash-pulse` trigger row, a burst or a recipe.
 export const BUBBLE_KINDS = [
   { id: 'treat',      label: '',  kind: 'treat',  payload: null,         overlayKind: null,  category: null,
     strength: 0,    points: 10, weight: 22,  minIntensity: 0,    tint: 'rgb(184,222,255)', sprite: PLAIN_SPRITE },
@@ -36,6 +41,7 @@ export const BUBBLE_KINDS = [
   { id: 'prism',      label: '❂', kind: 'treat',  payload: null,         overlayKind: null,  category: null,
     strength: 0,    points: 30, weight: 1.4, minIntensity: 0.1,  tint: 'rgb(200,168,255)', sprite: SPRITE_BASE + 'prism.png' },
   { id: 'flash',      label: '',  kind: 'effect', payload: 'flash',      overlayKind: null,  category: 'strobe',
+    spawn: false,   // dark since 2026-09-08, see the header; the word bubbles carry the flash now
     strength: 0.45, points: 15, weight: 6,   minIntensity: 0,    tint: 'rgb(255,208,232)', sprite: SPRITE_BASE + 'flash.png' },
   { id: 'subliminal', label: '♥', kind: 'effect', payload: 'subliminal', overlayKind: null,  category: 'cards',
     strength: 0.45, points: 15, weight: 5,   minIntensity: 0,    tint: 'rgb(176,128,255)', sprite: SPRITE_BASE + 'subliminal.png' },

@@ -172,7 +172,7 @@ Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
 | golden | treat | null | 50 | rare, JACKPOT chime |
 | lucky | treat | null | 25 | a plain 25 point treat, nothing else |
 | prism | treat | null | 30 | rainbow, pops neighbours |
-| flash | effect | flash | 15 | flash media from the pool |
+| flash | effect | flash | 15 | DARK since 2026-09-08, never spawns; the WORD carries the flash now (see below) |
 | subliminal | effect | subliminal | 15 | |
 | pink | effect | overlay/pink_filter | 20 | |
 | spiral | effect | overlay/spiral | 20 | |
@@ -191,7 +191,23 @@ never calls the setter.
 A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
 of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
 one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its
-sprite and its THE MIX `video` slot stay put for a later use.
+sprite and its THE MIX `video` slot stay put for a later use. `field.spawnRow` refuses a dark kind
+too, and refuses the WHOLE row rather than laying it with a hole in it, so anything that names a kind
+for a row (`cues.js` FALLBACK_TRIGGER / ROOM_TRIGGER, `triggerTheme.js` FALLBACK_KIND and every
+`THEME_BY_PRESET` row, `track.js` TRIGGER_KINDS) has to name one that still spawns.
+
+**THE WORD FLASH (2026-09-08).** The flash bubble is dark as well: the flash is a beat on a WORD now,
+not a bubble of its own. A pop of a bubble that WEARS a word (a transcript word bubble, or one of a
+trigger row whose kind is a treat) fires `payloadFx` `flash` at `WORD_FLASH` strength for ~185 ms
+half the time, rolled off the run's own seeded stream (`w.popRng`), one flash per `WORD_FLASH_GAP_MS`
+(250 ms) and none at all under reduced motion. It is cosmetic: it never reaches THE MIX, so it is no
+strobe charge and no recipe, and the pop scores as the treat it always was. The odds, the cap and the
+constants live in `race/cues.js` (`wordFlash`, `WORD_FLASH*`), so `race/smoke/rows-check.mjs` holds
+them; run.js only keeps the clock. `race/smoke/word-flash-check.mjs` drives a real headless run and
+reads the two counters back: `race.wordFlashStats()` (pops, capped, rolls, flashes) and
+`race.wordFaces().placed`, the tally of every kind the field has actually put on the road. The one preset that MEANT the flash, `flash-pulse`, goes the other
+way: its row is a line of plain word faces and its beat sets `cue.mix = 'flash'`, which is now the
+only door a strobe charge comes through, so the recipes that need one still have a way to be served.
 
 Placements: `lane` (rests on the road, h ~0.9, bobbing), `air` (along a ramp air line, h rises
 2..5), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` to the road in
@@ -415,6 +431,10 @@ add to 4, `freeze` and `video` are solo (`video` holds everything else). `action
 pop scores as a treat. Live category sets match `RECIPES` (first row whose `needs` are all live);
 run.js maps a served recipe to `score.boostMult` (never below x1), a toast, a mood poke and, for
 `marquee` rows, the banner. Durations for effects live in `CATEGORIES`, not run.js.
+Since 2026-09-08 no flash bubble spawns, so the `strobe` slot is lit by the `flash-pulse` trigger row
+alone (`cue.mix`), never by a pop: a seeded run with no chart under it now goes the whole way without
+one, and the word flash is deliberately not a charge. The slot, its bursts and the recipes that need
+it stay in the machine, the way the `video` slot did.
 
 ### `race/gltf.js` (pass four, the Blender packs)
 
