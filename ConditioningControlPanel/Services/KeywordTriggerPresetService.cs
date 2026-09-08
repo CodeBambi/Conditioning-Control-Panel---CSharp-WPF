@@ -121,6 +121,16 @@ namespace ConditioningControlPanel.Services
             if (settings == null || preset == null) return false;
 
             var prefix = TriggerIdPrefix + presetId + ":";
+
+            // THE DEACTIVATE WIPE (ccp-bugs#1185). The editor mutates the LIVE clones in
+            // settings.KeywordTriggers; preset.Triggers is only the seed the next install
+            // re-clones from. Removing the clones without mirroring them back therefore threw
+            // away every edit made since the preset was activated - a preset whose triggers
+            // were added while it was ON came back as blank keyword rows with a default
+            // subliminal action. Mirror first, then remove, on EVERY uninstall path (the card's
+            // Activate pill did not go through the detail dialog, which is where the only
+            // mirror used to live).
+            SyncCustomSourceFromClones(preset, settings.KeywordTriggers);
             int removed = settings.KeywordTriggers.RemoveAll(t =>
                 t.Id?.StartsWith(prefix, StringComparison.Ordinal) == true);
 
@@ -243,6 +253,73 @@ namespace ConditioningControlPanel.Services
                 App.Settings?.Save();
                 App.Logger?.Information("RefreshAiGating: adjusted {Count} avatar-comment actions (aiAvailable={Ai})",
                     touched, aiAvailable);
+            }
+        }
+
+        /// <summary>
+        /// Mirrors a custom preset's LIVE cloned triggers (the ones the editor actually mutates,
+        /// living in <c>settings.KeywordTriggers</c> under the <c>preset:&lt;id&gt;:</c> prefix) back
+        /// into <see cref="KeywordTriggerPreset.Triggers"/>, which is the seed a later install
+        /// re-clones from.
+        ///
+        /// <para>Built-in presets are skipped: their source of truth is the JSON in
+        /// <c>Resources/AwarenessPresets/</c>, not the user's copy.</para>
+        ///
+        /// <para>A preset with NO live clones is left alone. That is the safety catch: if the
+        /// clones are missing for any reason other than "the user deleted every trigger" (which
+        /// already strips the source entry as it goes), blanking the source list here would be a
+        /// second, worse data loss than the one this method exists to prevent.</para>
+        ///
+        /// <para>Pure apart from the two arguments, so the contract is unit testable without an
+        /// App spine. Returns the number of triggers mirrored.</para>
+        /// </summary>
+        internal static int SyncCustomSourceFromClones(KeywordTriggerPreset? preset, IList<KeywordTrigger>? liveTriggers)
+        {
+            if (preset == null || preset.IsBuiltIn || liveTriggers == null) return 0;
+            if (string.IsNullOrEmpty(preset.Id)) return 0;
+
+            var prefix = TriggerIdPrefix + preset.Id + ":";
+            var synced = new List<KeywordTrigger>();
+
+            foreach (var clone in liveTriggers)
+            {
+                if (clone?.Id == null) continue;
+                if (!clone.Id.StartsWith(prefix, StringComparison.Ordinal)) continue;
+
+                var copy = clone.Clone();
+                copy.Id = clone.Id.Substring(prefix.Length);
+                copy.LastTriggeredAt = DateTime.MinValue;
+                synced.Add(copy);
+            }
+
+            if (synced.Count == 0) return 0;
+
+            preset.Triggers = synced;
+            return synced.Count;
+        }
+
+        /// <summary>
+        /// Heals every INSTALLED custom preset whose source list has drifted from its live clones.
+        /// Called once at startup so a preset damaged by a pre-fix build is repaired while its
+        /// clones are still on disk - after a deactivate the clones are gone and nothing can bring
+        /// the lost triggers back.
+        /// </summary>
+        public void SyncInstalledCustomSources()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            int healed = 0;
+            foreach (var preset in settings.KeywordTriggerPresets)
+            {
+                if (preset == null || preset.IsBuiltIn || !preset.MasterEnabled) continue;
+                if (SyncCustomSourceFromClones(preset, settings.KeywordTriggers) > 0) healed++;
+            }
+
+            if (healed > 0)
+            {
+                App.Settings?.Save();
+                App.Logger?.Information("SyncInstalledCustomSources: refreshed the source list of {Count} installed custom preset(s)", healed);
             }
         }
 
