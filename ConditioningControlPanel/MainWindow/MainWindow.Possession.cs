@@ -252,6 +252,25 @@ namespace ConditioningControlPanel
 
         internal IReadOnlyList<PossessionTarget> GetPossessionTargets()
         {
+            // Off the UI thread this walk is not merely slow, it is illegal: the very first thing it
+            // reads is Window.Content, a dependency property, and DependencyObject.GetValue calls
+            // VerifyAccess. Three users hit exactly that as "Possession: target walk failed /
+            // InvalidOperationException: The calling thread cannot access this object" (ccp-bugs
+            // #1160, #1167, #1184). The caller that actually did it is fixed at its own layer
+            // (PossessionEvents marshals its settings reaction now), but this registry is public
+            // surface read from a dozen effects, so it degrades here instead of throwing: hand back
+            // the last good snapshot and leave the rebuild to the next UI-thread read.
+            //
+            // Deliberately NOT a blocking Invoke across to the UI thread: a background caller
+            // waiting on a dispatcher that is at that moment animating a ghost is how a haunt turns
+            // into a hang. The cache is marked dirty so the rebuild happens at the first safe read,
+            // still behind PossessionRebuildFloor.
+            if (!Dispatcher.CheckAccess())
+            {
+                _possessionCacheDirty = true;
+                return _possessionTargetCache ?? (IReadOnlyList<PossessionTarget>)Array.Empty<PossessionTarget>();
+            }
+
             try
             {
                 var now = DateTime.Now;
