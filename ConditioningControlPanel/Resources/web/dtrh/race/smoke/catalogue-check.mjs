@@ -13,9 +13,10 @@
  *   2. PRECEDENCE: the rule is a real order, and it is the rule that decides the
  *      seconds two sets both claim
  *   3. the countdown mode finds the two countdowns the shelf actually contains
-
- * The road the catalogue lays is the next PR's to hold: this one is the table, the
- * rule and the matcher, over the eleven real transcripts.
+ *   4. the fingerprint merge: a set the words file was never fingerprinted for
+ *      still reaches the road, and one it was keeps the truer second
+ *   5. the road: how many rows, how many of them wear an effect, and no one kind
+ *      swallowing a track
  *
  * It never prints a line of a transcript. Everything below is counted, never quoted.
  * ==========================================================================*/
@@ -27,6 +28,7 @@ import { TRIGGER_SETS, SET_RANK, rankOf, laysRow, compareHits } from '../../char
 import { findMatches, COUNTDOWN } from '../../chart/maker/triggers.js';
 import { KIND_BY_ID } from '../bubbleKinds.js';
 import { THEME_BY_PRESET, themeFor, kindForPreset } from '../triggerTheme.js';
+import { scanTriggers, triggerHits, wordedRoad, TRIGGER_GAP, FP_SNAP_SEC, PEAKS_PER_SEC } from '../cloudChart.js';
 
 let fails = 0;
 const ok = (cond, what) => { if (!cond) { console.error('FAIL ' + what); fails++; } else console.log('  ok  ' + what); };
@@ -36,7 +38,19 @@ const RACE = resolve(fileURLToPath(import.meta.url), '../..');
 const read = (rel) => JSON.parse(readFileSync(resolve(RACE, rel), 'utf8'));
 const index = read('words/index.json');
 
+/** A curve shaped like a spoken track: a speaking level throughout, swelling every 40 s. */
+function swell(durationSec, perSec = PEAKS_PER_SEC) {
+  const n = Math.ceil(durationSec * perSec);
+  const peaks = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const t = i / perSec;
+    const a = 0.22 + 0.5 * Math.max(0, Math.sin((t / 40) * Math.PI * 2)) ** 2;
+    peaks[i * 2] = -a; peaks[i * 2 + 1] = a;
+  }
+  return peaks;
+}
 const loadWords = (row) => ({ ...read('words/' + row.file), engine: row.engine });
+const durOf = (w) => Number(w.durationSec) || (w.source && Number(w.source.durationSec)) || 0;
 
 /* ---- 1. the catalogue ----------------------------------------------------- */
 {
@@ -126,4 +140,70 @@ const loadWords = (row) => ({ ...read('words/' + row.file), engine: row.engine }
   eq(old, 0, 'and the regex it replaced found none of them, which is why the mode exists');
 }
 
+/* ---- 4. the fingerprint merge --------------------------------------------- */
+{
+  const row = index.rows.find((r) => r.title === 'Bambi Body Lock');
+  const words = loadWords(row), dur = durOf(words);
+  ok(Array.isArray(words.hits) && words.hits.length > 0, row.title + ' carries fingerprinted hits (' + words.hits.length + ')');
+  const fpSets = new Set(words.hits.map((h) => h.setId));
+  const hits = triggerHits(words, dur);
+  const scan = scanTriggers({ ...words, hits: undefined }, dur);
+  eq(hits.length, scan.length, 'the merge lays exactly the scan\'s roll call, no more and no less');
+  const fresh = hits.filter((h) => !fpSets.has(h.setId));
+  ok(fresh.length > 0, 'and ' + fresh.length + ' of them are sets the fingerprint never saw, which used to reach the road never');
+  // a fingerprinted set keeps the truer second: every hit of one lands on a hit in the file
+  const kept = hits.filter((h) => fpSets.has(h.setId));
+  const snapped = kept.filter((h) => words.hits.some((f) => f.setId === h.setId && Math.abs(f.t - h.t) < 1e-6));
+  ok(snapped.length > kept.length * 0.6, 'and ' + snapped.length + ' of ' + kept.length + ' fingerprinted rows sit on the second the audio gave them');
+  ok(hits.every((h) => Math.abs(h.t - (scan.find((s) => s.id === h.id) || h).t) <= FP_SNAP_SEC + 1e-6),
+    'no row was moved further than the snap window (' + FP_SNAP_SEC + ' s)');
+  const bare = { ...words }; delete bare.hits;
+  ok(JSON.stringify(triggerHits(bare, dur)) === JSON.stringify(scan), 'a words file with no hits is the live scan, exactly');
+  eq(triggerHits({ ...bare, hits: [{ setId: 'not-a-set', t: 1, dur: 1, score: 1, src: 'fp' }] }, dur).length, scan.length,
+    'and hits that are all for sets the catalogue lost change nothing');
+}
+
+/* ---- 5. the road ---------------------------------------------------------- */
+/** The general share cap, and the roof for the three tracks that are genuinely one note. */
+const SHARE_CAP = 0.40, ONE_NOTE_CAP = 0.55;
+const ONE_NOTE = new Set(['Bambi IQ Lock', 'Bambi Body Lock', 'Bambi Uniformed']);
+/** Under this many rows a share is not a share, it is a handful. */
+const SHARE_MIN_ROWS = 20;
+/** What the survey asked for, as floors: the road is nearly all effect now. */
+const SHELF_ROWS_MIN = 900, SHELF_EFFECT_MIN = 850;
+
+const table = [];
+for (const row of index.rows) {
+  const words = loadWords(row), dur = durOf(words);
+  const road = wordedRoad({ peaks: swell(dur), durationSec: dur, name: row.title, hash: row.hash, words });
+  const trig = road.events.filter((e) => e.kind === 'trigger');
+  const by = {};
+  let effect = 0, tight = 0;
+  for (let i = 0; i < trig.length; i++) {
+    const k = (themeFor(trig[i]) || {}).kind || 'treat';
+    by[k] = (by[k] || 0) + 1;
+    if (KIND_BY_ID[k] && KIND_BY_ID[k].kind === 'effect') effect++;
+    if (i && trig[i].t - trig[i - 1].t < TRIGGER_GAP - 1e-6) tight++;
+  }
+  table.push({ title: row.title, rows: trig.length, effect, by, tight, sets: new Set(trig.map((e) => e.setId)).size });
+}
+const shelfRows = table.reduce((a, r) => a + r.rows, 0), shelfEffect = table.reduce((a, r) => a + r.effect, 0);
+console.log('  --  ' + table.map((r) => r.title.replace('Bambi ', '') + ' ' + r.effect + '/' + r.rows).join(', '));
+ok(shelfRows >= SHELF_ROWS_MIN, 'the shelf lays ' + shelfRows + ' trigger rows (floor ' + SHELF_ROWS_MIN + ')');
+ok(shelfEffect >= SHELF_EFFECT_MIN, 'and ' + shelfEffect + ' of them wear an effect (floor ' + SHELF_EFFECT_MIN + ')');
+eq(table.reduce((a, r) => a + r.tight, 0), 0, 'no two rows land inside TRIGGER_GAP of each other');
+ok(table.every((r) => r.sets >= 4), 'every track hears at least four different sets');
+{
+  const bi = table.find((r) => r.title === 'Bubble Induction');
+  ok(bi && bi.effect >= 40, 'Bubble Induction wears ' + (bi ? bi.effect : 0) + ' effect rows (floor 40, it had 2)');
+}
+for (const r of table) {
+  if (r.rows < SHARE_MIN_ROWS) continue;
+  const cap = ONE_NOTE.has(r.title) ? ONE_NOTE_CAP : SHARE_CAP;
+  const top = Math.max(...Object.values(r.by)), kind = Object.keys(r.by).find((k) => r.by[k] === top);
+  ok(top / r.rows <= cap, r.title + ': no kind past ' + (100 * cap).toFixed(0) + ' percent (' + kind + ' ' + (100 * top / r.rows).toFixed(0) + ')');
+}
+
+console.log('');
+console.log(fails ? 'catalogue-check: ' + fails + ' failed' : 'catalogue-check: all good');
 process.exit(fails ? 1 : 0);

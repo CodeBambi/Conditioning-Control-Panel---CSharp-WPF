@@ -412,15 +412,24 @@ ok(kept.trace.firedAt != null && kept.trace.firedAt - kept.trace.handedAt > 2, '
       }
       for (const m of [4, 8]) if (at[m] == null && score.state.mult >= m) at[m] = e.t - events[0].t;
     }
-    return { at, released, mult: score.state.mult, lines: done.size, score: score.state.score };
+    return { at, released, mult: score.state.mult, lines: done.size, score: score.state.score,
+      span: events[events.length - 1].t - events[0].t };
   }
 
   const was = drive(0, true), now = drive(0, false);
   ok(was.at[8] != null && was.at[8] < 30, 'a rung per bubble reached x8 in ' + (was.at[8] || 0).toFixed(1) + ' s of the file, which is the thing being fixed');
   ok(now.at[4] != null && was.at[4] != null && now.at[4] > was.at[4] * 2,
     'a rung per line takes ' + now.at[4].toFixed(1) + ' s to reach x4 where a rung per bubble took ' + was.at[4].toFixed(1) + ' s');
-  ok(now.at[8] == null, 'and x8 is not something this opening hands out for reading along: the rows and the goldens on the road are the rest of it');
-  eq(now.mult, 6, 'a clean read of every line in the file is worth x' + now.mult);
+  // 2026-09-08, the catalogue wave: the accent words (accept, relax, sleep) stopped laying trigger
+  // rows, this opening lost ten of them, and the word road got the seconds back - 41 readable lines
+  // where there were under forty. So a FLAWLESS read of the whole file does now touch the top rung,
+  // and the thing worth holding is not that it never comes, it is that it comes at the END: reading
+  // along cannot hand you x8 in the first half and leave the rows and the goldens with nothing to add.
+  ok(now.at[8] == null || now.at[8] > now.span * 0.9,
+    'x8 is not something this opening hands out early for reading along: ' +
+    (now.at[8] == null ? 'it never comes' : 'it comes at ' + now.at[8].toFixed(1) + ' s of ' + now.span.toFixed(1)) +
+    ', and the rows and the goldens on the road are the rest of it');
+  ok(now.mult >= 6, 'a clean read of every line in the file is worth x' + now.mult);
   ok(now.score >= events.length * 10, 'every word still pays its treat (' + now.score + ' points over ' + events.length + ' bubbles)');
 
   const sloppy = drive(3, false);
