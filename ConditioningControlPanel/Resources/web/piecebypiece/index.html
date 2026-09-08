@@ -24,6 +24,13 @@
   <!-- 3D layer. Agent-facing contract: #fx is an empty sibling ABOVE #stage and
        is owned entirely by the effects module (ramp/index.js). -->
   <div id="stage"><canvas id="board-canvas"></canvas></div>
+
+  <div id="hud" class="hud">
+    <div class="chip"><span class="who">black</span><span class="time" id="time-b">15:00</span></div>
+    <p class="status" id="status">white to move</p>
+    <div class="chip"><span class="who">white</span><span class="time" id="time-w">15:00</span></div>
+  </div>
+
   <div id="fx"></div>
 
   <div id="loader" class="loader">

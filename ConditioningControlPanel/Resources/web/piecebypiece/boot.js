@@ -6,36 +6,21 @@
  * effects module can attach to a live board whatever order the imports settle.
  * ==========================================================================*/
 
-import { createScene, FILES } from './board/scene.js';
+import { createScene } from './board/scene.js';
 import { createPieces } from './board/pieces.js';
 import { createBus } from './game/events.js';
+import { createHotseat } from './game/hotseat.js';
+import { DEFAULT_MS } from './game/clock.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
+  hud: { w: document.getElementById('time-w'), b: document.getElementById('time-b'), status: document.getElementById('status') },
   stage: document.getElementById('stage'),
   fx: document.getElementById('fx'),
   loader: document.getElementById('loader'),
   nope: document.getElementById('nope'),
   nopeMsg: document.getElementById('nope-msg'),
 };
-
-const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
-
-/** Placement field of a FEN to { e1: {type, side}, ... }. */
-export function positionFromFen(placement) {
-  const map = {};
-  const rows = String(placement).split(' ')[0].split('/');
-  for (let i = 0; i < rows.length && i < 8; i++) {
-    const rank = 8 - i;
-    let file = 0;
-    for (const ch of rows[i]) {
-      if (ch >= '1' && ch <= '8') { file += Number(ch); continue; }
-      if (file > 7) break;
-      map[FILES[file++] + rank] = { type: ch.toLowerCase(), side: ch === ch.toUpperCase() ? 'w' : 'b' };
-    }
-  }
-  return map;
-}
 
 function fail(message) {
   dom.loader.hidden = true;
@@ -55,8 +40,6 @@ function main() {
   }
 
   const pieces = createPieces({ group: view.pieceGroup });
-  pieces.setPosition(positionFromFen(START_FEN));
-  view.setSide('w', true);
   // The board API the effects layer drives. Keep this surface stable.
   const board = {
     view,
@@ -68,7 +51,17 @@ function main() {
     setSide(side, instant) { view.setSide(side, instant); },
   };
 
-  window.PBP = { bus, game: null, board };
+  const params = new URLSearchParams(location.search);
+  const game = createHotseat({
+    bus,
+    board,
+    hud: dom.hud,
+    clockMs: Number(params.get('clock')) > 0 ? Number(params.get('clock')) * 1000 : DEFAULT_MS,
+    fen: params.get('fen') || undefined,
+    auto: Number(params.get('auto')) || 0,
+  });
+
+  window.PBP = { bus, game, board };
 
   let last = performance.now();
   function frame(now) {
@@ -84,9 +77,13 @@ function main() {
 
   dom.loader.classList.add('gone');
   setTimeout(() => { dom.loader.hidden = true; }, 500);
-  bus.emit('local', { sides: ['w', 'b'] });
   pieces.tryLoadGlb();          // optional art; missing files stay silent
-  attachEffects(bus, board);    // optional layer; the board plays fine without it
+  // Give the optional effects layer a chance to subscribe before the first
+  // turn is dealt; it is optional, so a missing module must not hold the game.
+  attachEffects(bus, board).then(() => {
+    bus.emit('local', { sides: ['w', 'b'] });
+    game.start();
+  });
 }
 
 async function attachEffects(bus, board) {

@@ -18,11 +18,28 @@ html, body {
 #stage { position: fixed; inset: 0; z-index: 1; }
 #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
+/* Clocks and status. Sits under #fx on purpose, so the effects layer can wash
+   over it as things get busier. */
+.hud {
+  position: fixed; right: 22px; top: 22px; bottom: 22px; z-index: 2;
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between;
+  pointer-events: none; text-align: right;
+}
+.chip {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 16px; border-radius: 12px;
+  background: rgba(20, 20, 46, 0.55); border: 1px solid rgba(245, 230, 200, 0.12);
+  backdrop-filter: blur(3px);
+}
+.chip .who { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.55; }
+.chip .time { font-size: 26px; font-variant-numeric: tabular-nums; opacity: 0.7; transition: color 200ms ease, opacity 200ms ease; }
+.chip .time.on { color: var(--pbp-pink); opacity: 1; }
+.status { margin: 0; font-size: 13px; letter-spacing: 0.14em; text-transform: lowercase; opacity: 0.6; }
+
 /* Owned by the effects layer. Never written to by the board code. */
-#fx { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+#fx { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 
 .loader, .nope {
-  position: fixed; inset: 0; z-index: 3;
+  position: fixed; inset: 0; z-index: 4;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
   background: var(--pbp-bg); text-align: center; transition: opacity 420ms ease;
 }
