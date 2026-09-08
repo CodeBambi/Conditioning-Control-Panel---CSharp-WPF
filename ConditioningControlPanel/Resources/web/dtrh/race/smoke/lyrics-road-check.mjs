@@ -71,7 +71,7 @@ ok(dark.includes('flash'), 'the flash bubble is one of the darkened rows');
 ok(rows.every(([, r]) => r.kind !== 'flash'), 'and not one preset dresses its row as a flash any more');
 eq(kindForPreset('not-a-preset'), null, 'a preset nobody wrote a row for is null, not a guess');
 eq(themeFor({ kind: 'trigger', label: 'bambi sleep', setId: 'bambi-sleep', cue: 'blackout' }).theme, 'ink', 'themeFor reads the cue');
-eq(themeFor({ kind: 'trigger', label: 'good girl', setId: 'good-girl' }).theme, 'blink', 'and falls back to the set when the cue is gone');
+eq(themeFor({ kind: 'trigger', label: 'good girl', setId: 'good-girl' }).theme, 'card', 'and falls back to the set when the cue is gone');
 eq(themeFor({ kind: 'trigger', label: 'nothing anyone said', cue: 'nope' }).theme, 'mark', 'and to the mark row when it knows neither');
 eq(themeFor(null), null, 'themeFor of nothing is null');
 
@@ -100,7 +100,12 @@ ok(hits.some((h) => h.setId === 'bambi-sleep'), 'and the opening track really do
   const tr2 = road2.events.filter((e) => e.kind === 'trigger');
   ok(tr2.some((e) => e.setId === 'bambi-sleep' && e.t === 10) && tr2.some((e) => e.setId === 'bambi-sleep' && e.t === 30), 'and the worded road lays its triggers at the fingerprinted seconds');
   ok(Array.isArray(WORDS.hits) && WORDS.hits.length > 0, ROW.title + ' ships with ' + (WORDS.hits || []).length + ' fingerprinted hits');
-  ok(WORDS.hits.every((h) => scanned.some((s) => s.setId === h.setId && Math.abs(s.t - h.t) <= 0.6)), 'every shipped hit is a hit the scan hears too, within 0.6 s (the fingerprint refines, it does not invent)');
+  // The fingerprint refines the scan, it never invents. Since the 2026-09-08 catalogue wave a hit may
+  // be heard by a DIFFERENT set than the one it was fingerprinted for (the precedence rule hands an
+  // overlap to the longer phrase), and a set that clusters folds several seconds into one span, so
+  // what has to hold is that the second is still heard, not that it is still heard by the same name.
+  const near = (h, sp) => Math.abs(sp.t - h.t) <= 0.6 || (h.t >= sp.t - 0.6 && h.t <= sp.t + sp.dur + 0.6);
+  ok(WORDS.hits.every((h) => scanned.some((sp) => near(h, sp))), 'every shipped hit is a second the scan hears too (the fingerprint refines, it does not invent)');
 }
 
 /* ---- 3. the worded road --------------------------------------------------- */

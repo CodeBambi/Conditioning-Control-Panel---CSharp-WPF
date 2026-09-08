@@ -613,7 +613,7 @@
 .race-hud .rc-dim.is-on { animation: rcDim 300ms ease-out forwards; }
 @keyframes rcDim { 0% { opacity: 0; } 30% { opacity: 0.62; } 100% { opacity: 0; } }
 
-/* ---- the thirteen themes (race/triggerTheme.js THEME_BY_PRESET) ---- */
+/* ---- the seventeen themes (race/triggerTheme.js THEME_BY_PRESET) ---- */
 /* blackout: a near black card, white letters, and the room goes with it */
 .race-hud .rc-plate--ink {
   /* the card is wide, not tall: vertical padding here is height the measured air has to hold */
@@ -713,6 +713,59 @@
   100% { opacity: 0; transform: translate(-50%, 40%) scale(1.06); }
 }
 @keyframes rcRainStreak { 0% { opacity: 0.9; } 70% { opacity: 0.35; } 100% { opacity: 0; } }
+/* THE FOUR THE CATALOGUE WAVE NEEDED (2026-09-08) */
+/* card-whisper: praise and commands. Lilac, no charge at the face: it fades up, spreads, and hangs
+   there long enough to be read back, which is the whole of what a whispered card is for. */
+.race-hud .rc-plate--card {
+  color: #d9c6ff; text-shadow: 0 0 26px rgba(176, 128, 255, 0.9), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcCard 1400ms cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+}
+@keyframes rcCard {
+  0%   { opacity: 0; letter-spacing: 0.02em; transform: translate(-50%, -50%) scale(0.94); }
+  18%  { opacity: 1; }
+  30%, 76% { opacity: 1; letter-spacing: 0.16em; transform: translate(-50%, -50%) scale(1.06); }
+  100% { opacity: 0; letter-spacing: 0.22em; transform: translate(-50%, -50%) scale(1.1); }
+}
+/* drain-fog: the blank words. The letters keep their shape for a moment and then stop having edges. */
+.race-hud .rc-plate--fog {
+  color: #dfe4ff; text-shadow: 0 0 32px rgba(125, 139, 208, 0.95), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcFog 1400ms cubic-bezier(0.25, 0.7, 0.2, 1) forwards;
+}
+@keyframes rcFog {
+  0%   { opacity: 0; filter: blur(0); letter-spacing: 0.06em; transform: translate(-50%, -50%) scale(0.2); }
+  10%  { opacity: 1; }
+  46%  { opacity: 1; filter: blur(0); letter-spacing: 0.06em; transform: translate(-50%, -50%) scale(1.24); }
+  76%  { opacity: 0.85; filter: blur(3px); letter-spacing: 0.3em; transform: translate(-50%, -50%) scale(1.3); }
+  100% { opacity: 0; filter: blur(12px); letter-spacing: 0.6em; transform: translate(-50%, -50%) scale(1.34); }
+}
+/* lock-hold: the doll words. It arrives at scale 1 and it does NOT move again: a satin frame closes
+   on it and the plate sits inside, held, which is the opposite of every other theme here. */
+.race-hud .rc-plate--hold {
+  color: #ffe0f0; padding: 0.04em 0.34em;
+  border: 2px solid rgba(255, 158, 203, 0.9); border-radius: 0.08em;
+  box-shadow: 0 0 34px rgba(255, 158, 203, 0.55), inset 0 0 22px rgba(255, 158, 203, 0.25);
+  text-shadow: 0 0 24px rgba(255, 158, 203, 0.95), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcHoldLock 1400ms cubic-bezier(0.1, 0.9, 0.1, 1) forwards;
+}
+@keyframes rcHoldLock {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  9%   { opacity: 1; }
+  22%, 84% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+/* gif-wash: the cock words. The screen goes under the picture, so the plate stops being a word in the
+   air and becomes a caption ON it: a scrim behind the letters, and nothing that comes at you. */
+.race-hud .rc-plate--wash {
+  color: #fff1e2; padding: 0.06em 0.5em; border-radius: 0.1em;
+  background: rgba(12, 6, 2, 0.55);
+  text-shadow: 0 0 30px rgba(255, 138, 61, 0.95), 0 3px 12px rgba(0, 0, 0, 0.95);
+  animation: rcWash 1400ms cubic-bezier(0.2, 0.85, 0.25, 1) forwards;
+}
+@keyframes rcWash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(1.16); }
+  12%, 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.98); }
+}
 /* treats: warm pink, and it lands on a bounce rather than a glide */
 .race-hud .rc-plate--bounce { animation: rcZoom 1400ms cubic-bezier(0.2, 1.7, 0.35, 1) forwards; }
 /* mark: a marked word, not a trigger moment. Small, and it does not come at you. */
@@ -733,7 +786,8 @@
 @media (prefers-reduced-motion: reduce) {
   .race-hud .rc-plate, .race-hud .rc-plate--blink, .race-hud .rc-plate--wall, .race-hud .rc-plate--frost,
   .race-hud .rc-plate--snap, .race-hud .rc-plate--split, .race-hud .rc-plate--spiral, .race-hud .rc-plate--melt,
-  .race-hud .rc-plate--bounce, .race-hud .rc-plate--mark, .race-hud .rc-plate--rain {
+  .race-hud .rc-plate--bounce, .race-hud .rc-plate--mark, .race-hud .rc-plate--rain,
+  .race-hud .rc-plate--card, .race-hud .rc-plate--fog, .race-hud .rc-plate--hold, .race-hud .rc-plate--wash {
     animation: rcHold 1400ms linear forwards; transform: translate(-50%, -50%) scale(1); filter: none;
   }
   .race-hud .rc-plate--pulse::before, .race-hud .rc-plate--gold .rc-plate-sparks,
