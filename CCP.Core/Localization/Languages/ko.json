@@ -2543,6 +2543,8 @@
   "title_save_phrase_preset": "문구 프리셋 저장",
 
   "btn_ok": "확인",
+  "btn_yes": "네",
+  "btn_no": "아니요",
 
   "skill_mult_streak_power_days": "연속 기록 파워 ({0}일)",
   "skill_streak_bonus_name": "{0}일 연속 기록 보너스!",

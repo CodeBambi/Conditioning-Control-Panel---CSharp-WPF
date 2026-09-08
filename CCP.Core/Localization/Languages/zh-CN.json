@@ -3235,6 +3235,8 @@
   "title_save_asset_preset": "保存资源预设",
   "title_save_phrase_preset": "保存短语预设",
   "btn_ok": "确定",
+  "btn_yes": "是",
+  "btn_no": "否",
   "skill_mult_streak_power_days": "连续力量（{0} 天）",
   "skill_streak_bonus_name": "第 {0} 天连续奖励！",
   "skill_streak_bonus_flavor": "欢迎回来！+{0} XP 感谢你 {1} 天的连续签到~",

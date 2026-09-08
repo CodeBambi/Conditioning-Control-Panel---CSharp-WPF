@@ -2543,6 +2543,8 @@
   "title_save_phrase_preset": "Сохранить пресет фраз",
 
   "btn_ok": "ОК",
+  "btn_yes": "Да",
+  "btn_no": "Нет",
 
   "skill_mult_streak_power_days": "Сила серии ({0} дней)",
   "skill_streak_bonus_name": "Бонус за серию {0} дней!",

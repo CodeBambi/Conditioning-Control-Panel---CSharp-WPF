@@ -140,7 +140,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 e.Handled = true; // Prevent triggering the row click
 
                 var confirm = await Ask(Loc.Get("title_confirm"), Loc.GetF("msg_confirm_remove_item", item.Text),
-                    ("Yes", true), ("No", false));
+                    (Loc.Get("btn_yes"), true), (Loc.Get("btn_no"), false));
 
                 if (confirm == true)
                 {
@@ -180,7 +180,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
 
             var result = await Ask(Loc.Get("title_confirm"), Loc.GetF("msg_confirm_remove_selected", selected.Count),
-                ("Yes", true), ("No", false));
+                (Loc.Get("btn_yes"), true), (Loc.Get("btn_no"), false));
 
             if (result == true)
             {
@@ -197,7 +197,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             if (_hasChanges)
             {
                 var result = await Ask(Loc.Get("title_unsaved_changes"), Loc.Get("msg_discard_changes"),
-                    ("Yes", true), ("No", false));
+                    (Loc.Get("btn_yes"), true), (Loc.Get("btn_no"), false));
 
                 if (result != true)
                     return;
@@ -232,7 +232,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         private async void PromptSaveOnClose()
         {
             var result = await Ask(Loc.Get("title_unsaved_changes"), Loc.Get("msg_save_changes_before_closing"),
-                ("Yes", true), ("No", false), (Loc.Get("btn_cancel"), null));
+                (Loc.Get("btn_yes"), true), (Loc.Get("btn_no"), false), (Loc.Get("btn_cancel"), null));
 
             if (result == true)
             {
@@ -252,8 +252,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// Minimal stand-in for WPF's MessageBox, which Avalonia has no equivalent of. Each button
         /// carries the value Close() hands back; dismissing the window yields null, matching the
         /// Cancel button. Buttons hold a TextBlock, not Content, for the access-key reason above.
-        /// The app has no btn_yes/btn_no loc keys - WPF got those strings from the OS - so Yes and
-        /// No are English here. btn_ok and btn_cancel do exist and are used.
+        /// WPF got Yes/No from the OS; this head has no OS message box, so btn_yes/btn_no now ship
+        /// in all nine language files alongside the existing btn_ok and btn_cancel.
         /// </summary>
         private Task<bool?> Ask(string title, string message, params (string Label, bool? Value)[] buttons)
         {
@@ -291,17 +291,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                 }
             };
 
-            foreach (var (label, value) in buttons)
+            // Keyboard, per call site rather than by one blanket rule:
+            //  - Enter = the FIRST button. None of the WPF calls passes a defaultResult, so Win32
+            //    defaults to the first button: OK on the notices, and Yes on the removals and on
+            //    the save-before-closing prompt. Recorded openly: Enter therefore answers Yes on
+            //    the two destructive removals, exactly as the shipped WPF app does.
+            //  - Escape = the LAST button, which is Cancel on the three-answer close prompt (WPF
+            //    parity: MessageBoxResult.Cancel keeps the edits) and OK on the one-button
+            //    notices (WPF parity too). On the two-answer Yes/No prompts Win32 ignores Escape;
+            //    resolving to No is the owner-requested safe dismissal, not claimed WPF parity,
+            //    and it is outcome-identical to dismissing the window with X, which this port
+            //    already allows and already treats as "not Yes".
+            var defaultButton = default(Button);
+            for (var i = 0; i < buttons.Length; i++)
             {
+                var (label, value) = buttons[i];
                 var button = new Button
                 {
                     Content = new TextBlock { Text = label },
                     Padding = new Thickness(14, 6),
-                    Cursor = new Cursor(StandardCursorType.Hand)
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    IsDefault = i == 0,
+                    IsCancel = i == buttons.Length - 1
                 };
                 button.Click += (_, _) => dialog.Close(value);
                 row.Children.Add(button);
+                if (i == 0) defaultButton = button;
             }
+
+            dialog.Opened += (_, _) => defaultButton?.Focus();
 
             return dialog.ShowDialog<bool?>(this);
         }

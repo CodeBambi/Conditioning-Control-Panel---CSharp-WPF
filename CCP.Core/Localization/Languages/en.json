@@ -3539,6 +3539,8 @@
   "title_save_phrase_preset": "Save Phrase Preset",
 
   "btn_ok": "OK",
+  "btn_yes": "Yes",
+  "btn_no": "No",
 
   "skill_mult_streak_power_days": "Streak Power ({0} days)",
   "skill_streak_bonus_name": "Day {0} Streak Bonus!",

@@ -2543,6 +2543,8 @@
   "title_save_phrase_preset": "Salvar Predefinição de Frases",
 
   "btn_ok": "OK",
+  "btn_yes": "Sim",
+  "btn_no": "Não",
 
   "skill_mult_streak_power_days": "Poder de Sequência ({0} dias)",
   "skill_streak_bonus_name": "Bônus de Sequência de {0} Dias!",

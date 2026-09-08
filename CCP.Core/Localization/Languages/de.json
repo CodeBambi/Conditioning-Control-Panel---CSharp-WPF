@@ -2544,6 +2544,8 @@
   "title_save_phrase_preset": "Phrasen-Vorlage speichern",
 
   "btn_ok": "OK",
+  "btn_yes": "Ja",
+  "btn_no": "Nein",
 
   "skill_mult_streak_power_days": "Streak Power ({0} Tage)",
   "skill_streak_bonus_name": "Tag {0} Serien-Bonus!",

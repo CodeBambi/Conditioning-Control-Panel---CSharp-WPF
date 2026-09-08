@@ -2536,6 +2536,8 @@
   "title_save_phrase_preset": "Guardar Preset de Frases",
 
   "btn_ok": "OK",
+  "btn_yes": "Sí",
+  "btn_no": "No",
 
   "skill_mult_streak_power_days": "Poder de Racha ({0} días)",
   "skill_streak_bonus_name": "¡Bonus de Racha de {0} Días!",

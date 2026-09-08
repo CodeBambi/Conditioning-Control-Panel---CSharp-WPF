@@ -2536,6 +2536,8 @@
   "title_save_phrase_preset": "フレーズプリセットを保存",
 
   "btn_ok": "OK",
+  "btn_yes": "はい",
+  "btn_no": "いいえ",
 
   "skill_mult_streak_power_days": "ストリークパワー（{0}日）",
   "skill_streak_bonus_name": "{0}日ストリークボーナス！",

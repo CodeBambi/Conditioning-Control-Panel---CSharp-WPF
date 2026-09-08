@@ -2544,6 +2544,8 @@
   "title_save_phrase_preset": "Sauvegarder le Préréglage de Phrases",
 
   "btn_ok": "OK",
+  "btn_yes": "Oui",
+  "btn_no": "Non",
 
   "skill_mult_streak_power_days": "Pouvoir de Série ({0} jours)",
   "skill_streak_bonus_name": "Bonus de Série Jour {0} !",
