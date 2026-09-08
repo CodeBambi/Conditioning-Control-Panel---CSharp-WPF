@@ -17,6 +17,8 @@
  *   3. `race` fires again from that menu and rebuilds the world it dropped
  *   4. a charted run comes back with its track still loaded and its clock at
  *      zero, so taking that same level again is a replay
+ *   5. THE SHUTTER (race/shutter.js): `race` closes it and it opens again, it
+ *      takes no taps, and reduced motion turns it into the flat fade
  *
  * CHROME: `CHROME_PATH` if it is set, else the usual Windows install. Nothing is
  * installed by this file and the profile it makes is deleted on the way out.
@@ -128,6 +130,34 @@ await ev(`document.querySelector('.rm-btn[data-id=race]').click()`);
 ok(await until(RUNNING, 60), 'the second take starts');
 await sleep(2000);
 ok(await ev(`window.__race.race.track.t > 1`), 'and the clock runs with it');
+
+console.log('5. the shutter');
+await cdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/dtrh/race.html?intro=0&cards=0` });
+ok(await until(MENU_UP), 'the menu is up');
+ok(await ev(`!!document.querySelector('.rh-shutter')`), 'the shutter is built with the run');
+ok(await ev(`getComputedStyle(document.querySelector('.rh-shutter')).pointerEvents === 'none'`), 'and it can never take a tap');
+ok(await ev(`getComputedStyle(document.querySelector('.rh-shutter')).display === 'none'`), 'it is out of the page entirely while it is open');
+// the classes move faster than any poll: watch them instead of sampling them
+await ev(`window.__shut = []; (() => { const el = document.querySelector('.rh-shutter');
+  new MutationObserver(() => window.__shut.push(el.className)).observe(el, { attributes: true, attributeFilter: ['class'] }); })()`);
+await ev(`document.querySelector('.rm-btn[data-id=race]').click()`);
+ok(await until(RUNNING, 60), 'a run starts through it');
+await sleep(900);
+const shutLog = (await ev(`window.__shut.slice()`)) || [];
+ok(shutLog.some((c) => c.indexOf('is-closed') >= 0), 'it closed over the cut: ' + JSON.stringify(shutLog.slice(0, 3)));
+ok(shutLog.length > 1 && shutLog[shutLog.length - 1].indexOf('is-closed') < 0, 'and it opened again on the other side');
+ok(await ev(`getComputedStyle(document.querySelector('.rh-shutter')).display === 'none'`), 'and put itself away');
+ok(await ev(`!window.__race.race.shutter.closed`), 'the shutter agrees it is open');
+console.log('   reduced motion: the flat fade');
+await ev(`window.__race.race.shutter.setReduced(true)`);
+await ev(`window.__race.race.shutter.close()`);
+await sleep(60);
+ok(await ev(`document.querySelector('.rh-shutter').classList.contains('is-flat')`), 'reduced motion closes it flat');
+ok(await ev(`getComputedStyle(document.querySelector('.rh-shutter-a')).transform === 'none'`), 'with nothing moving');
+ok(await ev(`document.querySelector('.rh-shutter').style.getPropertyValue('--rh-shut-ms') === '150ms'`), 'over 150ms');
+await ev(`window.__race.race.shutter.open()`);
+await sleep(300);
+ok(await ev(`!window.__race.race.shutter.closed`), 'and it opens the same way');
 
 ws.close(); chrome.kill(); server.close();
 try { rmSync(prof, { recursive: true, force: true }); } catch (e) { /* the profile is locked, windows will take it */ }

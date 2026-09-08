@@ -586,6 +586,27 @@ export const CARDS_KEY = 'race.cards', CARDS;
   forces them, `?cards=0` skips them, `?card=N` opens on card N (screenshot aid). `?autostart=1` and
   `?scene=intro` never reach them.
 
+### `race/shutter.js` (the transition between the menu, the intro and the run)
+```js
+createShutter({ root, reducedMotion, log })
+  -> { close(ms), open(ms), sweep({ closeMs, holdMs, openMs, mid }), flash(), setReduced(b), closed, el, dispose() }
+```
+- Two hard-edged panels (race.css `.rh-shutter`, z40, above the Brake and End screens at z20, the menu
+  at z25 and the cards at z26) that close over the screen with one pink line at the seam and open
+  again. `display: none` while it is open, transform-only while it moves, `pointer-events: none`
+  throughout: it is decoration, it never takes a tap and it never gates a start.
+- Built by run.js (`race.shutter`, disposed with the run). It plays in three places: raceBoot's
+  `startRun` closes it on `race` and opens it once the intro is up (the world is built behind a shut
+  door); `intro.play()` resolves on `go`, so raceBoot claps it there with `flash()` (0.25 s each way,
+  never awaited, so the first steer is the player's) and run.js's `again()` does the same off
+  `hud.countdown({ onTick })`; and run.js's `leave()` runs the whole way home from the End screen
+  inside one `sweep({ mid })`. `?autostart=1` has no menu to leave and plays none of it.
+- `sweep` closes, awaits `mid` (the swap nobody should see), holds a beat and opens. Reduced motion,
+  as the MENU has it (raceBoot `motionOff()`: the option beats the system), drops both panels for one
+  flat 150 ms fade - same calls, same promises, one class (`is-flat`).
+- `node race/smoke/menu-return-check.mjs` section 5 records the class changes through a real
+  `race` press and holds the close, the open and the flat fade down.
+
 ### `race/chart.js` (track charts, PR c1)
 ```js
 normalizeChart(json) -> chart | demoChart({ seed, durationSec }) -> chart | createScheduler(chart, { leadSec }) -> sched

@@ -743,3 +743,31 @@
   .race-hud .rc-flash-word.is-ghost { animation: none; }
   .race-hud .rc-dim.is-on { animation: none; }
 }
+
+/* ============================================================================
+ * THE SHUTTER (race/shutter.js): two hard-edged panels that close over the
+ * screen between the menu, the intro and the run, with one pink line at the
+ * seam. It sits above everything the page can put up - the Brake and End
+ * screens (z20), the menu (z25) and the introduction cards (z26) - and it is
+ * `pointer-events: none` throughout, so no tap ever lands on the curtain.
+ * Display: none while it is open, transform-only while it moves, and the step
+ * timing keeps the edges pixel-hard instead of easing them into a slide.
+ * ==========================================================================*/
+#race-root .rh-shutter { position: fixed; inset: 0; z-index: 40; pointer-events: none; display: none; }
+#race-root .rh-shutter.is-on { display: block; }
+#race-root .rh-shutter-p {
+  position: absolute; left: -1px; right: -1px; height: calc(50% + 1px);
+  background: #0d0a14; box-shadow: inset 0 0 0 2px #2b1b3f;
+  transition: transform var(--rh-shut-ms, 350ms) steps(12, end);
+  will-change: transform;
+}
+#race-root .rh-shutter-a { top: 0; transform: translate3d(0, -101%, 0); border-bottom: 3px solid var(--pink, #ff69b4); }
+#race-root .rh-shutter-b { bottom: 0; transform: translate3d(0, 101%, 0); border-top: 3px solid var(--pink, #ff69b4); }
+#race-root .rh-shutter.is-closed .rh-shutter-p { transform: translate3d(0, 0, 0); }
+/* reduced motion: one flat fade, no moving parts */
+#race-root .rh-shutter.is-flat .rh-shutter-p {
+  top: 0; bottom: auto; height: 101%; transform: none; opacity: 0; border: 0; box-shadow: none;
+  transition: opacity var(--rh-shut-ms, 150ms) linear;
+}
+#race-root .rh-shutter.is-flat .rh-shutter-b { display: none; }
+#race-root .rh-shutter.is-flat.is-closed .rh-shutter-p { opacity: 1; }

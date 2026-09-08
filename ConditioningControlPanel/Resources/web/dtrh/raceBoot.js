@@ -16,6 +16,12 @@
  * the resting state either side of a run, and only the menu's own `surface`
  * verb and the host's exit-request take the page away.
  *
+ * THE SHUTTER (race/shutter.js, `race.shutter`) covers every one of those cuts:
+ * it closes on `race` and opens on the intro (the world is built behind it), it
+ * claps on the countdown's `go`, and run.js closes it over the whole way home
+ * from the End screen. `?autostart=1` has no menu to leave, so it plays none of
+ * it. Reduced motion, as the MENU has it (motionOff()), is one flat fade.
+ *
  * Host messages owned here: init, manifest, favorites, ping, exit-request,
  * fullscreen, local-media, setting (run.js owns pause + payout-result). Sent
  * here: pong, boot-error, fullscreen-set, exit + exit-done on a host
@@ -609,27 +615,39 @@ async function firstCards() {
   }
   if (!exiting && !started) menu.show();
 }
+/** Reduced motion as the MENU has it: the option beats the system, `system` defers to the host's init. */
+function motionOff() {
+  if (!menu) return !!settings.reducedMotion;
+  return menu.options.motion === 'on' || (menu.options.motion === 'system' && !!settings.reducedMotion);
+}
 /** race: the intro on the menu stage, then the run under the camera whip. autostart / intro=0 go straight to the run. */
 async function startRun(withIntro) {
   if (started || !race) return;
   started = true;
   hideSplash();
   try {
+    const reducedMotion = motionOff();
+    // THE SHUTTER (race/shutter.js): the menu goes and the world is built behind a shut door, so
+    // neither the cut nor the build hitch is something the player watches. There is nothing to
+    // transition FROM without a menu (`?autostart=1`), so that boot keeps going straight in.
+    const shut = menu ? race.shutter : null;
+    if (shut) { shut.setReduced(reducedMotion); await shut.close(); }
     if (menu) { menu.hide(); menu.seedCheck(); }
     if (race.prepare) race.prepare();   // the world is built here, not under the menu (race/CONTRACT.md); the intro's clock starts after
     // the menu theme keeps playing: the run's first room crossfades over it (race/AUDIO.md)
     try { if (race.audio && race.audio.menu) race.audio.menu(false); } catch (e) { /* audio gone */ }
     if (menu && withIntro && params.get('intro') !== '0') {
       const { createIntro, cameraWhip } = await import('./race/intro.js');
-      const reducedMotion = menu.options.motion === 'on' || (menu.options.motion === 'system' && settings.reducedMotion);
       const intro = createIntro({ stage: menu.stage.live, hud: race.hud, audio: race.audio, reducedMotion, log: host.log });
       const hold = Number(params.get('hold')) / 1000;   // screenshot aid: freeze the intro at that intro time
       race.setStage(hold > 0 ? { update(dt) { if (intro.time < hold) intro.update(dt); }, render: intro.render } : intro);
+      if (shut) shut.open();   // the intro is already up behind it; the play() below is not made to wait on a curtain
       await intro.play();
       if (exiting) return;
       race.setStage(null);
       intro.dispose();
       if (hudRoot) hudRoot.classList.remove('is-lobby');
+      if (shut) shut.flash();   // intro.play() resolves ON `go`: the countdown's shutter, 0.25 s each way
       race.start();
       if (startTrackClock) startTrackClock();
       race.setCameraOverride(cameraWhip(0.8));
@@ -638,9 +656,11 @@ async function startRun(withIntro) {
       if (hudRoot) hudRoot.classList.remove('is-lobby');
       race.start();
       if (startTrackClock) startTrackClock();
+      if (shut) shut.open();
     }
   } catch (err) {
     host.log('start: ' + ((err && err.stack) || err));
+    try { if (race.shutter) race.shutter.open(); } catch (e) { /* no curtain is left down over a fallback start */ }
     try { race.setStage(null); race.start(); } catch (e) { fail(e); }
   }
 }
