@@ -745,6 +745,78 @@
 }
 
 /* ============================================================================
+ * THE WHISPER, COMING AT YOU (race/subliminal.js).
+ *
+ * The RACE's subliminal card. game/payloadFx.js still owns the tube's `.sf-pfx-sub`
+ * blip and not one rule below names it, so dtrh.html is untouched; this is a second
+ * presentation the race page alone asks for through payloadFx's `subliminalFx` seam.
+ *
+ * It is built to be the opposite of the chrome in all four ways at once - size, face,
+ * ink and motion - because the owner drove the blip and could not tell a payload from
+ * a HUD label. The size comes from race/subliminal.js (fitPx, written inline in px: an
+ * eight word phrase steps down until its longest word fits 86% of the glass, which is a
+ * cap a `vw` font-size cannot express). Everything else is here.
+ *
+ * z14: over the chrome (z3), the caption band (z4) and all of payloadFx (inside .sf-hud,
+ * z10); under the Brake/End screens (z20), the countdown (z21), the menu (z25) and the
+ * shutter (z40). Click-through, like the rest of the glass.
+ * ==========================================================================*/
+.race-hud .rh-sub-layer {
+  position: fixed; inset: 0; z-index: 14; pointer-events: none; overflow: hidden;
+  display: grid; place-items: center;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+.race-hud .rh-sub-layer * { pointer-events: none; }
+.race-hud.is-lobby .rh-sub-layer { display: none; }
+
+/* The room goes dark around it: a payload dims the glass, a label never does. It carries the SAME
+   road cutout the sustained washes above carry, for the same reason - a soft hole over the lower
+   centre so the cup and the cornering line are still there to steer by while the card is up. The
+   card itself rides the middle of the glass, over the hole's soft edge, not inside it. */
+.race-hud .rh-sub-veil {
+  grid-area: 1 / 1; width: 100%; height: 100%; opacity: 0;
+  background: radial-gradient(ellipse 62% 52% at 50% 44%, rgba(26, 6, 28, 0.42), rgba(6, 3, 12, 0.66) 74%, rgba(6, 3, 12, 0.72));
+  -webkit-mask-image: radial-gradient(ellipse 40% 34% at 50% 90%, transparent 0%, rgba(0, 0, 0, 0.5) 58%, #000 100%);
+  mask-image: radial-gradient(ellipse 40% 34% at 50% 90%, transparent 0%, rgba(0, 0, 0, 0.5) 58%, #000 100%);
+  will-change: opacity;
+}
+.race-hud .rh-sub-layer.is-on .rh-sub-veil { animation: rhSubVeil 1250ms linear forwards; }
+
+/* cream, on a hot-pink bloom. 900 with wide tracking is heavy and soft where the chrome
+   is small and tight; the family is the page's own, so nothing is fetched at pop time and
+   a WebView2 with no network draws the same card. */
+.race-hud .rh-sub-card {
+  grid-area: 1 / 1; max-width: 86vw; overflow-wrap: break-word; text-align: center; text-wrap: balance;
+  font-family: var(--rh-font); font-weight: 900; font-style: normal;
+  font-size: 9vmin;   /* the pre-measure fallback only: subliminal.js writes px inline */
+  line-height: 0.98; letter-spacing: 0.055em; text-transform: lowercase;
+  color: #fff3e2; opacity: 0;
+  text-shadow: 0 0 0.34em rgba(255, 32, 150, 0.95), 0 0 0.1em rgba(255, 150, 205, 0.9), 0 0.03em 0.09em rgba(20, 4, 18, 0.85);
+  will-change: transform, opacity, filter;
+}
+/* THE RUSH: small and blurred deep in the scene, at you by ~330 ms, readable through a
+   ~450 ms hold, then past the POV while it lets go. transform / opacity / filter only. */
+.race-hud .rh-sub-layer.is-on .rh-sub-card { animation: rhSubRush 1250ms cubic-bezier(0.14, 0.86, 0.28, 1) forwards; }
+@keyframes rhSubRush {
+  0%   { opacity: 0; transform: scale(0.62); filter: blur(4px); }
+  18%  { opacity: 1; }
+  26%  { transform: scale(1); filter: blur(0px); }
+  62%  { opacity: 1; transform: scale(1.08); filter: blur(0px); }
+  100% { opacity: 0; transform: scale(1.7); filter: blur(2px); }
+}
+@keyframes rhSubVeil { 0% { opacity: 0; } 22%, 62% { opacity: 1; } 100% { opacity: 0; } }
+
+/* REDUCED MOTION (Law VI): nothing comes at you. The card is born at full size and only
+   fades, and the vignette fades with it. `is-still` is the race menu's own motion switch
+   (race/subliminal.js takes run.js's reducedMotion); the media query answers a browser
+   whose player never opened that menu. Both land on the same keyframes. */
+.race-hud .rh-sub-layer.is-on .rh-sub-card.is-still { animation: rhSubHold 1250ms linear forwards; filter: none; }
+@keyframes rhSubHold { 0% { opacity: 0; transform: scale(1); } 12%, 78% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .race-hud .rh-sub-layer.is-on .rh-sub-card { animation: rhSubHold 1250ms linear forwards; filter: none; }
+}
+
+/* ============================================================================
  * THE SHUTTER (race/shutter.js): two hard-edged panels that close over the
  * screen between the menu, the intro and the run, with one pink line at the
  * seam. It sits above everything the page can put up - the Brake and End

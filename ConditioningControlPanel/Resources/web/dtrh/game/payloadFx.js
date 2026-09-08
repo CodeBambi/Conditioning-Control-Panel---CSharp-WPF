@@ -43,7 +43,14 @@ const pick = (a) => a[(Math.random() * a.length) | 0];
 const MAX_FLASH = 6;
 const MAX_CASCADE = 14;
 
-export function createPayloadFx({ hud, fx, media, flashBurst }) {
+/**
+ * `subliminalFx` is the ONE presentation seam in this file, and Racing Thoughts is the
+ * only caller that passes it (race/run.js -> race/subliminal.js). The tube hands it
+ * nothing, so DtRH's whisper blip is byte-for-byte the card it always was. A race pop
+ * calls the override with the phrase already resolved and skips the blip entirely.
+ * Anything else that wants its own look adds a seam of its own; never restyle .sf-pfx-sub.
+ */
+export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = null }) {
   // Two layers: washes/bursts render BEHIND the bubble field (.cf-layer, z6) so
   // bubbles stay crisp and clickable on top of pink/spiral/glitch/braindrain;
   // the video card rides a FRONT layer above the bubbles (in front of the POV).
@@ -180,7 +187,11 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     }
   }
 
-  async function subliminal(strength) {
+  async function subliminal(strength, text) {
+    // the race's own presentation takes the whole payload, phrase and all (see the seam note above)
+    if (subliminalFx) {
+      try { subliminalFx({ strength, text: String(text || pick(WORDS)) }); return; } catch (e) { /* fall through to the blip */ }
+    }
     const dur = scale(320, 560, strength);   // a quick blip, like FlashSubliminal
     const url = Math.random() < 0.5 ? await pickImageUrl() : null;
     let el;
@@ -394,7 +405,8 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     const p = spec.payload;
     switch (p.kind) {
       case 'flash':        flash(strength, durMult); break;
-      case 'subliminal':   subliminal(strength); break;
+      // p.text: the road's own phrase when the caller has one (race only; the tube never sets it)
+      case 'subliminal':   subliminal(strength, p.text); break;
       case 'overlay':
         if (p.overlay === 'spiral') showSpiral(strength, durMult);
         else if (p.overlay === 'braindrain') showBraindrain(strength, durMult);
