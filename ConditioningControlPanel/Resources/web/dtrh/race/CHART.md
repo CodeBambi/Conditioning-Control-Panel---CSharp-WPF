@@ -205,6 +205,18 @@ the pop box. `node race/smoke/coverage-check.mjs` drives the whole shelf through
 refusals and fails under 96 percent on the shelf, under 90 on a track, or on ONE word bubble the
 chart asked for and the field did not lay.
 
+**THE PILE, AND WHY MOST OF THEM ARE NOT ONE.** Twenty-one runs on the shelf have three or more
+words inside `MERGE_SEC` of each other, and nineteen of them are real: "in a completely", "as a
+perfect", "of a trap", said at 0.09 to 0.11 s a word. The other kind is the aligner losing the
+words and dropping the whole run on the last instant it was sure of - seven words at 0.01 s a
+word with 2.7 s of empty road in front of them. So the test is the RATE, `PILE_TIGHT_SEC`
+(0.05 s a word, well under the fastest real run on the shelf), and a run that fails it is spread
+back over the silence beside it at the local speech rate, anchored on the second the aligner DID
+have, never further apart than `PHRASE_GAP_SEC` so it comes back as one line in one lane rather
+than a word per lane. Those bubbles carry `est: true` to the chart event. A run with no silence to
+go back into is left exactly where it is and counted (`coverage.pilesLeft`) - a guess with no room
+is worse than the collision. `node race/smoke/word-sync-check.mjs` holds all of it.
+
 ### `race/run.js` + `raceBoot.js` (PR c2)
 ```js
 race.setTrack(chart | null)        // before start(); null returns to the seeded run

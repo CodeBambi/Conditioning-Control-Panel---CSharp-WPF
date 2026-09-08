@@ -157,6 +157,10 @@ function normalizeEvents(raw, durationSec) {
         // and the LINE it belongs to (race/wordBubbles.js wordEventsFrom). A phrase is what the
         // ladder and the end card count in, so losing this turns a sentence back into loose words.
         if (isFinite(num(e.p, NaN))) ev.p = Math.max(0, Math.round(num(e.p, 0)));
+        // and whether this second is the transcript's or this build's estimate: a run the
+        // aligner collapsed onto one instant is spread back over the silence it was said in
+        // (race/wordBubbles.js unpile), and the bubbles that moved say so.
+        if (e.est === true) ev.est = true;
       }
       if (e.kind === 'chant') { ev.reps = Math.max(1, Math.round(num(e.reps, 3))); ev.period = Math.max(0, num(e.period, 0)); }
       // An author marks the events they placed by hand inside a road, names the cue they
