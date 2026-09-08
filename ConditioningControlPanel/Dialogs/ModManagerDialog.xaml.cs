@@ -173,6 +173,13 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Offline mode blocks every content-pack fetch (ReleaseContentService refuses the manifest
+        /// GET and the download separately). Read live, not cached: Settings -> Data can flip it while
+        /// this dialog is open.
+        /// </summary>
+        private static bool IsOfflineMode => App.Settings?.Current?.OfflineMode == true;
+
+        /// <summary>
         /// Paints the pack row for the selected mod. Collapsed unless this is a built-in whose pack is
         /// mapped, the app is a modular install, and the pack is not stamped yet.
         /// </summary>
@@ -216,12 +223,24 @@ namespace ConditioningControlPanel
                 PackProgress.Visibility = inFlight ? Visibility.Visible : Visibility.Collapsed;
                 if (!inFlight) PackProgress.Value = 0;
 
+                BtnDownloadPack.Content = Loc.GetF("modmgr_btn_download_pack",
+                    ModPackCatalog.FormatSize(ModPackCatalog.SizeBytesFor(entry)));
+
+                // Offline mode is a hard stop one rung below this button: the service refuses both the
+                // manifest fetch and the download. Say so BEFORE the press. An armed button that can
+                // only ever fail, then blames the user's connection, is what sent a reporter through a
+                // reinstall and a bug report for a setting they had turned on themselves.
+                if (!inFlight && IsOfflineMode)
+                {
+                    TxtPackState.Text = Loc.Get("modmgr_pack_offline");
+                    BtnDownloadPack.IsEnabled = false;
+                    return;
+                }
+
                 TxtPackState.Text = inFlight
                     ? Loc.GetF("modmgr_pack_downloading", (int)System.Math.Round(PackProgress.Value))
                     : Loc.Get("modmgr_pack_not_downloaded");
 
-                BtnDownloadPack.Content = Loc.GetF("modmgr_btn_download_pack",
-                    ModPackCatalog.FormatSize(ModPackCatalog.SizeBytesFor(entry)));
                 BtnDownloadPack.IsEnabled = !inFlight;
             }
             catch (System.Exception ex)
@@ -281,10 +300,15 @@ namespace ConditioningControlPanel
             else if (IsPackRowShowing(packId!))
             {
                 PackProgress.Visibility = Visibility.Collapsed;
-                TxtPackState.Text = svc.ManifestUnavailable
-                    ? Loc.Get("modmgr_pack_unavailable")
-                    : Loc.Get("modmgr_pack_failed");
-                BtnDownloadPack.IsEnabled = true;
+                // Offline mode first: the service short-circuits before it ever touches the network, so
+                // it never sets ManifestUnavailable and the old order fell through to "check your
+                // connection" — advice for a problem the user does not have.
+                TxtPackState.Text = IsOfflineMode
+                    ? Loc.Get("modmgr_pack_offline")
+                    : svc.ManifestUnavailable
+                        ? Loc.Get("modmgr_pack_unavailable")
+                        : Loc.Get("modmgr_pack_failed");
+                BtnDownloadPack.IsEnabled = !IsOfflineMode;
             }
         }
 

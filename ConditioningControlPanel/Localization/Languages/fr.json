@@ -3088,6 +3088,7 @@
   "modmgr_pack_installing": "Installation...",
   "modmgr_pack_ready": "Médias téléchargés. Redémarre l'appli s'il manque encore quelque chose.",
   "modmgr_pack_failed": "Échec du téléchargement. Vérifie ta connexion et réessaie.",
+  "modmgr_pack_offline": "Le mode hors ligne est actif, donc rien ne peut être téléchargé. Désactive-le dans Paramètres > Données, puis reviens.",
   "modmgr_pack_unavailable": "Serveur de téléchargement injoignable. Réessaie plus tard.",
   "modmgr_badge_needs_download": "⬇ médias",
 
