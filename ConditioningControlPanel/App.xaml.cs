@@ -4914,6 +4914,11 @@ Application State:
             // verdict was applied the moment it was rolled).
             try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
+            // Piece by Piece: same reason, same posture as the friction door above. Close() there
+            // and here is a straight dispose - the board has nothing to flush and no verdict to
+            // protect, so there is no graceful wind-down whose 1200ms timer would never tick.
+            try { Services.PieceByPiece.PieceByPieceHostService.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it
             // wouldn't block process exit, but shut it down explicitly. No-op when the avatar shares the
