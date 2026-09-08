@@ -38,6 +38,32 @@ html, body {
 /* Owned by the effects layer. Never written to by the board code. */
 #fx { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 
+/* --- camera views (.cam-*) -------------------------------------------------
+   A self-contained row, bottom left, above #fx and under the loader. Kept in
+   one block on purpose: the HUD redesign should be able to lift it whole. */
+.cam-views {
+  position: fixed; left: 22px; bottom: 22px; z-index: 3;
+  display: flex; align-items: center; gap: 6px;
+}
+.cam-btn {
+  width: 34px; height: 34px; padding: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font: 16px/1 'Segoe UI Symbol', 'Segoe UI', system-ui, sans-serif;
+  color: var(--pbp-ink); opacity: 0.55; border-radius: 10px;
+  background: rgba(20, 20, 46, 0.55); border: 1px solid rgba(245, 230, 200, 0.12);
+  backdrop-filter: blur(3px);
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.cam-btn:hover { opacity: 0.9; }
+.cam-btn:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.cam-btn.on { opacity: 1; color: var(--pbp-pink); border-color: rgba(255, 105, 180, 0.55); }
+.cam-free {
+  padding: 4px 8px; border-radius: 8px; font-size: 10px; letter-spacing: 0.18em;
+  text-transform: uppercase; opacity: 0.5;
+  background: rgba(20, 20, 46, 0.55); border: 1px solid rgba(245, 230, 200, 0.12);
+}
+/* --- end camera views ----------------------------------------------------- */
+
 .loader, .nope {
   position: fixed; inset: 0; z-index: 4;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;

@@ -7,6 +7,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { createCameraRig } from './camera.js';
 
 export const SQUARE = 1.0;
 export const FILES = 'abcdefgh';
@@ -46,8 +47,6 @@ export function worldToSquare(x, z) {
   if (f < 0 || f > 7 || r < 0 || r > 7) return null;
   return FILES[f] + (r + 1);
 }
-
-const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 export function createScene({ canvas }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
@@ -147,38 +146,16 @@ export function createScene({ canvas }) {
   }
 
   // --- camera rig -----------------------------------------------------------
-  // Sits behind whichever side is to move and swings around with a small dolly.
-  const RADIUS = 9.7;
-  const HEIGHT = 7.0;
-  const LOOK = new THREE.Vector3(0, 0.10, 0);
-  let angleFrom = 0;
-  let angleTo = 0;
-  let swing = 1;
+  // The rig itself is camera.js: an orbit the player drives with the right
+  // button, the wheel and a touch, plus the four view presets. What the game
+  // always did is layered back on top of it - the swing round behind whoever
+  // is to move, and the ramp's sway as an additive wobble applied last.
+  const rig = createCameraRig({ camera, canvas });
   let sway = 0;
   let clock = 0;
-  const lookAt = new THREE.Vector3();
 
-  function setSide(side, instant = false) {
-    const to = side === 'b' ? Math.PI : 0;
-    if (Math.abs(to - angleTo) < 1e-6 && swing >= 1) { if (instant) swing = 1; return; }
-    angleFrom = THREE.MathUtils.lerp(angleFrom, angleTo, easeInOut(Math.min(swing, 1)));
-    angleTo = to;
-    swing = instant ? 1 : 0;
-  }
-
-  function updateCamera(dt) {
-    if (swing < 1) swing = Math.min(1, swing + dt / 0.9);
-    const e = easeInOut(swing);
-    const ang = THREE.MathUtils.lerp(angleFrom, angleTo, e);
-    const dolly = 1 + 0.12 * Math.sin(Math.PI * e) * (swing < 1 ? 1 : 0);
-    const swayX = Math.sin(clock * 0.53) * 0.55 * sway;
-    const swayY = Math.sin(clock * 0.37 + 1.1) * 0.28 * sway;
-    camera.position.set(Math.sin(ang) * RADIUS * dolly + swayX, HEIGHT * dolly + swayY, Math.cos(ang) * RADIUS * dolly);
-    lookAt.copy(LOOK);
-    lookAt.x += Math.sin(clock * 0.29) * 0.4 * sway;
-    camera.lookAt(lookAt);
-    camera.rotateZ(Math.sin(clock * 0.23) * 0.035 * sway);
-  }
+  function setSide(side, instant = false) { rig.setSide(side, instant); }
+  function updateCamera(dt) { rig.update(dt, sway, clock); }
 
   function resize() {
     const w = canvas.clientWidth || window.innerWidth;
@@ -213,6 +190,7 @@ export function createScene({ canvas }) {
 
   function dispose() {
     window.removeEventListener('resize', resize);
+    rig.dispose();
     renderer.dispose();
   }
 
@@ -220,6 +198,7 @@ export function createScene({ canvas }) {
     renderer, scene, camera, boardGroup, pieceGroup, squares,
     update, render, resize, dispose,
     setSide, setHighlights, setHighlightSink, projectPoint, projectSquare,
+    cameraRig: rig,
     setCameraSway(v) { sway = Math.max(0, Math.min(1, Number(v) || 0)); },
   };
 }

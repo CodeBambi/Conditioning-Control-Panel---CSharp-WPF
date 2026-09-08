@@ -80,6 +80,13 @@ function main() {
   // happened yet: it is simply null until it has.
   window.PBP = { bus, game, board, ramp: null };
 
+  // --- camera: the rig the player drives ---
+  // A touch that picked a man up is never an orbit, so the rig asks drag.js.
+  window.PBP.camera = view.cameraRig;
+  view.cameraRig.setDragGuard(() => drag.isDragging());
+  view.cameraRig.attachUi();
+  // --- end camera ---
+
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
