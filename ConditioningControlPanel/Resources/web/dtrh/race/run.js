@@ -18,6 +18,12 @@
  * one that answers false, which is what `?autostart=1` does: there is no menu)
  * the End screen falls back to the old ending and closes the page.
  *
+ * THE SHUTTER (race/shutter.js) is the seam either side of a run: it claps shut
+ * on the countdown's `go` (fast, never awaited, so it cannot cost the first
+ * steer) and it covers the whole handover back to the menu. raceBoot drives the
+ * menu -> intro half of it through `race.shutter`. Reduced motion turns all of
+ * it into one flat 150 ms fade.
+ *
  * Host traffic owned here: sends heartbeat, run-started, sfx, fire-payload
  * (video only), run-ended, exit, exit-done, and with a track loaded track-play,
  * track-pause, track-stop; listens to pause, payout-result.
@@ -77,6 +83,7 @@ import { createSpeedFx } from './speed.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createRaceAudio } from './audio.js';
 import { resultTier, resultsCamera, preRollCamera } from './intro.js';
+import { createShutter } from './shutter.js';
 
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE = 72;   // 1.6 read as ALMOST spam: the next lane over qualified
 // FOV_BASE is the VERTICAL fov at 16:9 only; race/viewport.js re-solves it per aspect (see the header).
@@ -149,6 +156,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   /** `?words=unread`: a word the kart drove past writes nothing. Ghost is the default. */
   const GHOST_MISSES = flag('words') !== 'unread';
   const captions = hudRoot ? createCaptions(hudRoot, { mode: CAP_MODE }) : null;
+  // THE SHUTTER (race/shutter.js): the seam between the menu, the intro and the run. raceBoot drives
+  // the menu side of it through `race.shutter`; in here it is the countdown ending and the way home.
+  const shutter = createShutter({ root, reducedMotion, log: bridge.log });
   /** The word a word bubble wears, by the event that spawned it. race/bubbles.js is the layer that
    *  DRAWS a bubble and it stays that: the pop and the ghost read the text off here instead. */
   const wordOf = new Map();
@@ -856,7 +866,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   function again() {
     reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
-    hud.countdown().then(start);
+    // the shutter claps shut on `go` and is open again a quarter second later. Not awaited: the
+    // run starts on the same tick the countdown ends, so the first steer is never the shutter's.
+    hud.countdown({ onTick: (s) => { if (s === 'go') shutter.flash(); } }).then(start);
   }
   /**
    * `surface` on the End screen: the way back to the MENU. The world goes (the menu does not need
@@ -868,18 +880,24 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
    * would roll the cloud playlist a lap early (race/cloud.js onEnded).
    */
   function leave() {
-    if (!onExit) { exit(); return; }
-    try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
-    if (captions) captions.clear();
-    audio.duck(false, 'end');
-    setCameraOverride(null);
-    teardown();
-    resetRunState(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
-    S.started = false; S.hostPaused = false;
-    if (TR.track) setTrack(TR.track.chart);
-    let took = false;
-    try { took = onExit() !== false; } catch (e) { if (bridge.log) bridge.log('to menu: ' + e); }
-    if (!took) exit();
+    if (!onExit) { exit(); return Promise.resolve(); }
+    // the whole handover happens behind a shut door: the world goes, the menu comes back, and the
+    // player sees one transition instead of the seam between them.
+    return shutter.sweep({
+      mid: () => {
+        try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
+        if (captions) captions.clear();
+        audio.duck(false, 'end');
+        setCameraOverride(null);
+        teardown();
+        resetRunState(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+        S.started = false; S.hostPaused = false;
+        if (TR.track) setTrack(TR.track.chart);
+        let took = false;
+        try { took = onExit() !== false; } catch (e) { if (bridge.log) bridge.log('to menu: ' + e); }
+        if (!took) exit();
+      },
+    });
   }
   function exit() {
     trackSend('track-stop');
@@ -925,7 +943,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (payoutResolve) payoutResolve(null);
     teardown();
     audio.dispose();
-    input.dispose(); hud.dispose(); if (captions) captions.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    input.dispose(); hud.dispose(); if (captions) captions.dispose(); shutter.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
     pixel.dispose();
     scene.clear(); renderer.dispose();
   }
@@ -975,7 +993,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     };
   }
   function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block
-  return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
+  return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf, shutter,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack, trackClock: (t, playing) => TR.clock(t, playing),
