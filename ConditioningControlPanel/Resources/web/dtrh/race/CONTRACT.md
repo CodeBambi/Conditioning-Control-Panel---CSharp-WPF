@@ -393,6 +393,18 @@ and gates which bubble kinds may appear. Treat pops go to score; effect pops cal
 through the `fire-payload` bridge message exactly like `chaosRun.js` does today. ESC = Brake
 (pause + end screen). Run end sends `run-ended` (below).
 
+**The subliminal payload has a RACE-ONLY presentation.** `payloadFx` takes one optional
+`subliminalFx` seam and run.js is its only caller: the race draws `race/subliminal.js`'s card
+(`.rh-sub-layer` in `.race-hud` at z14, styled in race.css) instead of the tube's `.sf-pfx-sub`
+blip, and dtrh.html - which passes no seam - is unchanged. It is `fitPx`-sized off the viewport
+(176 px at 1280x720, 78 px on a 390 px phone, stepping down by word count so eight words still
+fit), cream on a hot-pink bloom over a dimmed vignette carrying the same road cutout the
+sustained washes carry, and it rushes the POV over 1250 ms (scale 0.62 blurred -> 1.0 by ~330 ms
+-> a ~450 ms readable hold -> 1.7 while it fades). Reduced motion fades it in place at full size.
+One card at a time: a second pop inside `MIN_SHOW_MS` (700 ms) queues at depth one, newest wins.
+The phrase is the popped bubble's own word if it wore one, else the last thing the road said
+inside `ECHO_SEC`, else `payloadFx`'s built-in whisper pool. `race/smoke/subliminal-check.mjs`.
+
 **The End screen's `surface` goes BACK TO THE MENU, it never closes the page.** `onExit` is the way
 home: run.js stops the file, drops the world (`teardown`), resets the run state, re-arms the same
 chart at `t = 0` (so picking that level again replays it) and calls `onExit()`. raceBoot's

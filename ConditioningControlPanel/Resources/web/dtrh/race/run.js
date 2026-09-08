@@ -75,6 +75,7 @@ import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
 import { createCaptions } from './captions.js';
+import { createSubliminal, ECHO_SEC } from './subliminal.js';
 import { createMediaLane } from './mediaLane.js';
 import { createInput } from './input.js';
 import { createPickups, TUNE as PICK } from './pickups.js';
@@ -156,6 +157,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   /** `?words=unread`: a word the kart drove past writes nothing. Ghost is the default. */
   const GHOST_MISSES = flag('words') !== 'unread';
   const captions = hudRoot ? createCaptions(hudRoot, { mode: CAP_MODE }) : null;
+  // THE WHISPER, COMING AT YOU (race/subliminal.js): the RACE's own subliminal card. The tube's
+  // blip is a HUD-sized word in the HUD's own white, which on this page reads as one more label,
+  // so the race hands game/payloadFx.js a presentation of its own through the `subliminalFx` seam
+  // and payloadFx's `.sf-pfx-sub` is left exactly as dtrh.html has always drawn it.
+  const subl = hudRoot ? createSubliminal(hudRoot, { reducedMotion }) : null;
   // THE SHUTTER (race/shutter.js): the seam between the menu, the intro and the run. raceBoot drives
   // the menu side of it through `race.shutter`; in here it is the countdown ending and the way home.
   const shutter = createShutter({ root, reducedMotion, log: bridge.log });
@@ -185,6 +191,20 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   const wordyRows = new Set();
   let lastFlashAt = -1e9;
   const flashStats = { pops: 0, capped: 0, rolls: 0, flashes: 0 };
+  // THE ECHO (race/subliminal.js). A subliminal card would rather say the ROAD's own phrase than a
+  // word out of payloadFx's built-in whisper pool, so the last thing the voice actually said is kept
+  // here with the run clock it was said on. A bubble that wears its own word beats this; nothing
+  // older than ECHO_SEC is used at all, so a quiet stretch falls back to the pool rather than
+  // repeating a line from a minute ago. `S.elapsed` is the RUN's clock: a paused game is not a gap.
+  let echoWord = '', echoAt = -1e9;
+  const echo = (w) => { const s = String(w || '').trim(); if (s) { echoWord = s; echoAt = S.elapsed; } };
+  /** The phrase this subliminal shows: the word the popped bubble wore, else a fresh echo, else ''
+   *  (empty hands it back to payloadFx, which draws from its own pool). */
+  function subText(eventId) {
+    const rec = eventId ? (wordOf.get(eventId) || rowOf.get(eventId)) : null;
+    if (rec && rec.w) return String(rec.w);
+    return S.elapsed - echoAt <= ECHO_SEC ? echoWord : '';
+  }
   const WSYNC = flag('wsync') === '1';
   const ROW_LATE_SEC = 0.6;
   let syncHud = null;
@@ -241,7 +261,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     return text;
   }
   const fxProxy ={ pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
-  const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
+  const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media,
+    subliminalFx: subl ? ({ text }) => subl.show({ text }) : null });
   // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
   // (warmFx) rather than 2-5 MB mid-lap; the desktop pool and the Loom's own spirals are untouched
   setBundledSpiralPool(Q.leanSpirals ? LEAN_SPIRALS : null);
@@ -343,6 +364,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     trailClear();
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
     wordyRows.clear(); lastFlashAt = -1e9; flashStats.pops = 0; flashStats.capped = 0; flashStats.rolls = 0; flashStats.flashes = 0;
+    echoWord = ''; echoAt = -1e9; if (subl) subl.clear();   // "again" starts with nothing said and a clear glass
     fxFired.clear();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
@@ -381,6 +403,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     const rec = wordOf.get(eventId);
     if (!rec) return;
     wordOf.delete(eventId);                       // one bubble, one flash: it is popped or it is past
+    echo(rec.w);                                  // the voice said it: a subliminal may repeat it back
     logWord(rec, passT == null ? (TR.track ? TR.track.t : 0) : passT, ghost);
     if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
     if (ghost || rec.p == null || lineDone.has(rec.p)) return;
@@ -415,6 +438,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   }
   function onPop(w, p) {
     const word = !!p.eventId && wordOf.has(p.eventId);   // a bubble off the transcript, not a chunk golden
+    // read BEFORE spendWord/rowOf spend the event: a subliminal says the word its own bubble wore
+    const said = p.payload === 'subliminal' ? subText(p.eventId) : '';
     // a plain word face: the transcript's own bubble, or one of a trigger row that wears the phrase
     // without firing an effect. delete() is the row's one-shot: many bubbles, one word, one flash.
     if ((word || (!!p.eventId && wordyRows.delete(p.eventId))) && p.kind === 'treat') wordFlashPop(w);
@@ -422,7 +447,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       const at = passTime(w, p.d);
       TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false, at);
       const row = rowOf.get(p.eventId);   // a trigger row: one log line for the row, on its first pop
-      if (row) { rowOf.delete(p.eventId); logWord(row, at, false); }
+      if (row) { rowOf.delete(p.eventId); echo(row.w); logWord(row, at, false); }
     }
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (S.sweep) sfx('chain_pop', 0.5);          // the pump: every pop on the road sounds like the chain
@@ -432,7 +457,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     const r = mix.add(p.id, { durationMult });
     if (r.action === 'held' || r.action === 'ignore') { w.score.pop(p.points, 'treat'); hud.toast('held', 'effect'); return; }
     w.score.pop(p.points, p.id);
-    pour(w, p, r, Math.round(clamp(p.strength, 0, 1) * 100), durationMult);
+    pour(w, p, r, Math.round(clamp(p.strength, 0, 1) * 100), durationMult, said);
     shake.shake(p.payload === 'video' ? 0.9 : 0.5, 300);
     poke('shock', 0.9);
     if (r.recipe) serve(w, r.recipe);
@@ -442,15 +467,17 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   /** Every payload the mixer pours passes through here, so this tally is the whole truth about what
    *  the run fired: race/smoke/gifrain-row-check.mjs reads it to hold a rain row to ONE cascade. */
   const fxFired = new Map();
-  const fire = (p, strength, durationMult) => {
+  const fire = (p, strength, durationMult, text) => {
     fxFired.set(p.payload, (fxFired.get(p.payload) || 0) + 1);
     if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
-    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
+    // `text` is the subliminal's phrase and nothing else reads it: the bubble's own word if it wore
+    // one, else the road's last line inside ECHO_SEC, else '' - which hands the pick back to payloadFx.
+    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind, text: p.payload === 'subliminal' ? (text || subText(null)) : undefined }, strength }, { durationMult });
   };
   function clearMixChrome() { root.removeAttribute('data-ov'); root.removeAttribute('data-tint'); if (hud.setTint) hud.setTint(0); }
   /** Pour one action. Sustained holds (tint / overlay / corruption) get a durationMult that lands payloadFx's
    *  fade on the mixer's drain, so a tint that was extended stays pink for as long as the rail says it will. */
-  function pour(w, p, r, strength, durationMult) {
+  function pour(w, p, r, strength, durationMult, text) {
     const label = (KIND_BY_ID[p.id] || {}).label || p.id;
     const slot = mix.live(r.category);
     const holdMult = slot && CATEGORIES[r.category].scaled ? clamp(slot.sec / CATEGORIES[r.category].sec, 0.1, 10) : durationMult;
@@ -480,8 +507,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
         hud.toast(r.action === 'refresh' ? 'more static' : label, 'effect');
         break;
       case 'video': fire(p, strength, durationMult); hud.toast(label, 'effect'); break;
-      default:   // cards, freeze
-        fire(p, strength, durationMult); w.kart.applySlow(0.92, 2.0);
+      default:   // cards (the subliminal lives here, and it is the one kind that carries a phrase), freeze
+        fire(p, strength, durationMult, text); w.kart.applySlow(0.92, 2.0);
         hud.toast(r.charges > 1 ? `${label} x${r.charges}` : label, 'effect');
     }
   }
@@ -879,6 +906,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     S.ended = true; S.running = false; S.paused = false;
     try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
     if (captions) captions.clear();   // nothing of the last phrase is left over the end card
+    if (subl) subl.clear();           // nor a whisper card mid-rush: the End card owns the screen
     const st = w.score.state;
     const summary = { score: st.score, banked: st.banked, bestCombo: st.bestCombo, popped: st.popped, treats: st.treats, effects: st.effects,
       nearMisses: st.nearMisses, laps: w.kart.state.lap, durationSec: Math.round(S.elapsed), seed: S.seed,
@@ -1001,7 +1029,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (payoutResolve) payoutResolve(null);
     teardown();
     audio.dispose();
-    input.dispose(); hud.dispose(); if (captions) captions.dispose(); shutter.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    input.dispose(); hud.dispose(); if (captions) captions.dispose(); if (subl) subl.dispose(); shutter.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
     pixel.dispose();
     scene.clear(); renderer.dispose();
   }
@@ -1065,6 +1093,17 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     fxStats: () => Object.fromEntries(fxFired),
     /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. */
     debugWord: (text, o) => (captions ? captions.showWord(text, o || {}) != null : false),
+    /** race/smoke/subliminal-check.mjs and the shot harness: fire ONE payload by hand, rendered
+     *  exactly as a pop of that kind renders it. THE MIX is never touched, so a shot cannot change
+     *  what the run is holding, and an empty `text` falls back to payloadFx's own whisper pool. */
+    debugPayload: (kind, o = {}) => {
+      if (!kind || S.disposed) return false;
+      payloadFx.applyPayload({ payload: { kind: String(kind), overlay: o.overlay || null, text: o.text || '' },
+        strength: o.strength == null ? 45 : o.strength }, { durationMult: o.durationMult == null ? 1 : o.durationMult });
+      return true;
+    },
+    /** race/smoke/subliminal-check.mjs: how many cards were painted and how many the queue held. */
+    subliminalStats: () => (subl ? subl.stats() : null),
     /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */
     capMode: () => CAP_MODE,
     /** THE SYNC WIN, for race/smoke/wsync-check.mjs: the log rows, the offset, a nudge, the export. */
