@@ -142,6 +142,36 @@ namespace ConditioningControlPanel.Services.Bark
         public bool CurrentPhaseIsDeepener =>
             _currentPhaseName.IndexOf("deep", StringComparison.OrdinalIgnoreCase) >= 0;
 
+        // --- pause / planned length, live off the engine ---
+        public int PauseCount => _engine?.IsRunning == true ? _engine.PauseCount : 0;
+        public double SessionPlannedMinutes => _engine?.IsRunning == true ? (_engine.CurrentSession?.DurationMinutes ?? 0) : 0;
+
+        // --- refocus: main window lost focus during a session and got it back ---
+        // A "refocus" only counts when the window was gone for at least the threshold, so an
+        // accidental click on another monitor does not read as "you tabbed away".
+        private DateTime? _unfocusedSinceUtc;
+        private int _refocusCount;
+        public int RefocusCount => System.Threading.Volatile.Read(ref _refocusCount);
+
+        public void RegisterUnfocus()
+        {
+            lock (_lock) { _unfocusedSinceUtc ??= DateTime.UtcNow; }
+        }
+
+        /// <summary>Returns the seconds the window was away, or -1 when nothing counts as a refocus.</summary>
+        public double RegisterRefocus(double minAwaySeconds = 20)
+        {
+            lock (_lock)
+            {
+                if (!_unfocusedSinceUtc.HasValue) return -1;
+                var away = (DateTime.UtcNow - _unfocusedSinceUtc.Value).TotalSeconds;
+                _unfocusedSinceUtc = null;
+                if (away < minAwaySeconds) return -1;
+                _refocusCount++;
+                return away;
+            }
+        }
+
         /// <summary>Reset per-session state (called on session start).</summary>
         public void ResetSessionScoped()
         {
@@ -149,6 +179,8 @@ namespace ConditioningControlPanel.Services.Bark
             {
                 _crossedMarathon.Clear();
                 _faceLostSinceUtc = null;
+                _unfocusedSinceUtc = null;
+                _refocusCount = 0;
             }
             _currentPhaseName = "";
         }

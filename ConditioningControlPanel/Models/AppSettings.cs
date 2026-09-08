@@ -871,6 +871,85 @@ namespace ConditioningControlPanel.Models
             set { _lastSeenUtc = value; OnPropertyChanged(); }
         }
 
+        // --- Session ledger: the companion's "I noticed" bark conditions --------------------
+        // Feeds sessions_7d / late_sessions_7d / sessions_today / same_mod_run in BarkService.
+        // Local settings only: never added to any server request, sync payload or telemetry.
+
+        private const int SessionLedgerCap = 60;
+
+        private List<DateTime> _recentSessionStartsUtc = new();
+        /// <summary>UTC start times of the most recent sessions (capped, oldest dropped).</summary>
+        public List<DateTime> RecentSessionStartsUtc
+        {
+            get => _recentSessionStartsUtc;
+            set { _recentSessionStartsUtc = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private string _lastSessionModId = "";
+        /// <summary>Mod id active when the most recent session started.</summary>
+        public string LastSessionModId
+        {
+            get => _lastSessionModId;
+            set { _lastSessionModId = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _sameModRun = 0;
+        /// <summary>How many consecutive sessions (including the latest) started under the same mod.</summary>
+        public int SameModRun
+        {
+            get => _sameModRun;
+            set { _sameModRun = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        /// <summary>Append one session start to the ledger and advance the same-mod run.</summary>
+        public void RecordSessionStart(string? modId)
+        {
+            var list = new List<DateTime>(_recentSessionStartsUtc) { DateTime.UtcNow };
+            if (list.Count > SessionLedgerCap) list.RemoveRange(0, list.Count - SessionLedgerCap);
+            RecentSessionStartsUtc = list;
+
+            var id = modId ?? "";
+            SameModRun = string.Equals(id, _lastSessionModId, StringComparison.OrdinalIgnoreCase) && _sameModRun > 0
+                ? _sameModRun + 1
+                : 1;
+            LastSessionModId = id;
+        }
+
+        /// <summary>Sessions started within the last <paramref name="days"/> days.</summary>
+        public int SessionsWithinDays(int days)
+        {
+            var since = DateTime.UtcNow.AddDays(-days);
+            int n = 0;
+            foreach (var t in _recentSessionStartsUtc) if (t >= since) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Sessions started within the last <paramref name="days"/> days whose LOCAL start hour was
+        /// 23:00 or later, or before 04:00 (the "can't sleep" window).
+        /// </summary>
+        public int LateSessionsWithinDays(int days)
+        {
+            var since = DateTime.UtcNow.AddDays(-days);
+            int n = 0;
+            foreach (var t in _recentSessionStartsUtc)
+            {
+                if (t < since) continue;
+                int h = t.ToLocalTime().Hour;
+                if (h >= 23 || h < 4) n++;
+            }
+            return n;
+        }
+
+        /// <summary>Sessions started since local midnight today.</summary>
+        public int SessionsToday()
+        {
+            var today = DateTime.Today;
+            int n = 0;
+            foreach (var t in _recentSessionStartsUtc) if (t.ToLocalTime() >= today) n++;
+            return n;
+        }
+
         #endregion
 
         #region Flash Images
