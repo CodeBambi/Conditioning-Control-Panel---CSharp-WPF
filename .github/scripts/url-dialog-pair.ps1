@@ -126,7 +126,8 @@ try {
         $tree = Require-Success (Invoke-Owned $git @('-C', $repo, 'rev-parse', "HEAD:$($entry[0])") $repo "tree-$($entry[0])")
         if ($tree -ne $entry[1]) { throw "Unreviewed source tree: $($entry[0])" }
     }
-    Require-Success (Invoke-Owned $git @('-C', $repo, 'archive', '--format=zip', "--output=$root/source.zip", 'HEAD', 'CCP.Avalonia', 'CCP.Core') $repo 'archive') | Out-Null
+    # Export committed LF bytes independently of the host's Git line-ending settings.
+    Require-Success (Invoke-Owned $git @('-C', $repo, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'archive', '--format=zip', "--output=$root/source.zip", 'HEAD', 'CCP.Avalonia', 'CCP.Core') $repo 'archive') | Out-Null
     $patch = Join-Path $root 'url-dialog-original.patch'
     [IO.File]::WriteAllText($patch, [IO.File]::ReadAllText("$PSScriptRoot/url-dialog-original.patch").Replace("`r`n", "`n"))
     if ((Get-FileHash $patch).Hash -ne '234a5a02dd46cdc09ec6a78af76366d44aee5af71b9f4ad1caaffe79d2610807') { throw 'Inverse patch changed' }
@@ -139,8 +140,8 @@ try {
         $source = Join-Path $pair 'source'
         Expand-Archive "$root/source.zip" $source
         if ($mode -eq 'red') {
-            Require-Success (Invoke-Owned $git @('-C', $source, 'apply', '--unidiff-zero', '--check', $patch) $source 'inverse-check') | Out-Null
-            Require-Success (Invoke-Owned $git @('-C', $source, 'apply', '--unidiff-zero', $patch) $source 'inverse-apply') | Out-Null
+            Require-Success (Invoke-Owned $git @('-C', $source, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '--unidiff-zero', '--check', $patch) $source 'inverse-check') | Out-Null
+            Require-Success (Invoke-Owned $git @('-C', $source, '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '--unidiff-zero', $patch) $source 'inverse-apply') | Out-Null
         }
         $testHash = (Get-FileHash "$source/$tests" -Algorithm SHA256).Hash
         if ($testHash -ne '097b76f6434ab5b164fb06b1c13ede6a39dd19aacb831f21f6d7c7e1e558cd34') { throw 'Test bytes changed' }
