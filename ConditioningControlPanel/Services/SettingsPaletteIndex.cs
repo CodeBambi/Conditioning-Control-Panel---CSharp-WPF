@@ -487,6 +487,9 @@ namespace ConditioningControlPanel.Services
             Setting("suppress_perk_notifications", "label_suppress_perk_notifications", "🔕", "notifications",
                     new[] { "ChkSuppressPerkNotifications" }, "set2_section_notifications",
                     "silence mute perk popup toast lucky 10x 20x xp multiplier pink rush quest complete ping sound immersion");
+            Setting("banner_pool", "banner_pool_enabled", "💬", "notifications",
+                    new[] { "ChkBannerPool" }, "set2_section_notifications",
+                    "banner header line pool taglines trivia rotating message");
 
             // Account (landed)
             Setting("patreon_login", "set2_palette_patreon_login", "🅿️", "account",

@@ -77,6 +77,7 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             try
             {
                 ChkSuppressPerkNotifications.IsChecked = s.SuppressPerkNotifications;
+                ChkBannerPool.IsChecked = s.BannerPoolEnabled;
             }
             finally { _isLoading = false; }
         }
@@ -88,6 +89,22 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             if (s == null) return;
 
             s.SuppressPerkNotifications = ChkSuppressPerkNotifications.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// Also a LIVE editor: the header banner's pool tick reads BannerPoolEnabled at the moment
+        /// it draws a line, so the flip has to reach settings and disk now rather than at the next
+        /// SaveSettings sweep. Turning it off drops the pool beat at the next draw; the fixed beats
+        /// and the server announcement are untouched either way.
+        /// </summary>
+        private void ChkBannerPool_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            s.BannerPoolEnabled = ChkBannerPool.IsChecked ?? true;
             App.Settings?.Save();
         }
     }

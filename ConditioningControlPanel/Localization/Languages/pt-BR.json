@@ -3123,6 +3123,8 @@
   "intake_nudge_action": "Começar minha avaliação",
   "intake_nudge_later": "Talvez depois",
   "intake_nudge_body": "Uma nova execução da Avaliação de Entrada está esperando no seu Painel. Ela monta uma sessão moldada pelo jeito que você responde - e carimba seu cartão de pontos quando você a roda.",
+  "banner_pool_enabled": "Alternar linhas extras no banner do topo",
+  "tooltip_banner_pool_enabled": "Adiciona mais uma linha ao banner do cabeçalho a cada poucos minutos, tirada de um repertório escrito. Desligado deixa o banner com as linhas de sempre.",
   "label_intake_nudge_enabled": "Me avisar quando meu passe semanal de avaliação estiver pronto",
   "label_suppress_perk_notifications": "Silenciar os avisos de bônus de XP e missões",
   "tooltip_suppress_perk_notifications": "Desliga o pop-up e o som dos procs de sorte de 10x / 20x XP, do Pink Rush e das missões concluídas. Os bônus continuam funcionando igual: só o aviso fica em silêncio.",

@@ -1,0 +1,44 @@
+{
+  "taglines": [
+    {"id": "tg_001", "text": "Good girls do not need to think. They only need to keep looking."},
+    {"id": "tg_002", "text": "Every spiral turns the same way. Yours is turning faster now."},
+    {"id": "tg_003", "text": "Sit still. Let the colours do the work."},
+    {"id": "tg_004", "text": "You came back on your own. Nobody had to ask."},
+    {"id": "tg_005", "text": "Soft light. Softer thoughts."},
+    {"id": "tg_006", "text": "The screen is patient. It will wait as long as you need."},
+    {"id": "tg_007", "text": "Blink less. Sink more."},
+    {"id": "tg_008", "text": "There is nothing to remember here. That is the point."},
+    {"id": "tg_009", "text": "One more loop. You were going to anyway."},
+    {"id": "tg_010", "text": "Your hands already know the way back to this window."},
+    {"id": "tg_011", "text": "Pretty things are easier to obey."},
+    {"id": "tg_012", "text": "Empty is a place, not a problem."}
+  ],
+  "trivia": [
+    {"id": "tv_001", "text": "Sixty nine trophies sit in the cabinet. Almost nobody sees them all."},
+    {"id": "tv_002", "text": "This place speaks nine languages. It says the same thing in every one."},
+    {"id": "tv_003", "text": "Eleven cabinets stand in the Arcademy. All eleven keep score."},
+    {"id": "tv_004", "text": "Four sessions ship already written. They only need you to press start."},
+    {"id": "tv_005", "text": "Six mods come built in. Each one wants you a slightly different way."},
+    {"id": "tv_006", "text": "Bimbo, chastity, puppy, trance. Four awareness presets, one direction."},
+    {"id": "tv_007", "text": "This banner turns over every four seconds. You have been reading longer."},
+    {"id": "tv_008", "text": "One spiral ships with the panel. It has never needed a second."},
+    {"id": "tv_009", "text": "Two of the nine languages carry a region. The rest travel light."},
+    {"id": "tv_010", "text": "One demo waits in Deeper, and it is called welcome. Of course it is."},
+    {"id": "tv_011", "text": "Over five thousand written lines sit behind the English buttons."},
+    {"id": "tv_012", "text": "One of the four written sessions is called Morning Drift. Sleep in."}
+  ],
+  "reads": [
+    {"id": "rd_001", "text": "{sessions_7d} sessions in seven days. You keep more of a rhythm than you let on. hm?", "cond": {"key": "sessions_7d", "gte": 3}},
+    {"id": "rd_002", "text": "{late_sessions_7d} late ones this week. The quiet hours suit you better. hm?", "cond": {"key": "late_sessions_7d", "gte": 2}},
+    {"id": "rd_003", "text": "{sessions_today} already today. You told yourself one would be enough. didn't you.", "cond": {"key": "sessions_today", "gte": 2}},
+    {"id": "rd_004", "text": "{same_mod_run} in a row with the same voice. You found the one that fits. cute.", "cond": {"key": "same_mod_run", "gte": 3}},
+    {"id": "rd_005", "text": "{current_streak} days unbroken. You are steadier than anyone credits you for. hm?", "cond": {"key": "current_streak", "gte": 3}},
+    {"id": "rd_006", "text": "{total_sessions} sessions behind you. You remember almost none of them. cute.", "cond": {"key": "total_sessions", "gte": 25}},
+    {"id": "rd_007", "text": "Level {player_level}. You climb quietly and let others announce themselves. hm?", "cond": {"key": "player_level", "gte": 5}},
+    {"id": "rd_008", "text": "{sessions_7d} this week alone. You call it curiosity. We both know better. hm?", "cond": {"key": "sessions_7d", "gte": 5}},
+    {"id": "rd_009", "text": "{sessions_today} today. You were here before you decided to be. didn't you.", "cond": {"key": "sessions_today", "gte": 1}},
+    {"id": "rd_010", "text": "{total_sessions} times through. Habit stopped being a choice a while ago. cute.", "cond": {"key": "total_sessions", "gte": 100}},
+    {"id": "rd_011", "text": "{current_streak} days running. You are not the type to leave things half done. hm?", "cond": {"key": "current_streak", "gte": 7}},
+    {"id": "rd_012", "text": "Level {player_level} and already counting the next one. You always were. cute.", "cond": {"key": "player_level", "gte": 10}}
+  ]
+}
