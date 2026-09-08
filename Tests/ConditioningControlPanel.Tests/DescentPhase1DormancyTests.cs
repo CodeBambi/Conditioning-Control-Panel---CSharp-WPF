@@ -201,8 +201,8 @@ public class DescentPhase1DormancyTests
     // ============================ spiral rail (§9) ============================
 
     [Fact]
-    public void SpiralRail_IsOffByDefault()
-        => Assert.False(new AppSettings().DescentSpiralRailEnabled);
+    public void SpiralRail_IsOnByDefault_Since693()
+        => Assert.True(new AppSettings().DescentSpiralRailEnabled);
 
     [Theory]
     [InlineData(0, "·")]      // the real pre-begin rung draws a dot, never "0"
