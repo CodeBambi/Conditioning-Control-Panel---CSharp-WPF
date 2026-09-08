@@ -53,6 +53,8 @@
  *               deckFull           a card for every active class
  *               afterBadDay        the previous play-day's best was C or worse
  *               awayCountAtLeast:N the tabAway/suspend escalation count
+ *               sameGameAsLast / newGameTonight   classStart only: this
+ *               room against the one you went through last
  *               hoursAtLeast:N     lifetime msVisible, in hours
  *               flingsAtLeast:N / bubblesAtLeast:N   the widget's own counters
  * perception    calendarDaysAtLeast:N  calendar days since her first day (the
@@ -390,6 +392,8 @@ export function createVoice(o) {
       postLabSessions: intOf(b.postLabSessions),
       once: Object.assign({}, plain(b.once)),
       punchDay: strOf(b.punchDay),
+      /* The last class you actually started, for the room diff below. */
+      lastGameKey: strOf(b.lastGameKey),
       punchesToday: intOf(b.punchesToday),
       dayBest: strOf(b.dayBest),
       prevDayBest: strOf(b.prevDayBest),
@@ -757,6 +761,14 @@ export function createVoice(o) {
        * ask someone. It is cleared with the latch, so a campus beat can never
        * inherit the last class's colour. */
       S.gameKey = typeof (p && p.gameKey) === 'string' && p.gameKey ? p.gameKey : null;
+      /* THE ROOM DIFF. Read before it is written, exactly like `gradeUp`
+       * below: a gate that compared against a key this same moment had
+       * already stored would answer "same room" every single time. No key
+       * on either side is NEITHER answer, never a guess. */
+      const room = S.gameKey;
+      c.sameGame = !!room && !!blob.lastGameKey && room === blob.lastGameKey;
+      c.newGame = !!room && !!blob.lastGameKey && room !== blob.lastGameKey;
+      if (room && blob.lastGameKey !== room) { blob.lastGameKey = room; touch(); }
     }
 
     /* TODAY'S HOLES, for the double-punch beat. Counted off the stamp moments
@@ -879,6 +891,12 @@ export function createVoice(o) {
     /** Which class fired the moment - the per-game colour gate. Closed only
      *  by the payload: no gameKey, no match, never a guess. */
     gameIs: (a, c) => !!c.gameKey && c.gameKey === String(a),
+    /** THE ROOM DIFF (2026-09-07). classStart only, written by bookkeep off
+     *  `blob.lastGameKey`; false on every other moment. The inverse is
+     *  deliberately NOT `!sameGameAsLast`: a first class ever, and a
+     *  classStart that carried no gameKey, are neither. */
+    sameGameAsLast: (a, c) => c.sameGame === true,
+    newGameTonight: (a, c) => c.newGame === true,
     /* --- the EMI ASKS wave (2026-08-25) --------------------------------- */
     /** She asked and you answered - an IGNORED ask is deliberately NOT an
      *  answer, so a callback can never reference a conversation you declined. */
@@ -1311,6 +1329,8 @@ export function createVoice(o) {
       visitsIgnored: Number(st.visitsIgnored) || 0,
       hours: (Number(st.msVisible) || 0) / 3600000,
       gradeUp: false,
+      sameGame: false,
+      newGame: false,
     };
   }
 

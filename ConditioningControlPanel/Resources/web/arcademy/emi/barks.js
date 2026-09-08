@@ -154,6 +154,19 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /** A2b - THE BARNUM GREET. A cold read on the way in, so it sits over the two
+   *  ordinary greets (10) and under greetBond (20). Both lines want a player
+   *  with some history behind them, which is the POOL's gate; the second one
+   *  narrows it to the day's second board-up. */
+  greetBarnum: {
+    on: 'greet', when: ['sessionAtLeast:3'], odds: 0.25, ceremony: false, priority: 12,
+    maxPerSession: 1,
+    lines: [
+      { t: "you're a regular. i can tell. i have a chart.", face: '(¬‿¬)', chain: 'smug', double: true },
+      { t: "twice today. you missed me. don't answer. i know.", face: '^_~', when: ['notFirstOfDay'] }
+    ]
+  },
+
   /** A3 - first greet after 2+ days away. Always barks; overrides the greet pools. */
   longAbsence: {
     on: 'greet', when: ['longAbsence:2'], odds: 1, ceremony: true, priority: 40,
@@ -163,6 +176,8 @@ export const POOLS = Object.freeze({
       { t: "you're back! full recap: nothing happened. i waited.", face: '^_^' },
       { t: "i practiced my hello. this was it. did it land?", face: '._.' },
       { t: "day three was quiet. i don't recommend it.", face: ';_;', when: ['longAbsence:3'] },
+      /* BARNUM: the days-away read. */
+      { t: "a few days off. you thought about it. once. cute.", face: '(¬‿¬)', double: true },
       /* EMI ASKS: the ONE greet name-drop. Gated `hasName` so an install that
        * never answered a14 sees the pool it always had, and the token itself
        * would collapse to the un-named variant even if it ever slipped through. */
@@ -427,7 +442,9 @@ export const POOLS = Object.freeze({
       { t: "hello? blink twice if you're a statue.", face: 'o_o' },
       { t: "i'll rehearse my celebration. for later. quietly.", face: '0_0', double: true },
       { t: "quiet time. love that for us. so much. yep.", face: '=_=' },
-      { t: "still there? i'll count dust. one dust. two dust.", face: '._.' }
+      { t: "still there? i'll count dust. one dust. two dust.", face: '._.' },
+      /* BARNUM: silence proves thought. it proves nothing. */
+      { t: "you're a thinker. i can tell. it's the quiet. it's a tell.", face: '0_0' }
     ]
   },
 
@@ -441,6 +458,31 @@ export const POOLS = Object.freeze({
       { t: "pencils up! we don't have pencils. spirits up!", face: '\\o/' },
       { t: "i believe in you an unhealthy amount.", face: '*_*' },
       { t: "class is in. i'll be your crowd. rah.", face: '^_^' }
+    ]
+  },
+
+  /* --- THE ROOM DIFF (barnum pair, 2026-09-07) --------------------------
+   * She keeps track of which door you went through last, so these two readings
+   * sit over the per-room pools at 20 - same odds, so the frequency of a
+   * classStart bark does not move, only who owns it. Two pools rather than one
+   * because the gates are exclusive by construction: a pool whose every line is
+   * gated can win the beat and then have nothing to say. */
+
+  /** B1 - the same room as last time. */
+  classStartSameRoom: {
+    on: 'classStart', when: ['sameGameAsLast'], odds: 0.25, ceremony: false, priority: 22,
+    noRepeat: false,   // single-line pool: no-repeat would mute it forever
+    lines: [
+      { t: "this room again. you have a favourite. it's fine. it's me.", face: '(¬‿¬)', chain: 'smug' }
+    ]
+  },
+
+  /** B2 - a different room than the last one. */
+  classStartNewRoom: {
+    on: 'classStart', when: ['newGameTonight'], odds: 0.25, ceremony: false, priority: 22,
+    maxPerSession: 1, noRepeat: false,
+    lines: [
+      { t: "different room tonight. you do that. i keep track. fondly.", face: '0_0', nod: true, double: true }
     ]
   },
 
@@ -604,7 +646,21 @@ export const POOLS = Object.freeze({
       { t: "i lost count on purpose. we start fresh.", face: ';_;', double: true },
       { t: "streaks are just numbers. i'm told. by me.", face: 'T_T' },
       { t: "one small hole in the calendar. i'll patch it.", face: ';_;' },
-      { t: "tomorrow counts double. a real rule i just made.", face: '0_0', nod: true }
+      { t: "tomorrow counts double. a real rule i just made.", face: '0_0', nod: true },
+      /* BARNUM: the bet is safe, and the cry chain is what makes it safe. */
+      { t: "you'll come back after this. i'd bet my screen on it.", face: ';_;', double: true, maxPerSession: 1 }
+    ]
+  },
+
+  /** A15b - THE BARNUM REPORT CARD. The first pool there has ever been on
+   *  `reportCard`, and a bark here REPLACES the stamp line for that sitting -
+   *  so the odds stay at the lock's 0.25 and the REPORT_LINES table stays the
+   *  ordinary road. */
+  reportBarnum: {
+    on: 'reportCard', odds: 0.25, ceremony: false, priority: 10,
+    lines: [
+      { t: "a middle day. you're harder on yourself than i am. stop it.", face: '^_^', nod: true, when: ['gradeIs:b'] },
+      { t: "you finished. not everyone does. i'd know. i'm the bell.", face: '^_^', double: true, maxPerSession: 1 }
     ]
   },
 
@@ -703,13 +759,27 @@ export const POOLS = Object.freeze({
     ]
   },
 
+  /** A22b - THE FIRST BLUR, which A22 above does not cover (it gates at two).
+   *  Priority 9 keeps it strictly under A22, so an escalating away count still
+   *  reads as escalation and this only ever owns the beat nobody else wants. */
+  tabAwayFirst: {
+    on: 'tabAway', when: ['awayCountAtLeast:1'], odds: 0.35, ceremony: false, priority: 9,
+    maxPerSession: 1, noRepeat: false,
+    lines: [
+      { t: "you'll be back. i don't even need to look. i'm looking.", face: '¬_¬', chain: 'sus', double: true }
+    ]
+  },
+
   /** A23 - focus or wake back. Wake chain first. */
   resume: {
     on: 'resume', odds: 0.3333, ceremony: false, priority: 10, chain: 'wake',
     lines: [
       { t: "you're back! i did nothing weird. don't check.", face: '0_0' },
       { t: "rebooting my smile. done. hi.", face: '^_^' },
-      { t: "wake me anytime. i wasn't sleeping. anyway.", face: '(⊙_⊙)', double: true }
+      { t: "wake me anytime. i wasn't sleeping. anyway.", face: '(⊙_⊙)', double: true },
+      /* BARNUM: a prophecy nobody heard, and a forecast she will not explain. */
+      { t: "told you. back. i didn't say it out loud. i thought it hard.", face: '(¬‿¬)' },
+      { t: "there you are. i had a feeling. i have those. about you.", face: '(◕‿◕)', double: true, maxPerSession: 1 }
     ]
   },
 
