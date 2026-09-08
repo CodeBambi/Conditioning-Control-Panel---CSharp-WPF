@@ -2,13 +2,21 @@
  * race/run.js - the run brain of Racing Thoughts. Implements CONTRACT.md
  * "race/run.js + raceBoot.js + race.html (PR 5, integration)".
  *
- *   createRace({ root, bridge, media, settings, seed }) -> { start(), setPaused(b), dispose() }
+ *   createRace({ root, bridge, media, settings, seed, onExit }) -> { start(), setPaused(b), dispose() }
  *
  * Composes renderer + spine + tunnel + fx + rooms + bubbles + kart + score + hud
  * + pickups + payloadFx + screen shake and runs the frame loop. `root` holds the
  * <canvas>, the `.race-hud` div, the `.sf-hud` layer payloadFx draws into and, when
  * the online feed is on, race/wallDom.js's `.rh-wall3d` layer over the canvas.
  * Nothing here subtracts: the run ends only from the Brake (Esc) or the host.
+ *
+ * THE END SCREEN'S `surface` GOES BACK TO THE MENU, it does not close the page.
+ * `onExit` is raceBoot's way home: the run stops the file, drops the world and
+ * the run state, re-arms the same chart at t = 0 and hands the frame back, and
+ * raceBoot puts the menu stage up. Only two things still post exit / exit-done:
+ * the host's exit-request and the menu's own `surface` verb. With no onExit (or
+ * one that answers false, which is what `?autostart=1` does: there is no menu)
+ * the End screen falls back to the old ending and closes the page.
  *
  * Host traffic owned here: sends heartbeat, run-started, sfx, fire-payload
  * (video only), run-ended, exit, exit-done, and with a track loaded track-play,
@@ -90,7 +98,7 @@ function flag(key) {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
 
-export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
+export function createRace({ root, bridge, media, settings = {}, seed = 1, onExit = null }) {
   const canvas = root.querySelector('canvas');
   const hudRoot = root.querySelector('.race-hud');
   const sfHud = root.querySelector('.sf-hud');
@@ -832,7 +840,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (payout && payout.finalXp != null) shown.title = (shown.title || 'the tea party') + ` · +${Math.round(payout.finalXp)} xp` + (payout.sparksEarned ? ` · ${payout.sparksEarned} sparks` : '');
     const pick = await hud.showEnd(shown, { beside: true });
     if (S.disposed) return;
-    if (pick === 'again') again(); else exit();
+    if (pick === 'again') again(); else leave();
   }
   /** Rebuild the world on a new seed (again, or the menu changing the seed rule). settings.seedLock pins again to one track.
    *  A world that was never built (the menu changing the rule before "race") stays unbuilt: prepare() / start() own that. */
@@ -849,6 +857,29 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
     hud.countdown().then(start);
+  }
+  /**
+   * `surface` on the End screen: the way back to the MENU. The world goes (the menu does not need
+   * it and `race` builds it again through prepare()), the run state resets, and the chart is re-armed
+   * at t = 0 so picking that same level again replays it from the top. raceBoot's onExit puts the
+   * menu stage and the menu theme back and answers true; false (no menu: `?autostart=1`) or no hook
+   * at all falls through to exit(), the old ending.
+   * The file is already stopped: endRun posted track-stop before the card came up and a second one
+   * would roll the cloud playlist a lap early (race/cloud.js onEnded).
+   */
+  function leave() {
+    if (!onExit) { exit(); return; }
+    try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
+    if (captions) captions.clear();
+    audio.duck(false, 'end');
+    setCameraOverride(null);
+    teardown();
+    resetRunState(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+    S.started = false; S.hostPaused = false;
+    if (TR.track) setTrack(TR.track.chart);
+    let took = false;
+    try { took = onExit() !== false; } catch (e) { if (bridge.log) bridge.log('to menu: ' + e); }
+    if (!took) exit();
   }
   function exit() {
     trackSend('track-stop');
