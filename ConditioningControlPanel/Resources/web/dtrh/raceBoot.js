@@ -22,7 +22,7 @@
  * from the End screen. `?autostart=1` has no menu to leave, so it plays none of
  * it. Reduced motion, as the MENU has it (motionOff()), is one flat fade.
  *
- * Host messages owned here: init, manifest, favorites, ping, exit-request,
+ * Host messages owned here: init, manifest, favorites, loom-list, ping, exit-request,
  * fullscreen, local-media, setting (run.js owns pause + payout-result). Sent
  * here: pong, boot-error, fullscreen-set, exit + exit-done on a host
  * exit-request or a menu surface. A `manifest` that lands AFTER boot is honoured
@@ -100,6 +100,8 @@ import { createHostMediaSource } from './hostMedia.js';
 // The feed's pictures start loading the moment a manifest carrying them lands, so a run built
 // later opens with pictures already on the wall. Imports nothing itself: this is the boot path.
 import { warmWallPosters } from './race/wallWarm.js';
+// THE LOOM: the player's own woven spirals, so a race pop can draw one of theirs.
+import { setLoomSpirals } from './engine/loomSpirals.js';
 
 const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250, PERF_LOG_MS = 2000;
 const params = new URLSearchParams(location.search);
@@ -211,6 +213,12 @@ bridge.on('setting', (m) => {
 bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
 bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
 bridge.on('exit-request', surface);
+// THE LOOM (crafting Part 2): the host's saved-spiral library, the same frame boot.js takes.
+// An entry carrying `params` is woven live by race/loomSpiralFx.js; one without is still its
+// gif. The host pushes this on `ready` and again after every save or delete, so a spiral woven
+// mid-session is on the road the next time one pops. Nothing here reaches into a run: the pool
+// lives in engine/loomSpirals.js and the picker reads it when it draws.
+bridge.on('loom-list', (m) => { try { setLoomSpirals((m && m.spirals) || []); } catch (e) { host.log('loom-list: ' + e); } });
 // ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
 bridge.on('track-chart', (m) => {
   if (!race || !m || !m.chart) return;
