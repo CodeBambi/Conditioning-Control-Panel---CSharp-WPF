@@ -23,7 +23,7 @@
 
 import { S } from '../engine/settings.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
-import { pickSpiralUrl } from '../engine/loomSpirals.js';
+import { pickSpiralUrl, pickSpiral } from '../engine/loomSpirals.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
@@ -49,8 +49,17 @@ const MAX_CASCADE = 14;
  * nothing, so DtRH's whisper blip is byte-for-byte the card it always was. A race pop
  * calls the override with the phrase already resolved and skips the blip entirely.
  * Anything else that wants its own look adds a seam of its own; never restyle .sf-pfx-sub.
+ *
+ * `spiralFx` is the SECOND seam, and the same shape (2026-09-09). Racing Thoughts is
+ * again the only caller (race/run.js -> race/loomSpiralFx.js): with it, a spiral is
+ * WOVEN LIVE off Loom params on a canvas inside the hold instead of being a stock gif
+ * background, per the owner's law that every game's spirals come out of the Loom. It
+ * needs `mount(el, wrap, {kind, durMs, onLost}) -> bool`, `drop(el)` and `cancel()`.
+ * With nothing passed the file draws the exact gif backgrounds it always has, so
+ * dtrh.html is untouched - and even with it, a `false` from mount() falls straight
+ * back onto the gif, so the screen can never go bare.
  */
-export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = null }) {
+export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = null, spiralFx = null }) {
   // Two layers: washes/bursts render BEHIND the bubble field (.cf-layer, z6) so
   // bubbles stay crisp and clickable on top of pink/spiral/glitch/braindrain;
   // the video card rides a FRONT layer above the bubbles (in front of the POV).
@@ -102,9 +111,35 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
    *  never by whether a picture moves - so this draws a few times and takes the first entry whose
    *  name or url says gif/webp, keeping whatever it drew last if none of them do. With nothing in
    *  the pool at all it takes a BUNDLED SPIRAL rather than one of the still FALLBACK_SPRITES:
-   *  those are all pngs, and a still png is exactly what this effect is not. */
+   *  those are all pngs, and a still png is exactly what this effect is not.
+   *
+   *  With a `spiralFx` seam that last fallback is a LIVE LOOM SPIRAL instead of a stock gif
+   *  (the owner's law), so this may hand back a params wrapper rather than a url - hence
+   *  `pickWash`, not `pickWashUrl`. The media pool still wins whenever it has a moving
+   *  picture: the wash is meant to be the player's own gif, and the Loom is its floor. */
   const MOVING_RE = /\.(gif|webp)(\?|#|$)/i;
-  async function pickWashUrl(tries = 4) {
+  /** The spiral source for a hold: a `{loom:true,...}` wrapper where the race can draw one,
+   *  and the same url every build has always drawn where it cannot. */
+  const spiralSource = () => (spiralFx && spiralFx.supported() ? pickSpiral() : pickSpiralUrl());
+  /** Paint `src` (a url, or a wrapper) onto a hold. Returns true if a live canvas took it. */
+  function paintSpiral(h, kind, src, durMs) {
+    if (src && typeof src === 'object' && src.loom && spiralFx) {
+      const took = spiralFx.mount(h.el, src, {
+        kind,
+        durMs,
+        // context lost MID-HOLD: the canvas is gone, so the gif takes the element at
+        // once and the screen never goes bare.
+        onLost: () => { if (!disposed && src.href) h.el.style.backgroundImage = `url('${src.href}')`; },
+      });
+      if (took) { h.el.style.backgroundImage = 'none'; return true; }
+    }
+    if (spiralFx) spiralFx.drop(h.el);      // a url is taking this element back
+    const url = src && typeof src === 'object' ? src.href : src;
+    // double quotes: a wash url is a media name, and a media name may carry an apostrophe
+    if (url) h.el.style.backgroundImage = `url("${url}")`;
+    return false;
+  }
+  async function pickWash(tries = 4) {
     let last = null;
     for (let i = 0; i < tries; i++) {
       try {
@@ -118,7 +153,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
         if (MOVING_RE.test(String(p.name || '')) || MOVING_RE.test(url)) return url;
       } catch (e) { break; }
     }
-    return last || pickSpiralUrl();
+    return last || spiralSource();
   }
 
   // ---- sustained overlays (spiral / pink / braindrain) -----------------------
@@ -143,11 +178,14 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
   }
 
   function showSpiral(strength, durMult) {
-    const h = holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    const durMs = scale(1500, 4500, strength) * durMult;
+    const h = holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), durMs);
     // Draw from the shared pool (bundled sp1..8 + the player's Loom spirals)
     // instead of the single hardcoded spiral.png in .sf-pfx-spiral - the CSS
     // still owns cover/blend/spin, we only swap the image so in-run spirals vary.
-    h.el.style.backgroundImage = `url('${pickSpiralUrl()}')`;
+    // With a `spiralFx` seam the pick may be a LIVE weave instead of a picture,
+    // and then a canvas takes the element and the CSS spin stands down.
+    paintSpiral(h, 'spiral', spiralSource(), durMs);
   }
   function showPink(strength, durMult) {
     const h = holdOn('pink', 'sf-pfx-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
@@ -222,17 +260,20 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
   /**
    * THE GIF TAKES THE SCREEN. The same wash `showBraindrain` puts under the glitch, off the leash:
    * NO backdrop blur, NO dark luminosity blend and NO 0.62 ceiling, so the picture is the thing on
-   * the glass rather than a bruise behind one. `pickWashUrl` prefers a moving entry (see above) and
-   * styles.css feathers the edges so the road underneath stays drivable at 0.8.
+   * the glass rather than a bruise behind one. `pickWash` prefers a moving entry (see above) and
+   * styles.css feathers the edges so the road underneath stays drivable at 0.8. With an empty
+   * media pool its floor is a LIVE LOOM SPIRAL where the caller can draw one, and a bundled gif
+   * where it cannot - either way the wash is never a still png.
    *
    * Racing Thoughts is the only caller today (bubbleKinds.js `gifwash`, THE MIX slot 'wash'); the
    * tube deals no bubble that fires it, so nothing dtrh.html draws changes.
    */
   async function showGifWash(strength, durMult) {
-    const h = holdOn('gifwash', 'sf-pfx-gifwash', scaleD(0.55, 0.80, strength), scale(1500, 3000, strength) * durMult);
+    const durMs = scale(1500, 3000, strength) * durMult;
+    const h = holdOn('gifwash', 'sf-pfx-gifwash', scaleD(0.55, 0.80, strength), durMs);
     h.el.classList.add('is-washing');   // the light shudder; race.css drops it under reduced motion
-    const url = await pickWashUrl();
-    if (!disposed && url) h.el.style.backgroundImage = `url("${url}")`;
+    const src = await pickWash();
+    if (!disposed && src) paintSpiral(h, 'gifwash', src, durMs);
   }
 
   /**
@@ -556,6 +597,8 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
     cascades.clear();
     videoCardEl = null;
     videoCardCancel = null;
+    // give every live Loom canvas its GL context back before the holds go with root
+    if (spiralFx) { try { spiralFx.cancel(); } catch (e) { /* best effort */ } }
     root.remove();
     front.remove();
   }

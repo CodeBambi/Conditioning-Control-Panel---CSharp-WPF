@@ -277,17 +277,28 @@ chapel high-glow log and golden, greyward dim arch, coronation golden and petal.
 `hueCycles: 0` (a race spiral does not rainbow), and, when the road phrase is still echoing, puts
 that word in the centrepiece as a `mantra` - the spiral says what the voice said.
 
+`race/loomSpiralFx.js` mounts it. payloadFx takes an optional `spiralFx` seam (defaults null, the
+same shape as `subliminalFx`); when a weave is picked it mounts a canvas inside the `sf-pfx-spiral`
+hold rather than setting a background-image, inheriting the hold's opacity fade so intensity stays
+one channel, and neutralises only the css the canvas replaces (the 14 s spin, the 1.6 overscan). The
+canvas backing store is capped at 512 px on the long side, 320 px on the touch tier, where it also
+drops layer 2 and the wobble and paces frames at 33 ms. Reduced motion paints one still frame.
+`webglcontextlost`, or no WebGL at all, drops the canvas and paints `href` - the old gif path is the
+floor, not a dead branch. Each mount self-unmounts at `durMs + 700`, so nothing spins behind an
+invisible layer. `gifwash`'s own fallback goes through the same seam, so it gets a weave too.
+
 The bundled gifs still ship as that floor. On the mobile tier `Q.leanSpirals` has run.js narrow the
 module's bundled pool to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the other five are
 2.2-5.3 MB) with `setBundledSpiralPool` and prefetch both in `prepare()` (while the intro plays;
 `start()` covers `?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full
 pool and the Descent never calls the setter.
 
-A weave is only params until something draws it; `race/loomSpiralFx.js` and the payloadFx seam
-that mounts it land in the next PR, so until then a picked weave falls to its `href` gif. On the web
-there is no account library (the site Loom is anonymous), so the web gets the race book only. Checks:
-`race/smoke/loom-book-check.mjs` (the book per room, the seed replay, the mantra) and
-`race/smoke/spiral-pool-check.mjs` (the picker mix and the floor under it).
+On the web there is no account library (the site Loom is anonymous), so the web gets the race book
+only; the desktop hand-off that puts the player's own weaves on the road lands in the next PR.
+Checks: `race/smoke/loom-book-check.mjs` (the book per room, the seed replay, the mantra),
+`race/smoke/spiral-pool-check.mjs` (the picker mix and the floor under it) and
+`race/smoke/loom-spiral-check.mjs` (the live canvas in the hold, the backing sizes, the
+lost-context floor, reduced motion, and that a Descent pop is still a url).
 A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
 of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
 one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its
