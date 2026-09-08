@@ -12,6 +12,7 @@ import { createPieces } from './board/pieces.js';
 import { createAnim } from './board/anim.js';
 import { createJiggle } from './board/jiggle.js';
 import { createDrag } from './board/drag.js';
+import { createGlyphs } from './board/glyphs.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { DEFAULT_MS } from './game/clock.js';
@@ -85,6 +86,9 @@ function main() {
   window.PBP.camera = view.cameraRig;
   view.cameraRig.setDragGuard(() => drag.isDragging());
   view.cameraRig.attachUi();
+  // From overhead the toys are unreadable, so the classic glyphs fade in over
+  // them. It ticks itself off the renderer, so the frame loop stays as it was.
+  window.PBP.glyphs = createGlyphs({ view, pieces });
   // --- end camera ---
 
   let last = performance.now();
