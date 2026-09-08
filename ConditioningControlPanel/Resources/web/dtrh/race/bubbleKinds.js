@@ -65,6 +65,19 @@ export const BUBBLE_KINDS = [
   { id: 'video',      label: '▶', kind: 'effect', payload: 'video',      overlayKind: null,  category: 'video',
     spawn: false,   // dark since 2026-09-06, see the header; the row stays for a later use
     strength: 0.7,  points: 40, weight: 0.35, minIntensity: 0.45, tint: 'rgb(224,64,77)',  sprite: SPRITE_BASE + 'video.png' },
+  // A GIF TAKES THE SCREEN (2026-09-08, owner's ask: "we should also use often the fullscreen gif
+  // overlay - the one we use for the glitch bubble in the dtrh"). The glitch bubble's wash, but off
+  // the leash: STRONG (0.55-0.8, no dark luminosity blend, no blur) and gif-first, so it reads as a
+  // picture that took the road rather than the drain's faint bruise. It gets its own THE MIX slot
+  // ('wash') because it is not the spiral's overlay and not the pink's tint, and the weight the
+  // owner asked for only reads as "often" if a spiral pop cannot evict it.
+  { id: 'gifwash',    label: '▩', kind: 'effect', payload: 'gifWash',    overlayKind: null,  category: 'wash',
+    strength: 0.55, points: 20, weight: 7,   minIntensity: 0.1,  tint: 'rgb(255,168,96)',  sprite: SPRITE_BASE + 'gifwash.png' },
+  // SLEEP NOW (2026-09-08). The heaviest thing on the road: the screen CUTS to black, holds, and
+  // hands back to the braindrain blur. Gated to the deep half of a run (minIntensity 0.5) and rare
+  // with it, because a blackout is only a moment while it is still a surprise.
+  { id: 'blackout',   label: '■', kind: 'effect', payload: 'blackout',   overlayKind: 'braindrain', category: 'overlay',
+    strength: 0.6,  points: 30, weight: 1.8, minIntensity: 0.5,  tint: 'rgb(122,126,170)', sprite: SPRITE_BASE + 'blackout.png' },
 ];
 
 export const KIND_BY_ID = Object.fromEntries(BUBBLE_KINDS.map((k) => [k.id, k]));

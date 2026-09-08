@@ -40,6 +40,13 @@ export const CATEGORIES = {
   strobe:     { label: 'strobe', glyph: '✦', mode: 'stack',   max: 5, sec: 2.6, scaled: true },
   tint:       { label: 'tint',   glyph: '◑', mode: 'extend',  max: 2, sec: 4.5, scaled: true },
   overlay:    { label: 'spin',   glyph: '◎', mode: 'replace', max: 1, sec: 4.5, scaled: true },
+  // WASH (2026-09-08): the full-screen gif. Its own slot rather than a second tenant of
+  // `overlay`, for two reasons. It is not a spin - the spiral and the drain are things the
+  // road turns INSIDE, and this is a picture laid over the lot. And the owner asked for it
+  // OFTEN (weight 7, level with the subliminal), which only reads as often if a
+  // spiral pop cannot evict it on the very next bubble. No recipe names it, so every RECIPES
+  // row still resolves off exactly the ingredients it always did.
+  wash:       { label: 'wash',   glyph: '▩', mode: 'replace', max: 1, sec: 3,   scaled: true },
   corruption: { label: 'glitch', glyph: '▚', mode: 'refresh', max: 1, sec: 4.5, scaled: true },
   cards:      { label: 'cards',  glyph: '♥', mode: 'add',     max: 4, sec: 6,   scaled: true },
   freeze:     { label: 'freeze', glyph: '❄', mode: 'solo',    max: 1, sec: 1.7, scaled: false },
@@ -261,6 +268,11 @@ if (typeof process !== 'undefined' && process.env && process.env.RACE_SELFCHECK)
   ok(m.add('spiral').action === 'fire', 'spiral fires');
   ok(m.add('spiral').action === 'refresh', 'second spiral refreshes');
   r = m.add('braindrain'); ok(r.action === 'replace' && r.prevKindId === 'spiral' && m.live('overlay').kindId === 'braindrain', 'braindrain replaces spiral');
+  r = m.add('blackout'); ok(r.action === 'replace' && m.live('overlay').kindId === 'blackout', 'a blackout takes the overlay slot: it hands back to the drain itself');
+  // WASH: its own slot, so the gif and the spin hold together and neither evicts the other
+  ok(m.add('gifwash').action === 'fire' && m.live('overlay').kindId === 'blackout', 'the wash opens its own slot and leaves the overlay alone');
+  ok(m.add('gifwash').action === 'refresh' && m.live('wash').kindId === 'gifwash', 'a second wash refreshes its own slot');
+  ok(!RECIPES.some((rc) => rc.needs.includes('wash')), 'no recipe needs the wash, so every recipe resolves off what it always did');
   // CORRUPTION refreshes
   ok(m.add('glitch').action === 'fire' && m.add('glitch').action === 'refresh', 'glitch fires then refreshes');
   // CARDS add to 4 then hold

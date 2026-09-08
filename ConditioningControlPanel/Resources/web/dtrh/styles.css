@@ -2998,6 +2998,35 @@ img.rh-fx-spiralspin {
 }
 .sf-pfx-drain.sf-pfx-glitching { animation: sf-pfx-glitch 0.16s steps(2) infinite; }
 
+/* THE GIF TAKES THE SCREEN (payloadFx showGifWash; Racing Thoughts' `gifwash` bubble).
+   The drain's wash without the three things that keep the drain subtle: no backdrop blur,
+   no luminosity blend, no near-black fill - the picture itself is what is on the glass, at
+   the 0.55-0.8 payloadFx sets inline. The mask is the only thing holding it back, and it
+   does two jobs at once: it feathers all four edges so the wash never reads as a hard
+   rectangle, and it sits HIGH (42% down) so the falloff lands over the lower centre, which
+   on the race page is the road. Nothing here fixes a colour, so a gif keeps its own. */
+.sf-pfx-gifwash {
+  background-color: #120610; background-position: center; background-size: cover;
+  background-repeat: no-repeat;
+  -webkit-mask-image: radial-gradient(ellipse 88% 84% at 50% 42%, #000 0%, #000 44%, rgba(0, 0, 0, 0.66) 74%, rgba(0, 0, 0, 0.16) 95%, transparent 100%);
+  mask-image: radial-gradient(ellipse 88% 84% at 50% 42%, #000 0%, #000 44%, rgba(0, 0, 0, 0.66) 74%, rgba(0, 0, 0, 0.16) 95%, transparent 100%);
+  transform-origin: 50% 50%;
+}
+/* the shudder: a breath of scale and drift, transform only, nothing that costs a repaint */
+.sf-pfx-gifwash.is-washing { animation: sf-pfx-wash 2.4s ease-in-out infinite alternate; }
+@keyframes sf-pfx-wash {
+  0%   { transform: scale(1.015) translate(-0.35%, 0.2%); }
+  50%  { transform: scale(1.045) translate(0.3%, -0.35%); }
+  100% { transform: scale(1.02) translate(0.15%, 0.3%); }
+}
+
+/* SLEEP NOW (payloadFx blackout; Racing Thoughts' `blackout` bubble). A flat black card that
+   CUTS in over 120 ms and lets go over a full second, so the drain underneath is what the
+   player comes back up through. `is-cut` is the hard half; it replaces the layer's own 0.45 s
+   ease so the cut is a cut, and dropping it again gives the release its full second. */
+.sf-pfx-black { background: #000; transition: opacity 1s ease; }
+.sf-pfx-black.is-cut { transition: opacity 0.12s linear; }
+
 /* transient bursts */
 .sf-pfx-flash {
   position: fixed; left: 50%; top: 50%; max-width: 38vmin; max-height: 38vmin;

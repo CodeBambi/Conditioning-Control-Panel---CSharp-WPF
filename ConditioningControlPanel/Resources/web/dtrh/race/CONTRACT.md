@@ -204,6 +204,33 @@ one bubble in twelve, so only the longest chant carries one at all:
 | freeze | effect | bambiFreeze | 25 | minIntensity 0.15 |
 | gifrain | effect | gifCascade | 25 | minIntensity 0.45 |
 | video | effect | video | 40 | DARK since 2026-09-06, never spawns (see below) |
+| gifwash | effect | gifWash | 20 | weight 7, minIntensity 0.1, THE MIX slot `wash` (see below) |
+| blackout | effect | blackout | 30 | weight 1.8, minIntensity 0.5, THE MIX slot `overlay` (see below) |
+
+THE GIF TAKES THE SCREEN (`gifwash`, 2026-09-08, the owner's ask: "we should also use often the
+fullscreen gif overlay, the one we use for the glitch bubble in the dtrh"). `payloadFx.showGifWash`
+is the glitch bubble's wash off the leash: no backdrop blur, no dark luminosity blend and no 0.62
+ceiling, so the picture is the thing on the glass. Opacity `0.55-0.8` by strength, hold `1.5-3 s`
+stretched by strength and `durationMult`, a light `is-washing` scale shudder, and a soft mask
+(`styles.css .sf-pfx-gifwash`) that both feathers the edges and lands its falloff over the lower
+centre so the road stays drivable - the race's `filter: opacity()` overlay cap is deliberately NOT
+extended to it. The url comes from `pickWashUrl()`, which draws up to four times from the DOM-safe
+pool and takes the first entry whose name or url says `.gif`/`.webp`, keeping the last draw if none
+do; with an empty pool it takes a BUNDLED SPIRAL (`pickSpiralUrl()`, all animated) rather than one
+of the still png `FALLBACK_SPRITES`. It has its OWN MIX slot, `wash` (`cocktail.js CATEGORIES`,
+mode `replace`, 3 s): a picture over the lot is not the spiral's spin, and the weight the owner
+asked for (7, level with the subliminal) only reads as often if a spiral pop cannot evict it. No recipe names
+`wash`, so every `RECIPES` row still resolves off the ingredients it always did.
+
+SLEEP NOW (`blackout`, 2026-09-08). The screen cuts to black over 120 ms (`.sf-pfx-black.is-cut`),
+holds `600-900 ms` by strength and `durationMult`, then lets go over a full second while
+`showBraindrain` fades the blur back in underneath, so the player comes back up through the drain
+rather than straight onto the road. One reused hold, so overlapping pops refresh a deadline instead
+of stacking; `cancelHeavy()` takes the glass back at once, so a run can never end with the screen
+dark. It rides the `overlay` slot (its `overlayKind` is `braindrain`, which is what it hands back
+to) and `fire()` in run.js refuses it unless `S.running && !S.ended`, so it never lands on the
+countdown or once the End card is owed - the pop still scores, only the picture is withheld.
+Both layers live inside `.sf-pfx` (z4), under the countdown (z21) and the End card (z25).
 
 Spiral pops (`payloadFx.showSpiral`, untouched) take their url from `engine/loomSpirals.js`
 `pickSpiralUrl()`. On the mobile tier `Q.leanSpirals` has run.js narrow that module's bundled pool
