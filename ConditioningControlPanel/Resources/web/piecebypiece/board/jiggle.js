@@ -8,6 +8,12 @@
  * deformation happens in the vertex shader, normals included, so the lighting
  * follows the bend instead of sitting painted on a rigid shape.
  *
+ * The flex goes on twice: once on the materials you can see, and once on a
+ * MeshDepthMaterial hung on every mesh as its customDepthMaterial, because the
+ * shadow map is drawn through that and not through the surface shader. Both
+ * copies share the same uniform objects, so the man and his shadow bend off
+ * one spring in the same frame.
+ *
  * The spring lives in the piece's LOCAL space. World-space impulses (a slide
  * direction, a drag delta) are rotated into it first, so a black man, who is
  * turned to face down the board, leans the same way a white one does.
@@ -59,6 +65,7 @@ export const TUNING = Object.freeze({
 });
 
 const CACHE_KEY = 'pbp-jiggle-1';
+const DEPTH_KEY = 'pbp-jiggle-depth-1';
 const T = TUNING;
 const f = (n) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 
@@ -114,22 +121,52 @@ export function createJiggle() {
 
   const gain = () => (prefersReducedMotion() ? T.reducedScale : 1);
 
-  function install(material, u) {
+  /**
+   * Put the flex on one material.
+   *   normals  off for the depth material: its vertex shader only reaches for
+   *            a normal behind #ifdef USE_DISPLACEMENTMAP, so there is nothing
+   *            there to rotate, and injecting into that branch would only
+   *            write dead code into a shader that never asks for it.
+   *   key      the program cache key. Depth and surface are different shaders,
+   *            so they get different keys.
+   * A hook the material already carried (the silicone's own patch) is kept and
+   * runs first; a hook this system installed earlier is dropped instead, so a
+   * cloned material cannot end up with the prelude declared twice.
+   */
+  function install(material, u, { normals = true, key = CACHE_KEY } = {}) {
     material.userData.pbpJiggle = u;
-    material.onBeforeCompile = (shader) => {
+    const prior = material.onBeforeCompile && !material.onBeforeCompile.pbpJiggle
+      ? material.onBeforeCompile : null;
+    const hook = (shader, renderer) => {
+      if (prior) prior(shader, renderer);
       shader.uniforms.uBend = u.uBend;
       shader.uniforms.uSquash = u.uSquash;
       shader.uniforms.uHeight = u.uHeight;
       shader.uniforms.uPhase = u.uPhase;
       shader.uniforms.uTime = u.uTime;
-      shader.vertexShader = PRELUDE + shader.vertexShader
-        .replace('#include <beginnormal_vertex>', BEND_NORMAL)
-        .replace('#include <begin_vertex>', BEND_VERTEX);
+      let vs = PRELUDE + shader.vertexShader;
+      if (normals) vs = vs.replace('#include <beginnormal_vertex>', BEND_NORMAL);
+      shader.vertexShader = vs.replace('#include <begin_vertex>', BEND_VERTEX);
     };
+    hook.pbpJiggle = true;
+    material.onBeforeCompile = hook;
     // Every jiggling material compiles the same program, so they share one
     // cache entry; without a key of our own three would key them apart.
-    material.customProgramCacheKey = () => CACHE_KEY;
+    material.customProgramCacheKey = () => key;
     material.needsUpdate = true;
+  }
+
+  /**
+   * The shadow map is not drawn with the material you can see: three renders it
+   * through a MeshDepthMaterial of its own, which knows nothing about the flex,
+   * so a bending man used to cast a standing shadow. This is that depth pass
+   * given the same prelude and the SAME uniform objects, so one spring drives
+   * the man and his shadow off the same numbers, in the same frame.
+   */
+  function depthMaterialFor(u) {
+    const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    install(depth, u, { normals: false, key: DEPTH_KEY });
+    return depth;
   }
 
   /** Give a freshly built piece its spring and hook up every mesh it owns. */
@@ -142,9 +179,13 @@ export function createJiggle() {
       uPhase: { value: Math.random() * Math.PI * 2 },
       uTime: { value: 0 },
     };
+    // One depth material for the whole man: every mesh he owns bends off the
+    // same spring, so they can all cast through the same shader.
+    const depth = depthMaterialFor(u);
     let height = 0;
     piece.traverse((o) => {
       if (!o.isMesh || !o.material) return;
+      o.customDepthMaterial = depth;
       if (o.geometry) {
         if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
         const bb = o.geometry.boundingBox;
@@ -162,6 +203,10 @@ export function createJiggle() {
       o.material = Array.isArray(o.material) ? next : next[0];
     });
     u.uHeight.value = height > 0.01 ? height : 1;
+    // The live spring, readable by anyone who owns the piece: pieces.js reads
+    // uBend and uSquash off it to keep the contact patch under a leaning man.
+    piece.userData.jiggleUniforms = u;
+    piece.userData.depthMaterial = depth;
     const world = (piece.scale.y || 1) * u.uHeight.value;
     const state = {
       piece, u,
