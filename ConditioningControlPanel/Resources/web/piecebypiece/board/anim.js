@@ -8,6 +8,16 @@
  *
  * The landing squash is not a scale any more: it is handed to jiggle.js, which
  * bends and squashes the mesh itself so the man lands like silicone.
+ *
+ * Bus events this file emits, once bindBus(bus, project) has been called (the
+ * board is silent without it; the dust and the sound listen):
+ *   land    {square, piece, side, capture, height, world:{x,y,z}, screen:{x,y}}
+ *           the frame a flight ends and the man touches his square; `capture`
+ *           is true when he took the man who stood there. A refused drop's
+ *           spring-back lands too, with `refused: true`.
+ *   sunk    {piece, side}  a captured man has finished sinking and is gone.
+ * A Blender capture animation later only has to emit `land` at the frame of
+ * contact for the dust and the thud to keep working.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -31,6 +41,25 @@ export function createAnim({ group, jiggle = null }) {
   const tumbles = [];
   const buzzes = [];
 
+  // --- J: bus hooks ---
+  let emit = () => {};
+  let project = () => null;
+  function bindBus(bus, projectFn = null) {
+    emit = bus && typeof bus.emit === 'function' ? (t, p) => bus.emit(t, p) : () => {};
+    if (typeof projectFn === 'function') project = projectFn;
+  }
+  function landed(piece, at, refused) {
+    const d = piece.userData;
+    emit('land', {
+      square: d.square || null, piece: d.type, side: d.side,
+      capture: !!d.tookOne && !refused, refused: !!refused,
+      height: d.scaleBase || 1,
+      world: { x: at.x, y: at.y, z: at.z },
+      screen: project(at),
+    });
+  }
+  // --- end J ---
+
   /** Landing flex. `travel` is the world x/z the man just crossed, or null. */
   function squash(piece, travel = null) {
     if (jiggle) jiggle.land(piece, travel);
@@ -44,7 +73,8 @@ export function createAnim({ group, jiggle = null }) {
     const dest = to || piece.position.clone();
     if (from.distanceToSquared(dest) < 1e-6) return;
     piece.userData.busy = true;   // hands the piece to us; idle wobble stands off
-    slides.push({ piece, from: from.clone(), to: dest, t: 0, hop: hop ?? Math.min(0.42, 0.12 + from.distanceTo(dest) * 0.05) });
+    slides.push({ piece, from: from.clone(), to: dest, t: 0, hop: hop ?? Math.min(0.42, 0.12 + from.distanceTo(dest) * 0.05), refused: !!piece.userData.refusedDrop });
+    piece.userData.refusedDrop = false;
     piece.position.copy(from);
   }
 
@@ -71,6 +101,7 @@ export function createAnim({ group, jiggle = null }) {
         s.piece.position.copy(s.to);
         slides.splice(i, 1);
         if (!sliding(s.piece)) s.piece.userData.busy = false;
+        landed(s.piece, s.to, s.refused);   // J: before squash, which spends tookOne
         squash(s.piece, [s.to.x - s.from.x, s.to.z - s.from.z]);
       }
     }
@@ -84,7 +115,10 @@ export function createAnim({ group, jiggle = null }) {
         const sink = Math.min(1, (t.t - FALL) / SINK);
         t.piece.position.y = t.start - sink * 1.1;
         for (const mat of skins(t.piece)) { mat.transparent = true; mat.opacity = 1 - sink; }
-        if (sink >= 1) { group.remove(t.piece); tumbles.splice(i, 1); }
+        if (sink >= 1) {
+          group.remove(t.piece); tumbles.splice(i, 1);
+          emit('sunk', { piece: t.piece.userData.type, side: t.piece.userData.side });   // J
+        }
       }
     }
 
@@ -115,12 +149,13 @@ export function createAnim({ group, jiggle = null }) {
   function springBack(piece) {
     const home = piece.userData.home;
     if (!home) return;
+    piece.userData.refusedDrop = true;   // J: the landing says so on the bus
     slide(piece, piece.position.clone(), new THREE.Vector3(home.x, 0, home.z), 0.1);
     buzz(piece);
   }
 
   return {
-    update, squash, slide, tumble, buzz, springBack,
+    update, squash, slide, tumble, buzz, springBack, bindBus,
     hooks: {
       onMoved: (piece, from) => slide(piece, from),
       onCaptured: (piece) => tumble(piece),
