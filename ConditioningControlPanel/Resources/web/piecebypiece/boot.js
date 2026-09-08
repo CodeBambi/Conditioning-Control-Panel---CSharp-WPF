@@ -10,6 +10,7 @@
 import { createScene } from './board/scene.js';
 import { createPieces } from './board/pieces.js';
 import { createAnim } from './board/anim.js';
+import { createJiggle } from './board/jiggle.js';
 import { createDrag } from './board/drag.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
@@ -42,13 +43,17 @@ function main() {
     return;
   }
 
-  const anim = createAnim({ group: view.pieceGroup });
-  const pieces = createPieces({ group: view.pieceGroup, hooks: anim.hooks });
+  // Soft-body flex. One system for the whole board; every piece gets its own
+  // spring out of it when pieces.js builds it.
+  const jiggle = createJiggle();
+  const anim = createAnim({ group: view.pieceGroup, jiggle });
+  const pieces = createPieces({ group: view.pieceGroup, hooks: anim.hooks, jiggle });
   // The board API the effects layer drives. Keep this surface stable.
   const board = {
     view,
     pieces,
     anim,
+    jiggle: pieces.jiggle,
     buzzCheck(square) { anim.buzz(pieces.pieceAt(square)); },
     setWobble(v) { pieces.setWobble(v); },
     setCameraSway(v) { view.setCameraSway(v); },
@@ -67,7 +72,7 @@ function main() {
     auto: Number(params.get('auto')) || 0,
   });
 
-  const drag = createDrag({ view, pieces, anim, bus, game });
+  const drag = createDrag({ view, pieces, anim, bus, game, jiggle });
   board.drag = drag;
 
   // `ramp` is filled in once the effects layer has attached. It is on the
@@ -83,6 +88,7 @@ function main() {
     pieces.update(dt);
     anim.update(dt);
     drag.update(dt);
+    jiggle.update(dt);   // last: it reads what everything else just decided
     if (window.PBP.game && window.PBP.game.update) window.PBP.game.update(dt);
     view.render();
     requestAnimationFrame(frame);
