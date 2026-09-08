@@ -493,7 +493,16 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const semis = pitchSemis(combo()), pan = panOf(p.x);
     const asEffect = p.kind === 'effect' && (!scored || scored.kindId !== 'treat');
     if (asEffect) { play('pop', { level: LEVELS.effect, semis: semis - 5, pan, lowpass: 1100 }); synth({ kind: 'sine', f0: 140, f1: 50, sec: 0.16, level: 0.28 }); return; }
-    if (p.id === 'golden') { play('pop3', { level: LEVELS.pop, semis: semis + 2, pan }); play('chime3', { level: LEVELS.chime * 0.8, semis: 7, pan, at: 0.05 }); play('chime3', { level: LEVELS.chime * 0.6, semis: 12, pan, at: 0.14 }); return; }
+    // the jackpot: the gold bubble is rare now, so its take is the biggest sound on the road - the
+    // pop, a chime stack that keeps climbing, and a low knock under it.
+    if (p.id === 'golden') {
+      play('pop3', { level: LEVELS.pop, semis: semis + 2, pan });
+      play('chime3', { level: LEVELS.chime * 0.8, semis: 7, pan, at: 0.05 });
+      play('chime3', { level: LEVELS.chime * 0.7, semis: 12, pan, at: 0.14 });
+      play('chime3', { level: LEVELS.chime * 0.5, semis: 19, pan, at: 0.24 });
+      synth({ kind: 'sine', f0: 96, f1: 42, sec: 0.28, level: 0.26 });
+      return;
+    }
     if (p.id === 'prism') { play('pop2', { level: LEVELS.pop, semis: 3 + semis, pan }); play('chime1', { level: LEVELS.chime * 0.45, semis: 5 + semis, pan, at: 0.04 }); return; }
     if (p.id === 'lucky') { play('pop2', { level: LEVELS.pop, semis, pan }); play('chime1', { level: LEVELS.chime * 0.5, semis: 5, pan, at: 0.05 }); return; }
     play(POPS[popRR++ % POPS.length], { level: LEVELS.pop, semis, pan });

@@ -66,10 +66,14 @@ const FALLBACK_TRIGGER = 'pink';
  *  of "nothing here fights you" anyway and keeps the room off the pink the Toybox already wears. */
 const ROOM_TRIGGER = {
   teagarden: 'subliminal', undertow: 'spiral', toybox: 'pink', chapel: 'spiral',
-  mirrors: 'glitch', greyward: 'freeze', coronation: 'prism', casino: 'lucky',
+  mirrors: 'glitch', greyward: 'freeze', coronation: 'braindrain', casino: 'pink',
 };
-/** What a peak rains per room; anywhere else it is plain treats. */
-const ROOM_RAIN = { casino: 'lucky', coronation: 'golden', chapel: 'prism', mirrors: 'prism' };
+/** What a peak rains per room; anywhere else it is plain treats. Effect kinds, all of them: the
+ *  peak is the loudest second in the file and every colour on it should mean something. */
+const ROOM_RAIN = { casino: 'pink', coronation: 'subliminal', chapel: 'spiral', mirrors: 'glitch' };
+/** ONE gold in a peak, at most, and only in the two rooms that are about it: it falls last, so
+ *  the room pours its colour and the jackpot lands on the end of it. */
+const PEAK_GOLD = { casino: 'lucky', coronation: 'golden' };
 /** Below this the spotter was guessing: the trigger is a treat, not its effect, and no word on the chrome. */
 const TRIGGER_SURE = 0.55;
 /** Below this a structure word is nothing; a guess must never cost the player a miss. */
@@ -109,8 +113,9 @@ const PEAK_MIN = 4, PEAK_MAX = 8, PEAK_GAP = 0.25;
 const PEAK_LYRIC_MULT = 0.5;
 /** The chant's two lanes, and the fallback beat when the analyzer sent no period. */
 const CHANT_X = 1.2, CHANT_PERIOD = 1.2, CHANT_MAX = 16;
-/** Every this-many chant treats, one is gold. */
-const CHANT_GOLD_EVERY = 4;
+/** Every this-many chant treats, one is gold. At CHANT_MAX (16) that is one gold in the longest
+ *  chant the road will lay and none at all in a short one, which is what a jackpot should be. */
+const CHANT_GOLD_EVERY = 12;
 /** A build hands over at most this many seconds of boost. */
 const BOOST_CAP = 4;
 /** THE WORD FLASH (2026-09-08). The flash bubble is dark: the flash is a beat on a WORD now.
@@ -262,21 +267,23 @@ export function cueFor(event, ctx = {}) {
       break;
     }
 
-    // a number inside a countdown: a golden ring in the air that sinks toward the road as the count
-    // runs down (n is the spoken number, of the run length: ten hangs high, one skims the road; a
-    // count going up climbs instead), the number on the chrome, and the last one braces her and
-    // throws the kart at it
+    // a number inside a countdown: a ring in the air that sinks toward the road as the count runs
+    // down (n is the spoken number, of the run length: ten hangs high, one skims the road; a count
+    // going up climbs instead), the number on the chrome, and the last one braces her and throws
+    // the kart at it. Only THAT last ring is gold: a count of ten used to hand out ten jackpots.
     case 'count': {
       const of = Math.max(1, Number(event.of) || 1), n = clamp(Number(event.n) || 1, 1, of);
       const sink = of > 1 ? 1 - (n - 1) / (of - 1) : 1;
-      cue.spawn.push({ kindId: 'golden', placement: 'air', x: laneX(rng) * 0.5, h: AIR_H - (AIR_H - LANE_H - 0.6) * sink, at: 0 });
+      cue.spawn.push({ kindId: event.last ? 'golden' : 'treat', placement: 'air', x: laneX(rng) * 0.5, h: AIR_H - (AIR_H - LANE_H - 0.6) * sink, at: 0 });
       if (label) cue.toast = { text: label, kind: event.last ? 'item' : 'pop' };
       if (event.last) { cue.jump = 6; cue.pose = 'clamp'; }
       break;
     }
 
-    // the drop: a jump, a spiral over the world, and golden rings climbing away from the word. A
-    // soft drop (a dip in the voice, not the fall) is a lower jump, two rings and no spiral.
+    // the drop: a jump, a spiral over the world, and rings climbing away from the word - the room's
+    // own effect, with ONE gold at the top of the climb on a hard drop, because a fall is where a
+    // jackpot belongs and three of them in a row is just wallpaper. A soft drop (a dip in the
+    // voice, not the fall) is a lower jump, two rings, no spiral and no gold.
     case 'drop': {
       const strength = Number.isFinite(Number(event.strength)) ? clamp(Number(event.strength), 0, 1) : 1;
       const hard = strength >= DROP_SOFT;
@@ -285,14 +292,17 @@ export function cueFor(event, ctx = {}) {
       cue.mood = 'streamed';
       cue.toast = { text: label || 'drop', kind: hard ? 'jackpot' : 'effect' };
       const rings = hard ? DROP_AT.length : 2;
+      const ringKind = ROOM_TRIGGER[roomId(ctx)] || FALLBACK_TRIGGER;
       for (let i = 0; i < rings; i++) {
-        cue.spawn.push({ kindId: 'golden', placement: 'air', x: DROP_X[i], h: AIR_H + i * AIR_RISE, at: DROP_AT[i] });
+        const apex = hard && i === rings - 1;
+        cue.spawn.push({ kindId: apex ? 'golden' : ringKind, placement: 'air', x: DROP_X[i], h: AIR_H + i * AIR_RISE, at: DROP_AT[i] });
       }
       break;
     }
 
-    // the same phrase over and over: a lane of treats in the chant's own rhythm, side to side, every
-    // fourth one gold, the phrase on the chrome and a cheer. A light chant is a shorter lane.
+    // the same phrase over and over: a lane of treats in the chant's own rhythm, side to side, the
+    // phrase on the chrome and a cheer. A long chant carries ONE gold; a light one is a shorter
+    // lane and carries none.
     case 'chant': {
       const reps = clamp(Math.round((Number(event.reps) || 3) * Math.max(0.5, weight01(event))), 1, CHANT_MAX);
       const period = Number(event.period) > 0 ? Number(event.period) : CHANT_PERIOD;
@@ -318,8 +328,10 @@ export function cueFor(event, ctx = {}) {
       const lyric = ctx.lyrics ? PEAK_LYRIC_MULT : 1;
       const n = Math.max(1, Math.round((PEAK_MIN + (PEAK_MAX - PEAK_MIN) * intensity) * lyric));
       const kindId = ROOM_RAIN[roomId(ctx)] || 'treat';
+      const gold = PEAK_GOLD[roomId(ctx)] || null;
       for (let i = 0; i < n; i++) {
-        cue.spawn.push({ kindId, placement: 'rain', x: spread(rng), h: CEILING_H, at: i * PEAK_GAP });
+        const last = gold && i === n - 1;
+        cue.spawn.push({ kindId: last ? gold : kindId, placement: 'rain', x: spread(rng), h: CEILING_H, at: i * PEAK_GAP });
       }
       cue.pose = 'cheer';
       cue.mood = intensity > 0.7 ? 'smug' : 'streamed';
