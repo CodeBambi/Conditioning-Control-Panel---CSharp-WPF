@@ -18,22 +18,90 @@ html, body {
 #stage { position: fixed; inset: 0; z-index: 1; }
 #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-/* Clocks and status. Sits under #fx on purpose, so the effects layer can wash
-   over it as things get busier. */
-.hud {
-  position: fixed; right: 22px; top: 22px; bottom: 22px; z-index: 2;
-  display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between;
-  pointer-events: none; text-align: right;
+/* --- the HUD ---------------------------------------------------------------
+   Clocks in the left corners, so the middle and the right stay clear for the
+   ramp's video card. The chip of the side to move is bright and full size, the
+   waiting one dims and shrinks a step, and a thin pink line slides between them:
+   the light moving is the whole turn indicator. Sits under #fx on purpose, so
+   the effects layer can wash over it. hud.js places the sliding parts by
+   measuring the chips, so nothing here has to know how tall a chip is. */
+.hud { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+
+/* the meter, as the frame of the screen warming rather than a bar with a
+   number on it. --pbp-vig is written by hud.js, 0 to about 0.9. */
+.vig {
+  position: fixed; inset: 0; pointer-events: none;
+  opacity: var(--pbp-vig, 0);
+  /* closest-side: the last stop lands exactly on the edges of the screen, so
+     the warmth is a frame and never a wash over the board in the middle */
+  background: radial-gradient(ellipse closest-side at 50% 50%,
+    rgba(255, 105, 180, 0) 40%, rgba(255, 105, 180, 0.18) 74%, rgba(255, 74, 150, 0.55) 100%);
+  transition: opacity 520ms ease;
 }
+.vig.breathe { animation: pbp-vig-breathe 3600ms ease-in-out infinite; }
+@keyframes pbp-vig-breathe {
+  0%, 100% { opacity: calc(var(--pbp-vig, 0) * 0.58); }
+  50% { opacity: var(--pbp-vig, 0); }
+}
+
 .chip {
-  display: flex; flex-direction: column; gap: 2px; padding: 10px 16px; border-radius: 12px;
+  position: absolute; left: 22px; width: 140px;
+  display: flex; flex-direction: column; gap: 1px; padding: 9px 14px; border-radius: 12px;
   background: rgba(20, 20, 46, 0.55); border: 1px solid rgba(245, 230, 200, 0.12);
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px); opacity: 0.45;
+  transition: opacity 220ms ease, background-color 300ms ease, border-color 300ms ease;
 }
+.chip-b { top: 22px; }
+.chip-w { bottom: 124px; }   /* room under it for the status column and the .cam- row */
+.chip.on { opacity: 1; }
 .chip .who { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.55; }
-.chip .time { font-size: 26px; font-variant-numeric: tabular-nums; opacity: 0.7; transition: color 200ms ease, opacity 200ms ease; }
-.chip .time.on { color: var(--pbp-pink); opacity: 1; }
-.status { margin: 0; font-size: 13px; letter-spacing: 0.14em; text-transform: lowercase; opacity: 0.6; }
+.chip .time {
+  font-size: 21px; line-height: 1.15; font-variant-numeric: tabular-nums;
+  transition: font-size 200ms ease, color 200ms ease;
+}
+.chip.on .time { font-size: 27px; color: var(--pbp-pink); }
+.chip .tally { min-height: 13px; font-size: 10px; letter-spacing: 0.14em; opacity: 0.5; }
+/* under 30 s on the mover's clock. After .on, so the red wins the tie. */
+.chip.low .time { color: #FF4257; }
+/* the checked side, for as long as the check stands */
+.chip.check { background: rgba(96, 16, 38, 0.6); border-color: rgba(255, 70, 105, 0.5); }
+.chip.shiver { animation: pbp-shiver 120ms steps(4) 1; }
+.chip.shiver-hard { animation: pbp-shiver-hard 110ms steps(5) 1; }
+@keyframes pbp-shiver {
+  0% { transform: translate(0, 0); } 25% { transform: translate(3px, -1px); }
+  50% { transform: translate(-2px, 2px); } 75% { transform: translate(2px, 1px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes pbp-shiver-hard {
+  0% { transform: translate(0, 0); } 20% { transform: translate(-5px, 2px); }
+  45% { transform: translate(5px, -2px); } 70% { transform: translate(-3px, -3px); }
+  88% { transform: translate(4px, 2px); } 100% { transform: translate(0, 0); }
+}
+
+.turn-line {
+  position: absolute; left: 22px; top: 0; width: 140px; height: 2px; border-radius: 2px;
+  background: var(--pbp-pink); box-shadow: 0 0 10px rgba(255, 105, 180, 0.75);
+  opacity: 0; transform: translateY(0);
+  transition: transform 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 220ms ease;
+}
+.turn-line.on { opacity: 0.95; }
+/* the host's own reduced-motion switch, which the OS media query cannot see */
+.hud.still .turn-line, .hud.still .statuscol { transition: none; }
+
+.statuscol {
+  position: absolute; left: 22px; top: 0; width: 210px;
+  transform: translateY(0); transition: transform 260ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.status { margin: 0; font-size: 13px; letter-spacing: 0.14em; text-transform: lowercase; opacity: 0.62; }
+.hint { margin: 6px 0 0; font-size: 11px; letter-spacing: 0.14em; opacity: 0; transition: opacity 320ms ease; }
+.hint.on { opacity: 0.42; }
+.dots { display: flex; gap: 5px; margin-top: 8px; }
+.dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(245, 230, 200, 0.16); transition: background-color 200ms ease;
+}
+.dots i.lit { background: var(--pbp-pink); }
+/* --- end the HUD ---------------------------------------------------------- */
 
 /* Owned by the effects layer. Never written to by the board code. */
 #fx { position: fixed; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
@@ -81,4 +149,11 @@ html, body {
 .nope h1 { margin: 0; font-size: 28px; letter-spacing: 0.16em; color: var(--pbp-pink); }
 .nope p { margin: 0; max-width: 30rem; line-height: 1.5; opacity: 0.8; }
 
-@media (prefers-reduced-motion: reduce) { .loader-ring { animation-duration: 2400ms; } }
+@media (prefers-reduced-motion: reduce) {
+  .loader-ring { animation-duration: 2400ms; }
+  /* the HUD keeps its colour and loses its movement: no shiver, no breathing
+     glow, and the light arrives instead of sliding */
+  .vig.breathe { animation: none; }
+  .chip.shiver, .chip.shiver-hard { animation: none; }
+  .turn-line, .statuscol { transition: none; }
+}
