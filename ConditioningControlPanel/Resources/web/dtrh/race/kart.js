@@ -509,6 +509,18 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     rig.update(dt, ctx);
   }
 
+  /**
+   * The rider alone, with the world parked. run.js's `again` skips the intro but still counts 3 2 1,
+   * and nothing calls update() until start(), so her pose springs would otherwise be frozen and she
+   * would sit dead still through the count. No physics, no camera, no depth: just her.
+   */
+  function idle(dt) {
+    dt = clamp(+dt || 0, 0, 0.1);
+    elapsed += dt;
+    ctx.t = elapsed; ctx.speedNorm = 0; ctx.airborne = false; ctx.steerVel = 0; ctx.drift = false; ctx.lean = lean;
+    rig.update(dt, ctx);
+  }
+
   function camera(out) {
     out.pos.copy(cam.pos); out.look.copy(cam.look);
     if (out.up && out.up.copy) out.up.copy(cam.up);
@@ -534,7 +546,7 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     listeners.length = 0;
   }
 
-  return { state, update, applyBoost, applySlow, pace, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
+  return { state, update, idle, applyBoost, applySlow, pace, setMood: rig.setMood, setFraught: rig.setFraught, camera, group,
     pulseTarget, setReach, setScale, setSway, onEvent, dispose,
     emiModel: () => rig.model(), emiReady: (cb) => rig.onReady(cb),
     setFace: (i) => rig.setFace(i), pose: (name, opts) => rig.pose(name, opts) };

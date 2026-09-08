@@ -19,7 +19,10 @@
  *                over the rim, the camera dips 8 cm, >_< then ^_^ 0.35 s on
  *   C  3.5..5.4  the cup rolls to the start gantry; the camera settles into a
  *                front seat (props.glb `gantry`, else two pink posts + a cream bar)
- *   D  5.4..     3 2 1 on the HUD with o_o, :3 on GO; play() resolves on GO
+ *   D  5.4..     3 2 1 on the HUD with o_o, :3 on GO; play() resolves on GO.
+ *                She waits on the beat, not still: a bob and a foot tap on
+ *                every number (race/emiPoses.js `ready`/`grip`), a crouch and
+ *                a shove on GO (`launch`), which is where cameraWhip takes over
  * Then the boot starts the run and installs cameraWhip: 0.8 s from the run's
  * own front seat to the chase seat while the run's kart takes over.
  *
@@ -32,6 +35,7 @@
 import * as THREE from 'three';
 import { loadPack } from './gltf.js';
 import { PODIUM_H, CUP_SCALE, PROPS_URL } from './menu.js';
+import { createPoseLayer } from './emiPoses.js';
 import { CAM_BACK, CAM_UP, CAM_LOOK_AHEAD, LANE_H } from './consts.js';
 
 const GANTRY_Z = -3.6, RIM_H = 0.75 * CUP_SCALE, PINK = 0xff69b4, CREAM = 0xf6e7c8;
@@ -162,9 +166,33 @@ export function createIntro({ stage, hud, audio = null, reducedMotion = false, l
     emi.face(FACE.wide);
     const onTick = (s) => {
       if (audio) { try { audio.sfx(s === 'go' ? 'streak_milestone' : 'ui_click', s === 'go' ? 0.7 : 0.5); } catch (e) { /* muted */ } }
+      poseBeat(s);
       if (s === 'go') { emi.face(FACE.cat); if (resolveGo) { const r = resolveGo; resolveGo = null; r(); } }
     };
     if (hud && typeof hud.countdown === 'function') hud.countdown({ onTick }); else onTick('go');
+  }
+  // ---- the countdown idle: she waits on the beat instead of standing there ----
+  // race/emiPoses.js over the stage's own glb. The layer only exists for the count, it is written
+  // AFTER stage.update(dt) so it wins over the idle clip's shoulders, and it hands the arms back on
+  // dispose. Reduced motion keeps the gesture and loses the bounce (`amp`, Law VI).
+  let poses = null, poseT = 0, beat = 0;
+  const poseAmp = reducedMotion ? 0.3 : 1;
+  // The grips are solved for the RUN's cup. Here she rides a 1.3x one and sits higher in it: her
+  // hands are 0.45 m over that rim and a full swing would leave them out past the saucer, waving at
+  // nothing. A third of it keeps them inside the bore and still reads as a fidget.
+  const POSE_ARMS = 0.3;
+  function poseLayer() {
+    if (poses || disposed) return poses;
+    const m = emi && typeof emi.model === 'function' ? emi.model() : null;
+    if (m) poses = createPoseLayer(m);
+    return poses;
+  }
+  /** One HUD tick: up on the number (the tap alternating), crouch and shove on GO. */
+  function poseBeat(s) {
+    const p = poseLayer();
+    if (!p) return;
+    if (s === 'go') p.set('launch', { amp: poseAmp, arms: POSE_ARMS });
+    else p.set('ready', { side: (beat++ % 2) ? -1 : 1, amp: poseAmp, arms: POSE_ARMS });
   }
   function skip() { if (!disposed) toLine(); }
   const onKey = (e) => { if (!e.repeat) skip(); };
@@ -191,6 +219,7 @@ export function createIntro({ stage, hud, audio = null, reducedMotion = false, l
   }
   function update(dt) {
     stage.update(dt);
+    if (poses) { poseT += dt; poses.update(dt, { t: poseT }); }   // after the mixer, so the count wins
     if (disposed || phase < 0) return;
     pollPad();
     if (atLine) { camPos.step(dt); camLook.step(dt); camera.lookAt(camLook.x); return; }
@@ -239,6 +268,7 @@ export function createIntro({ stage, hud, audio = null, reducedMotion = false, l
     if (disposed) return;
     disposed = true;
     window.removeEventListener('keydown', onKey); window.removeEventListener('pointerdown', onPointer);
+    if (poses) { poses.dispose(); poses = null; }   // the stage keeps the model; give it its stance back
     scene.remove(gantry); scene.remove(drops); drops.dispose();
     for (const x of own) x.dispose();
   }

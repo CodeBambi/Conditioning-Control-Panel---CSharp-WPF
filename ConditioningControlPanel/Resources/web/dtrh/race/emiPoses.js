@@ -9,10 +9,11 @@
  *   createPoseLayer(model, { }) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
  *   POSES                        the pure preset table (a node smoke reads it)
  *   PIVOTS                       the four glb pivots a preset is allowed to name
+ *   snapshotRest(model)          bank the authored stance before a mixer moves it
  *
  * `model` is the glb root (EMI_root clone). Every preset value is an OFFSET on
  * the pivot's authored rest rotation, so the model's own stance is never lost.
- * `opts`: { side: -1 | 1, tier: 1..3, hold: seconds }. A sided preset is authored
+ * `opts`: { side: -1 | 1, tier: 1..3, hold: seconds, amp: 0..1, arms: 0..1 }. A sided preset is authored
  * for side +1 (the kart's right, +x) and mirrored for -1: L and R swap and the y
  * and z of every rotation flip, along with the root lean.
  *
@@ -99,6 +100,22 @@ export const POSES = {
   // a personal best or a jackpot: both arms up
   cheer: { w: 9, zeta: 0.45, hold: 1.3, next: 'cruise', root: { lean: 0, tilt: -0.08, lift: 0.06, squash: 1.04 },
     shoulderL: [-2.60, 0, -0.35], shoulderR: [-2.60, 0, 0.35], footL: [-0.18, 0, 0], footR: [-0.18, 0, 0] },
+
+  // ---- the countdown, 3 2 1 GO (intro.js and run.js's `again` both drive these off the HUD ticks) ----
+  // up on the number: a bob off the brim, the weight rolling to one foot. Sided so the tap alternates
+  // beat to beat, `hold` short so it drops straight back into `grip` between the numbers.  dy +0.054
+  ready: { sided: 1, w: 12, zeta: 0.45, hold: 0.34, next: 'grip', breath: 1,
+    root: { lean: -0.06, tilt: -0.05, lift: 0.05, squash: 1.03 },
+    shoulderL: [-1.117, 0, -1.954], shoulderR: [-1.117, 0, 1.954], footL: [-0.26, 0, -0.06], footR: [0.06, 0, 0.04] },
+  // ...and down between them, hands re-gripping the brim. The long hold is the safety net: if a count
+  // is skipped or aborted she walks herself back to cruise instead of standing there mid-bob.  dy -0.011
+  grip: { w: 10, zeta: 0.6, hold: 1.2, next: 'cruise', breath: 1,
+    root: { lean: 0, tilt: 0.05, lift: -0.02, squash: 0.97 },
+    shoulderL: [-1.796, 0, -1.864], shoulderR: [-1.796, 0, 1.864], footL: [0.10, 0, 0], footR: [0.10, 0, 0] },
+  // GO: crouch onto the brim and shove, which is exactly where cameraWhip picks the run up.  dy -0.041
+  launch: { w: 16, zeta: 0.35, hold: 0.45, next: 'cruise',
+    root: { lean: 0, tilt: 0.16, lift: -0.07, squash: 0.84 },
+    shoulderL: [-1.995, 0, -2.043], shoulderR: [-1.995, 0, 2.043], footL: [0.30, 0, 0], footR: [0.30, 0, 0] },
 };
 
 const ZERO3 = [0, 0, 0];
@@ -130,7 +147,39 @@ export function resolvePose(name, opts = {}) {
   }
   if (side < 0) t.root.lean = -t.root.lean;
   if (opts.tier) t.root.lean *= 1 + 0.12 * clamp(+opts.tier || 0, 0, 3);   // a fatter drift leans harder
+  // `amp` scales the whole-body part of a pose and nothing else, so reduced motion keeps the gesture
+  // (the arms still move, she is still doing a thing) and only loses the bounce (Law VI).
+  if (opts.amp != null) {
+    const a = clamp(+opts.amp || 0, 0, 1);
+    t.root.lean *= a; t.root.tilt *= a; t.root.lift *= a;
+    t.root.squash = 1 + (t.root.squash - 1) * a;
+  }
+  // `arms` is the other half of that dial: how far the limbs commit, 1 being the authored pose. The
+  // rim grips are solved for the RUN's cup, and the menu stage sits her higher over a bigger one, so
+  // the intro asks for a fraction of the swing and keeps her hands inside the bore.
+  if (opts.arms != null) {
+    const a = clamp(+opts.arms || 0, 0, 1);
+    for (const k of PIVOTS) t[k] = [t[k][0] * a, t[k][1] * a, t[k][2] * a];
+  }
   return t;
+}
+
+/**
+ * Remember a model's authored stance while it is still authored. A mixer-driven model (the menu
+ * stage runs clips that key shoulderL/R) has moved by the time anything asks for a pose layer, so
+ * menu.js calls this the moment the glb lands and createPoseLayer prefers what it stored.
+ */
+export function snapshotRest(model) {
+  if (!model || !model.getObjectByName) return null;
+  const rest = {};
+  for (const k of PIVOTS) {
+    const o = model.getObjectByName(k);
+    if (o) rest[k] = [o.rotation.x, o.rotation.y, o.rotation.z];
+  }
+  rest.root = [model.rotation.x, model.rotation.z, model.position.y];
+  model.userData = model.userData || {};
+  model.userData.poseRest = rest;
+  return rest;
 }
 
 /**
@@ -139,24 +188,28 @@ export function resolvePose(name, opts = {}) {
  */
 export function createPoseLayer(model) {
   const find = (n) => (model && model.getObjectByName ? model.getObjectByName(n) || null : null);
+  const kept = (model && model.userData && model.userData.poseRest) || null;   // snapshotRest(), if anyone took one
   const piv = {}, rest = {}, sp = {};
   for (const k of PIVOTS) {
     const o = find(k);
     piv[k] = o;
-    rest[k] = o ? [o.rotation.x, o.rotation.y, o.rotation.z] : ZERO3;
+    rest[k] = (kept && kept[k]) || (o ? [o.rotation.x, o.rotation.y, o.rotation.z] : ZERO3);
     sp[k] = [new Spring(), new Spring(), new Spring()];
   }
   const ant0 = find('ant0');
-  const rootRest = model ? [model.rotation.x, model.rotation.z, model.position.y] : [0, 0, 0];
+  const rootRest = (kept && kept.root) || (model ? [model.rotation.x, model.rotation.z, model.position.y] : [0, 0, 0]);
   const sLean = new Spring(), sTilt = new Spring(), sLift = new Spring(), sSquash = new Spring(1);
   const sAntX = new Spring(), sAntZ = new Spring();
-  let name = 'cruise', target = resolvePose('cruise'), hold = 0;
+  let name = 'cruise', target = resolvePose('cruise'), hold = 0, opt = {};
   const api = { fraught: 0, get name() { return name; } };
 
   /** Set a pose. Unknown names are ignored (false) rather than blanking her stance. */
   function set(n, opts = {}) {
     if (!POSES[n]) return false;
     name = n;
+    // the shape of the caller, minus the timing: a pose that chains into `next` inherits it, so a
+    // count driven at `arms: 0.3` does not snap to a full swing the moment the beat times out
+    opt = { side: opts.side, tier: opts.tier, amp: opts.amp, arms: opts.arms };
     target = resolvePose(n, opts);
     hold = opts.hold != null ? Math.max(0, +opts.hold || 0) : (POSES[n].hold || 0);
     api.fraught = target.fraught;
@@ -168,7 +221,7 @@ export function createPoseLayer(model) {
     dt = Math.min(Math.max(+dt || 0, 0), 0.05);
     if (hold > 0) {
       hold -= dt;
-      if (hold <= 0) set(POSES[name].next || 'cruise');
+      if (hold <= 0) set(POSES[name].next || 'cruise', opt);
     }
     const w = target.w, z = target.zeta;
     for (const k of PIVOTS) {
