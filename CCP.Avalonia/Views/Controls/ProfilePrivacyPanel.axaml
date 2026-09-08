@@ -1,0 +1,216 @@
+<!-- PORTED from ConditioningControlPanel/Views/Controls/ProfilePrivacyPanel.xaml.
+     Structure, order, spacing, every x:Name and every resource key are preserved so the two diff
+     directly. Documented deviations, all forced by real WPF/Avalonia differences:
+
+       Style="{StaticResource ToggleStyle}" -> Theme="{StaticResource ToggleStyle}"
+                                        (a keyed style is a ControlTheme; ToggleStyle itself is
+                                        ported in Theme/Styles.xaml by this change)
+       {loc:Str key}                 ->  {Binding LocX}   (LocExtension is a WPF MarkupExtension
+                                        and stays in the head; the strings still come from
+                                        CCP.Core's Loc, via the view-model beside this view)
+       ToolTip="..."                 ->  ToolTip.Tip="..."
+       Content="{loc:Str btn_login}" ->  a <TextBlock> child (Avalonia parses "_" in Content as an
+                                        access key and every loc key here is snake_case)
+       x:FieldModifier="internal"    ->  dropped. On WPF those fields exist so MainWindow can poke
+                                        ~25 `DiscordTab.Chk*` writes at this panel; the Avalonia
+                                        head has no such host yet, so exposing the fields would
+                                        advertise a contract nothing implements. The x:Names are
+                                        kept, so re-adding the accessors later is mechanical.
+
+     Every Checked/Unchecked handler and the login Click are LEFT UNWIRED - see the code-behind. -->
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ConditioningControlPanel.Avalonia.Views.Controls.ProfilePrivacyPanel"
+             x:DataType="vm:ProfilePrivacyPanelViewModel"
+             xmlns:vm="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+             d:DesignHeight="700" d:DesignWidth="420"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <!-- ================================================================
+         PRIVACY & SHARING  (Profile redesign, Phase 1 "Reclaim")
+
+         This panel owns every toggle that used to live in the Profile
+         tab's right-hand column. It is a RELOCATION, not a behaviour
+         change: the x:Names, the Checked/Unchecked handlers and the
+         defaults are byte-for-byte what shipped on DiscordTabView.
+
+         Lifetime trap: the instance is created once by DiscordTabView
+         and handed to ProfilePrivacyDialog while the dialog is open, so
+         MainWindow's ~25 `DiscordTab.Chk*` writes keep landing whether
+         or not the dialog is on screen. Because it is therefore NOT in
+         MainWindow's visual tree, its handlers cannot use
+         Window.GetWindow(this) - see the code-behind's MainWindow lookup.
+
+         De-blurple rule: #5865F2 survives ONLY on the Discord connection
+         card at the top. Every group header is pink/purple.
+         ================================================================ -->
+
+    <StackPanel>
+
+        <!-- ==== Discord connection (blurple lives here, and only here) ==== -->
+        <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="10" Padding="15"
+                Margin="0,0,0,16" BorderBrush="#5865F2" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtDiscordTabStatus"
+                               Text="{Binding LocNotConnected}" Foreground="White"
+                               FontSize="14" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="TxtDiscordTabInfo"
+                               Text="{Binding LocLinkDiscordForCommunityFeatures}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               Margin="0,2,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+                <Button x:Name="BtnDiscordTabLogin" Grid.Column="1"
+                        Background="#5865F2" Foreground="White"
+                        BorderThickness="0" Padding="15,8" Margin="10,0,0,0" FontWeight="Bold"
+                        FontSize="11" Cursor="Hand">
+                    <TextBlock Text="{Binding LocLogin}"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ==== Presence ==== -->
+        <TextBlock Text="{Binding LocGroupPresence}"
+                   Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold"
+                   Margin="0,0,0,10"/>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocDiscordRichPresence}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocShowYourActivityStatus}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkDiscordTabRichPresence" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocShowLevelInStatus}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocDisplayYourLevel}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkDiscordTabShowLevel" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True"/>
+            </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocShowOnlineStatus}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocAppearOfflineWhenDisabled}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkDiscordTabShowOnline" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True"/>
+            </Grid>
+        </Border>
+
+        <!-- ==== Community sharing ==== -->
+        <TextBlock Text="{Binding LocCommunitySharing}"
+                   Foreground="#B478FF" FontSize="13" FontWeight="Bold" Margin="0,14,0,10"/>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocShareAchievements}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocPostAchievementsToDiscord}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkDiscordTabShareAchievements" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocShareLevelMilestones}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocPostLevelUpsToDiscord}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkDiscordTabShareLevelUps" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocAllowDmsFromLeaderboard}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocLetOthersMessageYou}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkDiscordTabAllowDm" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocShareProfilePicture}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocShowYourAvatarToOthers}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkDiscordTabSharePfp" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Sibling of the toggle above, deliberately adjacent so the pair reads as
+             "signed in users" then "the whole internet". Separate consent: the one above
+             never covers the public web card. Bordered because the audience is unbounded. -->
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"
+                BorderBrush="#B478FF" BorderThickness="1"
+                ToolTip.Tip="{Binding LocTooltipPublicShareRealAvatar}">
+            <Grid>
+                <StackPanel Margin="0,0,50,0">
+                    <TextBlock Text="{Binding LocPublicShareRealAvatar}" Foreground="White" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding LocPublicShareRealAvatarDesc}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkPublicShareRealAvatar" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- ==== Goon Game sharing (opt-in, sharer-only; all three default OFF).
+                 Separate audience from the community-sharing block above: these only
+                 affect the person you are currently duelling. ==== -->
+        <TextBlock Text="{Binding LocGoonGameSharing}"
+                   Foreground="#FFD700" FontSize="13" FontWeight="Bold" Margin="0,14,0,10"/>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"
+                ToolTip.Tip="{Binding LocTooltipGoonShareAvatar}">
+            <Grid>
+                <TextBlock Text="{Binding LocGoonShareAvatar}" Foreground="White" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,50,0"/>
+                <CheckBox x:Name="ChkGoonShareAvatar" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"
+                ToolTip.Tip="{Binding LocTooltipGoonShareDiscordDm}">
+            <Grid>
+                <TextBlock Text="{Binding LocGoonShareDiscordDm}" Foreground="White" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,50,0"/>
+                <CheckBox x:Name="ChkGoonShareDiscordDm" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,8"
+                ToolTip.Tip="{Binding LocTooltipGoonRichPresence}">
+            <Grid>
+                <TextBlock Text="{Binding LocGoonRichPresence}" Foreground="White" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,50,0"/>
+                <CheckBox x:Name="ChkGoonRichPresence" Theme="{StaticResource ToggleStyle}"
+                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>
