@@ -178,8 +178,11 @@ async function main() {
 
   // --- 2. a drag, held then dropped ----------------------------------------
   const a = await at('e2', 0.45);
-  const b = await at('e4', 0);
   await mouse('mousePressed', a.x, a.y);
+  // The held man rides under the cursor at the height he was grabbed at, so
+  // the release is aimed at that height over e4 rather than at board level.
+  const b = await at('e4', Number(await evalJs(
+    'window.PBP.board.drag && window.PBP.board.drag.holdHeight ? window.PBP.board.drag.holdHeight() : 0')) || 0);
   for (let i = 1; i <= 8; i++) {
     await mouse('mouseMoved', a.x + (b.x - a.x) * (i / 8), a.y + (b.y - a.y) * (i / 8));
     await beat(35);
