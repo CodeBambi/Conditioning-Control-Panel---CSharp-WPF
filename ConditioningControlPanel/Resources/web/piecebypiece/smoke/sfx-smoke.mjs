@@ -29,12 +29,13 @@ class FakeNode {
 class FakeContext {
   constructor() {
     this.state = 'suspended'; this.currentTime = 0; this.sampleRate = 48000;
-    this.started = []; this.wires = []; this.destination = { kind: 'destination' };
+    this.started = []; this.wires = []; this.sources = []; this.destination = { kind: 'destination' };
   }
   createGain() { const n = new FakeNode(this, 'gain'); n.gain = new Param(1); return n; }
-  createOscillator() { const n = new FakeNode(this, 'osc'); n.frequency = new Param(440); n.type = 'sine'; return n; }
+  createOscillator() { const n = new FakeNode(this, 'osc'); n.frequency = new Param(440); n.detune = new Param(0); n.type = 'sine'; this.sources.push(n); return n; }
   createBiquadFilter() { const n = new FakeNode(this, 'filter'); n.frequency = new Param(1000); n.type = 'lowpass'; return n; }
-  createBufferSource() { return new FakeNode(this, 'noise'); }
+  createBufferSource() { const n = new FakeNode(this, 'noise'); n.detune = new Param(0); this.sources.push(n); return n; }
+  createDelay() { const n = new FakeNode(this, 'delay'); n.delayTime = new Param(0); return n; }
   createBuffer(ch, len) { return { getChannelData: () => new Float32Array(len) }; }
   resume() { this.state = 'running'; return Promise.resolve(); }
   close() { this.state = 'closed'; return Promise.resolve(); }
@@ -114,6 +115,26 @@ history = [{ from: 'e7', to: 'e8', promotion: 'q' }];
 bus.emit('turn', { side: 'b', ply: 5 });
 expect(names().at(-1) === 'promote', 'a promotion chimes on its turn');
 history = [];
+
+// the room: a delay beside the master whose wet follows the meter, and a drift
+expect(fake.wires.some((w) => w[0] === 'gain' && w[1] === 'delay') && fake.wires.some((w) => w[0] === 'delay' && w[1] === 'gain'), 'the master feeds the delay and the delay comes back through a gain');
+const lastSource = () => fake.sources.at(-1);
+sfx.setMeter(0.2); sfx.play('tick');
+expect(sfx.state().wet === 0 && sfx.state().drift === 0 && lastSource().detune.value === 0, 'meter 0.2: dry, in tune');
+sfx.setMeter(0.55); sfx.play('tick');
+expect(Math.abs(sfx.state().wet - 0.14) < 1e-6 && sfx.state().drift === 0, 'meter 0.55: some wet (0.14), still in tune');
+sfx.setMeter(1.0); sfx.play('tick');
+expect(Math.abs(sfx.state().wet - 0.35) < 1e-9 && sfx.state().drift === -200 && lastSource().detune.value === -200, 'meter 1.0: wet 0.35 and every new voice two semitones flat');
+sfx.play('whisper');
+expect(names().at(-1) === 'whisper' && lastSource().kind === 'noise' && lastSource().detune.value === -200, 'the whisper is a breath of noise, and it drifts too');
+bus.emit('clock', { w: 20000, b: 60000, total: 900000, active: 'w' });
+sfx.play('tick');
+expect(sfx.state().lowClock && sfx.state().wet === 0 && lastSource().detune.value === 0, 'the mover under 30 s: the room goes dry and the ticks stay in tune');
+bus.emit('clock', { w: 60000, b: 20000, total: 900000, active: 'w' });
+expect(!sfx.state().lowClock && Math.abs(sfx.state().wet - 0.35) < 1e-9, 'the other side low does not count; the room comes back');
+win.PBP.settings.reducedMotion = true; sfx.setMeter(1.0);
+expect(sfx.state().wet === 0 && sfx.state().drift === 0, 'reduced motion: dry and in tune at meter 1');
+win.PBP.settings.reducedMotion = false; sfx.setMeter(0);
 
 // the clock: one tick a second under 30 s, sharper under 10 s, only the active side
 n0 = names().length;

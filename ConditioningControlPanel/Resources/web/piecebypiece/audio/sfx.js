@@ -21,6 +21,14 @@
  *   promote    a rising chime              `turn` after a promotion
  *   cardOpen/cardClose  a soft whoosh when the ramp's video card comes and
  *              goes (a MutationObserver on the fx root; the ramp emits nothing)
+ *   whisper    a breathy sigh, quiet     board/watch.js, when a man is held
+ *              too long
+ *
+ * The room (sfx.setMeter, driven by board.setMeter): a feedback delay sits
+ * beside the master and its wet level follows the meter, nothing at 0.25 and
+ * 0.35 at 1.0; past 0.55 every new voice is detuned, down to two semitones
+ * flat at 1.0. Both stay dry while the mover's clock is under 30 s (the
+ * clock ticks must stay crisp) and under reduced motion.
  *
  * sfx.play(name, opts) plays any cue by hand; sfx.log() is the last cues with
  * the context state, so a harness can prove each one scheduled. A `context`
@@ -40,8 +48,22 @@ export const TUNING = Object.freeze({
   clock: { hz: 1200, sharpHz: 1900, sec: 0.015, gain: 0.07, sharpGain: 0.11, underMs: 30000, sharpMs: 10000 },
   promote: { hz: [523, 659, 784, 1047], step: 0.06, sec: 0.28, gain: 0.12 },
   whoosh: { lowHz: 200, highHz: 4000, sec: 0.26, gain: 0.1 },
+  whisper: { from: 1100, to: 380, sec: 0.6, gain: 0.05, attack: 0.18 },
+  room: {
+    delaySec: 0.21, feedback: 0.32,      // the echo and how much of it comes back
+    wetFrom: 0.25, wetAt1: 0.35,         // wet level: 0 at wetFrom, wetAt1 at meter 1
+    driftFrom: 0.55, driftCents: 200,    // detune: 0 at driftFrom, this flat at 1
+    lowClockMs: 30000,                   // dry while the mover has less than this
+  },
   logSize: 32,
 });
+
+function reducedMotion(win) {
+  const s = win && win.PBP && win.PBP.settings;
+  if ((s && s.reducedMotion) || (win && win.PBP && win.PBP.reducedMotion)) return true;
+  try { return !!(win && win.matchMedia) && win.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  catch { return false; }
+}
 
 const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
 
@@ -53,6 +75,11 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   let master = null;
   let noise = null;
   let disposed = false;
+  let wet = null;            // the delay's return, beside the master
+  let meter = 0;
+  let wetLevel = 0;          // what the wet gain was last asked for
+  let drift = 0;             // cents, applied to every new voice
+  let lowClock = false;      // the mover is under lowClockMs
   const log = [];
   const settings = () => (win && win.PBP && win.PBP.settings) || {};
   const volume = () => {
@@ -71,6 +98,20 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     master = ctx.createGain();
     master.gain.value = doc && doc.hidden ? 0 : volume();
     master.connect(ctx.destination);
+    // The room: master -> delay -> (feedback -> delay) and delay -> wet -> out.
+    if (typeof ctx.createDelay === 'function') {
+      const R = TUNING.room;
+      const delay = ctx.createDelay(1.0);
+      delay.delayTime.value = R.delaySec;
+      const back = ctx.createGain();
+      back.gain.value = R.feedback;
+      wet = ctx.createGain();
+      wet.gain.value = 0;
+      master.connect(delay);
+      delay.connect(back); back.connect(delay);
+      delay.connect(wet); wet.connect(ctx.destination);
+      applyRoom();
+    }
     const seconds = 1;
     const buf = ctx.createBuffer(1, Math.max(1, Math.floor(ctx.sampleRate * seconds)), ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -88,6 +129,21 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     try { master.gain.setTargetAtTime(to, ctx.currentTime, 0.02); } catch { master.gain.value = to; }
   }
 
+  // --- the room --------------------------------------------------------------
+  const lerp01 = (m, from) => (m <= from ? 0 : Math.min(1, (m - from) / (1 - from)));
+  /** Work out the wet level and the drift from the meter, and set the wet gain. */
+  function applyRoom() {
+    const R = TUNING.room;
+    const dry = lowClock || reducedMotion(win);
+    wetLevel = dry ? 0 : R.wetAt1 * lerp01(meter, R.wetFrom);
+    drift = dry ? 0 : -R.driftCents * lerp01(meter, R.driftFrom);
+    if (wet && ctx) {
+      try { wet.gain.setTargetAtTime(wetLevel, ctx.currentTime, 0.15); } catch { wet.gain.value = wetLevel; }
+    }
+  }
+  function setMeter(m) { meter = clamp01(m); applyRoom(); }
+  const tune = (node) => { if (drift && node.detune) { try { node.detune.value = drift; } catch { /* a source without detune */ } } };
+
   // --- the palette ------------------------------------------------------------
   /** An oscillator with a gain envelope: attack straight up, decay to zero. */
   function tone(type, hz, sec, gain, { at = 0, slideTo = null, filterHz = null } = {}) {
@@ -95,6 +151,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
     osc.type = type;
+    tune(osc);
     osc.frequency.setValueAtTime(hz, t0);
     if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t0 + sec);
     env.gain.setValueAtTime(0.0001, t0);
@@ -114,17 +171,18 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     osc.stop(t0 + sec + 0.02);
   }
   /** Filtered noise with a sweep, for taps and whooshes. */
-  function hiss(sec, gain, { at = 0, from = 1000, to = 1000, type = 'bandpass' } = {}) {
+  function hiss(sec, gain, { at = 0, from = 1000, to = 1000, type = 'bandpass', attack = null } = {}) {
     const t0 = ctx.currentTime + at;
     const src = ctx.createBufferSource();
     src.buffer = noise;
+    tune(src);
     const f = ctx.createBiquadFilter();
     f.type = type;
     f.frequency.setValueAtTime(from, t0);
     if (to !== from) f.frequency.exponentialRampToValueAtTime(to, t0 + sec);
     const env = ctx.createGain();
     env.gain.setValueAtTime(0.0001, t0);
-    env.gain.exponentialRampToValueAtTime(gain, t0 + Math.min(0.03, sec * 0.3));
+    env.gain.exponentialRampToValueAtTime(gain, t0 + (attack != null ? Math.min(attack, sec * 0.5) : Math.min(0.03, sec * 0.3)));
     env.gain.exponentialRampToValueAtTime(0.0001, t0 + sec);
     src.connect(f); f.connect(env); env.connect(master);
     src.start(t0);
@@ -157,6 +215,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       const osc = ctx.createOscillator();
       const env = ctx.createGain();
       osc.type = 'triangle';
+      tune(osc);
       osc.frequency.setValueAtTime(B.hz[0], t0);
       for (let i = 1; i < B.hz.length; i++) osc.frequency.exponentialRampToValueAtTime(B.hz[i], t0 + B.sec * (i / (B.hz.length - 1)));
       env.gain.setValueAtTime(B.gain, t0);
@@ -174,6 +233,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     promote() { const P = TUNING.promote; P.hz.forEach((hz, i) => tone('sine', hz, P.sec, P.gain, { at: i * P.step })); },
     cardOpen() { const W = TUNING.whoosh; hiss(W.sec, W.gain, { from: W.lowHz, to: W.highHz, type: 'lowpass' }); },
     cardClose() { const W = TUNING.whoosh; hiss(W.sec, W.gain, { from: W.highHz, to: W.lowHz, type: 'lowpass' }); },
+    whisper() { const W = TUNING.whisper; hiss(W.sec, W.gain, { from: W.from, to: W.to, type: 'bandpass', attack: W.attack }); },
   };
 
   function play(name, opts = {}) {
@@ -248,6 +308,8 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   on('clock', (s) => {
     if (over || !s || !s.active) return;
     const ms = s[s.active];
+    const low = ms < TUNING.room.lowClockMs;
+    if (low !== lowClock) { lowClock = low; applyRoom(); }
     if (!(ms < TUNING.clock.underMs) || ms <= 0) return;
     const second = Math.ceil(ms / 1000);
     if (second === lastSecond) return;
@@ -286,7 +348,11 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
     wake,
     log: () => log.slice(),
     ready: () => !!ctx,
-    state: () => ({ context: ctx ? ctx.state : 'none', volume: master ? master.gain.value : 0, pulsing: !!checkTimer, over, hover }),
+    state: () => ({
+      context: ctx ? ctx.state : 'none', volume: master ? master.gain.value : 0, pulsing: !!checkTimer, over, hover,
+      meter, wet: +wetLevel.toFixed(3), drift: Math.round(drift), lowClock, room: !!wet,
+    }),
+    setMeter,
     setVolume(v) { settings().sfxVolume = clamp01(v); if (master) master.gain.value = doc && doc.hidden ? 0 : clamp01(v); },
     dispose() {
       disposed = true;
@@ -299,7 +365,7 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
         doc.removeEventListener('visibilitychange', onVisibility);
       }
       if (ctx && ctx.close) { try { ctx.close(); } catch { /* already */ } }
-      ctx = null; master = null;
+      ctx = null; master = null; wet = null;
     },
   };
 }
