@@ -37,12 +37,26 @@ export const FALLBACK_KIND = 'pink';
 export const FALLBACK_THEME = 'mark';
 
 /**
+ * A ROW MAY NAME A KIND THAT HAS NOT LANDED YET (2026-09-08). blackout, lock, melt and gifwash are
+ * four new bubbleKinds.js rows; a row that names one carries `fallback` too, and until the kind is
+ * there the road wears the fallback instead. The moment bubbleKinds.js has it, every one of these
+ * flips on its own with no edit here. The order is: the kind if it spawns, then the row's own
+ * fallback if THAT spawns, then FALLBACK_KIND, which is the last thing standing and always spawns.
+ */
+function liveKind(row) {
+  if (!row) return null;
+  if (spawnable(row.kind)) return row.kind;
+  if (row.fallback && spawnable(row.fallback)) return row.fallback;
+  return FALLBACK_KIND;
+}
+
+/**
  * The table. `kind` is the bubble; `theme` is the plate's CSS class; `color` and
  * `ink` are the plate's own two colours where the row fixes them, and `note` is
  * what the plate is supposed to DO, in one line, for whoever writes that class.
  */
 export const THEME_BY_PRESET = {
-  'blackout':     { kind: 'braindrain', theme: 'ink',    color: '#0f0f16', ink: '#f4f2ff', note: 'near black card, white text, the screen dims for 300 ms' },
+  'blackout':     { kind: 'blackout',   fallback: 'braindrain', theme: 'ink', color: '#0f0f16', ink: '#f4f2ff', note: 'near black card, white text, the screen dims for 300 ms' },
   'pink-blink':   { kind: 'pink',       theme: 'blink',  color: '#ff3da5', ink: '#0f0f1c', note: 'hot pink, double blink' },
   'pink-wall':    { kind: 'pink',       theme: 'wall',   color: '#ff69b4', ink: '#0f0f1c', note: 'pink, wide letter spacing, slides in from both sides' },
   'freeze-snap':  { kind: 'freeze',     theme: 'frost',  color: '#8ae6ff', ink: '#0f0f1c', note: 'ice blue, frost crackle, hard stop at scale 1' },
@@ -54,15 +68,15 @@ export const THEME_BY_PRESET = {
   'flash-pulse':  { kind: 'treat',      theme: 'pulse',  color: '#ffffff', ink: '#0f0f1c', note: 'white flash behind, three pulses' },
   'golden-rain':  { kind: 'golden',     theme: 'gold',   color: '#ffd700', ink: '#0f0f1c', note: 'gold, sparkle shards fall off the letters' },
   'spiral-air':   { kind: 'spiral',     theme: 'spiral', color: '#c8a8ff', ink: '#0f0f1c', note: 'lilac, slow rotate while it zooms' },
-  'melt':         { kind: 'braindrain', theme: 'melt',   color: '#4060c0', ink: '#f4f2ff', note: 'deep blue, letters sag and blur downward' },
+  'melt':         { kind: 'melt',       fallback: 'pink', theme: 'melt', color: '#4060c0', ink: '#f4f2ff', note: 'deep blue, letters sag and blur downward' },
   // THE FOUR THE CATALOGUE WAVE NEEDED (2026-09-08). The praise and the command words say
   // themselves back at the player; the blank words go soft at the edges; the doll words hold
   // still; and the cock words cover the screen, which is the owner's "we should also use often
   // the fullscreen gif overlay". Every kind named here is one that spawns today.
   'card-whisper': { kind: 'subliminal', theme: 'card',   color: '#b080ff', ink: '#0f0f1c', note: 'lilac, the words fade up one at a time and hang' },
   'drain-fog':    { kind: 'braindrain', theme: 'fog',    color: '#7d8bd0', ink: '#f4f2ff', note: 'grey blue, the letters lose their edges and drift apart' },
-  'lock-hold':    { kind: 'freeze',     theme: 'hold',   color: '#ff9ecb', ink: '#0f0f1c', note: 'satin pink frame, the plate stops dead at scale 1 and holds' },
-  'gif-wash':     { kind: 'gifrain',    theme: 'wash',   color: '#ff8a3d', ink: '#0f0f1c', note: 'the picture covers the screen and the letters sit on top of it' },
+  'lock-hold':    { kind: 'lock',       fallback: 'freeze', theme: 'hold', color: '#ff9ecb', ink: '#0f0f1c', note: 'satin pink frame, the plate stops dead at scale 1 and holds' },
+  'gif-wash':     { kind: 'gifwash',    fallback: 'gifrain', theme: 'wash', color: '#ff8a3d', ink: '#0f0f1c', note: 'the picture covers the screen and the letters sit on top of it' },
   'video':        { kind: 'video',      theme: 'scan',   color: '#ff5c6c', ink: '#f4f2ff', note: 'red, scanlines' },
   // gif rain (2026-09-08): the pictures come DOWN, so the plate comes down with them. Gold, the
   // gifrain bubble's own tint, and a shade colder than golden-rain's so the two never read alike.
@@ -74,6 +88,9 @@ export const THEME_BY_PRESET = {
 };
 
 const spawnable = (id) => { const k = KIND_BY_ID[id]; return !!k && k.spawn !== false; };
+/** The four kinds this table is ahead of; the smoke reports which of them have landed. */
+export const AHEAD_OF_KINDS = Object.entries(THEME_BY_PRESET)
+  .filter(([, r]) => r.fallback && !KIND_BY_ID[r.kind]).map(([, r]) => r.kind);
 const SET_BY_ID = new Map(TRIGGER_SETS.map((s) => [s.id, s]));
 const SET_BY_NAME = new Map(TRIGGER_SETS.map((s) => [String(s.name).toLowerCase(), s]));
 
@@ -81,7 +98,7 @@ const SET_BY_NAME = new Map(TRIGGER_SETS.map((s) => [String(s.name).toLowerCase(
 export function kindForPreset(preset) {
   const row = THEME_BY_PRESET[String(preset || '')];
   if (!row) return null;
-  return spawnable(row.kind) ? row.kind : FALLBACK_KIND;
+  return liveKind(row);
 }
 
 /**
@@ -100,7 +117,7 @@ export function themeFor(event) {
   const row = THEME_BY_PRESET[preset];
   return {
     preset,
-    kind: spawnable(row.kind) ? row.kind : FALLBACK_KIND,
+    kind: liveKind(row),
     theme: row.theme,
     // The row's own colour, and the set's when this event fell through to the fallback row.
     color: (preset === want ? row.color : (set && set.color)) || row.color,

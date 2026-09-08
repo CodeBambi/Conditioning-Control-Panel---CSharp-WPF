@@ -40,8 +40,19 @@ import { KIND_BY_ID } from './bubbleKinds.js';
  * Every other word rides an ordinary bubble, so these read as the beat of the line rather than as
  * sixteen shouts. A phrase that landed in one bubble counts if either half is on the list.
  */
-export const ACCENT_WORDS = new Set(['drop', 'sink', 'deeper', 'down', 'relax', 'now', 'empty',
-  'blank', 'bump', 'obey', 'pink', 'good', 'girl', 'bambi', 'sleep', 'bimbo']);
+export const ACCENT_WORDS = new Set([
+  // the original sixteen
+  'drop', 'sink', 'deeper', 'down', 'relax', 'now', 'empty',
+  'blank', 'bump', 'obey', 'pink', 'good', 'girl', 'bambi', 'sleep', 'bimbo',
+  // 2026-09-08, off the survey of the eleven transcripts: the words the scripts lean on that are
+  // said far too often to stop the road with a row (accept alone is said 104 times, 77 of them in
+  // Bubble Acceptance) but that the reader's eye should still land on. A big bubble is the right
+  // size for a word that is everywhere; a trigger row is not.
+  'accept', 'accepting', 'asleep', 'sleepy', 'doll', 'dolly', 'bubble', 'deep',
+  'cock', 'right', 'happy', 'perfect', 'pretty', 'heavy', 'warm',
+  'wonderful', 'stronger', 'control', 'resist', 'sexy', 'slutty', 'horny',
+  'breath', 'breathe', 'breathing', 'voice', 'listen', 'time', 'melt', 'melting',
+  'giggle', 'giggles', 'plastic', 'lock', 'locked', 'limp', 'trance', 'mindless']);
 /** What is stripped off a transcript word before it is held against that list. */
 const ACCENT_TRIM = /^["'(\[]+|[,.;:!?…"')\]]+$/g;
 
@@ -65,8 +76,9 @@ const FALLBACK_TRIGGER = 'pink';
  *  The Tea Garden's was the flash; it takes the whisper card instead, which is the gentler read
  *  of "nothing here fights you" anyway and keeps the room off the pink the Toybox already wears. */
 const ROOM_TRIGGER = {
-  teagarden: 'subliminal', undertow: 'spiral', toybox: 'pink', chapel: 'spiral',
-  mirrors: 'glitch', greyward: 'freeze', coronation: 'braindrain', casino: 'pink',
+  teagarden: ['subliminal'], undertow: ['spiral'], toybox: ['lock', 'freeze'], chapel: ['spiral'],
+  mirrors: ['glitch'], greyward: ['blackout', 'braindrain'], coronation: ['melt', 'pink'],
+  casino: ['pink'],
 };
 /** What a peak rains per room; anywhere else it is plain treats. Effect kinds, all of them: the
  *  peak is the loudest second in the file and every colour on it should mean something. */
@@ -74,7 +86,26 @@ const ROOM_RAIN = { casino: 'pink', coronation: 'subliminal', chapel: 'spiral', 
 /** ONE gold in a peak, at most, and only in the two rooms that are about it: it falls last, so
  *  the room pours its colour and the jackpot lands on the end of it. */
 const PEAK_GOLD = { casino: 'lucky', coronation: 'golden' };
-/** Below this the spotter was guessing: the trigger is a treat, not its effect, and no word on the chrome. */
+/**
+ * A KIND MAY NOT HAVE LANDED YET (2026-09-08). The four new bubbleKinds.js rows - blackout, lock,
+ * melt and gifwash - are named here and in race/triggerTheme.js before they exist, each with what
+ * the road wears until they do. The first id that is a real kind AND spawns wins; the moment the
+ * kind lands every table naming it flips with no edit. A dark kind is never handed out: bubbles.js
+ * lays no row at all for one, and a trigger row that never lands is the one thing this road may not do.
+ */
+function liveKind(...ids) {
+  for (const id of ids) { const k = KIND_BY_ID[id]; if (k && k.spawn !== false) return id; }
+  return null;
+}
+
+/**
+ * Below this the spotter was guessing: the trigger is a treat, not its effect, and no word on the
+ * chrome. NOT on a script-aligned file (`event.aligned`, race/cloudChart.js triggersFromHits): there
+ * the transcript was aligned to a script that already held the words, so a low conf is the aligner
+ * saying it is unsure WHEN and never whether. Held flat it threw 37 trigger rows away across the
+ * eleven files - eleven of the twelve "bimbo doll" rows of Bubble Induction, six "dumb" of IQ Lock,
+ * three "pink" of Cockslut - phrases the script certainly says, dressed down to a loose treat.
+ */
 const TRIGGER_SURE = 0.55;
 /** Below this a structure word is nothing; a guess must never cost the player a miss. */
 const WORD_SURE = 0.5;
@@ -152,14 +183,33 @@ export const GIFRAIN_ROW_CHANCE = 1 / 6;
 /** The bubble it puts there. bubbleKinds.js owns the kind AND its intensity floor, so the road and
  *  the row can never disagree about when the rain is allowed to start (no second floor here). */
 export const GIFRAIN_KIND = 'gifrain';
+/** And the fullscreen one: the picture covers the road and the row's word sits on top of it. The
+ *  owner asked for this one often, so it is both the plate of the whole cock and takeover family
+ *  (race/triggerTheme.js gif-wash) and the picture a plain word row wears on the tracks that are
+ *  ABOUT that family - by then the rain is the quieter of the two, and the wash is the register the
+ *  file is already in. Until the kind lands the rain stands in for it. */
+export const GIFWASH_KIND = 'gifwash';
+/**
+ * Which picture a plain word row pours on THIS track. The chart's own label -> kind map is the
+ * track saying what it is about: once a file has washes or rains of its own on it (08 Takeover,
+ * 09 Cockslut), a plain row pours the wash; anywhere else it pours the rain, as it always has.
+ */
+export function gifRowKind(ctx) {
+  const kinds = ctx && ctx.triggerKinds;
+  const wash = liveKind(GIFWASH_KIND, GIFRAIN_KIND);
+  if (kinds && typeof kinds.values === 'function') {
+    for (const id of kinds.values()) if (id === GIFWASH_KIND || id === GIFRAIN_KIND) return wash;
+  }
+  return liveKind(GIFRAIN_KIND) || wash;
+}
 /**
  * Does this trigger row wear the rain? Pure, so the smoke can hold the odds and the floor. The
  * caller draws from the ROAD's own seeded rng, the stream the rest of the chart rolls on, so a
  * seed lays the same rain every time.
  * @param kindId the kind the row resolved to, @param intensity 0..1, @param rng the road's rng
  */
-export function gifRainRow(kindId, intensity, rng) {
-  const k = KIND_BY_ID[kindId], rain = KIND_BY_ID[GIFRAIN_KIND];
+export function gifRainRow(kindId, intensity, rng, pictureKind = GIFRAIN_KIND) {
+  const k = KIND_BY_ID[kindId], rain = KIND_BY_ID[pictureKind];
   if (!k || k.kind !== 'treat' || !rain || rain.spawn === false) return false;   // an effect row keeps its effect
   if (!(Number(intensity) >= (rain.minIntensity || 0))) return false;            // the rain's own floor, not a new one
   return (typeof rng === 'function' ? rng() : Math.random()) < GIFRAIN_ROW_CHANCE;
@@ -182,7 +232,7 @@ function blank() {
 function triggerKind(label, ctx) {
   const kinds = ctx.triggerKinds;
   const id = (kinds && typeof kinds.get === 'function') ? kinds.get(label) : null;
-  return id || ROOM_TRIGGER[roomId(ctx)] || FALLBACK_TRIGGER;
+  return id || liveKind(...(ROOM_TRIGGER[roomId(ctx)] || [])) || FALLBACK_TRIGGER;
 }
 
 /**
@@ -203,7 +253,10 @@ export function cueFor(event, ctx = {}) {
     // the voice said a trigger phrase: its own effect bubble in a lane, the word on the chrome, and
     // she reaches for it. A phrase the spotter only half heard is a plain treat and stays off the chrome.
     case 'trigger': {
-      if (conf01(event) < TRIGGER_SURE) {   // a phrase half heard: one plain treat, off the chrome, easy to miss
+      // a phrase half heard: one plain treat, off the chrome, easy to miss. On a script-aligned
+      // file there is no such thing: the words were known before the timing was, so a low conf
+      // buys the row nothing and takes the phrase the script was written around away.
+      if (!event.aligned && conf01(event) < TRIGGER_SURE) {
         cue.spawn.push({ kindId: 'treat', placement: 'lane', x: laneX(rng), h: LANE_H, at: 0 });
         break;
       }
@@ -221,14 +274,15 @@ export function cueFor(event, ctx = {}) {
       // and one word row in six, once the run is loud enough, has the rain hanging in the middle of it.
       // Not over the golden centre, and not on a row that already pours something (the flash-pulse
       // line is plain faces on purpose: its beat IS the effect, and the rain would talk over it).
-      const rain = !gold && !cue.mix && gifRainRow(kindId, intensity, rng);
+      const picture = gifRowKind(ctx);
+      const rain = !gold && !cue.mix && gifRainRow(kindId, intensity, rng, picture);
       for (const x of ROW_X) {
         const mid = Math.abs(x) < 1e-6;
         // `script: true`: the row is the file talking, not the road being dressed, so race/bubbles.js
         // lays it whatever the density knob is on. "A trigger row that never lands is the one thing
         // this road may not do" was already written above the fallback kind; a density of 0 through a
         // silence used to be able to do exactly that.
-        cue.spawn.push({ kindId: mid ? (gold ? 'golden' : (rain ? GIFRAIN_KIND : kindId)) : kindId,
+        cue.spawn.push({ kindId: mid ? (gold ? 'golden' : (rain ? picture : kindId)) : kindId,
           placement: 'lane', x, h: LANE_H, at: 0, row: true, script: true, w: label || '', ink, big: true });
       }
       cue.word = label || null;
@@ -292,7 +346,7 @@ export function cueFor(event, ctx = {}) {
       cue.mood = 'streamed';
       cue.toast = { text: label || 'drop', kind: hard ? 'jackpot' : 'effect' };
       const rings = hard ? DROP_AT.length : 2;
-      const ringKind = ROOM_TRIGGER[roomId(ctx)] || FALLBACK_TRIGGER;
+      const ringKind = liveKind(...(ROOM_TRIGGER[roomId(ctx)] || [])) || FALLBACK_TRIGGER;
       for (let i = 0; i < rings; i++) {
         const apex = hard && i === rings - 1;
         cue.spawn.push({ kindId: apex ? 'golden' : ringKind, placement: 'air', x: DROP_X[i], h: AIR_H + i * AIR_RISE, at: DROP_AT[i] });

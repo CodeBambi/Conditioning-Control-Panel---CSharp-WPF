@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { BUBBLE_KINDS, KIND_BY_ID } from '../bubbleKinds.js';
 import { normalizeChart } from '../chart.js';
 import { TRIGGER_SETS, laysRow } from '../../chart/editor/triggerSets.js';
-import { THEME_BY_PRESET, PRESETS_IN_USE, kindForPreset, themeFor, FALLBACK_KIND } from '../triggerTheme.js';
+import { THEME_BY_PRESET, PRESETS_IN_USE, AHEAD_OF_KINDS, kindForPreset, themeFor, FALLBACK_KIND } from '../triggerTheme.js';
 import { GENERATOR_ID, WORD_BIN_SEC, BIN_SEC, CAPTION_CONF, FP_SNAP_SEC, captionWords, scanTriggers, triggerHits, wordedRoad, roadFromPeaks, PEAKS_PER_SEC } from '../cloudChart.js';
 
 let fails = 0;
@@ -62,7 +62,13 @@ const r2 = (v) => Math.round(v * 100) / 100;
 const rows = Object.entries(THEME_BY_PRESET);
 ok(rows.length >= 13, 'the table has a row for every preset the brief named (' + rows.length + ')');
 ok(PRESETS_IN_USE.every((p) => !!THEME_BY_PRESET[p]), 'every preset the catalogue uses has a row');
-ok(rows.every(([, r]) => !!KIND_BY_ID[r.kind]), 'every row names a real bubble kind');
+// A row may name a kind bubbleKinds.js has not landed yet (blackout, lock, melt, gifwash), and
+// then it MUST name a fallback that has: the table is allowed to be ahead of the kinds, never ahead
+// of what the road can lay. kindForPreset below is what actually reaches a bubble, and that is held
+// against the live table on every row.
+ok(rows.every(([, r]) => !!KIND_BY_ID[r.kind] || (!!r.fallback && !!KIND_BY_ID[r.fallback])),
+  'every row names a real bubble kind, or a real one to wear until its own lands' +
+  (AHEAD_OF_KINDS.length ? ' (waiting on ' + AHEAD_OF_KINDS.join(', ') + ')' : ' (all four have landed)'));
 ok(rows.every(([, r]) => r.theme && r.color && r.ink && r.note), 'every row has a theme, two colours and a note');
 eq(new Set(rows.map(([, r]) => r.theme)).size, rows.length, 'no two rows share a plate theme');
 const dark = BUBBLE_KINDS.filter((k) => k.spawn === false).map((k) => k.id);
