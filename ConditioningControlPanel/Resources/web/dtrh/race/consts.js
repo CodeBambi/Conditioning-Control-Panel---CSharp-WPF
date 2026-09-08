@@ -50,6 +50,17 @@ export const POP_HIT_H = 1.25;
 /** Height of a lane bubble above the road (bubbles.js), and where the pop ring sits (kart.js). */
 export const LANE_H = 0.9;
 
+// ---- the ramp wedge, and the line the kart rides over it ---------------------------------
+// THE ROAD IS NOT ALWAYS AT h = 0. rooms.js builds a solid wedge on the asphalt in front of every
+// ramp lip, and off its crest the kart flies an arc, so for those metres the surface a player can
+// actually reach sits well above the road plane. Both numbers live here because spine.js measures
+// the reachable line off them (surfaceH / airLineAt / rideH), rooms.js draws the wedge to them and
+// kart.js stands the kart on them: three private copies of one slope is how a bubble ends up buried
+// inside it.
+/** Metres of slope in front of the lip, and the height of the crest the kart launches from. */
+export const RAMP_LEN = 4;
+export const RAMP_H = 0.8;
+
 /** Combo -> score multiplier ladder: [comboAtLeast, mult]. The first rung is three pops away. */
 export const MULT_LADDER = [[0, 1], [3, 2], [8, 3], [15, 4], [25, 6], [40, 8]];
 

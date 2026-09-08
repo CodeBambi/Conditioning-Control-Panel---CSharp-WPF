@@ -167,6 +167,9 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
   let sway = 0, swayTarget = 0, swayPeriod = 2, swayX = 0;   // pocket watch: the pendulum (setSway)
 
   let vx = 0, lean = 0, pitch = 0, elapsed = 0, lastRampD = -1, driftSide = 1, camReady = false, camX = 0, camH = 0;
+  // the surface under the wheels this frame (the ramp wedge; 0 on open road) and the pitch that
+  // lying along it costs, so the clearance cap in place() measures air under the saucer, not h
+  let ground = 0, ridePitch = 0;
   let camBoost = 0, steerS = 0, hopT = 0, scrubSec = 0, sparkAcc = 0, driftWas = false;
   let airWas = false, steerWas = 0, trickArmed = false, trickKind = null, trickDir = 1, trickT = 1;
   let jumpArm = 0, jumpPending = false, jumpBoostD = -1, launchT = -1e4;
@@ -333,16 +336,26 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
       if (!hit && here && Math.abs(here.d - lastRampD) > 0.01) hit = here;
       if (hit) launch(hit);
     }
-    if (state.airborne || state.h > 0) {
+    // THE ROAD IS NOT ALWAYS AT h = 0 (consts.js RAMP_LEN / RAMP_H). The ramp wedge rooms.js
+    // draws is solid, so the wheels stand on it: the kart rides the slope up to the lip and
+    // launches off the crest rather than driving straight through the mesh at h = 0 with the air
+    // line hanging over its head. Everything below measures from `ground` for that reason, and
+    // spine.js hands bubbles.js the same line, so a bubble on a ramp is a bubble you can reach.
+    ground = lay.surfaceH ? lay.surfaceH(state.d) : 0;
+    if (state.airborne || state.h > ground) {
       state.vh -= GRAVITY * dt;
       state.h += state.vh * dt;
-      if (state.h <= 0) {                                              // THUD: land, squash, spring back
+      if (state.h <= ground) {                                         // THUD: land, squash, spring back
         rig.squash(clamp(-state.vh / 12, 0.25, 1));
-        state.h = 0; state.vh = 0; state.airborne = false;
+        state.h = ground; state.vh = 0; state.airborne = false;
       }
-    }
-    state.airborne = state.h > 0.05 || (state.airborne && state.h > 0);
-    const pitchT = state.airborne ? -clamp(state.vh / 12, -1, 1) * 0.35 : 0;
+    } else if (state.h !== ground) state.h = ground;                   // riding the wedge up to the lip
+    state.airborne = state.h > ground + 0.05 || (state.airborne && state.h > ground);
+    // grounded on the slope the cup lies ALONG it (nose up the wedge); in the air the pitch is
+    // the flight's. Both are negative for nose-up, see place().
+    const slope = state.airborne ? 0 : -Math.atan(lay.surfaceSlope ? lay.surfaceSlope(state.d) : 0);
+    ridePitch = Math.abs(slope);
+    const pitchT = state.airborne ? -clamp(state.vh / 12, -1, 1) * 0.35 : slope;
     pitch += (pitchT - pitch) * ease(6, dt);
   }
 
@@ -426,7 +439,9 @@ export function createKart({ scene, layout, reducedMotion = false, pixel = null 
     // kart's, but only as far as the air under the saucer allows: on the road the nose-up left
     // over from a landing would otherwise drive the saucer's back edge sin(pitch) * SAUCER_R_W
     // under the surface, so it is capped at asin(clearance / SAUCER_R_W) and touches down level.
-    const clear = Math.asin(clamp((state.h + Math.max(0, hopH)) / SAUCER_R_W, 0, 1));
+    // the air under the saucer is height above the SURFACE (the wedge included), and lying along
+    // the slope is never a clip, so the cap opens by exactly the slope the wheels are on
+    const clear = ridePitch + Math.asin(clamp((state.h - ground + Math.max(0, hopH)) / SAUCER_R_W, 0, 1));
     group.quaternion.multiply(_q.setFromAxisAngle(AX_X, clamp(pitch, -clear, clear)));
     if (trickT < 1) {                                                  // the trick: one full turn, eased
       const ang = Math.PI * 2 * smooth(trickT);
