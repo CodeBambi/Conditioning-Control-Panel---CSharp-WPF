@@ -85,10 +85,19 @@ export function sustainedFor(meter, tuning = RAMP_TUNING, opts = {}) {
   };
 }
 
-/** How long the video card sticks over the board at this meter. */
-export function videoHoldMs(meter, tuning = RAMP_TUNING) {
+/**
+ * How long the video card sticks over the board at this meter.
+ *
+ * `baseSec` is the host's own setting (pbp:settings.videoHoldSec) when the
+ * user has one. It moves the FLOOR and the ceiling follows it, so the card
+ * still grows with the meter by the same proportion the tuning asks for
+ * instead of the user's setting being quietly overruled at a high meter.
+ */
+export function videoHoldMs(meter, tuning = RAMP_TUNING, baseSec = null) {
   const v = tuning.videoCard;
-  return Math.round(lerp(v.minHoldSec, v.maxHoldSec, clamp01(meter)) * 1000);
+  const min = Number.isFinite(baseSec) && baseSec > 0 ? baseSec : v.minHoldSec;
+  const max = min * (v.maxHoldSec / v.minHoldSec);
+  return Math.round(lerp(min, max, clamp01(meter)) * 1000);
 }
 
 /**

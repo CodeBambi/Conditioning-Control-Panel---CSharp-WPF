@@ -13,6 +13,7 @@
                ?fire=flash  fire one layer once on load
                ?only=blur   show only that sustained layer
                ?noturn=1    do not play the opening move (no video card)
+               ?media=host  use the host source instead of the fixtures
                ?still=1     kill fade-in transitions (a still frame, not a fade)
                ?seek=1200   jump one-shot animations forward, for a still
                ?quiet=1     hide the control panel (clean screenshots)
@@ -114,7 +115,7 @@
 
 <script type="module">
 import { attachRamp } from '../ramp/index.js';
-import { createFixtureMedia, loadFixtureList } from '../ramp/media.js';
+import { createFixtureMedia, createHostMedia, loadFixtureList } from '../ramp/media.js';
 
 const qs = new URLSearchParams(location.search);
 if (qs.get('quiet') === '1') document.getElementById('panel').classList.add('hidden');
@@ -153,8 +154,11 @@ const game = { ply: 0, side: 'w', clocks: { w: TOTAL, b: TOTAL } };
 const bus = createBus();
 window.PBP = { bus, game, board: null };
 
+/* ?media=host runs the shipping source. In a plain browser there is no
+   window.chrome.webview, so this is also the proof that the host path degrades
+   the way it promises: an empty pool, generated noise tiles, and no card. */
 const list = await loadFixtureList(new URL('./media.json', import.meta.url).href);
-const media = createFixtureMedia(list);
+const media = qs.get('media') === 'host' ? createHostMedia([]) : createFixtureMedia(list);
 const ramp = attachRamp({ bus, root: document.getElementById('fx'), stage: document.getElementById('stage'), media });
 window.PBP.ramp = ramp;
 

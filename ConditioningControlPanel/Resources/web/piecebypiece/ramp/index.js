@@ -84,6 +84,24 @@ export function attachRamp(opts = {}) {
 
   const stack = createLayerStack({ root, front, stage, media, tuning, rng: schedule.rng });
 
+  // declared before the subscription below, which can fire the moment it is made
+  let hostHoldSec = null;     // pbp:settings.videoHoldSec, when the host sent one
+  let reducedMotion = false;  // pbp:settings.reducedMotion: the moving layers stop
+
+  // A host-backed pool (media.js createHostMedia) forwards the host's own
+  // settings frame. A fixture pool has no onSettings and this is simply skipped.
+  let unsubSettings = null;
+  if (media && typeof media.onSettings === 'function') {
+    try {
+      unsubSettings = media.onSettings((s) => {
+        hostHoldSec = Number.isFinite(s && s.videoHoldSec) ? s.videoHoldSec : null;
+        const wasReduced = reducedMotion;
+        reducedMotion = !!(s && s.reducedMotion);
+        if (reducedMotion && !wasReduced) stack.clear();   // drop what is mid-flight
+      });
+    } catch { warn('host settings could not be subscribed'); }
+  }
+
   let enabled = true;
   let disposed = false;
   let rafId = 0;
@@ -139,7 +157,9 @@ export function attachRamp(opts = {}) {
       ticks += 1;
       const m = liveMeter();
       const out = schedule.tick(t, liveHeat(t), m, { cardLive: stack.cardLive });
-      for (const kind of out.fire) stack.oneshot(kind, { heat: out.heat });
+      // reduced motion keeps the still layers (the melt, the blur, the veils)
+      // and drops everything that pops, falls or rushes at the player
+      if (!reducedMotion) for (const kind of out.fire) stack.oneshot(kind, { heat: out.heat });
       applySustained(out.sustained);
       if (t - lastBoardPush >= BOARD_PUSH_MS) { lastBoardPush = t; pushToBoard(m); }
     }
@@ -163,19 +183,21 @@ export function attachRamp(opts = {}) {
       // The card belongs to the side that just MOVED and is now waiting: it
       // rides over the board while the opponent thinks. In hotseat both sides
       // are local, so this is simply every turn.
+      if (reducedMotion) return;
       const waiting = otherSide(p && p.side === 'b' ? 'b' : 'w');
-      const holdMs = videoHoldMs(overrideMeter == null ? meter.meterFor(waiting) : clamp01(overrideMeter), tuning);
-      stack.videoCard({ holdMs, side: waiting });
+      const m = overrideMeter == null ? meter.meterFor(waiting) : clamp01(overrideMeter);
+      stack.videoCard({ holdMs: videoHoldMs(m, tuning, hostHoldSec), side: waiting });
     },
     capture(p) {
       const t = now();
       meter.noteCapture(p, t);
       const taker = p && p.by === 'b' ? 'b' : 'w';
+      if (reducedMotion) return;   // the meter still moved; only the burst is off
       // both sides feel it; the one who took the piece feels it harder
       stack.burst(schedule.burstFor('taker', meter.heatFor(taker, t)));
       stack.burst(schedule.burstFor('victim', meter.heatFor(otherSide(taker), t)));
     },
-    check() { stack.oneshot('flash', { heat: liveHeat(now()) }); },
+    check() { if (!reducedMotion) stack.oneshot('flash', { heat: liveHeat(now()) }); },
     grab(p) { stack.grab(p); },
     dragmove(p) { stack.dragmove(p); },
     drop(p) { stack.drop(p); },
@@ -206,6 +228,7 @@ export function attachRamp(opts = {}) {
     if (disposed) return;
     disposed = true;
     if (rafId) { try { cancelAnimationFrame(rafId); } catch { clearTimeout(rafId); } rafId = 0; }
+    if (unsubSettings) { try { unsubSettings(); } catch { /* gone */ } unsubSettings = null; }
     if (bus) for (const [type, fn] of bound) { try { bus.off(type, fn); } catch { /* gone already */ } }
     bound.length = 0;
     try { stack.dispose(); } catch { /* best effort */ }
@@ -222,6 +245,8 @@ export function attachRamp(opts = {}) {
       meter: liveMeter(),
       heat: liveHeat(t),
       override: overrideMeter,
+      hostHoldSec,
+      reducedMotion,
       model: meter.snapshot(t),
       layers: stack.debug ? stack.debug() : null,
       media: media.stats ? media.stats() : null,
@@ -236,7 +261,7 @@ export function attachRamp(opts = {}) {
       },
       /** Dev harness only: fire one layer by name right now. */
       fire(kind, o) {
-        if (kind === 'videoCard') stack.videoCard(o || { holdMs: videoHoldMs(liveMeter(), tuning) });
+        if (kind === 'videoCard') stack.videoCard(o || { holdMs: videoHoldMs(liveMeter(), tuning, hostHoldSec) });
         else stack.oneshot(kind, o || { heat: liveHeat(now()) });
       },
       /** Dev harness only: isolate ONE sustained layer (null shows them all). */
