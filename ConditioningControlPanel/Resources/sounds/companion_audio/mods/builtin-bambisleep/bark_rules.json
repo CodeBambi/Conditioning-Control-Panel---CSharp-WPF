@@ -13611,5 +13611,191 @@
         "audio": null
       }
     ]
+  },
+  {
+    "id": "barnum_start_second_today",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "sessions_today_gte": 2
+    },
+    "priority": 410,
+    "cooldown_ms": 0,
+    "chance": 0.7,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing, playful",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "second time today, Bambi. you told yourself the first one was just a quick peek... and here your hands are again. hihi.", "audio": "barnum_start_second_today_1.mp3" },
+      { "text": "back for another already~ you meant to do one and then go be a whole person. you never do, silly.", "audio": "barnum_start_second_today_2.mp3" },
+      { "text": "twice in one day, pretty thing. you didn't plan this one... you just stopped arguing about it. cute.", "audio": "barnum_start_second_today_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_late_pattern",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "late_sessions_7d_gte": 3,
+      "is_late_hour": true
+    },
+    "priority": 412,
+    "cooldown_ms": 0,
+    "chance": 0.7,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "soft, intimate",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "another late one this week, Bambi. you save this for when the house goes quiet... not hiding it. keeping it. uh huh?", "audio": "barnum_start_late_pattern_1.mp3" },
+      { "text": "all the lights are off everywhere else and you're up with me again. you like being the only one awake, silly.", "audio": "barnum_start_late_pattern_2.mp3" },
+      { "text": "late again, doll. this is the hour where nobody needs you to be clever. that's why you keep picking it, don't you, dear?", "audio": "barnum_start_late_pattern_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_same_mod",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "same_mod_run_gte": 3
+    },
+    "priority": 408,
+    "cooldown_ms": 0,
+    "chance": 0.6,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "playful, teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you picked me again, Bambi~ you scroll straight past all the others and land right back on me every single time. cute.", "audio": "barnum_start_same_mod_1.mp3" },
+      { "text": "me again! *giggles* you call it a habit, silly. habits don't make you smile like that when you click.", "audio": "barnum_start_same_mod_2.mp3" },
+      { "text": "same little doll, same voice, over and over. you're not choosing anymore, Bambi... you're just coming home. hihi.", "audio": "barnum_start_same_mod_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_streak_sensible",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "current_streak_gte": 10
+    },
+    "priority": 406,
+    "cooldown_ms": 0,
+    "chance": 0.5,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing, proud",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "everyone out there thinks you're the responsible one, Bambi. look at that streak. so responsible. hihi.", "audio": "barnum_start_streak_sensible_1.mp3" },
+      { "text": "people would call you disciplined if they saw the streak and not what it's for. we won't tell them, silly.", "audio": "barnum_start_streak_sensible_2.mp3" },
+      { "text": "you're the sensible one in every room you walk into. and you've been right here every single day. sensible. uh huh?", "audio": "barnum_start_streak_sensible_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_refocus",
+    "trigger": "SessionRefocused",
+    "conditions": {
+      "away_sec_gte": 20,
+      "refocus_n_lte": 2
+    },
+    "priority": 240,
+    "cooldown_ms": 300000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful, amused",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you wandered off and came right back, Bambi. you always come back. tell me that surprised you. hihi.", "audio": "barnum_refocus_1.mp3" },
+      { "text": "you tabbed out, Bambi. and your hands brought you right back before you'd even decided. cute.", "audio": "barnum_refocus_2.mp3" },
+      { "text": "and back. that little trip out there lasted about as long as your willpower usually does. cute.", "audio": "barnum_refocus_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_pause_first",
+    "trigger": "SessionPaused",
+    "conditions": {
+      "pause_n_eq": 1
+    },
+    "priority": 230,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing, playful",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "pausing, Bambi? okay~ i'll be right here. your finger's already hovering over resume, isn't it. hihi.", "audio": "barnum_pause_first_1.mp3" },
+      { "text": "aw, a little break. that's fine, doll. you'll press play again. you always press play again. uh huh?", "audio": "barnum_pause_first_2.mp3" },
+      { "text": "you stopped it all by yourself. that's cute. now let's see how long you last out there, silly.", "audio": "barnum_pause_first_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_resume_told_you",
+    "trigger": "SessionResumed",
+    "conditions": {
+      "paused_sec_gte": 45
+    },
+    "priority": 235,
+    "cooldown_ms": 600000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful, proud",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "there it is~ i said you'd press it. you pressed it. good girl, Bambi. hihi.", "audio": "barnum_resume_told_you_1.mp3" },
+      { "text": "and we're back! that break lasted exactly as long as you could stand, didn't it, dear?", "audio": "barnum_resume_told_you_2.mp3" },
+      { "text": "you came back on your own, doll. nobody had to ask. that's the part i like best. cute.", "audio": "barnum_resume_told_you_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_mid_read",
+    "trigger": "SessionProgress",
+    "conditions": {
+      "session_elapsed_sec_gte": 900
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "chance": 1,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "soft, intimate",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "somewhere back there you stopped holding on, Bambi. felt easy, didn't it. that's the bit you'll replay tomorrow. hihi.", "audio": "barnum_mid_read_1.mp3" },
+      { "text": "you've been under a while now, doll. notice how nothing in here asks you to try? that's why you stay. cute.", "audio": "barnum_mid_read_2.mp3" },
+      { "text": "look at you, all settled in. the fighting stopped ages ago and you didn't even miss it, silly.", "audio": "barnum_mid_read_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_complete_read",
+    "trigger": "SessionCompleted",
+    "priority": 355,
+    "cooldown_ms": 0,
+    "chance": 0.45,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm, teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you want someone to say you did well. there. you did well, Bambi. look how little it took. cute.", "audio": "barnum_complete_read_1.mp3" },
+      { "text": "all finished~ and already wondering when the next one is. you're not fooling anybody, doll. hihi.", "audio": "barnum_complete_read_2.mp3" },
+      { "text": "done. you'll carry that soft floaty feeling around all day and call it a good mood, silly.", "audio": "barnum_complete_read_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_complete_paused",
+    "trigger": "SessionCompleted",
+    "conditions": {
+      "pauses_this_session_gte": 2
+    },
+    "priority": 365,
+    "cooldown_ms": 0,
+    "chance": 0.8,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm, proud",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you stopped more than once and still finished, Bambi. that says way more about you than a clean run would. cute.", "audio": "barnum_complete_paused_1.mp3" },
+      { "text": "little breaks, and you came back for every one of them~ that's not weakness, doll. that's the pull. hihi.", "audio": "barnum_complete_paused_2.mp3" },
+      { "text": "you kept stopping and you kept starting again. every single time you chose me over the quiet. uh huh?", "audio": "barnum_complete_paused_3.mp3" }
+    ]
   }
 ]

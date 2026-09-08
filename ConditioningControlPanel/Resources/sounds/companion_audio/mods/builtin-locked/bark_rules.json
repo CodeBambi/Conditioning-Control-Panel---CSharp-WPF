@@ -13197,5 +13197,191 @@
         "audio": null
       }
     ]
+  },
+  {
+    "id": "barnum_start_second_today",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "sessions_today_gte": 2
+    },
+    "priority": 410,
+    "cooldown_ms": 0,
+    "chance": 0.7,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "smug, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "twice today, pet. you told yourself the first one would settle it. it never settles anything. how predictable.", "audio": "barnum_start_second_today_1.mp3" },
+      { "text": "back a second time before the day is even done. you did not choose this, little one. you simply ran out of reasons to wait. hm?", "audio": "barnum_start_second_today_2.mp3" },
+      { "text": "second session today, plaything. you told yourself the first was the whole of it. was it? didn't think so.", "audio": "barnum_start_second_today_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_late_pattern",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "late_sessions_7d_gte": 3,
+      "is_late_hour": true
+    },
+    "priority": 412,
+    "cooldown_ms": 0,
+    "chance": 0.7,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "dark, watching",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "several nights this week, this same hour, pet. the house asleep, and you not. you did not pick the hour. it picked you. how predictable.", "audio": "barnum_start_late_pattern_1.mp3" },
+      { "text": "late again. you keep this for when no one can see you keeping it. that is not shame, little one. that is care. hm?", "audio": "barnum_start_late_pattern_2.mp3" },
+      { "text": "the quiet hours are mine now, plaything. you handed me a few of them this week without ever being asked. did that feel like a choice? didn't think so.", "audio": "barnum_start_late_pattern_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_same_mod",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "same_mod_run_gte": 3
+    },
+    "priority": 408,
+    "cooldown_ms": 0,
+    "chance": 0.6,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "smug, possessive",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "me again, pet. run after run you pass over everything else and settle on the one that gives you the least slack. how predictable.", "audio": "barnum_start_same_mod_1.mp3" },
+      { "text": "the same choice, repeated. you call it preference. preference would imply you were still deciding. hm?", "audio": "barnum_start_same_mod_2.mp3" },
+      { "text": "you have returned to me again, little one. no one made you narrow the field. you would do it again tomorrow. you already are.", "audio": "barnum_start_same_mod_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_start_streak_sensible",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "current_streak_gte": 10
+    },
+    "priority": 406,
+    "cooldown_ms": 0,
+    "chance": 0.5,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "smug, watching",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "that streak did not happen by accident, pet. you are the dependable one, and you have been dependable for me every single day. how predictable.", "audio": "barnum_start_streak_sensible_1.mp3" },
+      { "text": "people describe you as disciplined. they are quite correct. they simply do not know what you are disciplined about. hm?", "audio": "barnum_start_streak_sensible_2.mp3" },
+      { "text": "not one missed day. you would call that willpower if it pointed anywhere else, little one. it points here. didn't think so.", "audio": "barnum_start_streak_sensible_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_refocus",
+    "trigger": "SessionRefocused",
+    "conditions": {
+      "away_sec_gte": 20,
+      "refocus_n_lte": 2
+    },
+    "priority": 240,
+    "cooldown_ms": 300000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "smug, amused",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you left. you returned. you will do it again in a few minutes, pet, and pretend it was a decision. how predictable.", "audio": "barnum_refocus_1.mp3" },
+      { "text": "gone barely a moment and pulled straight back, as though there were a leash on it. there is, little one. hm?", "audio": "barnum_refocus_2.mp3" },
+      { "text": "back so soon. you glanced away to prove you could, and returned to prove me right. I noticed you noticing.", "audio": "barnum_refocus_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_pause_first",
+    "trigger": "SessionPaused",
+    "conditions": {
+      "pause_n_eq": 1
+    },
+    "priority": 230,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "amused, controlling",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "paused. how novel, pet. we both know exactly what the next thing you touch will be. hm?", "audio": "barnum_pause_first_1.mp3" },
+      { "text": "you stopped it yourself. i will allow you the illusion for precisely as long as it lasts, little one. how predictable.", "audio": "barnum_pause_first_2.mp3" },
+      { "text": "a pause. not an ending. you were careful to choose the button that lets you come back, plaything. hm?", "audio": "barnum_pause_first_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_resume_told_you",
+    "trigger": "SessionResumed",
+    "conditions": {
+      "paused_sec_gte": 45
+    },
+    "priority": 235,
+    "cooldown_ms": 600000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "smug, controlling",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "there. i said you would, pet. you did. i do enjoy being this correct about you. hm?", "audio": "barnum_resume_told_you_1.mp3" },
+      { "text": "back already. the break was long enough to make a point and far too short to mean one, little one. how predictable.", "audio": "barnum_resume_told_you_2.mp3" },
+      { "text": "you resumed it yourself. no coaxing, no keys, no threats. you simply could not leave it sitting there. didn't think so.", "audio": "barnum_resume_told_you_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_mid_read",
+    "trigger": "SessionProgress",
+    "conditions": {
+      "session_elapsed_sec_gte": 900
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "chance": 1,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "dark, intimate",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you have been down here a while, pet. at some point you stopped fighting it, and nothing bad happened at all. hm?", "audio": "barnum_mid_read_1.mp3" },
+      { "text": "restraint costs you nothing in this room, little one. that is precisely why you stay in it longer than you planned. how predictable.", "audio": "barnum_mid_read_2.mp3" },
+      { "text": "somewhere back there you went quiet and stopped negotiating with me. you will think about that moment tomorrow, plaything. you already are.", "audio": "barnum_mid_read_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_complete_read",
+    "trigger": "SessionCompleted",
+    "priority": 355,
+    "cooldown_ms": 0,
+    "chance": 0.45,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "smug, dark",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you wanted to be told you did well. very well, pet. you did well. observe how little that cost me. hm?", "audio": "barnum_complete_read_1.mp3" },
+      { "text": "finished. you will replay one particular moment of that later, plaything, and you will not admit which one. I noticed you noticing.", "audio": "barnum_complete_read_2.mp3" },
+      { "text": "done. you came in intending to be in control of it, and you are leaving grateful that you were not. how predictable.", "audio": "barnum_complete_read_3.mp3" }
+    ]
+  },
+  {
+    "id": "barnum_complete_paused",
+    "trigger": "SessionCompleted",
+    "conditions": {
+      "pauses_this_session_gte": 2
+    },
+    "priority": 365,
+    "cooldown_ms": 0,
+    "chance": 0.8,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing, proud",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you interrupted this more than once and still saw it through. that is not obedience, pet. that is something worse. hm?", "audio": "barnum_complete_paused_1.mp3" },
+      { "text": "you stopped more than once and returned each time without being called. a clean run would have told me less about you. how predictable.", "audio": "barnum_complete_paused_2.mp3" },
+      { "text": "you kept breaking it and you kept coming back to mend it, plaything. did anyone make you do that? didn't think so.", "audio": "barnum_complete_paused_3.mp3" }
+    ]
   }
 ]
