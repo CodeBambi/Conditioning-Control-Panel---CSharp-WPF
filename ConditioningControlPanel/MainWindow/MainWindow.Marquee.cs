@@ -42,8 +42,9 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// The rotation, built once at init instead of per tick. Two beats forever (support +
-        /// welcome-back) plus the v6.8.0 One Account beat while it is still unspent - see
-        /// <see cref="RetireWebBannerBeat"/>, which is the only thing that rebuilds this.
+        /// welcome-back), plus the v6.8.0 One Account beat while it is still unspent, plus the
+        /// pool beat while a line is loaded - see <see cref="RebuildBannerBeats"/>, the only
+        /// thing that rebuilds this after init.
         /// </summary>
         private TextBlock[] _bannerBeats = Array.Empty<TextBlock>();
 
@@ -548,8 +549,8 @@ namespace ConditioningControlPanel
         private void BannerRotationTimer_Tick(object? sender, EventArgs e)
         {
             // The rotation follows _bannerBeats (built at init, rebuilt only by
-            // RetireWebBannerBeat): support + welcome-back always, plus the v6.8.0 One Account
-            // beat while it is unspent. 0813 retired the PlatinumPuppets thanks beat along with
+            // RebuildBannerBeats): support + welcome-back always, plus the v6.8.0 One Account
+            // beat while it is unspent and the pool beat while a line is loaded. 0813 retired the PlatinumPuppets thanks beat along with
             // the banner's own canvas row; the modulus follows the array, never a literal.
             var banners = _bannerBeats;
             if (banners.Length < 2) return;
