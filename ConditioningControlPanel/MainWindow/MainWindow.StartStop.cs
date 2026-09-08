@@ -478,6 +478,11 @@ namespace ConditioningControlPanel
 
             // Stop other services
             App.Subliminal.Stop();
+            // Before the overlay service goes down: hand back anything a TAKEOVER pulse borrowed
+            // (#1180). Takeover itself may legitimately outlive the engine (see the block below), but
+            // an in-flight pink/spiral pulse must not - it had boosted the user's opacity and taken
+            // ownership of the overlay service, and its own restore is 30 s away.
+            App.Autonomy?.CancelActivePulses();
             App.Overlay.Stop();
             App.LockCard.Stop();   // scheduler only — the visible card is dropped by ForceCloseAll below
             App.BubbleCount.Stop();

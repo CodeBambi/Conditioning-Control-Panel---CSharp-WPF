@@ -32,17 +32,19 @@ import { propPack, packGeo, geoSize } from './propPack.js';
 // ---- the eight rooms -------------------------------------------------------------
 // colors: road = ribbon tint, edge = kerb lines, prop = wall props, fog = the room's haze
 // (informational; the biome palette is what fx.js grades), banner = the MARQUEE plate.
-// bubbleBias multiplies bubbles.js kind weights; ambient names a fieldFx particle field.
+// bubbleBias multiplies bubbles.js kind weights; ambient names a fieldFx particle field. A bias on a
+// DARKENED kind (bubbleKinds.js `spawn: false`) is dead weight, because rollKind drops those rows out
+// of every pool before the bias is read: the `flash` entries came off on 2026-09-08 with the bubble.
 export const ROOMS = [
   { id: 'teagarden', name: 'The Tea Garden', tagline: 'nothing here fights you', biome: 'mirrorlake',
     colors: { road: 0x2f6e50, edge: 0xf6e7c8, prop: 0xffb6d9, fog: 0x12261f, banner: 0x5fa98a },
     propKind: 'teacup', loud: false,
-    bubbleBias: { treat: 1.4, golden: 0.8, lucky: 1.2, flash: 0.5, subliminal: 0.5, video: 0 },
+    bubbleBias: { treat: 1.4, golden: 0.8, lucky: 1.2, subliminal: 0.5, video: 0 },
     ambient: { kind: 'petals', colors: [[255, 182, 217], [191, 235, 216], [246, 231, 200]] } },
   { id: 'toybox', name: 'The Toybox', tagline: 'the floor bounces. so do you', biome: 'toybox',
     colors: { road: 0x33307f, edge: 0xffd23f, prop: 0xffd23f, fog: 0x14103a, banner: 0x6c63d8 },
     propKind: 'block', loud: true, propAlt: [0xff4d6d, 0x3a86ff],
-    bubbleBias: { treat: 1.2, prism: 1.5, flash: 1.3, glitch: 0.6 },
+    bubbleBias: { treat: 1.2, prism: 1.5, glitch: 0.6 },
     ambient: { kind: 'confetti', colors: [[255, 77, 109], [255, 210, 63], [58, 134, 255]] } },
   { id: 'casino', name: "The Fool's Casino", tagline: 'the wheel always pays. eventually', biome: 'casino',
     colors: { road: 0x5c1128, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x0b0508, banner: 0xa3122e },
@@ -57,7 +59,7 @@ export const ROOMS = [
   { id: 'mirrors', name: 'The Hall of Mirrors', tagline: 'the picture flips. your hand does not', biome: 'mirrors',
     colors: { road: 0x44454f, edge: 0x5be7d8, prop: 0xdde3f0, fog: 0x1a1e2c, banner: 0x9aa3c8 },
     propKind: 'mirror', loud: false,
-    bubbleBias: { prism: 1.6, glitch: 1.5, spiral: 1.2, flash: 1.2 },
+    bubbleBias: { prism: 1.6, glitch: 1.5, spiral: 1.2 },
     ambient: { kind: 'glints', colors: [[221, 227, 240], [91, 231, 216]] } },
   { id: 'chapel', name: 'The Pink Chapel', tagline: 'the spiral pins itself here', biome: 'chapel',
     colors: { road: 0x6c1c4c, edge: 0xf2c14e, prop: 0xffffff, fog: 0x2a0820, banner: 0xe23c9c },

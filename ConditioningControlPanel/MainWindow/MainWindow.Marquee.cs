@@ -42,8 +42,9 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// The rotation, built once at init instead of per tick. Two beats forever (support +
-        /// welcome-back) plus the v6.8.0 One Account beat while it is still unspent - see
-        /// <see cref="RetireWebBannerBeat"/>, which is the only thing that rebuilds this.
+        /// welcome-back), plus the v6.8.0 One Account beat while it is still unspent, plus the
+        /// pool beat while a line is loaded - see <see cref="RebuildBannerBeats"/>, the only
+        /// thing that rebuilds this after init.
         /// </summary>
         private TextBlock[] _bannerBeats = Array.Empty<TextBlock>();
 
@@ -63,6 +64,8 @@ namespace ConditioningControlPanel
 
             // Always start rotation now (support + welcome-back; the thanks beat was retired 0813)
             _bannerRotationTimer.Start();
+
+            InitializeBannerPool();
         }
 
         /// <summary>
@@ -73,9 +76,50 @@ namespace ConditioningControlPanel
         private TextBlock[] BuildBannerBeats()
         {
             var spent = App.Settings?.Current?.SeenFeatureIntros.Contains(WebBannerSeenKey) == true;
-            return spent
-                ? new[] { TxtBannerPrimary, TxtBannerSecondary }
-                : new[] { TxtBannerPrimary, TxtBannerSecondary, TxtBannerWeb };
+            var beats = new List<TextBlock> { TxtBannerPrimary, TxtBannerSecondary };
+            if (!spent) beats.Add(TxtBannerWeb);
+            if (_bannerPoolActive) beats.Add(TxtBannerPool);
+            return beats.ToArray();
+        }
+
+        /// <summary>
+        /// Rebuilds <see cref="_bannerBeats"/> in place, keeping whichever beat is on screen on
+        /// screen: the current beat's index is re-found in the new array rather than reset. If the
+        /// beat that was showing has just left the rotation, it hands its slot to the support beat
+        /// with the same 500ms crossfade the rotation uses, so the banner never blinks empty.
+        ///
+        /// <para>The one path that mutates the array. Both the One Account retirement and the
+        /// pool beat joining or leaving go through here.</para>
+        /// </summary>
+        private void RebuildBannerBeats()
+        {
+            var current = _bannerCurrentIndex >= 0 && _bannerCurrentIndex < _bannerBeats.Length
+                ? _bannerBeats[_bannerCurrentIndex]
+                : null;
+
+            _bannerBeats = BuildBannerBeats();
+
+            var idx = current == null ? -1 : Array.IndexOf(_bannerBeats, current);
+            if (idx >= 0)
+            {
+                _bannerCurrentIndex = idx;
+                return;
+            }
+
+            _bannerCurrentIndex = 0;
+            if (current == null) return;
+
+            var fade = TimeSpan.FromMilliseconds(500);
+            var ease = new System.Windows.Media.Animation.QuadraticEase
+            {
+                EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut
+            };
+            current.BeginAnimation(UIElement.OpacityProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(0, fade) { EasingFunction = ease });
+            TxtBannerPrimary.BeginAnimation(UIElement.OpacityProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(1, fade) { EasingFunction = ease });
+            current.IsHitTestVisible = false;
+            TxtBannerPrimary.IsHitTestVisible = true;
         }
 
         private void UpdateBannerWelcomeMessage()
@@ -505,8 +549,8 @@ namespace ConditioningControlPanel
         private void BannerRotationTimer_Tick(object? sender, EventArgs e)
         {
             // The rotation follows _bannerBeats (built at init, rebuilt only by
-            // RetireWebBannerBeat): support + welcome-back always, plus the v6.8.0 One Account
-            // beat while it is unspent. 0813 retired the PlatinumPuppets thanks beat along with
+            // RebuildBannerBeats): support + welcome-back always, plus the v6.8.0 One Account
+            // beat while it is unspent and the pool beat while a line is loaded. 0813 retired the PlatinumPuppets thanks beat along with
             // the banner's own canvas row; the modulus follows the array, never a literal.
             var banners = _bannerBeats;
             if (banners.Length < 2) return;
@@ -516,6 +560,9 @@ namespace ConditioningControlPanel
             var fadeOutTarget = banners[_bannerCurrentIndex];
             var nextIndex = (_bannerCurrentIndex + 1) % banners.Length;
             var fadeInTarget = banners[nextIndex];
+
+            // A pool line drawn while its beat was on screen swaps in here, off screen.
+            ApplyPendingBannerPoolText(fadeOutTarget, fadeInTarget);
 
             // Create fade animations
             var fadeOut = new System.Windows.Media.Animation.DoubleAnimation
@@ -606,38 +653,117 @@ namespace ConditioningControlPanel
 
                 if (_bannerBeats.Length == 0 || Array.IndexOf(_bannerBeats, TxtBannerWeb) < 0) return;
 
-                var current = _bannerCurrentIndex < _bannerBeats.Length
-                    ? _bannerBeats[_bannerCurrentIndex]
-                    : TxtBannerPrimary;
-                _bannerBeats = new TextBlock[] { TxtBannerPrimary, TxtBannerSecondary };
-
-                if (ReferenceEquals(current, TxtBannerWeb))
-                {
-                    // The retired beat is the one on screen - crossfade it out to the support
-                    // beat rather than leaving a spent nudge parked in the banner.
-                    _bannerCurrentIndex = 0;
-                    var fade = TimeSpan.FromMilliseconds(500);
-                    var ease = new System.Windows.Media.Animation.QuadraticEase
-                    {
-                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut
-                    };
-                    TxtBannerWeb.BeginAnimation(UIElement.OpacityProperty,
-                        new System.Windows.Media.Animation.DoubleAnimation(0, fade) { EasingFunction = ease });
-                    TxtBannerPrimary.BeginAnimation(UIElement.OpacityProperty,
-                        new System.Windows.Media.Animation.DoubleAnimation(1, fade) { EasingFunction = ease });
-                    TxtBannerWeb.IsHitTestVisible = false;
-                    TxtBannerPrimary.IsHitTestVisible = true;
-                }
-                else
-                {
-                    var idx = Array.IndexOf(_bannerBeats, current);
-                    _bannerCurrentIndex = idx >= 0 ? idx : 0;
-                }
+                // The key is spent, so BuildBannerBeats no longer offers the beat; the shared
+                // rebuild crossfades it out if it happens to be the one on screen.
+                RebuildBannerBeats();
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "RetireWebBannerBeat failed; the beat rotates on until next launch");
             }
+        }
+
+        // ---------------------------------------------------------------- rotating pool beat
+
+        /// <summary>The shipped line pool. Reads Resources/banner/lines.&lt;lang&gt;.json lazily.</summary>
+        private readonly Services.Banner.BannerPoolService _bannerPool = new();
+
+        /// <summary>Whether TxtBannerPool currently holds a line and belongs in the rotation.</summary>
+        private bool _bannerPoolActive;
+
+        /// <summary>
+        /// A freshly drawn line waiting for the pool beat to be off screen. Swapping the text while
+        /// the beat is visible would rewrite a line mid-read, so the swap is deferred to a rotation
+        /// tick that touches neither end of the crossfade.
+        /// </summary>
+        private string? _pendingBannerPoolText;
+
+        private static readonly Random BannerPoolRng = new();
+
+        /// <summary>
+        /// Arms the pool clock: first line 90 seconds after startup (long enough that it never
+        /// competes with the launch dialogs), then one every 8 to 12 minutes. Independent of the
+        /// 4 second crossfade, which is what actually shows the line.
+        /// </summary>
+        private void InitializeBannerPool()
+        {
+            try
+            {
+                _bannerPoolTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(90) };
+                _bannerPoolTimer.Tick += BannerPoolTimer_Tick;
+                _bannerPoolTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Banner pool clock failed to arm; the banner keeps its fixed beats");
+            }
+        }
+
+        /// <summary>Re-rolls the next gap. 8 to 12 minutes, fresh every time.</summary>
+        private void ScheduleNextBannerPoolLine()
+        {
+            if (_bannerPoolTimer == null) return;
+            _bannerPoolTimer.Interval = TimeSpan.FromMinutes(8 + BannerPoolRng.NextDouble() * 4);
+        }
+
+        /// <summary>
+        /// Draws the next pool line. Nothing eligible (pool off, no file, every line gated out)
+        /// retires the beat rather than showing a stale line, and the banner falls back to the
+        /// rotation it had before the pool existed.
+        /// </summary>
+        private void BannerPoolTimer_Tick(object? sender, EventArgs e)
+        {
+            if (Application.Current?.Dispatcher == null) return;
+            if (Application.Current.Dispatcher.HasShutdownStarted) return;
+
+            try
+            {
+                ScheduleNextBannerPoolLine();
+                if (!IsLoaded) return;
+
+                var line = _bannerPool.NextLine();
+
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    _pendingBannerPoolText = null;
+                    if (!_bannerPoolActive) return;
+
+                    // Leave the text alone: RebuildBannerBeats fades the beat out over 500ms, and
+                    // clearing it here would blank the line mid-fade. The next draw overwrites it.
+                    _bannerPoolActive = false;
+                    RebuildBannerBeats();
+                    return;
+                }
+
+                if (_bannerPoolActive)
+                {
+                    // Already in the rotation: park the new line and let the crossfade pick it up.
+                    _pendingBannerPoolText = line;
+                    return;
+                }
+
+                TxtBannerPool.Text = line;
+                _bannerPoolActive = true;
+                RebuildBannerBeats();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Banner pool tick failed; the beat is left as it was");
+            }
+        }
+
+        /// <summary>
+        /// Applies a parked pool line, but only on a tick where the pool beat is at neither end of
+        /// the crossfade (so it is fully transparent and the swap cannot be seen). With the two
+        /// fixed beats always present such a tick always comes round.
+        /// </summary>
+        private void ApplyPendingBannerPoolText(TextBlock fadeOutTarget, TextBlock fadeInTarget)
+        {
+            if (_pendingBannerPoolText == null) return;
+            if (ReferenceEquals(fadeOutTarget, TxtBannerPool) || ReferenceEquals(fadeInTarget, TxtBannerPool)) return;
+
+            TxtBannerPool.Text = _pendingBannerPoolText;
+            _pendingBannerPoolText = null;
         }
 
         #endregion

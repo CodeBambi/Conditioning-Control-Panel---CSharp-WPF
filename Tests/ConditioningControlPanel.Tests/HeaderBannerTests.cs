@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -53,6 +53,7 @@ public class HeaderBannerTests
         Assert.Single(Regex.Matches(xaml, "x:Name=\"TxtBannerPrimary\""));
         Assert.Single(Regex.Matches(xaml, "x:Name=\"TxtBannerSecondary\""));
         Assert.Single(Regex.Matches(xaml, "x:Name=\"TxtBannerWeb\""));
+        Assert.Single(Regex.Matches(xaml, "x:Name=\"TxtBannerPool\""));
     }
 
     [Fact]
@@ -82,9 +83,11 @@ public class HeaderBannerTests
     public void TheRotationFollowsTheBeatsArray()
     {
         // v6.8.0: the rotation reads _bannerBeats, built once at init - support + welcome-back
-        // always, plus the One Account beat while SeenFeatureIntros lacks "banner-web". The tick
-        // must never rebuild the array itself (the conditional lives in BuildBannerBeats and
-        // RetireWebBannerBeat is the only writer after init).
+        // always, plus the One Account beat while SeenFeatureIntros lacks "banner-web", plus the
+        // pool beat while a line is loaded. The tick must never rebuild the array itself (the
+        // conditionals live in BuildBannerBeats and RebuildBannerBeats is the only writer after
+        // init - both the One Account retirement and the pool beat joining or leaving go
+        // through it).
         var marquee = ReadSource("MainWindow", "MainWindow.Marquee.cs");
         var tick = Regex.Match(marquee, @"void BannerRotationTimer_Tick\(.*?\n        \}", RegexOptions.Singleline);
         Assert.True(tick.Success, "BannerRotationTimer_Tick has moved or changed shape");
@@ -101,12 +104,25 @@ public class HeaderBannerTests
         Assert.Contains("banners.Length < 2", tick.Value);
         Assert.Contains("_bannerCurrentIndex >= banners.Length", tick.Value);
 
-        // The builder carries the conditional: spent = two beats, unspent = three.
+        // Exactly one writer after the field initialiser: init builds it, RebuildBannerBeats
+        // replaces it. A third assignment is a second rotation nobody re-indexes.
+        Assert.Equal(3, Regex.Matches(marquee, @"_bannerBeats = ").Count);
+        var rebuild = Regex.Match(marquee, @"void RebuildBannerBeats\(\).*?\n        \}", RegexOptions.Singleline);
+        Assert.True(rebuild.Success, "RebuildBannerBeats has moved or changed shape");
+        Assert.Contains("_bannerBeats = BuildBannerBeats();", rebuild.Value);
+
+        // The builder carries the conditionals: the two fixed beats always, the One Account beat
+        // only while its key is unspent, the pool beat only while a line is actually loaded. Two
+        // to four beats, and EVERY optional one guarded - an unguarded add is a beat that rotates
+        // in empty (or one that keeps nagging someone who already went).
         var builder = Regex.Match(marquee, @"TextBlock\[\] BuildBannerBeats\(\).*?\n        \}", RegexOptions.Singleline);
         Assert.True(builder.Success, "BuildBannerBeats has moved or changed shape");
         Assert.Contains("WebBannerSeenKey", builder.Value);
-        Assert.Contains("new[] { TxtBannerPrimary, TxtBannerSecondary }", builder.Value);
-        Assert.Contains("new[] { TxtBannerPrimary, TxtBannerSecondary, TxtBannerWeb }", builder.Value);
+        Assert.Contains("{ TxtBannerPrimary, TxtBannerSecondary }", builder.Value);
+        foreach (var optional in new[] { "TxtBannerWeb", "TxtBannerPool" })
+            Assert.True(Regex.IsMatch(builder.Value, @"if \([^)]+\) beats\.Add\(" + optional + @"\);"),
+                        optional + " joins the rotation unconditionally");
+        Assert.Equal(2, Regex.Matches(builder.Value, @"beats\.Add\(").Count);
     }
 
     [Fact]
@@ -166,6 +182,7 @@ public class HeaderBannerTests
         Assert.Contains("x:Name=\"TxtBannerPrimary\"", block.Value);
         Assert.Contains("x:Name=\"TxtBannerSecondary\"", block.Value);
         Assert.Contains("x:Name=\"TxtBannerWeb\"", block.Value);
+        Assert.Contains("x:Name=\"TxtBannerPool\"", block.Value);
 
         // The sheen moved with them - MainWindow.ChromeFx.SweepBannerSheen drives all three names.
         foreach (var name in new[] { "BannerSheenHost", "BannerSheen", "BannerSheenSlide" })
@@ -191,11 +208,16 @@ public class HeaderBannerTests
         Assert.Contains("MaxWidth=", block.Value);
         Assert.Contains("HorizontalAlignment=\"Center\"", block.Value);
 
-        // Trim, never wrap: a wrapping beat is the other way this row grows. Three since
-        // v6.8.0 - the One Account beat trims like its siblings.
+        // Trim, never wrap: a wrapping beat is the other way this row grows. Asserted per beat
+        // rather than by a count, so a new beat has to trim like its siblings instead of just
+        // moving the number. Four since the banner pool beat.
         var body = Regex.Match(xaml, "<Border Grid.Column=\"5\" x:Name=\"HeaderBannerHost\".*?</Border>\\s*</Grid>",
                                RegexOptions.Singleline).Value;
-        Assert.Equal(3, Regex.Matches(body, "TextTrimming=\"CharacterEllipsis\"").Count);
+        var beats = Regex.Matches(body, "<TextBlock x:Name=\"(TxtBanner\\w+)\"[^>]*>").ToArray();
+        Assert.Equal(new[] { "TxtBannerPrimary", "TxtBannerSecondary", "TxtBannerWeb", "TxtBannerPool" },
+                     beats.Select(m => m.Groups[1].Value).ToArray());
+        foreach (var beat in beats)
+            Assert.Contains("TextTrimming=\"CharacterEllipsis\"", beat.Value);
         Assert.DoesNotContain("TextWrapping", body);
     }
 

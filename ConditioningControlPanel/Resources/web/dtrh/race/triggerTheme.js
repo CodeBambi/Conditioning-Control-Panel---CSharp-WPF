@@ -16,8 +16,10 @@
  *
  * DARK KINDS. `bubbleKinds.js` may darken a row (`spawn: false`) and a chart is
  * never allowed to place one, so a preset that points at a dark kind falls back
- * to `flash`. That check is made here, against the live table, so darkening one
- * more row never needs an edit in this file.
+ * to FALLBACK_KIND. That check is made here, against the live table, so darkening
+ * one more row never needs an edit in this file. It matters more than it reads:
+ * `bubbles.js spawnRow` lays NO row at all for a dark kind, so a preset left
+ * pointing at one would take the whole unavoidable line off the road.
  *
  * Node-clean: no DOM, no window.
  * ==========================================================================*/
@@ -25,8 +27,12 @@
 import { KIND_BY_ID } from './bubbleKinds.js';
 import { TRIGGER_SETS } from '../chart/editor/triggerSets.js';
 
-/** What a preset that points at a darkened kind wears instead. */
-export const FALLBACK_KIND = 'flash';
+/** What a preset that points at a darkened kind wears instead. `pink` since 2026-09-08 (the flash
+ *  bubble went dark with it): a preset that needed a fallback is a LOUD one (the tape, the pulse),
+ *  so a treat would quietly drop the effect the phrase was written for. Pink is the effect kind
+ *  that spawns at any intensity, and it sits in the tint slot of THE MIX, where it never fights
+ *  the strobe a `flash-pulse` row pours on the same beat. */
+export const FALLBACK_KIND = 'pink';
 /** And what an event with no preset at all, or one nobody wrote a row for, wears. */
 export const FALLBACK_THEME = 'mark';
 
@@ -42,11 +48,17 @@ export const THEME_BY_PRESET = {
   'freeze-snap':  { kind: 'freeze',     theme: 'frost',  color: '#8ae6ff', ink: '#0f0f1c', note: 'ice blue, frost crackle, hard stop at scale 1' },
   'snap-shake':   { kind: 'glitch',     theme: 'snap',   color: '#f4f2ff', ink: '#0f0f1c', note: 'white, one violent shake' },
   'glitch-shake': { kind: 'glitch',     theme: 'split',  color: '#ffd166', ink: '#0f0f1c', note: 'yellow, chromatic split' },
-  'flash-pulse':  { kind: 'flash',      theme: 'pulse',  color: '#ffffff', ink: '#0f0f1c', note: 'white flash behind, three pulses' },
+  // the flash bubble is dark (2026-09-08) and this preset is the one that MEANT it: the row is a
+  // line of plain word faces now, and cues.js pours the real flash through THE MIX on the beat, so
+  // the phrase still lights the room up and the strobe slot still has a way to be lit.
+  'flash-pulse':  { kind: 'treat',      theme: 'pulse',  color: '#ffffff', ink: '#0f0f1c', note: 'white flash behind, three pulses' },
   'golden-rain':  { kind: 'golden',     theme: 'gold',   color: '#ffd700', ink: '#0f0f1c', note: 'gold, sparkle shards fall off the letters' },
   'spiral-air':   { kind: 'spiral',     theme: 'spiral', color: '#c8a8ff', ink: '#0f0f1c', note: 'lilac, slow rotate while it zooms' },
   'melt':         { kind: 'braindrain', theme: 'melt',   color: '#4060c0', ink: '#f4f2ff', note: 'deep blue, letters sag and blur downward' },
   'video':        { kind: 'video',      theme: 'scan',   color: '#ff5c6c', ink: '#f4f2ff', note: 'red, scanlines' },
+  // gif rain (2026-09-08): the pictures come DOWN, so the plate comes down with them. Gold, the
+  // gifrain bubble's own tint, and a shade colder than golden-rain's so the two never read alike.
+  'gif-rain':     { kind: 'gifrain',    theme: 'rain',   color: '#ffc83d', ink: '#0f0f1c', note: 'gold, the letters fall in and keep falling out the bottom' },
   // A row of treats is not an effect: the road is what happens, and the plate is warm rather than loud.
   'treats':       { kind: 'treat',      theme: 'bounce', color: '#ffb3d9', ink: '#0f0f1c', note: 'warm pink, bouncy letters' },
   // A marked word, not a trigger moment: small, no zoom.

@@ -587,6 +587,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Header banner line pool (Resources\banner\lines.<lang>.json): read from disk at
+         runtime by BannerPoolService, so it ships next to the exe like the EMI lines above. -->
+    <Content Include="Resources\banner\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- EMI desk fonts (Resources\emi\fonts\*.ttf): loaded through a FontFamily base URI at
          runtime, not as a WPF Resource, so they ship beside the exe exactly like the lines file. -->
     <Content Include="Resources\emi\**\*.ttf">
@@ -665,6 +672,7 @@
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
       <TutorialVideoFiles Include="$(ProjectDir)Resources\tutorial_videos\**\*" />
+      <BannerPoolFiles Include="$(ProjectDir)Resources\banner\*.json" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(WebFiles)" DestinationFolder="$(PublishDir)Resources\web\%(RecursiveDir)" SkipUnchangedFiles="true" />
@@ -673,6 +681,7 @@
     <Copy SourceFiles="@(DeeperDemoFiles)" DestinationFolder="$(PublishDir)Resources\DeeperDemos\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(TutorialVideoFiles)" DestinationFolder="$(PublishDir)Resources\tutorial_videos\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(BannerPoolFiles)" DestinationFolder="$(PublishDir)Resources\banner\" SkipUnchangedFiles="true" />
     <Message Importance="High" Text="Copied content files to publish folder" />
   </Target>
 

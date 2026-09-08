@@ -63,7 +63,12 @@ eq(new Set(rows.map(([, r]) => r.theme)).size, rows.length, 'no two rows share a
 const dark = BUBBLE_KINDS.filter((k) => k.spawn === false).map((k) => k.id);
 ok(dark.length > 0 && rows.some(([, r]) => dark.includes(r.kind)), 'the table does point a row at a darkened kind (' + dark.join(', ') + ')');
 ok(rows.every(([p]) => !dark.includes(kindForPreset(p))), 'and kindForPreset never hands one out');
-eq(kindForPreset('video'), FALLBACK_KIND, 'the darkened row falls back to the flash bubble');
+eq(kindForPreset('video'), FALLBACK_KIND, 'the darkened row falls back to the fallback kind');
+// the fallback is not allowed to be a dark kind itself, or the row it saves still never lands
+ok(!!KIND_BY_ID[FALLBACK_KIND] && KIND_BY_ID[FALLBACK_KIND].spawn !== false, 'and the fallback kind (' + FALLBACK_KIND + ') is one that spawns');
+// the flash bubble is dark since 2026-09-08: no row of this table may point the road at one
+ok(dark.includes('flash'), 'the flash bubble is one of the darkened rows');
+ok(rows.every(([, r]) => r.kind !== 'flash'), 'and not one preset dresses its row as a flash any more');
 eq(kindForPreset('not-a-preset'), null, 'a preset nobody wrote a row for is null, not a guess');
 eq(themeFor({ kind: 'trigger', label: 'bambi sleep', setId: 'bambi-sleep', cue: 'blackout' }).theme, 'ink', 'themeFor reads the cue');
 eq(themeFor({ kind: 'trigger', label: 'good girl', setId: 'good-girl' }).theme, 'blink', 'and falls back to the set when the cue is gone');

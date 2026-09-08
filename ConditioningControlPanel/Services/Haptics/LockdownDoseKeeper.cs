@@ -75,27 +75,49 @@ public sealed class LockdownDoseKeeper : IDisposable
     /// empty room - but it is not a wall card, so <c>MainWindow.SetWallFeature</c> does not know its
     /// key and it must never be conscriptable. Living outside the catalog makes that true by
     /// construction: it counts, and it can never be picked.</para></summary>
-    private static bool HasOffWallDose(AppSettings s) =>
+    /// <param name="takeoverRunning">Is the takeover service ACTUALLY running right now
+    /// (<c>App.Autonomy.IsEnabled</c>)? The two settings flags are not enough on their own - see the
+    /// takeover clause below (#1184).</param>
+    private static bool HasOffWallDose(AppSettings s, bool takeoverRunning) =>
         s.AudioOnlySession
         || s.PopQuizEnabled
         || (s.CornerGifOverlays?.Any(o => o != null && o.Enabled) == true)
-        || (s.AutonomyModeEnabled && s.AutonomyConsentGiven);
+        // Takeover counts only while it is RUNNING (#1184). AutonomyModeEnabled/AutonomyConsentGiven
+        // persist across launches so the toggle remembers its label, and takeover deliberately starts
+        // OFF unless AutonomyResumeOnStartup is set - so the flags alone were true in a room where
+        // nothing whatsoever was going to happen. The keeper read that as "already dosed", skipped
+        // the conscription, started a bare engine, and the lockdown ran empty.
+        || (takeoverRunning && s.AutonomyModeEnabled && s.AutonomyConsentGiven);
+
+    /// <summary>Live read of the takeover service. Only the runtime path uses it; the pure overloads
+    /// take the answer as an argument so the suite can pin both sides without a live service.</summary>
+    private static bool TakeoverIsRunning
+    {
+        get { try { return App.Autonomy?.IsEnabled == true; } catch { return false; } }
+    }
 
     /// <summary>Test seam for the off-wall half of the census (Pop Quiz, the audio bed, corner GIFs,
     /// takeover). Public so the suite can pin what counts without a live lockdown.</summary>
-    public static bool CountsAsOffWallDose(AppSettings s) => s != null && HasOffWallDose(s);
+    public static bool CountsAsOffWallDose(AppSettings s, bool takeoverRunning)
+        => s != null && HasOffWallDose(s, takeoverRunning);
+
+    /// <summary>Runtime overload: reads the live takeover service.</summary>
+    public static bool CountsAsOffWallDose(AppSettings s) => CountsAsOffWallDose(s, TakeoverIsRunning);
 
     /// <summary>True when NOTHING would run - no wall feature on and no off-wall dose either.</summary>
-    public static bool DoseIsEmpty(AppSettings s)
+    public static bool DoseIsEmpty(AppSettings s, bool takeoverRunning)
     {
         if (s == null) return false;          // unknown = not our call; fail open
-        if (HasOffWallDose(s)) return false;
+        if (HasOffWallDose(s, takeoverRunning)) return false;
         foreach (var f in Catalog)
         {
             try { if (f.IsOn(s)) return false; } catch { }
         }
         return true;
     }
+
+    /// <summary>Runtime overload: reads the live takeover service.</summary>
+    public static bool DoseIsEmpty(AppSettings s) => DoseIsEmpty(s, TakeoverIsRunning);
 
     /// <summary>Keys currently ON, catalog order.</summary>
     public static List<string> KeysOn(AppSettings s)

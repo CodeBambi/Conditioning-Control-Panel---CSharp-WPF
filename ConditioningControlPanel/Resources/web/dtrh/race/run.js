@@ -70,7 +70,7 @@ import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
 import { createTrackState } from './track.js';
-import { cueFor, resultTag, LANE_X } from './cues.js';
+import { cueFor, resultTag, LANE_X, wordFlash, WORD_FLASH, WORD_FLASH_GAP_MS } from './cues.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
@@ -176,6 +176,15 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // without words, and the panel is only built for `?wsync=1` or the first nudge.
   const popLog = createPopLog();
   const rowOf = new Map(), rowWatch = [];
+  // THE WORD FLASH (race/cues.js WORD_FLASH). The flash bubble is dark: half the words the player
+  // TAKES pop a brief bloom of light instead, off the run's own seeded rng so a seed replays the
+  // same. `wordyRows` is the trigger rows whose bubbles are plain word faces (a mark or treats
+  // preset, or a phrase the room dressed as a treat) - those pops are word beats and roll for a
+  // flash; a row that already fires an effect kind has its own light and rolls for nothing. The
+  // delete is the one-shot: a row is many bubbles and one word, so it flashes once at most.
+  const wordyRows = new Set();
+  let lastFlashAt = -1e9;
+  const flashStats = { pops: 0, capped: 0, rolls: 0, flashes: 0 };
   const WSYNC = flag('wsync') === '1';
   const ROW_LATE_SEC = 0.6;
   let syncHud = null;
@@ -306,7 +315,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     };
     const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
     const pickups = createPickups({ rng, spots: layout.chunks.flatMap((c) => c.features || []).filter((f) => f.type === 'pickup'), totalDepth: layout.totalDepth });
-    const w = { layout, tunnel, fx, dresser, walls, wallDom, kart, score, field, pickups, rng };
+    // the word flash rolls off its OWN seeded stream, for the same reason the DOM posters do: a draw
+    // that depends on what the player popped must never shift the rolls the ROAD is built from.
+    const popRng = makeRng(runSeed ^ 0x1d872b41);
+    const w = { layout, tunnel, fx, dresser, walls, wallDom, kart, score, field, pickups, rng, popRng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     kart.onEvent((e) => onKart(w, e));
@@ -330,6 +342,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0, quiet: false, quietAt: -9 });
     trailClear();
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
+    wordyRows.clear(); lastFlashAt = -1e9; flashStats.pops = 0; flashStats.capped = 0; flashStats.rolls = 0; flashStats.flashes = 0;
+    fxFired.clear();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
 
@@ -383,8 +397,27 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     const early = sync.claim(eventId);
     if (early && early.event.kind === 'trigger' && early.cue.word) captions.showPlate(early.event);
   }
+  /** THE WORD FLASH. Half the words the player TAKES pop a brief bloom of light with them: the
+   *  flash bubble is dark (bubbleKinds.js, 2026-09-08) and this is where its light went. Cosmetic
+   *  and nothing else - it never touches THE MIX, so it is no strobe charge, no recipe and no
+   *  change to what the pop scores. Two words taken inside WORD_FLASH_GAP_MS share one, so a line
+   *  read clean reads as a sentence rather than a strobe, and reduced motion takes none at all. */
+  function wordFlashPop(w) {
+    flashStats.pops++;
+    if (reducedMotion) return;
+    const since = (S.elapsed - lastFlashAt) * 1000;   // the RUN's clock: a paused game is not a gap
+    if (since < WORD_FLASH_GAP_MS) { flashStats.capped++; return; }
+    flashStats.rolls++;
+    if (!wordFlash(w.popRng, since)) return;
+    lastFlashAt = S.elapsed;
+    flashStats.flashes++;
+    payloadFx.applyPayload({ payload: { kind: 'flash' }, strength: WORD_FLASH.strength }, { durationMult: WORD_FLASH.durationMult });
+  }
   function onPop(w, p) {
     const word = !!p.eventId && wordOf.has(p.eventId);   // a bubble off the transcript, not a chunk golden
+    // a plain word face: the transcript's own bubble, or one of a trigger row that wears the phrase
+    // without firing an effect. delete() is the row's one-shot: many bubbles, one word, one flash.
+    if ((word || (!!p.eventId && wordyRows.delete(p.eventId))) && p.kind === 'treat') wordFlashPop(w);
     if (p.eventId) {
       const at = passTime(w, p.d);
       TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false, at);
@@ -406,7 +439,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   }
 
   // ---- THE MIX: actions -> payloadFx + chrome, recipes -> the ledger ----
+  /** Every payload the mixer pours passes through here, so this tally is the whole truth about what
+   *  the run fired: race/smoke/gifrain-row-check.mjs reads it to hold a rain row to ONE cascade. */
+  const fxFired = new Map();
   const fire = (p, strength, durationMult) => {
+    fxFired.set(p.payload, (fxFired.get(p.payload) || 0) + 1);
     if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
     else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
   };
@@ -554,7 +591,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     const t = TR.setTrack(chart);
     audio.setRoute(routeOf(t));
     S.trackHold = 0; S.statsAt = 0; S.quiet = false; S.quietAt = -9; sync.reset(); wordOf.clear();
-    lineN.clear(); lineGot.clear(); lineDone.clear(); rowOf.clear(); rowWatch.length = 0;
+    lineN.clear(); lineGot.clear(); lineDone.clear(); rowOf.clear(); rowWatch.length = 0; wordyRows.clear();
     if (WSYNC && t && TR.lyrics) showSync(0); else refreshSync();
     for (const e of (t && t.chart && Array.isArray(t.chart.events) ? t.chart.events : [])) {
       if (e.kind === 'word' && e.p != null) lineN.set(e.p, (lineN.get(e.p) || 0) + 1);
@@ -616,6 +653,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       } else if (rowId && e.kind === 'trigger' && TR.lyrics) {   // the sync log's line for a row: w is the set's label
         if (rowOf.size >= WORD_MEM) rowOf.delete(rowOf.keys().next().value);
         rowOf.set(e.id, { w: e.label, p: null, t: e.t, i: eventIndex(e.id), lane: null });
+      }
+      // a row of plain word FACES (the mark and treats presets, and any phrase the room dressed as
+      // a treat) is a word beat: its pop rolls for the brief flash the same way a transcript word
+      // does. A row wearing an effect kind already fires one and is left out of the roll.
+      if (rowId && e.kind === 'trigger' && row[0].w && (KIND_BY_ID[row[0].kindId] || {}).kind === 'treat') {
+        if (wordyRows.size >= WORD_MEM) wordyRows.delete(wordyRows.values().next().value);
+        wordyRows.add(e.id);
       }
     }
     for (const sp of loose) {
@@ -807,6 +851,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (!W) return;
     if (S.running && !S.paused && !S.hostPaused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
+    } else if (!S.running && !S.ended) {
+      // the pre-roll count: the world is parked but she is not. Her pose springs only, no physics.
+      try { W.kart.idle(dt); } catch (e) { /* an old kart without idle() just stands there */ }
     }
     if (camOverride && camOverride(camera, dt, W, camOut) === false) camOverride = null;
     pixel.render(scene, camera);
@@ -863,12 +910,23 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     W = build(S.seed);
     try { renderer.compile(scene, camera); } catch (e) { /* a warm-up only: the first frame compiles what this missed */ }
   }
+  /** The same tick idle the intro plays, on the run's own rig: a bob per number, a shove on GO. */
+  function countTick() {
+    let beat = 0;
+    const amp = reducedMotion ? 0.3 : 1;
+    return (s) => {
+      if (!W || !W.kart.pose) return;
+      try { W.kart.pose(s === 'go' ? 'launch' : 'ready', { side: (beat++ % 2) ? -1 : 1, amp }); } catch (e) { /* no glb, no pose */ }
+    };
+  }
   function again() {
     reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
     // the shutter claps shut on `go` and is open again a quarter second later. Not awaited: the
     // run starts on the same tick the countdown ends, so the first steer is never the shutter's.
-    hud.countdown({ onTick: (s) => { if (s === 'go') shutter.flash(); } }).then(start);
+    // EMI's tick idle (countTick) rides the same onTick.
+    const tick = countTick();
+    hud.countdown({ onTick: (s) => { tick(s); if (s === 'go') shutter.flash(); } }).then(start);
   }
   /**
    * `surface` on the End screen: the way back to the MENU. The world goes (the menu does not need
@@ -1000,6 +1058,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugPickup,
     /** What race/smoke/face-check.mjs reads: the word faces on the road this frame. */
     wordFaces: () => (W ? W.field.faceReport() : null),
+    /** THE WORD FLASH, for race/smoke/word-flash-check.mjs: word pops, the ones the 250 ms cap ate,
+     *  the rolls that reached the rng and the flashes that came out of them. Never read by the game. */
+    wordFlashStats: () => ({ ...flashStats }),
+    /** GIF RAIN, for race/smoke/gifrain-row-check.mjs: how many of each payload the mixer poured. */
+    fxStats: () => Object.fromEntries(fxFired),
     /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. */
     debugWord: (text, o) => (captions ? captions.showWord(text, o || {}) != null : false),
     /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */

@@ -695,6 +695,24 @@
   background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0 2px, rgba(0, 0, 0, 0) 2px 5px);
   mix-blend-mode: multiply;
 }
+/* gif-rain: gold, and it falls. It comes IN from over the top and keeps going out the bottom, so the
+   plate moves the way the pictures behind it do, with a streak trailing the letters on the way down. */
+.race-hud .rc-plate--rain {
+  color: #ffdf8f; text-shadow: 0 0 30px rgba(255, 200, 61, 0.95), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcRain 1400ms cubic-bezier(0.3, 0.1, 0.3, 1) forwards;
+}
+.race-hud .rc-plate--rain::before {
+  content: ''; position: absolute; left: 50%; top: -46vh; width: 2px; height: 44vh; transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(255, 200, 61, 0), rgba(255, 223, 143, 0.75));
+  animation: rcRainStreak 620ms ease-in forwards;
+}
+@keyframes rcRain {
+  0%   { opacity: 0; transform: translate(-50%, -190%) scale(0.9); }
+  16%  { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
+  62%  { opacity: 1; transform: translate(-50%, -46%) scale(1.18); }
+  100% { opacity: 0; transform: translate(-50%, 40%) scale(1.06); }
+}
+@keyframes rcRainStreak { 0% { opacity: 0.9; } 70% { opacity: 0.35; } 100% { opacity: 0; } }
 /* treats: warm pink, and it lands on a bounce rather than a glide */
 .race-hud .rc-plate--bounce { animation: rcZoom 1400ms cubic-bezier(0.2, 1.7, 0.35, 1) forwards; }
 /* mark: a marked word, not a trigger moment. Small, and it does not come at you. */
@@ -715,10 +733,11 @@
 @media (prefers-reduced-motion: reduce) {
   .race-hud .rc-plate, .race-hud .rc-plate--blink, .race-hud .rc-plate--wall, .race-hud .rc-plate--frost,
   .race-hud .rc-plate--snap, .race-hud .rc-plate--split, .race-hud .rc-plate--spiral, .race-hud .rc-plate--melt,
-  .race-hud .rc-plate--bounce, .race-hud .rc-plate--mark {
+  .race-hud .rc-plate--bounce, .race-hud .rc-plate--mark, .race-hud .rc-plate--rain {
     animation: rcHold 1400ms linear forwards; transform: translate(-50%, -50%) scale(1); filter: none;
   }
-  .race-hud .rc-plate--pulse::before, .race-hud .rc-plate--gold .rc-plate-sparks { animation: none; opacity: 0; }
+  .race-hud .rc-plate--pulse::before, .race-hud .rc-plate--gold .rc-plate-sparks,
+  .race-hud .rc-plate--rain::before { animation: none; opacity: 0; }
   /* the flash fades in place too; the ghost keeps its own faintness, which is a reading and not a motion */
   .race-hud .rc-cap-word.rc-flash-word, .race-hud .rc-flash-word.is-accent,
   .race-hud .rc-flash-word.is-ghost { animation: none; }

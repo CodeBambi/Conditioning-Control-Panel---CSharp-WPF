@@ -952,6 +952,58 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Header Banner Pool
+
+        // The rotating line pool behind the header banner's third beat (BannerPoolService).
+        // Local settings only: the seen-set never leaves this machine.
+
+        private const int BannerSeenCap = 400;
+
+        private bool _bannerPoolEnabled = true;
+        /// <summary>
+        /// Whether the header banner rotates a line from the shipped pool alongside its fixed
+        /// beats. Off leaves the banner exactly as it was before the pool existed.
+        /// </summary>
+        public bool BannerPoolEnabled
+        {
+            get => _bannerPoolEnabled;
+            set { _bannerPoolEnabled = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _bannerSeenIds = new();
+        /// <summary>
+        /// Ids of banner pool lines already shown to this user, oldest first. Capped at
+        /// <see cref="BannerSeenCap"/>; one bucket's entries are dropped wholesale by
+        /// <see cref="ResetBannerSeen"/> once that bucket has nothing unseen left.
+        /// </summary>
+        [JsonProperty]
+        public List<string> BannerSeenIds
+        {
+            get => _bannerSeenIds;
+            set { _bannerSeenIds = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        /// <summary>Record one shown line id, dropping the oldest entries past the cap.</summary>
+        public void RecordBannerSeen(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+            var list = new List<string>(_bannerSeenIds);
+            list.Remove(id);
+            list.Add(id);
+            if (list.Count > BannerSeenCap) list.RemoveRange(0, list.Count - BannerSeenCap);
+            BannerSeenIds = list;
+        }
+
+        /// <summary>Forget every seen id carrying <paramref name="prefix"/> (one exhausted bucket).</summary>
+        public void ResetBannerSeen(string prefix)
+        {
+            if (string.IsNullOrEmpty(prefix)) return;
+            var list = _bannerSeenIds.FindAll(x => !x.StartsWith(prefix, StringComparison.Ordinal));
+            if (list.Count != _bannerSeenIds.Count) BannerSeenIds = list;
+        }
+
+        #endregion
+
         #region Flash Images
 
         private bool _flashEnabled = true;

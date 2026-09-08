@@ -131,7 +131,13 @@ function chartEnergy(t) {
   // a sure trigger is a ROW across the road now (rows-check.mjs holds its geometry), all one kind
   ok(t.spawn.length > 1 && t.spawn.every((sp) => sp.row) && KIND_BY_ID[t.spawn[0].kindId].kind === 'effect' && t.word === 'good girl',
     'a trigger is a row of ' + t.spawn.length + ' effect bubbles and the word: ' + t.spawn[0].kindId);
-  ok(cueFor({ kind: 'trigger', label: 'never analysed' }, ctx).spawn.every((sp) => sp.kindId === 'flash'), 'an unmapped phrase falls back to flash');
+  // an unmapped phrase falls back to the room's own effect, else cues.js FALLBACK_TRIGGER. Whatever
+  // it lands on must be a kind that still SPAWNS: bubbles.js lays no row at all for a darkened one,
+  // and a trigger row that never lands is the one thing this road may not do.
+  const un = cueFor({ kind: 'trigger', label: 'never analysed' }, ctx).spawn;
+  const unKind = KIND_BY_ID[un[0].kindId];
+  ok(un.every((sp) => sp.kindId === un[0].kindId) && !!unKind && unKind.spawn !== false,
+    'an unmapped phrase falls back to a bubble that still spawns (' + un[0].kindId + ')');
   const w = cueFor({ kind: 'word', label: 'deeper' }, ctx);
   ok(w.spawn.length === 1 && w.spawn[0].kindId === 'treat' && w.spawn[0].h === LANE_H, 'a structure word is one lane treat');
   const c = cueFor({ kind: 'count', label: '1', n: 1, of: 10, last: true }, ctx);

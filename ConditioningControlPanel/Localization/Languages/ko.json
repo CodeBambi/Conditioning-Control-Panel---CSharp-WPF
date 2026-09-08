@@ -3122,6 +3122,8 @@
   "intake_nudge_action": "인테이크 시작",
   "intake_nudge_later": "나중에",
   "intake_nudge_body": "새 채점 인테이크가 대시보드에서 기다리고 있어요. 답변 방식에 맞춘 세션을 짜 주고, 실행하면 펀치 카드에 도장을 찍어 줘요.",
+  "banner_pool_enabled": "상단 배너에 추가 문구 돌려 보여주기",
+  "tooltip_banner_pool_enabled": "몇 분마다 미리 쓰인 문구 하나를 헤더 배너에 더해 보여줘요. 끄면 배너는 늘 보던 문구만 돌려요.",
   "label_intake_nudge_enabled": "주간 인테이크 패스가 준비되면 알려주기",
   "label_suppress_perk_notifications": "XP 특전 및 퀵스트 알림 끄기",
   "tooltip_suppress_perk_notifications": "10x / 20x XP 행운 발동, 핑크 러시, 퀵스트 완료의 팝업과 알림음을 끓니다. 보너스 자체는 그대로 작동하며 알림만 조용해집니다.",

@@ -86,6 +86,33 @@
                     <TextBlock Text="{loc:Str set2_suppress_perk_notifications_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- THIRD ROW (banner pool). The header banner's third beat: a line drawn
+                         from Resources/banner/lines.<lang>.json every 8 to 12 minutes. Live-
+                         edited like the row above, because MainWindow.Marquee's pool tick reads
+                         the setting at the moment it draws; off simply means the beat never
+                         joins the crossfade. This is the closest thing this card has to a
+                         neighbour: it is the other opt-out for a line the panel volunteers at
+                         you, and it sits with the intake nudge rather than under Performance
+                         because it is copy, not motion. It does NOT touch the Settings-tab
+                         scrolling marquee or the server announcement, which keep their own
+                         beat. -->
+                    <Grid MinHeight="34" Margin="0,10,0,0"
+                          ToolTip="{loc:Str tooltip_banner_pool_enabled}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueNotificationsBrush}"
+                                   Text="{loc:Str banner_pool_enabled}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkBannerPool" x:FieldModifier="internal"
+                                  Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                  VerticalAlignment="Center"
+                                  Checked="ChkBannerPool_Changed"
+                                  Unchecked="ChkBannerPool_Changed"/>
+                    </Grid>
                 </StackPanel>
             </Grid>
         </Border>

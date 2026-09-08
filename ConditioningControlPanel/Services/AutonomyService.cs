@@ -123,6 +123,16 @@ namespace ConditioningControlPanel.Services
         private bool? _originalPinkFilterEnabled = null;
         private int? _originalPinkFilterOpacity = null;
 
+        // Did THIS pulse start the overlay service? (#1180)
+        // The pulse used to decide whether to stop the overlay service again from the feature
+        // toggles alone (`!wasEnabled && !spiralOn && !brainDrainOn`). With the engine OFF and the
+        // Pink Filter card armed on the wall, PinkFilterEnabled is true but nothing is on screen -
+        // so the restore put the toggle back, saw it "enabled", left the overlay service running,
+        // and the pink stayed up until the user started and stopped the engine by hand. Ownership,
+        // not the toggles, decides: a pulse that started the service stops it again.
+        private bool _pinkPulseStartedOverlay = false;
+        private bool _spiralPulseStartedOverlay = false;
+
         // Mood system
         private AutonomyMood _currentMood = AutonomyMood.Playful;
 
@@ -544,6 +554,31 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Should a finishing overlay pulse stop the OverlayService again? (#1180)
+        ///
+        /// <para>Pure ownership rule: a pulse that started the service is the one that stops it, and
+        /// only once no sibling pulse is still holding it up. Deliberately does NOT look at the
+        /// PinkFilter / Spiral / BrainDrain feature toggles - with the engine off those mean "armed
+        /// on the wall", not "on screen", so reading them left a takeover-started pink filter up
+        /// forever for anyone who had the card ticked.</para>
+        /// </summary>
+        /// <param name="overlayWasRunningBeforePulse">OverlayService.IsRunning as captured when the pulse began.</param>
+        /// <param name="otherPulseActive">True while the sibling pulse (spiral for pink, pink for spiral) still runs.</param>
+        public static bool ShouldStopOverlayAfterPulse(bool overlayWasRunningBeforePulse, bool otherPulseActive)
+            => !overlayWasRunningBeforePulse && !otherPulseActive;
+
+        /// <summary>
+        /// Should an action that was queued behind an announcement still fire? (#1153)
+        ///
+        /// <para>Takeover announces, waits ~2 s, then performs. Stop() and the panic path both bump
+        /// the global pulse generation, so a queued effect whose generation has moved on belongs to
+        /// a takeover that is already over - a mind wipe sting landing after the user stopped
+        /// everything. Enabled AND same generation, or it is dropped.</para>
+        /// </summary>
+        public static bool ShouldRunDelayedAction(bool enabled, int generationAtSchedule, int generationNow)
+            => enabled && generationAtSchedule == generationNow;
+
+        /// <summary>
         /// Cancel all active pulses and restore original settings.
         /// Called by panic key handler to immediately clear autonomy effects.
         /// Does NOT stop the autonomy service itself - just cancels current pulses.
@@ -557,6 +592,13 @@ namespace ConditioningControlPanel.Services
 
             // Invalidate all pending pulse callbacks
             _globalPulseGeneration++;
+
+            // Whether THIS takeover is the reason the overlay service is up. Read before the pulse
+            // flags below are cleared (#1180).
+            var startedOverlay = (_pinkFilterPulseActive && _pinkPulseStartedOverlay)
+                                 || (_spiralPulseActive && _spiralPulseStartedOverlay);
+            _pinkPulseStartedOverlay = false;
+            _spiralPulseStartedOverlay = false;
 
             // Restore spiral settings if a pulse was active
             if (_spiralPulseActive && _originalSpiralEnabled.HasValue)
@@ -611,6 +653,15 @@ namespace ConditioningControlPanel.Services
 
             // Refresh overlays to apply restored settings
             App.Overlay?.RefreshOverlays();
+
+            // ...and give the overlay SERVICE back as well (#1180). Restoring the toggles alone left
+            // a service this takeover had started running, so panic / Stop cleared the boost but not
+            // the overlay itself.
+            if (startedOverlay && App.Overlay?.IsRunning == true && !App.IsEngineRunning)
+            {
+                App.Overlay?.Stop();
+                App.Logger?.Information("AutonomyService: Stopped takeover-started overlay service");
+            }
 
             App.Logger?.Information("AutonomyService: All active pulses cancelled");
         }
@@ -990,8 +1041,13 @@ namespace ConditioningControlPanel.Services
                     AnnounceAction(actionType.Value);
                     App.Logger?.Information("AutonomyService: Announcement made, scheduling action in 2 seconds...");
 
-                    // Delay action after announcement
+                    // Delay action after announcement.
+                    // The generation is captured here and re-checked after the wait (#1153): Stop()
+                    // and CancelActivePulses both bump it, so an effect announced two seconds before
+                    // the user stopped everything is dropped instead of landing in a stopped app.
+                    // That is the mind wipe sting that played "despite the CCP engine being stopped".
                     var capturedAction = actionType.Value;
+                    var actionGen = _globalPulseGeneration;
                     Task.Delay(2000).ContinueWith(_ =>
                     {
                         App.Logger?.Information("AutonomyService: 2 second delay complete, executing {Action}...", capturedAction);
@@ -1002,6 +1058,13 @@ namespace ConditioningControlPanel.Services
                         }
                         Application.Current?.Dispatcher?.BeginInvoke(() =>
                         {
+                            if (!ShouldRunDelayedAction(_isEnabled, actionGen, _globalPulseGeneration))
+                            {
+                                App.Logger?.Information(
+                                    "AutonomyService: Announced {Action} dropped - takeover stopped during the delay (enabled={Enabled}, gen {Was}->{Now})",
+                                    capturedAction, _isEnabled, actionGen, _globalPulseGeneration);
+                                return;
+                            }
                             PerformAction(capturedAction, source, context, announce: true);
                         });
                     });
@@ -1619,6 +1682,9 @@ namespace ConditioningControlPanel.Services
             _spiralPulseActive = true;
             var currentGeneration = ++_spiralPulseGeneration;
             var globalGen = _globalPulseGeneration;
+            // Ownership, captured BEFORE we touch anything (#1180) - same rule as the pink pulse.
+            var overlayWasRunning = App.Overlay?.IsRunning == true;
+            _spiralPulseStartedOverlay = !overlayWasRunning;
 
             // Save current state - ONLY for spiral, don't touch pink filter
             // Also save to tracking fields for CancelActivePulses
@@ -1683,14 +1749,13 @@ namespace ConditioningControlPanel.Services
                         App.Settings.Current.SpiralOpacity = baseOpacity;
                         App.Overlay?.RefreshOverlays();
 
-                        // Stop overlay if nothing needs it
-                        var pinkOn = App.Settings.Current.PinkFilterEnabled;
-                        var brainDrainOn = App.Settings.Current.BrainDrainEnabled;
-                        if (!wasEnabled && !pinkOn && !brainDrainOn && !_pinkFilterPulseActive)
+                        // Ownership, not the toggles (#1180).
+                        if (ShouldStopOverlayAfterPulse(overlayWasRunning, _pinkFilterPulseActive))
                         {
                             App.Overlay?.Stop();
                             App.Logger?.Information("AutonomyService: Spiral pulse - stopped overlay service");
                         }
+                        _spiralPulseStartedOverlay = false;
                     }
                     App.Logger?.Information("AutonomyService: Spiral pulse ended (gen {Gen})", capturedGeneration);
                 });
@@ -1732,6 +1797,9 @@ namespace ConditioningControlPanel.Services
             _pinkFilterPulseActive = true;
             var currentGeneration = ++_pinkFilterPulseGeneration;
             var globalGen = _globalPulseGeneration;
+            // Ownership, captured BEFORE we touch anything (#1180).
+            var overlayWasRunning = App.Overlay.IsRunning;
+            _pinkPulseStartedOverlay = !overlayWasRunning;
 
             // Save current state - ONLY for pink filter, don't touch spiral
             // Also save to tracking fields for CancelActivePulses
@@ -1808,14 +1876,16 @@ namespace ConditioningControlPanel.Services
                             App.Settings.Current.PinkFilterOpacity = baseOpacity;
                         App.Overlay?.RefreshOverlays();
 
-                        // Stop overlay if nothing needs it
-                        var spiralOn = App.Settings.Current.SpiralEnabled;
-                        var brainDrainOn = App.Settings.Current.BrainDrainEnabled;
-                        if (!wasEnabled && !spiralOn && !brainDrainOn && !_spiralPulseActive)
+                        // Hand the overlay service back exactly as we found it (#1180). Reading the
+                        // feature toggles here was the bug: with the engine off they say "armed",
+                        // not "on screen", so an armed Pink Filter card kept the service alive and
+                        // the pink never went away.
+                        if (ShouldStopOverlayAfterPulse(overlayWasRunning, _spiralPulseActive))
                         {
                             App.Overlay?.Stop();
                             App.Logger?.Information("AutonomyService: Pink filter pulse - stopped overlay service");
                         }
+                        _pinkPulseStartedOverlay = false;
                     }
                     App.Logger?.Information("AutonomyService: Pink filter pulse ended (gen {Gen})", capturedGeneration);
                 });

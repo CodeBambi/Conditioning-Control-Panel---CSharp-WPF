@@ -172,7 +172,7 @@ Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
 | golden | treat | null | 50 | rare, JACKPOT chime |
 | lucky | treat | null | 25 | a plain 25 point treat, nothing else |
 | prism | treat | null | 30 | rainbow, pops neighbours |
-| flash | effect | flash | 15 | flash media from the pool |
+| flash | effect | flash | 15 | DARK since 2026-09-08, never spawns; the WORD carries the flash now (see below) |
 | subliminal | effect | subliminal | 15 | |
 | pink | effect | overlay/pink_filter | 20 | |
 | spiral | effect | overlay/spiral | 20 | |
@@ -191,7 +191,36 @@ never calls the setter.
 A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
 of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
 one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its
-sprite and its THE MIX `video` slot stay put for a later use.
+sprite and its THE MIX `video` slot stay put for a later use. `field.spawnRow` refuses a dark kind
+too, and refuses the WHOLE row rather than laying it with a hole in it, so anything that names a kind
+for a row (`cues.js` FALLBACK_TRIGGER / ROOM_TRIGGER, `triggerTheme.js` FALLBACK_KIND and every
+`THEME_BY_PRESET` row, `track.js` TRIGGER_KINDS) has to name one that still spawns.
+
+**THE WORD FLASH (2026-09-08).** The flash bubble is dark as well: the flash is a beat on a WORD now,
+not a bubble of its own. A pop of a bubble that WEARS a word (a transcript word bubble, or one of a
+trigger row whose kind is a treat) fires `payloadFx` `flash` at `WORD_FLASH` strength for ~185 ms
+half the time, rolled off the run's own seeded stream (`w.popRng`), one flash per `WORD_FLASH_GAP_MS`
+(250 ms) and none at all under reduced motion. It is cosmetic: it never reaches THE MIX, so it is no
+strobe charge and no recipe, and the pop scores as the treat it always was. The odds, the cap and the
+constants live in `race/cues.js` (`wordFlash`, `WORD_FLASH*`), so `race/smoke/rows-check.mjs` holds
+them; run.js only keeps the clock. `race/smoke/word-flash-check.mjs` drives a real headless run and
+reads the two counters back: `race.wordFlashStats()` (pops, capped, rolls, flashes) and
+`race.wordFaces().placed`, the tally of every kind the field has actually put on the road. The one preset that MEANT the flash, `flash-pulse`, goes the other
+way: its row is a line of plain word faces and its beat sets `cue.mix = 'flash'`, which is now the
+only door a strobe charge comes through, so the recipes that need one still have a way to be served.
+
+**GIF RAIN ON A ROAD BLOCK (2026-09-08).** A trigger row is unavoidable, and most rows are the many
+`mark` word sets: a line of plain word faces with no effect of their own. One such row in six
+(`cues.js` `GIFRAIN_ROW_CHANCE`, rolled off the ROAD's seeded rng so a seed lays the same rain
+twice), from the gifrain bubble's own `minIntensity` upward and no other floor, puts a gifrain
+bubble in the MIDDLE of the line. Only the centre, so a row can pour exactly one cascade and never
+five; never over a golden centre the rabbit foot is owed; and never on a row that already pours
+something, which is why a `flash-pulse` line stays plain. The `gif-rain` preset itself
+(`triggerTheme.js`, plate theme `rain`, gold) is what a set asks for by name: `cockslut` asks for it
+since 2026-09-08, having pointed at the dark `video` bubble since that one went dark.
+`race/smoke/rows-check.mjs` holds the odds, the floor and the one-bubble rule;
+`race/smoke/gifrain-row-check.mjs` drives a real run and holds the cascades against the rain
+bubbles that were laid, reading `race.fxStats()` - every payload the mixer has poured.
 
 Placements: `lane` (rests on the road, h ~0.9, bobbing), `air` (along a ramp air line, h rises
 2..5), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` to the road in
@@ -225,6 +254,7 @@ kart.emiModel()                  // the mounted race/assets/emi.glb root, or nul
 kart.emiReady(cb)                // cb(root) when she is mounted (fires at once if she already is)
 kart.setFace(i)                  // face atlas frame 0..4 (menus and results; never seen in race)
 kart.pose(name, opts)            // the pose layer, race/emiPoses.js
+kart.idle(dt)                    // the rider only, world parked (the `again` count: no physics, no camera)
 kart.dispose()
 ```
 `createKart` also takes `pixel` (race/pixel.js): the glb's textures land after the run's one
@@ -246,17 +276,45 @@ emoticons only, never a drawn face, never a speech line.
 
 ### `race/emiPoses.js` (pass four, EMI's body)
 ```js
-export const POSES, PIVOTS;   // the pure preset table, and the four glb pivots a preset may name
+export const POSES, PIVOTS;   // the pure preset table (rotations + per-arm `reach`), and the four glb pivots a preset may name
 export function resolvePose(name, opts) -> flattened target
 export function createPoseLayer(model) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
+export function snapshotRest(model)     // bank the authored stance before a mixer moves it
 ```
 Poses: `cruise` (the rest), `drift`, `boost` -> `boostOut`, `air`, `landing` / `landingKerb`,
-`grab`, `clamp`, `tuck`, `throw`, `cheer`. `opts` = `{ side:-1|1, tier:1..3, hold:sec }`; sided
+`grab`, `clamp`, `tuck`, `throw`, `cheer`, and the countdown set `ready` -> `grip` and `launch`.
+`opts` = `{ side:-1|1, tier:1..3, hold:sec, amp:0..1 }` (`amp` scales the whole-body part only, so
+reduced motion keeps the gesture and loses the bounce); sided
 presets are authored for +1 and mirrored for -1. Every value is an offset on the pack's authored
 rest rotation, blended on damped springs (Law XI, never a linear tween), and a pose with a `hold`
 falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and emi.js takes the
 max of that and the run brain's. run.js only ever calls `kart.pose(...)`; the layer exists only
 while the glb is mounted (the primitive EMI has no limbs to pose).
+
+**The rim grip.** Every pose that is meant to be *holding on* parks the glove on the SIDE of the
+cup's brim, the widest point of the lip on screen: lip top y 0.785, lip radius 0.500 in kart-body
+metres, the seat at (0, 0.395, 0.22) and the shoulder pivot at (-+0.312, 0.787, 0.196). The
+authored glove reach is only 0.206 m, which meets the lip between about 32 and 77 degrees around
+from dead ahead - the far arc, where the case hides the hands from the chase camera. So a holding
+pose also carries `reach: [L, R]`: `GRIP` = 1.28 stretches that arm along its own axis (a y-scale
+on the shoulder pivot, with `handL`/`thumbL` counter-scaled off their mounted base so the mitt does
+not go egg-shaped), which walks the grip out to 82..87 degrees, x -+0.51, z +0.02..0.07. A free
+hand keeps `reach` 1 (`grab`, `throw` right; `cheer` has no `reach` at all), and `opts.arms` fades
+the stretch with the angles. Re-solve, do not eyeball, and solve each pose against its OWN root
+attitude - lean, tilt, lift and squash move the shoulder, which is why `drift`'s two arms differ
+and `landingKerb` is asymmetric. A hand that drops below the lip vanishes inside the cup. The hands
+ride the cup through the steer lean for free - the seat and `kart_cup` share the body group that
+tips. So the mitts read at the game's real scale (the cup mouth is only ~113 px wide in a 1280
+frame), emi.js repaints `handL`/`handR`/`thumbL`/`thumbR` with their own white `emi_glove` material
+BEFORE `flattenRig` (the repaint is what splits them out of the merge) and scales the two hand
+nodes by `GLOVE_SCALE` 1.4. The case material is untouched.
+
+**The countdown.** `ready` -> `grip` is one beat of the 3 2 1 and `launch` is GO. Both counts drive
+them off the HUD's own ticks, never a hand-timed script: `intro.js` builds a layer over the menu
+stage's glb inside `count()` (written after `stage.update`, so it beats the idle clip, and disposed
+with the intro), and `run.js`'s `again` passes an `onTick` and leans on `kart.idle(dt)` to turn the
+springs while the world is still parked. `menu.js` calls `snapshotRest` the moment the glb lands so
+the layer offsets from the pack's stance and not from whatever frame the mixer was on.
 
 ### `race/pickups.js` (the passive pickups)
 ```js
@@ -428,6 +486,10 @@ add to 4, `freeze` and `video` are solo (`video` holds everything else). `action
 pop scores as a treat. Live category sets match `RECIPES` (first row whose `needs` are all live);
 run.js maps a served recipe to `score.boostMult` (never below x1), a toast, a mood poke and, for
 `marquee` rows, the banner. Durations for effects live in `CATEGORIES`, not run.js.
+Since 2026-09-08 no flash bubble spawns, so the `strobe` slot is lit by the `flash-pulse` trigger row
+alone (`cue.mix`), never by a pop: a seeded run with no chart under it now goes the whole way without
+one, and the word flash is deliberately not a charge. The slot, its bursts and the recipes that need
+it stay in the machine, the way the `video` slot did.
 
 ### `race/gltf.js` (pass four, the Blender packs)
 

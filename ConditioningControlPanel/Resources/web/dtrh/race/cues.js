@@ -33,6 +33,7 @@
 
 import { LANE_H, CEILING_H, LANE_X_MAX, POP_HIT_X } from './consts.js';
 import { themeFor } from './triggerTheme.js';
+import { KIND_BY_ID } from './bubbleKinds.js';
 
 /**
  * The words whose bubble is drawn BIG (race/wordFace.js): the ones the file is actually about.
@@ -55,11 +56,16 @@ function tagInk(event) {
   return row && row.preset === event.cue ? row.color : null;
 }
 
-/** A trigger phrase nobody has assigned a bubble to wears the room's own effect, else this. */
-const FALLBACK_TRIGGER = 'flash';
-/** Which effect an unmapped trigger wears per room (rooms.js ids; chart.js ACT_ROOM picks them). */
+/** A trigger phrase nobody has assigned a bubble to wears the room's own effect, else this.
+ *  `pink` since 2026-09-08: it was the flash bubble, and the flash bubble is dark now. Every id
+ *  named here has to be one that still SPAWNS, because bubbles.js lays no row at all for a dark
+ *  kind and a trigger row that never lands is the one thing this road may not do. */
+const FALLBACK_TRIGGER = 'pink';
+/** Which effect an unmapped trigger wears per room (rooms.js ids; chart.js ACT_ROOM picks them).
+ *  The Tea Garden's was the flash; it takes the whisper card instead, which is the gentler read
+ *  of "nothing here fights you" anyway and keeps the room off the pink the Toybox already wears. */
 const ROOM_TRIGGER = {
-  teagarden: 'flash', undertow: 'spiral', toybox: 'pink', chapel: 'spiral',
+  teagarden: 'subliminal', undertow: 'spiral', toybox: 'pink', chapel: 'spiral',
   mirrors: 'glitch', greyward: 'freeze', coronation: 'prism', casino: 'lucky',
 };
 /** What a peak rains per room; anywhere else it is plain treats. */
@@ -107,6 +113,52 @@ const CHANT_X = 1.2, CHANT_PERIOD = 1.2, CHANT_MAX = 16;
 const CHANT_GOLD_EVERY = 4;
 /** A build hands over at most this many seconds of boost. */
 const BOOST_CAP = 4;
+/** THE WORD FLASH (2026-09-08). The flash bubble is dark: the flash is a beat on a WORD now.
+ *  Half the word bubbles the player takes pop a brief bloom of light with them, and the other half
+ *  are just a word. It is cosmetic and nothing else: it never reaches THE MIX, it is not a strobe
+ *  charge, it cannot start a recipe and the pop still scores as the treat it always was.
+ *  A `flash-pulse` row is the exception, and it goes the other way: that preset MEANT the flash,
+ *  so its beat pours a real one through the mixer (`cue.mix`) instead of this bloom. */
+export const WORD_FLASH_CHANCE = 0.5;
+/** The preset whose row pours a real flash on its beat rather than the bloom (triggerTheme.js). */
+export const FLASH_PRESET = 'flash-pulse';
+/** Two words taken inside this many ms share one flash: a line read clean is a sentence, not a strobe. */
+export const WORD_FLASH_GAP_MS = 250;
+/** What run.js hands payloadFx: one scattered image at ~185 ms, which is a blink and not an effect. */
+export const WORD_FLASH = { strength: 12, durationMult: 0.18 };
+/**
+ * Does this word pop take a flash with it? Pure so the smokes can hold the odds: run.js keeps the
+ * clock and the run's own seeded rng, and a pop inside the gap never draws from it, so the cap is a
+ * cap and not a re-roll.
+ * @param rng the run's seeded rng, @param sinceMs ms since the last flash this run fired
+ */
+export function wordFlash(rng, sinceMs) {
+  if (!(sinceMs >= WORD_FLASH_GAP_MS)) return false;
+  return (typeof rng === 'function' ? rng() : Math.random()) < WORD_FLASH_CHANCE;
+}
+
+/** GIF RAIN ON A WORD ROW (2026-09-08). Most trigger rows are the many `mark` word sets: a line of
+ *  plain word faces with no effect of their own. One in six of those, past the gif rain bubble's own
+ *  intensity floor, puts a gifrain bubble in the MIDDLE of the line - the pictures come down, and the
+ *  row is still the word it was and still unavoidable. Only the centre, so a row can pour exactly one
+ *  cascade and never five; only a treat row, so a phrase written for a freeze or a spiral keeps the
+ *  effect it was written for; and never over the rabbit foot's golden centre, which was earned. */
+export const GIFRAIN_ROW_CHANCE = 1 / 6;
+/** The bubble it puts there. bubbleKinds.js owns the kind AND its intensity floor, so the road and
+ *  the row can never disagree about when the rain is allowed to start (no second floor here). */
+export const GIFRAIN_KIND = 'gifrain';
+/**
+ * Does this trigger row wear the rain? Pure, so the smoke can hold the odds and the floor. The
+ * caller draws from the ROAD's own seeded rng, the stream the rest of the chart rolls on, so a
+ * seed lays the same rain every time.
+ * @param kindId the kind the row resolved to, @param intensity 0..1, @param rng the road's rng
+ */
+export function gifRainRow(kindId, intensity, rng) {
+  const k = KIND_BY_ID[kindId], rain = KIND_BY_ID[GIFRAIN_KIND];
+  if (!k || k.kind !== 'treat' || !rain || rain.spawn === false) return false;   // an effect row keeps its effect
+  if (!(Number(intensity) >= (rain.minIntensity || 0))) return false;            // the rain's own floor, not a new one
+  return (typeof rng === 'function' ? rng() : Math.random()) < GIFRAIN_ROW_CHANCE;
+}
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const conf01 = (e) => (Number.isFinite(Number(e.conf)) ? clamp(Number(e.conf), 0, 1) : 1);
@@ -154,8 +206,22 @@ export function cueFor(event, ctx = {}) {
       const gold = typeof ctx.gold === 'function' && ctx.gold() === true;   // rabbit foot: a golden in the middle
       // every bubble of the row wears the set's word on its own face (bubbles.js spawnRow), inked
       // in the set's own theme colour, and the middle one is drawn bigger: the row IS the word.
-      const ink = (themeFor(event) || {}).color || null;
-      for (const x of ROW_X) cue.spawn.push({ kindId: gold && Math.abs(x) < 1e-6 ? 'golden' : kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
+      const row = themeFor(event) || {};
+      const ink = row.color || null;
+      // the one preset that MEANT the flash: its bubble went dark, so the beat pours the flash
+      // itself through THE MIX (run.js cueMix) and the row stays a line of plain white word faces.
+      // This is the only door a strobe charge still comes through, so the recipes that need one
+      // (pink lightning, snowblind, the full pour) are still on the table.
+      if (row.preset === FLASH_PRESET) cue.mix = 'flash';
+      // and one word row in six, once the run is loud enough, has the rain hanging in the middle of it.
+      // Not over the golden centre, and not on a row that already pours something (the flash-pulse
+      // line is plain faces on purpose: its beat IS the effect, and the rain would talk over it).
+      const rain = !gold && !cue.mix && gifRainRow(kindId, intensity, rng);
+      for (const x of ROW_X) {
+        const mid = Math.abs(x) < 1e-6;
+        cue.spawn.push({ kindId: mid ? (gold ? 'golden' : (rain ? GIFRAIN_KIND : kindId)) : kindId,
+          placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
+      }
       cue.word = label || null;
       cue.pose = 'grab';
       break;

@@ -106,6 +106,8 @@
   "intake_nudge_later": "Maybe later",
   "intake_nudge_body": "A fresh Graded Intake run is waiting on your Dashboard. It drafts a session shaped around how you answer - and stamps your punch card once you run it.",
   "label_awareness_privacy_notice_v2": "This feature reads the name of the active window to work out which app or site you are on, and counts visits and minutes on this PC. Only a category, the app name and rounded numbers are sent to our secure proxy for processing; page titles stay on this PC unless you allow an app yourself, and private or incognito windows are ignored entirely. The counts are deleted after the retention period you choose.",
+  "banner_pool_enabled": "Rotate extra lines in the top banner",
+  "tooltip_banner_pool_enabled": "Adds one more line to the header banner every few minutes, drawn from a written pool. Off leaves the banner with its usual beats.",
   "label_intake_nudge_enabled": "Remind me when my weekly intake pass is ready",
   "label_suppress_perk_notifications": "Silence XP perk and quest popups",
   "tooltip_suppress_perk_notifications": "Turns off the pop-up and the ping for lucky 10x / 20x XP procs, Pink Rush and quest completion. The bonuses themselves keep working exactly as before - only the announcement goes quiet.",
