@@ -34,9 +34,12 @@ const SMOOTH_SEC = 2;
 const END_PAD = 0.25;
 /** The most of the file one frame may carry on its own: see the header. */
 const MAX_STEP_SEC = 1;
-/** The effect bubbles a trigger phrase may wear, dealt round robin over the chart's lexicon. */
+/** The effect bubbles a trigger phrase may wear, dealt round robin over the chart's lexicon.
+ *  A DARKENED row (bubbleKinds.js `spawn: false`) is dropped from the deal, not just a missing one:
+ *  bubbles.js lays no row at all for a dark kind, so dealing one would take that phrase's whole
+ *  unavoidable line off the road. 'flash' left by this door on 2026-09-08. */
 const TRIGGER_KINDS = ['flash', 'subliminal', 'pink', 'spiral', 'glitch', 'freeze']
-  .filter((id) => BUBBLE_KINDS.some((k) => k.id === id));
+  .filter((id) => BUBBLE_KINDS.some((k) => k.id === id && k.spawn !== false));
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 

@@ -55,11 +55,16 @@ function tagInk(event) {
   return row && row.preset === event.cue ? row.color : null;
 }
 
-/** A trigger phrase nobody has assigned a bubble to wears the room's own effect, else this. */
-const FALLBACK_TRIGGER = 'flash';
-/** Which effect an unmapped trigger wears per room (rooms.js ids; chart.js ACT_ROOM picks them). */
+/** A trigger phrase nobody has assigned a bubble to wears the room's own effect, else this.
+ *  `pink` since 2026-09-08: it was the flash bubble, and the flash bubble is dark now. Every id
+ *  named here has to be one that still SPAWNS, because bubbles.js lays no row at all for a dark
+ *  kind and a trigger row that never lands is the one thing this road may not do. */
+const FALLBACK_TRIGGER = 'pink';
+/** Which effect an unmapped trigger wears per room (rooms.js ids; chart.js ACT_ROOM picks them).
+ *  The Tea Garden's was the flash; it takes the whisper card instead, which is the gentler read
+ *  of "nothing here fights you" anyway and keeps the room off the pink the Toybox already wears. */
 const ROOM_TRIGGER = {
-  teagarden: 'flash', undertow: 'spiral', toybox: 'pink', chapel: 'spiral',
+  teagarden: 'subliminal', undertow: 'spiral', toybox: 'pink', chapel: 'spiral',
   mirrors: 'glitch', greyward: 'freeze', coronation: 'prism', casino: 'lucky',
 };
 /** What a peak rains per room; anywhere else it is plain treats. */
@@ -107,6 +112,29 @@ const CHANT_X = 1.2, CHANT_PERIOD = 1.2, CHANT_MAX = 16;
 const CHANT_GOLD_EVERY = 4;
 /** A build hands over at most this many seconds of boost. */
 const BOOST_CAP = 4;
+/** THE WORD FLASH (2026-09-08). The flash bubble is dark: the flash is a beat on a WORD now.
+ *  Half the word bubbles the player takes pop a brief bloom of light with them, and the other half
+ *  are just a word. It is cosmetic and nothing else: it never reaches THE MIX, it is not a strobe
+ *  charge, it cannot start a recipe and the pop still scores as the treat it always was.
+ *  A `flash-pulse` row is the exception, and it goes the other way: that preset MEANT the flash,
+ *  so its beat pours a real one through the mixer (`cue.mix`) instead of this bloom. */
+export const WORD_FLASH_CHANCE = 0.5;
+/** The preset whose row pours a real flash on its beat rather than the bloom (triggerTheme.js). */
+export const FLASH_PRESET = 'flash-pulse';
+/** Two words taken inside this many ms share one flash: a line read clean is a sentence, not a strobe. */
+export const WORD_FLASH_GAP_MS = 250;
+/** What run.js hands payloadFx: one scattered image at ~185 ms, which is a blink and not an effect. */
+export const WORD_FLASH = { strength: 12, durationMult: 0.18 };
+/**
+ * Does this word pop take a flash with it? Pure so the smokes can hold the odds: run.js keeps the
+ * clock and the run's own seeded rng, and a pop inside the gap never draws from it, so the cap is a
+ * cap and not a re-roll.
+ * @param rng the run's seeded rng, @param sinceMs ms since the last flash this run fired
+ */
+export function wordFlash(rng, sinceMs) {
+  if (!(sinceMs >= WORD_FLASH_GAP_MS)) return false;
+  return (typeof rng === 'function' ? rng() : Math.random()) < WORD_FLASH_CHANCE;
+}
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const conf01 = (e) => (Number.isFinite(Number(e.conf)) ? clamp(Number(e.conf), 0, 1) : 1);
@@ -154,7 +182,13 @@ export function cueFor(event, ctx = {}) {
       const gold = typeof ctx.gold === 'function' && ctx.gold() === true;   // rabbit foot: a golden in the middle
       // every bubble of the row wears the set's word on its own face (bubbles.js spawnRow), inked
       // in the set's own theme colour, and the middle one is drawn bigger: the row IS the word.
-      const ink = (themeFor(event) || {}).color || null;
+      const row = themeFor(event) || {};
+      const ink = row.color || null;
+      // the one preset that MEANT the flash: its bubble went dark, so the beat pours the flash
+      // itself through THE MIX (run.js cueMix) and the row stays a line of plain white word faces.
+      // This is the only door a strobe charge still comes through, so the recipes that need one
+      // (pink lightning, snowblind, the full pour) are still on the table.
+      if (row.preset === FLASH_PRESET) cue.mix = 'flash';
       for (const x of ROW_X) cue.spawn.push({ kindId: gold && Math.abs(x) < 1e-6 ? 'golden' : kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
       cue.word = label || null;
       cue.pose = 'grab';
