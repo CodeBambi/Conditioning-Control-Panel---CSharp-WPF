@@ -502,10 +502,17 @@
    menu's toggle), and the media query answers a browser whose player never opened that menu.
    A blackout only ever fades, so it has nothing to take away. */
 #race-root[data-rm="1"] .sf-pfx-gifwash.is-washing { animation: none; }
+/* THE MELT AND THE DOLL (bubbleKinds.js `melt` / `lock`). Reduced motion keeps the COLOUR and the
+   words, which is the effect, and drops the movement: the melt stops sinking and wobbling but its
+   opacity still ramps up over the whole hold (a transition, not an animation, and the slow arrival
+   is the point of the kind), and the lacquer card stops breathing. */
+#race-root[data-rm="1"] .sf-pfx-pink.is-melting,
+#race-root[data-rm="1"] .sf-pfx-freeze.is-lacquer span { animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
   #race-root .sf-pfx-gifwash.is-washing { animation: none; }
+  #race-root .sf-pfx-pink.is-melting, #race-root .sf-pfx-freeze.is-lacquer span { animation: none; }
 }
 
 /* ============================================================================

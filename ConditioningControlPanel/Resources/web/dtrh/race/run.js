@@ -452,7 +452,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   function onPop(w, p) {
     const word = !!p.eventId && wordOf.has(p.eventId);   // a bubble off the transcript, not a chunk golden
     // read BEFORE spendWord/rowOf spend the event: a subliminal says the word its own bubble wore
-    const said = p.payload === 'subliminal' ? subText(p.eventId) : '';
+    const said = SPEAKING.has(p.payload) ? subText(p.eventId) : '';
     // a plain word face: the transcript's own bubble, or one of a trigger row that wears the phrase
     // without firing an effect. delete() is the row's one-shot: many bubbles, one word, one flash.
     if ((word || (!!p.eventId && wordyRows.delete(p.eventId))) && p.kind === 'treat') wordFlashPop(w);
@@ -480,6 +480,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   /** Every payload the mixer pours passes through here, so this tally is the whole truth about what
    *  the run fired: race/smoke/gifrain-row-check.mjs reads it to hold a rain row to ONE cascade. */
   const fxFired = new Map();
+  /** The payloads that put WORDS on the screen, and so want the road's own phrase handed to them. */
+  const SPEAKING = new Set(['subliminal', 'bambiLock']);
   const fire = (p, strength, durationMult, text) => {
     // THE BLACK IS FOR THE ROAD, NOT FOR THE SEAMS. A blackout cuts the screen for the best part
     // of a second, so it is only ever allowed while the run is actually being driven: never over
@@ -489,9 +491,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (p.payload === 'blackout' && (!S.running || S.ended)) return;
     fxFired.set(p.payload, (fxFired.get(p.payload) || 0) + 1);
     if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
-    // `text` is the subliminal's phrase and nothing else reads it: the bubble's own word if it wore
-    // one, else the road's last line inside ECHO_SEC, else '' - which hands the pick back to payloadFx.
-    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind, text: p.payload === 'subliminal' ? (text || subText(null)) : undefined }, strength }, { durationMult });
+    // `text` is the phrase, and only the kinds that SAY something read it: the bubble's own word if
+    // it wore one, else the road's last line inside ECHO_SEC, else '' - which hands the pick back to
+    // payloadFx's own pool. The doll (`lock`) speaks for the same reason the subliminal does: the
+    // road just said the words, so the card should be holding those words and not a stock two.
+    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind, text: SPEAKING.has(p.payload) ? (text || subText(null)) : undefined }, strength }, { durationMult });
   };
   function clearMixChrome() { root.removeAttribute('data-ov'); root.removeAttribute('data-tint'); if (hud.setTint) hud.setTint(0); }
   /** Pour one action. Sustained holds (tint / overlay / corruption) get a durationMult that lands payloadFx's

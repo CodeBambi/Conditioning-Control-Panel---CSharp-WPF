@@ -54,8 +54,11 @@ export const CATEGORIES = {
 };
 export const CATEGORY_IDS = Object.keys(CATEGORIES);
 
-/** Kinds whose life differs from their category's (payloadFx fixes these). */
-const KIND_LIFE = { subliminal: { sec: 0.5, scaled: false } };
+/** Kinds whose life differs from their category's (payloadFx fixes these).
+ *  `melt` is the tint that arrives slowly, so it holds the slot a little shorter than a pink pop
+ *  does: payloadFx spends 2-4 s of it ramping the colour up, and a melt that outlived the ramp by
+ *  the full tint life would read as a pink that forgot to leave. */
+const KIND_LIFE = { subliminal: { sec: 0.5, scaled: false }, melt: { sec: 3.4, scaled: true } };
 
 /** STROBE: a later charge lives this fraction of a fresh one, so five pops in
  * a row read as one rolling strobe that winds down, not a 13 s wall. */
@@ -264,6 +267,8 @@ if (typeof process !== 'undefined' && process.env && process.env.RACE_SELFCHECK)
   let r = m.add('pink'); ok(r.action === 'extend' && r.depth === 2 && m.live('tint').sec > 4.5, 'tint extends + deepens');
   r = m.add('pink'); ok(r.action === 'extend' && r.depth === 2, 'tint depth caps at 2');
   ok(m.live('tint').sec <= 4.5 * 2.5 + 1e-9, 'tint clock capped');
+  // the melt is a tint like any other: one colour on the glass, deepened rather than doubled
+  ok(categoryOf('melt') === 'tint' && m.add('melt').action === 'extend', 'a melt deepens the tint it lands on');
   // OVERLAY: same kind refreshes, a different kind replaces
   ok(m.add('spiral').action === 'fire', 'spiral fires');
   ok(m.add('spiral').action === 'refresh', 'second spiral refreshes');
@@ -279,8 +284,9 @@ if (typeof process !== 'undefined' && process.env && process.env.RACE_SELFCHECK)
   ok(m.add('subliminal').action === 'fire', 'card fires');
   ok(m.add('gifrain').action === 'stack' && m.add('gifrain').action === 'stack' && m.add('gifrain').action === 'stack', 'cards add to 4');
   ok(m.add('subliminal').action === 'held', 'fifth card held');
-  // FREEZE is solo
+  // FREEZE is solo, and the doll shares that one slot with it (never two cards over the road at once)
   ok(m.add('freeze').action === 'fire' && m.add('freeze').action === 'held', 'freeze solo');
+  ok(m.add('lock').action === 'held', 'a doll is held while a freeze is live');
   // VIDEO: exclusive over everything
   ok(m.add('video').action === 'fire', 'video fires over a full mix');
   ok(m.add('flash').action === 'held' && m.add('pink').action === 'held' && m.add('video').action === 'held', 'everything held under the tape');

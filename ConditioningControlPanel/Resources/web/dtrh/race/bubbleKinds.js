@@ -78,6 +78,19 @@ export const BUBBLE_KINDS = [
   // with it, because a blackout is only a moment while it is still a surprise.
   { id: 'blackout',   label: '■', kind: 'effect', payload: 'blackout',   overlayKind: 'braindrain', category: 'overlay',
     strength: 0.6,  points: 30, weight: 1.8, minIntensity: 0.5,  tint: 'rgb(122,126,170)', sprite: SPRITE_BASE + 'blackout.png' },
+  // THE DOLL (2026-09-08). "bimbo doll / uniform lock / bambi limp / plastic / puppet": the freeze
+  // card, but it says the ROAD'S OWN PHRASE - whatever the popped bubble or its trigger row was
+  // wearing - behind a pink lacquer frame instead of the frost. Same freeze/slow-mo timing, same
+  // THE MIX slot: 'freeze' is solo, so a doll and a freeze never talk over each other. The plain
+  // 'freeze' row above is untouched and still says the literal BAMBI FREEZE.
+  { id: 'lock',       label: '⊙', kind: 'effect', payload: 'bambiLock',  overlayKind: null,  category: 'freeze',
+    strength: 0.6,  points: 30, weight: 1.8, minIntensity: 0.5,  tint: 'rgb(255,138,196)', sprite: SPRITE_BASE + 'lock.png' },
+  // MELTING (2026-09-08). "cotton candy / pink satin / melting": the pink filter that SAGS. It is
+  // the same tint slot and the same layer the pink bubble uses, so a pink pop and a melt still read
+  // as one wash deepening, but the colour ramps up across the whole hold instead of snapping on and
+  // the layer sinks and wobbles while it does. Common enough to be a mood rather than an event.
+  { id: 'melt',       label: '❥', kind: 'effect', payload: 'melt',       overlayKind: 'pink_filter', category: 'tint',
+    strength: 0.55, points: 20, weight: 3,   minIntensity: 0.15, tint: 'rgb(255,105,180)', sprite: SPRITE_BASE + 'melt.png' },
 ];
 
 export const KIND_BY_ID = Object.fromEntries(BUBBLE_KINDS.map((k) => [k.id, k]));
