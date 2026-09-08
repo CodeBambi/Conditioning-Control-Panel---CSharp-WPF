@@ -73,6 +73,7 @@ export function createCheshireGuide(opts) {
   const seenLines = new Set();       // line ids (unprefixed) that must never repeat
   const cooldowns = new Map();       // pool key -> epoch ms it may fire again
   let lastSayAt = 0;                 // ambient-gap throttle
+  let runsThisSitting = 0;           // descents started this app-session (the Barnum 'sitting' fact)
 
   const now = () => Date.now();
 
@@ -128,6 +129,35 @@ export function createCheshireGuide(opts) {
   const onCooldown = (key) => (cooldowns.get(key) || 0) > now();
   const pick = (arr) => (arr && arr.length ? arr[Math.floor(Math.random() * arr.length)] : null);
 
+  /** Barnum cold-read gate. The facts a line may lean on are the ones guaranteed
+   * at its trigger: the bark's own data (runDetonations, combo, count, wave, act,
+   * threshold, quick...) plus runs (finished before this one), hour (local 0..23),
+   * weekday (0 = Sunday), weekend (0/1) and sitting (descents started this
+   * app-session). A line's `when: { fact: { min?, max? } }` must hold on every
+   * key or the line is simply not in the pick. Booleans read as 0/1; a missing
+   * fact fails the gate (never invent a hit). */
+  function facts(data) {
+    const m = meta() || {};
+    const d = new Date();
+    return Object.assign({
+      runs: m.runsCompleted | 0, hour: d.getHours(), weekday: d.getDay(),
+      weekend: (d.getDay() === 0 || d.getDay() === 6) ? 1 : 0, sitting: runsThisSitting,
+    }, data || {});
+  }
+  function allows(line, f) {
+    const w = line && line.when;
+    if (!w) return true;
+    for (const k of Object.keys(w)) {
+      const raw = f[k];
+      const v = typeof raw === 'boolean' ? (raw ? 1 : 0) : raw;
+      if (typeof v !== 'number' || Number.isNaN(v)) return false;
+      const c = w[k] || {};
+      if (c.min != null && v < c.min) return false;
+      if (c.max != null && v > c.max) return false;
+    }
+    return true;
+  }
+
   /** Fire one scheduled arc beat (say or overlay) + stamp its covers. */
   function fireBeat(b) {
     fired.add(b.id);
@@ -160,6 +190,7 @@ export function createCheshireGuide(opts) {
       ensureInit();
       fired.clear();
       schedule = null;
+      runsThisSitting++;
       if (!cfg) return;
       if (cfg.scriptedFirstRun) { schedule = script.runs[1] || null; return; }
       if (stage >= ARC_DONE || stage < 1) return;
@@ -214,7 +245,8 @@ export function createCheshireGuide(opts) {
       if (now() - lastSayAt < AMBIENT_GAP_MS) return false;
       if (onCooldown('e:' + event)) return false;
       if (Math.random() >= (pool.chance != null ? pool.chance : 1)) return false;
-      const line = pick(pool.lines.filter((l) => !l.once || !seenLines.has(l.id)));
+      const f = facts(data);
+      const line = pick(pool.lines.filter((l) => (!l.once || !seenLines.has(l.id)) && allows(l, f)));
       if (!line) return false;
       vn.say(line);
       lastSayAt = now();
@@ -325,16 +357,17 @@ export function createCheshireGuide(opts) {
       const hubPools = script.reactive && script.reactive.hub;
       if (!hubPools) return;
       if (vn.isBusy()) return;
+      const f = facts(null);   // hub lines gate on runs / hour / weekend only
       // one greeting per long stretch (persisted), else the occasional idle line
       const g = hubPools.greeting;
       if (g && !onCooldown('h:greeting') && Math.random() < (g.chance != null ? g.chance : 1)) {
-        const line = pick(g.lines);
+        const line = pick(g.lines.filter((l) => allows(l, f)));
         if (line) { vn.say(line); lastSayAt = now(); setCooldown('h:greeting', g.cd || 21600000); }
         return;
       }
       const idle = hubPools.idle;
       if (idle && !onCooldown('h:idle') && Math.random() < (idle.chance != null ? idle.chance : 1)) {
-        const line = pick(idle.lines);
+        const line = pick(idle.lines.filter((l) => allows(l, f)));
         if (line) { vn.say(line); lastSayAt = now(); setCooldown('h:idle', idle.cd || 300000); }
       }
     } catch (e) { /* ignore */ }
