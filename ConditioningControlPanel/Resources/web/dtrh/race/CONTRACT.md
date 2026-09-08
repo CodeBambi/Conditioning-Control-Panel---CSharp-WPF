@@ -209,6 +209,19 @@ reads the two counters back: `race.wordFlashStats()` (pops, capped, rolls, flash
 way: its row is a line of plain word faces and its beat sets `cue.mix = 'flash'`, which is now the
 only door a strobe charge comes through, so the recipes that need one still have a way to be served.
 
+**GIF RAIN ON A ROAD BLOCK (2026-09-08).** A trigger row is unavoidable, and most rows are the many
+`mark` word sets: a line of plain word faces with no effect of their own. One such row in six
+(`cues.js` `GIFRAIN_ROW_CHANCE`, rolled off the ROAD's seeded rng so a seed lays the same rain
+twice), from the gifrain bubble's own `minIntensity` upward and no other floor, puts a gifrain
+bubble in the MIDDLE of the line. Only the centre, so a row can pour exactly one cascade and never
+five; never over a golden centre the rabbit foot is owed; and never on a row that already pours
+something, which is why a `flash-pulse` line stays plain. The `gif-rain` preset itself
+(`triggerTheme.js`, plate theme `rain`, gold) is what a set asks for by name: `cockslut` asks for it
+since 2026-09-08, having pointed at the dark `video` bubble since that one went dark.
+`race/smoke/rows-check.mjs` holds the odds, the floor and the one-bubble rule;
+`race/smoke/gifrain-row-check.mjs` drives a real run and holds the cascades against the rain
+bubbles that were laid, reading `race.fxStats()` - every payload the mixer has poured.
+
 Placements: `lane` (rests on the road, h ~0.9, bobbing), `air` (along a ramp air line, h rises
 2..5), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` to the road in
 about 4 s, rests 2 s, then fizzles). Collision is pass-through: pop when

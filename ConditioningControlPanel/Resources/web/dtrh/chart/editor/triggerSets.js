@@ -25,7 +25,10 @@ export const TRIGGER_SETS = [
   { id: 'zap-cock-drain', name: 'zap cock drain', group: 'named', phrase: 'zap cock drain', mode: 'exact', color: '#ff5c6c', preset: 'flash-pulse' },
   { id: 'primped', name: 'primped and pampered', group: 'named', phrase: 'primped and pampered', mode: 'exact', color: '#ffb3d9', preset: 'treats' },
   { id: 'does-as-told', name: 'bambi does as she is told', group: 'named', phrase: "does as she(?:'s| is) told", mode: 'regex', color: '#c8a8ff', preset: 'spiral-air' },
-  { id: 'cockslut', name: 'bambi cockslut', group: 'named', phrase: 'cock ?slut', mode: 'regex', color: '#ee7078', preset: 'video' },
+  // cockslut asked for the video preset, whose bubble went dark on 2026-09-06: the row has been
+  // falling back to a plain effect ever since while its plate still said video. It gets gif rain
+  // instead (2026-09-08), which is the loud one the phrase wanted and a kind that still spawns.
+  { id: 'cockslut', name: 'bambi cockslut', group: 'named', phrase: 'cock ?slut', mode: 'regex', color: '#ee7078', preset: 'gif-rain' },
   { id: 'takeover', name: 'bambi takeover', group: 'named', phrase: 'take(?:s|n)? ?over', mode: 'regex', color: '#4060c0', preset: 'melt' },
   { id: 'awaken', name: 'bambi awaken', group: 'named', phrase: 'awaken|wake up|wide awake', mode: 'regex', color: '#ffd6a0', preset: 'flash-pulse' },
   { id: 'giggle-time', name: 'giggle time', group: 'named', phrase: 'giggle ?time', mode: 'regex', color: '#ffe066', preset: 'treats' },
