@@ -209,6 +209,13 @@ export function createOutline({ group, bus = null }) {
     flickering.push({ piece, t: 0 });
   }
 
+  /** Give one man's line another colour (`null` puts his side's back). The poses use it. */
+  function setBase(piece, hex) {
+    const h = piece && hulls.get(piece);
+    if (!h) return;
+    h.base = hex == null ? (piece.userData.side === 'b' ? T.colorBlack : T.colorWhite) : hex;
+  }
+
   function kingOf(side) {
     for (const p of group.children) {
       if (p.userData && p.userData.type === 'k' && p.userData.side === side) return p;
@@ -267,7 +274,7 @@ export function createOutline({ group, bus = null }) {
   }
 
   return {
-    update, attach, detach, flicker,
+    update, attach, detach, flicker, setBase,
     /** For the harness: how many men are inked and what the line is doing. */
     stats() {
       let held = 0;

@@ -164,6 +164,17 @@ function main() {
   view.cameraRig.setDragGuard(() => drag.isHolding());
   // --- end M ---
 
+  // --- N: the theatre (parade, poses; bloom and the room in the next PR) ---
+  import('./board/parade.js').then((m) => {
+    board.parade = m.createParade({ view, bus, jiggle });
+    feelLate.push((dt) => board.parade.update(dt));
+  }).catch((e) => console.warn('[pbp] parade missing', e));
+  import('./board/poses.js').then((m) => {
+    board.poses = m.createPoses({ view, pieces, bus, jiggle, outline: () => board.outline, project: (v) => view.projectPoint(v) });
+    feelLate.push((dt) => board.poses.update(dt));
+  }).catch((e) => console.warn('[pbp] poses missing', e));
+  // --- end N ---
+
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000);
