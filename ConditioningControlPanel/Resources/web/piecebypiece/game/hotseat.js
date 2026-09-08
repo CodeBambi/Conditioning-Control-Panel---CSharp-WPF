@@ -88,7 +88,10 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
         victimSide: played.capturedSide,
       });
     }
-    if (played.check) bus.emit('check', { side: played.turn });
+    if (played.check) {
+      if (board.buzzCheck) board.buzzCheck(played.to);   // the man giving check rattles
+      bus.emit('check', { side: played.turn });
+    }
 
     const end = rules.result();
     if (end) {

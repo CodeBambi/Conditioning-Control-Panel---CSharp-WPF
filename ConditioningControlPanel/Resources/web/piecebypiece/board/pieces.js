@@ -77,7 +77,7 @@ function trim(type, mat) {
   return parts;
 }
 
-export function createPieces({ group, assetsBase = './assets/pieces/' }) {
+export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {} }) {
   const geoCache = new Map();
   const glb = new Map();          // type -> geometry from a supplied glb
   const bySquare = new Map();     // square -> piece object
@@ -101,7 +101,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/' }) {
     root.scale.setScalar(HEIGHT[type]);
     // Knights (and any modelled piece) look at the far side.
     root.rotation.y = side === 'w' ? 0 : Math.PI;
-    root.userData = { type, side, material: mat, phase: Math.random() * Math.PI * 2, lift: 0, tilt: 0 };
+    root.userData = { type, side, material: mat, scaleBase: HEIGHT[type], phase: Math.random() * Math.PI * 2 };
     return root;
   }
 
@@ -133,20 +133,28 @@ export function createPieces({ group, assetsBase = './assets/pieces/' }) {
 
   function pieceAt(sq) { return bySquare.get(sq) || null; }
 
+  /** A man leaves the board. anim.js takes him if it wants a send-off. */
+  function retire(piece) {
+    if (hooks.onCaptured) hooks.onCaptured(piece);
+    else group.remove(piece);
+  }
+
   function move(from, to) {
     const piece = bySquare.get(from);
     if (!piece) return null;
     bySquare.delete(from);
     const taken = bySquare.get(to) || null;
-    if (taken) { group.remove(taken); bySquare.delete(to); }
+    if (taken) { retire(taken); bySquare.delete(to); }
+    const was = piece.position.clone();
     place(piece, to);
     bySquare.set(to, piece);
+    if (hooks.onMoved) hooks.onMoved(piece, was);
     return piece;
   }
 
   function remove(sq) {
     const piece = bySquare.get(sq);
-    if (piece) { group.remove(piece); bySquare.delete(sq); }
+    if (piece) { retire(piece); bySquare.delete(sq); }
     return piece || null;
   }
 
@@ -154,7 +162,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/' }) {
     clock += dt;
     if (wobble <= 0.001) return;
     for (const piece of bySquare.values()) {
-      if (piece.userData.held) continue;
+      if (piece.userData.held || piece.userData.busy) continue;
       const ph = piece.userData.phase;
       piece.rotation.z = Math.sin(clock * 1.7 + ph) * 0.055 * wobble;
       piece.rotation.x = Math.sin(clock * 1.3 + ph * 1.7) * 0.04 * wobble;
