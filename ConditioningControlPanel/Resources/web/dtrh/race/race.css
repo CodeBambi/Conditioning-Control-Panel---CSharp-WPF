@@ -494,9 +494,18 @@
 #race-root[data-tint="2"] .sf-pfx-pink { filter: opacity(0.92) saturate(1.3); }
 #race-root[data-ov="spiral"] .sf-pfx-drain:not(.sf-pfx-glitching) { filter: opacity(0); }
 #race-root[data-ov="braindrain"] .sf-pfx-spiral { filter: opacity(0); }
+/* THE WASH AND THE BLACK (bubbleKinds.js `gifwash` / `blackout`, drawn by game/payloadFx.js).
+   The overlay cap above is deliberately NOT extended to .sf-pfx-gifwash. The whole of the
+   owner's ask is that it read as a gif taking the screen rather than the drain's faint bruise,
+   and styles.css already keeps the road open with a soft mask instead of a ceiling. The one
+   thing the race adds is the motion switch: `data-rm` is run.js's own reducedMotion (the race
+   menu's toggle), and the media query answers a browser whose player never opened that menu.
+   A blackout only ever fades, so it has nothing to take away. */
+#race-root[data-rm="1"] .sf-pfx-gifwash.is-washing { animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
+  #race-root .sf-pfx-gifwash.is-washing { animation: none; }
 }
 
 /* ============================================================================

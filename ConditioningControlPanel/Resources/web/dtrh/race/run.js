@@ -271,6 +271,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   const lane = createMediaLane(sfHud);   // re-homes payload cards off the road
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
+  // The race menu's motion toggle, on the root, so a CSS-only payload layer can answer it. The
+  // payloadFx layers are drawn by a file that knows nothing about this run, and race.css cannot
+  // read a JS flag, so this attribute is the seam: `#race-root[data-rm="1"]` drops the gif wash's
+  // shudder exactly the way `prefers-reduced-motion` does for a player who never opened the menu.
+  if (reducedMotion) root.dataset.rm = '1'; else root.removeAttribute('data-rm');
   const input = createInput({ root });   // root: the touch layer, on a phone, is built inside its .race-hud
   const audio = createRaceAudio({ bridge, hud, settings, input });
   const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
@@ -476,6 +481,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
    *  the run fired: race/smoke/gifrain-row-check.mjs reads it to hold a rain row to ONE cascade. */
   const fxFired = new Map();
   const fire = (p, strength, durationMult, text) => {
+    // THE BLACK IS FOR THE ROAD, NOT FOR THE SEAMS. A blackout cuts the screen for the best part
+    // of a second, so it is only ever allowed while the run is actually being driven: never over
+    // the countdown (S.running is false until the count says go) and never once the End card is
+    // owed one (S.ended). It is a payload like any other everywhere else, and it still SCORES -
+    // only the picture is withheld, the same way THE MIX withholds a held pop's effect.
+    if (p.payload === 'blackout' && (!S.running || S.ended)) return;
     fxFired.set(p.payload, (fxFired.get(p.payload) || 0) + 1);
     if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
     // `text` is the subliminal's phrase and nothing else reads it: the bubble's own word if it wore
@@ -505,6 +516,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
         fire(p, strength, holdMult);
         root.dataset.ov = p.overlayKind;   // race.css crossfades the other hold out (the replace)
         hud.toast(r.action === 'refresh' ? 'deeper' : r.action === 'replace' ? `${label} takes over` : label, 'effect');
+        break;
+      // THE WASH: a gif over the whole screen. Its own slot, so it does not touch data-ov and
+      // cannot crossfade the spiral out; the picture holds for as long as the rail says it does.
+      case 'wash':
+        fire(p, strength, holdMult);
+        hud.toast(r.action === 'refresh' ? 'another one' : label, 'effect');
         break;
       case 'corruption':
         fire(p, strength, holdMult); hud.flicker();

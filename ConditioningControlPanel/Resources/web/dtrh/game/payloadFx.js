@@ -97,6 +97,30 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
   // an image url for washes/cascades: user media first, bundled sprite otherwise
   const anyImageUrl = async () => (await pickImageUrl()) || pick(FALLBACK_SPRITES);
 
+  /** A url for the FULL-SCREEN WASH, and the one place in this file that would rather have a gif.
+   *  There is no gif-only door in hostMedia.js - the pool is split local/remote and image/video,
+   *  never by whether a picture moves - so this draws a few times and takes the first entry whose
+   *  name or url says gif/webp, keeping whatever it drew last if none of them do. With nothing in
+   *  the pool at all it takes a BUNDLED SPIRAL rather than one of the still FALLBACK_SPRITES:
+   *  those are all pngs, and a still png is exactly what this effect is not. */
+  const MOVING_RE = /\.(gif|webp)(\?|#|$)/i;
+  async function pickWashUrl(tries = 4) {
+    let last = null;
+    for (let i = 0; i < tries; i++) {
+      try {
+        if (!hasDomMedia()) break;
+        const p = drawDom('image');
+        if (!p) break;
+        const got = await p.acquire();
+        const url = got && got.url ? got.url : null;
+        if (!url) break;
+        last = url;
+        if (MOVING_RE.test(String(p.name || '')) || MOVING_RE.test(url)) return url;
+      } catch (e) { break; }
+    }
+    return last || pickSpiralUrl();
+  }
+
   // ---- sustained overlays (spiral / pink / braindrain) -----------------------
   function ensureHold(kind, cls) {
     let h = holds[kind];
@@ -154,6 +178,56 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
       clearTimeout(h.hideTimer);
       h.hideTimer = setTimeout(() => { if (!disposed) { h.el.style.opacity = '0'; } h.hideTimer = 0; }, glitchMs);
     }
+  }
+
+  /**
+   * THE GIF TAKES THE SCREEN. The same wash `showBraindrain` puts under the glitch, off the leash:
+   * NO backdrop blur, NO dark luminosity blend and NO 0.62 ceiling, so the picture is the thing on
+   * the glass rather than a bruise behind one. `pickWashUrl` prefers a moving entry (see above) and
+   * styles.css feathers the edges so the road underneath stays drivable at 0.8.
+   *
+   * Racing Thoughts is the only caller today (bubbleKinds.js `gifwash`, THE MIX slot 'wash'); the
+   * tube deals no bubble that fires it, so nothing dtrh.html draws changes.
+   */
+  async function showGifWash(strength, durMult) {
+    const h = holdOn('gifwash', 'sf-pfx-gifwash', scaleD(0.55, 0.80, strength), scale(1500, 3000, strength) * durMult);
+    h.el.classList.add('is-washing');   // the light shudder; race.css drops it under reduced motion
+    const url = await pickWashUrl();
+    if (!disposed && url) h.el.style.backgroundImage = `url("${url}")`;
+  }
+
+  /**
+   * SLEEP NOW. The screen CUTS to black (120 ms, hard), holds there, then lets go over ~1 s while
+   * the braindrain blur fades back in underneath it - so the player comes back up through the drain
+   * rather than straight onto the road.
+   *
+   * It is one reused `.sf-pfx-black` hold like every other sustained layer, so overlapping pops
+   * refresh a deadline instead of stacking cards, and `cancelHeavy()` takes the glass back at once
+   * (run end / room arrival) so a run can never end with the screen still dark.
+   */
+  function blackout(strength, durMult) {
+    const h = ensureHold('blackout', 'sf-pfx-black');
+    if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
+    h.el.classList.add('is-cut');       // the 120 ms transition, in place of the layer's 450 ms
+    h.el.style.opacity = '1';
+    const holdMs = scale(600, 900, strength) * clamp(durMult, 0.5, 3);
+    h.hideTimer = setTimeout(() => {
+      h.hideTimer = 0;
+      if (disposed) return;
+      h.el.classList.remove('is-cut');  // back to the slow release
+      h.el.style.opacity = '0';
+      showBraindrain(strength, durMult);
+    }, holdMs);
+  }
+  /** Take the black back NOW, with nothing behind it (run end, room arrival). */
+  function endBlackout() {
+    const h = holds.blackout;
+    if (!h) return false;
+    if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
+    if (h.el.style.opacity === '0') return false;
+    h.el.classList.remove('is-cut');
+    h.el.style.opacity = '0';
+    return true;
   }
 
   // ---- transient bursts (flash / subliminal / bambi freeze) ------------------
@@ -347,11 +421,12 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
     setTimeout(() => loops.delete(handle), holdMs + 900);
   }
 
-  /** Room arrival cuts the heavies short: the stuck video card recedes and any
-   * running gif rain stops spawning (falling gifs finish their slide). Returns
-   * true if anything live was actually cut. */
+  /** Room arrival cuts the heavies short: the stuck video card recedes, any
+   * running gif rain stops spawning (falling gifs finish their slide) and a
+   * blackout hands the glass straight back. Returns true if anything live was
+   * actually cut. */
   function cancelHeavy() {
-    let cut = false;
+    let cut = endBlackout();
     heavyGen++;   // invalidate any video card still mid-acquire (see videoCard's gen check)
     if (videoCardCancel) { try { videoCardCancel(); } catch { /* ignore */ } cut = true; }
     for (const c of cascades) { try { c.cancel(); } catch { /* ignore */ } cut = true; }
@@ -413,6 +488,9 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
         else showPink(strength, durMult);   // pink_filter (default)
         break;
       case 'glitch':       showGlitch(strength, durMult); break;
+      // race-only kinds (bubbleKinds.js): the tube deals no bubble that fires either of these
+      case 'gifWash':      showGifWash(strength, durMult); break;
+      case 'blackout':     blackout(strength, durMult); break;
       case 'bambiFreeze':  bambiFreeze(); break;
       case 'bouncingText': bouncingText(durMult); break;
       case 'gifCascade':   gifCascade(durMult); break;
