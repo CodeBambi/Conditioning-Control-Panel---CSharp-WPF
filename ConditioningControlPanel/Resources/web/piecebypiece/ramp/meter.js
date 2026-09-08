@@ -34,7 +34,14 @@ export const RAMP_TUNING = Object.freeze({
 
   // --- sustained layer envelopes -------------------------------------------
   melt: Object.freeze({ minAlpha: 0.10, maxAlpha: 0.52 }),
-  blurMaxPx: 3,          // HARD CAP: a move must always stay physically possible
+  blurMaxPx: 3,
+  // THE VEIL BUDGET. The two full-screen gif veils (spiral, overlay) may cover
+  // this much between them and no more, and they step back to `cardVeilDamp` of
+  // that while a video card is over the board. Without it the top of the ramp
+  // is three walls at once and the board stops existing, which is a different
+  // game to the one being played.
+  veilBudget: 0.62,
+  cardVeilDamp: 0.45,          // HARD CAP: a move must always stay physically possible
   spiral: Object.freeze({ minAlpha: 0.16, maxAlpha: 0.50, minHoldMs: 1400, maxHoldMs: 5200, gapMs: 9000 }),
   overlay: Object.freeze({ minAlpha: 0.10, maxAlpha: 0.34 }),
 

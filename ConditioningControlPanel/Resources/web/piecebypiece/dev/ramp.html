@@ -11,6 +11,10 @@
 
   URL params:  ?meter=0.6   pin the meter (overrides the fake game)
                ?fire=flash  fire one layer once on load
+               ?only=blur   show only that sustained layer
+               ?noturn=1    do not play the opening move (no video card)
+               ?still=1     kill fade-in transitions (a still frame, not a fade)
+               ?seek=1200   jump one-shot animations forward, for a still
                ?quiet=1     hide the control panel (clean screenshots)
 -->
 <style>
@@ -115,6 +119,24 @@ import { createFixtureMedia, loadFixtureList } from '../ramp/media.js';
 const qs = new URLSearchParams(location.search);
 if (qs.get('quiet') === '1') document.getElementById('panel').classList.add('hidden');
 
+/* A screenshot pass sees almost no wall-clock time, so every layer would be
+   caught at the very start of its fade and the picture would show nothing.
+   ?still=1 removes the fades (sustained layers snap to their real value) and
+   ?seek= winds one-shot keyframes forward. Both are harness-only: the shipping
+   ramp keeps its transitions. */
+if (qs.get('still') === '1') {
+  const s = document.createElement('style');
+  s.textContent = '#stage, .pbp-fx > *, .pbp-fx-front, .pbp-fx-front * { transition-duration: 0s !important; }';
+  document.head.appendChild(s);
+}
+const seekAnimations = () => {
+  if (!qs.has('seek')) return;
+  const ms = Math.max(0, Number(qs.get('seek')) || 0);
+  for (const el of document.querySelectorAll('.pbp-fx > *, .pbp-fx-front, .pbp-fx-front *')) {
+    try { el.style.animationDelay = '-' + ms + 'ms'; } catch { /* gone */ }
+  }
+};
+
 /* ---- the fake bus: the same three-method surface the real game exposes ---- */
 function createBus() {
   const map = new Map();
@@ -143,7 +165,10 @@ const emitTurn = (side) => {
   bus.emit('turn', { side, ply: game.ply, clocks: { ...game.clocks }, total: TOTAL });
   emitClock();
 };
-emitTurn('w');
+/* ?noturn=1 keeps the opening move (and so the video card it fires) out of a
+   screenshot that is meant to show one other layer on a clean board */
+if (new URLSearchParams(location.search).get('noturn') === '1') emitClock();
+else emitTurn('w');
 setInterval(emitClock, 250);
 
 const PIECES = ['p', 'n', 'b', 'r', 'q'];
@@ -186,6 +211,7 @@ meterEl.addEventListener('input', applyMeter);
 
 /* ?meter=, ?fire= and ?prime= drive the screenshot pass */
 if (qs.has('meter')) { meterEl.value = Math.round(Number(qs.get('meter')) * 100); applyMeter(); }
+if (qs.has('only')) ramp.debug().only(qs.get('only'));
 if (qs.has('prime')) ramp.debug().prime(Number(qs.get('prime')) || 5);
 /* a fire name is either a harness event (grab, cap-w, check, ...) or a layer
    the ramp can fire directly (flash, gifRain, videoCard) */
@@ -196,6 +222,7 @@ if (qs.has('fire')) {
     else ramp.debug().fire(kind);
   }
 }
+seekAnimations();
 
 const out = document.getElementById('out');
 setInterval(() => {

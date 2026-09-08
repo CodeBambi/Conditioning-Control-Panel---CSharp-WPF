@@ -155,7 +155,9 @@ export function createLayerStack(ctx = {}) {
       }
       base.stageFilter.dispose();
     },
-    debug() { return { counts: { ...counts }, hasMedia: !!(ctx.media && ctx.media.size) }; },
+    /** True while a tape is over the board; the veils read this and step back. */
+    get cardLive() { return !!card.live; },
+    debug() { return { counts: { ...counts }, cardLive: !!card.live, hasMedia: !!(ctx.media && ctx.media.size) }; },
   };
   return api;
 }
