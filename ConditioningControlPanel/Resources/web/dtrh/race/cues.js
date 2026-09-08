@@ -33,6 +33,7 @@
 
 import { LANE_H, CEILING_H, LANE_X_MAX, POP_HIT_X } from './consts.js';
 import { themeFor } from './triggerTheme.js';
+import { KIND_BY_ID } from './bubbleKinds.js';
 
 /**
  * The words whose bubble is drawn BIG (race/wordFace.js): the ones the file is actually about.
@@ -136,6 +137,29 @@ export function wordFlash(rng, sinceMs) {
   return (typeof rng === 'function' ? rng() : Math.random()) < WORD_FLASH_CHANCE;
 }
 
+/** GIF RAIN ON A WORD ROW (2026-09-08). Most trigger rows are the many `mark` word sets: a line of
+ *  plain word faces with no effect of their own. One in six of those, past the gif rain bubble's own
+ *  intensity floor, puts a gifrain bubble in the MIDDLE of the line - the pictures come down, and the
+ *  row is still the word it was and still unavoidable. Only the centre, so a row can pour exactly one
+ *  cascade and never five; only a treat row, so a phrase written for a freeze or a spiral keeps the
+ *  effect it was written for; and never over the rabbit foot's golden centre, which was earned. */
+export const GIFRAIN_ROW_CHANCE = 1 / 6;
+/** The bubble it puts there. bubbleKinds.js owns the kind AND its intensity floor, so the road and
+ *  the row can never disagree about when the rain is allowed to start (no second floor here). */
+export const GIFRAIN_KIND = 'gifrain';
+/**
+ * Does this trigger row wear the rain? Pure, so the smoke can hold the odds and the floor. The
+ * caller draws from the ROAD's own seeded rng, the stream the rest of the chart rolls on, so a
+ * seed lays the same rain every time.
+ * @param kindId the kind the row resolved to, @param intensity 0..1, @param rng the road's rng
+ */
+export function gifRainRow(kindId, intensity, rng) {
+  const k = KIND_BY_ID[kindId], rain = KIND_BY_ID[GIFRAIN_KIND];
+  if (!k || k.kind !== 'treat' || !rain || rain.spawn === false) return false;   // an effect row keeps its effect
+  if (!(Number(intensity) >= (rain.minIntensity || 0))) return false;            // the rain's own floor, not a new one
+  return (typeof rng === 'function' ? rng() : Math.random()) < GIFRAIN_ROW_CHANCE;
+}
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const conf01 = (e) => (Number.isFinite(Number(e.conf)) ? clamp(Number(e.conf), 0, 1) : 1);
 const weight01 = (e) => (Number.isFinite(Number(e.weight)) ? clamp(Number(e.weight), 0, 1) : 1);
@@ -189,7 +213,15 @@ export function cueFor(event, ctx = {}) {
       // This is the only door a strobe charge still comes through, so the recipes that need one
       // (pink lightning, snowblind, the full pour) are still on the table.
       if (row.preset === FLASH_PRESET) cue.mix = 'flash';
-      for (const x of ROW_X) cue.spawn.push({ kindId: gold && Math.abs(x) < 1e-6 ? 'golden' : kindId, placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
+      // and one word row in six, once the run is loud enough, has the rain hanging in the middle of it.
+      // Not over the golden centre, and not on a row that already pours something (the flash-pulse
+      // line is plain faces on purpose: its beat IS the effect, and the rain would talk over it).
+      const rain = !gold && !cue.mix && gifRainRow(kindId, intensity, rng);
+      for (const x of ROW_X) {
+        const mid = Math.abs(x) < 1e-6;
+        cue.spawn.push({ kindId: mid ? (gold ? 'golden' : (rain ? GIFRAIN_KIND : kindId)) : kindId,
+          placement: 'lane', x, h: LANE_H, at: 0, row: true, w: label || '', ink, big: true });
+      }
       cue.word = label || null;
       cue.pose = 'grab';
       break;

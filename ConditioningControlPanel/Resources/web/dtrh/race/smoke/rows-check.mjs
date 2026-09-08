@@ -17,6 +17,8 @@
  *   2b. the flash bubble is dark and the WORD carries the flash instead: half the
  *      word pops, off the run's seeded rng, one flash per 250 ms, and the one
  *      preset that meant the flash pours a real one through THE MIX
+ *   2c. one word row in six wears the gif rain in the middle of the line, past the
+ *      rain bubble's own intensity floor, one bubble of it and never the golden one
  *   3. a trigger the spotter only half heard is the single treat it always was
  *   4. one event is one credit however many of its bubbles were popped
  *   5. a worded track halves the peak rain; nothing else on the road moves
@@ -35,11 +37,12 @@
  * It never prints a line of a transcript. Everything below is counted.
  * ==========================================================================*/
 
-import { cueFor, ROW_X, ROW_MAX_GAP, wordFlash, WORD_FLASH, WORD_FLASH_CHANCE, WORD_FLASH_GAP_MS } from '../cues.js';
+import { cueFor, ROW_X, ROW_MAX_GAP, wordFlash, WORD_FLASH, WORD_FLASH_CHANCE, WORD_FLASH_GAP_MS,
+  GIFRAIN_KIND, GIFRAIN_ROW_CHANCE } from '../cues.js';
 import { createScheduler, normalizeChart } from '../chart.js';
 import { KART_X_MAX, LANE_X_MAX, POP_HIT_X, POP_HIT_D, LANE_H, COMBO_HOLD_SEC, KART_BASE_SPEED, OPEN_PACE, makeRng } from '../consts.js';
 import { createScore } from '../score.js';
-import { THEME_BY_PRESET, kindForPreset } from '../triggerTheme.js';
+import { THEME_BY_PRESET, kindForPreset, PRESETS_IN_USE } from '../triggerTheme.js';
 import { KIND_BY_ID } from '../bubbleKinds.js';
 import { createCueSync, CUE_AHEAD_SEC, LATE_SEC } from '../sync.js';
 import { wordEventsFrom } from '../wordBubbles.js';
@@ -102,10 +105,12 @@ console.log('  --  the row: ' + ROW_X.length + ' bubbles, ' + ((LANE_X_MAX * 2) 
   + ' m apart, across ' + (LANE_X_MAX * 2).toFixed(2) + ' m of road');
 
 /* ---- 2. the row wears the preset ---------------------------------------- */
+// Under the gif rain's floor (2c), so this reads the row the preset table laid and nothing else.
+const QUIET = { intensity: (KIND_BY_ID.gifrain.minIntensity || 0) - 0.05 };
 let dressed = true;
 for (const preset of Object.keys(THEME_BY_PRESET)) {
   const kind = kindForPreset(preset);
-  const c = cueFor({ kind: 'trigger', t: 4, label: 'a phrase', conf: 0.9, cue: preset }, ctxFor({ 'a phrase': kind }));
+  const c = cueFor({ kind: 'trigger', t: 4, label: 'a phrase', conf: 0.9, cue: preset }, ctxFor({ 'a phrase': kind }, QUIET));
   const r = c.spawn.filter((s) => s.row);
   if (r.length !== ROW_X.length || r.some((s) => s.kindId !== kind) || KIND_BY_ID[kind].spawn === false) {
     ok(false, 'the ' + preset + ' row is a full row of the ' + kind + ' bubble');
@@ -115,7 +120,7 @@ for (const preset of Object.keys(THEME_BY_PRESET)) {
 }
 if (dressed) ok(true, 'every preset in the table lays a full row of its own bubble, and none of them is darkened');
 for (const preset of ['treats', 'mark']) {
-  const c = cueFor({ kind: 'trigger', t: 4, label: 'a phrase', conf: 0.9, cue: preset }, ctxFor({ 'a phrase': kindForPreset(preset) }));
+  const c = cueFor({ kind: 'trigger', t: 4, label: 'a phrase', conf: 0.9, cue: preset }, ctxFor({ 'a phrase': kindForPreset(preset) }, QUIET));
   eq(c.spawn.filter((s) => s.row && s.kindId === 'treat').length, ROW_X.length, 'a ' + preset + ' trigger is a row of treats, not an effect');
 }
 
@@ -144,6 +149,53 @@ const seedA = makeRng(7), seedB = makeRng(7);
 ok(Array.from({ length: 200 }, () => wordFlash(seedA, 999)).join() === Array.from({ length: 200 }, () => wordFlash(seedB, 999)).join(),
   'one seed, one sequence: a replay of a run flashes on the same words');
 ok(WORD_FLASH.durationMult < 0.3 && WORD_FLASH.strength < 30, 'and what it hands payloadFx is a blink, not the old flash bubble');
+
+/* ---- 2c. GIF RAIN: one word row in six, in the middle of the line -------- */
+// A word row is a line of plain faces; one in six of them, once the run is loud enough, hangs the
+// rain in the CENTRE of that line. The row must stay full width, and it must be able to pour one
+// cascade and never five, so exactly one bubble of the row may be the rain.
+const FLOOR = KIND_BY_ID.gifrain.minIntensity || 0;
+const rainRng = makeRng(0x9017);
+let rainRows = 0, plainRows = 0, wide = 0, manyRain = 0, offCentre = 0;
+for (let i = 0; i < 3000; i++) {
+  const c = cueFor({ kind: 'trigger', t: 4, label: 'blank', conf: 0.9, cue: 'mark' },
+    ctxFor({ blank: kindForPreset('mark') }, { intensity: 0.8, rng: rainRng }));
+  const r = c.spawn.filter((s) => s.row);
+  if (r.length === ROW_X.length) wide++;
+  const rain = r.filter((s) => s.kindId === GIFRAIN_KIND);
+  if (rain.length > 1) manyRain++;
+  if (rain.length === 1 && Math.abs(rain[0].x) > 1e-6) offCentre++;
+  if (rain.length) rainRows++; else plainRows++;
+}
+eq(wide, 3000, 'a rain row is still the full line across the road: unavoidable either way');
+eq(manyRain, 0, 'never more than one rain bubble in a row, so a row pours ONE cascade and not five');
+eq(offCentre, 0, 'and the one is always the middle bubble');
+ok(Math.abs(rainRows / 3000 - GIFRAIN_ROW_CHANCE) < 0.03,
+  Math.round((rainRows / 3000) * 100) + '% of word rows wear it (want ' + Math.round(GIFRAIN_ROW_CHANCE * 100) + '%, about one in six)');
+let below = 0;
+for (let i = 0; i < 2000; i++) {
+  const c = cueFor({ kind: 'trigger', t: 4, label: 'blank', conf: 0.9, cue: 'mark' },
+    ctxFor({ blank: kindForPreset('mark') }, { intensity: FLOOR - 0.01, rng: rainRng }));
+  if (c.spawn.some((s) => s.kindId === GIFRAIN_KIND)) below++;
+}
+eq(below, 0, 'under the gif rain bubble\'s own floor of ' + FLOOR + ' intensity it never starts');
+let stolen = 0;
+for (const preset of Object.keys(THEME_BY_PRESET)) {
+  const kind = kindForPreset(preset);
+  if (KIND_BY_ID[kind].kind === 'treat' || kind === GIFRAIN_KIND) continue;   // the word rows are the ones it may take
+  for (let i = 0; i < 200; i++) {
+    const c = cueFor({ kind: 'trigger', t: 4, label: 'a phrase', conf: 0.9, cue: preset },
+      ctxFor({ 'a phrase': kindForPreset(preset) }, { intensity: 0.95, rng: rainRng }));
+    if (c.spawn.some((s) => s.kindId === GIFRAIN_KIND)) stolen++;
+  }
+}
+eq(stolen, 0, 'and it never takes a row that was written for an effect of its own');
+const goldRain = cueFor({ kind: 'trigger', t: 4, label: 'blank', conf: 0.9, cue: 'mark' },
+  ctxFor({ blank: kindForPreset('mark') }, { intensity: 0.95, rng: makeRng(3), gold: () => true }));
+eq(goldRain.spawn.filter((s) => s.kindId === 'golden').length, 1, 'the rabbit foot still owns the centre when it is owed one');
+eq(goldRain.spawn.filter((s) => s.kindId === GIFRAIN_KIND).length, 0, 'and the rain never covers it');
+eq(kindForPreset('gif-rain'), GIFRAIN_KIND, 'the gif-rain preset wears the rain bubble');
+ok(PRESETS_IN_USE.every((p) => THEME_BY_PRESET[p]), 'every preset the catalogue uses has a row in the theme table');
 
 /* ---- 3. the unsure trigger is what it always was ------------------------- */
 const unsure = cueFor({ kind: 'trigger', t: 10, label: 'a phrase', conf: 0.3, cue: 'blackout' },

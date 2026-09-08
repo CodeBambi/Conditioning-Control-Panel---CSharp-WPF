@@ -56,6 +56,9 @@ export const THEME_BY_PRESET = {
   'spiral-air':   { kind: 'spiral',     theme: 'spiral', color: '#c8a8ff', ink: '#0f0f1c', note: 'lilac, slow rotate while it zooms' },
   'melt':         { kind: 'braindrain', theme: 'melt',   color: '#4060c0', ink: '#f4f2ff', note: 'deep blue, letters sag and blur downward' },
   'video':        { kind: 'video',      theme: 'scan',   color: '#ff5c6c', ink: '#f4f2ff', note: 'red, scanlines' },
+  // gif rain (2026-09-08): the pictures come DOWN, so the plate comes down with them. Gold, the
+  // gifrain bubble's own tint, and a shade colder than golden-rain's so the two never read alike.
+  'gif-rain':     { kind: 'gifrain',    theme: 'rain',   color: '#ffc83d', ink: '#0f0f1c', note: 'gold, the letters fall in and keep falling out the bottom' },
   // A row of treats is not an effect: the road is what happens, and the plate is warm rather than loud.
   'treats':       { kind: 'treat',      theme: 'bounce', color: '#ffb3d9', ink: '#0f0f1c', note: 'warm pink, bouncy letters' },
   // A marked word, not a trigger moment: small, no zoom.

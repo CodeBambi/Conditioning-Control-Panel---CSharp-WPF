@@ -333,6 +333,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     trailClear();
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
     wordyRows.clear(); lastFlashAt = -1e9; flashStats.pops = 0; flashStats.capped = 0; flashStats.rolls = 0; flashStats.flashes = 0;
+    fxFired.clear();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
 
@@ -428,7 +429,11 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   }
 
   // ---- THE MIX: actions -> payloadFx + chrome, recipes -> the ledger ----
+  /** Every payload the mixer pours passes through here, so this tally is the whole truth about what
+   *  the run fired: race/smoke/gifrain-row-check.mjs reads it to hold a rain row to ONE cascade. */
+  const fxFired = new Map();
   const fire = (p, strength, durationMult) => {
+    fxFired.set(p.payload, (fxFired.get(p.payload) || 0) + 1);
     if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
     else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
   };
@@ -1036,6 +1041,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     /** THE WORD FLASH, for race/smoke/word-flash-check.mjs: word pops, the ones the 250 ms cap ate,
      *  the rolls that reached the rng and the flashes that came out of them. Never read by the game. */
     wordFlashStats: () => ({ ...flashStats }),
+    /** GIF RAIN, for race/smoke/gifrain-row-check.mjs: how many of each payload the mixer poured. */
+    fxStats: () => Object.fromEntries(fxFired),
     /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. */
     debugWord: (text, o) => (captions ? captions.showWord(text, o || {}) != null : false),
     /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */
