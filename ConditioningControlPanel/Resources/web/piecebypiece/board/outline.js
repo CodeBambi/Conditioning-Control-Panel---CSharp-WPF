@@ -33,6 +33,8 @@ export const TUNING = Object.freeze({
   colorWhite: 0xFF2D95,     // white men: hotter than the board's pink so it reads on it
   colorBlack: 0xB0157A,     // black men: deep magenta, reads on cream and on pink
   heldColor: 0xFFC2E4,      // both sides brighten toward this in the hand
+  hoverWidthPx: 2.6,        // the man under the cursor (drag.js sets userData.hover)
+  hoverMix: 0.4,            // and how far toward heldColor he brightens
   flickerColor: 0xFFFFFF,   // check: the king's line snaps between his colour and this
   flickerHz: 9,
   flickerSec: 0.7,
@@ -120,6 +122,7 @@ export function createOutline({ group, bus = null }) {
   const hulls = new Map();          // piece root -> { meshes, mats, color, flicker }
   const uPixel = { value: 0 };      // world units per pixel at distance 1, shared
   const tmpColor = new THREE.Color();
+  const hoverColor = new THREE.Color(T.heldColor);
   let flickering = [];
 
   /** The flex uniforms jiggle installed on this man, or none if he has none. */
@@ -239,9 +242,11 @@ export function createOutline({ group, bus = null }) {
     }
     for (const [piece, h] of hulls) {
       const held = !!piece.userData.held;
+      const hover = !held && !!piece.userData.hover;   // the man under the cursor, one step up
       const flick = flickering.find((x) => x.piece === piece);
-      const wantWidth = held ? T.heldWidthPx : T.widthPx;
+      const wantWidth = held ? T.heldWidthPx : hover ? T.hoverWidthPx : T.widthPx;
       tmpColor.setHex(held ? T.heldColor : h.base);
+      if (hover) tmpColor.lerp(hoverColor, T.hoverMix);
       if (flick) {
         const onBeat = Math.floor(flick.t * T.flickerHz * 2) % 2 === 0;
         if (onBeat) tmpColor.setHex(T.flickerColor);
