@@ -149,6 +149,30 @@ smoke; `race/smoke/rows-check.mjs` holds the geometry against `consts.js`. `ctx.
 road came out of a transcript: it halves the `peak` rain and nothing else, because on a worded
 track the rows are the loud thing and a rain over them takes the reading away.
 
+THE CATALOGUE (2026-09-08). Which phrases lay a trigger row at all is one file,
+`chart/editor/triggerSets.js`, shared by the Track Maker and the road, and every set carries a
+`preset`. `race/triggerTheme.js` is the only place a preset turns into a bubble kind and a plate
+theme, so what the kart drives into and what flies at the face come off one row and cannot drift.
+
+- **Precedence.** Sets overlap on purpose ("bimbo doll" lives inside the chant, "drop" inside "drop
+  for cock"). When two land on the same tenth of a second the winner is, in order: the lower group
+  rank (`named` 0, `sequence` 1, `words` 2, an author's own set 3), then the LONGER match, then the
+  set id. `rankOf` / `compareHits` in `triggerSets.js`; the comparator sorts on the quantized tenth,
+  not the raw second, because an order that is not transitive silently un-sorts the list.
+- **`row: false`.** A set may be a colour in the Track Maker and lay no road at all. The words said
+  a hundred times a track (accept, relax, sleep) are accents on the word bubbles, not rows: a row
+  every four seconds is not a trigger, it is a wall.
+- **`mode: 'countdown'`.** A count is its own mode, not a regex: the scripts put a whole sentence
+  between one number and the next, so the rule is a number of five or under, then a smaller one
+  within 40 s, at least three long. One span per count, on the first number.
+- **The scan is the roll call, the fingerprint is the clock.** A words file may ship `hits` measured
+  off the audio. Those no longer REPLACE the live scan (a set the file was never fingerprinted for
+  could then never reach the road, however the catalogue grew); the scan says which phrases are
+  said, and a scanned hit within `FP_SNAP_SEC` of a fingerprinted one of the same set adopts its
+  second and its confidence. `GENERATOR_ID` is `web-road-v5` since.
+- `TRIGGER_GAP` (2.2 s) thins what is left, first wins. `race/smoke/catalogue-check.mjs` holds all
+  of the above, plus a per-track share cap so no one kind swallows a track.
+
 The plain mapping (c2): `trigger` -> the row above, lane placement, `word: label`; `word` -> a treat bubble; `count` -> a golden air bubble, `last` adds
 `jump: 6`; `drop` -> `jump: 7`, `mix: 'spiral'`, `mood: 'streamed'`, three golden air bubbles at
 `at = 0.2, 0.5, 0.8`; `chant` -> `reps` treats in lane placement alternating `x = +-1.2` at

@@ -55,6 +55,14 @@ export const THEME_BY_PRESET = {
   'golden-rain':  { kind: 'golden',     theme: 'gold',   color: '#ffd700', ink: '#0f0f1c', note: 'gold, sparkle shards fall off the letters' },
   'spiral-air':   { kind: 'spiral',     theme: 'spiral', color: '#c8a8ff', ink: '#0f0f1c', note: 'lilac, slow rotate while it zooms' },
   'melt':         { kind: 'braindrain', theme: 'melt',   color: '#4060c0', ink: '#f4f2ff', note: 'deep blue, letters sag and blur downward' },
+  // THE FOUR THE CATALOGUE WAVE NEEDED (2026-09-08). The praise and the command words say
+  // themselves back at the player; the blank words go soft at the edges; the doll words hold
+  // still; and the cock words cover the screen, which is the owner's "we should also use often
+  // the fullscreen gif overlay". Every kind named here is one that spawns today.
+  'card-whisper': { kind: 'subliminal', theme: 'card',   color: '#b080ff', ink: '#0f0f1c', note: 'lilac, the words fade up one at a time and hang' },
+  'drain-fog':    { kind: 'braindrain', theme: 'fog',    color: '#7d8bd0', ink: '#f4f2ff', note: 'grey blue, the letters lose their edges and drift apart' },
+  'lock-hold':    { kind: 'freeze',     theme: 'hold',   color: '#ff9ecb', ink: '#0f0f1c', note: 'satin pink frame, the plate stops dead at scale 1 and holds' },
+  'gif-wash':     { kind: 'gifrain',    theme: 'wash',   color: '#ff8a3d', ink: '#0f0f1c', note: 'the picture covers the screen and the letters sit on top of it' },
   'video':        { kind: 'video',      theme: 'scan',   color: '#ff5c6c', ink: '#f4f2ff', note: 'red, scanlines' },
   // gif rain (2026-09-08): the pictures come DOWN, so the plate comes down with them. Gold, the
   // gifrain bubble's own tint, and a shade colder than golden-rain's so the two never read alike.
