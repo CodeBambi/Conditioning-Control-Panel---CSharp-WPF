@@ -2,34 +2,32 @@
  * board/anim.js - the weight and the wobble.
  *
  * Everything that makes the men feel like objects rather than sprites: a moved
- * piece arcs across and squashes as it lands, a captured piece is knocked over,
+ * piece arcs across and flexes as it lands, a captured piece is knocked over,
  * rolls once and sinks into the board, and the piece giving check buzzes like a
  * wand. Hooks into pieces.js so the game code never has to ask for any of it.
+ *
+ * The landing squash is not a scale any more: it is handed to jiggle.js, which
+ * bends and squashes the mesh itself so the man lands like silicone.
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { TUNING as TUNE } from './jiggle.js';
 
 const SLIDE = 0.30;   // seconds a piece takes to cross to its square
-const SQUASH = 0.36;
 const BUZZ = 0.7;
 const FALL = 0.55;
 const SINK = 0.7;
 
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
-export function createAnim({ group }) {
+export function createAnim({ group, jiggle = null }) {
   const slides = [];
-  const squashes = [];
   const tumbles = [];
   const buzzes = [];
-  const byPiece = new Map(); // piece -> its live squash, so two landings never fight
 
-  const base = (piece) => piece.userData.scaleBase || 1;
-
-  function squash(piece) {
-    const live = byPiece.get(piece);
-    if (live) live.t = 0;
-    else { const s = { piece, t: 0 }; byPiece.set(piece, s); squashes.push(s); }
+  /** Landing flex. `travel` is the world x/z the man just crossed, or null. */
+  function squash(piece, travel = null) {
+    if (jiggle) jiggle.land(piece, travel);
   }
 
   const sliding = (piece) => slides.some((s) => s.piece === piece);
@@ -67,18 +65,8 @@ export function createAnim({ group }) {
         s.piece.position.copy(s.to);
         slides.splice(i, 1);
         if (!sliding(s.piece)) s.piece.userData.busy = false;
-        squash(s.piece);
+        squash(s.piece, [s.to.x - s.from.x, s.to.z - s.from.z]);
       }
-    }
-
-    for (let i = squashes.length - 1; i >= 0; i--) {
-      const s = squashes[i];
-      s.t += dt;
-      const p = Math.min(1, s.t / SQUASH);
-      const a = 0.26 * Math.exp(-4.2 * p) * Math.cos(p * Math.PI * 3);
-      const b = base(s.piece);
-      s.piece.scale.set(b * (1 + a * 0.55), b * (1 - a), b * (1 + a * 0.55));
-      if (p >= 1) { s.piece.scale.setScalar(b); byPiece.delete(s.piece); squashes.splice(i, 1); }
     }
 
     for (let i = tumbles.length - 1; i >= 0; i--) {
@@ -104,6 +92,11 @@ export function createAnim({ group }) {
       const amp = 0.035 * (1 - p);
       b.piece.position.x = b.home.x + Math.sin(b.t * 62) * amp;
       b.piece.position.z = b.home.z + Math.cos(b.t * 47) * amp * 0.6;
+      // The body rattles, and the soft top rattles harder and later.
+      if (jiggle) {
+        const fa = TUNE.buzzAmp * (1 - p);
+        jiggle.drive(b.piece, Math.sin(b.t * TUNE.buzzFastX) * fa, Math.cos(b.t * TUNE.buzzFastZ) * fa * 0.6);
+      }
       const mat = b.piece.userData.material;
       if (mat) mat.emissiveIntensity = 0.55 * (1 - p);
       if (p >= 1) {
