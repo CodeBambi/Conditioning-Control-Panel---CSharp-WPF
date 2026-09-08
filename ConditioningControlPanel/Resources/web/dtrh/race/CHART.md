@@ -175,8 +175,8 @@ A loaded track ducks the room OST to `TRACK_DUCK` (0.12) and the bed to silence 
 
 ### `race/bubbles.js` additions (PR c2)
 ```js
-field.spawnAt({ kindId, placement, d, x, h, eventId })   // an explicit placement; returns the slot id or -1 when the pool is full
-field.spawnRow({ kindId, placement, d, h, xs, eventId }) // a whole row at one depth (PR L4); returns how many went down, 0 for none
+field.spawnAt({ kindId, placement, d, x, h, eventId, script })   // an explicit placement; the slot id, or -1 when it was refused
+field.spawnRow({ kindId, placement, d, h, xs, eventId, script }) // a whole row at one depth (PR L4); how many went down, 0 for none
 field.setDensity(mult)                                  // already in CONTRACT.md; with a track this scales only the cue spawns
 field.setSparse(on)                                     // the loaded road came out of a transcript (PR L4): seedChunk stands down
 ```
@@ -188,6 +188,22 @@ also SPENDS as one thing: the first of its bubbles to pop or to slip past settle
 bubbles are one `taken` on the scheduler (`takenIds` is a set) and at worst one broken combo. With
 `setSparse(true)` `seedChunk` lays only the chunk's own golden and no lanes or ramp lines,
 so what the player drives through is the lyric. Too many bubbles is no bubbles.
+
+**THE SCRIPT IS NOT DRESSING** (2026-09-08). `script: true` marks a spawn the FILE asked for -
+`cues.js` puts it on the word bubbles (`case 'word'`) and on the trigger rows (`case 'trigger'`) -
+and neither refusal above may touch one: no density roll, and a full pool recycles the bubble
+farthest from the kart rather than dropping the line. `density` thins the road's DRESSING, and it
+is turned down to 0.6 on every `release` and to 0 through a `silence`; rolling each word bubble
+against it separately was taking 22 percent of the shelf's words and leaving 44 percent of the
+lines short, which is the owner's "i see maybe 1 word out of a phrase".
+
+**THE COVERAGE CHECK.** `wordedRoad` counts itself as it finishes (`wordBubbles.js coverageOf`),
+stamps `analysis.coverage` (kept by `normalizeChart`, so the cache and `window.__race` both have
+it) and says one `[race-coverage]` line to the host log. A word is on the road when it wears a
+bubble or when it is inside a trigger row's own span; what is left is the guard margin, which is
+the pop box. `node race/smoke/coverage-check.mjs` drives the whole shelf through the field's own
+refusals and fails under 96 percent on the shelf, under 90 on a track, or on ONE word bubble the
+chart asked for and the field did not lay.
 
 ### `race/run.js` + `raceBoot.js` (PR c2)
 ```js

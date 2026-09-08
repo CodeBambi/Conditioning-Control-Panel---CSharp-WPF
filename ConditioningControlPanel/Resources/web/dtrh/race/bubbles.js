@@ -261,13 +261,15 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
   /** An explicit placement from a track cue (CHART.md): the run has already worked the depth out at
    *  the kart's speed, so nothing is rolled or gated by intensity here. Returns the slot id, -1 when
-   *  the pool is full (a cue never steals a live bubble), when the kind is dark (bubbleKinds.js
-   *  spawn:false), or when density has gated this one out.
-   *  Over 1, density is the chance of a second bubble beside the first. */
-  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null, w = '', ink = null, big = false } = {}) {
-    if (liveCount >= CAP) return -1;
+   *  the pool is full (a decorative cue never steals a live bubble), when the kind is dark
+   *  (bubbleKinds.js spawn:false), or when density has gated this one out.
+   *  Over 1, density is the chance of a second bubble beside the first.
+   *  `script` is THE ROAD'S OWN SCRIPT (race/cues.js marks the word bubbles and the trigger rows):
+   *  see spawnRow below for why it goes down whatever the density knob is saying. */
+  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null, w = '', ink = null, big = false, script = false } = {}) {
+    if (liveCount >= CAP && !script) return -1;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return -1;   // a dark kind: no chart may place one
-    if (tracked) {
+    if (tracked && !script) {
       if (density <= 0) return -1;
       if (density < 1 && Math.random() >= density) return -1;
     }
@@ -285,13 +287,26 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
    *  not laid at all (a row with a hole in it is a row the kart drives through), the density gate is
    *  rolled ONCE for the whole line rather than per bubble, and density over 1 never doubles it,
    *  because a doubled row is just a thicker wall and the wall was already unavoidable.
+   *
+   *  THE SCRIPT IS NOT DECORATION (2026-09-08). `script` marks a row the FILE asked for - a word
+   *  bubble off the transcript, a trigger row - and neither of the two refusals above may touch one.
+   *  `density` is the road-dressing knob: race/cues.js turns it down to 0.6 on a release and to 0
+   *  through a silence, and until now every word bubble was rolled against it one at a time. On a
+   *  worded road that is the road losing three words of a four word line at random and leaving one
+   *  bubble sitting on its own, which is exactly what the owner saw ("I see maybe 1 word out of a
+   *  phrase"): 22 percent of every word on the shelf, 44 percent of the lines thinned, 353 lines
+   *  gone altogether. A line the voice is saying is not the road being busy, so a script row skips
+   *  the density roll and, when the pool is full, RECYCLES the bubble farthest from the kart
+   *  (takeSlot already does, and 60 m of road behind the kart is a cheaper thing to lose than the
+   *  word she is saying) instead of refusing to lay the line at all.
    *  Returns how many went down, 0 for a row that was gated out. */
-  function spawnRow({ kindId, kindIds = null, placement = 'lane', d, h, xs, eventId = null, w = '', ink = null, big = false } = {}) {
+  function spawnRow({ kindId, kindIds = null, placement = 'lane', d, h, xs, eventId = null, w = '', ink = null, big = false, script = false } = {}) {
     const list = Array.isArray(xs) ? xs.filter((x) => Number.isFinite(Number(x))) : [];
     if (!list.length) return 0;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return 0;   // a dark kind: no chart may place one
-    if (liveCount + list.length > CAP) return 0;
-    if (tracked) {
+    // a script row may evict, but never more than half the pool: a line longer than that is not a line
+    if (liveCount + list.length > CAP && !(script && list.length * 2 <= CAP)) return 0;
+    if (tracked && !script) {
       if (density <= 0) return 0;
       if (density < 1 && Math.random() >= density) return 0;
     }
