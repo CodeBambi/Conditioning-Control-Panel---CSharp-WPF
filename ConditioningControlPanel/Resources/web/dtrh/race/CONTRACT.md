@@ -258,6 +258,14 @@ falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and 
 max of that and the run brain's. run.js only ever calls `kart.pose(...)`; the layer exists only
 while the glb is mounted (the primitive EMI has no limbs to pose).
 
+**The rim grip.** Every pose that is meant to be *holding on* parks the glove on the cup's brim:
+lip top y 0.785, lip radius 0.500 in kart-body metres, the shoulder pivot at (-+0.312, 0.787,
+0.226) and a glove reach of 0.206 m. That short reach only meets the lip between about 32 and 77
+degrees around from dead ahead, and the forward half of that arc hides behind her own case from the
+chase camera, so the grips sit at 66..79 degrees. Re-solve, do not eyeball: a hand that drops below
+the lip vanishes inside the cup. The hands ride the cup through the steer lean for free - the seat
+and `kart_cup` share the body group that tips.
+
 ### `race/pickups.js` (the passive pickups)
 ```js
 export const TUNE;      // the one table of knobs: FIRST_SEC, GAP_SEC, AHEAD_M, TAKE_X, POINTS, DROP_M, CLEAR_SEC, GOLD_LEAD_SEC

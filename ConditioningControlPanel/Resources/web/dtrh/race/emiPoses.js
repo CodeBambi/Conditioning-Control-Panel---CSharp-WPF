@@ -27,54 +27,74 @@ const BREATH_SEC = 3.9;      // the same one breath emi.js runs on (Law III)
 const BREATH_LIFT = 0.02;    // model metres, so 0.013 m once the seat's 0.64 is on it
 const ANT_MAX = 1.2;         // how far the tuck is allowed to drag the antenna base
 
+/* ---------------------------------------------------------------------------
+ * THE RIM GRIP (measured, not guessed - keep these numbers with the table)
+ *
+ * Everything below is in kart-body metres, the space the cup and the seat share:
+ *   the cup's lip      top y 0.785, lip radius 0.500 (rMean 0.503; the handle is the outlier)
+ *   the seat           (0, 0.395, 0.25), scale 0.8, so a model metre is 0.8 body metres
+ *   a shoulder pivot   (-+0.312, 0.787, 0.226) with the root at rest - level with the lip
+ *   the glove centre   [0.025, -0.2563, 0.0078] in shoulder-local (|u| 0.257 model = 0.206 body)
+ *
+ * That reach is short: the sphere it sweeps only meets the lip circle between about 32 and 77
+ * degrees around from dead ahead, and the forward half of that arc is hidden behind her own case
+ * from the chase camera. So every "holding on" pose parks the glove at 66..79 degrees, where the
+ * hand is both reachable and SEEN. The old table's arms sat 0.109 m below the lip - inside the
+ * cup, invisible - which is the bug this fixes.
+ * ------------------------------------------------------------------------ */
+
 /**
  * The presets. `root` is { lean (z), tilt (x), lift (y), squash (y scale) }, the four pivots are
  * [x, y, z] offsets in radians, `w` / `zeta` are the spring, `hold` is seconds before `next`
  * (0 = hold until something else is set), `breath` keeps the idle bob, `fraught` feeds emi.js and
  * `antDown` lets the antenna base fall toward the real floor while the world is upside down.
+ *
+ * The `dy` in each comment is the glove centre's height against the lip: + is over the brim,
+ * - is pressing down into it. A hand that leaves the rim on purpose (the drift point, the grab,
+ * the throw, the cheer) says so.
  */
 export const POSES = {
-  // hands on the far rim, shoulders soft, the breath running
+  // both gloves on the brim, shoulders soft, the breath running                   dy +0.02
   cruise: { w: 7, zeta: 0.7, hold: 0, breath: 1, root: { lean: 0, tilt: 0, lift: 0, squash: 1 },
-    shoulderL: [-0.95, 0, -0.10], shoulderR: [-0.95, 0, 0.10], footL: [0, 0, 0], footR: [0, 0, 0] },
+    shoulderL: [-1.449, 0, -1.903], shoulderR: [-1.449, 0, 1.903], footL: [0, 0, 0], footR: [0, 0, 0] },
 
-  // lean into the turn; the outside hand (shoulderL at side +1) lifts off the rim and points
+  // lean into the turn; the outside hand (shoulderL at side +1) rides up over the brim  dy +0.11 / +0.01
   drift: { sided: 1, w: 9, zeta: 0.55, hold: 1.1, next: 'cruise', root: { lean: -0.20, tilt: 0.04, lift: 0, squash: 1 },
-    shoulderL: [0.45, 0, -0.75], shoulderR: [-1.15, 0, 0.06], footL: [-0.12, 0, -0.10], footR: [0.10, 0, 0.06] },
+    shoulderL: [-0.153, 0, -1.984], shoulderR: [-1.613, 0, 1.779], footL: [-0.12, 0, -0.10], footR: [0.10, 0, 0.06] },
 
-  // the mini turbo: squash on the kick...
+  // the mini turbo: squash on the kick, hands push down on the brim              dy -0.02
   boost: { w: 18, zeta: 0.6, hold: 0.11, next: 'boostOut', root: { lean: 0, tilt: 0.14, lift: -0.06, squash: 0.86 },
-    shoulderL: [0.55, 0, 0.18], shoulderR: [0.55, 0, -0.18], footL: [-0.20, 0, 0], footR: [-0.20, 0, 0] },
-  // ...then stretch, arms pinned back down the road
+    shoulderL: [-1.881, 0, -1.845], shoulderR: [-1.881, 0, 1.845], footL: [-0.20, 0, 0], footR: [-0.20, 0, 0] },
+  // ...then stretch, elbows straightening, hands still on it                     dy +0.05
   boostOut: { w: 10, zeta: 0.38, hold: 0.55, next: 'cruise', root: { lean: 0, tilt: -0.07, lift: 0.05, squash: 1.10 },
-    shoulderL: [0.95, 0, 0.26], shoulderR: [0.95, 0, -0.26], footL: [0.16, 0, 0], footR: [0.16, 0, 0] },
+    shoulderL: [-1.185, 0, -2.026], shoulderR: [-1.185, 0, 2.026], footL: [0.16, 0, 0], footR: [0.16, 0, 0] },
 
-  // off the ramp: arms out, one leg kicks, a little nose up
+  // off the ramp: arms lift clear of the brim, one leg kicks, a little nose up   dy +0.10
   air: { w: 8, zeta: 0.5, hold: 3, next: 'cruise', root: { lean: 0, tilt: -0.16, lift: 0.04, squash: 1.03 },
-    shoulderL: [-0.20, 0, -1.05], shoulderR: [-0.20, 0, 1.05], footL: [-0.70, 0, -0.15], footR: [0.28, 0, 0.10] },
+    shoulderL: [-0.494, 0, -1.994], shoulderR: [-0.494, 0, 1.994], footL: [-0.70, 0, -0.15], footR: [0.28, 0, 0.10] },
 
-  // touchdown: squash hard with the overshoot, hands slap the rim
+  // touchdown: squash hard with the overshoot, hands slap the brim               dy -0.02
   landing: { w: 16, zeta: 0.35, hold: 0.28, next: 'cruise', root: { lean: 0, tilt: 0.06, lift: -0.05, squash: 0.82 },
-    shoulderL: [-1.35, 0, 0.06], shoulderR: [-1.35, 0, -0.06], footL: [0.22, 0, 0], footR: [0.22, 0, 0] },
-  // the same, kerbed: a wobble on the way down and a beat of fraught
+    shoulderL: [-1.869, 0, -1.907], shoulderR: [-1.869, 0, 1.907], footL: [0.22, 0, 0], footR: [0.22, 0, 0] },
+  // the same, kerbed: one hand jolts down, the other up, and a beat of fraught    dy -0.03 / +0.04
   landingKerb: { w: 14, zeta: 0.30, hold: 0.5, next: 'cruise', fraught: 0.7, root: { lean: 0.16, tilt: 0.12, lift: -0.07, squash: 0.78 },
-    shoulderL: [-1.45, 0, 0.22], shoulderR: [-1.10, 0, -0.30], footL: [0.34, 0, 0.12], footR: [0.16, 0, -0.10] },
+    shoulderL: [-1.902, 0, -2.056], shoulderR: [-1.104, 0, 1.790], footL: [0.34, 0, 0.12], footR: [0.16, 0, -0.10] },
 
-  // a treat went by: the near hand reaches for it (side +1 = the pop is to her +x)
+  // a treat went by: the far hand keeps the brim, the near one reaches out (side +1 = her +x)
   grab: { sided: 1, w: 12, zeta: 0.5, hold: 0.5, next: 'cruise', root: { lean: -0.10, tilt: -0.05, lift: 0.02, squash: 1 },
-    shoulderL: [-0.85, 0, -0.10], shoulderR: [-1.75, 0, 0.55], footL: [0, 0, 0], footR: [-0.10, 0, 0] },
+    shoulderL: [-1.449, 0, -1.903], shoulderR: [-1.75, 0, 0.55], footL: [0, 0, 0], footR: [-0.10, 0, 0] },
 
-  // an effect is pouring: hands clamp the rim and she gets small
+  // an effect is pouring: hands clamp the brim and she gets small                dy  0.00
   clamp: { w: 11, zeta: 0.7, hold: 1.2, next: 'cruise', fraught: 1, root: { lean: 0, tilt: 0.10, lift: -0.06, squash: 0.90 },
-    shoulderL: [-1.30, 0, 0.14], shoulderR: [-1.30, 0, -0.14], footL: [0.35, 0, 0.08], footR: [0.35, 0, -0.08] },
+    shoulderL: [-1.689, 0, -1.797], shoulderR: [-1.689, 0, 1.797], footL: [0.35, 0, 0.08], footR: [0.35, 0, -0.08] },
 
-  // upside down in the Wheel: knees up, white knuckles, the antenna hangs toward the real floor
+  // upside down in the Wheel: knees up, white knuckles on the brim, the antenna hangs   dy +0.01
   tuck: { w: 10, zeta: 0.6, hold: 0, antDown: 1, root: { lean: 0, tilt: 0.18, lift: -0.08, squash: 0.94 },
-    shoulderL: [-1.50, 0, 0.20], shoulderR: [-1.50, 0, -0.20], footL: [-0.85, 0, 0.10], footR: [-0.85, 0, -0.10] },
+    shoulderL: [-1.612, 0, -1.736], shoulderR: [-1.612, 0, 1.736], footL: [-0.85, 0, 0.10], footR: [-0.85, 0, -0.10] },
 
-  // the item goes over the side: the free hand throws an arc (the low zeta IS the arc)
+  // the item goes over the side: one hand holds, the other arcs over the brim (the low zeta IS the arc)
   throw: { sided: 1, w: 14, zeta: 0.35, hold: 0.45, next: 'cruise', root: { lean: -0.07, tilt: 0.05, lift: 0.02, squash: 1 },
-    shoulderL: [-0.95, 0, -0.10], shoulderR: [1.00, 0, 0.35], footL: [0, 0, 0], footR: [0.12, 0, 0] },
+    shoulderL: [-1.449, 0, -1.903], shoulderR: [-0.181, 0, 2.032], footL: [0, 0, 0], footR: [0.12, 0, 0] },
 
   // a personal best or a jackpot: both arms up
   cheer: { w: 9, zeta: 0.45, hold: 1.3, next: 'cruise', root: { lean: 0, tilt: -0.08, lift: 0.06, squash: 1.04 },
