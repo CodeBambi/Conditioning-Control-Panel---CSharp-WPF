@@ -9,27 +9,38 @@
  * ONE reused element (grab/drop can fire many times a game), moved by transform
  * only, so a per-frame dragmove never touches layout. The tile is deliberately
  * SMALLER than the piece it covers is tall: it should sit on the piece like a
- * sticker, not blot out the destination square.
+ * sticker, not blot out the destination square. That is why it is sized from
+ * the board (one square's width on screen) rather than from a pixel count.
  *
  * `screen` comes from the board's own projection (A's projectSquare feeds it),
  * so this layer never needs to know where anything is in 3D.
  * ==========================================================================*/
 
 export function createGlitchGrab(ctx) {
-  const t = (ctx.tuning && ctx.tuning.glitchGrab) || { sizePx: 132, alpha: 0.85 };
+  const t = (ctx.tuning && ctx.tuning.glitchGrab) || { sizePx: 96, alpha: 0.85 };
   let el = null;
   let disposed = false;
   let holding = false;
   let raf = 0;
   let pending = null;
 
+  /**
+   * How wide the sticker should be right now. A piece is about one square
+   * tall, so the sticker is measured against a square rather than pinned to a
+   * pixel count: the same window can hold a very different board. The pixel
+   * value in the tuning is the fallback for a caller with no board to ask.
+   */
+  function sizePx() {
+    const square = typeof ctx.squarePx === 'function' ? ctx.squarePx() : 0;
+    if (!(square > 0)) return t.sizePx || 96;
+    const want = square * (t.squareShare || 0.82);
+    return Math.round(Math.min(t.maxPx || 132, Math.max(t.minPx || 52, want)));
+  }
+
   function ensure() {
     if (el || disposed) return el;
     el = ctx.el('div', 'pbp-grab');
-    if (el) {
-      el.style.setProperty('--pbp-grab-size', (t.sizePx || 132) + 'px');
-      ctx.mount(el);
-    }
+    if (el) ctx.mount(el);
     return el;
   }
 
@@ -56,6 +67,8 @@ export function createGlitchGrab(ctx) {
     if (!node) return;
     const url = ctx.tile();
     try {
+      // re-measured every grab: the camera swings between turns
+      node.style.setProperty('--pbp-grab-size', sizePx() + 'px');
       if (url) node.style.backgroundImage = `url("${url}")`;
       node.style.opacity = String(t.alpha == null ? 0.85 : t.alpha);
       node.classList.add('is-on');

@@ -2,8 +2,9 @@
  * boot.js - entry point for Piece by Piece.
  *
  * Builds the 3D board, hands the effects layer its hooks, and runs the frame
- * loop. window.PBP = { bus, game, board } is set before the first frame so the
- * effects module can attach to a live board whatever order the imports settle.
+ * loop. window.PBP = { bus, game, board, ramp } is set before the first frame
+ * so the effects module can attach to a live board whatever order the imports
+ * settle; `ramp` is the handle attachRamp hands back, once it has.
  * ==========================================================================*/
 
 import { createScene } from './board/scene.js';
@@ -69,7 +70,10 @@ function main() {
   const drag = createDrag({ view, pieces, anim, bus, game });
   board.drag = drag;
 
-  window.PBP = { bus, game, board };
+  // `ramp` is filled in once the effects layer has attached. It is on the
+  // object from the start so a reader never has to care whether that has
+  // happened yet: it is simply null until it has.
+  window.PBP = { bus, game, board, ramp: null };
 
   let last = performance.now();
   function frame(now) {
@@ -90,17 +94,44 @@ function main() {
   pieces.tryLoadGlb();          // optional art; missing files stay silent
   // Give the optional effects layer a chance to subscribe before the first
   // turn is dealt; it is optional, so a missing module must not hold the game.
-  attachEffects(bus, board).then(() => {
+  attachEffects(bus, board, params).then(() => {
     bus.emit('local', { sides: ['w', 'b'] });
     game.start();
   });
 }
 
-async function attachEffects(bus, board) {
+/**
+ * Attach the effects layer, and give it somewhere to get its pictures from.
+ *
+ *   default        the host. In WebView2 the C# side answers with the player's
+ *                  own library; in a plain browser there is no bridge and the
+ *                  pool stays empty, which the ramp treats as a normal state.
+ *   ?media=fixture dev/media.json, so the ramp can be seen working in a plain
+ *                  browser with no host at all (the screenshot harness uses it).
+ *   ?media=none    an empty pool on purpose, to check the no-pictures path.
+ */
+async function attachEffects(bus, board, params) {
   try {
     const m = await import('./ramp/index.js');
-    m.attachRamp({ bus, root: dom.fx, stage: dom.stage, board });
+    const media = await pickMedia(params);
+    window.PBP.ramp = m.attachRamp({ bus, root: dom.fx, stage: dom.stage, board, media });
   } catch (e) { console.warn('ramp missing', e); }
+}
+
+async function pickMedia(params) {
+  const mode = (params.get('media') || '').toLowerCase();
+  try {
+    const media = await import('./ramp/media.js');
+    if (mode === 'fixture') {
+      const list = await media.loadFixtureList(new URL('./dev/media.json', import.meta.url).href);
+      return media.createFixtureMedia(list);
+    }
+    if (mode === 'none') return media.createFixtureMedia([]);
+    return media.createHostMedia();
+  } catch (e) {
+    console.warn('[pbp] no media source; the ramp runs without pictures', e);
+    return undefined;   // attachRamp falls back to an empty pool of its own
+  }
 }
 
 main();

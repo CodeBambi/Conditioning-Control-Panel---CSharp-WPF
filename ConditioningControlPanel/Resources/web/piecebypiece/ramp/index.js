@@ -6,7 +6,7 @@
  * softer and harder to read. Taking a piece ramps you MORE than losing one, so
  * the player who is ahead on material is also the one squinting.
  *
- * attachRamp({ bus, root, stage, media }) -> { dispose, setEnabled, debug }
+ * attachRamp({ bus, root, stage, media, board }) -> { dispose, setEnabled, debug }
  *
  * CONTRACT (the board owns these, this module only listens):
  *   turn     {side,ply,clocks:{w,b},total}   capture {by,piece,square,victimSide}
@@ -46,7 +46,15 @@ function ensureCss() {
 
 /** A root to hang layers on. Falls back to a self-made one rather than dying. */
 function resolveRoot(root) {
-  if (root && root.appendChild) return root;
+  if (root && root.appendChild) {
+    // The page supplies the element (#fx); the ramp supplies the class. Without
+    // it ramp.css's click-through guarantee never reaches the layers the ramp
+    // hangs inside it, and the page's own rule is the only thing holding them
+    // off the board. Position and z-index still come from the page's #fx rule,
+    // which outranks .pbp-fx on specificity.
+    try { root.classList.add('pbp-fx'); } catch { /* not an element we can class */ }
+    return root;
+  }
   try {
     if (typeof document === 'undefined') return null;
     warn('no #fx root supplied; creating a fallback layer host');
@@ -82,7 +90,7 @@ export function attachRamp(opts = {}) {
     } catch { front = null; }
   }
 
-  const stack = createLayerStack({ root, front, stage, media, tuning, rng: schedule.rng });
+  const stack = createLayerStack({ root, front, stage, media, tuning, rng: schedule.rng, board: opts.board });
 
   // declared before the subscription below, which can fire the moment it is made
   let hostHoldSec = null;     // pbp:settings.videoHoldSec, when the host sent one
@@ -109,6 +117,7 @@ export function attachRamp(opts = {}) {
   let lastBoardPush = 0;
   let ticks = 0;   // scheduling beats served, so a harness can prove the loop runs
   let overrideMeter = null;   // dev harness: pin the meter regardless of the game
+  let seenTurn = false;       // the board's seeding `turn` is not a played move
   let solo = null;            // dev harness: show ONE sustained layer, for a screenshot
   // OFF is the "this layer is currently off" key; UNSET is "we have never
   // written it". They must differ, or a forced re-apply of an off layer reads
@@ -128,19 +137,29 @@ export function attachRamp(opts = {}) {
   /** Hand the meter to A's board if it grew those knobs. Always guarded. */
   function pushToBoard(m) {
     try {
-      const board = (typeof window !== 'undefined' && window.PBP && window.PBP.board) || null;
+      // the board the caller handed us wins; window.PBP is the fallback for a
+      // harness that never passed one
+      const board = opts.board
+        || (typeof window !== 'undefined' && window.PBP && window.PBP.board) || null;
       if (!board) return;
       if (typeof board.setWobble === 'function') board.setWobble(clamp01(m * tuning.wobbleScale));
       if (typeof board.setCameraSway === 'function') board.setCameraSway(clamp01(m * tuning.swayScale));
     } catch { /* A's board is optional and may change under us */ }
   }
 
+  // The spiral PULSES: it shows for a hold and then hides itself, and the next
+  // pass only starts on the next set() it is handed. Deduping it the way the
+  // steady layers are deduped means a steady meter gets exactly one pass and
+  // then a dead veil forever, so it is always forwarded and gates itself on its
+  // own gapMs.
+  const PULSING = new Set(['spiral']);
+
   function applySustained(sus) {
     for (const name of ['melt', 'blur', 'spiral', 'overlay']) {
       const spec = solo && solo !== name ? { on: false } : sus[name];
       const key = spec.on ? (spec.alpha != null ? spec.alpha : spec.px) : OFF;
       // retune only on a real change, so we are not writing style every 90ms
-      if (Math.abs(key - applied[name]) < 0.005) continue;   // NaN fails this, as it should
+      if (!PULSING.has(name) && Math.abs(key - applied[name]) < 0.005) continue;   // NaN fails this, as it should
       applied[name] = key;
       stack.setSustained(name, spec);
     }
@@ -179,11 +198,17 @@ export function attachRamp(opts = {}) {
     local() { /* both sides are on this screen: nothing to gate, kept for parity */ },
     clock(p) { meter.setClock(p); },
     turn(p) {
+      const seeding = !seenTurn;
+      seenTurn = true;
       meter.setTurn(p);
       // The card belongs to the side that just MOVED and is now waiting: it
       // rides over the board while the opponent thinks. In hotseat both sides
       // are local, so this is simply every turn.
-      if (reducedMotion) return;
+      //
+      // Except the first one. The board deals a `turn` at start() to seed the
+      // clocks and the effects layer, and nobody has moved yet: a card there
+      // covers the opening position before the player has touched a piece.
+      if (seeding || reducedMotion) return;
       const waiting = otherSide(p && p.side === 'b' ? 'b' : 'w');
       const m = overrideMeter == null ? meter.meterFor(waiting) : clamp01(overrideMeter);
       stack.videoCard({ holdMs: videoHoldMs(m, tuning, hostHoldSec), side: waiting });

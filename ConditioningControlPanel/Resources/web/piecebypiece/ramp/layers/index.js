@@ -73,6 +73,20 @@ function makeCtx(ctx) {
       try { if (host && e) host.appendChild(e); } catch { /* no host */ }
       return e;
     },
+    /** One square's width on screen, or 0 when there is no board to ask.
+     *  Anything sized against the board (the grab sticker) reads this instead
+     *  of guessing in pixels: the same window can hold a very different board
+     *  depending on the camera, and a piece is about one square tall. */
+    squarePx() {
+      try {
+        const b = ctx.board;
+        if (!b || typeof b.projectSquare !== 'function') return 0;
+        const a = b.projectSquare('d4', 0);
+        const c = b.projectSquare('e4', 0);
+        const d = Math.hypot(c.x - a.x, c.y - a.y);
+        return Number.isFinite(d) && d > 4 ? d : 0;
+      } catch { return 0; }
+    },
     /** A gif url, or a generated pink noise tile when the pool has no gifs. */
     tile: () => (media && media.drawTile ? media.drawTile() : null),
     image: () => (media && media.draw ? media.draw('image') : null),
@@ -82,7 +96,8 @@ function makeCtx(ctx) {
 }
 
 /**
- * createLayerStack(ctx) - ctx is { root, front, stage, media, tuning, rng }.
+ * createLayerStack(ctx) - ctx is { root, front, stage, media, tuning, rng, board }.
+ * `board` is optional: it is only read to measure the board on screen.
  * Every method must survive a missing root, a missing stage and empty media.
  */
 export function createLayerStack(ctx = {}) {
