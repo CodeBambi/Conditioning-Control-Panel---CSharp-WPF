@@ -15,7 +15,9 @@
  *
  * Wiring:
  *   boot.js  createDust({ scene, bus }) and update(dt, camera, renderer) once
- *            a frame; it listens on the bus for anim.js's `land`
+ *            a frame; it listens on the bus for anim.js's `land`, and for
+ *            its `hit` (a whip crossing a man: a short puff off the victim,
+ *            no flash and no ring, the landing on the square pays those)
  *   settings window.PBP.settings.reducedMotion (or the media query) makes it
  *            smaller and shorter; a refused drop's landing puffs less
  * ==========================================================================*/
@@ -34,6 +36,7 @@ export const TUNING = Object.freeze({
   size: 0.15,              // world size of a mote at a pawn's height
   captureGain: 1.6,        // taking a man: bigger and wider
   refusedGain: 0.45,       // a spring-back landing: a shrug of dust
+  hitGain: 0.8,            // a whip crack: knocked dust, no ring
   colorCream: 0xFFF1E0,
   colorPink: 0xFFB0D8,
   flashSec: 0.14,
@@ -190,7 +193,7 @@ export function createDust({ scene, bus = null }) {
    */
   function puff(at, height = 1, kind = 'move', type = null) {
     const low = reduced();
-    const gain = kind === 'capture' ? T.captureGain : kind === 'refused' ? T.refusedGain : 1;
+    const gain = kind === 'capture' ? T.captureGain : kind === 'refused' ? T.refusedGain : kind === 'hit' ? T.hitGain : 1;
     const h = Math.max(0.4, Math.min(1.6, height));
     const n = Math.round((low ? T.countReduced : T.count) * (kind === 'capture' ? 1.4 : 1));
     const lifeSec = low ? T.lifeReduced : T.life;
@@ -214,8 +217,8 @@ export function createDust({ scene, bus = null }) {
       }
     }
     upload();
-    flash(at.x, at.z, T.flashAlpha * (low ? 0.5 : 1) * (kind === 'refused' ? 0.5 : 1));
-    if (!low && kind !== 'refused') ring(at.x, at.z, gain);
+    if (kind !== 'hit') flash(at.x, at.z, T.flashAlpha * (low ? 0.5 : 1) * (kind === 'refused' ? 0.5 : 1));
+    if (!low && kind !== 'refused' && kind !== 'hit') ring(at.x, at.z, gain);
     bursts++;
   }
 
@@ -225,6 +228,12 @@ export function createDust({ scene, bus = null }) {
       if (!p || !p.world) return;
       puff(p.world, p.height, p.capture ? 'capture' : p.refused ? 'refused' : 'move', p.piece);
     });
+    const unsubHit = bus.on('hit', (p) => {
+      if (!p || !p.world) return;
+      puff(p.world, p.height, 'hit', p.victim);
+    });
+    const unsubLand = unsub;
+    unsub = () => { unsubLand(); unsubHit(); };
   }
 
   function update(dt, camera, renderer) {

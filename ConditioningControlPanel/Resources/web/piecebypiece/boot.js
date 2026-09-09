@@ -204,6 +204,14 @@ function main() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
   });
+  // --- Q: a capture animation is never a hostage ---
+  // A tap on the board or a Space/Enter while the bishop is mid-whip lands
+  // everything at once: no animation debt, the next move is already yours.
+  window.addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Enter') && anim.whipping && anim.whipping()) { anim.skip(); e.preventDefault(); }
+  });
+  dom.canvas.addEventListener('pointerdown', () => { if (anim.whipping && anim.whipping()) anim.skip(); }, { capture: true });
+  // --- end Q ---
   signalReady();
 
   let last = performance.now();
