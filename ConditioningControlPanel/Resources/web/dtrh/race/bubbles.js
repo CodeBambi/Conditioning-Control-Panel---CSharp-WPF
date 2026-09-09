@@ -59,6 +59,10 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const sizeOf = (id) => (id === 'video' || id === 'gifrain') ? 1.5 : id === 'golden' ? 0.95 : id === 'lucky' ? 0.8 : 1.15;
 /** A trigger row's centre bubble, and an accent word, are drawn this much bigger than the rest. */
 const BIG_SCALE = 1.15;
+/** A bubble wearing a word is drawn this much bigger than a plain one of its kind: the owner
+ *  could not read the words at speed on the phone (0909), so the glass the word sits on grew
+ *  by a quarter. The pop box is unchanged; only the sprite is. */
+const WORD_SCALE = 1.25;
 
 /** Soft radial dot: the fallback face while a sprite loads, and the shard face. */
 function makeDotTex() {
@@ -205,14 +209,15 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
 
   /** The bubble puts a word ON its face. The material goes white because the kind's tint is
    *  already multiplied into the canvas: tinting a second time would drag the ink toward it.
-   *  `big` is the trigger row's centre bubble and the accent word, drawn BIG_SCALE larger. */
+   *  `big` is the trigger row's centre bubble and the accent word, drawn BIG_SCALE larger; every
+ *  worded bubble is WORD_SCALE larger than its plain kind. */
   function wear(s, w, ink, big, rowN) {
     const text = String(w || '');
     if (!text) return;
     const k = KIND_BY_ID[s.kindId] || KIND_BY_ID.treat;
     const tex = faces.faceFor({ key: baseKey(k.id), word: text, ink: ink || undefined, image: texOf[k.id] && texOf[k.id].image, tint: k.tint });
     s.w = text; s.ink = ink || null; s.big = !!big; s.rowN = rowN || 1;
-    s.size = sizeOf(k.id) * (s.big ? BIG_SCALE : 1);
+    s.size = sizeOf(k.id) * WORD_SCALE * (s.big ? BIG_SCALE : 1);
     if (!tex) return;
     s.mat.map = tex; s.mat.color.set('#ffffff'); s.mat.needsUpdate = true;
     s.sprite.scale.setScalar(s.size * s.scale);

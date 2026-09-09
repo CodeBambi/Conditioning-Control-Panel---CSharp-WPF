@@ -28,22 +28,28 @@
 
 import * as THREE from 'three';
 
-/** The face canvas, square. A bubble is at most about 68 px on a phone and 147 on a desktop
- *  at the pop point, so this is over the glass either way and cheap to hold a lot of. */
-export const TEX_PX = 128;
+/** The face canvas, square. A word bubble is about 85 px on a phone (x3 for its pixel ratio)
+ *  and 185 on a desktop at the pop point, so 256 keeps the letters crisp on the glass; the
+ *  cache at its cap is 25 MB of texture, which a phone holds fine. */
+export const TEX_PX = 256;
 /** How many faces live at once before the least recently asked for one is disposed. */
 export const CACHE_MAX = 96;
-/** The word fits inside this much of the bubble's diameter: the rest is the bubble's rim. */
-export const TEXT_FRAC = 0.7;
+/** The word fits inside this much of the bubble's diameter: the rest is the bubble's rim.
+ *  0.7 until 0909; the owner could not read it at speed, so the word takes more of the glass. */
+export const TEXT_FRAC = 0.8;
 /** At most this many lines. A merged two word bubble reads as two; a set label of three or
  *  four words is balanced across the same two rather than shrinking to nothing on one. */
 export const MAX_LINES = 2;
-/** Type sizes in canvas pixels, and the dark outline that keeps ink off the bubble's highlight. */
-export const FONT_MAX_PX = 34, FONT_MIN_PX = 9, OUTLINE_PX = 2;
-/** The default ink. An accent word or a trigger row hands its set's own colour in instead. */
-export const INK = '#ff8fd0';
+/** Type sizes in canvas pixels, and the dark outline that keeps ink off the bubble's highlight.
+ *  (34 / 9 / 2 on the old 128 px face: the outline is a third thicker in bubble terms now.) */
+export const FONT_MAX_PX = 84, FONT_MIN_PX = 18, OUTLINE_PX = 6;
+/** A dark halo blurred out behind the outline: the letters lift off the bubble's own colour. */
+export const HALO_PX = 8;
+/** The default ink. An accent word or a trigger row hands its set's own colour in instead.
+ *  Brighter than the bubble pinks it sits on, so a plain word bubble reads pale on rose. */
+export const INK = '#ffb3e1';
 /** Every SAMPLE_STEP-th pixel of the inner circle is read back to measure what was painted. */
-export const SAMPLE_STEP = 4;
+export const SAMPLE_STEP = 8;
 
 const FALLBACK_FONT = "'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const OUTLINE = 'rgba(10,8,18,0.94)';
@@ -121,7 +127,11 @@ export function createWordFaces() {
     c.lineWidth = OUTLINE_PX; c.lineJoin = 'round'; c.miterLimit = 2;
     c.strokeStyle = OUTLINE; c.fillStyle = ink || INK;
     const step = size * 1.06, top = TEX_PX / 2 - (step * (rows - 1)) / 2;
-    lines.forEach((line, i) => { c.strokeText(line, TEX_PX / 2, top + i * step); c.fillText(line, TEX_PX / 2, top + i * step); });
+    // the outline pass also throws the halo; the fill goes down clean on top of both
+    c.shadowColor = OUTLINE; c.shadowBlur = HALO_PX; c.shadowOffsetX = 0; c.shadowOffsetY = 0;
+    lines.forEach((line, i) => c.strokeText(line, TEX_PX / 2, top + i * step));
+    c.shadowColor = 'transparent'; c.shadowBlur = 0;
+    lines.forEach((line, i) => c.fillText(line, TEX_PX / 2, top + i * step));
     return size;
   }
 
