@@ -2517,11 +2517,13 @@ namespace ConditioningControlPanel.Services
                 _strictActive = false;
                 CancelPendingRetry();
 
-                var allScreens = App.GetAllScreensCached().ToList();
+                // Global "Show content on" picker, not every screen: with one monitor picked
+                // this list has exactly one entry and no secondary window is ever created.
+                var allScreens = App.GetGlobalScreens().ToList();
                 if (allScreens.Count == 0) return;
 
                 var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
-                var secondaries = allScreens.Where(s => !s.Primary).ToList();
+                var secondaries = allScreens.Where(s => s.DeviceName != primary.DeviceName).ToList();
 
                 // Create primary window with audio
                 var primaryWin = CreateLibVLCUrlWindow(url, primary, withAudio: true);
@@ -2555,7 +2557,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private static bool ShouldFillSecondaryMonitors(int screenCount)
         {
-            if (!App.Settings.Current.DualMonitorEnabled) return false;
+            // screenCount is the TARGETED screen count (App.GetGlobalScreens), so the
+            // DualMonitorEnabled test this used to open with is already applied: one targeted
+            // screen means there is no secondary to fill.
+            if (screenCount <= 1) return false;
             if (screenCount <= 2) return true; // 1–2 monitors: unchanged
             return App.Settings.Current.FillAllMonitorsWithVideo;
         }
@@ -3015,7 +3020,8 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        var allScreens = App.GetAllScreensCached().ToList();
+                        // Global "Show content on" picker, not every screen (see GetGlobalScreens).
+                        var allScreens = App.GetGlobalScreens().ToList();
                         VideoDiag.Log("VIDEO", $"screens enumerated ({allScreens.Count}) +{showSw.ElapsedMilliseconds}ms");
                         if (allScreens.Count == 0)
                         {
@@ -3024,7 +3030,7 @@ namespace ConditioningControlPanel.Services
                             return;
                         }
                         var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
-                        var secondaries = allScreens.Where(s => !s.Primary).ToList();
+                        var secondaries = allScreens.Where(s => s.DeviceName != primary.DeviceName).ToList();
 
                         App.Logger?.Information("VideoService: Detected {Total} screens - Primary: {Primary}, Secondary: {SecCount} ({SecNames})",
                             allScreens.Count, primary.DeviceName, secondaries.Count,
@@ -5458,7 +5464,7 @@ namespace ConditioningControlPanel.Services
                 var pool = settings.AttentionPool.Where(p => p.Value).Select(p => p.Key).ToList();
                 var text = pool.Count > 0 ? pool[_random.Next(pool.Count)] : "CLICK ME";
 
-                var screens = settings.DualMonitorEnabled ? App.GetAllScreensCached() : new[] { Screen.PrimaryScreen };
+                var screens = App.GetGlobalScreens();
                 // Safety check: ensure we have at least one screen
                 if (screens == null || screens.Length == 0 || screens[0] == null)
                 {
@@ -5837,7 +5843,7 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             CloseAll();
 
-            var screens = App.Settings.Current.DualMonitorEnabled ? App.GetAllScreensCached() : new[] { Screen.PrimaryScreen };
+            var screens = App.GetGlobalScreens();
             // Safety check: ensure we have at least one screen
             if (screens == null || screens.Length == 0 || screens[0] == null)
             {

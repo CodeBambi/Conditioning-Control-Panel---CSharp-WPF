@@ -2224,6 +2224,29 @@ namespace ConditioningControlPanel.Models
             set { _dualMonitorEnabled = value; OnPropertyChanged(); }
         }
 
+        private int _globalTargetMonitor = -1;
+        /// <summary>
+        /// Which monitor(s) the app's full-screen content covers, app-wide. Same sentinel
+        /// alphabet as the per-effect targets below: -1 = follow <see cref="DualMonitorEnabled"/>
+        /// (the legacy behaviour - every screen when multi-monitor is on, else the Windows
+        /// primary), -2 = every connected monitor, 0..N = that one screen index in
+        /// <c>Screen.AllScreens</c>.
+        ///
+        /// <para>Default -1, so a settings file written before this existed behaves exactly as it
+        /// did. This is the setting behind Settings / General / "Show content on", the only way to
+        /// pin content to a specific NON-primary screen: the multi-monitor checkbox alone can say
+        /// only "all screens" or "the Windows primary".</para>
+        ///
+        /// <para>An index past the current monitor count is NOT clamped here - it falls back to the
+        /// -1 behaviour at resolve time (<c>App.ResolveScreens</c>) so an unplugged monitor's target
+        /// survives a reconnect.</para>
+        /// </summary>
+        public int GlobalTargetMonitor
+        {
+            get => _globalTargetMonitor;
+            set { _globalTargetMonitor = value; OnPropertyChanged(); }
+        }
+
         // ---- Per-effect monitor targeting (suggestion #639) ----------------
         // Overrides the global DualMonitorEnabled screen selection for a single
         // effect. Sentinels: -1 = follow DualMonitorEnabled (default, backward

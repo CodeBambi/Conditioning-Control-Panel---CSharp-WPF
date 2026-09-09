@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:feat="clr-namespace:ConditioningControlPanel.Features"
              mc:Ignorable="d" d:DesignWidth="620">
 
     <!-- ================================================================
@@ -111,6 +112,33 @@
                                   ToolTip="{loc:Str set2_general_language_hint}"
                                   SelectionChanged="CmbLanguageSetting_SelectionChanged"/>
                     </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================== display ============================= -->
+        <!-- The multi-monitor answer never made it onto the Settings door in the 6.8 rework: the
+             only reachable control was ChkMultiMon in the System popup on Home (all screens, or the
+             Windows primary, and nothing else), and the one monitor dropdown the Ctrl+K palette
+             lists is the WEBCAM's calibration screen, which does not move content. This row is the
+             app-wide picker; the same control is embedded in the System popup so the two agree. -->
+        <Border x:Name="DisplayGeneralCard" Style="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+                BorderBrush="{StaticResource SectionHueGeneralBorderBrush}">
+            <Grid>
+                <Border CornerRadius="11" Background="{StaticResource SectionHueGeneralWashBrush}"/>
+                <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                        Background="{StaticResource SectionHueGeneralBrush}"/>
+                <StackPanel Margin="15,12,15,12">
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                               Source="{Binding Source='🖥', Converter={StaticResource EmojiToImageSource}}"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str set2_general_display_title}"
+                                   Foreground="{StaticResource SectionHueGeneralBrush}"
+                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                    </StackPanel>
+
+                    <feat:MonitorTargetPicker x:Name="ContentMonitorPicker" x:FieldModifier="internal"/>
                 </StackPanel>
             </Grid>
         </Border>
