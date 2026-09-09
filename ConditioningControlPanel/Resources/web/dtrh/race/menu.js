@@ -93,7 +93,7 @@ import * as THREE from 'three';
 import { wantsTouch } from './touch.js';
 import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
 import { snapshotRest } from './emiPoses.js';
-import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
+import { PIXEL_STEPS, PIXEL_LEGACY_DEFAULT, pixelDefault, normalizeBlock } from './pixel.js';
 import { createMenuFlashes } from './menuFlashes.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createFeedGroup } from './feedGroup.js';
@@ -107,7 +107,9 @@ export const ROSTER = [
     clips: { idle: 'idle', wave: 'wave', hop: 'hop', peek: 'peek', drum: 'drum' },
     faces: { idle: 0, wave: 1, hop: 2, peek: 3, drum: 4, starry: 5, spiral: 6 } },
 ];
-const DEFAULTS = { pixel: PIXEL_DEFAULT, music: 0.8, sfx: 0.8, motion: 'system', seed: 'daily', seedValue: 7 };
+// `pixel` is the one default that reads the device: off on a coarse pointer, the smallest block on a
+// fine one (race/pixel.js pixelDefault). loadOptions below migrates the old fixed default onto it.
+const DEFAULTS = { pixel: pixelDefault(), music: 0.8, sfx: 0.8, motion: 'system', seed: 'daily', seedValue: 7 };
 const MOTIONS = ['system', 'on', 'off'], SEEDS = ['daily', 'random', 'custom'];
 const GLASS = 'EMI_glass', FADE = 0.3, ONE_SHOTS = ['wave', 'hop', 'drum'];
 const BEAT_MIN = 3, BEAT_MAX = 6, PEEK_GAP = 6;
@@ -178,7 +180,13 @@ export function loadOptions() {
   try {
     const raw = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null');
     if (raw && typeof raw === 'object') {
-      if (typeof raw.pixel === 'number') o.pixel = normalizeBlock(raw.pixel);
+      // THE PIXEL MIGRATION. The menu saves the WHOLE options table, so everyone who ever opened
+      // the menu has a `pixel` written down whether or not they ever pressed that row: a saved
+      // value equal to the old default (PIXEL_LEGACY_DEFAULT, 3) is therefore read as "never
+      // chosen" and takes the new per-device default instead (off on glass, the smallest block on
+      // a mouse). A player who deliberately sat on 3 pays for it once and sets it again; every
+      // other number they picked is kept exactly as it is.
+      if (typeof raw.pixel === 'number' && normalizeBlock(raw.pixel) !== PIXEL_LEGACY_DEFAULT) o.pixel = normalizeBlock(raw.pixel);
       for (const k of ['music', 'sfx']) if (typeof raw[k] === 'number' && isFinite(raw[k])) o[k] = clamp(raw[k], 0, 1);
       if (MOTIONS.includes(raw.motion)) o.motion = raw.motion;
       if (SEEDS.includes(raw.seed)) o.seed = raw.seed;

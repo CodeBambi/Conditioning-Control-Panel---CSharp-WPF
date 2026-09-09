@@ -22,7 +22,9 @@
  *     { block, setBlock(n), cycle(), resize(w, h), render(scene, camera),
  *       filterTexture(tex), retexture(scene), label(), stats, dispose() }
  *
- * PIXEL_STEPS is the P-key cycle: off, 2, 3, 4, 6 screen pixels per block.
+ * PIXEL_STEPS is the P-key cycle: off, 2, 3, 4, 6 screen pixels per block, and
+ * pixelDefault() is where a player who never touched the option starts: off on
+ * glass, the smallest block on a mouse.
  * Put an object on the crisp layer with `obj.layers.set(CRISP_LAYER)`.
  * `stats` is last frame's draw calls + triangles summed over the passes plus
  * the frame time (avg + p95 ms over the last FRAME_WIN frames); with `log`
@@ -35,7 +37,15 @@ import * as THREE from 'three';
 import { Q } from '../shared/quality.js';
 
 export const PIXEL_STEPS = [0, 2, 3, 4, 6];
-export const PIXEL_DEFAULT = 3;
+/** The smallest block there is, `off` aside. This is the default a mouse gets. */
+export const PIXEL_MIN = PIXEL_STEPS[1];
+/**
+ * THE OLD DEFAULT, kept for one job: the migration in race/menu.js loadOptions. Everybody who never
+ * opened the option still has this number written into `race.options` (the menu saves the whole
+ * table whatever the player touched), so a saved 3 is read there as "never chosen" and takes the new
+ * default instead. Nothing else may read it: what a fresh page gets is pixelDefault() below.
+ */
+export const PIXEL_LEGACY_DEFAULT = 3;
 export const CRISP_LAYER = 1;
 const WORLD_MASK = 1 << 0, CRISP_MASK = 1 << CRISP_LAYER, ALL_MASK = WORLD_MASK | CRISP_MASK;
 const MAP_KEYS = ['map', 'emissiveMap', 'alphaMap', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap'];
@@ -43,6 +53,30 @@ const FAR_FADE = [42, 80];     // metres: the world pass fades to the fog colour
 const PERF_LOG_SEC = 5;
 const FRAME_WIN = 300;         // frames kept for the avg / p95
 const SLOW_MS = 24, FAST_MS = 13;   // governor thresholds on the avg frame (about 42 and 77 fps)
+
+/**
+ * THE DEFAULT BLOCK, which is not one number any more. On glass the big pixels cost the most and
+ * read the worst: a phone panel is already tiny, and a 3 px block on it turned the road to mush
+ * (the owner, phone testing 2026-09-09). So a COARSE POINTER starts with the look OFF and a fine
+ * one starts at PIXEL_MIN, the gentlest block on the cycle. The option row still walks the whole
+ * range either way: this decides where a player who never touched it begins, nothing more.
+ *
+ * The test is `(pointer: coarse)` and only that - a Windows laptop with a touchscreen has a mouse
+ * as well, reads as fine, and is a pc. `?coarse=1` / `?coarse=0` force the answer for a headless
+ * check (race/smoke/popped-check.mjs), the way race/touch.js takes `?touch=`.
+ */
+export function pixelDefault(win) {
+  const w = win || (typeof window !== 'undefined' ? window : null);
+  if (!w) return PIXEL_MIN;
+  try {
+    const q = new URLSearchParams(w.location.search).get('coarse');
+    if (q === '1' || q === 'on') return 0;
+    if (q === '0' || q === 'off') return PIXEL_MIN;
+  } catch (e) { /* no location, or a page that hides it: fall through to the device test */ }
+  try { if (typeof w.matchMedia === 'function' && w.matchMedia('(pointer: coarse)').matches) return 0; }
+  catch (e) { /* no matchMedia: a mouse is the safer guess */ }
+  return PIXEL_MIN;
+}
 
 /** Snap any input to a step: 0 (off) or the nearest listed block size. */
 export function normalizeBlock(n) {
@@ -80,7 +114,7 @@ const BLIT_FRAG = `
     #include <colorspace_fragment>
   }`;
 
-export function createPixelizer({ renderer, canvas, block = PIXEL_DEFAULT, log = null }) {
+export function createPixelizer({ renderer, canvas, block = pixelDefault(), log = null }) {
   let cur = normalizeBlock(block);
   let w = 1, h = 1;
   let dprCap = Infinity;         // the governor's lid on the device pixel ratio (1 while slow)
