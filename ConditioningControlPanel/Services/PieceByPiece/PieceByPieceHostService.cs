@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Http;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services.Chaos;
@@ -29,6 +33,19 @@ namespace ConditioningControlPanel.Services.PieceByPiece;
 /// speaks, and are handled here too. Both watchdogs are guarded on the page having reported
 /// <c>ready</c>, so a shell that speaks none of this cannot be closed by a silence it was never
 /// going to break.</para>
+///
+/// <para>ONLINE PLAY adds three more, and they are a set - one that hands the page an identity,
+/// and a request/reply pair that carries HTTP for it:
+/// <list type="bullet">
+/// <item>host -&gt; page, once after boot:
+///   <c>{ type: 'pbp:identity', unifiedId, displayName, appVersion, online,
+///        net: { serverBase, authToken, viaHost } }</c></item>
+/// <item>page -&gt; host: <c>{ type: 'pbp:net', id, method, path, body }</c></item>
+/// <item>host -&gt; page: <c>{ type: 'pbp:net-result', id, status, body }</c></item>
+/// </list>
+/// Mirrors <c>GoonHostService</c>'s <c>net-post</c> pair exactly, for its reasons: the token is
+/// attached HERE rather than in the page, and only <c>/v2/pbp/*</c> is ever forwarded. See
+/// <see cref="OnNetRequest"/> for why that whitelist is load-bearing rather than tidy.</para>
 ///
 /// <para><b>Nothing here is authoritative over anything.</b> A chess game pays out no XP, keeps no
 /// Sparks and fires no desktop payloads, so there is no state to flush and no verdict to protect:
@@ -59,6 +76,37 @@ internal static class PieceByPieceHostService
 
     private static readonly Random Rng = new();
 
+    /// <summary>Where <c>/v2/pbp/*</c> lives. The same proxy every other online surface uses.</summary>
+    private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
+
+    /// <summary>
+    /// The ONLY path prefix <see cref="OnNetRequest"/> will forward.
+    ///
+    /// <para>A WHITELIST, NOT A CONVENIENCE. Without it this handler is an open HTTP proxy that
+    /// signs whatever the page asks for with the user's auth token - and this page loads content
+    /// from <c>ccp.assets</c>, so "whatever the page asks for" is not a purely hypothetical
+    /// concern. Anything outside the chess game's own routes fails closed as
+    /// <c>status:0, body:"forbidden_path"</c>, which is the shape a transport failure already
+    /// produces, so the page needs no special case for it.</para>
+    /// </summary>
+    private const string AllowedPathPrefix = "/v2/pbp/";
+
+    /// <summary>
+    /// One client for the app session; a per-request <see cref="HttpClient"/> exhausts sockets.
+    /// 30s covers the events long poll, which the server caps at 8s and Vercel kills at 10s -
+    /// generous enough that a timeout here always means something is genuinely wrong, and short
+    /// enough that the page's own 45s deadline is never the thing that fires first.
+    /// </summary>
+    private static readonly HttpClient Http = BuildHttpClient();
+
+    private static HttpClient BuildHttpClient()
+    {
+        var c = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        try { c.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}"); }
+        catch (Exception ex) { Diag.Swallowed(ex); }
+        return c;
+    }
+
     private static ChaosWebViewHost? _host;
     private static DispatcherTimer? _bootWatch;
     private static DispatcherTimer? _heartbeatWatch;
@@ -66,6 +114,7 @@ internal static class PieceByPieceHostService
     private static DateTime _lastProgressUtc;
     private static bool _pinged;
     private static bool _settingsPosted;   // pbp:settings goes out exactly once per boot
+    private static bool _identityPosted;   // and so does pbp:identity
     private static bool _disposing;        // reentrancy: Dispose closes the window -> Closed -> Close()
 
     /// <summary>True while the board is open.</summary>
@@ -97,6 +146,7 @@ internal static class PieceByPieceHostService
         try
         {
             _settingsPosted = false;
+            _identityPosted = false;
             _pinged = false;
             _lastProgressUtc = DateTime.UtcNow;
 
@@ -172,6 +222,7 @@ internal static class PieceByPieceHostService
             CancelBootDeadline();
             StopHeartbeatWatch();
             _settingsPosted = false;
+            _identityPosted = false;
             _pinged = false;
             bool had = _host != null;
             try { _host?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
@@ -195,8 +246,52 @@ internal static class PieceByPieceHostService
             _pinged = false;
             _host?.FocusWeb();
             PostSettings();
+            PostIdentity();
         }
         catch (Exception ex) { App.Logger?.Warning("PieceByPieceHostService.OnPageReady: {E}", ex.Message); }
+    }
+
+    /// <summary>
+    /// Who is playing, and how the page reaches the server. Sent once per boot, right behind the
+    /// settings frame.
+    ///
+    /// <para>THE TOKEN IS THE CCP AUTH TOKEN (DPAPI-backed <c>SecureAuthTokenStore</c> behind
+    /// <c>AppSettings.AuthToken</c>), NOT the Patreon bearer - <c>/v2/pbp/*</c> authenticates the
+    /// unified account, exactly as the Goon Game's <c>/v2/goon/*</c> does. It rides in the frame
+    /// so a future direct-fetch build has it the moment CORS for the <c>ccp.game</c> origin is
+    /// deployed; until then <c>viaHost:true</c> means the page never actually uses it and this
+    /// host attaches the header itself, per call, against the path whitelist.</para>
+    ///
+    /// <para>An EMPTY token is a normal state, not a failure: it means the user has no cloud
+    /// session. <c>online:false</c> says so plainly, and the page's lobby answers null and lets
+    /// the front door open on its offline mock rather than 401ing at every screen.</para>
+    /// </summary>
+    private static void PostIdentity()
+    {
+        if (_identityPosted) return;
+        _identityPosted = true;
+        try
+        {
+            var uid = App.UnifiedUserId ?? string.Empty;
+            var token = SafeAuthToken();
+            _host?.Post(new
+            {
+                type = "pbp:identity",
+                unifiedId = uid,
+                displayName = SafeDisplayName(),
+                appVersion = UpdateService.AppVersion,
+                // Both halves are needed: an account with no token cannot authenticate, and a
+                // token with no account has nothing to name in a request body.
+                online = !string.IsNullOrEmpty(uid) && !string.IsNullOrEmpty(token),
+                net = new
+                {
+                    serverBase = ProxyBaseUrl,
+                    authToken = token,
+                    viaHost = true,
+                },
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("PieceByPiece: identity post failed: {E}", ex.Message); }
     }
 
     /// <summary>The one host -&gt; page settings frame, sent once per boot.</summary>
@@ -235,6 +330,10 @@ internal static class PieceByPieceHostService
 
                 case "pbp:media-request":
                     OnMediaRequest(o);
+                    break;
+
+                case "pbp:net":
+                    OnNetRequest(o);
                     break;
 
                 case "pbp:exit":
@@ -352,6 +451,115 @@ internal static class PieceByPieceHostService
         if (reservoir.Count < count) { reservoir.Add(url); return; }
         int j = Rng.Next(seen);
         if (j < count) reservoir[j] = url;
+    }
+
+    // ============================ the net lane ============================
+
+    /// <summary>
+    /// <c>pbp:net { id, method, path, body }</c> - one HTTP call to
+    /// <see cref="ProxyBaseUrl"/> + path, answered with
+    /// <c>pbp:net-result { id, status, body }</c>.
+    ///
+    /// <para>THE PAGE NEVER HOLDS THE TOKEN IN PRACTICE. This is why: every online call comes
+    /// back through here, the header is attached on this side, and the page's copy of the token
+    /// (which the identity frame does carry, for a future direct-fetch build) is never used while
+    /// <c>viaHost</c> is true. The whitelist on <see cref="AllowedPathPrefix"/> is what keeps that
+    /// from being an open, authenticated proxy for anything else the page might be talked into
+    /// asking for.</para>
+    ///
+    /// <para>A failure of any kind answers <c>status:0</c>, which the page reads as "no answer at
+    /// all" - the same shape as being offline. It never throws back at the page, and it never
+    /// leaves a call unanswered: an id with no reply would sit in the page's pending map until
+    /// its own 45s deadline swept it.</para>
+    /// </summary>
+    private static void OnNetRequest(JObject o)
+    {
+        var id = (string?)o["id"] ?? "";
+        var path = (string?)o["path"] ?? "";
+        var method = ((string?)o["method"] ?? "GET").Trim().ToUpperInvariant();
+        var body = o["body"]?.Type == JTokenType.String
+            ? (string?)o["body"] ?? ""
+            : (o["body"] is null || o["body"]!.Type == JTokenType.Null
+                ? ""
+                : o["body"]!.ToString(Newtonsoft.Json.Formatting.None));
+
+        if (!path.StartsWith(AllowedPathPrefix, StringComparison.Ordinal))
+        {
+            App.Logger?.Warning("PieceByPiece: net REJECTED for path '{Path}'", path);
+            ReplyNet(id, 0, "forbidden_path");
+            return;
+        }
+        if (method != "GET" && method != "POST")
+        {
+            // The whole surface is GET and POST. Anything else is a page that has been
+            // tampered with, not a route this build has not caught up with yet.
+            App.Logger?.Warning("PieceByPiece: net REJECTED for method '{Method}'", method);
+            ReplyNet(id, 0, "forbidden_method");
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            int status = 0;
+            string responseBody = "";
+            try
+            {
+                var verb = method == "POST" ? HttpMethod.Post : HttpMethod.Get;
+                using var request = new HttpRequestMessage(verb, ProxyBaseUrl + path);
+                if (method == "POST")
+                {
+                    request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                }
+                var token = SafeAuthToken();
+                if (!string.IsNullOrEmpty(token)) request.Headers.Add("X-Auth-Token", token);
+                request.Headers.Add("X-Client-Version", UpdateService.AppVersion);
+
+                using var response = await Http.SendAsync(request, CancellationToken.None).ConfigureAwait(false);
+                status = (int)response.StatusCode;
+                responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Timeout, DNS, offline, a cancelled long poll. status 0 is the page's
+                // "never got an answer", which every call site there already branches on.
+                status = 0;
+                responseBody = "";
+                App.Logger?.Debug("PieceByPiece: net {Method} {Path} failed: {E}", method, path, ex.Message);
+            }
+            ReplyNet(id, status, responseBody);
+        });
+    }
+
+    /// <summary>Post the reply back on the UI thread - WebView2 is thread-affine.</summary>
+    private static void ReplyNet(string id, int status, string body)
+    {
+        RunOnUi(() =>
+        {
+            try { _host?.Post(new { type = "pbp:net-result", id, status, body }); }
+            catch (Exception ex) { App.Logger?.Debug("PieceByPiece.ReplyNet: {E}", ex.Message); }
+        });
+    }
+
+    /// <summary>The CCP auth token - DPAPI-backed <c>SecureAuthTokenStore</c> behind
+    /// <c>AppSettings.AuthToken</c>, NOT the Patreon bearer. Empty when the user has no cloud
+    /// session, which the page reads as "online play is not available" rather than as a
+    /// failure.</summary>
+    private static string SafeAuthToken()
+    {
+        try { return App.Settings?.Current?.AuthToken ?? string.Empty; }
+        catch { return string.Empty; }
+    }
+
+    /// <summary>The same name every other online surface presents, so one player is one identity
+    /// whichever door of the app they came through.</summary>
+    private static string SafeDisplayName()
+    {
+        try
+        {
+            var name = App.Settings?.Current?.UserDisplayName;
+            return string.IsNullOrWhiteSpace(name) ? "Player" : name!;
+        }
+        catch { return "Player"; }
     }
 
     // ============================ window plumbing ============================

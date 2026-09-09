@@ -15,6 +15,7 @@ import { createDrag } from './board/drag.js';
 import { createGlyphs } from './board/glyphs.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
+import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, signalReady } from './bridge.js';
 
@@ -65,7 +66,11 @@ function main() {
   };
 
   const params = new URLSearchParams(location.search);
-  const game = createHotseat({
+  // THE DRIVER IS BEHIND A SWITCH, always - even in a hotseat-only session.
+  // drag.js, promote.js, hud.js and sfx.js are each handed `game` once and hold
+  // that reference for the life of the page, so the thing they are handed has
+  // to be the one object that outlives any particular game. See net/online.js.
+  const hotseat = createHotseat({
     bus,
     board,
     hud: dom.hud,
@@ -73,6 +78,7 @@ function main() {
     fen: params.get('fen') || undefined,
     auto: Number(params.get('auto')) || 0,
   });
+  const game = createDriverSwitch(hotseat);
 
   const drag = createDrag({ view, pieces, anim, bus, game, jiggle });
   board.drag = drag;
@@ -81,6 +87,13 @@ function main() {
   // object from the start so a reader never has to care whether that has
   // happened yet: it is simply null until it has.
   window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: false } };
+  /**
+   * Deal an online game onto this board. The front door calls it with the Match
+   * its lobby handed back; everything after that - the seat, the clocks, the
+   * long poll - belongs to net/match.js, and nothing else on the page has to
+   * know the game changed hands.
+   */
+  window.PBP.startOnline = (match) => startOnlineMatch({ bus, board, hud: dom.hud, game, match });
   onHostMessage((m) => {
     if (m.type !== 'pbp:settings') return;
     const { type, ...values } = m;   // the envelope's own key is not a setting
