@@ -3876,6 +3876,7 @@
   "modmgr_pack_installing": "正在安装...",
   "modmgr_pack_ready": "媒体已下载。如果还是缺东西，请重启应用。",
   "modmgr_pack_failed": "下载失败。请检查网络后重试。",
+  "modmgr_pack_offline": "离线模式已开启，无法下载任何内容。请在设置 > 数据中关闭后再回来。",
   "modmgr_pack_unavailable": "无法连接下载服务器，请稍后再试。",
   "modmgr_badge_needs_download": "⬇ 未下载",
 
