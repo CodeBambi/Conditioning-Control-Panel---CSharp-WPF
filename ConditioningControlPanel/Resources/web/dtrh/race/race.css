@@ -603,6 +603,41 @@
   to { text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
 }
 
+/* ---- THE SLOT: the script on the band, and the word you popped sliding into it ----
+   The owner, phone testing 2026-09-09: "when popped a bubble the word rises and slides into the
+   typewriter we got (the missed ones appear as dimmed like now) the words we get go slot themselves
+   as visible". So the whole phrase is on the band from the moment the clock opens it, dim, and the
+   pop lights its own word: same band, same box, same two line cap, same measured top. Dim is the
+   ghost's own grey, so a line half taken reads as a line half taken and nothing has to be explained.
+   The flight is one shot and one element, parented to the layer rather than to the line, so it can
+   start anywhere on the glass without ever reflowing the sentence it is on its way into. */
+.race-hud .rc-cap.is-slot .rc-cap-word {
+  opacity: 0.35; color: #d6d0dd; text-shadow: 0 2px 5px rgba(0, 0, 0, 0.95);
+  transition: opacity 0.16s linear, color 0.16s linear, text-shadow 0.16s linear;
+}
+.race-hud .rc-cap.is-slot .rc-cap-word.is-said {
+  opacity: 1; color: var(--rc-ink, #fff);
+  text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95);
+}
+/* captions.js sets left/top to the bubble's own place on the glass and --rc-fly-dx/dy to the trip
+   from there to the slot's middle. The lift at 55 percent is the RISE the ask asks for: the word
+   comes up out of the road before it slides, rather than skating flat across the screen. */
+.race-hud .rc-slot-fly {
+  position: absolute; left: 0; top: 0; white-space: nowrap; z-index: 1;
+  font-size: 1rem; font-weight: 800; letter-spacing: 0.02em; color: var(--rc-ink, #fff);
+  text-shadow: 0 0 18px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95);
+  transform: translate(-50%, -50%);
+  animation: rcSlotFly 300ms cubic-bezier(0.3, 0.86, 0.28, 1) both;
+}
+@keyframes rcSlotFly {
+  from { opacity: 0.25; transform: translate(-50%, -50%) scale(1.22); }
+  22% { opacity: 1; }
+  55% {
+    transform: translate(calc(-50% + var(--rc-fly-dx, 0px) * 0.42), calc(-50% + var(--rc-fly-dy, 0px) * 0.42 - 24px)) scale(1.1);
+  }
+  to { opacity: 1; transform: translate(calc(-50% + var(--rc-fly-dx, 0px)), calc(-50% + var(--rc-fly-dy, 0px))) scale(1); }
+}
+
 /* ---- the plate: out of the vanishing point, into your face ---- */
 .race-hud .rc-plates { position: absolute; inset: 0; perspective: 900px; }
 .race-hud .rc-plate {
@@ -814,6 +849,9 @@
   /* the flash fades in place too; the ghost keeps its own faintness, which is a reading and not a motion */
   .race-hud .rc-cap-word.rc-flash-word, .race-hud .rc-flash-word.is-accent,
   .race-hud .rc-flash-word.is-ghost { animation: none; }
+  /* and the slot simply lights: captions.js already flies nothing under reduced motion, so this is
+     the belt to that brace rather than the rule itself */
+  .race-hud .rc-slot-fly { animation: none; opacity: 0; }
   .race-hud .rc-dim.is-on { animation: none; }
 }
 

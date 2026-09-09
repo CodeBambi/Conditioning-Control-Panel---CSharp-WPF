@@ -2,6 +2,7 @@
  * race/smoke/captions-check.mjs - the voice on the glass.
  *
  *   node race/smoke/captions-check.mjs     (from Resources/web/dtrh; 0 on pass, 1 with a count)
+ *   RACE_SHOTS=1 node race/smoke/captions-check.mjs   (also writes shots/cap-slot-phone.png)
  *
  * Two halves. The first is pure: the real caption track this branch ships for the
  * opening level is cut into phrases and the cut is held against its own rules. The
@@ -9,13 +10,16 @@
  * things this layer can get wrong that no unit test sees are "the caption sits on
  * the score plate" and "the plate never actually reached the DOM".
  *
- * The browser half boots the same fixture TWICE, because the band has two halves of
- * its own now. `?cap=type` is the old word-timed typewriter (sections 2, 3 and 7);
- * the default build is THE FLASH (section 7b), where the words are on the road and
- * the band answers a pop instead of typing the file. The flash section holds the
- * whole rule: within 50 ms of a pop, joined inside 0.3 s, a fresh line after the
- * fade, a ghost at 0.35 for a word driven past, two lines at most, no typewriter,
- * and never a pixel on the score plate, the toast rail or the plate's rest spot.
+ * The browser half boots the same fixture THREE times, because the band has three
+ * halves of its own now. `?cap=type` is the old word-timed typewriter (sections 2, 3
+ * and 7); `?cap=flash` is the wave 3 band, where a pop WROTE the word onto the glass
+ * (section 7b); and the default build is THE SLOT (section 7c), where the script sits
+ * on the band dim and the word the kart pops rises out of its bubble and slides into
+ * its own slot. Between them those two sections hold the whole rule: dim until it is
+ * popped, inked where it lands, a word driven past left exactly as dim as it was, a
+ * seek that redraws with nothing replayed, the trigger's plate never doubled, two
+ * lines at most, and never a pixel on the score plate, the toast rail or the plate's
+ * rest spot.
  *
  * The browser half builds one fixture chart off the real transcript, serves it to
  * `?chart=<url>`, then drives `race.trackClock(t, false)` straight at the seconds
@@ -30,13 +34,14 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPhrases, paintTriggers, MAX_WORDS, GAP_SEC, HOLD_SEC, PLATE_MS,
-  FLASH_HOLD_MS, FLASH_FADE_MS, FLASH_JOIN_MS, GHOST_ALPHA } from '../captions.js';
+  FLASH_HOLD_MS, FLASH_FADE_MS, FLASH_JOIN_MS, GHOST_ALPHA,
+  SLOT_FLY_MS, SLOT_DIM_ALPHA } from '../captions.js';
 import { THEME_BY_PRESET, themeFor } from '../triggerTheme.js';
 import { wordedRoad, PEAKS_PER_SEC } from '../cloudChart.js';
 
@@ -48,6 +53,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HERE = resolve(fileURLToPath(import.meta.url), '..');
 const RACE = resolve(HERE, '..');
 const WEB = resolve(RACE, '../..');                        // Resources/web
+/** `RACE_SHOTS=1`: one 390x844 png of the slot line, half read and half still dim, into shots/. */
+const SHOTS = process.env.RACE_SHOTS === '1' ? resolve(WEB, '../../../shots') : null;
 const read = (rel) => JSON.parse(readFileSync(resolve(RACE, rel), 'utf8'));
 const ROW = read('words/index.json').rows[0];             // the opening level
 // the aligner stamp lives on the index row, not on the race copy of the transcript, and
@@ -357,19 +364,20 @@ ok(!!worst && !hits(worst.cap, worst.score), 'and even the tallest keeps off the
 /* ============================================================================
  * 7b. THE FLASH: the band answers the pops, and nothing types
  *
- * The default build. The words are on the road (race/wordBubbles.js), so the band
- * is where a POP is answered: the word lands whole, holds, joins the line if
- * another pop is inside 0.3 s, and a word the kart drove past still lands as a
- * grey ghost. `race.debugWord` is the same call race/run.js onPop makes, so the
- * timings below are the layer's own and not a re-implementation of them.
+ * The wave 3 band, one release behind `?cap=flash` now that the slot line below is
+ * the default. The words are on the road (race/wordBubbles.js), so the band is where
+ * a POP is answered: the word lands whole, holds, joins the line if another pop is
+ * inside 0.3 s, and a word the kart drove past still lands as a grey ghost.
+ * `race.debugWord` is the same call race/run.js onPop makes, so the timings below
+ * are the layer's own and not a re-implementation of them.
  *
  * It never prints a word of the transcript: everything here is counted, measured
  * or read off a class, and the one word it puts on the glass itself is 'ok'.
  * ==========================================================================*/
-const upFlash = await boot(FIXTURE_URL);
-ok(upFlash, 'the default build boots the same road');
+const upFlash = await boot(`${FIXTURE_URL}&cap=flash`);
+ok(upFlash, 'the flash band boots the same road behind ?cap=flash');
 if (!upFlash) await done(1);
-eq(await ev(`window.__race.race.capMode()`), 'flash', 'and the band is the flash, not the typewriter');
+eq(await ev(`window.__race.race.capMode()`), 'flash', 'and the band is the flash, not the slot line and not the typewriter');
 
 /** What the band is holding right now: the words, their classes, and the boxes around them. */
 const band = () => json(`(()=>{ const cap=document.querySelector('.rc-cap');
@@ -443,7 +451,7 @@ ok(!hitB(chain.cap, chain.score), `it never touches the score plate (band ${chai
 ok(!hitB(chain.cap, chain.rail), 'nor the toast rail');
 ok(chain.plateY > chain.cap.y + chain.cap.h, `and the plate's rest spot is still clear under it (band bottom ${chain.cap.y + chain.cap.h}, plate y ${chain.plateY})`);
 
-// 7. the typewriter really is behind ?cap=type: the clock inside a phrase writes nothing
+// 7. the typewriter really is behind ?cap=type: the clock inside a phrase writes nothing on the flash band
 await sleep(FLASH_HOLD_MS + FLASH_FADE_MS + 250);
 await ev(`window.__race.race.trackClock(${target.words[1].t}, false)`);
 await sleep(300);
@@ -473,6 +481,157 @@ await sleep(6000);
 const live = await json(`({ flash: window.__flash, ghost: window.__ghost, t: window.__race.race.track.t })`);
 ok(live.t > road.words[0].t, `the road rolled through the first spoken words (to ${live.t.toFixed(1)}s)`);
 ok(live.flash > 0, `and ${live.flash} of them reached the band off real pops and passes (${live.ghost} as ghosts)`);
+
+/* ============================================================================
+ * 7c. THE SLOT: the script on the band, and the pop that lights its own word
+ *
+ * The default build. The owner, phone testing 2026-09-09: "when popped a bubble the
+ * word rises and slides into the typewriter we got (the missed ones appear as dimmed
+ * like now) the words we get go slot themselves as visible on the typewriter kind of
+ * text we got displayed, except triggers that get already shown big and highlighted."
+ *
+ * So the whole promise, held here and not described: the phrase the clock is on sits
+ * on the band with every word DIM, a pop puts one word in the air and inks the slot
+ * it lands in, a word driven past stays exactly as dim as it was, a seek away and back
+ * draws the line the way the kart left it with nothing replayed, a sure trigger flies
+ * its plate and slides nothing into the line behind it, and none of it touches the
+ * score plate or the toast rail on a 390x844 phone.
+ *
+ * Same rule as 7b about the transcript: a word of it is handed to the page inside an
+ * evaluate so the layer has a real slot to find, and not one is ever printed.
+ * ==========================================================================*/
+const upSlot = await boot(FIXTURE_URL);
+ok(upSlot, 'the default build boots the same road');
+if (!upSlot) await done(1);
+eq(await ev(`window.__race.race.capMode()`), 'slot', 'and the default band is the slot line');
+
+/**
+ * What the slot line is holding: its words, their ink, what is in the air, and the boxes.
+ *
+ * `zero` runs `capSlotsReset()` first, and `then` runs after it, all inside ONE evaluate. A check
+ * that seeks the clock about by hand drags a burst of real bubbles onto the road behind it, and
+ * those pops are real pops that take real slots. Forgetting them and reading the line back without
+ * ever yielding is the only way a count here can be about the one thing the check just did.
+ */
+const slotBand = (o = {}) => json(`(()=>{ ${o.zero ? 'window.__race.race.capSlotsReset();' : ''} ${o.then || ''}
+  const cap=document.querySelector('.rc-cap');
+  const r=(el)=>{ if(!el) return null; const b=el.getBoundingClientRect(); return { x:Math.round(b.left), y:Math.round(b.top), w:Math.round(b.width), h:Math.round(b.height) }; };
+  const words=[...document.querySelectorAll('.rc-cap-word')], cs=(w)=>getComputedStyle(w);
+  const a=(w)=>Math.round(+cs(w).opacity*100)/100;
+  const fly=[...document.querySelectorAll('.rc-slot-fly')].pop();
+  const tops=new Set(); for(const w of words){ const b=w.getBoundingClientRect(); if(b.height>0) tops.add(Math.round(b.top)); }
+  return { n: words.length, said: words.filter(w=>w.classList.contains('is-said')).length,
+    ink: words.map(w=>w.classList.contains('is-said')?1:0),
+    lit: words.filter(w=>w.classList.contains('is-said')).map(a),
+    dim: words.filter(w=>!w.classList.contains('is-said')).map(a),
+    flying: document.querySelectorAll('.rc-slot-fly').length,
+    flyMs: fly?getComputedStyle(fly).animationDuration:'', flyY: fly?Math.round(fly.getBoundingClientRect().top+fly.getBoundingClientRect().height/2):0,
+    flashWords: document.querySelectorAll('.rc-flash-word').length,
+    slots: window.__race.race.capSlots(),
+    lines: tops.size, hidden: !cap||cap.hidden, cap: cap&&!cap.hidden?r(cap):null,
+    score: r(document.querySelector('.rh-score-wrap')), rail: r(document.querySelector('.rh-toasts')),
+    plateY: parseFloat(getComputedStyle(document.querySelector('.rc-layer')).getPropertyValue('--rc-plate-y'))||0,
+    vw: innerWidth, vh: innerHeight };})()`);
+/** Park the clock on one second, as a pause does, and let the seek's own burst of bubbles drain off
+ *  the road before reading anything: with the clock stopped no cue fires, so the road goes quiet. */
+const park = async (t, o) => { await ev(`window.__race.race.trackClock(${t}, false)`); await sleep(1500); return slotBand(o); };
+
+// 1. the phrase is up whole and DIM: the script is on the band before anything is popped.
+// The zero is its own step here rather than part of the read, because a word going back to dim
+// takes race.css's own 0.16s to do it and a computed opacity mid-transition is the transition's.
+const one = target.words[1];
+const POP = `window.__race.race.debugWord(${JSON.stringify(one.w)}, { at: ${one.t}, from: { x: 195, y: 700 } });`;
+await park(one.t);
+await ev(`window.__race.race.capSlotsReset()`);
+await sleep(320);
+const dim = await slotBand();
+eq(dim.n, target.words.length, `the phrase the clock is on sits on the band with all ${target.words.length} of its words in it`);
+eq(dim.said, 0, 'and not one of them is inked until the kart takes it');
+ok(dim.dim.length > 0 && dim.dim.every((v) => Math.abs(v - SLOT_DIM_ALPHA) < 0.02),
+  `every unread word sits at ${SLOT_DIM_ALPHA}, the faint grey a missed word already wore (got ${dim.dim[0]})`);
+eq(dim.flashWords, 0, 'and nothing writes itself onto the band: the slot line never flashes a word beside the script');
+
+// 2. a pop rises out of the bubble and slides into its own slot
+const flew = await slotBand({ zero: true, then: POP });
+eq(flew.flying, 1, 'a pop puts exactly one word in the air');
+eq(flew.slots.flew, 1, 'and one flight is all the layer thinks it started');
+eq(flew.flyMs, `${SLOT_FLY_MS / 1000}s`, `it flies for ${SLOT_FLY_MS}ms, which keeps up with the road`);
+ok(flew.flyY > 400, `and starts down at the pop rather than up at the band (it left from y ${flew.flyY} of ${dim.vh})`);
+eq(flew.n, dim.n, 'while the line it is on its way into never grew a word or reflowed to take it');
+eq(flew.said, 0, 'and no slot lights the moment the pop happens: the word has to get there first');
+
+await sleep(SLOT_FLY_MS + 220);
+const landed = await json(`(()=>{ const w=document.querySelectorAll('.rc-cap-word')[1], cs=getComputedStyle(w);
+  return { said: w.classList.contains('is-said'), alpha: Math.round(+cs.opacity*100)/100,
+    n: document.querySelectorAll('.rc-cap-word').length, flying: document.querySelectorAll('.rc-slot-fly').length };})()`);
+ok(landed.said, 'the word it carried is inked when it gets there, in its own slot in the line');
+ok(landed.alpha > 0.95, `and reads at full strength (${landed.alpha}) where an unread word sits at ${SLOT_DIM_ALPHA}`);
+eq(landed.flying, 0, 'with the flight over and nothing left moving on the glass');
+eq(landed.n, dim.n, 'and the line still exactly as long as the script said it was');
+
+// the picture the owner asked for: half the line taken, half of it still dim, on the phone
+if (SHOTS) {
+  const two0 = target.words[0];
+  await ev(`window.__race.race.debugWord(${JSON.stringify(two0.w)}, { at: ${two0.t}, from: { x: 120, y: 660 } })`);
+  await sleep(SLOT_FLY_MS + 260);
+  const png = (await cdp('Page.captureScreenshot', { format: 'png' })).result?.data;
+  if (png) {
+    await mkdir(SHOTS, { recursive: true });
+    const at = join(SHOTS, 'cap-slot-phone.png');
+    await writeFile(at, Buffer.from(png, 'base64'));
+    console.log('  --  shot: ' + at);
+  }
+}
+
+// 3. a word driven past stays dim in the slot it already had: no ghost, no flight, no ink
+const two = target.words[Math.min(2, target.words.length - 1)];
+const missed = await slotBand({ zero: true,
+  then: `window.__race.race.debugWord(${JSON.stringify(two.w)}, { at: ${two.t}, ghost: true, from: { x: 195, y: 700 } });` });
+eq(missed.said, 0, 'a word the kart drove past inks nothing: it stays dim in the slot it already had');
+eq(missed.flying, 0, 'and flies nothing');
+eq(missed.flashWords, 0, 'nor writes a ghost of its own beside the line');
+
+// 4. a seek is a redraw off the clock, and the slots the player took come back with it
+await slotBand({ zero: true, then: POP });
+await sleep(SLOT_FLY_MS + 120);
+await park(Math.max(0, target.t0 - 1.2));
+const back = await park(one.t);
+eq(back.ink[1], 1, 'a seek away and back draws the line the way the kart left it: the slot it took is still lit');
+eq(back.flying, 0, 'and re-drawing a line replays no flight, so a stopped clock leaves nothing moving');
+eq(back.n, dim.n, 'with the same words in it either way');
+
+// 5. the phone: two lines at most, and never on the chrome
+ok(back.vw + 'x' + back.vh === '390x844', 'the slot line is being measured on a phone portrait viewport');
+ok(back.lines <= 2, `it draws two lines at most (${back.lines})`);
+ok(!!back.cap && back.cap.y >= 0 && back.cap.y + back.cap.h <= back.vh, 'and the band is whole on the glass');
+ok(!hitB(back.cap, back.score), `it never touches the score plate (band ${back.cap.y}..${back.cap.y + back.cap.h}, plate ${back.score.y}..${back.score.y + back.score.h})`);
+ok(!hitB(back.cap, back.rail), 'nor the toast rail');
+ok(back.plateY > back.cap.y + back.cap.h, `and the plate's rest spot is still clear under it (band bottom ${back.cap.y + back.cap.h}, plate y ${back.plateY})`);
+
+// 6. the trigger keeps the plate and is never doubled by a slot flying in behind it. The count is
+// taken AT the frame the plate reaches the DOM, with a flight deliberately in the air when it does.
+await ev(`(()=>{ window.__atPlate = -1;
+  new MutationObserver((ms)=>{ for (const m of ms) for (const n of m.addedNodes) {
+    if (n.classList && n.classList.contains('rc-plate') && window.__atPlate < 0) window.__atPlate = document.querySelectorAll('.rc-slot-fly').length;
+  } }).observe(document.querySelector('.rc-plates'), { childList: true });
+  window.__race.race.capSlotsReset(); ${POP} window.__race.race.trackClock(${trig.t}, false); })()`);
+await sleep(700);
+eq(await json(`document.querySelectorAll('.rc-plate').length`), 1, 'a sure trigger still flies its plate, big and highlighted');
+eq(await ev(`window.__atPlate`), 0, 'and the frame it reaches the glass has nothing sliding into the line behind it: the plate is that word\'s moment, not a slot\'s');
+
+// 7. THE WIRING: real pops on the real road slot themselves, counted as they land. The clock is
+// seeked onto the first spoken words and given three seconds to shed that seek's own burst of
+// bubbles, and only the six seconds AFTER that are counted: a seek is not a drive.
+await ev(`window.__race.race.trackClock(${Math.max(0, road.words[0].t - 0.7)}, true)`);
+await sleep(3000);
+await ev(`window.__race.race.capSlotsReset()`);
+await sleep(6000);
+const slotLive = await json(`({ s: window.__race.race.capSlots(), t: window.__race.race.track.t })`);
+ok(slotLive.t > road.words[0].t, `the road rolled through the first spoken words (to ${slotLive.t.toFixed(1)}s)`);
+console.log(`  --  six seconds of road: ${slotLive.s.flew} words slid into their slot, ${slotLive.s.stale} landed on a line the clock had already left, ${slotLive.s.none} found no slot at all`);
+ok(slotLive.s.flew > 0, `${slotLive.s.flew} words rose out of a real bubble and slid into a real slot`);
+ok(slotLive.s.flew >= slotLive.s.stale + slotLive.s.none,
+  'and most of what the kart took landed on the line that was up, which is the whole promise of the slot band');
 
 /* ============================================================================
  * 8. the demo road still runs, and nothing shouted
