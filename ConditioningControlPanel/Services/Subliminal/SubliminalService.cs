@@ -714,9 +714,7 @@ namespace ConditioningControlPanel.Services
             var bgTransparent = App.Settings.Current.SubBackgroundTransparent;
 
             // Get all monitors and reuse (or lazily create) the keep-alive window per screen
-            var screens = App.Settings.Current.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            var screens = App.GetGlobalScreens();
             var stealsFocus = App.Settings.Current.SubliminalStealsFocus;
 
             // Compositor: one layer call covers every target screen (solid-mode and classic

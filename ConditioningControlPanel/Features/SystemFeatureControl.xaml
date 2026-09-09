@@ -32,18 +32,13 @@
                                 Background="{StaticResource SectionHueStudioBrush}"/>
                         <StackPanel Margin="16,8,16,8">
 
-                            <!-- Multi-monitor -->
-                            <Grid Height="34" ToolTip="{loc:Str tooltip_show_content_on_all_connected_monitors_2_3_or}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{loc:Str setting_multi_mon}" FontSize="13" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                <CheckBox Grid.Column="1" x:Name="ChkMultiMon"
-                                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
-                                          Checked="ChkMultiMon_Changed" Unchecked="ChkMultiMon_Changed"/>
-                            </Grid>
+                            <!-- Multi-monitor. This WAS a bare on/off checkbox (ChkMultiMon), which
+                                 could only say "every screen" or "the Windows primary" - there was
+                                 no way to name a single non-primary screen anywhere in the app. It
+                                 is now the shared picker, the same control Settings > General
+                                 hosts; both instances write the same two settings and repaint from
+                                 AppSettings.PropertyChanged, so they cannot drift. -->
+                            <feat:MonitorTargetPicker x:Name="ContentMonitorPicker"/>
 
                             <!-- Depends on the row above, so it stays indented. -->
                             <Grid Height="34" Margin="16,0,0,0" ToolTip="{loc:Str tooltip_fill_all_monitors_video}">

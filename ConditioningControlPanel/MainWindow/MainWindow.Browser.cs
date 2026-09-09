@@ -2703,8 +2703,9 @@ namespace ConditioningControlPanel
 
             if (isFullscreen)
             {
-                var screens = App.GetAllScreensCached();
-                var useDualMonitor = App.Settings.Current.DualMonitorEnabled && screens.Length > 1;
+                // Mirror only when the "Show content on" picker actually covers more than one
+                // screen - pinning content to a single monitor must not clone it onto the others.
+                var useDualMonitor = App.GetGlobalScreens().Length > 1;
 
                 if (useDualMonitor)
                 {

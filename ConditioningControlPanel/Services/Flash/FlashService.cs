@@ -2513,7 +2513,8 @@ namespace ConditioningControlPanel.Services
         ///      is supplied (passed by TriggerMultiplication so children stay
         ///      on the parent's screen) and exists in the candidate list,
         ///      return it.
-        ///   2. Random pick from GetMonitors(DualMonitorEnabled).
+        ///   2. Random pick from GetMonitors(), i.e. the screens the global
+        ///      "Show content on" picker targets (App.GetGlobalScreens).
         /// Flashes are baseline content — they do not consult the gaze
         /// calibration clamp. Off-cal-screen flashes are filtered out of
         /// gaze-pop / gaze-linger interaction by GazeFocusService.FindBestTarget;
@@ -2521,7 +2522,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private MonitorInfo PickMonitor(AppSettings settings, MonitorInfo? preferred = null)
         {
-            var candidates = GetMonitors(settings.DualMonitorEnabled);
+            var candidates = GetMonitors();
 
             // Hydra inheritance: keep children on the parent's screen.
             if (preferred != null)
@@ -2537,13 +2538,18 @@ namespace ConditioningControlPanel.Services
             return candidates[_random.Next(candidates.Count)];
         }
 
-        private List<MonitorInfo> GetMonitors(bool dualMonitor)
+        /// <summary>
+        /// The monitors a flash may spawn on, in DIPs. Sourced from <c>App.GetGlobalScreens()</c>
+        /// so the app-wide "Show content on" picker is honoured - reading DualMonitorEnabled
+        /// directly (what this did before) could only ever mean "all" or "the Windows primary".
+        /// </summary>
+        private List<MonitorInfo> GetMonitors()
         {
             var monitors = new List<MonitorInfo>();
 
             try
             {
-                foreach (var screen in App.GetAllScreensCached())
+                foreach (var screen in App.GetGlobalScreens())
                 {
                     // Get DPI scale for THIS specific screen (not just primary)
                     var dpiScale = GetDpiForScreen(screen);
@@ -2576,13 +2582,6 @@ namespace ConditioningControlPanel.Services
                     Height = (int)SystemParameters.PrimaryScreenHeight,
                     IsPrimary = true
                 });
-            }
-
-            // If dual monitor is disabled, only use primary
-            if (!dualMonitor)
-            {
-                var primary = monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
-                return new List<MonitorInfo> { primary };
             }
 
             return monitors;

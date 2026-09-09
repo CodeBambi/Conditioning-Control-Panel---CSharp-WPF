@@ -429,6 +429,15 @@ namespace ConditioningControlPanel.Services
                     new[] { "ChkAutoRun" }, "set2_section_general", "auto start engine run");
             Setting("startup_video", "rf_palette_startup_video", "📼", "general",
                     new[] { "TxtStartupVideo" }, "set2_section_general", "startup video pick file");
+            // The app-wide monitor picker. Heavily aliased on purpose: "monitor"/"screen" used to
+            // surface only the WEBCAM's calibration monitor, which moves nothing (ask-support
+            // 2026-09-08 - the reporter found that row, changed it, and content still covered
+            // every screen).
+            Setting("content_monitor", "setting_content_monitor", "🖥️", "general",
+                    new[] { "ContentMonitorPicker", "CmbContentMonitor", "DisplayGeneralCard" },
+                    "set2_section_general",
+                    "monitor screen display multi monitor dual monitor second screen one screen "
+                    + "single monitor primary only all monitors show content on");
             Setting("enable_deeper", "setting_deeper_enable", "🌊", "general",
                     new[] { "ChkEnableDeeper" }, "set2_section_general", "deeper enable tab");
 
