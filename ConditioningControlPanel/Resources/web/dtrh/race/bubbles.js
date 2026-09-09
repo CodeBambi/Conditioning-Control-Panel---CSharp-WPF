@@ -60,9 +60,10 @@ const sizeOf = (id) => (id === 'video' || id === 'gifrain') ? 1.5 : id === 'gold
 /** A trigger row's centre bubble, and an accent word, are drawn this much bigger than the rest. */
 const BIG_SCALE = 1.15;
 /** A bubble wearing a word is drawn this much bigger than a plain one of its kind: the owner
- *  could not read the words at speed on the phone (0909), so the glass the word sits on grew
- *  by a quarter. The pop box is unchanged; only the sprite is. */
-const WORD_SCALE = 1.25;
+ *  could not read the words at speed on the phone (0909), so the glass the word sits on grew:
+ *  a quarter first, then to 1.6 once the word was kept inside the glass (the sprite's glass is
+ *  only 72 percent of its canvas, see wordFace.js GLASS_FRAC). The pop box is unchanged. */
+const WORD_SCALE = 1.6;
 
 /** Soft radial dot: the fallback face while a sprite loads, and the shard face. */
 function makeDotTex() {
