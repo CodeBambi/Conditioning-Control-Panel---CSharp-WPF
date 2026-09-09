@@ -53,7 +53,10 @@
  * either they show once, gated on localStorage `race.cards`), and `?card=N`
  * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
- * the host init; `?pickup=<id>` stands that pickup up on the next spot ahead
+ * the host init, and with none of the three the block is race/pixel.js's own
+ * pixelDefault(): off on a coarse pointer, the smallest step on a mouse
+ * (`?coarse=1` / `?coarse=0` force that answer for a check);
+ * `?pickup=<id>` stands that pickup up on the next spot ahead
  * once the run is up, a screenshot aid for it (race/pickups.js);
  * `?panel=howto` opens the menu on the key card (race/menu.js).
  *

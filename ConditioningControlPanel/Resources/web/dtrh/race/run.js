@@ -81,7 +81,7 @@ import { createSubliminal, ECHO_SEC } from './subliminal.js';
 import { createMediaLane } from './mediaLane.js';
 import { createInput } from './input.js';
 import { createPickups, TUNE as PICK } from './pickups.js';
-import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
+import { createPixelizer, pixelDefault } from './pixel.js';
 import { createSpeedFx } from './speed.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createRaceAudio } from './audio.js';
@@ -122,7 +122,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, alpha: false, powerPreference: 'high-performance' });
   // the big-pixel look: the world at low resolution, bubbles + wall media crisp on top (race/pixel.js);
   // host settings.pixel / ?pixel=N override, 0 = off; draw-call stats go to the host log every ~5 s
-  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? PIXEL_DEFAULT : settings.pixel, log: (m) => { if (bridge.log) bridge.log(m); } });
+  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? pixelDefault() : settings.pixel, log: (m) => { if (bridge.log) bridge.log(m); } });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12261f);

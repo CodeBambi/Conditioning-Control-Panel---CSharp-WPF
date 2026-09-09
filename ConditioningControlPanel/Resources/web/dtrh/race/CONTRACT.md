@@ -695,7 +695,9 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
   `--rm-scrim-b` to the band's complement and `is-band` on `.rm-root`: menu.css draws those two scrims
   instead of its one sheet, so no dark plate and no verb ever lies over her.
 - Options persist under the single localStorage key `race.options` (`pixel, music, sfx, motion, seed, seedValue`), not in
-  `engine/settings.js`. Precedence for the block: `?pixel` > `race.options.pixel` > host `settings.pixel` > `PIXEL_DEFAULT`.
+  `engine/settings.js`. Precedence for the block: `?pixel` > `race.options.pixel` > host `settings.pixel` > `pixelDefault()`,
+  which answers 0 (off) on a coarse pointer and `PIXEL_MIN` on a fine one. A stored value equal to the old fixed default
+  (`PIXEL_LEGACY_DEFAULT`, 3) is read by `loadOptions` as "never chosen" and takes that per-device default instead.
   The seed rule (daily / random / custom) sets `settings.seedLock`, which `again` honours; a change in the menu calls `reseed`.
 - Music / sfx sliders store their values and call `audio.setLevels({ music, sfx })` when audio.js grows one; until then
   the rows are dimmed with a note. Reduced motion from the menu drives the stage and the intro at once, the run on the next launch.
