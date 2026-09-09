@@ -169,7 +169,28 @@ function fail(err) {
   const msg = String((err && (err.stack || err.message)) || err || 'unknown').slice(0, 600);
   console.error('[race] boot-error', msg);
   note('something broke. the host has the log.');
+  showDetail(msg);
   host.send({ type: 'boot-error', msg, message: msg });
+}
+/**
+ * The first line of the error, on the splash under the note. A phone has no console and no host
+ * log to open (cclabs-web's race host only console.errors the frame), so without this a boot that
+ * dies on an iPhone is a sad face and nothing to report. Selectable, so it can be copied.
+ */
+function showDetail(msg) {
+  if (!waitEl || !waitEl.parentNode) return;
+  let el = document.getElementById('race-err');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'race-err';
+    const s = el.style;
+    s.marginTop = '12px'; s.padding = '0 24px'; s.fontSize = '11px'; s.lineHeight = '1.4';
+    s.fontFamily = 'ui-monospace, Menlo, Consolas, monospace'; s.color = 'rgba(255,255,255,0.45)';
+    s.whiteSpace = 'pre-wrap'; s.wordBreak = 'break-word'; s.userSelect = 'text'; s.webkitUserSelect = 'text';
+    s.maxWidth = '92vw'; s.textAlign = 'center';
+    waitEl.parentNode.insertBefore(el, waitEl.nextSibling);
+  }
+  el.textContent = String(msg || '').split('\n').slice(0, 4).join('\n').slice(0, 320);
 }
 window.addEventListener('error', (e) => {
   const src = e.filename ? ` @ ${String(e.filename).split('/').pop()}:${e.lineno}` : '';
