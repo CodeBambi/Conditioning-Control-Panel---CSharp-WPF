@@ -255,6 +255,9 @@ function main() {
   const dealAtOnce = params.has('hotseat') || Number(params.get('auto')) > 0 || params.get('door') === '0';
   function startGame({ mode = 'hotseat', match = null } = {}) {
     window.PBP.match = match;                         // the online lane reads this
+    // an online seat is built and switched in by net/online.js; the hotseat's
+    // reset-and-start is not what it wants
+    if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
     if (game.reset) game.reset();
     bus.emit('local', { sides: ['w', 'b'], mode, match });
     game.start();

@@ -403,7 +403,9 @@ export function createDoor(opts = {}) {
       case 'profile': show('profile'); break;
       case 'challenge': if (lobby) look(lobby.challenge(id)); break;
       case 'cancel': try { if (lobby) lobby.cancel(); } catch { /* fine */ } break;
-      case 'accept': if (ask) { const m = ask.accept(); const a = ask; ask = null; if (a.timer) clearTimeout(a.timer); if (m) matched(m); } break;
+      // accepting is a round trip on a server; the mock answers at once and
+      // Promise.resolve makes both read the same
+      case 'accept': if (ask) { const a = ask; ask = null; if (a.timer) clearTimeout(a.timer); Promise.resolve(a.accept()).then((m) => { if (m) matched(m); }); } break;
       case 'decline': if (ask) { try { ask.decline(); } catch { /* fine */ } if (ask.timer) clearTimeout(ask.timer); ask = null; render(); } break;
       case 'go': go(); break;
       case 'watch': openReplay(id); break;
