@@ -250,7 +250,9 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
   }
 
   /* ---- the presses ------------------------------------------------------- */
-  /** A tap on a level. One track, one run. On a desktop it is a door, not a download. */
+  /** A tap on a level. One track, one run. On a desktop it is a door, not a download.
+   *  The tap is the whole visit: the panel closes behind it and the main list takes over,
+   *  where the menu's plate shows the load and the first verb becomes `start · <name>`. */
   function tap(lv) {
     remember(lv.id);
     pickedId = lv.id; prog = null;   // the row itself is the answer from here on
@@ -259,11 +261,13 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
       call('toast', OVER_THERE_LINE);
       say(lv.title + ': handed to the desktop');
       paint();
+      if (onClose) onClose();
       return;
     }
     say('level ' + lv.n + ': ' + lv.title);
     call('play', [entry(lv)]);
     paint();
+    if (onClose) onClose();
   }
 
   /** The whole set, in order. The rollover between them is lane W1's, unchanged. */
@@ -274,6 +278,7 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
     say(set.title + ': all ' + levels.length);
     call('play', levels.map(entry));
     paint();
+    if (onClose) onClose();
   }
 
   function togglePaste() {
@@ -393,7 +398,8 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
     setStage(id, word) { stageId = String(id || ''); stageWord = String(word || ''); paint(); },
     /**
      * The state the menu's track plate would have shown. TRUE when this panel painted it on a
-     * picked row instead, which is raceBoot's whole rule for hiding the plate.
+     * picked row too, which is the menu's rule for keeping the plate down WHILE THIS PANEL IS OPEN
+     * (on the main list the plate shows regardless: a tap lands there).
      *   picking  a file dialog: not a level at all, so the pick is dropped and the plate takes it
      *   null     nothing loaded any more: the row goes back to being a row
      * A state with no picked row under it (a pasted link, a file) is never claimed.
