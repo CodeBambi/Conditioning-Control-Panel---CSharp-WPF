@@ -92,7 +92,7 @@ gl_Position = projectionMatrix * mvPosition;`;
  * (0908) came out of Blender inside-out, five bodies of six: their winding
  * and normals agreed with each other and both faced inward, so the skin showed
  * its far side and a back-face hull would draw its near side over the man.
- * tools/blender/pbp rebuilt them outward on 0909; this stays as the safety
+ * tools/blender/pbp/fix_normals.py turned them outward on 0909; this stays as the safety
  * net for any glb dropped in by hand, mirroring the hull so the line reads
  * either way. Measured once
  * per geometry: the sign of normal . (position - axis) over every vertex, which
