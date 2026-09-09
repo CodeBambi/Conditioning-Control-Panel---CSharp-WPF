@@ -66,6 +66,11 @@ namespace ConditioningControlPanel.Views.Deeper
         private Window? _videoFullscreenWindow;
         private bool _isVideoFullscreen;
         private bool _fsTransitionInFlight;
+        // An exit request that landed while a fullscreen transition was in flight.
+        // Enter/Exit pump the dispatcher (Invoke at Render priority), so a teardown
+        // can arrive mid-swap; without this it was dropped and the borderless host
+        // stayed up forever.
+        private bool _fsExitPending;
         private bool _isPlayerDualMonitorActive;
 
         public EnhancementPlayerWindow(EnhancementAudioPlayer player, EnhancementHostService host)
@@ -1364,6 +1369,23 @@ namespace ConditioningControlPanel.Views.Deeper
                         }
                     });
 
+                    // ESC from inside the page. The borderless host window's
+                    // WPF KeyDown handler almost never sees a key while the
+                    // WebView2 owns focus (the Chromium HWND eats it), so ESC
+                    // was effectively dead once the page had focus. Post the
+                    // exit message from the page instead - C# force-closes the
+                    // host regardless of page fullscreen state.
+                    function escHandler(e) {
+                        if (!e) return;
+                        var isEsc = e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27;
+                        if (!isEsc) return;
+                        if (!inAnyFs()) return;
+                        exitLoop(5);
+                        postExit();
+                    }
+                    document.addEventListener('keydown', escHandler, true);
+                    window.addEventListener('keydown', escHandler, true);
+
                     // Ctrl+MouseWheel = page zoom. IsZoomControlEnabled is
                     // false in WebView2 settings so the built-in shortcut is
                     // off and we own the gesture. preventDefault stops the
@@ -1405,7 +1427,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     // the flag, but Close() left the window alive.
                     if (_isVideoFullscreen || _videoFullscreenWindow != null)
                     {
-                        Dispatcher.BeginInvoke(() => { try { ExitVideoFullscreen(); } catch (Exception ex) { Diag.Swallowed(ex); } });
+                        Dispatcher.BeginInvoke(() => ForceExitVideoFullscreen("page requested exit"));
                     }
                 }
                 else if (msg == "ccp_zoom_in")
@@ -1467,6 +1489,19 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtVideoStatus.Visibility = Visibility.Collapsed;
                 BtnPlayPause.Content = "⏸";
                 TxtStatus.Text = Loc.Get("deeper_player_status_playing");
+
+                // Re-arm the forced-fullscreen flag on the NEW document. It lives
+                // on `window`, so every navigation wipes it — and a video that
+                // ends and rolls into the next page navigates. Without this the
+                // page-side escape hatches (dblclick / ESC / fullscreenchange)
+                // all decide we are not in fullscreen, ESC no-ops, and the
+                // borderless host is left up with nothing in it and no way out
+                // (Discord report BUG-J9PPPJT274).
+                if (_isVideoFullscreen || _videoFullscreenWindow != null)
+                {
+                    try { FireScript("window._ccpForcedFs = true;"); }
+                    catch (Exception ex) { Diag.Swallowed(ex); }
+                }
 
                 ScrollVideoIntoView();
             }
@@ -1650,12 +1685,17 @@ namespace ConditioningControlPanel.Views.Deeper
                         try { App.ScreenMirror?.DisableMirror(); } catch (Exception ex) { Diag.Swallowed(ex); }
                         _isPlayerDualMonitorActive = false;
                     }
-                    ExitVideoFullscreen();
+                    ForceExitVideoFullscreen("page left html5 fullscreen");
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "EnhancementPlayer: fullscreen toggle failed");
+                // A throw on the way INTO fullscreen unwinds inside
+                // EnterVideoFullscreen; a throw on the way out must not leave the
+                // borderless host on screen with no way to reach it.
+                try { ForceExitVideoFullscreen("fullscreen toggle error"); }
+                catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
             }
         }
 
@@ -1758,10 +1798,13 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
                 };
 
-                System.ComponentModel.CancelEventHandler closingHandler = (_, _) =>
+                // Clear THIS window's content, not whatever _videoFullscreenWindow
+                // happens to point at — a fast exit/re-enter would otherwise blank
+                // the new host while the old one closes.
+                System.ComponentModel.CancelEventHandler closingHandler = (s, _) =>
                 {
-                    if (_videoFullscreenWindow != null)
-                        _videoFullscreenWindow.Content = null;
+                    if (s is Window w) w.Content = null;
+                    else if (built != null) built.Content = null;
                 };
 
                 // TOPMOST IS RENTED, NOT OWNED (#905). A fullscreen video has to sit over the
@@ -1896,6 +1939,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _fsTransitionInFlight = false;
+                DrainPendingFullscreenExit();
             }
         }
 
@@ -2001,32 +2045,156 @@ namespace ConditioningControlPanel.Views.Deeper
                     catch (Exception ex) { Diag.Swallowed(ex); }
                 }
                 _fsTransitionInFlight = false;
+                DrainPendingFullscreenExit();
             }
+        }
+
+        /// <summary>
+        /// THE teardown for the borderless fullscreen host. Every end path funnels
+        /// here — ESC/F11, the page's dblclick + ccp_exit_fullscreen message, an
+        /// error mid-playback, and the Player window closing. Idempotent, always
+        /// runs on the UI thread, never throws, and always ends with the host
+        /// window closed and VideoBrowser back in the Player's pane.
+        ///
+        /// Before this existed, exit depended on the PAGE still being in HTML5
+        /// fullscreen. It usually isn't: the reparent drops it, and a video that
+        /// ends and navigates wipes window._ccpForcedFs too. exitFullscreen() then
+        /// no-ops, ContainsFullScreenElementChanged never fires, and the borderless
+        /// host is stranded — empty, un-draggable (WindowStyle.None), un-resizable
+        /// (ResizeMode.NoResize), swallowing input as a topmost window.
+        /// Discord report BUG-J9PPPJT274.
+        /// </summary>
+        private void ForceExitVideoFullscreen(string reason)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                try
+                {
+                    if (Application.Current?.Dispatcher?.HasShutdownStarted != true)
+                        Dispatcher.BeginInvoke(() => ForceExitVideoFullscreen(reason));
+                }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+                return;
+            }
+
+            if (!_isVideoFullscreen && _videoFullscreenWindow == null) return;
+
+            // Mid-swap: Enter/Exit pump the dispatcher, so we can land on top of
+            // one. Queue instead of racing it — the transition's finally drains
+            // this via DrainPendingFullscreenExit.
+            if (_fsTransitionInFlight)
+            {
+                _fsExitPending = true;
+                App.Logger?.Information(
+                    "EnhancementPlayer: fullscreen teardown deferred ({Reason}) — transition in flight", reason);
+                return;
+            }
+
+            App.Logger?.Information("EnhancementPlayer: fullscreen teardown ({Reason})", reason);
+
+            // Ordered path first: unsubscribes, clears the page flag, closes.
+            try { ExitVideoFullscreen(); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex,
+                    "EnhancementPlayer: ordered fullscreen exit failed ({Reason}); forcing the host closed", reason);
+            }
+
+            // Guaranteed path: whatever the ordered attempt did or didn't manage,
+            // the host window does not survive this method.
+            var host = _videoFullscreenWindow;
+            if (host == null && !_isVideoFullscreen) return;
+
+            _fsTransitionInFlight = false;
+            _isVideoFullscreen = false;
+            _videoFullscreenWindow = null;
+
+            if (host != null)
+            {
+                try { App.Overlay?.SetFullscreenBrowserActive(host, false); }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+                try { host.Content = null; }
+                catch (Exception ex) { Diag.Swallowed(ex); }
+                try { host.Close(); }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex,
+                        "EnhancementPlayer: forced close of the fullscreen host failed ({Reason}); hiding it instead", reason);
+                    // Last resort: a window we cannot close must at least stop
+                    // covering the app and eating input.
+                    try { host.Topmost = false; } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                    try { host.Hide(); } catch (Exception exIgnored) { Diag.Swallowed(exIgnored); }
+                }
+            }
+
+            // The host's Closed handler normally re-parents the WebView; do it
+            // here too in case that handler was already detached or threw.
+            try { TryDetachFromUiParent(VideoBrowser); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { SafeRestoreVideoBrowserToPane(); } catch (Exception ex) { Diag.Swallowed(ex); }
+            try { App.Overlay?.RequestForcedZOrderReassert(); } catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        /// <summary>
+        /// Session / panic teardown hook. The Deeper player's forced fullscreen is
+        /// the same shape as the built-in browser's (#952) — topmost, chrome-less,
+        /// taskbar-less — so a panic that leaves it standing hands the user a window
+        /// they cannot move, resize or close. Safe to call unconditionally: it
+        /// early-outs on every player that isn't in fullscreen.
+        /// </summary>
+        internal static void ForceExitFullscreenAll()
+        {
+            try
+            {
+                if (Application.Current == null) return;
+                if (Application.Current.Dispatcher?.HasShutdownStarted == true) return;
+                foreach (var w in Application.Current.Windows
+                                     .OfType<EnhancementPlayerWindow>().ToList())
+                {
+                    try { w.ForceExitVideoFullscreen("session/panic teardown"); }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "EnhancementPlayer: teardown fullscreen exit failed");
+                    }
+                }
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+        }
+
+        /// <summary>
+        /// Runs a teardown that arrived while a fullscreen transition held the
+        /// lock. Called from the finally of both Enter and Exit.
+        /// </summary>
+        private void DrainPendingFullscreenExit()
+        {
+            if (!_fsExitPending) return;
+            _fsExitPending = false;
+            if (!_isVideoFullscreen && _videoFullscreenWindow == null) return;
+            try
+            {
+                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                Dispatcher.BeginInvoke(() => ForceExitVideoFullscreen("deferred exit"));
+            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
         private void ExitFullscreenViaScript()
         {
-            // Driving exitFullscreen from the page side fires
-            // ContainsFullScreenElementChanged again, which routes through
-            // OnVideoFullscreenChanged → ExitVideoFullscreen and keeps the page
-            // and window in sync (vs closing the window first and leaving the
-            // page in fullscreen state).
+            // Ask the page to drop HTML5 fullscreen first so page and window stay
+            // in sync — but never DEPEND on it. When the page isn't in HTML5
+            // fullscreen (the common case after our reparent, and always after the
+            // video ends and the page navigates) this script is a no-op and no
+            // event comes back, which is exactly how the host window got stranded.
             try
             {
                 if (VideoBrowser?.CoreWebView2 != null)
                 {
                     FireScript(
-                        "(function(){if(document.fullscreenElement)document.exitFullscreen();})();");
-                }
-                else
-                {
-                    ExitVideoFullscreen();
+                        "window._ccpForcedFs = false; (function(){if(document.fullscreenElement)document.exitFullscreen();})();");
                 }
             }
-            catch
-            {
-                ExitVideoFullscreen();
-            }
+            catch (Exception ex) { Diag.Swallowed(ex); }
+
+            ForceExitVideoFullscreen("esc/f11");
         }
 
         private void OnHostActionLogged(string line)
@@ -2094,24 +2262,17 @@ namespace ConditioningControlPanel.Views.Deeper
             // Check the window reference too — a partial prior exit can leave
             // the borderless host alive with the flag already cleared, and
             // skipping cleanup here would orphan it past the player's death.
-            try { if (_isVideoFullscreen || _videoFullscreenWindow != null) ExitVideoFullscreen(); } catch (Exception ex) { Diag.Swallowed(ex); }
-
-            // Safety net: ExitVideoFullscreen() early-returns while a fullscreen transition
-            // is in flight (_fsTransitionInFlight) — and EnterVideoFullscreen pumps the
-            // dispatcher at render priority mid-transition, so a close that lands in that
-            // window leaves the borderless host alive as a see-through, un-interactable
-            // ghost AND then disposes VideoBrowser out from under it (#381). Force the host
-            // window closed here regardless of transition state; its Closed handler reparents
-            // VideoBrowser back to the pane before we dispose it below.
-            if (_videoFullscreenWindow != null)
-            {
-                _fsTransitionInFlight = false;
-                try { _videoFullscreenWindow.Close(); }
-                catch (Exception ex) { App.Logger?.Debug("EnhancementPlayer: forced fullscreen window close failed: {Error}", ex.Message); }
-                _videoFullscreenWindow = null;
-                _isVideoFullscreen = false;
-                try { SafeRestoreVideoBrowserToPane(); } catch (Exception ex) { Diag.Swallowed(ex); }
-            }
+            //
+            // ForceExitVideoFullscreen defers when a transition holds the lock,
+            // and there is no "later" once the window is closing — EnterVideoFullscreen
+            // pumps the dispatcher at render priority mid-transition, so a close can
+            // land right inside one and leave the borderless host alive as a
+            // see-through, un-interactable ghost with VideoBrowser disposed out from
+            // under it (#381). Drop the lock first so the teardown runs here and now.
+            _fsTransitionInFlight = false;
+            _fsExitPending = false;
+            try { ForceExitVideoFullscreen("player window closing"); }
+            catch (Exception ex) { Diag.Swallowed(ex); }
 
             try
             {

@@ -532,6 +532,11 @@ namespace ConditioningControlPanel
             // topmost, chrome-less, taskbar-less window, so a session that ends behind one leaves
             // the completion dialog modal and invisible - the reporter had to reboot the machine.
             ExitBrowserFullscreenForTeardown();
+            // Same shape, same list: the Deeper player pops its WebView out into a
+            // borderless topmost host for fullscreen video. Left standing it is a
+            // window with no title bar to drag, no resize grip, and nothing in it
+            // once the video is over (Discord report BUG-J9PPPJT274).
+            Views.Deeper.EnhancementPlayerWindow.ForceExitFullscreenAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();
