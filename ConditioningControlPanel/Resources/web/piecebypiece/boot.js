@@ -224,12 +224,46 @@ function main() {
   dom.loader.classList.add('gone');
   setTimeout(() => { dom.loader.hidden = true; }, 500);
   pieces.tryLoadGlb();          // optional art; missing files stay silent
-  // Give the optional effects layer a chance to subscribe before the first
-  // turn is dealt; it is optional, so a missing module must not hold the game.
-  attachEffects(bus, board, params).then(() => {
-    bus.emit('local', { sides: ['w', 'b'] });
+  // --- O: the front door ---
+  // The game is dealt by startGame, never by the door itself: the door only
+  // decides WHEN. ?hotseat=1, ?auto=N and ?door=0 deal at once, so every
+  // harness that photographs a live board keeps doing so; the host opens the
+  // page bare and gets the menu. The lobby is the server module when one has
+  // landed (net/lobbyServer.js, another lane's), else the mock, and ?lobby=mock
+  // asks for the mock on purpose.
+  const dealAtOnce = params.has('hotseat') || Number(params.get('auto')) > 0 || params.get('door') === '0';
+  function startGame({ mode = 'hotseat', match = null } = {}) {
+    window.PBP.match = match;                         // the online lane reads this
+    if (game.reset) game.reset();
+    bus.emit('local', { sides: ['w', 'b'], mode, match });
     game.start();
+  }
+  const doorReady = attachEffects(bus, board, params).then(async () => {
+    if (dealAtOnce) { startGame({ mode: 'hotseat' }); return null; }
+    let lobby = null;
+    try {
+      const wantMock = params.get('lobby') === 'mock';
+      if (!wantMock) {
+        try { const s = await import('./net/lobbyServer.js'); lobby = s.createServerLobby({ bus, params }); } catch { lobby = null; }
+      }
+      if (!lobby) { const m = await import('./net/lobby.js'); lobby = m.createMockLobby({ seed: Number(params.get('seed')) || undefined }); }
+    } catch (e) { console.warn('[pbp] no lobby; the door opens without one', e); }
+    const m = await import('./door/door.js');
+    const door = m.createDoor({ bus, game, board, lobby, root: document.getElementById('door'), params, startGame });
+    window.PBP.door = door;
+    window.PBP.lobby = lobby;
+    // the men stand on their squares behind the menu, clocks stopped
+    pieces.setPosition(game.rules.position());
+    board.setSide('w', true);
+    door.show(params.get('screen') || 'menu');
+    return door;
+  }).catch((e) => {
+    console.warn('[pbp] the door did not open; dealing a game', e);
+    startGame({ mode: 'hotseat' });
+    return null;
   });
+  window.PBP.doorReady = doorReady;
+  // --- end O ---
 }
 
 /**
