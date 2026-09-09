@@ -20,57 +20,42 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.9.2";
+        public const string AppVersion = "6.9.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.9.2 - The Spiral pt. 2
+        public const string CurrentPatchNotes = @"v6.9.3 - The Spiral pt. 3
 
-a polish wave for the things you told us about after the Spiral, plus a few Arcademy asks from the suggestions forum that were too good to leave sitting. nothing here touches your progress. it stays yours :3
+a fix wave for the things you reported after pt. 2, plus the spiral finally remembering what you did each day. nothing here touches your progress. it stays yours :3
 
-THE SPIRAL, NOW ON THE WEB
-- your descent is on cclabs.app. open your profile and the spiral is a 3D rail, one turn per day, your features and achievements hanging off it where they happened. it is on for everyone with at least one day in; add ?rail=0 to the address if you prefer the 2D map.
-- the phone home-screen app signs in through Safari in one smooth pass.
+THE SPIRAL
+- the calendar card on the web spiral names the features you used on each day instead of ""their names were not kept"". the app keeps a per-day log and sends it up with your stats.
+- the lil spiral in the nav rail is on by default. you can switch it off in Settings.
 
 VIDEOS
-- video fix: mandatory videos keep their sound when your master volume sits low.
-- video fix: clips hand over to each other without a black gap, and every clip draws its first frame.
-- video fix: popped video bubbles launch their video every time.
-- ""no videos found"" now tells you why (empty folder, filters too tight, pack not downloaded) and only says it once.
-- a remote ""play hypnotube"" while the Arcademy is open shows up on a surface you can see.
+- video fix: closing a mandatory video with ESC left a libvlc ghost behind in the sound mixer, eating ram until clips froze on their first frame. every teardown now lets go of the video for real.
+- the Deeper player no longer strands an empty borderless window over the library after a video ends. ESC, the panic key and the end of the clip all close it.
 
-FLASHES AND AUDIO
-- flash voicelines rotate through the whole pool and respect your phrase library toggles.
-- optimization: 100% fade runs at full frame rate.
-- the flash ""Size"" slider is now labelled for what it does (centre keep-out). size and opacity live on the Visuals card.
+MONITORS
+- Settings, General has a ""Show content on"" picker: all monitors, primary only, or one specific screen. the System menu got the same picker so the two can not disagree. flashes, videos, overlays, subliminals and bouncing text all follow it, and changing it mid-session moves them right away.
 
-CAMERA, GAZE AND COMPANION
-- solved a bug where the app might freeze for a moment when stopping the camera.
-- the Focus Gaze switch reflects your saved setting.
-- companion roster cards show each companion's XP mechanic (hover the card).
-- the AI companion's ""play audio"" effect reports honestly whether a clip played.
-- daily and weekly quests only deal camera or mic tasks to machines that have one. a re-roll never hands you the same dead quest twice.
-- switching mods repaints the Studio rack in the new mod's colours.
-- Brain Drain is back in the session creator, with a random onset option.
+COMPANION
+- offline mode no longer silences the companion for good, and the message you got when it happened stops blaming your connection.
+- EMI's greeting no longer falls through to a stock line.
+- Infection Control gets its Goon Fuel name back and its tube fit stays put.
 
-THE ARCADEMY (from the suggestions forum)
-- the Tardy Slip: streak protection sold at the Prize Counter. hold up to two, they burn themselves on a missed night, and the Rake will upsell you one when you are holding none.
-- share your report card as an image. anonymous by default, name and ID are an opt-in toggle.
-- the Time Capsule: first exhibit in the trophy case, sealed until 30 nights of attendance.
-- the Bugle's comics are drawn. all six.
-- EMI at her desk wears whatever outfit the Locker armed.
-- the Front Gate: a way back to CC Labs from the web campus.
-- the classroom door sign fits the frame on phones.
+SESSIONS, TRIGGERS AND CARDS
+- takeover effects end when the engine ends instead of outliving it.
+- deactivating a custom awareness preset keeps its triggers.
+- a lock card phrase with an ellipsis or curly quotes can be typed.
+- solved a bug where Possession could hitch the app and EMI shrank into a single pixel.
 
-UNDER THE HOOD
-- logs were rebuilt. one file per run with a header and footer, a tenth of the noise, personal content redacted as it is written, and a flight recorder that keeps the debug trail in memory and only writes it when something needs a look. the bug button sends the session file for the run you are reporting.
-- age moderation reads spelled-out, mixed leet and zero-padded numbers.
-- optimization: the Deeper editor's mini timeline scrubs smoothly (thanks wunadacatt).
-- a handful of campus and rabbit hole lines got reworded.
+THE ARCADEMY
+- the sort room stays smooth with a gif heavy library. only the cards on screen animate.
 
-full nerd changelog in pull requests 477, 480, 639 through 648, 782 through 799, 824 through 841 and 871.";
+full nerd changelog in pull requests 817, 928, 948 through 952, 978, 1013 through 1015 and 1017.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
