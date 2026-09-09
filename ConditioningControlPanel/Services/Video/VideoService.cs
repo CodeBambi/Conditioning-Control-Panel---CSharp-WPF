@@ -904,6 +904,92 @@ namespace ConditioningControlPanel.Services
             RecordNativePoisoning($"{nativeObj.GetType().Name} quarantined: {reason}");
         }
 
+        // ---- Player teardown funnel (#1196, follow-up to #1121) ----
+        // The ONE place a mandatory-video MediaPlayer is taken down. Every exit path funnels here -
+        // natural end, ESC, panic key, attention-check fail, window close, engine/session stop, app
+        // exit, and a window whose creation threw - and nothing calls MediaPlayer.Dispose() directly
+        // any more.
+        //
+        // Why it has to exist: MediaPlayer.Media is NOT a stored reference. Every READ calls
+        // libvlc_media_player_get_media(), which takes a ref on the native media and hands back a
+        // brand new managed wrapper. A wrapper that is never disposed keeps that native ref - and
+        // with it the clip's input, demuxer, decoder chain and audio output - alive until the GC
+        // happens to run its finalizer, and the wrapper is a few dozen managed bytes pinning
+        // megabytes of native ones, so nothing about the managed heap ever makes that urgent. That
+        // is the shape of #1196: a "libvlc" entry that stays in the Windows volume mixer after the
+        // video is closed, RAM that only climbs across repeated video tests, and eventually clips
+        // that show their first frame and nothing more. The read site is fixed at source (the vmem
+        // aspect probe in CreateLibVLCVideoWindow) and this funnel drops the player's own media
+        // reference explicitly at teardown rather than leaving it to Dispose.
+        //
+        // CONTRACT: never call this on the UI thread and never from a LibVLC callback thread, and
+        // only once the player's Stop() has actually completed - a player whose Stop() is still
+        // inside native code is quarantined instead (QuarantineNative), because disposing a wedged
+        // player is what poisons the shared instance (#559). Idempotent: a player is released
+        // exactly once. The claim table holds WEAK keys, so it can never root a player itself.
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+            LibVLCSharp.Shared.MediaPlayer,
+            System.Runtime.CompilerServices.StrongBox<int>> _playerReleaseClaims = new();
+
+        private static bool ClaimPlayerRelease(LibVLCSharp.Shared.MediaPlayer player)
+        {
+            var claim = _playerReleaseClaims.GetValue(
+                player, static _ => new System.Runtime.CompilerServices.StrongBox<int>(0));
+            return Interlocked.Exchange(ref claim.Value, 1) == 0;
+        }
+
+        /// <summary>
+        /// Stop-completed teardown for one LibVLC <see cref="LibVLCSharp.Shared.MediaPlayer"/>:
+        /// release the media it still holds, then dispose the player. Idempotent, never throws.
+        /// See the contract note above - OFF the dispatcher, OFF any LibVLC callback thread, and
+        /// only for a player whose Stop() has returned.
+        /// </summary>
+        /// <param name="reason">Which exit path this is, for the log line and the trace.</param>
+        internal static void ReleasePlayer(LibVLCSharp.Shared.MediaPlayer? player, string reason)
+        {
+            if (player == null) return;
+            if (!ClaimPlayerRelease(player))
+            {
+                // Two teardown paths reaching the same player is a bug elsewhere, not a crash here.
+                VideoDiag.Log("CLOSE", $"player release skipped ({reason}) - already released");
+                return;
+            }
+
+            bool hadMedia = false;
+            try
+            {
+                // `using` is the whole point: the getter itself takes a ref, so reading this
+                // property and dropping the result on the floor leaks one media reference per read.
+                using var media = player.Media;
+                hadMedia = media != null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: releasing the player's media failed ({Reason}) - {Error}",
+                    reason, ex.Message);
+            }
+
+            try
+            {
+                player.Dispose();
+                // Information, not Debug: the next "libvlc is still in my sound mixer" report should
+                // be answerable from the log alone - either these lines are there (the players were
+                // released and something else holds the audio session) or they are not (the teardown
+                // never reached them). One line per player, and a mandatory video has at most one
+                // per monitor.
+                App.Logger?.Information(
+                    "VideoService: LibVLC player torn down ({Reason}) - media {MediaState}, player disposed",
+                    reason, hadMedia ? "released" : "already detached");
+                VideoDiag.Log("CLOSE", $"player torn down ({reason}) - hadMedia={hadMedia}");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("VideoService: disposing a LibVLC player failed ({Reason}) - {Error}",
+                    reason, ex.Message);
+                VideoDiag.Log("CLOSE", $"player Dispose() threw ({reason}) - {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// Retire the shared LibVLC instance: quarantine it (never dispose - players created from it
         /// may still be wedged inside native calls) and clear the init flags so the next video's
@@ -1180,8 +1266,7 @@ namespace ConditioningControlPanel.Services
                         return;
                     }
 
-                    player.Dispose();
-                    VideoDiag.Log("LEASE", $"{ownerTag}: managed player disposed");
+                    ReleasePlayer(player, $"leased player released ({ownerTag})");
                 }
                 catch (Exception ex)
                 {
@@ -1662,7 +1747,7 @@ namespace ConditioningControlPanel.Services
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
             try
             {
-                CloseAll(synchronous: false);
+                CloseAll(synchronous: false, reason: "engine stop");
             }
             catch (FileNotFoundException)
             {
@@ -2479,7 +2564,7 @@ namespace ConditioningControlPanel.Services
             _strictActive = false;
             CancelPendingRetry();
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
-            CloseAll(synchronous);
+            CloseAll(synchronous, reason: synchronous ? "app exit" : "force cleanup (panic / stuck / session switch)");
             App.Audio?.ForceUnduck();
             _penalties = 0;
 
@@ -2631,7 +2716,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 if (_isCleaningUp) return; // Double-check on UI thread
                                 _videoPlaying = false;
-                                CloseAll();
+                                CloseAll(reason: "url playback ended");
                             });
                         }
                         catch (Exception ex)
@@ -2659,7 +2744,7 @@ namespace ConditioningControlPanel.Services
                             dispatcher.BeginInvoke(() =>
                             {
                                 _videoPlaying = false;
-                                CloseAll();
+                                CloseAll(reason: "url playback error");
                             });
                         }
                         catch (Exception ex)
@@ -3496,7 +3581,15 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        var tracks = aspectPlayer.Media?.Tracks;
+                        // #1196: `using`, because MediaPlayer.Media is a GETTER that calls
+                        // libvlc_media_player_get_media() and returns a NEW ref-counted wrapper
+                        // every time. This probe is wired to Playing, ESSelected AND Vout, so the
+                        // un-disposed reads leaked several native media references - each pinning a
+                        // whole input/decoder/aout chain - per mandatory video, on the DEFAULT
+                        // (blurred-background) render path. Matches the shape of the pattern already
+                        // used by the vout watchdog's track probe.
+                        using var probeMedia = aspectPlayer.Media;
+                        var tracks = probeMedia?.Tracks;
                         if (tracks == null) return;
                         // Pick the BIGGEST video ES, not the first one that parses. A container can
                         // carry an attached cover-art/thumbnail video track, and since #786 the sharp
@@ -3691,7 +3784,9 @@ namespace ConditioningControlPanel.Services
                         {
                             _mediaPlayers.Remove(mediaPlayer);
                         }
-                        mediaPlayer.Dispose();
+                        // Nothing ever called Play() on this one, so there is no Stop() to wait for
+                        // and the funnel's contract holds even on the UI thread (#1196).
+                        ReleasePlayer(mediaPlayer, "video window creation failed");
                     }
                     win?.Close();
                 }
@@ -5835,7 +5930,7 @@ namespace ConditioningControlPanel.Services
             // CRITICAL: Set _videoPlaying to false BEFORE CloseAll() so strict mode
             // handlers don't cancel window closing (they check _videoPlaying in Closing event)
             _videoPlaying = false;
-            CloseAll();
+            CloseAll(reason: "attention-check message");
 
             var screens = App.Settings.Current.DualMonitorEnabled ? App.GetAllScreensCached() : new[] { Screen.PrimaryScreen };
             // Safety check: ensure we have at least one screen
@@ -6842,7 +6937,7 @@ namespace ConditioningControlPanel.Services
                         _fallbackSafetyTimer?.Stop();
                         _fallbackSafetyTimer = null;
                         _videoPlaying = false;
-                        CloseAll();
+                        CloseAll(reason: "vout self-heal");
                         App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
                         App.Logger?.Information("VideoService: vout self-heal - replaying {File} on a fresh LibVLC instance",
                             Path.GetFileName(path));
@@ -7162,7 +7257,13 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void CloseAll(bool synchronous = false)
+        /// <param name="reason">
+        /// Which exit path asked for the teardown - natural end / ESC dismiss ("cleanup"), panic key
+        /// or any other forced close ("force cleanup"), engine stop, app exit. Carried into the
+        /// Information-level teardown lines and into ReleasePlayer so a #1196-shaped report ("libvlc
+        /// is still in my sound mixer") can be answered from the log without a repro.
+        /// </param>
+        private void CloseAll(bool synchronous = false, string reason = "teardown")
         {
             // Use lock to prevent race conditions between multiple cleanup triggers
             // (panic key, EndReached, safety timer, etc.)
@@ -7245,6 +7346,19 @@ namespace ConditioningControlPanel.Services
                 {
                     playersCopy = _mediaPlayers.ToList();
                     _mediaPlayers.Clear();
+                }
+
+                // #1196: one Information line per REAL teardown, naming the exit path and what it
+                // is taking down. Gated on there being something to take down, so the no-op
+                // teardowns (every panic press, every engine stop) stay off disk - same rule as
+                // traceClose above. Paired with ReleasePlayer's per-player line, a log now shows
+                // whether a video's players were actually released or left holding their audio
+                // output, without needing the reporter to reproduce anything.
+                if (playersCopy.Count > 0 || _windows.Count > 0)
+                {
+                    App.Logger?.Information(
+                        "VideoService: video teardown ({Reason}) - {Players} LibVLC player(s), {Windows} window(s), {Surfaces} vmem surface(s)",
+                        reason, playersCopy.Count, _windows.Count, _blurSurfaces.Count);
                 }
 
                 // Drop primary refs before tearing players down so any concurrent
@@ -7469,14 +7583,7 @@ namespace ConditioningControlPanel.Services
                                 QuarantineNative(player, "Stop() still wedged at app exit");
                                 continue;
                             }
-                            try
-                            {
-                                player.Dispose();
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
-                            }
+                            ReleasePlayer(player, reason + " (synchronous)");
                         }
                     }
                     else
@@ -7507,14 +7614,9 @@ namespace ConditioningControlPanel.Services
                                     RetireSharedLibVLC(owningLibVLC, "a wedged player was quarantined");
                                     continue;
                                 }
-                                try
-                                {
-                                    player.Dispose();
-                                }
-                                catch (Exception ex)
-                                {
-                                    App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
-                                }
+                                // Already off the dispatcher and past this player's Stop(), which is
+                                // exactly ReleasePlayer's contract.
+                                ReleasePlayer(player, reason);
                             }
                         });
                     }
@@ -7647,7 +7749,10 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _triggerInProgress = false;
             ClearGraceState();   // defensive: CloseAll also does it, but it early-returns if already cleaning (#735)
-            CloseAll();
+            // "cleanup" covers both doors into this method: the natural end of a clip and the ESC
+            // dismiss (SetupStrictHandlers / TryEscapeFromGlobalKey). The VideoDiag PANIC line
+            // immediately before an ESC-driven call says which one it was.
+            CloseAll(reason: "cleanup");
 
             App.Logger?.Information("VideoService: Cleanup() - CloseAll completed, _windows now={WinCount}", _windows.Count);
             // Audio unduck now happens inside CloseAll (above) so every teardown path releases the
