@@ -19,6 +19,12 @@
  * its bar, so the track line stands down for it. When the chart is ready the first verb reads
  * `start · <name>`.
  *
+ * THE BEST ON THIS TRACK (race/popped.js). A file that has been driven to its end at least once
+ * carries `popped 345 / 560 thoughts`: the word bubbles taken on the best run of it, of every word
+ * the file says. It rides the plate while the plate is up and the `track ·` line when it is not, so
+ * the number is under the player's eye wherever the name of the track is. No record is no line, and
+ * the seeded road never has one.
+ *
  * YOUR MEDIA (web only). `settings.mediaControls === true` adds a `your media` verb and a panel of
  * pickers: the browser host has no library of its own to enumerate, so the player hands it one. Each
  * button posts `set-setting {key:'media.pickLocal' | 'media.clearLocal', value}` INSIDE the click's
@@ -94,6 +100,7 @@ import { wantsTouch } from './touch.js';
 import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
 import { snapshotRest } from './emiPoses.js';
 import { PIXEL_STEPS, PIXEL_LEGACY_DEFAULT, pixelDefault, normalizeBlock } from './pixel.js';
+import { readBests, bestFor, bestLine } from './popped.js';
 import { createMenuFlashes } from './menuFlashes.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createFeedGroup } from './feedGroup.js';
@@ -527,6 +534,9 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const trackName = el('div', 'rm-track-name', trackEl, '');
   const trackBar = el('div', 'rm-track-bar', trackEl); const trackFill = el('i', '', trackBar);
   const trackCap = el('div', 'rm-track-cap', trackEl, '');
+  // THE BEST ON THIS TRACK (race/popped.js): `popped 345 / 560 thoughts`, off the last completed
+  // run of this same file. No record is no line, and a track nobody finished never grows one.
+  const trackBest = el('div', 'rm-track-best', trackEl, ''); trackBest.hidden = true;
   // shown only for a chart a person wrote (host: track-chart authored:true)
   const trackMark = el('div', 'rm-track-mark', trackEl, 'hand-tuned'); trackMark.hidden = true;
   // ---- the status lines: what the next run is made of, under the verbs (header: THE STATUS LINES) ----
@@ -700,6 +710,8 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   };
   const STAGE_CAP = { picking: 'pick a file', opening: 'over to bambicloud', fetching: 'pulling the audio down', decode: 'reading the file', energy: 'feeling the pulse', words: 'listening for the words', cancelled: '', error: '' };
   let trackState = null, trackOnRow = false;
+  /** The stored best for the track in hand, read ONCE per setTrack: the paints below run every frame. */
+  let trackBestRec = null;
   function paintPlate() {
     const st = trackState;
     trackEl.hidden = !st || st.stage === 'cancelled' || (trackOnRow && panel === CLOUD_VERB);
@@ -720,8 +732,10 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       let c = null; try { c = media.stats(); } catch (e) { c = null; }
       if (c) { known = true; if (c.images || c.videos) parts.push(`your library (${counts(c.images | 0, c.videos | 0)})`); }
     }
+    // the best on this track rides the track line when the plate is not up to carry it (paintStatus)
+    const best = name ? bestLine(trackBestRec) : '';
     return {
-      track: name ? `track · ${name}` : 'track · just the road',
+      track: name ? `track · ${name}${best ? ` · ${best}` : ''}` : 'track · just the road',
       media: parts.length ? `media · ${parts.join(' and ')}` : 'media · no assets, the walls stay bare',
       known,
     };
@@ -762,6 +776,12 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       } else trackCap.textContent = st.stage === 'error' ? (st.message || 'the track would not load') : (STAGE_CAP[st.stage] || st.stage);
     }
     trackMark.hidden = !(ready && st && st.authored);
+    // the best on THIS file, keyed the way race/popped.js keys it (the hash, or the cloud id when
+    // the file was never hashed). Read here and nowhere else: the paints below run every frame.
+    trackBestRec = ready ? bestFor(readBests(), { hash: st.hash, cloudId: st.cloudId }) : null;
+    const bLine = bestLine(trackBestRec);
+    trackBest.hidden = !bLine;
+    if (bLine && trackBest.textContent !== bLine) trackBest.textContent = bLine;
     verbEl('race').textContent = ready ? `start · ${st.name || 'the track'}` : 'race';
     verbEl('track').textContent = ready ? 'another track' : 'load a track';
     verbEl('clear').hidden = !ready;

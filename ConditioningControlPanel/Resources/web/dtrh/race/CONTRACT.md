@@ -602,6 +602,14 @@ As built (PR 5 reality notes):
   renderer's programs, and `start()` builds it if nothing did (`?autostart=1`). `reseed` on a world that was
   never built only resets state, so the menu changing the seed rule costs nothing until `race`.
 - Extra `run-ended` fields: `nearMisses`, `personalBest`. `exit` is followed by `exit-done` once torn down.
+- THE THOUGHTS COUNT (`race/popped.js`). A thought is one word bubble: one `word` event of the chart, one
+  bubble on the road. The total is read off the chart when it loads (never off what spawned) and a trigger
+  row is not in it. The HUD carries `popped N / M` under the kept line while a track is in hand, the End card
+  adds a `thoughts` row, and `run-ended` grows `thoughts`, `thoughtsTotal` and, on a run that reached the end
+  of the chart, `thoughtsBest` / `thoughtsRecord`. Only a COMPLETED run files a best, into localStorage
+  `race.popped` keyed by `source.hash` (or `cid:<cloudId>` where there is no hash); a best is beaten on the
+  count alone. race/menu.js paints it on the track plate and the `track ·` status line, race/levels.js on the
+  level's own row (by cloud id, because a row knows a url and not a hash).
 - Boot and reduced motion: `raceBoot.js` calls `detectMode({ reducedIs3d: true })`, so `prefers-reduced-motion: reduce`
   boots the 3D race and only turns motion down through `settings.reducedMotion`; a boot error is reserved for a real
   hard wall (no WebGL, no import maps).

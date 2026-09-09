@@ -82,6 +82,7 @@ import { createMediaLane } from './mediaLane.js';
 import { createInput } from './input.js';
 import { createPickups, TUNE as PICK } from './pickups.js';
 import { createPixelizer, pixelDefault } from './pixel.js';
+import { saveBest } from './popped.js';
 import { createSpeedFx } from './speed.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createRaceAudio } from './audio.js';
@@ -176,6 +177,17 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // track), `lineGot` how many of them the kart has taken this run, and the pop that finishes one
   // calls race/score.js chain(). A phrase left half-taken simply never pays.
   const lineN = new Map(), lineGot = new Map(), lineDone = new Set();
+  // THE THOUGHTS COUNT (race/popped.js). `total` is every `word` event of the chart, counted the
+  // moment it loads, so the number on the HUD is knowable before the first metre; `popped` is how
+  // many of those bubbles the kart has taken this run. A trigger row is one trigger, not five
+  // thoughts, so it is not in either. A completed run files this as a per-track best.
+  const TH = { popped: 0, total: 0 };
+  const thoughtsIn = (chart) => {
+    let n = 0;
+    for (const e of (chart && Array.isArray(chart.events) ? chart.events : [])) if (e.kind === 'word') n++;
+    return n;
+  };
+  const paintThoughts = () => { try { if (hud && hud.setPopped) hud.setPopped(TH.popped, TH.total); } catch (e) { /* no hud yet */ } };
   // THE SYNC WIN (race/wordSync.js). Every word bubble and every trigger row popped or driven past
   // writes how far from its second it landed into a ring in localStorage; `[` `]` move this track's
   // offset; `\` copies the numbers. `rowOf` is the trigger rows still on the road (a row is not in
@@ -386,6 +398,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
     wordyRows.clear(); lastFlashAt = -1e9; flashStats.pops = 0; flashStats.capped = 0; flashStats.rolls = 0; flashStats.flashes = 0;
     echoWord = ''; echoAt = -1e9; if (subl) subl.clear();   // "again" starts with nothing said and a clear glass
+    TH.popped = 0; paintThoughts();   // the same road again is the same total and a fresh count
     // the spiral book is the run's, not the page's: "again" on the same seed weaves the same
     // spirals in the same order, and a new seed opens a new book (race/loomBook.js)
     loomBook.reseed(runSeed); spiralFx.cancel();
@@ -436,6 +449,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if (!rec) return;
     wordOf.delete(eventId);                       // one bubble, one flash: it is popped or it is past
     echo(rec.w);                                  // the voice said it: a subliminal may repeat it back
+    if (!ghost) { TH.popped++; paintThoughts(); }  // a thought taken off the road (race/popped.js)
     logWord(rec, passT == null ? (TR.track ? TR.track.t : 0) : passT, ghost);
     if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
     if (ghost || rec.p == null || lineDone.has(rec.p)) return;
@@ -671,6 +685,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     for (const e of (t && t.chart && Array.isArray(t.chart.events) ? t.chart.events : [])) {
       if (e.kind === 'word' && e.p != null) lineN.set(e.p, (lineN.get(e.p) || 0) + 1);
     }
+    TH.total = t ? thoughtsIn(t.chart) : 0; TH.popped = 0; paintThoughts();   // the total, off the chart, before the first metre
     if (W) { W.field.setTracked(!!t); W.field.setSparse(TR.lyrics); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     if (captions) captions.setTrack(t ? t.chart : null);
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
@@ -680,6 +695,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   /** The words pass landing live, or a nudge: keep the clock, adopt only what is still ahead (track.js replace). */
   function replaceTrack(chart) {
     TR.replace(chart); audio.setRoute(routeOf(TR.track));
+    // the words pass is what a partial road was waiting for: the total it carries is the real one now
+    TH.total = TR.track ? thoughtsIn(TR.track.chart) : 0; paintThoughts();
     if (W) W.field.setSparse(TR.lyrics);
     if (captions) captions.setTrack(TR.track ? TR.track.chart : null);
     refreshSync();
@@ -961,6 +978,19 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       personalBest: st.banked + st.score > S.bestAtStart && st.banked + st.score > 0 };
     const track = TR.summary();   // "you took N of M" on a charted run (the results screen is PR c7)
     if (track) Object.assign(summary, { taken: track.taken, countable: track.countable, trackName: track.name });
+    // THE THOUGHTS (race/popped.js): the word bubbles of the file taken, of every word in it. Only a
+    // run that reached the END of the chart files a best - a quit is not a score - and the best is
+    // beaten on the count alone, so a longer cut of a file never reads as a worse run.
+    if (track && TH.total > 0) {
+      Object.assign(summary, { thoughts: TH.popped, thoughtsTotal: TH.total });
+      if (TR.ended) {
+        const src = (TR.track && TR.track.chart && TR.track.chart.source) || {};
+        const filed = saveBest(undefined, { hash: track.hash, cloudId: src.cloudId, name: track.name, popped: TH.popped, total: TH.total });
+        summary.thoughtsBest = filed.rec ? filed.rec.popped : 0;
+        summary.thoughtsRecord = filed.wrote;
+        if (bridge.log) bridge.log(`race popped: ${TH.popped} of ${TH.total} thoughts${filed.wrote ? ', a new best' : ''}`);
+      }
+    }
     send({ type: 'run-ended', ...summary, ...(track ? { track } : {}) });
     trackSend('track-stop');
     sfx('surface', 0.8);
@@ -1133,6 +1163,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugPickup,
+    /** THE THOUGHTS COUNT: { popped, total } word bubbles this run (race/popped.js). The check's window on it. */
+    thoughts: () => ({ ...TH }),
     /** What race/smoke/face-check.mjs reads: the word faces on the road this frame. */
     wordFaces: () => (W ? W.field.faceReport() : null),
     /** THE WORD FLASH, for race/smoke/word-flash-check.mjs: word pops, the ones the 250 ms cap ate,
