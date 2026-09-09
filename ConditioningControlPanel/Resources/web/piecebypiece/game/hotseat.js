@@ -171,6 +171,35 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
     tryMove(pick.from, pick.to, 'q');
   }
 
+  /**
+   * A new game on the same board: the referee, the clocks, the record and the
+   * result all go back to the start, and `start()` deals again. The men are
+   * stood back up by start(), so a rematch reads as the board being reset
+   * rather than rebuilt. Anyone who took `rules` or `clock` at boot keeps a
+   * live one: both are reset in place.
+   */
+  function reset() {
+    rules.reset();
+    clock.reset();
+    history.length = 0;
+    over = null;
+    lastBack = 0;
+    autoLeft = 0;
+    bus.emit('newgame', { ply: 0 });
+  }
+
+  /**
+   * The game as a record, for the shelf of past games: the moves in SAN, the
+   * result if there is one, and where the clocks stood.
+   */
+  function record() {
+    let moves = [];
+    try { moves = rules.chess.history(); } catch { moves = []; }
+    const s = clock.snapshot();
+    return { moves, plies: moves.length, result: over ? { result: over.result, winner: over.winner ?? null, reason: over.reason || null } : null,
+             clocks: { w: s.w, b: s.b, total: clockMs } };
+  }
+
   function start() {
     pieces.setPosition(rules.position());
     board.setSide(rules.turn(), true);
@@ -180,7 +209,7 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
   }
 
   return {
-    rules, clock, start, update, tryMove, takeBack, canPick, legalTargets, resign,
+    rules, clock, start, reset, record, update, tryMove, takeBack, canPick, legalTargets, resign,
     plies: () => history.length,
     turn: () => rules.turn(),
     isOver: () => !!over,

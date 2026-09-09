@@ -1,0 +1,186 @@
+/* Piece by Piece - the front door. One glass card over the live board; the
+   board itself is the scenery and keeps drifting behind it (Law III). Every
+   screen is the same card with different contents, so the eye learns one
+   place. The ONE foreground BREATH per screen is the primary button's glow;
+   nothing else on the card loops.
+
+   Reduced motion (.door.still, from the host switch or the OS query) takes the
+   STATE and not the travel: transitions and animations are cut, classes still
+   land, so a screen that "should" be there simply is (trap 92's lesson). */
+
+.door { position: fixed; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.door[hidden] { display: none !important; }
+.door > * { pointer-events: auto; }
+
+/* the veil: the board reads through it, dimmer, so the card is the subject */
+.door-veil {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 42%, rgba(26, 26, 62, 0.18) 0%, rgba(26, 26, 62, 0.62) 100%);
+  opacity: 0; transition: opacity 420ms ease;
+}
+.door.up .door-veil { opacity: 1; }
+/* the end card wants the board seen: the men are the result */
+.door.screen-end .door-veil { background: radial-gradient(ellipse at 50% 42%, rgba(26, 26, 62, 0) 0%, rgba(26, 26, 62, 0.5) 100%); }
+
+.door-card {
+  position: relative; width: min(440px, 92vw); max-height: 86vh; overflow: hidden;
+  display: flex; flex-direction: column; gap: 18px; padding: 26px 26px 20px;
+  border-radius: 18px; background: rgba(20, 20, 46, 0.74);
+  border: 1px solid rgba(245, 230, 200, 0.14); backdrop-filter: blur(9px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  color: var(--pbp-ink);
+  /* REVEAL 340ms cubic-bezier(.2,1.5,.4,1): the card arrives with a little overshoot, once */
+  animation: door-reveal 340ms cubic-bezier(.2, 1.5, .4, 1) both;
+}
+@keyframes door-reveal {
+  from { opacity: 0; transform: translateY(14px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* a screen swap inside the card: 160ms crossfade, the card itself stays put */
+.door-body { display: flex; flex-direction: column; gap: 14px; min-height: 0; animation: door-swap 160ms ease both; }
+@keyframes door-swap { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.door-title { margin: 0; font-size: 12px; letter-spacing: 0.34em; text-transform: lowercase; opacity: 0.55; }
+.door-title b { font-weight: 500; opacity: 1; color: var(--pbp-cream); }
+.door-h { margin: 0; font-size: 22px; font-weight: 400; letter-spacing: 0.02em; color: var(--pbp-cream); }
+.door-sub { margin: 0; font-size: 12px; letter-spacing: 0.12em; opacity: 0.55; text-transform: lowercase; }
+.door-sub b { font-weight: 500; opacity: 1; color: var(--pbp-pink); }
+
+/* --- buttons --- */
+.door-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; min-height: 48px; padding: 0 18px; border-radius: 14px; cursor: pointer;
+  font: 12px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--pbp-ink); background: rgba(245, 230, 200, 0.06);
+  border: 1px solid rgba(245, 230, 200, 0.22);
+  transition: transform 140ms cubic-bezier(.2, 1.5, .4, 1), background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.door-btn:hover { background: rgba(245, 230, 200, 0.11); border-color: rgba(245, 230, 200, 0.4); }
+/* BOUNCE on press: 0.97 and back, the button admits it was touched */
+.door-btn:active { transform: scale(0.97); }
+.door-btn:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.door-btn.primary {
+  color: #1A1A3E; background: var(--pbp-pink); border-color: var(--pbp-pink); font-weight: 600;
+  box-shadow: 0 0 0 rgba(255, 105, 180, 0);
+  /* THE BREATH: the one thing on the card that loops, 3600ms like the HUD's vignette */
+  animation: door-breath 3600ms ease-in-out infinite;
+}
+@keyframes door-breath {
+  0%, 100% { box-shadow: 0 0 14px rgba(255, 105, 180, 0.25); }
+  50% { box-shadow: 0 0 26px rgba(255, 105, 180, 0.6); }
+}
+.door-btn.primary:hover { background: #FF7DBE; border-color: #FF7DBE; }
+.door-btn .k { font-size: 10px; opacity: 0.55; letter-spacing: 0.1em; }
+.door-row { display: flex; gap: 10px; }
+.door-row .door-btn { flex: 1; }
+.door-links { display: flex; justify-content: center; gap: 22px; margin-top: 2px; }
+.door-link {
+  background: none; border: 0; padding: 6px 2px; cursor: pointer; color: var(--pbp-ink);
+  font: 11px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.5;
+  border-bottom: 1px solid transparent; transition: opacity 140ms ease, border-color 140ms ease;
+}
+.door-link:hover { opacity: 0.95; border-bottom-color: rgba(255, 105, 180, 0.6); }
+.door-link:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; opacity: 1; }
+.door-foot { display: flex; justify-content: space-between; align-items: center; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.38; }
+.door-foot .name { text-transform: none; letter-spacing: 0.06em; }
+.door-foot .name b { color: var(--pbp-cream); font-weight: 500; }
+
+/* --- lists (lobby, past games) --- */
+.door-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; overflow-y: auto; max-height: 44vh; scrollbar-width: thin; scrollbar-color: rgba(255, 105, 180, 0.5) transparent; }
+.door-item {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 12px; background: rgba(245, 230, 200, 0.05);
+  border: 1px solid rgba(245, 230, 200, 0.1);
+  animation: door-swap 200ms ease both;
+}
+.door-item .who { font-size: 14px; color: var(--pbp-cream); letter-spacing: 0.02em; }
+.door-item .meta { font-size: 11px; letter-spacing: 0.1em; opacity: 0.5; text-transform: lowercase; font-variant-numeric: tabular-nums; }
+.door-item .meta.win { color: #8CF0B4; opacity: 0.9; }
+.door-item .meta.loss { color: #FF6E8A; opacity: 0.9; }
+.door-item .meta.draw { color: var(--pbp-cream); opacity: 0.7; }
+.door-pill {
+  cursor: pointer; padding: 7px 12px; border-radius: 999px; color: var(--pbp-pink);
+  background: rgba(255, 105, 180, 0.08); border: 1px solid rgba(255, 105, 180, 0.5);
+  font: 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.18em; text-transform: uppercase;
+  transition: transform 140ms cubic-bezier(.2, 1.5, .4, 1), background-color 140ms ease;
+}
+.door-pill:hover { background: rgba(255, 105, 180, 0.2); }
+.door-pill:active { transform: scale(0.95); }
+.door-pill:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.door-item.leaving { animation: door-leave 180ms ease both; }
+@keyframes door-leave { to { opacity: 0; transform: translateX(10px); } }
+.door-empty { padding: 18px 4px; font-size: 12px; letter-spacing: 0.12em; opacity: 0.55; text-transform: lowercase; display: flex; align-items: center; gap: 10px; }
+/* the waiting dot: on the lobby it is the screen's BREATH instead of the button (there is no primary while you wait) */
+.door-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pbp-pink); box-shadow: 0 0 8px rgba(255, 105, 180, 0.8); animation: door-breath-dot 1800ms ease-in-out infinite; }
+@keyframes door-breath-dot { 0%, 100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.1); } }
+.door.looking .door-btn.primary { animation: none; opacity: 0.55; }
+
+/* --- the incoming challenge: a small line at the top of the card, one tap --- */
+.door-ask {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 12px; background: rgba(255, 105, 180, 0.1);
+  border: 1px solid rgba(255, 105, 180, 0.45); font-size: 12px; letter-spacing: 0.06em;
+  animation: door-reveal 340ms cubic-bezier(.2, 1.5, .4, 1) both;
+}
+.door-ask b { color: var(--pbp-cream); font-weight: 500; }
+.door-ask .door-link { padding: 4px 6px; }
+
+/* --- match found: the JACKPOT-shaped beat, kept small --- */
+.door-found { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 4px; text-align: center; }
+/* THE THUD 340ms cubic-bezier(.2,1.5,.4,1): scale 2.1 -> 0.86 -> 1, brightness 2.2 -> 1 */
+.door-found .line { margin: 0; font-size: 22px; color: var(--pbp-cream); animation: door-thud 340ms cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes door-thud {
+  0% { transform: scale(2.1); filter: brightness(2.2); opacity: 0; }
+  55% { transform: scale(0.86); filter: brightness(1.3); opacity: 1; }
+  100% { transform: scale(1); filter: brightness(1); opacity: 1; }
+}
+.door-found .side { margin: 0; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.6; }
+.door-found .side b { font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.door-found .side b.w { color: #1A1A3E; background: var(--pbp-cream); }
+.door-found .side b.b { color: var(--pbp-cream); background: #3B2A63; }
+/* CHIME LADDER, drawn: 3 2 1 each land with a small BOUNCE, the tone under them rises */
+.door-count { font-size: 44px; line-height: 1; color: var(--pbp-pink); font-variant-numeric: tabular-nums; min-height: 48px; }
+.door-count.tick { animation: door-bounce 300ms cubic-bezier(.2, 1.5, .4, 1) both; }
+@keyframes door-bounce { 0% { transform: scale(0.6); opacity: 0.3; } 100% { transform: scale(1); opacity: 1; } }
+.door-found .skip { opacity: 0.4; }
+
+/* --- the end card --- */
+.door-end { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding-top: 4px; }
+.door-end .result { margin: 0; font-size: 26px; color: var(--pbp-cream); animation: door-thud 340ms cubic-bezier(.2, 1.5, .4, 1) both; }
+.door-end .result.win { color: var(--pbp-pink); }
+/* a loss gets sympathy: a SHIVER on the line, then it settles; never silence */
+.door-end .result.loss { animation: door-thud 340ms cubic-bezier(.2, 1.5, .4, 1) both, door-shiver 250ms ease-in-out 340ms both; }
+@keyframes door-shiver { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 50% { transform: translateX(3px); } 75% { transform: translateX(-2px); } }
+.door-end .tally { margin: 0; font-size: 12px; letter-spacing: 0.16em; opacity: 0.55; text-transform: lowercase; font-variant-numeric: tabular-nums; }
+/* the slot the XP and recap agent fills; empty it takes no room */
+#door-recap:empty { display: none; }
+
+/* --- profile --- */
+.door-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.door-stat { padding: 12px 10px; border-radius: 12px; background: rgba(245, 230, 200, 0.05); border: 1px solid rgba(245, 230, 200, 0.1); text-align: center; }
+.door-stat .n { display: block; font-size: 22px; color: var(--pbp-cream); font-variant-numeric: tabular-nums; }
+.door-stat .n.pink { color: var(--pbp-pink); }
+.door-stat .l { display: block; margin-top: 4px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.45; }
+.door-name { display: flex; align-items: center; gap: 10px; }
+.door-name input {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 12px; color: var(--pbp-cream);
+  background: rgba(245, 230, 200, 0.05); border: 1px solid rgba(245, 230, 200, 0.16);
+  font: 14px 'Segoe UI', system-ui, sans-serif;
+}
+.door-name input:focus { outline: 2px solid var(--pbp-pink); outline-offset: 1px; }
+
+/* --- replay: the card folds down to a strip so the board is the subject --- */
+.door.screen-replay { align-items: flex-end; padding-bottom: 26px; }
+.door.screen-replay .door-veil { opacity: 0; }
+.door.screen-replay .door-card { width: min(520px, 94vw); padding: 14px 16px; gap: 10px; }
+.door-strip { display: grid; grid-template-columns: auto auto 1fr auto auto; align-items: center; gap: 10px; }
+.door-strip .san { font-size: 13px; color: var(--pbp-cream); text-align: center; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.door-strip .san i { font-style: normal; opacity: 0.45; margin-right: 8px; }
+.door-scrub { width: 100%; accent-color: var(--pbp-pink); }
+.door-ico { width: 40px; min-height: 40px; padding: 0; font-size: 14px; letter-spacing: 0; }
+
+/* the HUD and the camera row step aside while the door is up */
+.hud.parked, .cam-views.parked { opacity: 0 !important; pointer-events: none !important; transition: opacity 260ms ease; }
+
+/* reduced motion: state, not travel */
+.door.still *, .door.still { animation: none !important; transition: none !important; }
