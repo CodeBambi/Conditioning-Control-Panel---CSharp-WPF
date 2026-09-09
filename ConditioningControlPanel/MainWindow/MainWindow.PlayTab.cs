@@ -102,6 +102,12 @@ namespace ConditioningControlPanel
                 // opens (ArcademyHostService.DoorAvailable) the band must already be right.
                 SetLockband(tab.PlayLockArcademy,
                     TierGate.RequiresLab(Services.Arcademy.ArcademyHostService.ProductName));
+                // Piece by Piece: the same T2 bar and the same posture - a literal product name,
+                // identical in all nine language files, so a key would only add a row nobody
+                // translates. Not on the daily-free wheel either (no key passed, so no FREE TODAY
+                // stamp to keep in step).
+                SetLockband(tab.PlayLockPieceByPiece,
+                    TierGate.RequiresLab(Services.PieceByPiece.PieceByPieceHostService.ProductName));
 
                 // --- The Arcademy: present, and locked when the account is not T2 ------------
                 // NOT the Just Drop posture below any more. Until v6.8.5 the door was shut and a

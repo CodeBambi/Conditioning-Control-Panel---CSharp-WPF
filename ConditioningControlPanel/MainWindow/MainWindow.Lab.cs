@@ -403,6 +403,34 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Play → Piece by Piece strip. Opens the 3D chess board (Resources/web/piecebypiece) via
+        /// <see cref="Services.PieceByPiece.PieceByPieceHostService"/>, the sibling of the DtRH,
+        /// Arcademy and Intake hosts. Both gates live in <c>Launch()</c> - idempotent re-focus
+        /// first, then the T2 bar through <see cref="TierGate"/> - for the same reason the
+        /// Arcademy card leaves its refusal there: the strip's lockband is decoration, and the
+        /// one code path that actually opens the door has to be the one that can say no.
+        ///
+        /// <para>No <c>BootFailedThisSession</c> prompt, unlike the Arcademy. That warning exists
+        /// because losing the Arcademy costs a paying account the headline feature; a chess board
+        /// that refused to start once is worth simply clicking again, and a second black window
+        /// is a cheaper thing to spend than a dialog on every visit.</para>
+        /// </summary>
+        internal void BtnStartPieceByPiece_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Services.PieceByPiece.PieceByPieceHostService.Launch();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BtnStartPieceByPiece_Click failed");
+                MessageBox.Show(Loc.GetF("play_pbp_open_failed_body", ex.Message),
+                    Services.PieceByPiece.PieceByPieceHostService.ProductName,
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
         /// Quick Start: launch a Chaos run with the saved settings, bypassing the modal hub.
         /// Mirrors what BEGIN CHAOS does after SaveToSettings (StartRun reads ChaosRunConfig.FromSettings),
         /// just without the dialog.
