@@ -11,7 +11,9 @@
  *   grab       a wet little pop           `grab`
  *   tick       a dry tick per legal square the held man passes over `dragmove`
  *   land       a thud pitched by the man's height, the king lowest  `land`
- *   capture    the thud plus a squelch     `land` with capture
+ *   capture    the thud plus a squelch     `land` with capture (not a whip's:
+ *              the crack already paid for that one, the square gets a thud)
+ *   whip       a crack and a slap          `hit` (board/whip.js, the bishop)
  *   boing      a sympathetic wobble        `drop` ok:false
  *   check      a low pulse, beating every 0.9 s while the side to move is in
  *              check                       `check` .. `turn` / `gameover`
@@ -41,6 +43,7 @@ export const TUNING = Object.freeze({
   tick: { hz: 1800, sec: 0.02, gain: 0.05 },
   thud: { pawnHz: 210, kingHz: 95, pawnH: 0.55, kingH: 1.25, sec: 0.18, gain: 0.5, tapGain: 0.12 },
   squelch: { from: 900, to: 150, sec: 0.18, gain: 0.16 },
+  whip: { crackFrom: 5200, crackTo: 700, crackSec: 0.07, crackGain: 0.34, slapHz: 170, slapTo: 55, slapSec: 0.14, slapGain: 0.3 },
   boing: { hz: [300, 180, 240, 200], sec: 0.25, gain: 0.14 },
   check: { hz: 58, sec: 0.28, gain: 0.32, everySec: 0.9 },
   mate: { hz: [392, 311, 233], step: 0.16, sec: 0.5, gain: 0.2 },
@@ -209,6 +212,12 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
       tone('sawtooth', S.from, S.sec, S.gain, { slideTo: S.to, filterHz: 1200, at: 0.02 });
       hiss(0.12, S.gain * 0.5, { from: 3000, to: 300, at: 0.03 });
     },
+    whip() {
+      const Wc = TUNING.whip;
+      hiss(Wc.crackSec, Wc.crackGain, { from: Wc.crackFrom, to: Wc.crackTo, type: 'bandpass', attack: 0.004 });
+      tone('sine', Wc.slapHz, Wc.slapSec, Wc.slapGain, { slideTo: Wc.slapTo, at: 0.01 });
+      hiss(0.05, Wc.crackGain * 0.35, { from: 1800, to: 300, type: 'lowpass', at: 0.02 });
+    },
     boing() {
       const B = TUNING.boing;
       const t0 = ctx.currentTime;
@@ -286,8 +295,9 @@ export function createSfx({ bus, game = null, group = null, squareOf = null, roo
   });
   on('land', (p) => {
     if (!p || p.refused) return;
-    play(p.capture ? 'capture' : 'land', { height: p.height });
+    play(p.capture && p.manner !== 'whip' ? 'capture' : 'land', { height: p.height });
   });
+  on('hit', () => { play('whip'); });
   on('check', () => { checkArmed = true; startPulse(); });
   on('turn', () => {
     lastSecond = -1;
