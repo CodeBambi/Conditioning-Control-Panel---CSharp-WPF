@@ -529,7 +529,8 @@
       $(MSBuildProjectDirectory)\Resources\web\intake\assets\music\**\*.mp3;
       $(MSBuildProjectDirectory)\Resources\web\dtrh\assets\**\*.mp3
     </ContentPackWebExcludeAbs>
-    <!-- The four arcademy *demo.html browser harnesses. Listed once here and referenced by
+    <!-- The four arcademy *demo.html browser harnesses, plus the games' node smoke
+         checks (games\*\smoke\*.mjs). Listed once here and referenced by
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
@@ -537,13 +538,15 @@
       Resources\web\arcademy\annex\demo.html;
       Resources\web\arcademy\vn\demo.html;
       Resources\web\arcademy\emi\demo.html;
-      Resources\web\arcademy\shell\recordsroom.demo.html
+      Resources\web\arcademy\shell\recordsroom.demo.html;
+      Resources\web\arcademy\games\**\smoke\**\*
     </ArcademyHarnessExclude>
     <ArcademyHarnessExcludeAbs>
       $(MSBuildProjectDirectory)\Resources\web\arcademy\annex\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\vn\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\emi\demo.html;
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html;
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
