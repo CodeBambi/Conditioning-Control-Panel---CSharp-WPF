@@ -28,15 +28,20 @@
 
 import * as THREE from 'three';
 
-/** The face canvas, square. A word bubble is about 85 px on a phone (x3 for its pixel ratio)
- *  and 185 on a desktop at the pop point, so 256 keeps the letters crisp on the glass; the
+/** The face canvas, square. A word bubble is about 110 px on a phone (x3 for its pixel ratio)
+ *  and 235 on a desktop at the pop point, so 256 keeps the letters crisp on the glass; the
  *  cache at its cap is 25 MB of texture, which a phone holds fine. */
 export const TEX_PX = 256;
 /** How many faces live at once before the least recently asked for one is disposed. */
 export const CACHE_MAX = 96;
-/** The word fits inside this much of the bubble's diameter: the rest is the bubble's rim.
- *  0.7 until 0909; the owner could not read it at speed, so the word takes more of the glass. */
-export const TEXT_FRAC = 0.8;
+/** The GLASS is only this much of the sprite canvas: the rest is the rim's soft edge and clear
+ *  margin (bubble.png and the effects sprites all measure 0.72 at alpha over 40). */
+export const GLASS_FRAC = 0.72;
+/** The word fits inside this much of the canvas, which is 0.89 of the glass: 0.7 and then 0.8
+ *  let the letters clip past the rim (owner, 0909: "the words kinda clip and go out of the
+ *  bubble"), so the word is kept on the glass and the bubble itself grew instead
+ *  (bubbles.js WORD_SCALE). */
+export const TEXT_FRAC = 0.64;
 /** At most this many lines. A merged two word bubble reads as two; a set label of three or
  *  four words is balanced across the same two rather than shrinking to nothing on one. */
 export const MAX_LINES = 2;
