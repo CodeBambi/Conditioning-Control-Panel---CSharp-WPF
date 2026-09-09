@@ -2293,12 +2293,7 @@ public class OverlayService : IDisposable
     {
         try
         {
-            var all = App.GetAllScreensCached();
-            if (all.Length == 0) return Array.Empty<System.Windows.Forms.Screen>();
-            if (settings.DualMonitorEnabled) return all;
-            foreach (var s in all)
-                if (s.Primary) return new[] { s };
-            return Array.Empty<System.Windows.Forms.Screen>();
+            return App.GetGlobalScreens();
         }
         catch { return Array.Empty<System.Windows.Forms.Screen>(); }
     }

@@ -599,9 +599,7 @@ public class BubbleCountService : IDisposable
         try
         {
             var settings = App.Settings.Current;
-            var screens = settings.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { Screen.PrimaryScreen };
+            var screens = App.GetGlobalScreens();
 
             if (screens == null || screens.Length == 0 || screens[0] == null)
             {

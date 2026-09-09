@@ -146,7 +146,7 @@ public class BouncingTextService : IDisposable
         _currentFont = settings.BouncingTextFont ?? "Segoe UI";
 
         // Calculate screen bounds
-        CalculateScreenBounds(settings.DualMonitorEnabled);
+        CalculateScreenBounds();
 
         // One logo, or two independent ones when the second-text toggle is on
         _logos.Clear();
@@ -178,7 +178,7 @@ public class BouncingTextService : IDisposable
         }
 
         // Create windows for each screen
-        CreateWindows(settings.DualMonitorEnabled, settings.BouncingTextOpacity, logoCount, settings.BouncingTextOutline);
+        CreateWindows(settings.BouncingTextOpacity, logoCount, settings.BouncingTextOutline);
 
         // Drive motion off the composition clock (vsync-aligned, one callback per
         // rendered frame) instead of a DispatcherTimer — see _lastRenderTime note.
@@ -323,11 +323,13 @@ public class BouncingTextService : IDisposable
         }
     }
 
-    private void CalculateScreenBounds(bool dualMonitor)
+    /// <summary>Bounds to bounce inside: the screens the app-wide "Show content on" picker
+    /// targets (App.GetGlobalScreens), which may be all of them, the Windows primary, or one
+    /// pinned monitor.</summary>
+    private void CalculateScreenBounds()
     {
-        var screens = dualMonitor
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        var screens = App.GetGlobalScreens();
+        if (screens.Length == 0) return;
 
         // Get DPI scale
         var dpiScale = GetDpiScale();
@@ -339,11 +341,9 @@ public class BouncingTextService : IDisposable
         _maxY = screens.Max(s => s.Bounds.Y + s.Bounds.Height) / dpiScale;
     }
 
-    private void CreateWindows(bool dualMonitor, int opacity, int logoCount, bool outline)
+    private void CreateWindows(int opacity, int logoCount, bool outline)
     {
-        var screens = dualMonitor
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        var screens = App.GetGlobalScreens();
 
         foreach (var screen in screens)
         {
