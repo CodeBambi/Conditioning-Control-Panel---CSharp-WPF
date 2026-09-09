@@ -11,7 +11,19 @@
  * Two layers, one file, because they are one idea: the road says the word, the
  * glass says the word, and the plate says it loudly.
  *
- *   THE FLASH (`mode: 'flash'`, what a worded road runs). The words are on the ROAD
+ *   THE SLOT (`mode: 'slot'`, what a worded road runs). The owner, phone testing
+ *   2026-09-09: "when popped a bubble the word rises and slides into the typewriter
+ *   we got (the missed ones appear as dimmed like now) the words we get go slot
+ *   themselves as visible on the typewriter kind of text we got displayed, except
+ *   triggers that get already shown big and highlighted." So the band is the SCRIPT
+ *   and the pops light it. The phrase the file is on opens with every one of its words
+ *   already in the DOM and DIMMED, the word the kart pops rises out of the bubble's own
+ *   place on the glass and slides into its own slot over SLOT_FLY_MS, and there it
+ *   inks. A word driven past never moves: it stays dim in the slot it already had,
+ *   which is the same faint grey the flash's ghost wore. A sure trigger flies nothing
+ *   into the line - the plate below is its moment, and doubling it is noise.
+ *
+ *   THE FLASH (`mode: 'flash'`, behind `?cap=flash`). The words are on the ROAD
  *   now, one to a bubble (race/wordBubbles.js), so the band is no longer where the
  *   script is read: it is where a POP is answered. The word the kart just took hits
  *   the band whole, holds FLASH_HOLD_MS, fades over FLASH_FADE_MS, and a pop inside
@@ -27,13 +39,19 @@
  *
  *   THE PLATE. A sure trigger flies at the camera from the vanishing point, themed
  *   off race/triggerTheme.js, one at a time, a new one taking the old one's place.
- *   It owns the glass while it flies: the plate clears the band under it.
+ *   It owns the glass while it flies: on the flash band the plate clears the words
+ *   under it, and on the slot band it clears the flights and leaves the script alone,
+ *   because the script is not an answer to anything and has nothing to give way to.
  *
  * EVERYTHING IS A FUNCTION OF THE CLOCK. `update(t)` reads the track second and
  * nothing else: no elapsed frames, no timers of its own. A seek, a pause, a resume
  * and a chart swapped in under the run all land right for free, because there is no
- * state to get out of step. The only thing with a timer is the plate, which is a
- * one shot animation and belongs to no second in particular.
+ * state to get out of step. The slot band keeps that promise the same way: WHICH
+ * phrase is up is the clock's, and which of its words are inked is a set of slots the
+ * player took, so the same second with the same pops behind it always draws the same
+ * line. The only things with timers are the plate and a slot flight, which are one
+ * shot animations and belong to no second in particular - and a seek or a pause lands
+ * every flight in the air at once, so nothing is left moving over a stopped clock.
  *
  * `buildPhrases` is pure and node-clean; the layer wants a DOM.
  * ==========================================================================*/
@@ -63,6 +81,16 @@ export const FLASH_FADE_MS = 300;
 export const FLASH_JOIN_MS = 300;
 /** A word the kart drove past: the ghost's own opacity (race.css `.rc-flash-word.is-ghost`). */
 export const GHOST_ALPHA = 0.35;
+
+/** THE SLOT. The flight from the bubble to its slot, in ms (race.css `rcSlotFly` runs the same). */
+export const SLOT_FLY_MS = 300;
+/** The ink lands this long before the flight ends, so the word arrives on a slot already lit. */
+export const SLOT_LAND_MS = 60;
+/** How far from a word's own second a pop may be and still be that word's slot. A bubble is popped
+ *  a frame either side of the second it was laid on, never a word away from it. */
+export const SLOT_NEAR_SEC = 0.25;
+/** A word nobody has popped yet, on the slot band: the ghost's grey, so the line reads either way. */
+export const SLOT_DIM_ALPHA = GHOST_ALPHA;
 
 /** Two lines and no more. A third is shrunk into the two, never cut off the glass. */
 export const MAX_LINES = 2;
@@ -177,8 +205,10 @@ function phraseAt(phrases, t) {
 export function createCaptions(root, opts = {}) {
   const doc = root && root.ownerDocument;
   if (!doc) return null;
-  /** 'flash' (the pops write the band) or 'type' (the old typewriter, behind `?cap=type`). */
-  const mode = (opts && opts.mode) === 'type' ? 'type' : 'flash';
+  /** 'slot' (the script on the band, the pops light it), 'flash' (the pops WRITE the band, behind
+   *  `?cap=flash`) or 'type' (the old typewriter, behind `?cap=type`). */
+  const want = opts && opts.mode;
+  const mode = want === 'type' ? 'type' : want === 'flash' ? 'flash' : 'slot';
   const reduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const el = (cls, parent) => { const d = doc.createElement('div'); d.className = cls; parent.appendChild(d); return d; };
 
@@ -188,12 +218,21 @@ export function createCaptions(root, opts = {}) {
   const cap = el('rc-cap', layer);
   const line = el('rc-cap-line', cap);
   cap.hidden = true;
+  if (mode === 'slot') cap.classList.add('is-slot');   // race.css: every word dim until its slot is taken
 
   let phrases = [];
   let shown = -1;              // which phrase is in the DOM
   let inked = -1;              // how many of its words have been inked
   let spans = [];              // the word elements of the phrase in the DOM
   let plate = null, plateTimer = 0, dimTimer = 0;
+  /** THE SLOTS THE PLAYER TOOK, as `phrase:word`. Not the clock's: a pop is a thing the player did
+   *  and it stays done, so a seek back over a line the kart read clean draws it read clean again. */
+  const popped = new Set();
+  /** The flights in the air. Each one is a word on its way from a bubble to its slot. */
+  const flys = [];
+  /** What the pops did to the line, for race/smoke/captions-check.mjs: flights started, pops whose
+   *  slot was in a phrase the clock had already left, and pops that matched no slot at all. */
+  const slotStats = { flew: 0, stale: 0, none: 0 };
 
   // ---- the measured layout: see the header of this function ----
   const win = doc.defaultView || (typeof window === 'object' ? window : null);
@@ -307,6 +346,7 @@ export function createCaptions(root, opts = {}) {
    * @returns the span, or null when this build is not the one that flashes
    */
   function showWord(text, o = {}) {
+    if (mode === 'slot') return slotWord(text, o);
     if (mode !== 'flash') return null;
     const said = String(text == null ? '' : text).trim();
     if (!said) return null;
@@ -340,6 +380,121 @@ export function createCaptions(root, opts = {}) {
     return s;
   }
 
+  // ---- THE SLOT: the script on the band, and the pop that lights its own word ----
+  // The phrase is the CLOCK's (draw / update below, exactly as the typewriter's is). Which of its
+  // words are lit is the PLAYER's, and lives in `popped` rather than in the DOM, so a phrase drawn
+  // again after a seek comes back lit the way the kart left it and no flight has to be replayed.
+  const slotKey = (i, k) => i + ':' + k;
+
+  /**
+   * The slot a popped word belongs to: `{ i, k }`, the phrase and the word inside it.
+   * By the word's own second first, because that is the one thing a bubble and a caption word
+   * certainly share (race/wordBubbles.js lays a bubble on the second race/captions.js cut the
+   * phrase at). With no second to go on - a hand call, a smoke - the text picks the first slot of
+   * the phrase on the band that nobody has taken yet.
+   */
+  function slotFor(at, said) {
+    if (!phrases.length) return null;
+    const t = Number(at);
+    if (!Number.isFinite(t)) {
+      const p = phrases[shown];
+      if (!p) return null;
+      const want = said.toLowerCase();
+      for (let k = 0; k < p.words.length; k++) {
+        if (popped.has(slotKey(shown, k))) continue;
+        if (String(p.words[k].w).trim().toLowerCase() === want) return { i: shown, k };
+      }
+      return null;
+    }
+    // the phrase whose window this second falls in, and its neighbours: a word on a phrase's edge
+    // belongs to whichever of the two actually holds it
+    let lo = 0, hi = phrases.length - 1, near = 0;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (phrases[mid].t0 <= t) { near = mid; lo = mid + 1; } else hi = mid - 1; }
+    let best = null, gap = SLOT_NEAR_SEC;
+    for (let i = near - 1; i <= near + 1; i++) {
+      const p = phrases[i];
+      if (!p) continue;
+      for (let k = 0; k < p.words.length; k++) {
+        const d = Math.abs(p.words[k].t - t);
+        if (d <= gap) { best = { i, k }; gap = d; }
+      }
+    }
+    return best;
+  }
+
+  /** A flight is over: the word it carried is off the glass and its slot is lit. */
+  function dropFly(rec) {
+    const at = flys.indexOf(rec);
+    if (at >= 0) flys.splice(at, 1);
+    if (rec.land) { clearTimeout(rec.land); rec.land = 0; }
+    if (rec.gone) { clearTimeout(rec.gone); rec.gone = 0; }
+    rec.el.remove();
+  }
+
+  /** Every flight in the air lands NOW. A seek, a pause or a new phrase leaves nothing moving. */
+  function clearFlys() {
+    while (flys.length) {
+      const rec = flys[0];
+      if (rec.land) rec.ink();     // it never reached its slot: the slot lights anyway
+      dropFly(rec);
+    }
+  }
+
+  /**
+   * The rise and the slide. A copy of the word starts at the bubble's own place on the glass, lifts
+   * out of it and slides into the slot's box, and the slot inks under it just before it gets there.
+   * With no start point, no box or reduced motion the slot simply lights: the ink is the promise,
+   * the flight is the flourish.
+   */
+  function flyTo(span, from) {
+    const ink = () => { span.classList.add('is-said'); };
+    const box = span.getBoundingClientRect ? span.getBoundingClientRect() : null;
+    const x0 = from ? num(from.x, NaN) : NaN, y0 = from ? num(from.y, NaN) : NaN;
+    if (reduced || !box || !(box.width > 0) || !Number.isFinite(x0) || !Number.isFinite(y0)) { ink(); return; }
+    const node = doc.createElement('span');
+    node.className = 'rc-slot-fly';
+    node.textContent = span.textContent;
+    node.style.left = `${Math.round(x0)}px`;
+    node.style.top = `${Math.round(y0)}px`;
+    node.style.setProperty('--rc-fly-dx', `${Math.round(box.left + box.width / 2 - x0)}px`);
+    node.style.setProperty('--rc-fly-dy', `${Math.round(box.top + box.height / 2 - y0)}px`);
+    const tint = span.style.getPropertyValue('--rc-ink');
+    if (tint) node.style.setProperty('--rc-ink', tint);
+    try { if (win) node.style.fontSize = win.getComputedStyle(span).fontSize; } catch (e) { /* no layout */ }
+    layer.appendChild(node);
+    const rec = { el: node, ink, land: 0, gone: 0 };
+    flys.push(rec);
+    rec.land = setTimeout(() => { rec.land = 0; ink(); }, Math.max(0, SLOT_FLY_MS - SLOT_LAND_MS));
+    rec.gone = setTimeout(() => { rec.gone = 0; dropFly(rec); }, SLOT_FLY_MS + 80);
+  }
+
+  /**
+   * One pop, on the slot band.
+   * @param text the word the bubble wore (a merged bubble's two words are one string, and take
+   *             two slots: race/wordBubbles.js merged them, the script never did)
+   * @param o { at, from, ghost }: `at` the word's own second, `from` the bubble's place on the
+   *          glass in viewport pixels, `ghost` a word the kart drove past - which does nothing at
+   *          all here, because its slot is already dim and dim is what a missed word looks like
+   * @returns the slot's span, or null when there was no slot to take
+   */
+  function slotWord(text, o) {
+    const said = String(text == null ? '' : text).trim();
+    if (!said || o.ghost) return null;
+    const hit = slotFor(o.at, said);
+    if (!hit) { slotStats.none++; return null; }
+    if (popped.has(slotKey(hit.i, hit.k))) return null;
+    const p = phrases[hit.i];
+    const n = Math.max(1, said.split(/\s+/).length);
+    for (let k = hit.k; k < Math.min(p.words.length, hit.k + n); k++) popped.add(slotKey(hit.i, k));
+    if (hit.i !== shown) { slotStats.stale++; return null; }   // not the line on the band; draw() inks it
+    const span = spans[hit.k];
+    if (!span) { slotStats.stale++; return null; }
+    for (let k = hit.k + 1; k < Math.min(spans.length, hit.k + n); k++) spans[k].classList.add('is-said');
+    slotStats.flew++;
+    flyTo(span, o.from);
+    return span;
+  }
+
   function draw(i) {
     clearPhrase();
     const p = phrases[i];
@@ -354,6 +509,9 @@ export function createCaptions(root, opts = {}) {
       spans.push(s);
     }
     shown = i; inked = 0;
+    // the slots this phrase was already read out of, lit again with no flight: the line the kart
+    // took clean a minute ago comes back exactly as it left, and a seek costs no animation
+    if (mode === 'slot') for (let k = 0; k < spans.length; k++) if (popped.has(slotKey(i, k))) spans[k].classList.add('is-said');
     cap.hidden = false;
     fit();          // two lines, measured off what the phrase actually drew
     measure();      // and the plate under it goes wherever that left room
@@ -364,27 +522,30 @@ export function createCaptions(root, opts = {}) {
    * needs no telling: the same second always draws the same line.
    */
   function update(t) {
-    if (mode !== 'type') return;   // the flash is answered by the pops, not typed by the second
-    if (!phrases.length) { if (shown >= 0) clearPhrase(); return; }
+    if (mode === 'flash') return;  // the flash is answered by the pops, not opened by the second
+    if (!phrases.length) { if (shown >= 0) { clearFlys(); clearPhrase(); } return; }
     const sec = num(t, 0);
     const i = phraseAt(phrases, sec);
     if (i !== shown) {
+      clearFlys();                 // nothing may be in flight to a line that is no longer up
       if (i < 0) { clearPhrase(); return; }
       draw(i);
     }
     const p = phrases[shown];
     if (!p) return;
-    // ink every word the voice has reached, and un-ink the ones a seek put back in the future
-    let n = 0;
-    while (n < p.words.length && p.words[n].t <= sec) n++;
-    if (n !== inked) {
-      for (let k = 0; k < spans.length; k++) spans[k].classList.toggle('is-said', k < n);
-      inked = n;
-    }
-    // the word being spoken right now carries the light
-    for (let k = 0; k < spans.length; k++) {
-      const w = p.words[k];
-      spans[k].classList.toggle('is-now', sec >= w.t && sec < w.t + Math.max(0.12, w.d));
+    if (mode === 'type') {
+      // ink every word the voice has reached, and un-ink the ones a seek put back in the future
+      let n = 0;
+      while (n < p.words.length && p.words[n].t <= sec) n++;
+      if (n !== inked) {
+        for (let k = 0; k < spans.length; k++) spans[k].classList.toggle('is-said', k < n);
+        inked = n;
+      }
+      // the word being spoken right now carries the light
+      for (let k = 0; k < spans.length; k++) {
+        const w = p.words[k];
+        spans[k].classList.toggle('is-now', sec >= w.t && sec < w.t + Math.max(0.12, w.d));
+      }
     }
     // fleeting: the line lets go over its last second rather than blinking out
     const left = p.tEnd - sec;
@@ -396,7 +557,10 @@ export function createCaptions(root, opts = {}) {
     const row = themeFor(event);
     const text = (event && typeof event.label === 'string' ? event.label : '').trim();
     if (!row || !text) return null;
-    clearFlash();   // the plate owns the glass: the band under it goes quiet for the flight
+    // the plate owns the glass. On the flash band that means the words under it go quiet for the
+    // flight; on the slot band the line IS the script and stays, and only the flights are landed,
+    // so a trigger is never doubled by a word sliding into the line behind it.
+    if (mode === 'flash') clearFlash(); else clearFlys();
     measure();      // it lands in the air the band and the toast rail left, never on either
     if (plateTimer) { clearTimeout(plateTimer); plateTimer = 0; }
     if (plate) plate.remove();
@@ -428,6 +592,7 @@ export function createCaptions(root, opts = {}) {
     /** The loaded chart, or null to go quiet. Reads `words` and the trigger events, nothing else. */
     setTrack(chart) {
       phrases = chart ? paintTriggers(buildPhrases(chart.words), chart.events) : [];
+      clearFlys(); popped.clear();     // a new file is a new script: no slot of the old one is taken
       clearFlash();
       // hud.js reads this: with words on the glass the act ribbon's old spot under the score
       // plate belongs to the caption band, so the ribbon takes the clear air lower down instead
@@ -438,13 +603,31 @@ export function createCaptions(root, opts = {}) {
     update,
     showPlate,
     showWord,
-    /** Which half of this file is driving the band: 'flash' (the pops) or 'type' (the clock). */
+    /** Which third of this file is driving the band: 'slot' (the script, lit by the pops), 'flash'
+     *  (the pops write it) or 'type' (the clock types it). */
     get mode() { return mode; },
     /** How many words the flash line is holding right now. The smoke reads it; the game does not. */
     get flashWords() { return mode === 'flash' ? flashN : 0; },
+    /** THE SLOT, for race/smoke/captions-check.mjs: the line's words, how many of them the player
+     *  has taken, and how many are still in the air. Nothing in the game reads this. */
+    get slots() {
+      let said = 0;
+      for (const s of spans) if (s.classList.contains('is-said')) said++;
+      return { phrase: shown, words: spans.length, said, flying: flys.length, taken: popped.size, ...slotStats };
+    },
+    /** THE SMOKE'S OWN ZERO, and nothing in the game calls it. A check that seeks the clock about
+     *  by hand drags a burst of real bubbles onto the road behind it, and those pops are real pops:
+     *  they take real slots. This forgets them, so the next thing the check does is the only thing
+     *  the count can be about. Never wired to a key, a pause or an "again". */
+    resetSlots() {
+      clearFlys(); popped.clear();
+      for (const s of spans) s.classList.remove('is-said');
+      slotStats.flew = 0; slotStats.stale = 0; slotStats.none = 0;
+    },
     /** The run is over or the file was cleared: nothing of the last one stays on the glass. */
     clear() {
-      clearFlash();
+      clearFlys(); popped.clear();
+      clearFlash();               // which takes the phrase off the band with it, in every mode
       if (plateTimer) { clearTimeout(plateTimer); plateTimer = 0; }
       if (plate) { plate.remove(); plate = null; }
       if (dimTimer) { clearTimeout(dimTimer); dimTimer = 0; }
@@ -464,5 +647,6 @@ export function createCaptions(root, opts = {}) {
   };
 }
 
-// self-check: node race/smoke/captions-check.mjs cuts the real caption track, pops words at the
-// band and drives the typewriter behind ?cap=type.
+// self-check: node race/smoke/captions-check.mjs cuts the real caption track, slots popped words
+// into the script on the band, pops words at the flash band behind ?cap=flash and drives the
+// typewriter behind ?cap=type.

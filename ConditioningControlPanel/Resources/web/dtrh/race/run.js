@@ -152,11 +152,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // ---- the parts that outlive a run ----
   const hud = createRaceHud(hudRoot);
   // the voice on the glass: the band under the chrome and the trigger plate over it.
-  // The band ANSWERS THE POPS now (race/captions.js showWord): the words are on the road, so the
-  // word the kart just took is what lands, and the word it drove past lands as a ghost. The old
-  // word-timed typewriter is one release behind `?cap=type`; a track with no words file had no
-  // caption either way and is untouched.
-  const CAP_MODE = flag('cap') === 'type' ? 'type' : 'flash';
+  // The band is the SCRIPT and the pops LIGHT it (race/captions.js, mode 'slot'): the phrase the
+  // file is on sits there dim, and the word the kart pops rises out of the bubble and slides into
+  // its own slot. The wave 3 flash band, where a pop WROTE the word instead, is one release behind
+  // `?cap=flash`, and the word-timed typewriter two behind `?cap=type`; a track with no words file
+  // had no caption on any of the three and is untouched.
+  const CAP_MODE = flag('cap') === 'type' ? 'type' : flag('cap') === 'flash' ? 'flash' : 'slot';
   /** `?words=unread`: a word the kart drove past writes nothing. Ghost is the default. */
   const GHOST_MISSES = flag('words') !== 'unread';
   const captions = hudRoot ? createCaptions(hudRoot, { mode: CAP_MODE }) : null;
@@ -437,13 +438,29 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       shake.shake(0.3, 220); poke('smug', 1.2);
     }
   }
+  /** THE POP'S PLACE ON THE GLASS. A bubble's world point through the run's own camera, in viewport
+   *  pixels: race/captions.js starts the slot flight there, so the word rises out of the bubble the
+   *  player actually took rather than out of a corner. Null when the point is behind the camera or
+   *  the canvas has no box to speak of yet, and the slot then simply lights where it stands. */
+  const _pop3 = new THREE.Vector3();
+  function screenOf(v) {
+    if (!v || typeof v.x !== 'number') return null;
+    _pop3.set(v.x, v.y, v.z).project(camera);
+    if (!Number.isFinite(_pop3.x) || !Number.isFinite(_pop3.y) || _pop3.z > 1) return null;
+    const b = root.getBoundingClientRect ? root.getBoundingClientRect() : null;
+    const cw = (b && b.width) || root.clientWidth || 0, ch = (b && b.height) || root.clientHeight || 0;
+    if (!(cw > 0) || !(ch > 0)) return null;
+    return { x: (b ? b.left : 0) + (_pop3.x * 0.5 + 0.5) * cw, y: (b ? b.top : 0) + (0.5 - _pop3.y * 0.5) * ch };
+  }
   /**
-   * THE FLASH. The word that bubble wore goes on the band: bright on a pop, a grey ghost on a
-   * word the kart drove past. Pops inside race/captions.js FLASH_JOIN_MS join one line, so a line
-   * of word bubbles taken clean reads back as the sentence the voice said.
+   * THE WORD, ON THE BAND. The default band is the SCRIPT (race/captions.js mode 'slot'): the word
+   * the kart popped rises out of its bubble and slides into its own slot in the line, and a word
+   * driven past stays dim in the slot it already had. Behind `?cap=flash` the same call writes the
+   * word onto the band instead, bright on a pop and a grey ghost on a miss.
    * @param eventId the chart event that spawned the bubble, @param ghost true for a miss
+   * @param from the bubble's world position (the pop payload's `worldPos`), for the slot flight
    */
-  function spendWord(w, eventId, ghost, passT) {
+  function spendWord(w, eventId, ghost, passT, from) {
     if (!eventId) return;
     const rec = wordOf.get(eventId);
     if (!rec) return;
@@ -451,7 +468,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     echo(rec.w);                                  // the voice said it: a subliminal may repeat it back
     if (!ghost) { TH.popped++; paintThoughts(); }  // a thought taken off the road (race/popped.js)
     logWord(rec, passT == null ? (TR.track ? TR.track.t : 0) : passT, ghost);
-    if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
+    if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w,
+      { ink: rec.ink, accent: rec.accent, ghost: !!ghost, at: rec.t, from: ghost ? null : screenOf(from) });
     if (ghost || rec.p == null || lineDone.has(rec.p)) return;
     const n = lineN.get(rec.p) || 0, got = (lineGot.get(rec.p) || 0) + 1;
     lineGot.set(rec.p, got);
@@ -491,7 +509,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     if ((word || (!!p.eventId && wordyRows.delete(p.eventId))) && p.kind === 'treat') wordFlashPop(w);
     if (p.eventId) {
       const at = passTime(w, p.d);
-      TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false, at);
+      TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false, at, p.worldPos);
       const row = rowOf.get(p.eventId);   // a trigger row: one log line for the row, on its first pop
       if (row) { rowOf.delete(p.eventId); echo(row.w); logWord(row, at, false); }
     }
@@ -1172,8 +1190,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     wordFlashStats: () => ({ ...flashStats }),
     /** GIF RAIN, for race/smoke/gifrain-row-check.mjs: how many of each payload the mixer poured. */
     fxStats: () => Object.fromEntries(fxFired),
-    /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. */
+    /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. `o` carries
+     *  the slot band's `at` (the word's own second) and `from` (a point on the glass) untouched. */
     debugWord: (text, o) => (captions ? captions.showWord(text, o || {}) != null : false),
+    /** race/smoke/captions-check.mjs: what the slot line is holding - words, taken, still flying. */
+    capSlots: () => (captions ? captions.slots : null),
+    capSlotsReset: () => { if (captions && captions.resetSlots) captions.resetSlots(); },
     /** race/smoke/subliminal-check.mjs and the shot harness: fire ONE payload by hand, rendered
      *  exactly as a pop of that kind renders it. THE MIX is never touched, so a shot cannot change
      *  what the run is holding, and an empty `text` falls back to payloadFx's own whisper pool. */
@@ -1194,7 +1216,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       /** Pretend the context went: the gif floor takes every hold from here on. */
       breakGl: () => spiralFx.loseContext(),
     },
-    /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */
+    /** Which third of race/captions.js drives the band on this build: 'slot', 'flash' or 'type'. */
     capMode: () => CAP_MODE,
     /** THE SYNC WIN, for race/smoke/wsync-check.mjs: the log rows, the offset, a nudge, the export. */
     wordSync: { rows: () => popLog.rows(trackKey()), size: () => popLog.size, offset: offsetOf, nudge, exportJson: exportSync, overlay: () => (syncHud ? syncHud.el : null) },
