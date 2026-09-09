@@ -247,6 +247,16 @@ bridge.on('exit-request', surface);
 // mid-session is on the road the next time one pops. Nothing here reaches into a run: the pool
 // lives in engine/loomSpirals.js and the picker reads it when it draws.
 bridge.on('loom-list', (m) => { try { setLoomSpirals((m && m.spirals) || []); } catch (e) { host.log('loom-list: ' + e); } });
+/**
+ * The two names a chart answers to, carried on every `ready` plate state: race/menu.js looks the
+ * track's popped best up by them (race/popped.js keys by the file hash, and by the cloud id for a
+ * file that was never hashed). Nothing else in the plate reads them.
+ */
+const keysOf = (chart) => {
+  const s = (chart && chart.source) || {};
+  return { hash: String(s.hash || ''), cloudId: String(s.cloudId || '') };
+};
+
 // ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
 bridge.on('track-chart', (m) => {
   if (!race || !m || !m.chart) return;
@@ -255,7 +265,7 @@ bridge.on('track-chart', (m) => {
   const t = race.track, st = race.trackStats ? race.trackStats() : null;
   // `authored` is the host saying a person wrote this chart: the plate marks it, and nothing
   // fuller is coming behind it (an authored chart is never partial and never replaced).
-  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial, authored: !!m.authored } : null;
+  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial, authored: !!m.authored, ...keysOf(t.chart) } : null;
   plate(trackReady);
 });
 bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });
@@ -432,7 +442,7 @@ async function standaloneTrack() {
     else chart = mod.normalizeChart(await (await fetch(want)).json());
     race.setTrack(chart);
     const st = race.trackStats ? race.trackStats() : null;
-    trackReady = { stage: 'ready', name: chart.source.name, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false };
+    trackReady = { stage: 'ready', name: chart.source.name, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false, ...keysOf(chart) };
   } catch (err) {
     trackError('chart: ' + ((err && err.message) || err));
     return;
@@ -483,7 +493,7 @@ function showTrack(chart) {
   const st = race && race.trackStats ? race.trackStats() : null;
   const partial = !!(chart.analysis && chart.analysis.partial);
   trackReady = { stage: 'ready', name: chart.source.name + cloudWhere, durationSec: chart.source.durationSec,
-    countable: st ? st.countable : 0, partial };
+    countable: st ? st.countable : 0, partial, ...keysOf(chart) };
   plate(trackReady);
 }
 

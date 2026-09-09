@@ -26,6 +26,12 @@
  *            `cloud-open { url }` and says to press play over there. This page
  *            never loads a byte of audio in that mode.
  *
+ * THE BEST ON A ROW. A level driven to its end at least once carries
+ * `popped 345 / 560 thoughts` under its title: the word bubbles taken on the best
+ * run of that file, of every word in it (race/popped.js). It costs no network and
+ * no chart - the store is keyed by the cloud id off the url - and a level nobody
+ * has finished simply has no line.
+ *
  * THE MARK ON A ROW. `hand-tuned` when race/charts/index.json has a row for that
  * track, `road` when it does not, `again` on the last one played. Deciding it
  * costs NO NETWORK: the index is same-origin and already fetched, and the key is
@@ -54,6 +60,7 @@
  * ==========================================================================*/
 
 import { cloudIdFrom, findAuthored } from './chartSource.js';
+import { readBests, bestFor, bestLine } from './popped.js';
 
 /** The panel key. Kept as `cloud` so the menu, `?panel=cloud` and the smokes all still name it. */
 export const VERB_ID = 'cloud';
@@ -195,6 +202,12 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
 
   /** The `hand-tuned` mark, decided with no network at all: the index is same origin. */
   const authored = (lv) => !!findAuthored(index, { cloudId: cloudIdFrom(lv.url), hash: lv.hash });
+  // THE BEST ON A ROW (race/popped.js): `popped 345 / 560 thoughts` under the title of every level
+  // that has been driven to the end at least once. A level is known here by its URL and never by
+  // its file hash, so the lookup is by cloud id; the whole map is read once per paint rather than
+  // once per row, and a store that throws (a private window) simply has no bests in it.
+  let bests = readBests(mem);
+  const bestOf = (lv) => bestFor(bests, { hash: lv.hash, cloudId: cloudIdFrom(lv.url) });
   /** What race/cloud.js is handed for a level. `bytes` saves it a HEAD the cdn will not answer. */
   const entry = (lv) => ({ id: lv.id, url: lv.url, title: lv.title, bytes: lv.bytes, locked: false });
 
@@ -306,10 +319,16 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
   function paint() {
     if (!slotEl || disposed) return;
     const picked = pickedLevel();
+    bests = readBests(mem);   // a run that just ended wrote one: the panel is painted after it
     for (let i = 0; i < levels.length; i++) {
       const b = levelEls[i]; if (!b) continue;
       const lv = levels[i], mark = markOf(lv), m = b.querySelector('.rm-level-mark');
       if (m && m.textContent !== mark) m.textContent = mark;
+      const bestEl = b.querySelector('.rm-level-best'), bLine = bestLine(bestOf(lv));
+      if (bestEl) {
+        bestEl.hidden = !bLine;
+        if (bLine && bestEl.textContent !== bLine) bestEl.textContent = bLine;
+      }
       b.classList.toggle('is-on', !!playerState(lv));
       b.classList.toggle('is-hand', authored(lv));
       // the picked row IS the status: it lights, and the bar under its title is the load
@@ -350,6 +369,8 @@ export function createLevels({ settings = {}, sets = [], cloud = null, index = n
       elm('span', 'rm-level-title', b, lv.title);
       elm('span', 'rm-level-len', b, mmss(lv.durationSec));
       elm('span', 'rm-level-mark', b, '');
+      // the best on this level, on the row itself: hidden until the track has been finished once
+      const best = elm('span', 'rm-level-best', b, ''); best.hidden = true;
       // the bar lives IN the row, under the title, and only the picked row ever shows it
       const bar = elm('i', 'rm-level-bar', b); elm('i', '', bar);
       b.addEventListener('click', (ev) => { ev.stopPropagation(); if (onPick) onPick(i); });

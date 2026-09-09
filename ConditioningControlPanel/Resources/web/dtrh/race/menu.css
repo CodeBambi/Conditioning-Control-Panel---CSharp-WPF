@@ -140,7 +140,7 @@
 #race-root .rm-levels { display: flex; flex-direction: column; gap: 4px; }
 #race-root .rm-levels-set { margin-top: 0; margin-bottom: 6px; color: #ffd6ea; letter-spacing: 0.08em; text-transform: uppercase; }
 #race-root .rm-level-btn {
-  display: grid; grid-template-columns: 2.4em 1fr auto; grid-template-areas: 'n title len' 'n bar bar' 'n mark mark';
+  display: grid; grid-template-columns: 2.4em 1fr auto; grid-template-areas: 'n title len' 'n bar bar' 'n mark best';
   gap: 0 10px; align-items: center; width: 100%; min-height: 48px; text-align: left;
   padding: 7px 14px 7px 28px; font-size: 16px;
 }
@@ -148,6 +148,9 @@
 #race-root .rm-level-title { grid-area: title; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #race-root .rm-level-len { grid-area: len; color: rgba(255, 214, 234, 0.75); font-variant-numeric: tabular-nums; }
 #race-root .rm-level-mark { grid-area: mark; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 214, 234, 0.55); }
+/* the best on this level, on the same line as the mark and hard against the right edge */
+#race-root .rm-level-best { grid-area: best; justify-self: end; font-size: 11px; letter-spacing: 0.04em; color: rgba(255, 214, 234, 0.6); font-variant-numeric: tabular-nums; }
+#race-root .rm-level-best[hidden] { display: none; }
 /* a hand-made road is the one thing on this list worth pointing at, so it is the one thing lit */
 #race-root .rm-level-btn.is-hand .rm-level-mark { color: var(--pink, #ff69b4); }
 #race-root .rm-level-btn.is-on .rm-level-title { color: #fff; }
@@ -223,6 +226,9 @@
 #race-root .rm-track.is-error .rm-track-bar { display: none; }
 #race-root .rm-track-cap { font-size: 12px; color: rgba(255, 214, 234, 0.75); }
 #race-root .rm-track.is-busy .rm-track-cap::after { content: '…'; animation: rmDots 1.2s steps(3, end) infinite; }
+/* The best on this track: a count, so it reads quieter than the caption above it. */
+#race-root .rm-track-best { font-size: 11px; letter-spacing: 0.04em; color: rgba(255, 214, 234, 0.6); }
+#race-root .rm-track-best[hidden] { display: none; }
 /* The authored mark: a chart a person wrote, not one the analysis found. */
 #race-root .rm-track-mark { display: inline-block; margin-top: 6px; padding: 1px 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #0d0a14; background: #5be7d8; }
 #race-root .rm-track-mark[hidden] { display: none; }
@@ -377,6 +383,7 @@
   /* the rows keep their 48 px: a short screen scrolls the column, it does not shrink the target */
   #race-root .rm-level-btn { font-size: 15px; padding: 5px 14px 5px 28px; }
   #race-root .rm-level-mark { font-size: 10px; }
+  #race-root .rm-level-best { font-size: 10px; }
   #race-root .rm-level-bar { height: 4px; margin: 3px 0 2px; }
   #race-root .rm-levels-foot { margin-top: 4px; padding: 4px 0 2px; }
   #race-root .rm-h { margin-bottom: 2px; font-size: 16px; }

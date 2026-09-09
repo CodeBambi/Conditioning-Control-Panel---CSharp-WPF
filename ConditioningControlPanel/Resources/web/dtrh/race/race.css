@@ -86,6 +86,9 @@
 .race-hud .rh-next.is-top { color: #fff0b8; }
 .race-hud .rh-bank { font-size: 0.78rem; color: #ffe082; opacity: 0.85; }
 .race-hud .rh-bank.is-pop { animation: rhThud 0.34s cubic-bezier(0.2, 1.6, 0.4, 1); }
+/* the thoughts line: quieter than the kept line, because it is a count and not a prize */
+.race-hud .rh-popped { font-size: 0.72rem; letter-spacing: 0.06em; color: rgba(255, 214, 234, 0.72); }
+.race-hud .rh-popped[hidden] { display: none; }
 
 /* ---- MARQUEE: the room banner as a LEFT RIBBON under the score block.
    It used to sit top-centre, which is exactly where payload cards land and

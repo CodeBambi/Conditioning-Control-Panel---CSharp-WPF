@@ -30,6 +30,7 @@
  * ==========================================================================*/
 
 import { COMBO_HOLD_SEC, MULT_LADDER, KART_MAX_SPEED, KART_BASE_SPEED } from './consts.js';
+import { poppedLine } from './popped.js';
 
 const FLICK_MS = 450;
 /**
@@ -98,6 +99,11 @@ export function createRaceHud(root) {
   const comboN = el('rh-num', comboRow, 'combo 0');
   const nextEl = el('rh-next rh-num', scoreWrap, '');
   const bankEl = el('rh-bank rh-num', scoreWrap, 'kept 0');
+  // THE THOUGHTS LINE (race/popped.js): how many word bubbles of this track have been taken, of
+  // every word the file says. A run with no track carries no line at all, so the seeded road and
+  // its plate are exactly what they were.
+  const poppedEl = el('rh-popped rh-num', scoreWrap, '');
+  poppedEl.hidden = true;
 
   // ---- the rung ladder: consts by default, swappable via setLadder ----
   let ladder = okLadder(MULT_LADDER) ? MULT_LADDER : NEW_LADDER;
@@ -310,6 +316,12 @@ export function createRaceHud(root) {
       if (hot !== speedHot) { speedHot = hot; speed.classList.toggle('is-boost', hot); }
     },
     setBank(n) { bankTarget = Math.max(0, n || 0); wake(); },
+    /** THE THOUGHTS LINE: `popped 12 / 560` under the kept line. No total is no line (race/popped.js). */
+    setPopped(n, total) {
+      const line = poppedLine(n, total);
+      poppedEl.hidden = !line;
+      if (line && poppedEl.textContent !== line) poppedEl.textContent = line;
+    },
     banner(name, tagline, colorHex) {
       if (colorHex) chrome.style.setProperty('--rh-room', colorHex);
       bannerName.textContent = (name || '').toLowerCase();
@@ -481,6 +493,9 @@ export function createRaceHud(root) {
       if (s.trackName) {   // a charted run: the file, and how many of its words the player met
         line('track', String(s.trackName).replace(/\.[a-z0-9]{2,4}$/i, '').slice(0, 28));
         if (s.countable > 0) line('taken', `${fmt(s.taken || 0)} of ${fmt(s.countable)}`);
+        // the word bubbles, counted one for one (race/popped.js). `taken` above folds a whole line
+        // of them into one thing to take; this is the raw count of the words the player popped.
+        if (s.thoughtsTotal > 0) line('thoughts', `${fmt(s.thoughts || 0)} of ${fmt(s.thoughtsTotal)}`);
       }
       if (endResolve) settleEnd('exit');
       end.classList.add('is-on');
