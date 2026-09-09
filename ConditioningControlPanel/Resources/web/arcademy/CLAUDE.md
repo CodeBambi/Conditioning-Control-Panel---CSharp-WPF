@@ -1633,6 +1633,19 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
       once `VIDEO_BUDGET` (6; 2 under `.ae-lite`) is spent. Anything that mints a decoration
       video must come through `mediaEl` and leave through `timers.release`/`kill`, or the
       count leaks and the budget closes for the session.
+    - **AN ANIMATED GIF IS A DECODE TOO, AND IT NEVER STOPS** (ccp-bugs #1197, 2026-09-09).
+      The bullet above was written about `<video>`, so "a gif still animates cheaply" got
+      written into `games/sort/wall.js` and the wall held one live `<img>` per landed card,
+      up to `WALL.CAP` = 120 of them. On a gif-heavy library that is 120 perpetual MAIN-THREAD
+      decodes behind the stack: the class's own 250ms `paintClock` stopped being called (the
+      report was "the timer only updates every few seconds" - a starved tick, never a clock
+      bug) and a fresh tile never got a lane. **A COLLAGE HOLDS A BUDGET, NOT A GALLERY:** the
+      newest `WALL.LIVE_FACES` (3) tiles keep an `<img>`, every older one is FROZEN by one
+      `drawImage` into a `<canvas>` that replaces it, and at most `WALL.DECODE_LANES` (4)
+      urls are ever in flight. **`drawImage` into a canvas you never read back is legal on a
+      CORS-tainted image** - the taint only ever bit `toDataURL`/`getImageData` - so a remote
+      feed freezes exactly like the local library and a freeze needs no `canvasSafe` pool.
+      Proof: `games/sort/smoke/wall-live-check.mjs` (33 assertions, 300 fake gifs).
     **AND A LADDER, NOT A SWITCH:** under a 4x CPU throttle even an all-stills board fell to
     40fps, so the whole frame has to get cheaper, not just the videos. `de_perf`
     (`auto|full|lite`) is the pattern: `lite` = `.g-de-lite` on the game's stage **and
