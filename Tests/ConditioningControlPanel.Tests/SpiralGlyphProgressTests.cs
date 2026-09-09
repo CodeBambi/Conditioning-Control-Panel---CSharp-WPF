@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using ConditioningControlPanel.Controls;
 using Xunit;
@@ -171,4 +171,49 @@ public class SpiralGlyphProgressTests
         // The gate that IS there: a real block, on your own card.
         Assert.Contains("block is not null && _profileViewingSelf", code, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// THE NAV-RAIL CHIP IS NATIVE, and this is the assertion that keeps it that way.
+    ///
+    /// <para>It hosted a <c>SpiralEmbedView</c> at ?mode=mini until 2026-09-09. A WebView2 is a
+    /// native child HWND, so the pointer arriving on it left the WPF visual tree, NavSidebar
+    /// raised MouseLeave, MainWindow.NavRail.cs collapsed the rail on the spot, the rail's width
+    /// fell under the embed's minimum, the host tore the browser down, the pointer was over plain
+    /// WPF again and the rail reopened. The owner saw the flyout open and shut on a loop, on that
+    /// one row and no other, because that was the only row on the rail owning an HWND.</para>
+    ///
+    /// <para>Comment lines are stripped: the file EXPLAINS the browser it no longer builds, and
+    /// the explanation must not be what fails the assertion.</para>
+    /// </summary>
+    [Fact]
+    public void TheRailChipOwnsNoBrowser()
+    {
+        var code = CodeOf("Controls", "SpiralRailHost.cs");
+
+        Assert.DoesNotContain("SpiralEmbedView", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("WebView", code, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// AND IT IS NEVER AN EMPTY CIRCLE. The old chip drew a Roman numeral under the browser and
+    /// hid even that the moment the canvas posted 'spiral:ready', so a mini canvas that painted
+    /// nothing but its own background left a hole where the spiral should be. The chip now wears
+    /// the same <see cref="SpiralGlyph"/> the Trainer Card plate and the account menu row do, and
+    /// a vector arm has no state in which it fails to arrive.
+    /// </summary>
+    [Fact]
+    public void TheRailChipWearsTheSameGlyphAsTheProfileSurfaces()
+    {
+        var code = CodeOf("Controls", "SpiralRailHost.cs");
+
+        Assert.Contains("new SpiralGlyph", code, StringComparison.Ordinal);
+        Assert.Contains("_glyph.Apply(block)", code, StringComparison.Ordinal);
+    }
+
+    /// <summary>Source with every comment line removed, so a file that documents a thing cannot
+    /// be mistaken for a file that does it.</summary>
+    private static string CodeOf(params string[] parts)
+        => string.Join(" ", Array.FindAll(
+            AppFile(parts).Split('\n'),
+            l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
 }
