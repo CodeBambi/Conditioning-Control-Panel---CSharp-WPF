@@ -20,11 +20,11 @@ namespace ConditioningControlPanel.Controls
     ///     only when the flag is on. It sits ON TOP of the badge and hides it once the
     ///     canvas is ready; any failure disposes it and the badge is simply uncovered.
     ///
-    /// DARK BY DEFAULT. AppSettings.DescentSpiralRailEnabled is false and has no editor,
-    /// so in a shipped build <see cref="Arm"/> returns before it touches anything and
-    /// this control stays Collapsed — zero pixels, zero HWNDs, zero requests. The embed
-    /// route does not exist yet either; when it 404s, the fallback path above is the one
-    /// that runs, which is exactly the path this had to prove anyway.
+    /// ON BY DEFAULT since 6.9.3 (AppSettings.DescentSpiralRailEnabled, no editor; a
+    /// hand-edited false in settings.json makes <see cref="Arm"/> return before it touches
+    /// anything and this control stays Collapsed — zero pixels, zero HWNDs, zero requests).
+    /// If the embed route ever 404s, the fallback path above is the one that runs, which
+    /// is exactly the path this had to prove before the route existed.
     ///
     /// THE AIRSPACE MITIGATION, AND THE OPEN QUESTION BEHIND IT. DECISIONS.md
     /// (2026-08-10) amended the "one web canvas" law with "rail MINI = native WPF
@@ -93,7 +93,7 @@ namespace ConditioningControlPanel.Controls
             Loaded += (_, _) => Wire();
         }
 
-        /// <summary>The flag. False in every shipped build; there is deliberately no editor for it.</summary>
+        /// <summary>The flag. True by default since 6.9.3; there is deliberately no editor for it.</summary>
         public static bool FlagEnabled => App.Settings?.Current?.DescentSpiralRailEnabled == true;
 
         // ============================== lifecycle ==============================
