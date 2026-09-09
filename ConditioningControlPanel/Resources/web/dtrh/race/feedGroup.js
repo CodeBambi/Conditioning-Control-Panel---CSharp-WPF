@@ -162,6 +162,9 @@ export function createFeedGroup({ slot, settings = {}, post, ui = null }) {
     rows,
     els,
     paint,
+    /** What the menu's status line reads: the same consent and picks the rows paint, never a
+     *  pending ask. Labels, lower case, in catalog order. */
+    get state() { return { consent, niches: catalog.filter((c) => picked.has(c.id)).map((c) => c.label) }; },
     /**
      * The host's `setting` echo. Returns true when this group owned the key, so
      * the menu knows not to hand it on to the pickers' own pending paint.

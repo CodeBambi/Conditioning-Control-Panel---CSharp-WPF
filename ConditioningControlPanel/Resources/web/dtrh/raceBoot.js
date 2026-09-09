@@ -220,7 +220,11 @@ if (mode.hardBlock || !mode.canTry3d) {
 
 // ---- host wiring ----
 bridge.on('init', (m) => { initMsg = m; maybeBoot(); });
-bridge.on('manifest', (m) => { try { media.setManifest(m); warmWallPosters(media); } catch (e) { host.log('manifest: ' + e); } haveManifest = true; maybeBoot(); });
+bridge.on('manifest', (m) => {
+  try { media.setManifest(m); warmWallPosters(media); } catch (e) { host.log('manifest: ' + e); }
+  haveManifest = true; maybeBoot();
+  if (menu) { try { menu.refresh(); } catch (e) { /* the status line reads the pool on its next paint */ } }
+});
 bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } catch (e) { host.log('favorites: ' + e); } });
 // The media panel's two frames (race/menu.js "YOUR MEDIA"). Both can land before the menu exists -
 // the pickers are only reachable from the menu, but the host pushes the pile it already holds on
@@ -268,7 +272,9 @@ bridge.on('track-progress', (m) => {
 /**
  * Where a track's progress goes while the menu is up (the run has the toast instead). The LEVELS
  * panel gets first refusal: a state that belongs to a row picked in there is painted ON that row,
- * bar and all, and the plate stays down. Anything the panel does not claim - a pasted link, a file
+ * bar and all, and the menu keeps its plate down while that panel is open. On the main list (where a
+ * tap on a level lands) the plate shows the same state, bar and all, and the first verb reads
+ * `start · <name>` once the chart is in. Anything the panel does not claim - a pasted link, a file
  * the host picked, the seeded road - is the plate's, exactly as it always was.
  */
 function plate(state) {
@@ -375,7 +381,7 @@ async function boot() {
     if (params.get('autostart') === '1') { startRun(false); debugPickup(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
     levels = await makeLevels();
-    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, levels });
+    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, levels, media });
     if (localMedia) { try { menu.setLocalMedia(localMedia); } catch (e) { host.log('local-media: ' + e); } }
     while (settingEchoes.length) { try { menu.settingEcho(settingEchoes.shift()); } catch (e) { host.log('setting: ' + e); } }
     // Nowhere to surface to: no host and no `?back=`, or a host that says outright it cannot take
