@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Piece by Piece</title>
 <link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./door/door.css">
 <!--
   Piece by Piece - a 3D chess board for the in-app browser games.
   Standard chess rules, no house rules. three.js is resolved from the shared
@@ -77,6 +78,12 @@
     <button type="button" class="cam-btn" data-view="opponent" title="Opponent view (4)" aria-label="Opponent view">◨</button>
     <span class="cam-free" hidden>free</span>
   </div>
+
+  <!-- The front door: menu, lobby, past games, profile and the end card, as one
+       glass card over the live board. Above #fx so the card reads over whatever
+       the effects layer is doing at the end of a game; hidden for the whole of a
+       game, so the board never has an extra layer in the way of a drag. -->
+  <div id="door" class="door" hidden></div>
 
   <div id="loader" class="loader">
     <div class="loader-ring" aria-hidden="true"></div>

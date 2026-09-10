@@ -15,6 +15,7 @@ import { createDrag } from './board/drag.js';
 import { createGlyphs } from './board/glyphs.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
+import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
 import { postToHost, onHostMessage, signalReady } from './bridge.js';
 
@@ -65,7 +66,11 @@ function main() {
   };
 
   const params = new URLSearchParams(location.search);
-  const game = createHotseat({
+  // THE DRIVER IS BEHIND A SWITCH, always - even in a hotseat-only session.
+  // drag.js, promote.js, hud.js and sfx.js are each handed `game` once and hold
+  // that reference for the life of the page, so the thing they are handed has
+  // to be the one object that outlives any particular game. See net/online.js.
+  const hotseat = createHotseat({
     bus,
     board,
     hud: dom.hud,
@@ -73,6 +78,7 @@ function main() {
     fen: params.get('fen') || undefined,
     auto: Number(params.get('auto')) || 0,
   });
+  const game = createDriverSwitch(hotseat);
 
   const drag = createDrag({ view, pieces, anim, bus, game, jiggle });
   board.drag = drag;
@@ -81,6 +87,13 @@ function main() {
   // object from the start so a reader never has to care whether that has
   // happened yet: it is simply null until it has.
   window.PBP = { bus, game, board, ramp: null, settings: { videoHoldSec: 15, reducedMotion: false } };
+  /**
+   * Deal an online game onto this board. The front door calls it with the Match
+   * its lobby handed back; everything after that - the seat, the clocks, the
+   * long poll - belongs to net/match.js, and nothing else on the page has to
+   * know the game changed hands.
+   */
+  window.PBP.startOnline = (match) => startOnlineMatch({ bus, board, hud: dom.hud, game, match });
   onHostMessage((m) => {
     if (m.type !== 'pbp:settings') return;
     const { type, ...values } = m;   // the envelope's own key is not a setting
@@ -204,6 +217,14 @@ function main() {
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
   });
+  // --- Q: a capture animation is never a hostage ---
+  // A tap on the board or a Space/Enter while the bishop is mid-whip lands
+  // everything at once: no animation debt, the next move is already yours.
+  window.addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Enter') && anim.whipping && anim.whipping()) { anim.skip(); e.preventDefault(); }
+  });
+  dom.canvas.addEventListener('pointerdown', () => { if (anim.whipping && anim.whipping()) anim.skip(); }, { capture: true });
+  // --- end Q ---
   signalReady();
 
   let last = performance.now();
@@ -224,12 +245,49 @@ function main() {
   dom.loader.classList.add('gone');
   setTimeout(() => { dom.loader.hidden = true; }, 500);
   pieces.tryLoadGlb();          // optional art; missing files stay silent
-  // Give the optional effects layer a chance to subscribe before the first
-  // turn is dealt; it is optional, so a missing module must not hold the game.
-  attachEffects(bus, board, params).then(() => {
-    bus.emit('local', { sides: ['w', 'b'] });
+  // --- O: the front door ---
+  // The game is dealt by startGame, never by the door itself: the door only
+  // decides WHEN. ?hotseat=1, ?auto=N and ?door=0 deal at once, so every
+  // harness that photographs a live board keeps doing so; the host opens the
+  // page bare and gets the menu. The lobby is the server module when one has
+  // landed (net/lobbyServer.js, another lane's), else the mock, and ?lobby=mock
+  // asks for the mock on purpose.
+  const dealAtOnce = params.has('hotseat') || Number(params.get('auto')) > 0 || params.get('door') === '0';
+  function startGame({ mode = 'hotseat', match = null } = {}) {
+    window.PBP.match = match;                         // the online lane reads this
+    // an online seat is built and switched in by net/online.js; the hotseat's
+    // reset-and-start is not what it wants
+    if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
+    if (game.reset) game.reset();
+    bus.emit('local', { sides: ['w', 'b'], mode, match });
     game.start();
+  }
+  const doorReady = attachEffects(bus, board, params).then(async () => {
+    if (dealAtOnce) { startGame({ mode: 'hotseat' }); return null; }
+    let lobby = null;
+    try {
+      const wantMock = params.get('lobby') === 'mock';
+      if (!wantMock) {
+        try { const s = await import('./net/lobbyServer.js'); lobby = s.createServerLobby({ bus, params }); } catch { lobby = null; }
+      }
+      if (!lobby) { const m = await import('./net/lobby.js'); lobby = m.createMockLobby({ seed: Number(params.get('seed')) || undefined }); }
+    } catch (e) { console.warn('[pbp] no lobby; the door opens without one', e); }
+    const m = await import('./door/door.js');
+    const door = m.createDoor({ bus, game, board, lobby, root: document.getElementById('door'), params, startGame });
+    window.PBP.door = door;
+    window.PBP.lobby = lobby;
+    // the men stand on their squares behind the menu, clocks stopped
+    pieces.setPosition(game.rules.position());
+    board.setSide('w', true);
+    door.show(params.get('screen') || 'menu');
+    return door;
+  }).catch((e) => {
+    console.warn('[pbp] the door did not open; dealing a game', e);
+    startGame({ mode: 'hotseat' });
+    return null;
   });
+  window.PBP.doorReady = doorReady;
+  // --- end O ---
 }
 
 /**

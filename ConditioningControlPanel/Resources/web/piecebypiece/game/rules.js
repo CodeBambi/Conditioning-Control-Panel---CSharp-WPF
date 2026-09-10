@@ -128,9 +128,18 @@ export function createRules(fen) {
     return move(pick.from, pick.to, 'q');
   }
 
+  /**
+   * Back to the start, on the SAME chess instance: every module that took
+   * `game.rules` at boot keeps a live referee, so a rematch never has to tell
+   * anyone the rules changed.
+   */
+  function reset(startFen = fen) {
+    if (startFen) chess.load(startFen); else chess.reset();
+  }
+
   return {
     chess,
-    position, movesFrom, targets, legalMove, move, undo, rookHop, randomMove,
+    position, movesFrom, targets, legalMove, move, undo, rookHop, randomMove, reset,
     turn: () => chess.turn(),
     inCheck: () => chess.isCheck(),
     isOver: () => chess.isGameOver(),
