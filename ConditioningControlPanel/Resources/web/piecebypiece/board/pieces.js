@@ -77,7 +77,7 @@ function trim(type, mat) {
   return parts;
 }
 
-export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {} }) {
+export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {}, jiggle = null }) {
   const geoCache = new Map();
   const glb = new Map();          // type -> geometry from a supplied glb
   const bySquare = new Map();     // square -> piece object
@@ -97,11 +97,22 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     body.castShadow = true;
     body.receiveShadow = true;
     root.add(body);
-    if (!glb.has(type)) for (const part of trim(type, mat)) { part.castShadow = true; root.add(part); }
+    // Trim is baked into the body's own space before it joins the piece: the
+    // flex shader reads position.y as a height up the piece, so a part that
+    // carried its own offset would bend around the wrong origin.
+    if (!glb.has(type)) for (const part of trim(type, mat)) {
+      part.updateMatrix();
+      part.geometry = part.geometry.clone().applyMatrix4(part.matrix);
+      part.position.set(0, 0, 0);
+      part.rotation.set(0, 0, 0);
+      part.castShadow = true;
+      root.add(part);
+    }
     root.scale.setScalar(HEIGHT[type]);
     // Knights (and any modelled piece) look at the far side.
     root.rotation.y = side === 'w' ? 0 : Math.PI;
     root.userData = { type, side, material: mat, scaleBase: HEIGHT[type], phase: Math.random() * Math.PI * 2 };
+    if (jiggle) jiggle.attach(root);
     return root;
   }
 
@@ -144,7 +155,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     if (!piece) return null;
     bySquare.delete(from);
     const taken = bySquare.get(to) || null;
-    if (taken) { retire(taken); bySquare.delete(to); }
+    if (taken) { retire(taken); bySquare.delete(to); piece.userData.tookOne = true; }
     const was = piece.position.clone();
     place(piece, to);
     bySquare.set(to, piece);
@@ -203,10 +214,23 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     }
   }
 
+  // The flex system talks in pieces; the board talks in squares. This is the
+  // translation, and it is what the harness and the ramp reach for.
+  const jiggleApi = jiggle ? {
+    poke(square, opts = {}) { jiggle.poke(bySquare.get(square), opts); },
+    debug(square) { return jiggle.debug(bySquare.get(square)); },
+    stats() { return jiggle.stats(); },
+    system: jiggle,
+  } : null;
+
   return {
     setPosition, pieceAt, move, remove, update, tryLoadGlb,
     pieces: bySquare,
-    setWobble(v) { wobble = Math.max(0, Math.min(1, Number(v) || 0)); },
+    jiggle: jiggleApi,
+    setWobble(v) {
+      wobble = Math.max(0, Math.min(1, Number(v) || 0));
+      if (jiggle) jiggle.setWobble(wobble);
+    },
     getWobble() { return wobble; },
   };
 }
