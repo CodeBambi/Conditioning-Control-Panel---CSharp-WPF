@@ -70,4 +70,61 @@ public class SeasonKeyAdoptionTests
     [Fact]
     public void UnusableLocalKeyStillRejectsAnUnusableServerKey()
         => Assert.False(SeasonRecapService.ShouldAdoptServerSeason("junk", "junk"));
+
+    // ---- ShouldAdoptSilently: the fresh-device case ----
+    //
+    // A returning user signing in on a NEW PC has a settings file with no season keys in it at
+    // all. The first sync then hands over the server's real key, and everything downstream reads
+    // the empty LastSeasonResetSeen as "earlier than" that key and announces a rollover - one this
+    // machine never witnessed, with no snapshot behind it, so the card it opens is empty. This
+    // helper is the one gate that separates "I have never seen a season" from "the season I saw
+    // has ended", and both halves matter: too loose and a real rollover is swallowed, too tight
+    // and the false box comes back.
+
+    [Fact]
+    public void FreshSettingsWithAServerConfirmedKeyAdoptsSilently()
+    {
+        // Exactly the new-PC case: nothing local, the server named the season.
+        Assert.True(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: true));
+        Assert.True(SeasonRecapService.ShouldAdoptSilently(null, null, serverConfirmed: true));
+    }
+
+    [Fact]
+    public void FreshSettingsOnWallClockDoesNotAdopt()
+    {
+        // Not logged in / sync failing: CurrentSeasonKey is the wall-clock fallback, a key no
+        // server ever authored. Writing that into settings would invent a season boundary AND
+        // suppress the first genuine rollover this install ever sees.
+        Assert.False(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: false));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently(null, null, serverConfirmed: false));
+    }
+
+    [Theory]
+    [InlineData("2026-08", "")]        // recapped before; the stats bucket happens to be empty
+    [InlineData("", "2026-08")]        // never recapped, but this install has been accruing stats
+    [InlineData("2026-08", "2026-08")]  // an ordinary established install
+    public void AnInstallThatHasSeenASeasonNeverAdoptsSilently(string lastSeasonSeen, string statsSeason)
+    {
+        // Either key being set means a season was witnessed here, so a later advance is a REAL
+        // rollover and has to reach the recap. Silently adopting would eat it.
+        Assert.False(SeasonRecapService.ShouldAdoptSilently(lastSeasonSeen, statsSeason, serverConfirmed: true));
+    }
+
+    [Fact]
+    public void SilentAdoptIsOneShot()
+    {
+        // After the adopt writes both keys, the very next call must decline - otherwise the block
+        // would re-run on every launch and keep clearing SeasonResetPending under a real reset.
+        Assert.True(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: true));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently("2026-09", "2026-09", serverConfirmed: true));
+    }
+
+    [Fact]
+    public void WhitespaceIsNotEmpty()
+    {
+        // IsNullOrEmpty, not IsNullOrWhiteSpace, on purpose: a whitespace key is a corrupted
+        // value, not a virgin install, and it is what CompareOrdinal will actually be handed
+        // downstream. Leave it to the rollover path rather than papering over it here.
+        Assert.False(SeasonRecapService.ShouldAdoptSilently("   ", "", serverConfirmed: true));
+    }
 }
