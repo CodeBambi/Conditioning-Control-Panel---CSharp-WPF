@@ -48,6 +48,17 @@
     <!-- the light that moves between the chips IS the turn indicator -->
     <span class="turn-line" id="turn-line" aria-hidden="true"></span>
 
+    <!-- The moves, written down. Right edge, clear of the middle lane the
+         ramp's card rides down, and the one part of the HUD that takes a
+         click. Hidden until movelist.js takes it, so a missing module leaves
+         nothing half-built on screen. -->
+    <div class="moves closed" id="moves" hidden>
+      <button type="button" class="moves-tab" id="moves-tab" aria-expanded="false" aria-controls="moves-list">
+        <span class="chev" aria-hidden="true"></span><span class="word">moves</span>
+      </button>
+      <ol class="moves-list" id="moves-list"></ol>
+    </div>
+
     <div class="statuscol" id="status-col">
       <p class="status" id="status">white to move</p>
       <p class="hint" id="hud-hint" hidden>hold esc to leave the board</p>
