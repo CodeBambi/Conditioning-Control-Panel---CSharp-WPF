@@ -297,15 +297,21 @@ namespace ConditioningControlPanel
                 // file LastSeasonResetSeen and SeasonStatsSeason are both empty, and the first
                 // sync writes the server's real key - at which point every test below reads the
                 // empty key as "before" the server's and announces a season end this machine
-                // never witnessed, with no snapshot to show for it. Write the key down, clear any
-                // pending latch that rode in with the same sync, and say nothing. Deliberately
-                // ahead of the highestLevel gate: a level-1 install that returned early here
-                // would leave the empty keys in place and fire the same false recap the moment it
-                // reached level 2. Anyone who HAS seen a season (either key set) falls through to
-                // the real rollover logic untouched.
+                // never witnessed, with no snapshot to show for it. Write the key down and say
+                // nothing. Deliberately ahead of the highestLevel gate: a level-1 install that
+                // returned early here would leave the empty keys in place and fire the same false
+                // recap the moment it reached level 2. Anyone who HAS seen a season (either key
+                // set) falls through to the real rollover logic untouched.
+                //
+                // And so does anyone the SERVER just reset. SeasonResetPending is only ever set by
+                // ProfileSyncService off an explicit level_reset, which is how an admin reset of a
+                // single account surfaces at all; clearing that latch on the way past would have
+                // swallowed it silently on exactly the install least able to notice - a fresh
+                // settings file with both keys empty. A reset the server declared is real news
+                // whatever this machine remembers, so it falls through to the pending path.
                 var statsSeasonSeen = App.Settings.Current.SeasonStatsSeason ?? "";
                 if (Services.SeasonRecapService.ShouldAdoptSilently(lastSeasonSeen, statsSeasonSeen,
-                        Services.SeasonRecapService.IsSeasonKeyServerConfirmed))
+                        Services.SeasonRecapService.IsSeasonKeyServerConfirmed, resetPending))
                 {
                     App.Settings.Current.LastSeasonResetSeen = currentSeason;
                     App.Settings.Current.SeasonStatsSeason = currentSeason;
@@ -1031,9 +1037,10 @@ namespace ConditioningControlPanel
 
                             // Shown at once when nothing is quiet - which is every launch that is
                             // not a brand-new install - and otherwise a row in the Inbox. The
-                            // popup's own DismissedAnnouncementId bookkeeping stays inside the
-                            // popup; dismissing the ROW records the same thing, so waving the
-                            // news away without reading it still means never seeing it again.
+                            // popup's own bookkeeping stays inside the popup; dismissing the ROW
+                            // has to do BOTH halves of it itself (the local slot and the per-account
+                            // record), so waving the news away without reading it means never seeing
+                            // it again on this PC or the next one.
                             PresentOrInbox(new Services.Startup.InboxItem
                             {
                                 Key = "announcement:" + id,
@@ -1053,6 +1060,17 @@ namespace ConditioningControlPanel
                                         if (s == null) return;
                                         s.DismissedAnnouncementId = id;
                                         App.Settings?.Save();
+
+                                        // The account half, exactly as AnnouncementPopup's own
+                                        // RecordServerDismissal does it (that method is private to
+                                        // the window and this row never opens one). Without it a
+                                        // dismissed row is a LOCAL answer only, and "The Spiral is
+                                        // open" greets the same person again on their next PC -
+                                        // which is the replay the per-account record was added to
+                                        // stop. Fire-and-forget; the call never throws and logs its
+                                        // own failures at Debug.
+                                        if (!string.IsNullOrEmpty(s.UnifiedId))
+                                            _ = App.ProfileSync?.DismissAnnouncementAsync(id);
                                     }
                                     catch (Exception ex) { App.Logger?.Debug("Announcement row dismiss: {E}", ex.Message); }
                                 },

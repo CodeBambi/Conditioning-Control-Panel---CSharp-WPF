@@ -121,8 +121,17 @@ namespace ConditioningControlPanel.Services
         /// <param name="lastSeasonSeen">AppSettings.LastSeasonResetSeen as read (may be "" or null).</param>
         /// <param name="statsSeason">AppSettings.SeasonStatsSeason as read (may be "" or null).</param>
         /// <param name="serverConfirmed"><see cref="IsSeasonKeyServerConfirmed"/> at the call site.</param>
-        internal static bool ShouldAdoptSilently(string? lastSeasonSeen, string? statsSeason, bool serverConfirmed)
+        /// <param name="resetPending">AppSettings.SeasonResetPending. Set ONLY by ProfileSyncService
+        /// off an explicit server <c>level_reset</c>, so it is the one input here that is news rather
+        /// than bookkeeping: an admin resetting a single account is exactly how a reset surfaces
+        /// mid-month, and the fresh-settings shape (both keys empty) is not evidence against it. The
+        /// silent adopt cleared the latch on its way past, which swallowed that reset outright on the
+        /// install least equipped to notice. When this is true there is nothing silent to do and the
+        /// caller falls through to the real pending path.</param>
+        internal static bool ShouldAdoptSilently(string? lastSeasonSeen, string? statsSeason,
+                                                 bool serverConfirmed, bool resetPending)
             => serverConfirmed
+               && !resetPending
                && string.IsNullOrEmpty(lastSeasonSeen)
                && string.IsNullOrEmpty(statsSeason);
 

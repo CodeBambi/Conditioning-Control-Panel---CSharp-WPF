@@ -85,8 +85,8 @@ public class SeasonKeyAdoptionTests
     public void FreshSettingsWithAServerConfirmedKeyAdoptsSilently()
     {
         // Exactly the new-PC case: nothing local, the server named the season.
-        Assert.True(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: true));
-        Assert.True(SeasonRecapService.ShouldAdoptSilently(null, null, serverConfirmed: true));
+        Assert.True(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: true, resetPending: false));
+        Assert.True(SeasonRecapService.ShouldAdoptSilently(null, null, serverConfirmed: true, resetPending: false));
     }
 
     [Fact]
@@ -95,8 +95,8 @@ public class SeasonKeyAdoptionTests
         // Not logged in / sync failing: CurrentSeasonKey is the wall-clock fallback, a key no
         // server ever authored. Writing that into settings would invent a season boundary AND
         // suppress the first genuine rollover this install ever sees.
-        Assert.False(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: false));
-        Assert.False(SeasonRecapService.ShouldAdoptSilently(null, null, serverConfirmed: false));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: false, resetPending: false));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently(null, null, serverConfirmed: false, resetPending: false));
     }
 
     [Theory]
@@ -107,7 +107,7 @@ public class SeasonKeyAdoptionTests
     {
         // Either key being set means a season was witnessed here, so a later advance is a REAL
         // rollover and has to reach the recap. Silently adopting would eat it.
-        Assert.False(SeasonRecapService.ShouldAdoptSilently(lastSeasonSeen, statsSeason, serverConfirmed: true));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently(lastSeasonSeen, statsSeason, serverConfirmed: true, resetPending: false));
     }
 
     [Fact]
@@ -115,9 +115,27 @@ public class SeasonKeyAdoptionTests
     {
         // After the adopt writes both keys, the very next call must decline - otherwise the block
         // would re-run on every launch and keep clearing SeasonResetPending under a real reset.
-        Assert.True(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: true));
-        Assert.False(SeasonRecapService.ShouldAdoptSilently("2026-09", "2026-09", serverConfirmed: true));
+        Assert.True(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: true, resetPending: false));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently("2026-09", "2026-09", serverConfirmed: true, resetPending: false));
     }
+
+    [Fact]
+    public void AServerResetIsNeverAdoptedAway()
+    {
+        // The one case the fresh-settings shape does NOT cover. SeasonResetPending is written only
+        // by ProfileSyncService, off an explicit server level_reset - an admin resetting a single
+        // account, which is the only way a reset surfaces mid-month and the only way the feature is
+        // testable at all. The silent adopt cleared that latch on its way past and returned, so on
+        // an install with both keys empty the reset was swallowed without a word. Real news beats
+        // "I have never seen a season": fall through and let the pending path speak.
+        Assert.False(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: true, resetPending: true));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently(null, null, serverConfirmed: true, resetPending: true));
+    }
+
+    [Fact]
+    public void AResetWithNoServerSeasonIsStillNotAdopted()
+        // Both reasons to refuse at once. Nothing here should be able to cancel the other out.
+        => Assert.False(SeasonRecapService.ShouldAdoptSilently("", "", serverConfirmed: false, resetPending: true));
 
     [Fact]
     public void WhitespaceIsNotEmpty()
@@ -125,6 +143,6 @@ public class SeasonKeyAdoptionTests
         // IsNullOrEmpty, not IsNullOrWhiteSpace, on purpose: a whitespace key is a corrupted
         // value, not a virgin install, and it is what CompareOrdinal will actually be handed
         // downstream. Leave it to the rollover path rather than papering over it here.
-        Assert.False(SeasonRecapService.ShouldAdoptSilently("   ", "", serverConfirmed: true));
+        Assert.False(SeasonRecapService.ShouldAdoptSilently("   ", "", serverConfirmed: true, resetPending: false));
     }
 }
