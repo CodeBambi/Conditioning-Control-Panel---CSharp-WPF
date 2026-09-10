@@ -340,28 +340,39 @@ namespace ConditioningControlPanel
             if (combo == null) return;
 
             _syncingLanguageSelectors = true;
-            try
-            {
-                combo.Items.Clear();
-                int selectedIndex = 0;
-                var currentLang = App.Settings?.Current?.Language ?? "en";
-
-                for (int i = 0; i < LocalizationManager.AvailableLanguages.Length; i++)
-                {
-                    var (code, displayName, shortName) = LocalizationManager.AvailableLanguages[i];
-                    combo.Items.Add(new ComboBoxItem
-                    {
-                        Content = shortLabels ? $"🌐 {shortName}" : displayName,
-                        Tag = code,
-                        ToolTip = displayName
-                    });
-                    if (code == currentLang)
-                        selectedIndex = i;
-                }
-
-                combo.SelectedIndex = selectedIndex;
-            }
+            try { FillLanguageCombo(combo, shortLabels); }
             finally { _syncingLanguageSelectors = false; }
+        }
+
+        /// <summary>
+        /// The language list itself, and the only copy of it. Shared with the first-run wizard's
+        /// Welcome step, which offers the same languages in the same order before this window has
+        /// any chrome to offer them from - one list, three surfaces.
+        /// <para>Static and unguarded on purpose: the re-entrancy flag belongs to the two MainWindow
+        /// surfaces that can talk over each other, not to the list-building itself.</para>
+        /// </summary>
+        internal static void FillLanguageCombo(ComboBox? combo, bool shortLabels)
+        {
+            if (combo == null) return;
+
+            combo.Items.Clear();
+            int selectedIndex = 0;
+            var currentLang = App.Settings?.Current?.Language ?? "en";
+
+            for (int i = 0; i < LocalizationManager.AvailableLanguages.Length; i++)
+            {
+                var (code, displayName, shortName) = LocalizationManager.AvailableLanguages[i];
+                combo.Items.Add(new ComboBoxItem
+                {
+                    Content = shortLabels ? $"🌐 {shortName}" : displayName,
+                    Tag = code,
+                    ToolTip = displayName
+                });
+                if (code == currentLang)
+                    selectedIndex = i;
+            }
+
+            combo.SelectedIndex = selectedIndex;
         }
 
         private void CmbLanguagePill_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -369,6 +380,26 @@ namespace ConditioningControlPanel
             if (_syncingLanguageSelectors) return;
             if (CmbLanguagePill?.SelectedItem is not ComboBoxItem selected) return;
             ApplyLanguageSelection(selected.Tag as string);
+        }
+
+        /// <summary>
+        /// The language write itself, with no MainWindow chrome attached: the setting, the live
+        /// <c>LocalizationManager</c> switch and the save. Returns true when the language actually
+        /// changed.
+        /// <para>Split out so the first-run wizard can take the same path on a fresh box, where
+        /// there is no pill, no Settings tab and no restart banner to update. Everything else goes
+        /// through <see cref="ApplyLanguageSelection"/>, which wraps this with those.</para>
+        /// </summary>
+        internal static bool SetApplicationLanguage(string? langCode)
+        {
+            var code = string.IsNullOrWhiteSpace(langCode) ? "en" : langCode!;
+
+            if (App.Settings?.Current == null || App.Settings.Current.Language == code) return false;
+
+            App.Settings.Current.Language = code;
+            LocalizationManager.Instance.SetLanguage(code);
+            App.Settings.Save();
+            return true;
         }
 
         /// <summary>
@@ -381,12 +412,8 @@ namespace ConditioningControlPanel
             if (_syncingLanguageSelectors) return;
             var code = string.IsNullOrWhiteSpace(langCode) ? "en" : langCode!;
 
-            if (App.Settings?.Current != null && App.Settings.Current.Language != code)
+            if (SetApplicationLanguage(code))
             {
-                App.Settings.Current.Language = code;
-                LocalizationManager.Instance.SetLanguage(code);
-                App.Settings.Save();
-
                 // XAML bindings update live; code-behind strings need a restart
                 if (TxtBannerSecondary != null)
                 {

@@ -2069,6 +2069,44 @@
                             </Style>
                         </Button.Style>
                     </Button>
+                    <!-- THE INBOX (first-run redesign, lane C). Everything that used to pop
+                         itself in front of a brand-new user - the server announcement, the weekly
+                         nudge, the feature cards, the unlock toasts - lands here instead while the
+                         quiet window is on, and says so with a count. Collapsed at zero: an empty
+                         glyph in the title bar is one more thing to explain, and the whole point of
+                         this control is to stop explaining things nobody asked about. Painted and
+                         driven by MainWindow.Inbox.cs. -->
+                    <Button x:Name="BtnInbox" Click="BtnInbox_Click" Cursor="Hand"
+                            Margin="10,0,0,0" Width="26" Height="26" Visibility="Collapsed">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Grid Background="Transparent" Width="26" Height="26">
+                                    <Border x:Name="InboxChip" Background="#3D1A3D" CornerRadius="6"
+                                            BorderBrush="#3D3D60" BorderThickness="1"/>
+                                    <TextBlock Text="&#x2709;" FontSize="13"
+                                               Foreground="{DynamicResource PinkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <!-- Count badge. Explicit Foreground on both the fill and the
+                                         digits: unstated text in this title bar renders white on a
+                                         light chip and is unreadable. -->
+                                    <Border Background="{DynamicResource PinkBrush}" CornerRadius="7"
+                                            MinWidth="14" Height="14" Padding="3,0"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                            Margin="0,-4,-5,0">
+                                        <TextBlock Text="{TemplateBinding Tag}" Foreground="White"
+                                                   FontSize="9" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="InboxChip" Property="Background" Value="#2D2D50"/>
+                                        <Setter TargetName="InboxChip" Property="BorderBrush" Value="#5D5D80"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
                     <!-- Re-homed from the row-2 button grid Phase 1 deleted. BtnMainHelp is a
                          tutorial spotlight target (TutorialService.cs) - the name must survive. -->
                     <Button x:Name="BtnMainHelp" Content="?" Click="BtnMainHelp_Click"

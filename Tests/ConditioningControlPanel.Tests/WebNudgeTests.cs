@@ -178,13 +178,20 @@ public class WebNudgeTests
     {
         // What's New clears IsStartupDialogShowing in its finally BEFORE the queued tour action
         // runs, so a wait predicate without the tutorial check let the picker open modally on
-        // top of the running spotlight (flagged in the 0812 build review).
+        // top of the running spotlight (flagged in the 0812 build review). Since the first-run
+        // redesign the picker no longer carries a wait of its own: it is one rung of the
+        // StartupPresenter ladder, and the presenter refuses to start ANY modal while a tutorial
+        // is active (StartupQueueCore.CanStartModal). Two things are pinned here: that the
+        // picker really is on the ladder rather than back on a hand-rolled poll, and that the
+        // ladder's gate still has the tutorial in it.
         var main = ReadSource("MainWindow", "MainWindow.xaml.cs");
         var picker = Regex.Match(main,
-            @"await Task\.Delay\(1500\);.*?ModPickerDialog\.ShowIfNeeded\(this, preselectActiveMod: true\);",
+            @"EnqueueStartupModal\(""mod-picker"",\s*50,.*?ModPickerDialog\.ShowIfNeeded\([^;]*preselectActiveMod: true\);",
             RegexOptions.Singleline);
-        Assert.True(picker.Success, "the upgrader mod-picker block has moved or changed shape");
+        Assert.True(picker.Success, "the upgrader mod-picker block has left the startup ladder or changed shape");
+        Assert.DoesNotContain("await Task.Delay(1500)", main);
 
-        Assert.Equal(2, Regex.Matches(picker.Value, Regex.Escape("App.Tutorial?.IsActive")).Count);
+        Assert.False(ConditioningControlPanel.Services.Startup.StartupQueueCore.CanStartModal(
+            modalUp: false, updateDialogActive: false, tutorialActive: true, windowReady: true));
     }
 }

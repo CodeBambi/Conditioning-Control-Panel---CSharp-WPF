@@ -994,7 +994,18 @@ namespace ConditioningControlPanel
                 if (App.Patreon?.HasPremiumAccess != true) return;
                 if (_sessionEngine?.IsRunning == true) return;
                 if (App.IsUpdateDialogActive || IsStartupDialogShowing) return;
-                FeatureIntroPopup.ShowCelebrationIfFirstTime(this);
+
+                // Through the presenter. Suppression is still never fatal - the seen-flag is spent
+                // inside ShowCore, at open time - but inside the quiet window the card becomes an
+                // Inbox row instead of vanishing until the next launch's re-check.
+                PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:" + FeatureIntroPopup.CelebrationKey,
+                    Glyph = "💖",
+                    Title = "Premium is yours",
+                    Summary = "Everything that was locked is open.",
+                    Open = () => FeatureIntroPopup.ShowCelebrationIfFirstTime(this),
+                });
             }
             catch (Exception ex)
             {

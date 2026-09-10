@@ -332,10 +332,16 @@ public sealed class EmiDeskService : IDisposable
             _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
             _summonTouring = string.Equals(why, "tour", StringComparison.OrdinalIgnoreCase);
 
-            // THE KNOCK WAS ANSWERED (Ask EMI wave 1). The chip flashed, and this is the summon
-            // that followed it - by the chip, the chord or the tray, because all three are the
-            // same answer to the same question. She opens with the scripted first-contact beat
-            // instead of the ambient greeting, and the pending flag is spent either way so a
+            // THE KNOCK'S OWN SUMMON (Ask EMI wave 1; rewritten by the first-run redesign). This
+            // is now nearly always the summon TryKnock itself just made a line ago - she is not
+            // waiting to be fetched any more, she comes out and asks. The flag still routes the
+            // opener rather than the caller passing it, because the other three ways in (the chip,
+            // the chord, the tray) can still land first on a slow machine, and whichever summon
+            // gets here first is the one that owes her the scripted beat.
+            //
+            // ONE opener, not two. _summonMoment was set to ChooseGreetMoment() a few lines up and
+            // is REPLACED here, never added to: ScheduleSummonMoment fires exactly one of them, so
+            // the greeting cannot double up behind the ask. The flag is spent either way, so a
             // second summon this launch gets the ordinary hello.
             try
             {
@@ -346,7 +352,7 @@ public sealed class EmiDeskService : IDisposable
                     if (!string.IsNullOrEmpty(contact))
                     {
                         _summonMoment = contact;
-                        Log.Information("[EmiDesk] the knock was answered: opening with {Moment}", contact);
+                        Log.Information("[EmiDesk] the knock opens with {Moment}", contact);
                     }
                 }
             }
@@ -809,9 +815,10 @@ public sealed class EmiDeskService : IDisposable
     /// NEXT one is <c>desktopFirstBoot</c>, and everything after that is the ordinary
     /// <c>summoned</c>.</para>
     ///
-    /// <para>The knock path still overrides this in <see cref="Summon"/> - it has its own three
-    /// scripted openers (<c>firstContact</c> / <c>firstContactUpgrade</c> / <c>firstContactLater</c>)
-    /// and they are chosen by population, not by order.</para>
+    /// <para>The knock path still overrides this in <see cref="Summon"/>: its opener is chosen by
+    /// population rather than by order, and it is the one that carries the walk offer. On a fresh
+    /// install the two agree on <c>firstContact</c> anyway - the difference is the ask, which only
+    /// the knock's route puts on the glass.</para>
     ///
     /// <para>"Spent" is read from the engine's own once-ever bucket, so the limits in the lines file
     /// stay the single authority: this only orders the choice. A greeting the engine swallows (she
@@ -1007,25 +1014,40 @@ public sealed class EmiDeskService : IDisposable
     /// <summary>
     /// The chip should flash. Raised on the dispatcher; <see cref="Controls.EmiDock"/> is the only
     /// listener and it is free to ignore it (a designer instance, a rail mid-rebuild).
+    ///
+    /// <para>The pulses are no longer a request for a click - <see cref="TryKnock"/> brings her out
+    /// in the same beat. They are the answer to "where did she just come from", pointing at the
+    /// ring she stepped out of, which is the one part of this widget a first-run user has to be
+    /// able to find again after they send her away.</para>
     /// </summary>
     public event EventHandler? KnockRequested;
 
-    /// <summary>True between the flash and the summon that answers it.</summary>
+    /// <summary>
+    /// True across the knock's own summon, so that summon opens with the scripted first-contact
+    /// beat instead of the ambient greeting. Spent by the first summon that reads it.
+    /// </summary>
     public bool KnockPending => _knockPending;
 
     /// <summary>
     /// ASK THE KNOCK, ONCE, at the far side of the first-run flow.
+    ///
+    /// <para><b>The knock is the offer now</b> (first-run redesign, Sep 2026). It used to only
+    /// raise <see cref="KnockRequested"/> and hope: three pink pulses on a 40 px ring, and the
+    /// offer was reachable only if the user read those six seconds as an invitation and clicked.
+    /// Almost nobody did, and the offer was spent all the same. So this method now does BOTH -
+    /// pulse the chip and bring her out - and she opens with the ask itself. One question, asked
+    /// out loud, non-modally, once.</para>
     ///
     /// <para><paramref name="seenVersionSnapshot"/> must be <c>AppSettings.LastSeenVersion</c> as
     /// it stood BEFORE this launch stamped it: <c>ShowWhatsNewIfNeeded</c> writes the current
     /// version to that setting on the synchronous side of the first-run branch, long before this
     /// runs, and a late read would see the stamp rather than the history. That is the same shape
     /// as the bug that showed every fresh install a migration notice for a move it never
-    /// witnessed.</para>
+    /// witnessed. It still matters with the knock down to fresh installs only: the snapshot is the
+    /// difference between "no stamp" and "stamped by us, ten seconds ago".</para>
     ///
-    /// <para>Returns true only when the chip was actually asked to flash. Every refusal is
-    /// silent by design - this is asked once per launch and the answer is no almost every
-    /// time.</para>
+    /// <para>Returns true only when she was actually brought out. Every refusal is silent by
+    /// design - this is asked once per launch and the answer is no almost every time.</para>
     /// </summary>
     public bool TryKnock(string? seenVersionSnapshot)
     {
@@ -1049,18 +1071,39 @@ public sealed class EmiDeskService : IDisposable
                 return false;
             }
 
-            // Spend the offer BEFORE the pulse: the ledger has to survive a kill mid-animation,
-            // or "once, ever" becomes "once per launch you happen to close during".
+            // Spend the offer BEFORE anything visible happens: the ledger has to survive a kill
+            // mid-animation, or "once, ever" becomes "once per launch you happen to close during".
             EmiState.NoteKnocked();
 
+            // Set BEFORE the summon, not after. Summon() reads _knockPending inline to pick the
+            // opener, so a flag written afterwards would arrive one beat too late and she would
+            // come out for the knock and then play the ordinary hello.
             _knockWorld = world;
             _knockPending = true;
 
-            Log.Information("[EmiDesk] the chip knocks: population={Pop}, offer {N} of {Cap}",
+            Log.Information("[EmiDesk] the knock: population={Pop}, offer {N} of {Cap}",
                 _knock.Population(world), EmiState.Current.KnockOffers, EmiKnockMachine.OfferCap);
 
+            // The pulse first, so the ring is already lit as she arrives out of it: it is the
+            // answer to "where did that come from", not a request for a click any more.
             try { KnockRequested?.Invoke(this, EventArgs.Empty); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] knock handler threw"); }
+
+            // ...and then bring her out, in the same beat, to ASK. why:"knock" is for the log and
+            // the summon telemetry; the OPENER is routed by _knockPending, which is why that flag
+            // had to be set above and not here.
+            Summon("knock");
+
+            // She may have refused to come (the feature switched off between the gate and here, the
+            // window failing to build). The offer is spent either way and deliberately so - a retry
+            // loop around an onboarding prompt is the failure mode this whole machine exists to
+            // prevent - but the log should say which of the two happened.
+            if (!IsOut)
+            {
+                _knockPending = false;
+                Log.Information("[EmiDesk] the knock spent its offer but she never made it out");
+                return false;
+            }
 
             return true;
         }

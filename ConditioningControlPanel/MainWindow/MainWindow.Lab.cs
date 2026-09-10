@@ -1235,7 +1235,19 @@ namespace ConditioningControlPanel
                 if (s == null) return;
                 if (!s.LockdownPossessionEnabled || s.LockdownPossessionIntroSeen) return;
 
-                FeatureIntroPopup.ShowIfFirstTime("possession", this);
+                // Through the presenter: unchanged on a normal launch (nothing is quiet, so the
+                // card opens right here), and an Inbox row rather than an ambush if possession is
+                // armed inside the first-launch window or mid-session. The bark still fires now -
+                // it is her voice, not a modal, and it is the half that survives being clicked
+                // through in half a second.
+                PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:possession",
+                    Glyph = "🕶",
+                    Title = "The warden's rules",
+                    Summary = "What possession does before the room starts moving.",
+                    Open = () => FeatureIntroPopup.ShowIfFirstTime("possession", this),
+                });
                 App.Bark?.NotifyPossessionRules();
 
                 s.LockdownPossessionIntroSeen = true;

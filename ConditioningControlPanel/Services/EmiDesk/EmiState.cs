@@ -124,22 +124,29 @@ public sealed class EmiState
     // ---- the knock (Ask EMI, wave 1) -------------------------------------------
 
     /// <summary>
-    /// How far the one-time onboarding knock has got. <c>0</c> she has never flashed the dock chip,
-    /// <c>1</c> the chip has knocked and the offer is still owed, <c>2</c> spent - they answered,
-    /// either way, and nothing here ever fires again.
+    /// How far the one-time onboarding knock has got. <c>0</c> she has never knocked, <c>1</c> she
+    /// came out and asked, <c>2</c> spent - they said yes, and nothing here ever fires again.
+    ///
+    /// <para>A NO leaves this at <c>1</c> and always did. It is not the thing that stops her: the
+    /// one-offer ceiling below is, and it was already spent the moment she appeared.</para>
     ///
     /// <para>This is the first of the knock's four brakes (docs/emi-desk/WAVE1-CONTRACT.md) and the
     /// only one that is a latch rather than a ceiling.</para>
     /// </summary>
     [JsonProperty("knockState")] public int KnockState { get; set; }
 
-    /// <summary>When the chip knocked, in UTC ticks. <c>0</c> means it never has. Read by the
-    /// next-launch re-offer, which is the only thing allowed to follow a knock.</summary>
+    /// <summary>When she knocked, in UTC ticks. <c>0</c> means she never has. Read by the machine's
+    /// "never twice in one sitting" guard, which is what holds if the offer counter ever does
+    /// not.</summary>
     [JsonProperty("knockAtUtc")] public long KnockAtUtc { get; set; }
 
     /// <summary>
-    /// How many onboarding offers she has EVER made. Hard ceiling 2: the knock itself, and one
-    /// shrugged re-offer on a later launch. A third is nagging and the machine refuses it.
+    /// How many onboarding offers she has EVER made. Hard ceiling ONE: she comes out, she asks,
+    /// and that was the feature. A second is nagging and the machine refuses it.
+    ///
+    /// <para>The ceiling was 2 while the knock was only a pulse on the chip and the offer needed a
+    /// click to reach, so a shrug bought one quieter re-offer. An install carrying a 2 from that
+    /// era reads as over, which is exactly right - they were asked twice already.</para>
     /// </summary>
     [JsonProperty("knockOffers")] public int KnockOffers { get; set; }
 
@@ -530,13 +537,17 @@ public sealed class EmiState
     // ---- the knock (Ask EMI, wave 1) -------------------------------------------
 
     /// <summary>
-    /// THE CHIP JUST FLASHED. Latches <see cref="KnockState"/> to
-    /// <see cref="EmiKnockMachine.Knocked"/>, stamps the time and SPENDS one of the two offers.
+    /// SHE IS COMING OUT TO ASK. Latches <see cref="KnockState"/> to
+    /// <see cref="EmiKnockMachine.Knocked"/>, stamps the time and SPENDS the one and only offer.
     ///
-    /// <para>The offer is spent here, at the flash, and not when they click: somebody who never
-    /// touches the chip has answered too, by ignoring it, and a counter that waited for a click
-    /// would re-flash on every launch forever. Written NOW rather than debounced, because a knock
-    /// that is not on disk when the app is killed is a knock that happens again.</para>
+    /// <para>The offer is spent here, at the knock, and not when they answer: somebody who closes
+    /// the app while the bubble is still on screen has been asked, and a counter that waited for a
+    /// chip press would put her back out on every launch forever. Written NOW rather than
+    /// debounced, because a knock that is not on disk when the app is killed is a knock that
+    /// happens again.</para>
+    ///
+    /// <para>With the cap at one this call is also what makes a NO permanent: there is no second
+    /// offer left for a shrug to earn, and no "they said no" flag to write.</para>
     /// </summary>
     public static void NoteKnocked()
     {
@@ -547,7 +558,7 @@ public sealed class EmiState
             s.KnockAtUtc = DateTime.UtcNow.Ticks;
             s.KnockOffers = Math.Min(EmiKnockMachine.OfferCap, s.KnockOffers + 1);
             SaveNow();
-            Log.Information("[EmiDesk] the chip knocked (offer {N} of {Cap})",
+            Log.Information("[EmiDesk] the knock spent its offer ({N} of {Cap})",
                 s.KnockOffers, EmiKnockMachine.OfferCap);
         }
         catch (Exception ex)
@@ -559,6 +570,10 @@ public sealed class EmiState
     /// <summary>
     /// They said YES. Brake 1: the knock is spent for good, whatever the offer counter says and
     /// whether or not the tour they accepted is ever finished - she asked, they answered, done.
+    ///
+    /// <para>Still worth having now that one offer is the whole cap: this latch survives a QA
+    /// counter reset, so replaying the knock on a machine where somebody already took the walk
+    /// cannot put the same question back in front of them.</para>
     /// </summary>
     public static void NoteKnockAnswered()
     {
@@ -601,9 +616,9 @@ public sealed class EmiState
 
     /// <summary>
     /// Has this <c>TutorialType</c> name been finished end to end? An unreadable ledger answers
-    /// NO: the cost of a false no is one walk offered twice, and the knock's own brakes cap
-    /// that at two offers ever. The cost of a false yes is a first-run user who is never
-    /// offered the walk at all and never learns there was one.
+    /// NO: the cost of a false no is the walk offered to somebody who has taken it, which the
+    /// knock's one-offer cap bounds at exactly once. The cost of a false yes is a first-run user
+    /// who is never offered the walk at all and never learns there was one.
     /// </summary>
     public static bool HasTourDone(string? tour)
     {

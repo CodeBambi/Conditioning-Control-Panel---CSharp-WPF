@@ -4511,6 +4511,58 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Tells the server this account has answered a server announcement, so it is never
+        /// served to this user again - on this PC or any other.
+        ///
+        /// <para>The client's own record is a SINGLE slot (<c>AppSettings.DismissedAnnouncementId</c>)
+        /// living in the settings file, which means it does not exist on a machine the user has
+        /// not used yet. "The Spiral is open" therefore replayed in full on every new install and
+        /// after every settings wipe, months after it was news. Dismissal is a fact about the
+        /// person, not about the PC, so the server keeps it and filters the announcement out at
+        /// the source (GET /config/announcement skips any id in the account's
+        /// <c>dismissed_announcements</c>).</para>
+        ///
+        /// <para>Fire-and-forget on purpose. The local slot is still written first and is the
+        /// offline fallback, so nothing here is load-bearing for the popup that just closed: a
+        /// failure means the announcement may reappear on a DIFFERENT machine, which is exactly
+        /// the pre-existing behaviour. Never throws, and logs at Debug rather than Warning
+        /// because an offline dismissal is ordinary, not a fault.</para>
+        /// </summary>
+        /// <param name="announcementId">The announcement's server id. Ignored when blank.</param>
+        public async Task DismissAnnouncementAsync(string announcementId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(announcementId)) return;
+
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+                if (string.IsNullOrEmpty(unifiedId)) return;   // no cloud account: local slot is all there is
+
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/announcement/dismiss");
+                AddAuthHeader(request);
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(new { unified_id = unifiedId, announcement_id = announcementId }),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Debug("Announcement dismissal not recorded server-side: {Status} (id={Id})",
+                        response.StatusCode, announcementId);
+                    return;
+                }
+
+                App.Logger?.Debug("Announcement {Id} dismissed server-side", announcementId);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Announcement dismissal request failed: {Error}", ex.Message);
+            }
+        }
+
         #endregion
 
         #region The Descent — migration handshake (CONTRACTS-0812 §2)
