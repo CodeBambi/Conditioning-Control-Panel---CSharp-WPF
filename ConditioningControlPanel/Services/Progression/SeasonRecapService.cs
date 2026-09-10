@@ -98,6 +98,34 @@ namespace ConditioningControlPanel.Services
             return string.CompareOrdinal(serverSeason!, localSeason!) > 0;
         }
 
+        /// <summary>
+        /// Whether this install should take the server's season key QUIETLY: write it down, roll
+        /// nothing, announce nothing.
+        ///
+        /// <para>The case is a returning user on a NEW PC. The settings file is brand new, so
+        /// LastSeasonResetSeen and SeasonStatsSeason are both empty; the first sync then learns
+        /// the server's real season. Everything downstream reads an empty LastSeasonResetSeen as
+        /// "before any real key", so the recap concluded a season had just ended and put a
+        /// rollover box in front of someone who had only just signed in - for a rollover this
+        /// machine never witnessed, with no snapshot behind it, so the card had nothing to show.
+        /// That is the owner's "season box on re-login on a new PC" complaint.</para>
+        ///
+        /// <para>Empty is not "before". Empty is "I have never seen a season", and the honest
+        /// response to that is to write down the one the server just named and carry on. BOTH
+        /// keys must be empty: once either is set this install HAS witnessed a season, and a
+        /// later advance is a real rollover that must still fire. Server confirmation is required
+        /// for the same reason it is required in TryPresentSeasonRecap - the wall-clock fallback
+        /// invents a key nobody authored, and adopting that would write a fiction into settings
+        /// and suppress the first genuine rollover this install ever sees.</para>
+        /// </summary>
+        /// <param name="lastSeasonSeen">AppSettings.LastSeasonResetSeen as read (may be "" or null).</param>
+        /// <param name="statsSeason">AppSettings.SeasonStatsSeason as read (may be "" or null).</param>
+        /// <param name="serverConfirmed"><see cref="IsSeasonKeyServerConfirmed"/> at the call site.</param>
+        internal static bool ShouldAdoptSilently(string? lastSeasonSeen, string? statsSeason, bool serverConfirmed)
+            => serverConfirmed
+               && string.IsNullOrEmpty(lastSeasonSeen)
+               && string.IsNullOrEmpty(statsSeason);
+
         // ---------- live counter mutations (call from feature hook points) ----------
 
         /// <summary>

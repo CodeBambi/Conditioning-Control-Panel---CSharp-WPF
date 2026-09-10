@@ -293,6 +293,28 @@ namespace ConditioningControlPanel
                 var highestLevel = App.Settings.Current.HighestLevelEver;
                 var resetPending = App.Settings.Current.SeasonResetPending;
 
+                // A NEW PC adopting the server's season is not a rollover. On a fresh settings
+                // file LastSeasonResetSeen and SeasonStatsSeason are both empty, and the first
+                // sync writes the server's real key - at which point every test below reads the
+                // empty key as "before" the server's and announces a season end this machine
+                // never witnessed, with no snapshot to show for it. Write the key down, clear any
+                // pending latch that rode in with the same sync, and say nothing. Deliberately
+                // ahead of the highestLevel gate: a level-1 install that returned early here
+                // would leave the empty keys in place and fire the same false recap the moment it
+                // reached level 2. Anyone who HAS seen a season (either key set) falls through to
+                // the real rollover logic untouched.
+                var statsSeasonSeen = App.Settings.Current.SeasonStatsSeason ?? "";
+                if (Services.SeasonRecapService.ShouldAdoptSilently(lastSeasonSeen, statsSeasonSeen,
+                        Services.SeasonRecapService.IsSeasonKeyServerConfirmed))
+                {
+                    App.Settings.Current.LastSeasonResetSeen = currentSeason;
+                    App.Settings.Current.SeasonStatsSeason = currentSeason;
+                    App.Settings.Current.SeasonResetPending = false;
+                    App.Settings.Save();
+                    App.Logger?.Information("Adopted server season {Season} silently (fresh settings, nothing to recap)", currentSeason);
+                    return;
+                }
+
                 // Brand-new users (never leveled up) skip this. They'll see it once they progress.
                 if (highestLevel < 2) return;
 
