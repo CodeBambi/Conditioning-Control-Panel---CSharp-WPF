@@ -215,8 +215,11 @@ is the glitch bubble's wash off the leash: no backdrop blur, no dark luminosity 
 ceiling, so the picture is the thing on the glass. Opacity `0.55-0.8` by strength, hold `1.5-3 s`
 stretched by strength and `durationMult`, a light `is-washing` scale shudder, and a soft mask
 (`styles.css .sf-pfx-gifwash`) that both feathers the edges and lands its falloff over the lower
-centre so the road stays drivable - the race's `filter: opacity()` overlay cap is deliberately NOT
-extended to it. The url comes from `pickWashUrl()`, which draws up to four times from the DOM-safe
+centre so the road stays drivable - the spiral's 0.78 `filter: opacity()` cap is deliberately NOT
+extended to it; what the race does put on the hold is a flat `opacity(0.85)` (2026-09-09, phone
+testing: "15% less opacity on the fullscreen gifs"), so the ramp lands at `0.47-0.68` and the live
+Loom canvas, which inherits the hold's filter, sits at the same weight as a gif. The url comes from
+`pickWashUrl()`, which draws up to four times from the DOM-safe
 pool and takes the first entry whose name or url says `.gif`/`.webp`, keeping the last draw if none
 do; with an empty pool it takes a BUNDLED SPIRAL (`pickSpiralUrl()`, all animated) rather than one
 of the still png `FALLBACK_SPRITES`. It has its OWN MIX slot, `wash` (`cocktail.js CATEGORIES`,
@@ -281,8 +284,35 @@ that word in the centrepiece as a `mantra` - the spiral says what the voice said
 same shape as `subliminalFx`); when a weave is picked it mounts a canvas inside the `sf-pfx-spiral`
 hold rather than setting a background-image, inheriting the hold's opacity fade so intensity stays
 one channel, and neutralises only the css the canvas replaces (the 14 s spin, the 1.6 overscan). The
-canvas backing store is capped at 512 px on the long side, 320 px on the touch tier, where it also
-drops layer 2 and the wobble and paces frames at 33 ms. Reduced motion paints one still frame.
+canvas backing store is capped at 512 px on the long side, 256 px on the touch tier, where it also
+drops layer 2 and the wobble and paces frames at 42 ms. One WebGL context and one compiled shader
+serve every hold for the manager's life (2026-09-09: a context per pop was the phone's lag - a
+shader compile on every spiral); a hold is only a 2D view over that surface. Reduced motion paints
+one still frame.
+THE PHONE'S LAYERS (2026-09-10: "we still lag a lot on the fullscreen effects on iphone. the glitch
+bubble fullscreen in particular and the spiral"). Every sustained hold is a fullscreen DOM layer over
+the WebGL glass, composited at device resolution (3x on an iPhone), and three things on them cost a
+full-resolution pass on every frame the layer changes: race.css's `filter: opacity()` caps (and the
+MIX crossfade and tint-2 saturate through the same channel), the drain's `backdrop-filter: blur()`,
+and the glitch's `hue-rotate` / `saturate` keyframes. So run.js stamps `#race-root[data-touch="1"]`
+on the touch tier (`isTouchTier`, the same stamp the spiral canvas tiers on) and passes payloadFx
+its third seam, `opacityCap(kind)`: the same 0.78 / 0.7 / 0.86 / 0.85 (0.92 for tint 2) multiplied
+INLINE into the hold's opacity at `holdOn` / `showMelt`, so the intensities are the desktop's and
+race.css can take every filter, the backdrop blur and the colour keyframes off that tier (the
+glitch shudders on transform alone, a heavier fill stands in for the blur, the melt's sag drops its
+saturate). The masks stay: a mask is a composite, not a per-frame filter pass. The desktop rules
+are untouched, the Descent passes no cap. `race/smoke/loom-spiral-check.mjs` section 7b.
+The second pass (2026-09-10, "smoother but still not good enough ... the gifs, pink filter and
+spiral ... the blink shutter effect on the bambi sleep trigger"): under the same stamp the melt's
+drip (an animated background-position, a 3 M px repaint per frame) is gone and only the sag stays;
+the flash bursts and the gif rain swap `filter: drop-shadow()` for a box-shadow; the `pink-blink`
+plate blinks in colour instead of `filter: brightness()`, and the `melt` and `fog` plates let go
+without `filter: blur()`; the doll's lacquer breathes on scale alone; the subliminal card rushes
+without its blur; the strobe edge is the 5 px line without the 40 px inset blur. `shared/quality.js`
+mobile: `bubbleShards` 24 (was 32) and `bubbleViewAhead` 64 m (was 76): every visible sprite is a
+draw call, and 64 m is still 2.9 s ahead at cruise. The governor in `race/pixel.js` has a lower rung
+on a coarse pointer, `TOUCH_DPR_FLOOR` 0.8, read every `GOV_TOUCH_SEC` 2 s, climbing back one rung
+at a time. Section 7c.
 `webglcontextlost`, or no WebGL at all, drops the canvas and paints `href` - the old gif path is the
 floor, not a dead branch. Each mount self-unmounts at `durMs + 700`, so nothing spins behind an
 invisible layer. `gifwash`'s own fallback goes through the same seam, so it gets a weave too.

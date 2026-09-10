@@ -1,4 +1,4 @@
-using ConditioningControlPanel.Services.Descent;
+﻿using ConditioningControlPanel.Services.Descent;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -17,9 +17,10 @@ namespace ConditioningControlPanel.Tests;
 public class VatFillCoordinatorTests
 {
     private static DescentBlock? BlockWith(int cap, int todayXp, double fillPct, double lipPct = 120)
-        => DescentReader.Parse(DescentReader.ParseWire(
-            $"{{ \"devotion_days\": 10, \"vat\": {{ \"cap\": {cap}, \"today_xp\": {todayXp}, " +
-            $"\"fill_pct\": {fillPct}, \"fill_lip_pct\": {lipPct} }} }}"));
+        // Invariant on purpose: a plain interpolation writes 40,98 on an it-IT machine and the wire
+        // JSON stops parsing, which reads as Ignored and fails every fractional case below.
+        => DescentReader.Parse(DescentReader.ParseWire(System.FormattableString.Invariant(
+            $"{{ \"devotion_days\": 10, \"vat\": {{ \"cap\": {cap}, \"today_xp\": {todayXp}, \"fill_pct\": {fillPct}, \"fill_lip_pct\": {lipPct} }} }}")));
 
     // ------------------------------------------------------------- the threshold
 

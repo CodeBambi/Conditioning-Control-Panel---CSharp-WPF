@@ -42,11 +42,18 @@
  * exactly as before the moment it takes the element back.
  *
  * PERF (measured knobs, all in here):
- *   - backing store 512 long side on desktop, 320 on the mobile tier / a coarse
+ *   - ONE WebGL context and ONE compiled shader for the manager's whole life
+ *     (2026-09-09, the owner: "the spirals make the phone version laggy"). The
+ *     first cut built a fresh context per hold - a shader compile + program link
+ *     on every pop, which on a phone is the frame-long stall the player felt as
+ *     lag. Now every hold is a 2D view over the same field surface; a hold costs
+ *     a canvas element and nothing else. The context is torn down on dispose
+ *     (the run's end) and on loss, never between pops.
+ *   - backing store 512 long side on desktop, 256 on the mobile tier / a coarse
  *     pointer, CSS-upscaled to the viewport. The field is analytically
  *     antialiased (u_px in loomField's shader), so it stays crisp anyway - this
  *     is the whole reason a canvas beats a 5 MB gif on a phone.
- *   - 30 fps cap under touch, paced through a timeout so the compositor idles
+ *   - 24 fps cap under touch, paced through a timeout so the compositor idles
  *     between paints (a bare rAF re-arm keeps a display-rate heartbeat alive).
  *   - layer2 off and wobble flattened under touch: two uniforms the phone does
  *     not owe. The params are COPIED first - the book's id means "this spiral
@@ -64,11 +71,11 @@
 import { createFieldRenderer, normalizeParams2, loopMs2, composeFrame } from '../shared/loomField.js';
 import { Q } from '../shared/quality.js';
 
-/** Backing-store long side, by tier. A phone draws under a third of the desktop's pixels. */
+/** Backing-store long side, by tier. A phone draws a quarter of the desktop's pixels. */
 export const BACK_LONG = 512;
-export const BACK_LONG_TOUCH = 320;
-/** 30 fps under touch; the desktop runs at display rate. */
-export const TOUCH_FRAME_MS = 33;
+export const BACK_LONG_TOUCH = 256;
+/** 24 fps under touch; the desktop runs at display rate. */
+export const TOUCH_FRAME_MS = 42;
 /** payloadFx's `.sf-pfx-layer` fade is 0.45 s; the canvas outlives the hold by that plus a breath. */
 export const FADE_MS = 700;
 
@@ -115,8 +122,11 @@ export function backingFor(w, h, touch) {
  */
 export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
   const say = typeof log === 'function' ? log : () => {};
-  /** el -> { el, view, ctx, gl canvas, field, q, loop, kind, timer, id, onLost } */
+  /** el -> { el, view, ctx, q, loop, kind, timer, id, onLost } - the 2D view over the shared field */
   const live = new Map();
+  /** THE ONE FIELD. A GL canvas (never in the DOM) and loomField's renderer over it, built on the
+   *  first mount and kept until dispose or a context loss: every hold draws off this surface. */
+  let glc = null, field = null, onContextLost = null;
   let touch = isTouchTier();
   let lost = false;          // WebGL refused or a context was lost - latched for the run
   let disposed = false;
@@ -135,9 +145,9 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
   }
   function sizeRec(rec) {
     const b = viewport();
+    if (glc && (glc.width !== b.w || glc.height !== b.h)) { glc.width = b.w; glc.height = b.h; }
     if (rec.view.width !== b.w || rec.view.height !== b.h) {
       rec.view.width = b.w; rec.view.height = b.h;
-      rec.gl.width = b.w; rec.gl.height = b.h;
       return true;
     }
     return false;
@@ -166,7 +176,7 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
     rafId = raf(frame);
   }
   function drawOne(rec, phase) {
-    try { composeFrame(rec.ctx, rec.field, rec.q, phase, rec.view.width, rec.view.height); stats.frames++; return true; }
+    try { composeFrame(rec.ctx, field, rec.q, phase, rec.view.width, rec.view.height); stats.frames++; return true; }
     catch (e) { say('race loom render threw (' + ((e && e.message) || e) + ') - the gif takes the layer'); fail(rec); return false; }
   }
   function frame(now) {
@@ -182,13 +192,18 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
     rafId = raf(frame);
   }
 
-  /** Context lost, or a render threw: latch, tear this hold down, tell the caller. */
+  /** Context lost, or a render threw: latch, tear EVERY hold down (they all drew off the one
+   *  surface), tell each caller. `rec` is the hold that saw it first, or null from the context. */
   function fail(rec) {
     lost = true;
-    const back = rec && rec.onLost;
-    dropRec(rec);
-    stats.floors++;
-    if (typeof back === 'function') { try { back(); } catch (e) { /* ignore */ } }
+    const recs = rec ? [rec, ...[...live.values()].filter((r) => r !== rec)] : [...live.values()];
+    for (const r of recs) {
+      const back = r.onLost;
+      dropRec(r);
+      stats.floors++;
+      if (typeof back === 'function') { try { back(); } catch (e) { /* ignore */ } }
+    }
+    dropField();
   }
 
   function applyOverrides(el, kind) {
@@ -200,24 +215,49 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
     for (const k of Object.keys(map)) { try { el.style[k] = ''; } catch (e) { /* ignore */ } }
   }
 
-  /** Take one hold's canvas off: free the context, remove the node, give the element back. */
+  /** Take one hold's view off: remove the node, give the element back. The field stays for the next pop. */
   function dropRec(rec) {
     if (!rec || !live.has(rec.el)) return;
     if (rec.timer) { clearTimeout(rec.timer); rec.timer = 0; }
     live.delete(rec.el);
-    try {
-      const g = rec.field && rec.field.gl;
-      const ext = g && g.getExtension ? g.getExtension('WEBGL_lose_context') : null;
-      if (ext && typeof ext.loseContext === 'function') ext.loseContext();
-    } catch (e) { /* ignore */ }
-    try { rec.gl.removeEventListener('webglcontextlost', rec.onContextLost); } catch (e) { /* ignore */ }
     try { rec.view.remove(); } catch (e) { /* ignore */ }
     restoreOverrides(rec.el, rec.kind);
     stats.drops++;
     if (!live.size) halt();
   }
 
-  /** Build the pair of canvases for one hold, or null if WebGL will not have us. */
+  /** The shared field: built once, or null (and `lost` latched) if WebGL will not have us. */
+  function ensureField() {
+    if (field) return field;
+    if (lost) return null;
+    const gl = document.createElement('canvas');     // the field's own surface, never in the DOM
+    const b = viewport();
+    gl.width = b.w; gl.height = b.h;
+    let f = null;
+    try { f = createFieldRenderer(gl); } catch (e) { say('race loom shader failed (' + ((e && e.message) || e) + ') - the gif takes the layer'); f = null; }
+    if (!f) { lost = true; return null; }
+    onContextLost = (ev) => {
+      try { if (ev && typeof ev.preventDefault === 'function') ev.preventDefault(); } catch (e) { /* ignore */ }
+      say('race loom: webgl context lost - the gif takes the layer');
+      fail(null);
+    };
+    gl.addEventListener('webglcontextlost', onContextLost, false);
+    glc = gl; field = f;
+    return field;
+  }
+  /** Free the one context: on dispose, and on loss (where it is already gone). */
+  function dropField() {
+    if (!glc) return;
+    try {
+      const g = field && field.gl;
+      const ext = g && g.getExtension ? g.getExtension('WEBGL_lose_context') : null;
+      if (ext && typeof ext.loseContext === 'function') ext.loseContext();
+    } catch (e) { /* ignore */ }
+    try { glc.removeEventListener('webglcontextlost', onContextLost); } catch (e) { /* ignore */ }
+    glc = null; field = null; onContextLost = null;
+  }
+
+  /** Build the 2D view for one hold, or null if the page has no 2D canvas. */
   function makeRec(el, kind) {
     const view = document.createElement('canvas');
     view.className = 'rh-loom-spiral';
@@ -225,19 +265,10 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
     s.position = 'absolute'; s.left = '0'; s.top = '0';
     s.width = '100%'; s.height = '100%';
     s.display = 'block'; s.pointerEvents = 'none';
-    const gl = document.createElement('canvas');     // the field's own surface, never in the DOM
-    const rec = { el, view, gl, ctx: null, field: null, kind, q: null, loop: 3600, timer: 0, id: '', onLost: null, onContextLost: null };
+    const rec = { el, view, ctx: null, kind, q: null, loop: 3600, timer: 0, id: '', onLost: null };
     sizeRec(rec);
     rec.ctx = view.getContext('2d');
     if (!rec.ctx) return null;
-    rec.field = createFieldRenderer(gl);
-    if (!rec.field) return null;
-    rec.onContextLost = (ev) => {
-      try { if (ev && typeof ev.preventDefault === 'function') ev.preventDefault(); } catch (e) { /* ignore */ }
-      say('race loom: webgl context lost - the gif takes the layer');
-      fail(rec);
-    };
-    gl.addEventListener('webglcontextlost', rec.onContextLost, false);
     return rec;
   }
 
@@ -264,6 +295,7 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
       if (rec && rec.kind !== kind) { dropRec(rec); rec = null; }
       if (!rec) {
         try {
+          if (!ensureField()) { stats.floors++; return false; }
           rec = makeRec(el, kind);
           if (!rec) { lost = true; stats.floors++; return false; }
           el.appendChild(rec.view);
@@ -304,21 +336,21 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
       if (disposed) return;
       disposed = true;
       for (const rec of [...live.values()]) dropRec(rec);
+      dropField();
       halt();
       if (resizeWired) { try { window.removeEventListener('resize', onResize); } catch (e) { /* ignore */ } resizeWired = false; }
       if (visWired) { try { document.removeEventListener('visibilitychange', onVisibility); } catch (e) { /* ignore */ } visWired = false; }
     },
 
-    /** SMOKE / RIG ONLY. Pretend the context went on every live hold: the same path a real
-     *  `webglcontextlost` takes, so race/smoke/loom-spiral-check.mjs can prove the gif floor
-     *  without a driver reset. Returns how many holds were dropped. */
+    /** SMOKE / RIG ONLY. Pretend the one context went: the same path a real `webglcontextlost`
+     *  takes, so race/smoke/loom-spiral-check.mjs can prove the gif floor without a driver
+     *  reset. Returns how many holds were dropped. */
     loseContext() {
-      const recs = [...live.values()];
-      for (const rec of recs) {
-        try { rec.gl.dispatchEvent(new Event('webglcontextlost')); }
-        catch (e) { fail(rec); }
-      }
-      return recs.length;
+      const n = live.size;
+      if (!glc) return 0;
+      try { glc.dispatchEvent(new Event('webglcontextlost')); }
+      catch (e) { fail(null); }
+      return n;
     },
 
     /** race/smoke/loom-spiral-check.mjs + the shot harness: what is on the glass. */
@@ -328,7 +360,7 @@ export function createLoomSpiralFx({ reducedMotion = false, log = null } = {}) {
         backing: r.view.width + 'x' + r.view.height,
         mounted: r.view.parentNode === r.el,
       }));
-      return { holds, touch, lost, disposed, still: !!reducedMotion, ...stats };
+      return { holds, touch, lost, disposed, still: !!reducedMotion, field: !!field, ...stats };
     },
   };
   return api;
