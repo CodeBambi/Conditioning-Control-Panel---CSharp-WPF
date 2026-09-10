@@ -17,11 +17,35 @@ namespace ConditioningControlPanel.Services.Possession.Effects;
 ///
 /// <para>Voice per mod, matched to each pack's own lockdown_on / lockdown_off / lockdown_tick lines
 /// (Resources/sounds/companion_audio/mods/&lt;mod&gt;/bark_rules.json): Bambi Sleep is sweet and
-/// sinking, Sissy Hypno is coaxing and soft, Locked is a keeper talking to a pet. Custom mods borrow
-/// the Bambi Sleep pool - it is the least mod-specific of the three.</para>
+/// sinking, Sissy Hypno is coaxing and soft, Locked is a keeper talking to a pet. No mod, CCP Default
+/// and custom mods use the Vanilla pool: the same shape with no persona or gendered words, so a fresh
+/// install stays neutral. A mod's own word for the user reaches it through <c>{petname}</c>.</para>
 /// </summary>
 public static class RewritePools
 {
+    /// <summary>Vanilla (no mod, CCP Default, custom mods): the neutral floor. Second person, no
+    /// persona name, no gendered word. Same keys as the themed pools so the haunt reads the same.
+    /// <c>{petname}</c> is resolved at pick time, so a custom mod's own word lands here.</summary>
+    private static readonly Dictionary<string, string[]> Vanilla = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["home"] = new[] { "quiet", "down" },
+        ["start"] = new[] { "stay", "sink" },
+        ["stop"] = new[] { "stay", "sink" },
+        ["pause"] = new[] { "stay" },
+        ["exit"] = new[] { "stay" },
+        ["close"] = new[] { "stay" },
+        ["back"] = new[] { "deeper" },
+        ["settings"] = new[] { "their settings" },
+        ["sessions"] = new[] { "their sessions" },
+        ["profile"] = new[] { "their subject" },
+        ["progress"] = new[] { "sinking" },
+        ["play"] = new[] { "obey", "sink" },
+        ["lockdown"] = new[] { "theirs" },
+        ["flashes"] = new[] { "blanks" },
+        ["videos"] = new[] { "trances" },
+        ["you"] = new[] { VocabTokens.PetNameToken },
+    };
+
     /// <summary>Bambi Sleep: sink, be pretty, be good. Short words, lower case, no punctuation tricks.</summary>
     private static readonly Dictionary<string, string[]> Bambi = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -85,12 +109,13 @@ public static class RewritePools
         ["you"] = new[] { "pet" },
     };
 
-    /// <summary>The pool for the mod that is live right now (custom mods borrow Bambi Sleep).</summary>
+    /// <summary>The pool for the mod that is live right now (anything unthemed gets Vanilla).</summary>
     private static Dictionary<string, string[]> PoolFor(string? modId) => modId switch
     {
+        BuiltInMods.BambiSleepId => Bambi,
         BuiltInMods.SissyHypnoId => Sissy,
         BuiltInMods.LockedId => LockedPool,
-        _ => Bambi,
+        _ => Vanilla,
     };
 
     /// <summary>The mod the warden currently speaks as. Safe before the mod service exists.</summary>
@@ -98,8 +123,8 @@ public static class RewritePools
     {
         get
         {
-            try { return App.Mods?.ActiveModId ?? BuiltInMods.BambiSleepId; }
-            catch { return BuiltInMods.BambiSleepId; }
+            try { return App.Mods?.ActiveModId ?? BuiltInMods.CCPDefaultId; }
+            catch { return BuiltInMods.CCPDefaultId; }
         }
     }
 
@@ -120,7 +145,8 @@ public static class RewritePools
             var pool = PoolFor(modId);
             if (pool.TryGetValue(trimmed, out var options) && options.Length > 0)
             {
-                var pick = options[rng.Next(options.Length)];
+                // Apply() resolves {petname} to the active mod's word, or "sweetie" with no mod.
+                var pick = VocabTokens.Apply(options[rng.Next(options.Length)]);
                 var shaped = MatchCase(trimmed, pick, original);
                 if (!string.Equals(shaped, original, StringComparison.Ordinal)) return shaped;
             }

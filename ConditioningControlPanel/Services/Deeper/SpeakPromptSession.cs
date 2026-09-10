@@ -1,10 +1,11 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Speech;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Services.Deeper
 {
@@ -64,7 +65,7 @@ namespace ConditioningControlPanel.Services.Deeper
             _requiredReps = Math.Clamp(effect.SpeakRequiredReps, 1, 5);
             _completion = effect.SpeakCompletion;
             _holdMode = effect.SpeakHoldMode;
-            _correctMsg = string.IsNullOrWhiteSpace(effect.SpeakCorrectMessage) ? "good girl" : effect.SpeakCorrectMessage!.Trim();
+            _correctMsg = string.IsNullOrWhiteSpace(effect.SpeakCorrectMessage) ? $"that's it, {VocabTokens.VanillaPetName}" : effect.SpeakCorrectMessage!.Trim();
             _incorrectMsg = string.IsNullOrWhiteSpace(effect.SpeakIncorrectMessage) ? "try again" : effect.SpeakIncorrectMessage!.Trim();
             _source = source;
             _regionStart = effect.SpeakRegionStartSec;

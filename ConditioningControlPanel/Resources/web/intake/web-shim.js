@@ -138,7 +138,7 @@ function fromHostInit(m) {
     speechCaps = { bridge: true, available: c.speech.available !== false, reason: c.speech.reason || null };
   }
   return defaultBootConfig({
-    niche: NICHES.includes(c.niche) ? c.niche : Niche.Bambi,
+    niche: NICHES.includes(c.niche) ? c.niche : Niche.Default,
     caps: Object.assign({}, DEFAULT_CAPS, c.caps || {}),
     endless: !!c.endless,
     steerValve: numOr(c.steerValve, 1),
@@ -163,9 +163,9 @@ function fromHostInit(m) {
 function standaloneConfig() {
   const q = new URLSearchParams((typeof location !== 'undefined' && location.search) || '');
   const saved = readLocal('intake.bootConfig') || {};
-  const niche = q.get('niche') || saved.niche || Niche.Bambi;
+  const niche = q.get('niche') || saved.niche || Niche.Default;
   return defaultBootConfig({
-    niche: NICHES.includes(niche) ? niche : Niche.Bambi,
+    niche: NICHES.includes(niche) ? niche : Niche.Default,
     caps: Object.assign({}, DEFAULT_CAPS, saved.caps || {}),
     endless: q.has('endless') ? q.get('endless') !== '0' : !!saved.endless,
     steerValve: numOr(q.get('steer'), numOr(saved.steerValve, 1)),

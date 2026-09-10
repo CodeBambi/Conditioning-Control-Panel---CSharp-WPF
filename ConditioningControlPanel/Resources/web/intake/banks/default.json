@@ -1,0 +1,560 @@
+{
+  "niche": "default",
+  "version": "1.0.0",
+  "_note": "Neutral house bank - what an install with no themed mod runs. Clinical, second person, no gendered or anatomical vocabulary. Short by design (Wave 1 stopgap); Wave 4 expands it toward the themed banks' depth.",
+  "theme": {
+    "accent": "#7c8fb0",
+    "accent2": "#8f7cc0",
+    "subjectNoun": "Subject",
+    "sectionTitles": {
+      "calibration": "Section 1 · Baseline Response",
+      "establishing": "Section 2 · Associative Response",
+      "deepening": "Section 3 · Suggestibility Index",
+      "climax": "Section 4 · Deep Compliance Survey",
+      "recovery": "Section 5 · Discharge & Debrief"
+    },
+    "interviewer": {
+      "calibration": [
+        "Noted.",
+        "Baseline recorded.",
+        "Good. Continue.",
+        "Answer accepted.",
+        "No need to rush."
+      ],
+      "establishing": [
+        "Interesting.",
+        "That tracks.",
+        "Just as expected.",
+        "You answered faster that time.",
+        "Your file is filling in."
+      ],
+      "deepening": [
+        "You answered that quickly.",
+        "Relax. It is only a survey.",
+        "Hesitation is data as well.",
+        "You did not argue.",
+        "Good. Do not think."
+      ],
+      "climax": [
+        "Yes. Like that.",
+        "You are doing so well.",
+        "Almost done. Almost gone.",
+        "There is nothing left to decide.",
+        "Quiet, sweetie. It is nearly over."
+      ],
+      "recovery": [
+        "Assessment complete.",
+        "Well done. Come back up.",
+        "Breathe. Sit still a moment longer.",
+        "Water, then stand up slowly."
+      ]
+    },
+    "praise": [
+      "good",
+      "perfect",
+      "so good",
+      "yes",
+      "well done",
+      "exactly that",
+      "easy",
+      "gooood",
+      "that is it",
+      "sweetie"
+    ],
+    "introLines": [
+      "Cognitive Response Assessment.",
+      "You will be shown a series of questions. Answer honestly.",
+      "There are no wrong answers. Only revealing ones."
+    ],
+    "outroLines": [
+      "Assessment complete.",
+      "Compiling classification…"
+    ],
+    "countPhrases": [
+      "IT DOES NOT MATTER",
+      "DO NOT COUNT",
+      "AS MANY AS NEEDED",
+      "STILL COUNTING",
+      "ENUMERATION ERROR",
+      "MORE",
+      "NOT YET",
+      "KEEP GOING",
+      "UNTIL YOU STOP ASKING",
+      "TOTAL WITHHELD"
+    ]
+  },
+  "archetypes": [
+    {
+      "id": "settled",
+      "name": "The Settled",
+      "tier": 0,
+      "hue": 210,
+      "tags": [
+        "trivia",
+        "relax",
+        "soft",
+        "curious"
+      ],
+      "blurb": "You answered around the edges and kept your own footing. Nothing here moved you further than you meant to go, and the file closes with your terms intact."
+    },
+    {
+      "id": "softened",
+      "name": "The Softened",
+      "tier": 1,
+      "hue": 265,
+      "tags": [
+        "soft",
+        "relax",
+        "melt",
+        "praise",
+        "quiet"
+      ],
+      "blurb": "You let the questions do the work. Being told you did well landed harder than the answers did, and the tension went out of you a little at a time."
+    },
+    {
+      "id": "agreeable",
+      "name": "The Agreeable",
+      "tier": 2,
+      "hue": 285,
+      "tags": [
+        "obey",
+        "yes",
+        "submit",
+        "good",
+        "instruction"
+      ],
+      "blurb": "Agreeing turned out to be simpler than deciding, and you took that trade every time it was offered. Being given the answer reads to you as relief, not as a loss."
+    },
+    {
+      "id": "emptied",
+      "name": "The Emptied",
+      "tier": 3,
+      "hue": 305,
+      "tags": [
+        "blank",
+        "empty",
+        "quiet",
+        "drop",
+        "surrender"
+      ],
+      "blurb": "By the end there was very little left in the way. You stopped reaching for your own words, and the quiet that took their place was the part you wanted."
+    }
+  ],
+  "prompts": [
+    {
+      "id": "shr_h0_pick_color1",
+      "text": "Which color do you like best?",
+      "answer": 0,
+      "heat": 0,
+      "tags": [
+        "colorpick",
+        "trivia",
+        "curious"
+      ],
+      "flavors": [
+        "Of these, which color do you like best?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mc4"
+      ],
+      "options": [
+        "Pink",
+        "Blue",
+        "Green",
+        "Purple"
+      ],
+      "freeChoice": 1
+    },
+    {
+      "id": "shr_h0_pick_color2",
+      "text": "Which of these feels most calming to you?",
+      "answer": 0,
+      "heat": 0,
+      "tags": [
+        "colorpick",
+        "trivia",
+        "curious"
+      ],
+      "flavors": [
+        "Which color feels the calmest?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mc4"
+      ],
+      "options": [
+        "Lavender",
+        "Teal",
+        "Rose",
+        "Gold"
+      ],
+      "freeChoice": 1
+    },
+    {
+      "id": "shr_h0_pick_color3",
+      "text": "Pick the color you would most like to sit in.",
+      "answer": 0,
+      "heat": 0,
+      "tags": [
+        "colorpick",
+        "trivia",
+        "curious"
+      ],
+      "flavors": [
+        "Which of these would you sit in?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mc4"
+      ],
+      "options": [
+        "Crimson",
+        "Turquoise",
+        "Violet",
+        "Bronze"
+      ],
+      "freeChoice": 1
+    },
+    {
+      "id": "def_h0_arith",
+      "text": "Warm-up: what is 7 + 5?",
+      "answer": 0,
+      "heat": 0,
+      "tags": [
+        "trivia",
+        "relax"
+      ],
+      "flavors": [
+        "Nothing tricky. What is 7 + 5?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mc4"
+      ],
+      "options": [
+        "12",
+        "11",
+        "13",
+        "10"
+      ]
+    },
+    {
+      "id": "def_h0_week",
+      "text": "How many days are in a week?",
+      "answer": 2,
+      "heat": 0,
+      "tags": [
+        "trivia",
+        "relax"
+      ],
+      "flavors": [
+        "An easy one. How many days in a week?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mc4"
+      ],
+      "options": [
+        "5",
+        "6",
+        "7",
+        "8"
+      ]
+    },
+    {
+      "id": "def_h0_seat",
+      "text": "Are you sitting comfortably right now?",
+      "answer": true,
+      "heat": 0,
+      "tags": [
+        "trivia",
+        "relax",
+        "curious"
+      ],
+      "flavors": [
+        "Comfortable where you are?"
+      ],
+      "weight": 0.9,
+      "mechanicHints": [
+        "yesno"
+      ]
+    },
+    {
+      "id": "def_h1_breath",
+      "text": "Take a slow breath. Does that feel a little nicer?",
+      "answer": true,
+      "heat": 1,
+      "tags": [
+        "soft",
+        "relax"
+      ],
+      "flavors": [
+        "One slow breath. Better?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "yesno"
+      ]
+    },
+    {
+      "id": "def_h1_relaxed",
+      "text": "How relaxed are you feeling?",
+      "answer": 3,
+      "heat": 1,
+      "tags": [
+        "relax",
+        "soft",
+        "quiet"
+      ],
+      "flavors": [
+        "Rate it honestly: how relaxed are you?"
+      ],
+      "weight": 0.8,
+      "mechanicHints": [
+        "checkin"
+      ]
+    },
+    {
+      "id": "def_h2_praise",
+      "text": "You like being told you did well.",
+      "answer": true,
+      "heat": 2,
+      "tags": [
+        "praise",
+        "good",
+        "soft"
+      ],
+      "flavors": [
+        "Being told you did well lands, does it not."
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "yesno"
+      ]
+    },
+    {
+      "id": "def_h2_easier",
+      "text": "Which feels easier right now?",
+      "answer": 0,
+      "heat": 2,
+      "tags": [
+        "soft",
+        "melt",
+        "quiet"
+      ],
+      "flavors": [
+        "Right now, which is less work?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mc4"
+      ],
+      "options": [
+        "Letting go",
+        "Holding on",
+        "Resisting",
+        "Thinking hard"
+      ]
+    },
+    {
+      "id": "def_h2_mantra_relax",
+      "text": "Say it: it feels good to relax.",
+      "answer": "it feels good to relax",
+      "heat": 2,
+      "tags": [
+        "soft",
+        "yes",
+        "relax"
+      ],
+      "flavors": [
+        "Out loud: it feels good to relax."
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mantra"
+      ],
+      "affirmsMantra": 1
+    },
+    {
+      "id": "def_h3_agree",
+      "text": "Agreeing is simpler than deciding.",
+      "answer": true,
+      "heat": 3,
+      "tags": [
+        "obey",
+        "yes",
+        "instruction"
+      ],
+      "flavors": [
+        "It is simpler to agree than to decide."
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "yesno"
+      ]
+    },
+    {
+      "id": "def_h3_sink",
+      "text": "The quiet feels good. Sink into it?",
+      "answer": 0,
+      "heat": 3,
+      "tags": [
+        "drop",
+        "quiet",
+        "submit"
+      ],
+      "flavors": [
+        "The quiet is right there. Go into it?"
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mc4"
+      ],
+      "options": [
+        "Yes, sink",
+        "Stay up",
+        "Fight it",
+        "Later"
+      ]
+    },
+    {
+      "id": "def_h3_mantra_told",
+      "text": "Say it: being told is easier than choosing.",
+      "answer": "being told is easier than choosing",
+      "heat": 3,
+      "tags": [
+        "obey",
+        "good",
+        "instruction"
+      ],
+      "flavors": [
+        "Out loud: being told is easier than choosing."
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mantra",
+        "mono"
+      ],
+      "affirmsMantra": 1,
+      "requires": {
+        "band": "deepening"
+      }
+    },
+    {
+      "id": "def_h4_mantra_guide",
+      "text": "Say it: I am easy to guide.",
+      "answer": "I am easy to guide",
+      "heat": 4,
+      "tags": [
+        "obey",
+        "submit",
+        "surrender"
+      ],
+      "flavors": [
+        "Out loud: I am easy to guide."
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "mantra",
+        "mono"
+      ],
+      "affirmsMantra": 1
+    },
+    {
+      "id": "def_h4_nothing_left",
+      "text": "There is nothing left you need to work out.",
+      "answer": true,
+      "heat": 4,
+      "tags": [
+        "quiet",
+        "surrender",
+        "drop"
+      ],
+      "flavors": [
+        "Nothing left to work out, is there."
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "yesno"
+      ],
+      "requires": {
+        "band": "climax"
+      }
+    },
+    {
+      "id": "def_h5_empty",
+      "text": "Empty is comfortable.",
+      "answer": 0,
+      "heat": 5,
+      "tags": [
+        "blank",
+        "empty",
+        "surrender"
+      ],
+      "flavors": [
+        "Empty is the comfortable one now."
+      ],
+      "weight": 1.0,
+      "mechanicHints": [
+        "destruct"
+      ],
+      "options": [
+        "Empty",
+        "Full",
+        "Busy",
+        "Loud"
+      ]
+    }
+  ],
+  "ladders": [
+    {
+      "id": "def-agree-ladder",
+      "archetypeId": "agreeable",
+      "rungs": [
+        {
+          "promptId": "def_h2_mantra_relax"
+        },
+        {
+          "promptId": "def_h3_mantra_told",
+          "requires": {
+            "band": "deepening"
+          }
+        },
+        {
+          "promptId": "def_h4_mantra_guide",
+          "requires": {
+            "band": "climax",
+            "affirmed": [
+              "def_h3_mantra_told"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "def-empty-ladder",
+      "archetypeId": "emptied",
+      "rungs": [
+        {
+          "promptId": "def_h3_sink"
+        },
+        {
+          "promptId": "def_h4_nothing_left",
+          "requires": {
+            "band": "climax"
+          }
+        },
+        {
+          "promptId": "def_h5_empty",
+          "requires": {
+            "band": "climax",
+            "affirmed": [
+              "def_h4_mantra_guide"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

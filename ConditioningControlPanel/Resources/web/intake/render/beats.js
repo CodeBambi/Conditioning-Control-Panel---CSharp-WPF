@@ -556,7 +556,7 @@ const DISTORT_GOOD_CHIME_RATE = 0.30;
 const WRONG_GOOD_CHIME_RATE = 0.10;
 const FREEZE_GATE_MS = 20000;             // stall window before we auto-pick
 const FREEZE_SUB_FALLBACK = 'Are you sure, sweetie?'; // no manifest/clip text
-const FREEZE_NICHES = ['bambi', 'sissy', 'drone', 'circe'];
+const FREEZE_NICHES = ['default', 'bambi', 'sissy', 'drone', 'circe'];
 const FREEZE_DOT_Z = 2147480000;          // == steering HIJACK_Z (fake cursor on top)
 /** Mechanics with a discrete wrong/correct option set (skip sliders/mantra/
  *  interludes/BubblePop). Mono/Funnel never send a WRONG index to attempt(), so
@@ -712,9 +712,12 @@ export function createBeats({ root, effects, audio, steering, reward, caps, back
   let transitionFired = false;
 
   // Active bank niche for the freeze-gate VO id contract (sure_<niche>_NN). The
-  // niche is validated by the shim before boot; fall back to bambi if a caller
-  // ever omits it. Feeds ONLY the freeze-gate taunt clip id + subtitle text.
-  const gateNiche = (typeof niche === 'string' && FREEZE_NICHES.indexOf(niche) >= 0) ? niche : 'bambi';
+  // niche is validated by the shim before boot; fall back to the neutral house
+  // niche if a caller ever omits it. Feeds ONLY the freeze-gate taunt clip id +
+  // subtitle text. sure_default_NN clips are not cut yet: audio.voice fails soft
+  // on a missing id and the subtitle stays on FREEZE_SUB_FALLBACK, which is
+  // already the neutral line.
+  const gateNiche = (typeof niche === 'string' && FREEZE_NICHES.indexOf(niche) >= 0) ? niche : 'default';
 
   // Guarded SFX seam: fire a finalized-library cue via audio.sfx (additive; may
   // be absent on the stub). Never throws, never breaks gameplay. Returns the

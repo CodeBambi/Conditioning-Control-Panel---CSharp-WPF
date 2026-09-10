@@ -36,7 +36,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SPRITE = (n) => `/dtrh/assets/bubbles/effects/${n}.png`;
 const FALLBACK_SPRITES = [SPRITE('flash'), SPRITE('spiral'), SPRITE('pinkfilter'), SPRITE('glitch')];
 // a small built-in whisper pool for word flashes when no subliminal text is piped
-const WORDS = ['good girl', 'drop', 'sink', 'obey', 'deeper', 'blank', 'melt', 'pink', 'empty', 'yes'];
+const WORDS = ['quiet', 'drop', 'sink', 'obey', 'deeper', 'blank', 'melt', 'pink', 'empty', 'yes'];
 const pick = (a) => a[(Math.random() * a.length) | 0];
 
 // hard caps so a dense wave can never flood the DOM with clips/flashes
@@ -191,11 +191,15 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     setTimeout(() => el.remove(), dur + 300);
   }
 
-  function bambiFreeze() {
+  /**
+   * The freeze card. `text` is the caller's own phrase when it has one; the tube never passes it,
+   * so dtrh.html reads the neutral FREEZE unless a caller names the word.
+   */
+  function bambiFreeze(text) {
     const el = document.createElement('div');
     el.className = 'sf-pfx-freeze';
     const word = document.createElement('span');
-    word.textContent = 'BAMBI FREEZE';
+    word.textContent = String(text || '').trim().toUpperCase() || 'FREEZE';
     el.appendChild(word);
     root.appendChild(el);
     setTimeout(() => { if (!disposed) el.classList.add('sf-pfx-out'); }, 1200);

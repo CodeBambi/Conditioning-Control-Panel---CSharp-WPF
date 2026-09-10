@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         /// <summary>
         /// The model's answer to an <see cref="AmbientEvent"/> — an unprompted quip, not a reply to
-        /// anything the user typed. Assistant-role on the wire so the live window knows what she just
+        /// anything the user typed. Assistant-role on the wire so the live window knows what the companion just
         /// said (and a "why'd you say that?" follow-up has context), but deliberately NOT
         /// <see cref="CompanionTurn.IsDialogue"/>, so it never reaches disk.
         ///
@@ -39,7 +39,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
 
         /// <summary>
         /// What the pre-recorded voice just said out loud, carried as an assistant-role line so the
-        /// model knows what "she" already said and doesn't repeat it. Flavor, not content: capped
+        /// model knows what the companion already said and does not repeat it. Flavor, not content: capped
         /// hard in the prompt window and never persisted (barks replay from bark_rules.json).
         /// </summary>
         BarkEcho,
@@ -96,8 +96,8 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public bool IsDialogue => Kind is TurnKind.UserChat or TurnKind.AssistantChat;
 
         /// <summary>
-        /// Wire role. AmbientEvents ride as user-role (they are things that happened *to* her),
-        /// BarkEchoes as assistant-role (they are things she said). SystemNotes have no role — they
+        /// Wire role. AmbientEvents ride as user-role (things that happened *to* the companion),
+        /// BarkEchoes as assistant-role (they are things the companion said). SystemNotes have no role — they
         /// never reach a model; callers must filter them out before mapping.
         /// </summary>
         public string Role => Kind switch
@@ -123,7 +123,7 @@ namespace ConditioningControlPanel.Services.Companion.Brain
         public ChatMessage ToMessage() => new(Role, WireText);
 
         /// <summary>
-        /// Formats a bark line as the assistant-role "she already said this out loud" echo.
+        /// Formats a bark line as the assistant-role "already said this out loud" echo.
         /// <paramref name="speaker"/> is the active mod's companion name.
         /// </summary>
         public static string FormatBarkEcho(string speaker, string line) =>

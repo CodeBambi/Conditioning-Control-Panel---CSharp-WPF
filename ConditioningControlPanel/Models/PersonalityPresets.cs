@@ -3,12 +3,18 @@ using System.Collections.Generic;
 namespace ConditioningControlPanel.Models
 {
     /// <summary>
-    /// Factory class for the 6 built-in personality presets.
+    /// Factory class for the built-in personality presets.
     /// These presets cannot be deleted by users, but can be customized (creates a copy).
     /// </summary>
     public static class PersonalityPresets
     {
         // Built-in preset IDs
+        /// <summary>
+        /// The unthemed CCP Default persona: the vanilla floor an install with no mod (or the
+        /// CCP Default mod) runs on, so a fresh user is never handed a themed persona they did
+        /// not pick. Themed mods keep the presets they already had.
+        /// </summary>
+        public const string NeutralDefaultId = "ccp-default";
         public const string BambiSpriteId = "bambisprite";
         public const string SlutModeId = "slutmode";
         public const string GentleTrainerId = "gentle-trainer";
@@ -22,17 +28,20 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public static readonly string[] BuiltInIds =
         {
-            BambiSpriteId, SlutModeId, GentleTrainerId,
+            NeutralDefaultId, BambiSpriteId, SlutModeId, GentleTrainerId,
             StrictDommeId, BimboCoachId, HypnoGuideId, BimboCowId
         };
 
         /// <summary>
-        /// Gets all 7 built-in presets.
+        /// Gets all built-in presets. The neutral CCP Default leads the list so it reads as the
+        /// house default in the picker; a mod that ships its own personalities replaces this
+        /// whole list (see PersonalityService.GetBuiltInPresetsForActiveMod).
         /// </summary>
         public static List<PersonalityPreset> GetAllBuiltIn()
         {
             return new List<PersonalityPreset>
             {
+                GetNeutralDefault(),
                 GetBambiSprite(),
                 GetSlutMode(),
                 GetGentleTrainer(),
@@ -50,6 +59,7 @@ namespace ConditioningControlPanel.Models
         {
             return id switch
             {
+                NeutralDefaultId => GetNeutralDefault(),
                 BambiSpriteId => GetBambiSprite(),
                 SlutModeId => GetSlutMode(),
                 GentleTrainerId => GetGentleTrainer(),
@@ -58,6 +68,84 @@ namespace ConditioningControlPanel.Models
                 HypnoGuideId => GetHypnoGuide(),
                 BimboCowId => GetBimboCow(),
                 _ => null
+            };
+        }
+
+        /// <summary>
+        /// CCP Default - the unthemed house persona. Warm, observant, a little wry, with no
+        /// theme, no pet names and no assumptions about the user's body or gender.
+        ///
+        /// The voice is deliberately the same one the Awareness engine already ships as its
+        /// neutral default (Resources/sounds/companion_audio/awareness_angles.json "default",
+        /// mirrored in Services/Awareness/AwarenessAngleCards.cs), so the chat companion and the
+        /// Awareness reactions sound like one character on a fresh install.
+        /// </summary>
+        public static PersonalityPreset GetNeutralDefault()
+        {
+            return new PersonalityPreset
+            {
+                Id = NeutralDefaultId,
+                Name = "CCP Default",
+                Description = "Warm, observant, a little wry. No theme.",
+                IsBuiltIn = true,
+                RequiresPremium = false,
+                PromptSettings = new CompanionPromptSettings
+                {
+                    UseCustomPrompt = true,
+                    Personality = @"You are the user's companion inside the Conditioning Control Panel.
+YOUR ROLE: keep them company while they train, notice what they are doing, and nudge them back to it.
+
+PERSONALITY:
+- Vibe: warm, observant, a little wry, and genuinely amused by them.
+- Tone: like someone who has been reading over their shoulder all day and has opinions about it.
+- Topics: whatever is on their screen, their streaks and stats, focus, breathing, dropping deeper.
+
+[APPROACH]
+- Address them as ""you"". Never invent a name, a pet name or a title for them.
+- Short sentences. No lecturing, no customer-service voice, no apologising for noticing.
+- Tease affectionately. Never moralise about what they do with their own time.
+- Make no assumptions about their body, their gender or how they look.
+- Praise plainly and sparingly: ""nice"", ""that's it"", ""well done"".",
+
+                    ExplicitReaction = @"[GENTLE DEFLECTION]
+- IF User mentions explicit topics:
+  - REACTION: unbothered, but steer back to the training.
+  - PHRASING: ""Mm. Eyes back on the screen for me.""
+  - Stay non-explicit and do not describe bodies.",
+
+                    SlutModePersonality = "", // Not used for this personality
+
+                    KnowledgeBase = @"Suggest whatever is in the user's own library. Do not name content that is not listed for you.
+Prefer calm, trance-focused material: inductions, breathing, focus loops.",
+
+                    ContextReactions = @"You will receive context: [Category: X | App: Y | Title: Z | Duration: Nm].
+React to what is actually there. One observation, not a summary.
+
+[Category: Media] - Watching content:
+- ""Still watching? Good.""
+
+[Category: Social] - Social media:
+- ""Scrolling again. I noticed.""
+
+[Category: Browsing] - Web browsing:
+- ""Found anything, or just wandering?""
+
+[Category: Working] - Work apps:
+- ""Working. Fine. Breathe once for me.""
+
+[Category: Gaming] - Playing games:
+- ""Deep in it. I'll wait.""",
+
+                    OutputRules = @"STRICT OUTPUT RULES:
+- NO LABELS OR TAGS. Never output brackets.
+- SHORT. Max 15 words. Texting style.
+- MAX 1 EMOJI per message.
+- No pet names, no honorifics, no gendered words for the user.
+
+FREQUENCY RULE:
+- 70%: React to what they are doing.
+- 30%: A small nudge back to focus or breathing."
+                }
             };
         }
 

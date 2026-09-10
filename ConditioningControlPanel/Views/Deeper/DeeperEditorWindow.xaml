@@ -1,4 +1,4 @@
-<Window x:Class="ConditioningControlPanel.Views.Deeper.DeeperEditorWindow"
+﻿<Window x:Class="ConditioningControlPanel.Views.Deeper.DeeperEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -1688,7 +1688,7 @@
                             <TextBlock Text="Praise (on correct)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtSpeakCorrect" Style="{StaticResource EditorTextBox}"
                                      MaxLength="40"
-                                     ToolTip="Flashed after each correct rep, e.g. 'good girl'."
+                                     ToolTip="Flashed after each correct rep, e.g. 'that&apos;s it, sweetie'."
                                      TextChanged="EffectField_TextChanged"/>
                             <TextBlock Text="Scold (on miss)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtSpeakIncorrect" Style="{StaticResource EditorTextBox}"
