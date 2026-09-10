@@ -289,6 +289,19 @@ drops layer 2 and the wobble and paces frames at 42 ms. One WebGL context and on
 serve every hold for the manager's life (2026-09-09: a context per pop was the phone's lag - a
 shader compile on every spiral); a hold is only a 2D view over that surface. Reduced motion paints
 one still frame.
+THE PHONE'S LAYERS (2026-09-10: "we still lag a lot on the fullscreen effects on iphone. the glitch
+bubble fullscreen in particular and the spiral"). Every sustained hold is a fullscreen DOM layer over
+the WebGL glass, composited at device resolution (3x on an iPhone), and three things on them cost a
+full-resolution pass on every frame the layer changes: race.css's `filter: opacity()` caps (and the
+MIX crossfade and tint-2 saturate through the same channel), the drain's `backdrop-filter: blur()`,
+and the glitch's `hue-rotate` / `saturate` keyframes. So run.js stamps `#race-root[data-touch="1"]`
+on the touch tier (`isTouchTier`, the same stamp the spiral canvas tiers on) and passes payloadFx
+its third seam, `opacityCap(kind)`: the same 0.78 / 0.7 / 0.86 / 0.85 (0.92 for tint 2) multiplied
+INLINE into the hold's opacity at `holdOn` / `showMelt`, so the intensities are the desktop's and
+race.css can take every filter, the backdrop blur and the colour keyframes off that tier (the
+glitch shudders on transform alone, a heavier fill stands in for the blur, the melt's sag drops its
+saturate). The masks stay: a mask is a composite, not a per-frame filter pass. The desktop rules
+are untouched, the Descent passes no cap. `race/smoke/loom-spiral-check.mjs` section 7b.
 `webglcontextlost`, or no WebGL at all, drops the canvas and paints `href` - the old gif path is the
 floor, not a dead branch. Each mount self-unmounts at `durMs + 700`, so nothing spins behind an
 invisible layer. `gifwash`'s own fallback goes through the same seam, so it gets a weave too.
