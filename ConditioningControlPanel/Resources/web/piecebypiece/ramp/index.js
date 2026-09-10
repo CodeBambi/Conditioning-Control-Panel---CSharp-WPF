@@ -21,7 +21,7 @@
  * ==========================================================================*/
 
 import { createMeter, RAMP_TUNING, clamp01 } from './meter.js';
-import { createSchedule, videoHoldMs } from './schedule.js';
+import { createSchedule, videoHoldMs, sustainedFor } from './schedule.js';
 import { createLayerStack } from './layers/index.js';
 import { createFixtureMedia } from './media.js';
 
@@ -219,12 +219,23 @@ export function attachRamp(opts = {}) {
       layers: stack.debug ? stack.debug() : null,
       media: media.stats ? media.stats() : null,
       tuning,
-      /** Dev harness only: pin the meter (null gives the game back control). */
-      setMeter(v) { overrideMeter = v == null ? null : clamp01(v); return overrideMeter; },
+      /** Dev harness only: pin the meter (null gives the game back control).
+       *  Sustained layers are applied at once so a screenshot does not have to
+       *  wait for the next rAF beat (headless barely gets any). */
+      setMeter(v) {
+        overrideMeter = v == null ? null : clamp01(v);
+        applySustained(sustainedFor(liveMeter(), tuning));
+        return overrideMeter;
+      },
       /** Dev harness only: fire one layer by name right now. */
       fire(kind, o) {
         if (kind === 'videoCard') stack.videoCard(o || { holdMs: videoHoldMs(liveMeter(), tuning) });
         else stack.oneshot(kind, o || { heat: liveHeat(now()) });
+      },
+      /** Dev harness only: fill the screen for a screenshot without waiting. */
+      prime(n = 5) {
+        const heat = liveHeat(now());
+        for (let i = 0; i < n; i++) { stack.oneshot('flash', { heat }); stack.oneshot('gifRain', { heat }); }
       },
       stack,
     };

@@ -184,9 +184,10 @@ function applyMeter() {
 }
 meterEl.addEventListener('input', applyMeter);
 
-/* ?meter= and ?fire= drive the screenshot pass */
+/* ?meter=, ?fire= and ?prime= drive the screenshot pass */
 if (qs.has('meter')) { meterEl.value = Math.round(Number(qs.get('meter')) * 100); applyMeter(); }
-if (qs.has('fire')) ramp.debug().fire(qs.get('fire'));
+if (qs.has('prime')) ramp.debug().prime(Number(qs.get('prime')) || 5);
+if (qs.has('fire')) for (const kind of qs.get('fire').split(',')) ramp.debug().fire(kind.trim());
 
 const out = document.getElementById('out');
 setInterval(() => {
