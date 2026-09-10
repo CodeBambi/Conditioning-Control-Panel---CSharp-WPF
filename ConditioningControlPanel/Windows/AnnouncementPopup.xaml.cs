@@ -316,11 +316,43 @@ public partial class AnnouncementPopup : Window
             try
             {
                 Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+                // Acting on an announcement answers it. Someone who clicked through to the link
+                // has read it; replaying it on their next PC would be the same nag the per-account
+                // record exists to stop. The local slot is deliberately left alone - this window
+                // stays open behind the browser and its own dismiss button still owns that.
+                RecordServerDismissal();
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Failed to open announcement link: {Error}", ex.Message);
             }
+        }
+    }
+
+    /// <summary>
+    /// Records this announcement as answered on the ACCOUNT, so it does not replay on the user's
+    /// next PC. Fire-and-forget; the local <c>DismissedAnnouncementId</c> slot remains the offline
+    /// fallback and is written by the caller.
+    ///
+    /// <para>Guarded on <c>_onDismiss == null</c> for the same reason the local slot is: a popup
+    /// that brought its own dismissal handler is a LOCAL recurring nudge borrowing this window,
+    /// and its id is not a server announcement id. Sending it would write junk into the account's
+    /// dismissed list and, once the list rolls, could evict a real dismissal.</para>
+    /// </summary>
+    private void RecordServerDismissal()
+    {
+        if (_onDismiss != null) return;
+        if (string.IsNullOrWhiteSpace(_announcementId)) return;
+        if (string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId)) return;
+
+        try
+        {
+            _ = App.ProfileSync?.DismissAnnouncementAsync(_announcementId);
+        }
+        catch (Exception ex)
+        {
+            // DismissAnnouncementAsync never throws; this only catches a null-service race on shutdown.
+            App.Logger?.Debug("Could not record announcement dismissal: {Error}", ex.Message);
         }
     }
 
@@ -335,6 +367,7 @@ public partial class AnnouncementPopup : Window
         else if (App.Settings?.Current != null)
         {
             App.Settings.Current.DismissedAnnouncementId = _announcementId;
+            RecordServerDismissal();
         }
 
         try

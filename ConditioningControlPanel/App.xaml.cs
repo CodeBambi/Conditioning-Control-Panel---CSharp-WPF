@@ -288,8 +288,6 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
-
                 // Application.MainWindow is a DependencyProperty and verifies thread access, so
                 // only touch it when we are actually on the UI thread; a null owner is fine.
                 if (owner == null && dispatcher.CheckAccess())
@@ -297,8 +295,31 @@ namespace ConditioningControlPanel
                     try { owner = Current?.MainWindow; } catch { owner = null; }
                 }
 
+                var cardOwner = owner;
                 Logger?.Information("RemoteMedia: empty assets at {Surface} — offering the online source", surface);
-                FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, owner);
+
+                // Through the presenter: shown at once when nothing is quiet (exactly as before),
+                // parked as an Inbox row inside the first-launch window. The once-per-launch claim
+                // moved INTO the open action - a card that only ever became a row must not spend
+                // the launch's one offer, or opening the row later would find it already gone.
+                Startup?.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:remote-media",
+                    Glyph = "🌐",
+                    Title = "Media without the download",
+                    Summary = "Your folders are empty - she can stream from the online pool instead.",
+                    Open = () =>
+                    {
+                        if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+                        FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
+                    },
+                });
+
+                if (Startup == null)
+                {
+                    if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+                    FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
+                }
             }
             catch (Exception ex)
             {
@@ -416,6 +437,14 @@ namespace ConditioningControlPanel
         // Static service references
         public static ILogger Logger { get; private set; } = null!;
         public static SettingsService Settings { get; private set; } = null!;
+
+        /// <summary>
+        /// The one owner of every startup surface: the modal ladder, the quiet window and the
+        /// Inbox. Created at the top of <see cref="OnStartup"/>, before MainWindow, so anything
+        /// that wants the screen can queue rather than racing for it. See
+        /// <see cref="Services.Startup.StartupPresenter"/> for why that mattered.
+        /// </summary>
+        public static Services.Startup.StartupPresenter? Startup { get; private set; }
 
         // Transient feed of recent AI-driven effect actions, surfaced in the Companion tab's
         // "Live actions" panel. Populated by the upcoming local-LLM effect controller; not persisted.
@@ -1763,6 +1792,13 @@ namespace ConditioningControlPanel
             // Initialize services
             Settings = new SettingsService();
 
+            // THE STARTUP LADDER. Built here, before a single service that might want to interrupt
+            // and long before MainWindow exists, because MainWindow's constructor is the first
+            // thing that queues on it. Everything that used to decide for itself when it was
+            // allowed to open - the failed-update report, the wizard, What's New, the season
+            // recap, the mod picker, the enhance nudge, the update dialog - now asks this.
+            Startup = new Services.Startup.StartupPresenter(Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
+
             // One-shot settings migrations. Must run before anything reads
             // the migrated fields (Flash UI, GazeFocusService, etc.).
             try
@@ -2884,8 +2920,23 @@ namespace ConditioningControlPanel
             // come from the dispatcher itself so a wedged message loop is detected again.
             Dispatcher.BeginInvoke(new Action(() => _startupPhase = false));
 
-            // Age verification gate (first launch only, deferred to ensure splash is fully closed)
-            if (Settings?.Current?.HasAcceptedAgeVerification != true)
+            // Age verification gate - the LEFTOVER population only.
+            //
+            // A fresh install never reaches this: the 18+ tick is the first-run wizard's Welcome
+            // step, and its Enter button IS the gate (FirstRunWizard.RecordAgeAcceptance writes the
+            // flag, closing without it hands the first run back and shuts down). Firing a
+            // MessageBox in front of that window is the modal-on-modal pile-up the redesign exists
+            // to remove, so the condition is now Welcomed AND not accepted: an old install that
+            // somehow never answered. When Welcomed is false the wizard owns the gate and this
+            // stays out of its way.
+            //
+            // The claim check is what makes "Welcomed" mean the right thing HERE: MainWindow's
+            // constructor ran at line ~2563, and FirstRunWizard.ShouldRunAndClaim already latched
+            // Welcomed = true for this very launch, so the flag alone would read a fresh install as
+            // an old one. FirstRunClaimedThisLaunch is the wizard saying "this launch is mine".
+            if (Settings?.Current?.Welcomed == true
+                && Settings?.Current?.HasAcceptedAgeVerification != true
+                && !FirstRunWizard.FirstRunClaimedThisLaunch)
             {
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
@@ -3180,17 +3231,38 @@ namespace ConditioningControlPanel
                             Application.Current.Dispatcher.HasShutdownStarted) return;
 
                         // stackIndex pushes each extra toast a further (Height + 8) upward.
-                        for (int i = 0; i < rewards.Count; i++)
+                        void ShowAll()
                         {
-                            try
+                            for (int i = 0; i < rewards.Count; i++)
                             {
-                                new ItemUnlockedPopup(rewards[i], i).Show();
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                                try
+                                {
+                                    new ItemUnlockedPopup(rewards[i], i).Show();
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                                }
                             }
                         }
+
+                        // A column of toasts is the loudest thing on this list, so inside the
+                        // quiet window the whole column collapses to ONE Inbox row - opening it
+                        // still shows every toast, stacked exactly as it would have been.
+                        var names = string.Join(", ", rewards.ConvertAll(static r => r.Name));
+                        var item = new Services.Startup.InboxItem
+                        {
+                            Key = "wardrobe-unlock:" + achievementId,
+                            Glyph = "👗",
+                            Title = rewards.Count == 1
+                                ? "A new wardrobe item is yours"
+                                : rewards.Count + " new wardrobe items are yours",
+                            Summary = names,
+                            Open = ShowAll,
+                        };
+
+                        if (Startup != null) Startup.PresentOrInbox(item);
+                        else ShowAll();
                     }
                     catch (Exception ex)
                     {
@@ -3498,9 +3570,41 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ================================================================== welcome back
+        //
+        // A returning user landing on a NEW PC used to be the worst path in the app. The old
+        // CheckCloudSettingsRestoreAsync asked "restore your settings?" in an unowned, task-modal
+        // MessageBox, then answered itself with a second box ("restored") or a third ("failed") -
+        // and it fired on exactly the population that also gets the first-run wizard, What's New
+        // and the season box. Five modal stops before the app.
+        //
+        // It is now one sheet, on the ladder at priority 30, that says all of it: restore, bring
+        // the flavour, what changed, and one muted line if the server rotated the board.
+
+        /// <summary>1 once the sheet has been queued. At most one per launch, by construction.</summary>
+        private static int _welcomeBackClaimed;
+
         /// <summary>
-        /// On fresh install, check if a cloud settings backup exists and offer to restore it.
-        /// Waits for authentication to complete before checking.
+        /// Serialises the two triggers below. Both do a pair of network round trips before they
+        /// can decide anything, so without this the 5 s timer and a ProfileLoaded landing at 5.1 s
+        /// would both peek the backup and both queue a sheet.
+        /// </summary>
+        private static readonly SemaphoreSlim _welcomeBackGate = new(1, 1);
+
+        /// <summary>This launch is the population the sheet is for: fresh settings file, no factory reset.</summary>
+        private static bool _welcomeBackEligible;
+
+        private static bool _welcomeBackHookAttached;
+
+        /// <summary>
+        /// The welcome-back trigger. Fresh settings file plus a cloud identity means a returning
+        /// user on a new machine.
+        ///
+        /// <para><b>Two looks, not one.</b> The 5 s wait below is the one this check always had,
+        /// and on a new PC it usually finds nothing: the user signs in through the wizard, which
+        /// is still open at five seconds, so the identity arrives minutes later. The second look
+        /// rides <c>ProfileSync.ProfileLoaded</c> - the moment the account is actually known - and
+        /// whichever look gets there first spends the launch's one sheet.</para>
         /// </summary>
         private async Task CheckCloudSettingsRestoreAsync()
         {
@@ -3514,93 +3618,393 @@ namespace ConditioningControlPanel
                 // reset is immediately offered its own undo under fresh-install copy.
                 if (ConsumeFactoryResetMarker())
                 {
-                    Logger?.Information("Skipping the cloud settings restore offer — the missing settings file is a factory reset");
+                    Logger?.Information("Skipping the welcome-back sheet - the missing settings file is a factory reset");
                     return;
                 }
+
+                _welcomeBackEligible = true;
+
+                // Armed BEFORE the wait, so a sign-in that completes during it is not missed.
+                HookProfileLoadedForWelcomeBack();
 
                 // Wait for provider auth to complete
                 await Task.Delay(5000);
 
-                // Need a cloud identity to check for backup
-                if (!HasCloudIdentity) return;
-                if (ProfileSync == null) return;
-
-                Logger?.Information("Fresh install detected with cloud identity — checking for settings backup...");
-
-                var backupInfo = await ProfileSync.GetSettingsBackupInfoAsync();
-                if (backupInfo == null)
-                {
-                    Logger?.Information("No cloud settings backup found");
-                    return;
-                }
-
-                Logger?.Information("Cloud settings backup found (v{Version}, {Date})",
-                    backupInfo.AppVersion, backupInfo.BackedUpAt);
-
-                // This prompt fires on exactly the population the FIRST-RUN WIZARD claims, and it is
-                // unowned and task-modal: landing it on top of the wizard disables the wizard's
-                // buttons behind a box that can hide under it, and accepting swaps
-                // App.Settings.Current out from under the flags the wizard already spent. So wait
-                // out the startup ladder (update dialog, What's New, season recap, the wizard) the
-                // same way MainWindow.xaml.cs:537 does - up to 5 minutes, because a mod pack can
-                // take that long to download inside the wizard - and re-check before showing.
-                for (int i = 0; i < 600 && (IsUpdateDialogActive ||
-                                           ConditioningControlPanel.MainWindow.IsStartupDialogShowing); i++)
-                {
-                    await Task.Delay(500);
-                }
-                if (IsUpdateDialogActive || ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                {
-                    Logger?.Information("Cloud settings restore offer deferred to the next launch — a startup dialog is still open");
-                    return;
-                }
-
-                // Ask user on UI thread
-                await Current.Dispatcher.InvokeAsync(async () =>
-                {
-                    var dateStr = backupInfo.BackedUpAt?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "unknown date";
-                    var owner = MainWindowRef ?? Current?.MainWindow;
-                    var body = $"A cloud backup of your settings was found!\n\n" +
-                               $"Backed up: {dateStr}\n" +
-                               $"App version: {backupInfo.AppVersion}\n\n" +
-                               $"Would you like to restore your settings from this backup?";
-                    // Owned when there is a window: an unowned box can end up BEHIND the app.
-                    var result = owner != null
-                        ? System.Windows.MessageBox.Show(owner, body,
-                            "Restore Settings from Cloud",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Question)
-                        : System.Windows.MessageBox.Show(body,
-                            "Restore Settings from Cloud",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Question);
-
-                    if (result != System.Windows.MessageBoxResult.Yes) return;
-
-                    var restored = await ProfileSync.RestoreSettingsFromCloudAsync();
-                    if (restored == null)
-                    {
-                        System.Windows.MessageBox.Show(
-                            "Failed to restore settings from cloud.",
-                            "Restore Failed",
-                            System.Windows.MessageBoxButton.OK,
-                            System.Windows.MessageBoxImage.Warning);
-                        return;
-                    }
-
-                    ApplyRestoredSettings(restored);
-
-                    System.Windows.MessageBox.Show(
-                        "Settings restored from cloud! Some UI changes may require a restart to take full effect.",
-                        "Settings Restored",
-                        System.Windows.MessageBoxButton.OK,
-                        System.Windows.MessageBoxImage.Information);
-                });
+                await TryOfferWelcomeBackAsync("startup");
             }
             catch (Exception ex)
             {
-                Logger?.Warning(ex, "Cloud settings restore check failed");
+                Logger?.Warning(ex, "Welcome-back check failed");
             }
+        }
+
+        /// <summary>
+        /// Second look: the profile actually loading. Fires at most once - the handler unsubscribes
+        /// itself - because every later load is a heartbeat, not an arrival.
+        /// </summary>
+        private void HookProfileLoadedForWelcomeBack()
+        {
+            try
+            {
+                if (_welcomeBackHookAttached || ProfileSync == null) return;
+                _welcomeBackHookAttached = true;
+
+                EventHandler? handler = null;
+                handler = (_, _) =>
+                {
+                    try { if (ProfileSync != null) ProfileSync.ProfileLoaded -= handler; }
+                    catch (Exception ex) { Logger?.Debug("Welcome-back: unhook failed: {Error}", ex.Message); }
+
+                    _ = TryOfferWelcomeBackAsync("profile loaded");
+                };
+                ProfileSync.ProfileLoaded += handler;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Welcome-back: could not watch for the profile load: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Gathers everything the sheet needs, decides whether there is a sheet at all, and queues
+        /// it. The backup is PEEKED here rather than at Let's-go time: the sheet prints the level
+        /// and the flavour that are inside it, and <c>RestoreSettingsFromCloudAsync</c> only
+        /// downloads and deserializes - applying is a separate, explicit step.
+        /// </summary>
+        private async Task TryOfferWelcomeBackAsync(string source)
+        {
+            if (!_welcomeBackEligible) return;
+            if (Volatile.Read(ref _welcomeBackClaimed) != 0) return;
+            if (IsUnattendedRig) return;
+
+            if (!await _welcomeBackGate.WaitAsync(TimeSpan.FromMinutes(2))) return;
+            try
+            {
+                if (Volatile.Read(ref _welcomeBackClaimed) != 0) return;
+
+                // Need a cloud identity to have anyone to welcome back.
+                if (!HasCloudIdentity || ProfileSync == null) return;
+
+                var backupInfo = await ProfileSync.GetSettingsBackupInfoAsync();
+
+                // A backup only counts once it is actually in hand. Metadata that will not
+                // download is a restore row whose toggle cannot be honoured, and offering one is
+                // worse than never mentioning it.
+                Models.AppSettings? backup = null;
+                if (backupInfo != null)
+                {
+                    backup = await ProfileSync.RestoreSettingsFromCloudAsync();
+                    if (backup == null)
+                        Logger?.Warning("Welcome-back: the backup's metadata resolved but its body did not - continuing without a restore row");
+                }
+
+                var backupModId = backup?.ActiveModId;
+                var packId = ModPackCatalog.PackIdForMod(backupModId);
+                var packInstalled = IsFlavourPackInstalled(packId);
+
+                var plan = WelcomeBackDecision.Decide(
+                    settingsFileWasMissing: Settings?.WasSettingsFileMissing == true,
+                    factoryReset: false,                    // consumed and returned above
+                    hasCloudIdentity: HasCloudIdentity,
+                    backupExists: backup != null,
+                    playerLevel: Settings?.Current?.PlayerLevel ?? 0,
+                    backupFlavourPackId: packId,
+                    flavourPackInstalled: packInstalled);
+
+                if (!plan.ShowSheet)
+                {
+                    Logger?.Information("Welcome-back ({Source}): nothing to say (backup={Backup}, level={Level})",
+                        source, backup != null, Settings?.Current?.PlayerLevel ?? 0);
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref _welcomeBackClaimed, 1, 0) != 0) return;
+
+                var content = BuildWelcomeBackContent(plan, backup, backupInfo, backupModId);
+
+                Logger?.Information(
+                    "Welcome-back ({Source}): queueing the sheet (restore={Restore}, flavour={Flavour}, season={Season})",
+                    source, plan.ShowRestoreRow, plan.ShowFlavourRow, content.SeasonLine != null);
+
+                // Priority 30: the upgrader's What's New slot. The two are alternatives - a fresh
+                // settings file has no LastSeenVersion, so What's New stamps and says nothing -
+                // and the sheet carries the patch notes itself for exactly that reason.
+                Startup?.EnqueueModal("welcome-back", 30, owner => ShowWelcomeBackSheet(owner, content, backup, plan));
+
+                if (Startup == null)
+                {
+                    await Current.Dispatcher.InvokeAsync(() => ShowWelcomeBackSheet(null, content, backup, plan));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back offer failed");
+            }
+            finally
+            {
+                try { _welcomeBackGate.Release(); } catch { }
+            }
+        }
+
+        /// <summary>Is the backup's flavour already on this disk? Unknown reads as "yes", which
+        /// hides the row - the Mod Manager can always fetch it later.</summary>
+        private static bool IsFlavourPackInstalled(string? packId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(packId)) return true;
+                var svc = ReleaseContent;
+                if (svc == null) return true;
+                return svc.IsFullInstall || svc.IsInstalled(packId!);
+            }
+            catch { return true; }
+        }
+
+        private WelcomeBackSheetContent BuildWelcomeBackContent(
+            WelcomeBackPlan plan, Models.AppSettings? backup, SettingsBackupInfo? backupInfo, string? backupModId)
+        {
+            var entry = ModPackCatalog.ForMod(backupModId);
+            var modName = entry == null ? null : WelcomeBackModName(entry);
+
+            // "What changed" is only news to someone who has not read it. The backup remembers the
+            // last version this user was shown notes for; matching it means they already have.
+            var version = Services.UpdateService.AppVersion;
+            var notes = string.Equals(backup?.LastSeenVersion, version, StringComparison.OrdinalIgnoreCase)
+                ? ""
+                : Services.UpdateService.CurrentPatchNotes ?? "";
+
+            return new WelcomeBackSheetContent
+            {
+                DisplayName = UserDisplayName ?? "",
+                Level = Settings?.Current?.PlayerLevel ?? 0,
+                BackupModName = modName,
+                BackupTakenAt = backupInfo?.BackedUpAt,
+                Plan = plan,
+                FlavourModName = plan.ShowFlavourRow ? modName : null,
+                FlavourSizeText = plan.ShowFlavourRow && entry != null
+                    ? ModPackCatalog.FormatSize(ModPackCatalog.SizeBytesFor(entry))
+                    : "",
+                VersionLabel = version,
+                PatchNotes = notes,
+                SeasonLine = BuildWelcomeBackSeasonLine(backup),
+                TourAction = string.IsNullOrWhiteSpace(notes) ? null : StartUpgradeTourFromWelcomeBack,
+            };
+        }
+
+        private static string WelcomeBackModName(ModPackEntry entry)
+        {
+            try
+            {
+                var name = Loc.Get(entry.NameLocKey);
+                return string.IsNullOrWhiteSpace(name) || string.Equals(name, entry.NameLocKey, StringComparison.Ordinal)
+                    ? entry.ModId
+                    : name;
+            }
+            catch { return entry.ModId; }
+        }
+
+        /// <summary>
+        /// The sheet's one season sentence, or null. Only the SERVER may say a season ended (the
+        /// wall-clock fallback under CurrentSeasonKey invents one on the 1st for every never-synced
+        /// install), and there has to be a real earlier key to have moved on from.
+        ///
+        /// <para>The backup's key is preferred over this device's. A fresh settings file holds no
+        /// season at all, and the silent adoption on first sync then writes the server's current
+        /// key straight in - so the device key on this population is either empty or equal to the
+        /// current one, and carries no information either way. The backup remembers the season the
+        /// user actually last saw.</para>
+        /// </summary>
+        private static string? BuildWelcomeBackSeasonLine(Models.AppSettings? backup)
+        {
+            try
+            {
+                var current = Services.SeasonRecapService.CurrentSeasonKey;
+                var seen = !string.IsNullOrWhiteSpace(backup?.LastSeasonResetSeen)
+                    ? backup!.LastSeasonResetSeen
+                    : Settings?.Current?.LastSeasonResetSeen;
+
+                if (!WelcomeBackDecision.ShouldShowSeasonLine(
+                        current, seen, Services.SeasonRecapService.IsSeasonKeyServerConfirmed))
+                    return null;
+
+                // The rotation branch of TryPresentSeasonRecap, said once and quietly: a board
+                // rotation touches nothing of the user's, so it is a line, not a dialog.
+                var template = Loc.Get("wb_season_line");
+                if (string.IsNullOrWhiteSpace(template) || template == "wb_season_line")
+                    template = "The monthly leaderboard rotated to season {0} while you were away. Your level, your XP and everything you unlocked carried over.";
+
+                try { return string.Format(template, current); }
+                catch (FormatException) { return template; }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Welcome-back: season line skipped: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        private static void StartUpgradeTourFromWelcomeBack()
+        {
+            // The sheet posts this at Normal priority after ShowDialog unwinds, so the presenter's
+            // finally has already put the flag down. Asserting it anyway is deliberate: a tour
+            // that starts while anything still believes a startup dialog is up puts the spotlight
+            // underneath a modal nobody can see.
+            ConditioningControlPanel.MainWindow.IsStartupDialogShowing = false;
+            try { MainWindowRef?.StartTutorial(Services.TutorialType.UpgradeTour); }
+            catch (Exception ex) { Logger?.Warning(ex, "Welcome-back: could not start the upgrade tour"); }
+        }
+
+        /// <summary>
+        /// Runs the sheet and honours what it was told. Blocking by contract - the ladder measures
+        /// "this surface is done" by this call returning.
+        /// </summary>
+        private void ShowWelcomeBackSheet(Window? owner, WelcomeBackSheetContent content,
+                                          Models.AppSettings? backup, WelcomeBackPlan plan)
+        {
+            bool restore, flavour;
+            try
+            {
+                var sheet = new WelcomeBackSheet(content) { Owner = owner ?? MainWindowRef };
+                sheet.ShowDialog();
+                restore = sheet.RestoreChosen;
+                flavour = sheet.BringFlavourChosen;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back sheet failed to show");
+                return;
+            }
+
+            // Restore first, flavour second, and in that order on purpose: the restore replaces
+            // App.Settings.Current wholesale, so anything written before it (a pending activation
+            // id, a stamped version) would be thrown away with the instance it was written on.
+            if (restore) ApplyWelcomeBackRestore(backup);
+            if (flavour) BringWelcomeBackFlavour(backup?.ActiveModId, plan.FlavourPackId);
+        }
+
+        /// <summary>
+        /// Applies the peeked backup. No follow-up boxes: success is silent (the app repaints
+        /// itself) and failure becomes an Inbox row whose Open tries again.
+        /// </summary>
+        private void ApplyWelcomeBackRestore(Models.AppSettings? backup)
+        {
+            try
+            {
+                if (backup == null) { PostRestoreFailedInboxItem(); return; }
+
+                ApplyRestoredSettings(backup);
+
+                // The backup remembers an OLDER LastSeenVersion, and ApplyRestoredSettings does not
+                // preserve this one - so without this line the restore re-arms What's New for a
+                // release whose notes the sheet just showed.
+                if (Settings?.Current != null)
+                {
+                    Settings.Current.LastSeenVersion = Services.UpdateService.AppVersion;
+                    Settings.Save();
+                }
+
+                Logger?.Information("Welcome-back: cloud settings restored");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back: the restore failed");
+                PostRestoreFailedInboxItem();
+            }
+        }
+
+        /// <summary>
+        /// The old "Failed to restore settings from cloud." MessageBox, demoted to a row. The
+        /// retry re-downloads rather than reusing the object that just failed - the usual cause is
+        /// a network hiccup, and a second copy costs a few KB.
+        /// </summary>
+        private void PostRestoreFailedInboxItem()
+        {
+            try
+            {
+                var item = new Services.Startup.InboxItem
+                {
+                    Key = "welcome-back:restore-failed",
+                    Glyph = "☁",
+                    Title = WelcomeBackStr("wb_restore_failed_title", "Restore failed"),
+                    Summary = WelcomeBackStr("wb_restore_failed_summary",
+                        "Your cloud settings did not come down. Open this to try again."),
+                    Open = () => _ = RetryWelcomeBackRestoreAsync(),
+                };
+
+                if (Startup != null) Startup.PresentOrInbox(item);
+                else Logger?.Warning("Welcome-back: the restore failed and there is no Inbox to say so");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Welcome-back: could not post the restore-failed row: {Error}", ex.Message);
+            }
+        }
+
+        private async Task RetryWelcomeBackRestoreAsync()
+        {
+            try
+            {
+                var fresh = ProfileSync == null ? null : await ProfileSync.RestoreSettingsFromCloudAsync();
+                if (fresh == null)
+                {
+                    Logger?.Warning("Welcome-back: the restore retry failed too - re-posting the row");
+                    await Current.Dispatcher.InvokeAsync(PostRestoreFailedInboxItem);
+                    return;
+                }
+
+                await Current.Dispatcher.InvokeAsync(() => ApplyWelcomeBackRestore(fresh));
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back: the restore retry threw");
+            }
+        }
+
+        /// <summary>
+        /// Brings the backup's mod across. Deliberately the SAME path the wizard's flavour step
+        /// uses - content already here switches at once, content that still has to be fetched is
+        /// recorded with <see cref="PendingModActivation"/> and downloaded, so the switch happens
+        /// when the pack lands even if that is in a later session.
+        /// </summary>
+        private static void BringWelcomeBackFlavour(string? modId, string? packId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(modId)) return;
+
+                if (PendingModActivation.IsContentAvailable(modId!))
+                {
+                    MainWindowRef?.ActivateChosenMod(modId!, PendingModActivation.Trigger.Immediate);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(packId) || ReleaseContent == null) return;
+
+                PendingModActivation.Record(modId!);
+
+                // CancellationToken.None on purpose: nothing on this sheet's far side should be
+                // able to kill a download the user just asked for. RequestPackAsync de-dupes and
+                // resumes, so the Mod Manager joins this task rather than starting a second one.
+                _ = ReleaseContent.RequestPackAsync(packId!, null, System.Threading.CancellationToken.None);
+
+                Logger?.Information("Welcome-back: fetching {Pack} so {Mod} can take over when it lands", packId, modId);
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Welcome-back: could not bring the flavour across");
+            }
+        }
+
+        private static string WelcomeBackStr(string key, string english)
+        {
+            try
+            {
+                var value = Loc.Get(key);
+                return string.IsNullOrEmpty(value) || string.Equals(value, key, StringComparison.Ordinal)
+                    ? english
+                    : value;
+            }
+            catch { return english; }
         }
 
         /// <summary>
@@ -3740,39 +4144,17 @@ namespace ConditioningControlPanel
                         }
                     });
 
-                    // Wait for any startup dialogs (What's New) to be dismissed
-                    // Check every 500ms for up to 30 seconds
-                    Logger?.Information("Waiting for startup dialogs to close before showing update popup...");
-                    for (int i = 0; i < 60; i++)
-                    {
-                        if (!ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                        {
-                            Logger?.Information("No startup dialog showing, proceeding with update popup");
-                            break;
-                        }
-                        Logger?.Information("Startup dialog still showing, waiting... ({Attempt}/60)", i + 1);
-                        await Task.Delay(500);
-                    }
-
-                    // Additional small delay after dialog closes to let UI settle
-                    await Task.Delay(500);
-
-                    // Now show the update dialog on UI thread
-                    Logger?.Information("Attempting to show update dialog on UI thread...");
-
-                    Application.Current.Dispatcher.Invoke(() =>
+                    // Priority 80: last on the ladder. The button above is already lit, so the
+                    // news is delivered either way and this dialog can afford to wait behind the
+                    // wizard, What's New, the recap and the mod picker. It used to run its own
+                    // 30 s poll over IsStartupDialogShowing and then give up silently - which is
+                    // how an upgrader still reading patch notes lost the update prompt entirely.
+                    Logger?.Information("Queueing the update dialog behind the startup ladder...");
+                    Startup?.EnqueueModal("update-available", 80, owner =>
                     {
                         try
                         {
-                            // Double-check no modal dialog is showing
-                            if (ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                            {
-                                Logger?.Warning("Startup dialog still showing after wait, skipping auto-popup");
-                                return;
-                            }
-
-                            Logger?.Information("Inside Dispatcher.Invoke - getting MainWindow");
-                            var mainWindow = Application.Current.MainWindow as MainWindow;
+                            var mainWindow = (owner as MainWindow) ?? MainWindowRef ?? Application.Current.MainWindow as MainWindow;
 
                             if (mainWindow == null)
                             {
@@ -3790,7 +4172,7 @@ namespace ConditioningControlPanel
                         }
                         catch (Exception innerEx)
                         {
-                            Logger?.Error(innerEx, "Exception inside Dispatcher.Invoke for update dialog");
+                            Logger?.Error(innerEx, "Exception showing the update dialog from the startup ladder");
                         }
                     });
                 }
@@ -3806,31 +4188,28 @@ namespace ConditioningControlPanel
         /// Consumes the marker left by the previous run's update attempt and, if the install did
         /// not take, tells the user once and points them at the manual download.
         /// </summary>
-        private static async Task ReportFailedUpdateAttemptAsync()
+        private static Task ReportFailedUpdateAttemptAsync()
         {
             try
             {
                 var outcome = UpdateService.ConsumePendingUpdateOutcome();
-                if (outcome == null || outcome.Succeeded) return;
+                if (outcome == null || outcome.Succeeded) return Task.CompletedTask;
 
-                // Don't stack on top of the What's New / startup dialogs.
-                for (int i = 0; i < 60 && ConditioningControlPanel.MainWindow.IsStartupDialogShowing; i++)
-                {
-                    await Task.Delay(500);
-                }
-
-                Application.Current?.Dispatcher.Invoke(() =>
-                {
+                // Priority 10: first on the ladder, ahead of the wizard and What's New. An install
+                // that did not take is the one piece of startup news that changes what the user
+                // should do next, and it used to hand-roll its own 30 s poll over
+                // IsStartupDialogShowing to avoid stacking. The ladder is that poll now.
+                Startup?.EnqueueModal("failed-update-report", 10, owner =>
                     OfferManualUpdateDownload(
-                        Current?.MainWindow,
+                        owner ?? Current?.MainWindow,
                         Loc.Get("title_update_failed"),
-                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion));
-                });
+                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion)));
             }
             catch (Exception ex)
             {
                 Logger?.Warning(ex, "Failed to report previous update attempt");
             }
+            return Task.CompletedTask;
         }
 
         /// <summary>

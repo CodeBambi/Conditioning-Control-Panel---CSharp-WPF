@@ -249,6 +249,34 @@ namespace ConditioningControlPanel
                 var highestLevel = App.Settings.Current.HighestLevelEver;
                 var resetPending = App.Settings.Current.SeasonResetPending;
 
+                // A NEW PC adopting the server's season is not a rollover. On a fresh settings
+                // file LastSeasonResetSeen and SeasonStatsSeason are both empty, and the first
+                // sync writes the server's real key - at which point every test below reads the
+                // empty key as "before" the server's and announces a season end this machine
+                // never witnessed, with no snapshot to show for it. Write the key down and say
+                // nothing. Deliberately ahead of the highestLevel gate: a level-1 install that
+                // returned early here would leave the empty keys in place and fire the same false
+                // recap the moment it reached level 2. Anyone who HAS seen a season (either key
+                // set) falls through to the real rollover logic untouched.
+                //
+                // And so does anyone the SERVER just reset. SeasonResetPending is only ever set by
+                // ProfileSyncService off an explicit level_reset, which is how an admin reset of a
+                // single account surfaces at all; clearing that latch on the way past would have
+                // swallowed it silently on exactly the install least able to notice - a fresh
+                // settings file with both keys empty. A reset the server declared is real news
+                // whatever this machine remembers, so it falls through to the pending path.
+                var statsSeasonSeen = App.Settings.Current.SeasonStatsSeason ?? "";
+                if (Services.SeasonRecapService.ShouldAdoptSilently(lastSeasonSeen, statsSeasonSeen,
+                        Services.SeasonRecapService.IsSeasonKeyServerConfirmed, resetPending))
+                {
+                    App.Settings.Current.LastSeasonResetSeen = currentSeason;
+                    App.Settings.Current.SeasonStatsSeason = currentSeason;
+                    App.Settings.Current.SeasonResetPending = false;
+                    App.Settings.Save();
+                    App.Logger?.Information("Adopted server season {Season} silently (fresh settings, nothing to recap)", currentSeason);
+                    return;
+                }
+
                 // Brand-new users (never leveled up) skip this. They'll see it once they progress.
                 if (highestLevel < 2) return;
 
@@ -290,12 +318,15 @@ namespace ConditioningControlPanel
                 App.Logger?.Information("Presenting season recap (monthRolled={Month}, resetPending={Pending}, last={Old}, current={New}, highestLevel={Highest})",
                     monthRolled, resetPending, string.IsNullOrEmpty(lastSeasonSeen) ? "(none)" : lastSeasonSeen, currentSeason, highestLevel);
 
-                Dispatcher.BeginInvoke(new Action(() =>
+                // Priority 40 on the startup ladder: behind What's New (30) and the wizard (20),
+                // ahead of the upgrader's mod picker (50). Only the PRESENTATION moved here - every
+                // predicate above still runs synchronously, at the same instant, on the same
+                // caller's thread, so which launches present a recap has not changed. The presenter
+                // owns IsStartupDialogShowing around this lambda; it no longer sets it itself.
+                EnqueueStartupModal("season-recap", 40, owner =>
                 {
                     try
                     {
-                        IsStartupDialogShowing = true;
-
                         // Snapshot the just-ended season BEFORE its counters are cleared, then roll
                         // the bucket. CaptureAndRollover writes the JSON first and only then clears —
                         // order is load-bearing (an empty snapshot = an empty card).
@@ -316,7 +347,7 @@ namespace ConditioningControlPanel
                         if (snapshot != null)
                         {
                             var vm = new ViewModels.SeasonRecapViewModel(snapshot);
-                            var recapWindow = new Controls.SeasonRecapWindow(vm) { Owner = this };
+                            var recapWindow = new Controls.SeasonRecapWindow(vm) { Owner = owner ?? this };
                             recapWindow.ShowDialog();
                         }
                         else
@@ -373,17 +404,7 @@ namespace ConditioningControlPanel
                     {
                         App.Logger?.Warning(ex, "Failed to present season recap");
                     }
-                    finally
-                    {
-                        IsStartupDialogShowing = false;
-                    }
-                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
-                    // host + avatar animations) that Loaded-priority items are starved and
-                    // silently never run - the same starvation that stopped the first-launch tour
-                    // ever starting (see MainWindow.xaml.cs, the first-launch branch's comment).
-                    // A recap that never posts also never clears IsStartupDialogShowing, so this
-                    // one is worse than a missing card.
-                }), System.Windows.Threading.DispatcherPriority.Normal);
+                });
             }
             catch (Exception ex)
             {
@@ -428,17 +449,16 @@ namespace ConditioningControlPanel
                     // EMI Desk (MOMENTS 4.B): read before the stamp below overwrites LastSeenVersion.
                     try { App.EmiDesk?.Fire("afterUpdate", new { target = currentVersion }); } catch { }
 
-                    // Claim the flag HERE, at queue time, not inside the lambda below: everything
-                    // that waits on it (the mod picker, the update dialog, FeatureIntroPopup) can
-                    // otherwise run in the gap between this method returning and the dispatcher
-                    // getting round to the dialog. MainWindow.xaml.cs papers over that gap with a
-                    // Task.Delay(1500) before it starts watching; claiming up front is what makes
-                    // the flag honest. The finally below is the single place it is released.
-                    IsStartupDialogShowing = true;
-                    App.Logger?.Information("What's New dialog queued, setting IsStartupDialogShowing=true");
+                    // Priority 30 on the startup ladder. The old version claimed
+                    // IsStartupDialogShowing HERE, at queue time, because everything that waited on
+                    // it could otherwise run in the gap between this method returning and the
+                    // dispatcher getting round to the dialog. There is no gap any more: the mod
+                    // picker sits at 50 behind this one by construction, and the update dialog at
+                    // 80 behind both, so the queue itself is what holds the order. The presenter
+                    // raises and clears the flag around the lambda for everything still polling it.
+                    App.Logger?.Information("What's New dialog queued on the startup ladder");
 
-                    // Delay slightly to let the window fully load
-                    Dispatcher.BeginInvoke(new Action(() =>
+                    EnqueueStartupModal("whats-new", 30, owner =>
                     {
                         try
                         {
@@ -466,7 +486,7 @@ namespace ConditioningControlPanel
                                 },
                                 tourButtonText: "Show me around (60s)")
                             {
-                                Owner = this
+                                Owner = owner ?? this
                             };
                             whatsNew.ShowDialog();
 
@@ -481,19 +501,7 @@ namespace ConditioningControlPanel
                         {
                             App.Logger?.Warning(ex, "Failed to show What's New dialog");
                         }
-                        finally
-                        {
-                            // Clear flag AFTER MessageBox is dismissed
-                            IsStartupDialogShowing = false;
-                            App.Logger?.Information("What's New dialog dismissed, setting IsStartupDialogShowing=false");
-                        }
-                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
-                    // host + avatar animations) that Loaded-priority items are starved and
-                    // silently never run - the documented reason the first-launch tour never
-                    // started (see MainWindow.xaml.cs, the first-launch branch's comment). Since
-                    // the flag is now claimed at queue time, a starved lambda would also leave
-                    // IsStartupDialogShowing stuck true.
-                    }), System.Windows.Threading.DispatcherPriority.Normal);
+                    });
                 }
             }
             catch (Exception ex)
@@ -891,17 +899,60 @@ namespace ConditioningControlPanel
                         Dispatcher.Invoke(() =>
                         {
                             // Claim the launch's one popup slot so the weekly intake nudge
-                            // stands down - see CheckIntakePassNudge.
+                            // stands down - see CheckIntakePassNudge. Claimed HERE, at routing
+                            // time, not when the popup opens: this is a per-launch pacing budget
+                            // rather than a seen-flag, and the news being parked in the Inbox is
+                            // exactly as good a reason for the nudge to stand down as the news
+                            // being on screen. Nothing persistent is spent by this line.
                             _serverAnnouncementShownThisLaunch = true;
 
-                            var popup = new AnnouncementPopup(
-                                result.id!,
-                                result.title!,
-                                result.message ?? "",
-                                result.image_url,
-                                result.link_url,
-                                result.theme);
-                            popup.Show();
+                            var id = result.id!;
+                            var title = result.title!;
+                            var message = result.message ?? "";
+                            var imageUrl = result.image_url;
+                            var linkUrl = result.link_url;
+                            var theme = result.theme;
+
+                            // Shown at once when nothing is quiet - which is every launch that is
+                            // not a brand-new install - and otherwise a row in the Inbox. The
+                            // popup's own bookkeeping stays inside the popup; dismissing the ROW
+                            // has to do BOTH halves of it itself (the local slot and the per-account
+                            // record), so waving the news away without reading it means never seeing
+                            // it again on this PC or the next one.
+                            PresentOrInbox(new Services.Startup.InboxItem
+                            {
+                                Key = "announcement:" + id,
+                                Glyph = "📣",
+                                Title = title,
+                                Summary = Summarise(message),
+                                Open = () =>
+                                {
+                                    var popup = new AnnouncementPopup(id, title, message, imageUrl, linkUrl, theme);
+                                    popup.Show();
+                                },
+                                Dismiss = () =>
+                                {
+                                    try
+                                    {
+                                        var s = App.Settings?.Current;
+                                        if (s == null) return;
+                                        s.DismissedAnnouncementId = id;
+                                        App.Settings?.Save();
+
+                                        // The account half, exactly as AnnouncementPopup's own
+                                        // RecordServerDismissal does it (that method is private to
+                                        // the window and this row never opens one). Without it a
+                                        // dismissed row is a LOCAL answer only, and "The Spiral is
+                                        // open" greets the same person again on their next PC -
+                                        // which is the replay the per-account record was added to
+                                        // stop. Fire-and-forget; the call never throws and logs its
+                                        // own failures at Debug.
+                                        if (!string.IsNullOrEmpty(s.UnifiedId))
+                                            _ = App.ProfileSync?.DismissAnnouncementAsync(id);
+                                    }
+                                    catch (Exception ex) { App.Logger?.Debug("Announcement row dismiss: {E}", ex.Message); }
+                                },
+                            });
                         });
                     }
                 }
@@ -974,9 +1025,25 @@ namespace ConditioningControlPanel
                 // text-only layout rather than rendering an empty frame.
                 var cardArt = Services.Quiz.IntakeNiche.PassCardImage();
 
-                var popup = new AnnouncementPopup(
+                var nudgeTitle = LocOr("intake_nudge_title", "Your weekly intake pass is ready");
+
+                // OUR record, not DismissedAnnouncementId. Hoisted out of the popup so the Inbox
+                // row can run the identical bookkeeping when the user waves it away from there.
+                void RecordDismissed()
+                {
+                    try
+                    {
+                        var s = App.Settings?.Current;
+                        if (s == null) return;
+                        s.IntakeNudgeDismissedWeek = week;
+                        App.Settings?.Save();
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("Intake nudge dismiss: {E}", ex.Message); }
+                }
+
+                AnnouncementPopup BuildNudge() => new AnnouncementPopup(
                     $"intake-pass-{week}",
-                    LocOr("intake_nudge_title", "Your weekly intake pass is ready"),
+                    nudgeTitle,
                     // Deliberately a NEW key rather than a rewrite of "intake_nudge_body": that key
                     // already carries the old terse copy in en.json, so reusing it would keep
                     // showing the old line until someone remembered to edit the value, whereas a
@@ -992,18 +1059,7 @@ namespace ConditioningControlPanel
                     imageUrl: null,
                     linkUrl: null,
                     theme: null,
-                    onDismiss: () =>
-                    {
-                        // OUR record, not DismissedAnnouncementId.
-                        try
-                        {
-                            var s = App.Settings?.Current;
-                            if (s == null) return;
-                            s.IntakeNudgeDismissedWeek = week;
-                            App.Settings?.Save();
-                        }
-                        catch (Exception ex) { App.Logger?.Debug("Intake nudge dismiss: {E}", ex.Message); }
-                    },
+                    onDismiss: RecordDismissed,
                     cardImage: cardArt,
                     actionText: LocOr("intake_nudge_action", "Start my intake"),
                     onAction: StartIntakeFromNudge,
@@ -1011,9 +1067,22 @@ namespace ConditioningControlPanel
                 {
                     Owner = this,
                 };
-                popup.Show();
 
-                App.Logger?.Information("Intake pass nudge shown for {Week} (art={HasArt})", week, cardArt != null);
+                // A weekly nudge earns its place by being rare and well-timed, and the quiet
+                // window is the app saying "not now" on the user's behalf. The row keeps the offer
+                // without spending the moment; dismissing the row stamps the week exactly as
+                // dismissing the popup would.
+                PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = $"intake-pass:{week}",
+                    Glyph = "🎟️",
+                    Title = nudgeTitle,
+                    Summary = LocOr("intake_nudge_action", "Start my intake"),
+                    Open = () => BuildNudge().Show(),
+                    Dismiss = RecordDismissed,
+                });
+
+                App.Logger?.Information("Intake pass nudge offered for {Week} (art={HasArt})", week, cardArt != null);
             }
             catch (Exception ex)
             {

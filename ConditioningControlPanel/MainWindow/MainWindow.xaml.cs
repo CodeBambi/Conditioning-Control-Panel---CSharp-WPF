@@ -540,9 +540,9 @@ namespace ConditioningControlPanel
             // (and latches) the same Welcomed flag WelcomeDialog.ShowIfNeeded did, at the same
             // instant, so the else branch below - What's New, season recap, the upgrader's mod
             // picker - is reached by exactly the same population as before. The wizard itself
-            // owns what used to be three separate modals: the welcome card, the first-run mod
+            // owns what used to be four separate modals: the age check, the welcome card, the first-run mod
             // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
-            // "choose a content folder" MessageBox; StartTutorial is launched from its last step.
+            // "choose a content folder" MessageBox. No tour starts from it: EMI offers the walk once, later.
             // ASK EMI WAVE 1: read LastSeenVersion HERE, before anything on this launch stamps it.
             // ShowWhatsNewIfNeeded (the first statement of the else branch, a few lines down) writes
             // the current version into that setting synchronously, minutes before the knock's own
@@ -558,118 +558,91 @@ namespace ConditioningControlPanel
                 // first launch and she does not get to talk over someone's first thirty seconds.
                 try { App.EmiDesk?.Fire("firstLaunchEver", null); } catch { }
 
-                Dispatcher.BeginInvoke(new Action(async () =>
-                {
-                    // Wait for any update dialog to be dismissed first
-                    // Check every 500ms for up to 30 seconds
-                    for (int i = 0; i < 60 && App.IsUpdateDialogActive; i++)
+                // Priority 20 on the ladder. The three hand-rolled waits this replaces (30 s for
+                // the update dialog, 10 s for the window, then the open) all live in the presenter
+                // now, along with the give-up rule: five minutes without a free screen and the
+                // first run is HANDED BACK rather than spent on a wizard nobody saw.
+                EnqueueStartupModal("first-run-wizard", 20,
+                    owner =>
                     {
-                        await Task.Delay(500);
-                    }
-
-                    // The wizard's doors step and the spotlight overlay both measure this window's
-                    // controls, so neither may start against a window that hasn't loaded yet (up
-                    // to 10s). This is why the wizard opens here rather than in the constructor.
-                    for (int i = 0; i < 20 && !IsLoaded; i++)
+                        try
+                        {
+                            FirstRunWizard.Run(owner as MainWindow ?? this);
+                        }
+                        finally
+                        {
+                            // The wizard is modal, so this is the far side of it: the screen is the
+                            // user's again and the HOLD comes off. In a finally because a wizard
+                            // that threw must not leave EMI muted for the rest of the launch.
+                            try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
+                        }
+                    },
+                    onAbandoned: () =>
                     {
-                        await Task.Delay(500);
-                    }
-
-                    if (!App.IsUpdateDialogActive && IsLoaded)
-                    {
-                        FirstRunWizard.Run(this);
-                        // The wizard is modal, so this is the far side of it: the screen is the
-                        // user's again and the HOLD comes off.
-                        try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
-                    }
-                    else
-                    {
-                        // The waits above gave up (an update dialog still on screen after 30s, a
-                        // window that never loaded). Hand the flags back rather than spending a
+                        // The ladder gave up (an update dialog still on screen after five minutes,
+                        // a window that never loaded). Hand the flags back rather than spending a
                         // first run nobody was shown - the next launch offers it properly.
                         FirstRunWizard.HandBackFirstRun(
                             App.IsUpdateDialogActive ? "update dialog still open" : "window never loaded");
                         // Nothing was shown, so nothing is owed the screen.
                         try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
-                    }
 
-                    // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the
-                    // population this is FOR is the one that pressed "explore on my own", and the
-                    // hand-back path is a launch where nothing was ever shown and she is exactly as
-                    // welcome. Every remaining gate - the wizard, an update dialog, a session, a
-                    // tutorial overlay, a minimised window, the setting, whether she is already out
-                    // - lives in EmiKnockMachine.MayKnock, so this is one call and no policy.
-                    QueueEmiKnock(knockSeenVersion);
-                    // Normal, NOT Loaded: this app keeps the dispatcher busy enough (compositor
-                    // host + avatar animations) that Loaded-priority items are starved and never
-                    // run - the first-launch tour silently never started at Loaded priority.
-                }), System.Windows.Threading.DispatcherPriority.Normal);
+                        // ...and the launch does not get to CONTINUE unshown either. The wizard's
+                        // Welcome step is the only 18+ gate a fresh install has - App.OnStartup's
+                        // MessageBox stands down for any launch the wizard claimed - so carrying on
+                        // here would be an adult app running with the question never asked. The
+                        // hand-back above means the next launch offers the screen properly.
+                        // No-op when an earlier launch already accepted (the hand-back path leaves
+                        // that flag alone on purpose).
+                        FirstRunWizard.AbortUngatedLaunch("the ladder gave up on the wizard", handBack: false);
+                    });
+
+                // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the
+                // population this is FOR is the one that pressed "explore on my own", and the
+                // hand-back path is a launch where nothing was ever shown and she is exactly as
+                // welcome. Every remaining gate - the wizard, an update dialog, a session, a
+                // tutorial overlay, a minimised window, the setting, whether she is already out
+                // - lives in EmiKnockMachine.MayKnock, so this is one call and no policy.
+                QueueEmiKnock(knockSeenVersion);
             }
             else
             {
-                // Not first launch - check if we need to show "What's New" after an update
+                // Not first launch - check if we need to show "What's New" after an update.
+                // Both of these now END in an EnqueueStartupModal (priorities 30 and 40); their
+                // own predicates still decide synchronously, right here, whether there is anything
+                // to queue at all.
                 ShowWhatsNewIfNeeded();
                 TryPresentSeasonRecap();
 
-                // Upgraders into the modular build get the SAME picker, once, at the equivalent safe
-                // point: after the update dialog AND the What's New / season-recap dialogs are done,
-                // and once this window has actually loaded. No tutorial follows here - existing users
-                // already had it.
-                Dispatcher.BeginInvoke(new Action(async () =>
+                // Upgraders into the modular build get the SAME picker, once, at priority 50 -
+                // behind What's New and the recap by construction rather than by a 1500 ms delay
+                // followed by a 600-iteration poll over three flags. ModPickerDialog.ShowIfNeeded
+                // keeps every one of its own guards (ModPickerShown / offline offers / full
+                // install), so the population offered the picker has not changed.
+                EnqueueStartupModal("mod-picker", 50, owner =>
                 {
                     try
                     {
-                        // Let the startup dialogs that were queued just above actually claim the
-                        // flag before we start watching it - What's New posts itself and has not
-                        // raised IsStartupDialogShowing yet at this instant.
-                        await Task.Delay(1500);
-
-                        // Same waiting idiom as the first-launch branch, plus IsStartupDialogShowing:
-                        // What's New is modal and posts itself onto the dispatcher, so it can still be
-                        // pending when this runs. Every modular upgrader ARRIVES with a What's New to
-                        // read, so wait out minutes of reading, not seconds - at 30s a user still on
-                        // the patch notes silently lost the picker until the next launch (play-test
-                        // scenario C caught exactly that). Past 5 min we still defer to next launch,
-                        // which ModPickerShown=false keeps armed.
-                        //
-                        // App.Tutorial.IsActive is in the predicate since v6.8.0: What's New clears
-                        // IsStartupDialogShowing in its finally BEFORE the "Show me around (60s)"
-                        // action it queued gets to run, so without this check the picker opened
-                        // modally ON TOP of the running upgrade tour's spotlight (flagged in the
-                        // 0812 build review). The tour is minutes at most, well inside the 5-min
-                        // budget this loop already spends on the patch notes.
-                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing
-                                                    || App.Tutorial?.IsActive == true); i++)
-                        {
-                            await Task.Delay(500);
-                        }
-
-                        for (int i = 0; i < 20 && !IsLoaded; i++)
-                        {
-                            await Task.Delay(500);
-                        }
-
-                        if (!App.IsUpdateDialogActive && !IsStartupDialogShowing
-                            && App.Tutorial?.IsActive != true && IsLoaded)
-                        {
-                            // Pre-ticks the card for the mod they were already running, so one press
-                            // restores what the installer removed.
-                            ModPickerDialog.ShowIfNeeded(this, preselectActiveMod: true);
-                        }
+                        // Pre-ticks the card for the mod they were already running, so one press
+                        // restores what the installer removed.
+                        ModPickerDialog.ShowIfNeeded(owner as MainWindow ?? this, preselectActiveMod: true);
                     }
                     catch (Exception ex)
                     {
                         App.Logger?.Warning(ex, "Failed to offer the mod picker to an upgrading install");
                     }
+                });
 
-                    // THE KNOCK (Ask EMI wave 1), the upgrader's half. Same call, same gates; the
-                    // snapshot taken before ShowWhatsNewIfNeeded ran is what makes this population
-                    // legible at all by the time we get here.
-                    QueueEmiKnock(knockSeenVersion);
-                    // Normal, NOT Loaded - Loaded-priority work is starved in this app and silently
-                    // never runs (same reason as the first-launch branch above).
-                }), System.Windows.Threading.DispatcherPriority.Normal);
+                // THE KNOCK (Ask EMI wave 1), the upgrader's half. Same call, same gates; the
+                // snapshot taken before ShowWhatsNewIfNeeded ran is what makes this population
+                // legible at all by the time we get here.
+                QueueEmiKnock(knockSeenVersion);
             }
+
+            // The title bar's Inbox glyph. Nothing to show yet - it stays collapsed until the
+            // first surface is parked - but the badge has to be subscribed to the presenter's
+            // collection before any of them are.
+            InitializeInboxBadge();
 
             // Initialize scheduler timer (checks every 30 seconds)
             _schedulerTimer = new DispatcherTimer
@@ -4029,18 +4002,21 @@ namespace ConditioningControlPanel
                 {
                     try
                     {
-                        // SETTLED, not merely "after". MayKnock reads the screen at one instant, and
-                        // the two things most likely to own it are queued rather than running: the
-                        // wizard's own tour starts a beat after its last step, and What's New posts
-                        // itself onto the dispatcher. So wait them out with the same idiom the mod
-                        // picker uses a few hundred lines up - a beat for the queue to fill, then up
-                        // to five minutes of somebody actually reading. Past that we simply do not
-                        // knock; the offer has not been spent, so the next launch offers it properly.
-                        await Task.Delay(1500);
-
-                        for (int i = 0; i < 600 && (App.IsUpdateDialogActive || IsStartupDialogShowing
-                                                    || App.Tutorial?.IsActive == true); i++)
+                        // SETTLED, not merely "after", and now the ladder is what says so. MayKnock
+                        // reads the screen at one instant, and the things most likely to own it are
+                        // QUEUED rather than running at the moment this is called - the wizard and
+                        // What's New are both enqueued a few lines before this. The old version
+                        // guessed at that with a flat 1500 ms delay and then polled three flags;
+                        // IsLadderIdle is the same question asked of the thing that actually knows.
+                        // Past five minutes we simply do not knock; the offer has not been spent,
+                        // so the next launch offers it properly.
+                        var startup = App.Startup;
+                        for (int i = 0; i < 600; i++)
                         {
+                            bool busy = App.IsUpdateDialogActive || IsStartupDialogShowing
+                                        || App.Tutorial?.IsActive == true
+                                        || startup?.IsLadderIdle == false;
+                            if (!busy && i > 0) break;
                             await Task.Delay(500);
                         }
 

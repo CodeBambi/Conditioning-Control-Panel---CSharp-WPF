@@ -364,6 +364,14 @@ namespace ConditioningControlPanel.Services.Descent
                     return;
                 }
 
+                // THE QUIET WINDOW (first-run redesign, lane C). The ceremony is a full-screen
+                // account-lifetime event and it must not be the thing that greets somebody nine
+                // minutes into their first install. Same mechanism as the catch-up crack: take a
+                // HOLD, so the offer stays in _liveOffer and is replayed rather than cancelled,
+                // and let quiet ending release it. A row goes to the Inbox at the same time, so
+                // the user can take it earlier if they want to.
+                if (TryHoldForQuiet()) return;
+
                 DescentMigrationOffer? offer;
                 lock (_gate)
                 {
@@ -404,6 +412,135 @@ namespace ConditioningControlPanel.Services.Descent
             {
                 lock (_gate) _ceremonyOpen = false;
                 Log.Error(ex, "[Descent] Could not open the migration ceremony window — the server will re-offer on the next sync.");
+            }
+        }
+
+        // ------------------------------------------------------------------ the quiet window
+
+        /// <summary>True while this service is holding its own offer behind the startup quiet
+        /// window. Exactly one such hold ever exists, so the depth counter stays balanced.</summary>
+        private bool _quietHoldTaken;
+
+        /// <summary>
+        /// One-shot: the user asked for the ceremony from the Inbox row while the app was still
+        /// quiet, so the NEXT hold test must let it through.
+        ///
+        /// <para>Without it the row could never work. Open ran ReleaseQuietHold, which cleared
+        /// <see cref="_quietHoldTaken"/> and called ReleaseOffers, whose replay lands back in
+        /// OpenCeremonyWindow - whose first statement is the hold test, which saw a still-quiet app
+        /// and an untaken hold and took it again, re-posting the row. Click, nothing, click,
+        /// nothing, for the whole ten minutes.</para>
+        ///
+        /// <para>Consumed by the test that honours it, so it opens the door exactly once and an
+        /// unrelated offer arriving later in the same quiet window is still held.</para>
+        /// </summary>
+        private bool _quietOverridden;
+
+        /// <summary>The posted row, kept so the release can take it back out of the Inbox.</summary>
+        private Startup.InboxItem? _quietRow;
+
+        /// <summary>Re-entrancy latch for <see cref="ReleaseQuietHold"/>: dismissing the row can
+        /// run the row's own Dismiss action, which is allowed to call back in here.</summary>
+        private bool _releasingQuietHold;
+
+        /// <summary>
+        /// Takes (once) a hold on the ceremony while the app is quiet, posts an Inbox row that can
+        /// lift it early, and subscribes to the end of the quiet window. Returns true when the
+        /// caller should stand down and let the release replay the open.
+        /// </summary>
+        private bool TryHoldForQuiet()
+        {
+            var presenter = App.Startup;
+            if (presenter is null || !presenter.IsQuiet) return false;
+
+            lock (_gate)
+            {
+                // The row was clicked. Spend the override and let this open through - the user
+                // asking for it IS the exception the quiet window is meant to have.
+                if (_quietOverridden)
+                {
+                    _quietOverridden = false;
+                    return false;
+                }
+
+                if (_quietHoldTaken) return true;
+                _quietHoldTaken = true;
+            }
+
+            HoldOffers();
+            presenter.QuietChanged += OnStartupQuietChanged;
+            Log.Information("[Descent] Ceremony held behind the startup quiet window - it opens when the app goes quiet no longer.");
+
+            var row = new Startup.InboxItem
+            {
+                Key = "descent:ceremony",
+                Glyph = "🌀",
+                Title = "The Descent",
+                Summary = "Something is waiting for you. It only happens once.",
+                Open = OpenFromInboxRow,
+            };
+            _quietRow = row;
+            presenter.PresentOrInbox(row);
+
+            return true;
+        }
+
+        /// <summary>
+        /// The Inbox row's Open. Marks the override BEFORE releasing, because the release replays
+        /// straight back into the hold test.
+        /// </summary>
+        private void OpenFromInboxRow()
+        {
+            lock (_gate) _quietOverridden = true;
+            ReleaseQuietHold();
+        }
+
+        private void OnStartupQuietChanged()
+        {
+            if (App.Startup?.IsQuiet == true) return;
+            ReleaseQuietHold();
+        }
+
+        /// <summary>
+        /// Lifts the quiet hold, once. Idempotent on purpose: the Inbox row and the end of the
+        /// quiet window can both arrive, and a second release would decrement somebody else's
+        /// hold (the catch-up crack's) and open the ceremony over a fullscreen show.
+        ///
+        /// <para>It also takes the row back out of the Inbox. When the quiet window simply ran out
+        /// on its own, nobody else ever would: the ceremony opened, the row stayed behind it with
+        /// the badge at 1 for the rest of the session, and clicking it did nothing at all because
+        /// the hold it offered to lift was already lifted.</para>
+        /// </summary>
+        private void ReleaseQuietHold()
+        {
+            lock (_gate)
+            {
+                if (!_quietHoldTaken || _releasingQuietHold) return;
+                _quietHoldTaken = false;
+                _releasingQuietHold = true;
+            }
+
+            try
+            {
+                var presenter = App.Startup;
+                if (presenter != null)
+                {
+                    presenter.QuietChanged -= OnStartupQuietChanged;
+
+                    var row = _quietRow;
+                    _quietRow = null;
+                    // DismissItem runs the row's Dismiss action, and the Inbox flyout's own Open
+                    // path has already removed it - both are no-ops here, and _releasingQuietHold
+                    // covers the case where either one finds its way back to this method.
+                    if (row != null) presenter.DismissItem(row);
+                }
+
+                Log.Information("[Descent] Startup quiet window lifted - replaying the held ceremony offer.");
+                ReleaseOffers();
+            }
+            finally
+            {
+                lock (_gate) _releasingQuietHold = false;
             }
         }
 
