@@ -2959,8 +2959,23 @@ namespace ConditioningControlPanel
             // come from the dispatcher itself so a wedged message loop is detected again.
             Dispatcher.BeginInvoke(new Action(() => _startupPhase = false));
 
-            // Age verification gate (first launch only, deferred to ensure splash is fully closed)
-            if (Settings?.Current?.HasAcceptedAgeVerification != true)
+            // Age verification gate - the LEFTOVER population only.
+            //
+            // A fresh install never reaches this: the 18+ tick is the first-run wizard's Welcome
+            // step, and its Enter button IS the gate (FirstRunWizard.RecordAgeAcceptance writes the
+            // flag, closing without it hands the first run back and shuts down). Firing a
+            // MessageBox in front of that window is the modal-on-modal pile-up the redesign exists
+            // to remove, so the condition is now Welcomed AND not accepted: an old install that
+            // somehow never answered. When Welcomed is false the wizard owns the gate and this
+            // stays out of its way.
+            //
+            // The claim check is what makes "Welcomed" mean the right thing HERE: MainWindow's
+            // constructor ran at line ~2563, and FirstRunWizard.ShouldRunAndClaim already latched
+            // Welcomed = true for this very launch, so the flag alone would read a fresh install as
+            // an old one. FirstRunClaimedThisLaunch is the wizard saying "this launch is mine".
+            if (Settings?.Current?.Welcomed == true
+                && Settings?.Current?.HasAcceptedAgeVerification != true
+                && !FirstRunWizard.FirstRunClaimedThisLaunch)
             {
                 Dispatcher.BeginInvoke(new Action(() =>
                 {

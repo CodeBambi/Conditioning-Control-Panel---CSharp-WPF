@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -166,17 +167,65 @@ namespace ConditioningControlPanel
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    /// <summary>What the first run does with the window the user just closed.</summary>
+    public enum FirstRunOutcome
+    {
+        /// <summary>The gate was accepted and Enter was pressed: the app carries on.</summary>
+        Proceed,
+
+        /// <summary>Nobody accepted: hand the first run back and shut the app down.</summary>
+        DeclineAndShutDown
+    }
+
     /// <summary>
-    /// Phase 8's first run: three steps (Welcome, mod pick, doors tour) in place of the up-to-ten
-    /// popup gauntlet a fresh install used to walk through.
+    /// The first run's two decisions, pure: no WPF, no <c>App</c>, no settings file. The wizard
+    /// (and its tests) call these rather than restating the rules inline, because both of them used
+    /// to live in code nobody could exercise: the age gate was a MessageBox in front of the window,
+    /// and the offline flavour latch was buried in an event handler.
+    /// </summary>
+    public static class FirstRunGate
+    {
+        /// <summary>
+        /// The 18+ gate. Enter on the Welcome step is the ONLY way past it: a tick with no Enter is
+        /// somebody who read the sentence and closed the window, which is the same answer the old
+        /// "Do you wish to continue?" MessageBox took as No.
+        /// </summary>
+        public static FirstRunOutcome Decide(bool ageChecked, bool enterPressed) =>
+            (ageChecked && enterPressed) ? FirstRunOutcome.Proceed : FirstRunOutcome.DeclineAndShutDown;
+
+        /// <summary>
+        /// What <c>ModPickerShown</c> must be after the wizard's flavour step ended offline: always
+        /// latched, whatever the offer count.
+        ///
+        /// <para>The wizard used to hand the offer back here (the standalone picker's own re-arm
+        /// rule, <see cref="ModPickerDialog.ShouldReArmAfterOfflineShowing"/>), and that is exactly
+        /// how "the Circe one" came back days later on its own. A first run is offered once; if the
+        /// box was offline for it, the Mod Manager and the Library own downloads from then on and
+        /// no popup ever asks again. <c>ModPickerOfflineOffers</c> keeps counting, for diagnostics
+        /// only. The standalone upgrader path keeps its own re-arm - that population never saw a
+        /// wizard.</para>
+        /// </summary>
+        public static bool ModPickerShownAfterOfflineFlavourStep(int offersAfterShowing) => true;
+    }
+
+    /// <summary>
+    /// The first run, in two steps: Welcome (language, your own content folder, the 18+ gate) and
+    /// Flavour (which mod to run). It replaces what used to be a modal gauntlet: the age-verify
+    /// MessageBox, <c>WelcomeDialog</c>, the first-launch <c>ModPickerDialog.ShowIfNeeded</c> call,
+    /// the seven-step spotlight tour and the hardcoded-English "choose a content folder" MessageBox.
     ///
-    /// <para>What it replaces, and nothing else: <c>WelcomeDialog</c>, the first-launch
-    /// <c>ModPickerDialog.ShowIfNeeded</c> call, the seven-step spotlight tour that fired straight
-    /// after it, and the hardcoded-English "choose a content folder" MessageBox. Every PRESERVED
-    /// surface is untouched - the consent dialogs (webcam / mic / awareness / explicit content) are
-    /// still lazily user-initiated and are never folded in here, the staged 3s/5s/7s/14s startup
-    /// ladder keeps its slots, the lockdown intro keeps its secret-exit line, and
-    /// <c>NewYearNoteReactionSeen</c> is never touched.</para>
+    /// <para><b>One gate.</b> The age check is this window's primary button rather than a
+    /// MessageBox in front of it: Enter stays disabled until the box is ticked, ticking and
+    /// pressing Enter writes <c>HasAcceptedAgeVerification</c>, and closing step 1 without that
+    /// hands the first run back and shuts the app down - precisely what the MessageBox's No did.
+    /// <see cref="FirstRunGate.Decide"/> is that rule, on its own, unit tested.</para>
+    ///
+    /// <para><b>One tour.</b> There is no doors step and no "Take the tour" button. EMI offers the
+    /// single walk there is, once, from her chip, after this window is gone.</para>
+    ///
+    /// <para>Every PRESERVED surface is untouched: the consent dialogs (webcam / mic / awareness /
+    /// explicit content) are still lazily user-initiated and are never folded in here, the lockdown
+    /// intro keeps its secret-exit line, and <c>NewYearNoteReactionSeen</c> is never touched.</para>
     ///
     /// <para>Only a genuinely fresh install ever sees this: the gate is
     /// <see cref="ShouldRunAndClaim"/>, which reads the same <c>Welcomed</c> flag the old
@@ -187,12 +236,12 @@ namespace ConditioningControlPanel
     /// <para>Hardening lessons carried over from the popups it replaces: one-shot flags are spent
     /// BEFORE the screen opens (a crash inside must never turn it into an every-launch popup),
     /// deferred work runs at <see cref="DispatcherPriority.Normal"/> and never Loaded (Loaded is
-    /// starved in this app), closing mid-download does NOT cancel the download, and offline is a
-    /// first-class state that hands the mod offer back instead of burning it.</para>
+    /// starved in this app), closing mid-download does NOT cancel the download, and an offline
+    /// first run LATCHES the flavour offer rather than re-arming it.</para>
     /// </summary>
     public partial class FirstRunWizard : Window
     {
-        private const int StepCount = 3;
+        private const int StepCount = 2;
 
         private readonly MainWindow? _owner;
         private readonly ObservableCollection<FirstRunModCard> _cards = new();
@@ -200,19 +249,38 @@ namespace ConditioningControlPanel
         private int _step = 1;
         private FirstRunModCard? _selected;
 
-        /// <summary>The mod id already handed to the activation path, so Back/Next can't double-fire it.</summary>
+        /// <summary>The mod id already handed to the activation path, so nothing can double-fire it.</summary>
         private string? _committedModId;
 
         private bool _modStepPrepared;
         private bool _modStepOffline;
         private bool _offlineOfferCounted;
         private bool _closed;
+        private bool _populatingLanguage;
 
-        /// <summary>Set by "Take the tour"; read by <see cref="Run"/> after the modal returns.</summary>
-        public bool StartTourRequested { get; private set; }
+        /// <summary>True once Enter was pressed on the Welcome step with the 18+ box ticked.</summary>
+        private bool _enteredPastGate;
+
+        /// <summary>
+        /// The gate's verdict, read by <see cref="Run"/> on the far side of the modal: false means
+        /// the user declined and the app is already shutting down, so nothing else may be started.
+        /// </summary>
+        public bool AgeAccepted => _enteredPastGate;
 
         /// <summary>Set by the Welcome step's folder button; the picker opens after this window closes.</summary>
         public bool PickAssetsFolderRequested { get; private set; }
+
+        /// <summary>
+        /// True once <see cref="ShouldRunAndClaim"/> has claimed THIS launch for the wizard.
+        ///
+        /// <para>Read by <c>App.OnStartup</c>'s age-verification block, which runs several hundred
+        /// lines after MainWindow's constructor and therefore always sees <c>Welcomed = true</c> on
+        /// a fresh install - the claim above set it. Without this the MessageBox the wizard exists
+        /// to replace would fire in front of the wizard on exactly the population that must never
+        /// see it. Not reset by <see cref="HandBackFirstRun"/>: the launch was still the wizard's,
+        /// whatever became of the window.</para>
+        /// </summary>
+        public static bool FirstRunClaimedThisLaunch { get; private set; }
 
         private FirstRunWizard(MainWindow? owner)
         {
@@ -220,8 +288,8 @@ namespace ConditioningControlPanel
             InitializeComponent();
 
             ApplyStaticText();
+            PopulateLanguages();
             BuildModCards();
-            BuildDoorRows();
             ModCardsList.ItemsSource = _cards;
 
             try
@@ -283,6 +351,7 @@ namespace ConditioningControlPanel
                 settings.FirstRunAssetsPromptShown = true;
                 settings.LastSeenVersion = UpdateService.AppVersion;
                 App.Settings?.Save();
+                FirstRunClaimedThisLaunch = true;
                 return true;
             }
             catch (Exception ex)
@@ -293,11 +362,11 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Undoes <see cref="ShouldRunAndClaim"/> when the caller decided NOT to open the wizard
-        /// after all (the update dialog outlasted its 30s wait, the window never loaded). Without
-        /// this the flags would be spent on a screen nobody ever saw and the install would silently
-        /// never get a first run at all. A crash inside the wizard is deliberately NOT covered -
-        /// that is what spending up front buys.
+        /// Undoes <see cref="ShouldRunAndClaim"/> when the wizard was never shown (the update dialog
+        /// outlasted its 30s wait, the window never loaded) or when the user declined the 18+ gate.
+        /// Without this the flags would be spent on a screen nobody accepted and the install would
+        /// silently never get a first run at all. A crash inside the wizard is deliberately NOT
+        /// covered - that is what spending up front buys.
         /// </summary>
         public static void HandBackFirstRun(string reason)
         {
@@ -319,9 +388,9 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Opens the wizard modally and performs whatever the user asked for on the way out: the
-        /// content-folder picker first (it is modal too, so it must not race the tour), then the
-        /// existing TutorialService ladder. Never throws - a first-run screen must never be the
-        /// reason a fresh install fails to start.
+        /// content-folder picker (it is modal too, so it runs alone), and then the quiet window that
+        /// keeps the next ten minutes free of popups. Never throws - a first-run screen must never
+        /// be the reason a fresh install fails to start.
         /// </summary>
         public static void Run(MainWindow owner)
         {
@@ -343,13 +412,14 @@ namespace ConditioningControlPanel
 
             if (wizard == null) return;
 
+            // The gate said no: the shutdown is already in flight and the first run has been handed
+            // back. Nothing after this point belongs to a session that is ending.
+            if (!wizard.AgeAccepted) return;
+
             bool pickFolder = wizard.PickAssetsFolderRequested;
-            bool startTour = wizard.StartTourRequested;
-            if (!pickFolder && !startTour) return;
 
             // Normal, never Loaded: Loaded-priority work is starved in this app (compositor host +
-            // avatar animations keep the dispatcher busy) and silently never runs. One action for
-            // both so the folder dialog is finished before the spotlight overlay appears.
+            // avatar animations keep the dispatcher busy) and silently never runs.
             owner.Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (pickFolder)
@@ -358,17 +428,8 @@ namespace ConditioningControlPanel
                     catch (Exception ex) { App.Logger?.Warning(ex, "[FirstRun] Assets folder picker failed"); }
                 }
 
-                if (startTour)
-                {
-                    // The SHORT WALK, not the door-by-door tour (owner call 1,
-                    // docs/emi-desk/WAVE1-CONTRACT.md). Seven cards, about ninety seconds, and it
-                    // teaches the app rather than the furniture: somebody who has just been shown
-                    // all seven doors on the screen behind this button does not need them named
-                    // again. The full tour did not go anywhere - it is the first row in the ?
-                    // panel, which is what fr8_tour_outro now says.
-                    try { owner.StartTutorial(TutorialType.ShortWalk); }
-                    catch (Exception ex) { App.Logger?.Warning(ex, "[FirstRun] Could not start the short walk"); }
-                }
+                // The far side of the first run: the screen is the user's, and it stays theirs.
+                // LANE C WIRING: App.Startup?.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10));
             }), DispatcherPriority.Normal);
         }
 
@@ -407,8 +468,7 @@ namespace ConditioningControlPanel
         /// Which wordmark is the same branch <c>MainWindow.LoadLogo</c> takes: logo.png is
         /// the Bambi-branded mark, logo2.png the neutral "Conditioning Control Panel" one used by
         /// CCP Default and Sissy - and a fresh install IS CCP Default, so the wizard must not
-        /// hardcode logo.png. Re-called from ShowStep(1) so Back-navigation after a mod pick
-        /// repaints instead of showing the previous mod's mark.
+        /// hardcode logo.png.
         /// </para>
         /// </summary>
         private void RefreshWelcomeLogo()
@@ -433,55 +493,51 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("[FirstRun] logo resolve failed: {E}", ex.Message); }
         }
 
+        /// <summary>
+        /// Every string on the screen, re-runnable: the language row switches the app's language in
+        /// place, and this window's own copy is code-behind rather than <c>{loc:Str}</c> bindings,
+        /// so it has to be repainted by hand when that happens.
+        /// </summary>
         private void ApplyStaticText()
         {
             Title = Str("fr8_wizard_title", "Getting started");
             TxtWizardTitle.Text = Title;
 
-            // --- step 1 ---
+            // --- step 1: welcome ---
             RefreshWelcomeLogo();
 
             TxtAppTitle.Text = Loc.Get("app_title");
-            TxtWelcomeHeading.Text = StrF("fr8_welcome_heading", "Welcome, {0}.",
-                App.Mods?.GetAffirmation() ?? "Subject");
+            TxtWelcomeHeading.Text = Str("fr8_welcome_title", "Welcome.");
             TxtWelcomeBody.Text = Str("fr8_welcome_body",
-                "Conditioning Control Panel layers the effects you choose - flashes, videos, subliminals, " +
-                "screen overlays and a companion who reacts to all of it - over whatever you are already doing. " +
-                "Nothing runs until you press START, and every camera, microphone or screen-reading feature " +
-                "asks for your consent separately, the first time you use it.");
+                "Two quick choices and she is all yours. Everything else can wait until you ask for it.");
 
-            TxtTipsTitle.Text = Loc.Get("label_tips");
-            TxtTipHelp.Text = Str("fr8_welcome_tip_help",
-                "Click the ? button in the title bar any time for the full tour and per-feature guides.");
-            TxtTipHover.Text = Str("fr8_welcome_tip_hover", "Hover over any setting to see what it does.");
-            TxtTipAssets.Text = Str("fr8_welcome_tip_assets",
-                "Add your own images and videos from the Library door, or point the app at any folder you like.");
+            TxtLanguageLabel.Text = Str("fr8_welcome_language", "Language");
+            TxtLanguageHint.Text = Str("fr8_welcome_language_hint", "You can change this any time from the title bar.");
 
-            TxtPerfTitle.Text = Loc.Get("label_performance_warning");
-            TxtPerfBody.Text = Str("fr8_welcome_perf_warning",
-                "Running many features at once, especially at high frequencies, is heavy on older machines. " +
-                "Turn some off or lower their rates in Settings if things get sluggish.");
+            TxtFolderLabel.Text = Str("fr8_welcome_folder", "Your own content");
+            TxtFolderHint.Text = Str("fr8_welcome_folder_hint",
+                "Optional. Point the app at a folder of your own images and videos.");
 
-            BtnPickFolder.Content = Str("fr8_welcome_pick_folder", "Choose a content folder");
+            // Keep the queued confirmation if the folder was already asked for: this method also
+            // runs on a language switch, and repainting the button would quietly un-say it.
+            BtnPickFolder.Content = PickAssetsFolderRequested
+                ? Str("fr8_welcome_pick_folder_queued", "We'll ask for your content folder right after this")
+                : Str("fr8_welcome_pick_folder", "Choose a content folder");
 
-            // --- step 2 ---
+            TxtAgeConfirm.Text = Str("fr8_age_confirm",
+                "I am 18 or older and I have read the content policy.");
+            RunContentPolicy.Text = Str("fr8_age_policy_link", "Read the content policy");
+
+            // --- step 2: flavour ---
             TxtModHeading.Text = Str("fr8_modpick_heading", "Pick your flavour");
             TxtModSub.Text = Str("fr8_modpick_sub",
                 "A mod re-skins the whole app: her name and voice, the art, the phrases, the programs. " +
                 "Pick the one you want to start with - you can switch any time from the title bar.");
-            TxtModHint.Text = Str("fr8_modpick_skip_hint",
-                "Skipping keeps the neutral CCP Default. Downloads carry on in the background, so you can " +
-                "close this window whenever you like.");
-
-            // --- step 3 ---
-            TxtTourHeading.Text = Str("fr8_tour_heading", "Seven doors");
-            TxtTourOutro.Text = Str("fr8_tour_outro",
-                "The rail on the left is always there. Take the tour for a ninety-second walk through the " +
-                "essentials, or explore on your own - the ? button replays it, and the full door-by-door " +
-                "tour is in there too.");
-
-            // --- chrome ---
-            BtnBack.Content = Str("fr8_wizard_back", "Back");
+            if (!_modStepOffline)
+            {
+                TxtModHint.Text = Str("fr8_modpick_offline_hint",
+                    "Offline? The download waits. No second ask.");
+            }
         }
 
         // ------------------------------------------------------------------ steps
@@ -492,26 +548,58 @@ namespace ConditioningControlPanel
 
             Step1.Visibility = _step == 1 ? Visibility.Visible : Visibility.Collapsed;
             Step2.Visibility = _step == 2 ? Visibility.Visible : Visibility.Collapsed;
-            Step3.Visibility = _step == 3 ? Visibility.Visible : Visibility.Collapsed;
-
-            TxtStepCounter.Text = StrF("fr8_wizard_step_of", "Step {0} of {1}", _step, StepCount);
-            BtnBack.Visibility = _step == 1 ? Visibility.Collapsed : Visibility.Visible;
-
-            if (_step == 3)
-            {
-                BtnSkip.Content = Str("fr8_tour_explore", "Explore on my own");
-                BtnNext.Content = Str("fr8_tour_take", "Take the tour");
-            }
-            else
-            {
-                BtnSkip.Content = Str("fr8_wizard_skip", "Skip setup");
-                BtnNext.Content = Str("fr8_wizard_next", "Next");
-            }
 
             if (_step == 1) RefreshWelcomeLogo();
             if (_step == 2) PrepareModStep();
 
+            ApplyStepChrome();
             FadeInCurrentStep();
+        }
+
+        /// <summary>
+        /// The title-bar counter and the two footer buttons. Split out of <see cref="ShowStep"/>
+        /// because a language switch and a card selection both change this copy without changing
+        /// which step is on screen.
+        /// </summary>
+        private void ApplyStepChrome()
+        {
+            TxtStepCounter.Text = StrF("fr8_wizard_step_of", "Step {0} of {1}", _step, StepCount);
+
+            if (_step == 1)
+            {
+                // No skip on the gate: not accepting is closing the window, and the muted line
+                // under the button says so rather than dressing it up as a third choice.
+                BtnSkip.Visibility = Visibility.Collapsed;
+                BtnNext.Content = Str("fr8_welcome_enter", "Enter");
+                BtnNext.IsEnabled = ChkAgeConfirm.IsChecked == true;
+
+                TxtCloseHint.Text = Str("fr8_welcome_close_hint", "Not for you? Just close this window.");
+                TxtCloseHint.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                BtnSkip.Visibility = Visibility.Visible;
+                BtnSkip.Content = Str("fr8_modpick_keep_default", "Keep the default");
+                BtnNext.IsEnabled = true;
+                UpdateFlavourButton();
+
+                TxtCloseHint.Text = "";
+                TxtCloseHint.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>"Enter with Circe", or plain "Enter" for the in-box default.</summary>
+        private void UpdateFlavourButton()
+        {
+            if (_step != 2) return;
+
+            var card = _selected;
+            var isDefault = card == null
+                            || string.Equals(card.ModId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
+
+            BtnNext.Content = isDefault
+                ? Str("fr8_welcome_enter", "Enter")
+                : StrF("fr8_modpick_enter_with", "Enter with {0}", card!.Name);
         }
 
         /// <summary>
@@ -522,7 +610,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var host = _step == 1 ? (FrameworkElement)Step1 : _step == 2 ? Step2 : Step3;
+                var host = _step == 1 ? (FrameworkElement)Step1 : Step2;
                 host.BeginAnimation(OpacityProperty, null);
 
                 if (!MotionFx.AllowTransitions)
@@ -540,7 +628,93 @@ namespace ConditioningControlPanel
             catch { /* a transition must never be the reason a step fails to render */ }
         }
 
-        // ------------------------------------------------------------------ step 2: mod pick
+        // ------------------------------------------------------------------ step 1: language
+
+        /// <summary>
+        /// The same language list the title-bar pill and Settings offer, from the same helper -
+        /// <c>MainWindow.FillLanguageCombo</c> - so this screen can never drift from them.
+        /// </summary>
+        private void PopulateLanguages()
+        {
+            _populatingLanguage = true;
+            try { MainWindow.FillLanguageCombo(CmbWizardLanguage, shortLabels: false); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "[FirstRun] Could not fill the language list"); }
+            finally { _populatingLanguage = false; }
+        }
+
+        private void CmbWizardLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_populatingLanguage) return;
+            if (CmbWizardLanguage.SelectedItem is not ComboBoxItem item) return;
+
+            try
+            {
+                // The one writer of AppSettings.Language, either through MainWindow (which also
+                // re-selects its own two surfaces and raises the restart banner) or, when there is
+                // no owner, through the same static core it calls.
+                if (_owner != null) _owner.ApplyLanguageSelection(item.Tag as string);
+                else MainWindow.SetApplicationLanguage(item.Tag as string);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[FirstRun] Language switch failed");
+            }
+
+            // This window's copy is assigned in code-behind, so it does not follow the live
+            // LocalizationManager change on its own.
+            ApplyStaticText();
+            ApplyStepChrome();
+        }
+
+        // ------------------------------------------------------------------ step 1: the gate
+
+        private void AgeConfirm_Changed(object sender, RoutedEventArgs e) => ApplyStepChrome();
+
+        /// <summary>The sentence is the target too - a 20px box is a mean thing to aim at.</summary>
+        private void AgeConfirmLabel_Click(object sender, MouseButtonEventArgs e)
+        {
+            ChkAgeConfirm.IsChecked = ChkAgeConfirm.IsChecked != true;
+            e.Handled = true;
+        }
+
+        private void LnkContentPolicy_Click(object sender, RoutedEventArgs e)
+        {
+            // The same constant the moderation warning uses - one URL, one place.
+            var url = ContentPolicyWarningDialog.PolicyUrl;
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[FirstRun] Failed to open the content policy URL {Url}", url);
+            }
+        }
+
+        /// <summary>
+        /// Writes the acceptance the moment Enter is pressed, before anything else on the way to
+        /// step 2 can throw. <c>App.xaml.cs</c>'s MessageBox now only covers the other population -
+        /// an install that is already <c>Welcomed</c> but somehow never accepted.
+        /// </summary>
+        private void RecordAgeAcceptance()
+        {
+            _enteredPastGate = true;
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                settings.HasAcceptedAgeVerification = true;
+                App.Settings?.Save();
+                App.Logger?.Information("[FirstRun] Age verification accepted on the Welcome step");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[FirstRun] Could not record the age acceptance");
+            }
+        }
+
+        // ------------------------------------------------------------------ step 2: flavour
 
         private void BuildModCards()
         {
@@ -595,7 +769,7 @@ namespace ConditioningControlPanel
             }
 
             // Pre-select what this install is already running (CCP Default on a fresh box), so the
-            // screen reads as "here is what you have, here is what you can have" and pressing Next
+            // screen reads as "here is what you have, here is what you can have" and pressing Enter
             // without touching anything is a no-op rather than an accidental switch.
             Select(_cards.FirstOrDefault(c => string.Equals(c.ModId, activeModId, StringComparison.OrdinalIgnoreCase))
                    ?? _cards.FirstOrDefault());
@@ -617,6 +791,7 @@ namespace ConditioningControlPanel
         {
             _selected = card;
             foreach (var c in _cards) c.IsSelected = ReferenceEquals(c, card);
+            UpdateFlavourButton();
         }
 
         private void ModCard_Click(object sender, MouseButtonEventArgs e)
@@ -643,8 +818,7 @@ namespace ConditioningControlPanel
                 if (settings == null || svc == null)
                 {
                     // No pack service this session: the cards still render (with their baked-in
-                    // sizes) but there is nothing to download from here, and the one-shot offer is
-                    // NOT spent - same call the picker's own guard makes.
+                    // sizes) but there is nothing to download from here.
                     SetModStepOffline(countOffer: false);
                     return;
                 }
@@ -661,8 +835,8 @@ namespace ConditioningControlPanel
 
                 if (settings.ModPickerShown)
                 {
-                    // Already offered somehow (a re-armed offline showing, a hand-edited settings
-                    // file). Picking still works; the offer is simply not spent twice.
+                    // Already offered somehow (a hand-edited settings file). Picking still works;
+                    // the offer is simply not spent twice.
                     return;
                 }
 
@@ -670,14 +844,14 @@ namespace ConditioningControlPanel
                                                           settings.ModPickerOfflineOffers))
                 {
                     App.Logger?.Information(
-                        "[FirstRun] {Reason} - the mod step opens read-only and the offer is handed back",
+                        "[FirstRun] {Reason} - the flavour step opens read-only",
                         settings.OfflineMode ? "Offline mode is on" : "Manifest unreachable this session");
                     SetModStepOffline(countOffer: true);
                     return;
                 }
 
                 // Spend the offer BEFORE anything can go wrong on this page, exactly as
-                // ModPickerDialog.ShowIfNeeded does; the offline path below hands it back.
+                // ModPickerDialog.ShowIfNeeded does.
                 settings.ModPickerShown = true;
                 App.Settings?.Save();
 
@@ -685,7 +859,7 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[FirstRun] Mod step preparation failed - falling back to the offline copy");
+                App.Logger?.Warning(ex, "[FirstRun] Flavour step preparation failed - falling back to the offline copy");
                 SetModStepOffline(countOffer: false);
             }
         }
@@ -722,8 +896,12 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Offline is a first-class state, not a showing: the cards stay readable (with their
-        /// baked-in sizes) but nothing can be downloaded, so the one-shot offer is handed back for
-        /// a launch that can reach the manifest - bounded by <c>MaxOfflineOffers</c>.
+        /// baked-in sizes) but nothing can be downloaded from here.
+        ///
+        /// <para>The offer is NOT handed back. An offline first run latches the picker
+        /// (<see cref="FirstRunGate.ModPickerShownAfterOfflineFlavourStep"/>) so no standalone
+        /// picker ever fires days later on its own - the Mod Manager and the Library own downloads
+        /// from here. <c>ModPickerOfflineOffers</c> keeps counting for diagnostics only.</para>
         /// </summary>
         private void SetModStepOffline(bool countOffer)
         {
@@ -740,25 +918,17 @@ namespace ConditioningControlPanel
 
                 var offerCount = settings.ModPickerOfflineOffers + 1;
                 settings.ModPickerOfflineOffers = offerCount;
-                if (ModPickerDialog.ShouldReArmAfterOfflineShowing(offerCount))
-                {
-                    settings.ModPickerShown = false;
-                    App.Logger?.Information(
-                        "[FirstRun] Mod step ended offline (offer {Count}/{Max}) - re-arming the picker for a later launch",
-                        offerCount, ModPickerDialog.MaxOfflineOffers);
-                }
-                else
-                {
-                    settings.ModPickerShown = true;
-                    App.Logger?.Information(
-                        "[FirstRun] Mod step ended offline for the {Count}th time - latching; the Mod Manager owns downloads from here",
-                        offerCount);
-                }
+                settings.ModPickerShown = FirstRunGate.ModPickerShownAfterOfflineFlavourStep(offerCount);
                 App.Settings?.Save();
+
+                App.Logger?.Information(
+                    "[FirstRun] Flavour step ended offline (offer {Count}, diagnostics only) - latched; " +
+                    "the Mod Manager owns downloads from here",
+                    offerCount);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[FirstRun] Could not record the offline mod offer");
+                App.Logger?.Warning(ex, "[FirstRun] Could not record the offline flavour offer");
             }
         }
 
@@ -825,81 +995,6 @@ namespace ConditioningControlPanel
             else card.MarkFailed();
         }
 
-        // ------------------------------------------------------------------ step 3: the doors
-
-        /// <summary>
-        /// The seven doors, in rail order. Mirrors <c>MainWindow.NavDoorMap</c> (which is private,
-        /// and is navigation truth - this list is only the wizard's description of it). Glyphs match
-        /// the rail headers in MainWindow.xaml; the labels reuse the existing <c>nav_door_*</c>
-        /// keys, so only the one-line blurbs are new copy.
-        /// </summary>
-        private static readonly (string Glyph, string LabelKey, string BlurbKey, string Blurb)[] Doors =
-        {
-            ("\U0001F3E0", "nav_door_home", "fr8_door_home_blurb",
-                "Your dashboard: the START hero, the feature mosaic, the browser card, today's program and the marquee."),
-            ("\U0001F39B️", "nav_door_studio", "fr8_door_studio_blurb",
-                "Where every effect is tuned: the rack, presets and sessions, the scheduler, the intensity ramp and your toys."),
-            ("\U0001F916", "nav_door_companion", "fr8_door_companion_blurb",
-                "Her room: personality, Takeover, She's Listening, Awareness, and every AI permission in one grid."),
-            ("\U0001F3AE", "nav_door_play", "fr8_door_play_blurb",
-                "The card wall: DTRH, Goon, Gaze, Bureau, Deeper, Graded Intake, Lockdown, Remote Control and the Showcase shelf."),
-            ("\U0001F464", "nav_door_you", "fr8_door_you_blurb",
-                "Your progress: Trainer Card, quests, achievements, the Skill Tree, training programs and the leaderboard."),
-            ("\U0001F4DA", "nav_door_library", "fr8_door_library_blurb",
-                "Everything you own: assets and content packs, mods, the catalogue, your phrase pools and the media log."),
-            ("⚙️", "nav_door_settings", "fr8_door_settings_blurb",
-                "The system side: language, audio, devices, performance, notifications, account, data and updates."),
-        };
-
-        private void BuildDoorRows()
-        {
-            foreach (var door in Doors)
-            {
-                var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-                var glyph = new TextBlock
-                {
-                    Text = door.Glyph,
-                    FontSize = 20,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    Margin = new Thickness(2, 0, 14, 0)
-                };
-                row.Children.Add(glyph);
-
-                var text = new StackPanel();
-                text.Children.Add(new TextBlock
-                {
-                    Text = Loc.Get(door.LabelKey),
-                    Foreground = Brushes.White,
-                    FontSize = 14,
-                    FontWeight = FontWeights.Bold
-                });
-                text.Children.Add(new TextBlock
-                {
-                    Text = Str(door.BlurbKey, door.Blurb),
-                    Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0xC0, 0xC0)),
-                    FontSize = 12,
-                    TextWrapping = TextWrapping.Wrap,
-                    LineHeight = 18,
-                    Margin = new Thickness(0, 2, 0, 0)
-                });
-                Grid.SetColumn(text, 1);
-                row.Children.Add(text);
-
-                var shell = new Border
-                {
-                    Background = Application.Current?.TryFindResource("PanelBgBrush") as Brush,
-                    CornerRadius = new CornerRadius(8),
-                    Padding = new Thickness(12, 10, 12, 10),
-                    Margin = new Thickness(0, 0, 0, 8),
-                    Child = row
-                };
-                DoorsHost.Children.Add(shell);
-            }
-        }
-
         // ------------------------------------------------------------------ pack events
 
         private void OnPackProgressChanged(object? sender, PackProgressEventArgs e) =>
@@ -940,25 +1035,35 @@ namespace ConditioningControlPanel
             try { DragMove(); } catch { /* DragMove throws if the button was already released */ }
         }
 
-        private void BtnBack_Click(object sender, RoutedEventArgs e) => ShowStep(_step - 1);
-
         private void BtnNext_Click(object sender, RoutedEventArgs e)
         {
-            if (_step == 2) CommitModChoice();
-
-            if (_step >= StepCount)
+            if (_step == 1)
             {
-                // Last step's primary action is the doors tour itself.
-                StartTourRequested = true;
-                CloseSafely();
+                // Belt and braces: the button is disabled until the box is ticked, but the gate is
+                // the one thing on this screen that must not be reachable by accident.
+                if (ChkAgeConfirm.IsChecked != true) return;
+
+                RecordAgeAcceptance();
+                ShowStep(2);
                 return;
             }
 
-            ShowStep(_step + 1);
+            CommitModChoice();
+            CloseSafely();
         }
 
-        /// <summary>Skip always closes and never blocks; on the last step it reads "Explore on my own".</summary>
-        private void BtnSkip_Click(object sender, RoutedEventArgs e) => CloseSafely();
+        /// <summary>
+        /// "Keep the default": the second step's secondary. It puts the selection back on whatever
+        /// this install is already running before closing, so a card the user clicked and then
+        /// changed their mind about is not committed on the way out.
+        /// </summary>
+        private void BtnSkip_Click(object sender, RoutedEventArgs e)
+        {
+            var activeModId = App.Mods?.ActiveModId ?? BuiltInMods.CCPDefaultId;
+            Select(_cards.FirstOrDefault(c => string.Equals(c.ModId, activeModId, StringComparison.OrdinalIgnoreCase))
+                   ?? _cards.FirstOrDefault());
+            CloseSafely();
+        }
 
         private void BtnClose_Click(object sender, RoutedEventArgs e) => CloseSafely();
 
@@ -990,10 +1095,27 @@ namespace ConditioningControlPanel
             if (_closed) return;
             _closed = true;
 
-            // A choice made but never "Next"-ed (Esc, the X, Explore on my own) still counts - the
+            UnsubscribePackEvents();
+
+            if (FirstRunGate.Decide(ChkAgeConfirm.IsChecked == true, _enteredPastGate)
+                == FirstRunOutcome.DeclineAndShutDown)
+            {
+                // Exactly what the old age-verification MessageBox's "No" did, plus the hand-back
+                // the MessageBox never had: the flags were spent before this window opened, so a
+                // later launch would otherwise never offer the screen again.
+                HandBackFirstRun("age gate declined");
+                App.Logger?.Information("[FirstRun] The 18+ gate was not accepted - shutting down");
+                try { Application.Current?.Shutdown(); } catch { }
+                return;
+            }
+
+            // A choice made but never entered (Esc, the X on the flavour step) still counts - the
             // user ticked a mod, and honouring it is what the picker's own contract promises.
             CommitModChoice();
+        }
 
+        private void UnsubscribePackEvents()
+        {
             try
             {
                 if (App.Mods != null) App.Mods.ModAvailabilityChanged -= OnModAvailabilityChanged;
