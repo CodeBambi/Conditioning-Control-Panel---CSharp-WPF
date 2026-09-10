@@ -316,6 +316,89 @@ const scenes = {
     console.log('knight take at 450 ms: land=' + JSON.stringify(l[l.length - 1] && l[l.length - 1].p));
     await shot('knight-take-2.png', await closeUp('e5', 0.6, 420, 360));
   },
+  // --- PR 3: the room watches -------------------------------------------------
+  async bloom() {
+    await open();
+    await move('e2', 'e4');
+    await beat(900);
+    const bl = () => json('window.PBP.board.bloom.stats()');
+    const chain = () => json('({ bloom: window.PBP.board.bloom.stats().meter, watch: window.PBP.board.watch.stats().meter, sfx: window.PBP.board.sfx.state().meter })');
+    // The ramp's hook: its tick (a real timer, not the stepped clock) pushes the meter down the chain.
+    await evalJs('window.PBP.ramp.setEnabled(true); window.PBP.ramp.debug().setMeter(0.8)');
+    // The ramp ticks on rAF (ours) against the real clock, so let the clock run and step a frame.
+    for (let i = 0; i < 3; i++) { await sleep(260); await beat(50); }
+    const viaRamp = await chain();
+    console.log('meter via ramp: ' + JSON.stringify(viaRamp));
+    if (Math.abs(viaRamp.bloom - 0.8) > 0.05 || Math.abs(viaRamp.watch - 0.8) > 0.05 || Math.abs(viaRamp.sfx - 0.8) > 0.05) bad('the ramp meter did not reach the chain');
+    await evalJs('window.PBP.ramp.setEnabled(false)');
+    await beat(50);
+    // Off and on, same camera, same position.
+    await evalJs('window.PBP.board.setMeter(0); window.PBP.board.bloom.settle()');
+    await beat(300);
+    const e4off = await at('e4', 0);
+    for (let i = 0; i < 30; i++) await beat(16);
+    const off = await bl();
+    await shot('bloom-off.png');
+    await shot('bloom-off-near.png', await closeUp('e4', 0.4, 640, 420));
+    await evalJs('window.PBP.board.setMeter(0.8); window.PBP.board.bloom.settle()');
+    await beat(300);
+    for (let i = 0; i < 30; i++) await beat(16);
+    const on = await bl();
+    const e4on = await at('e4', 0);
+    await shot('bloom-on-0.8.png');
+    await shot('bloom-on-0.8-near.png', await closeUp('e4', 0.4, 640, 420));
+    console.log('bloom off: ' + JSON.stringify(off) + '\nbloom on:  ' + JSON.stringify(on));
+    console.log('projectSquare e4 off/on: ' + JSON.stringify(e4off) + ' ' + JSON.stringify(e4on));
+    if (!on.live || on.strength < 0.3) bad('bloom did not come on at 0.8');
+    if (off.live) bad('bloom was live at meter 0');
+    if (Math.abs(e4off.x - e4on.x) > 0.5 || Math.abs(e4off.y - e4on.y) > 0.5) bad('projectPoint moved under the composer');
+    console.log('outline: ' + JSON.stringify(await json('window.PBP.board.outline && window.PBP.board.outline.stats()')));
+    await evalJs('window.PBP.board.setMeter(0); window.PBP.board.bloom.settle()');
+  },
+  async watch() {
+    await open();
+    await evalJs('window.PBP.board.setMeter(0.6); window.PBP.board.bloom.settle()');
+    await beat(100);
+    const ws = () => json('window.PBP.board.watch.stats()');
+    const a = await at('e2', 0.45);
+    await mouse('mousePressed', a.x, a.y);
+    await beat(80);
+    const held = Number(await evalJs('window.PBP.board.drag && window.PBP.board.drag.holdHeight ? window.PBP.board.drag.holdHeight() : 0')) || 0;
+    const b = await at('e4', held);
+    for (let i = 1; i <= 8; i++) { await mouse('mouseMoved', a.x + (b.x - a.x) * (i / 8), a.y + (b.y - a.y) * (i / 8)); await beat(35); }
+    await beat(700);
+    const w1 = await ws();
+    console.log('watching at 1.1 s: ' + JSON.stringify(w1));
+    if (!w1.held) bad('nobody is held');
+    if (w1.maxOffDeg > 12.01) bad('a man turned past twelve degrees');
+    if (w1.maxOffDeg < 3) bad('the room did not turn');
+    await shot('watch-held.png');
+    await shot('watch-held-near.png', await closeUp('e4', 0.3, 720, 460));
+    await beat(3500);
+    const w2 = await ws();
+    const whispered = (await json('window.PBP.board.sfx.log()')).some((e) => e.name === 'whisper');
+    console.log('held at 4.6 s: ' + JSON.stringify(w2) + ' whisper=' + whispered);
+    if (!w2.hesitated || !whispered) bad('no hesitation after four seconds');
+    await mouse('mouseReleased', b.x, b.y);
+    await beat(1200);
+    const w3 = await ws();
+    console.log('after the drop: ' + JSON.stringify(w3));
+    if (w3.held || w3.maxOffDeg > 0.5) bad('the room did not turn back');
+    await shot('watch-released.png');
+    // Below the meter nobody looks (it is black's move now, so black's pawn).
+    await evalJs('window.PBP.board.setMeter(0.2)');
+    const c = await at('d7', 0.45);
+    await mouse('mousePressed', c.x, c.y);
+    await beat(80);
+    await mouse('mouseMoved', c.x + 4, c.y + 4);
+    await beat(600);
+    const w4 = await ws();
+    console.log('held at meter 0.2: ' + JSON.stringify(w4));
+    if (!w4.held) bad('the second man was not held');
+    if (w4.maxOffDeg > 0.5) bad('the room looked below the meter');
+    await mouse('mouseReleased', c.x, c.y);
+    await beat(300);
+  },
 };
 
 async function main() {

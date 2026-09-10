@@ -178,7 +178,9 @@ function main() {
   view.cameraRig.setDragGuard(() => drag.isHolding());
   // --- end M ---
 
-  // --- N: the theatre (parade, poses; bloom and the room in the next PR) ---
+  // --- N: the theatre (parade, poses, bloom, the room watches) ---
+  window.PBP.settings = Object.assign({ bloom: true }, window.PBP.settings);
+  { const prev = board.setMeter; board.setMeter = (m) => { if (prev) prev(m); if (board.bloom) board.bloom.setMeter(m); if (board.watch) board.watch.setMeter(m); if (board.sfx && board.sfx.setMeter) board.sfx.setMeter(m); }; }
   import('./board/parade.js').then((m) => {
     board.parade = m.createParade({ view, bus, jiggle });
     feelLate.push((dt) => board.parade.update(dt));
@@ -187,6 +189,14 @@ function main() {
     board.poses = m.createPoses({ view, pieces, bus, jiggle, outline: () => board.outline, project: (v) => view.projectPoint(v) });
     feelLate.push((dt) => board.poses.update(dt));
   }).catch((e) => console.warn('[pbp] poses missing', e));
+  import('./board/watch.js').then((m) => {
+    board.watch = m.createWatch({ group: view.pieceGroup, bus, jiggle, sfx: () => board.sfx });
+    feelLate.push((dt) => board.watch.update(dt));
+  }).catch((e) => console.warn('[pbp] watch missing', e));
+  import('./board/bloom.js').then((m) => {
+    board.bloom = m.createBloom({ view });
+    feelLate.push((dt) => board.bloom.update(dt));
+  }).catch((e) => console.warn('[pbp] bloom missing', e));
   // --- end N ---
 
   let last = performance.now();
