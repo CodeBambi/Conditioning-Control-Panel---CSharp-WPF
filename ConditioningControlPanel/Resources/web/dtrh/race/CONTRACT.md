@@ -215,8 +215,11 @@ is the glitch bubble's wash off the leash: no backdrop blur, no dark luminosity 
 ceiling, so the picture is the thing on the glass. Opacity `0.55-0.8` by strength, hold `1.5-3 s`
 stretched by strength and `durationMult`, a light `is-washing` scale shudder, and a soft mask
 (`styles.css .sf-pfx-gifwash`) that both feathers the edges and lands its falloff over the lower
-centre so the road stays drivable - the race's `filter: opacity()` overlay cap is deliberately NOT
-extended to it. The url comes from `pickWashUrl()`, which draws up to four times from the DOM-safe
+centre so the road stays drivable - the spiral's 0.78 `filter: opacity()` cap is deliberately NOT
+extended to it; what the race does put on the hold is a flat `opacity(0.85)` (2026-09-09, phone
+testing: "15% less opacity on the fullscreen gifs"), so the ramp lands at `0.47-0.68` and the live
+Loom canvas, which inherits the hold's filter, sits at the same weight as a gif. The url comes from
+`pickWashUrl()`, which draws up to four times from the DOM-safe
 pool and takes the first entry whose name or url says `.gif`/`.webp`, keeping the last draw if none
 do; with an empty pool it takes a BUNDLED SPIRAL (`pickSpiralUrl()`, all animated) rather than one
 of the still png `FALLBACK_SPRITES`. It has its OWN MIX slot, `wash` (`cocktail.js CATEGORIES`,
@@ -281,8 +284,11 @@ that word in the centrepiece as a `mantra` - the spiral says what the voice said
 same shape as `subliminalFx`); when a weave is picked it mounts a canvas inside the `sf-pfx-spiral`
 hold rather than setting a background-image, inheriting the hold's opacity fade so intensity stays
 one channel, and neutralises only the css the canvas replaces (the 14 s spin, the 1.6 overscan). The
-canvas backing store is capped at 512 px on the long side, 320 px on the touch tier, where it also
-drops layer 2 and the wobble and paces frames at 33 ms. Reduced motion paints one still frame.
+canvas backing store is capped at 512 px on the long side, 256 px on the touch tier, where it also
+drops layer 2 and the wobble and paces frames at 42 ms. One WebGL context and one compiled shader
+serve every hold for the manager's life (2026-09-09: a context per pop was the phone's lag - a
+shader compile on every spiral); a hold is only a 2D view over that surface. Reduced motion paints
+one still frame.
 `webglcontextlost`, or no WebGL at all, drops the canvas and paints `href` - the old gif path is the
 floor, not a dead branch. Each mount self-unmounts at `durMs + 700`, so nothing spins behind an
 invisible layer. `gifwash`'s own fallback goes through the same seam, so it gets a weave too.

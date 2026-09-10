@@ -244,8 +244,8 @@ eq(JSON.parse(await ev(HOLD)).canvases, 0, 'every pop after a loss is a gif, wit
     return JSON.stringify({ desk: m.backingFor(1280, 720, false), touch: m.backingFor(390, 844, true), cap: m.TOUCH_FRAME_MS });
   })()`);
   ok(Math.max(phone.desk.w, phone.desk.h) === 512, `a 1280x720 desktop draws ${phone.desk.w}x${phone.desk.h}`);
-  ok(Math.max(phone.touch.w, phone.touch.h) === 320, `a 390x844 phone draws ${phone.touch.w}x${phone.touch.h}`);
-  eq(phone.cap, 33, 'and paces itself at 30 fps under touch');
+  ok(Math.max(phone.touch.w, phone.touch.h) === 256, `a 390x844 phone draws ${phone.touch.w}x${phone.touch.h}`);
+  eq(phone.cap, 42, 'and paces itself at 24 fps under touch');
 }
 
 /* ============================================================================

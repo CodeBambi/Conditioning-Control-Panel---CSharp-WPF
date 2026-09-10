@@ -1097,7 +1097,18 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     else if (a === 'nudgeUp' || a === 'nudgeDown') nudge((a === 'nudgeUp' ? 1 : -1) * (shift ? NUDGE_BIG_SEC : NUDGE_SEC));
     else if (a === 'export') exportSync();
   });
-  const onVis = () => { last = 0; };
+  // THE SCREEN GOES DARK (2026-09-09, phone testing: "the audio seems to keep going while screen is
+  // off"). The rAF already stops with the document, so the world freezes on its own - but the loaded
+  // file (CHART.md: the file is the clock) played on under a locked phone, and the run would leap
+  // to wherever it had got to when the screen came back. So hidden IS the Brake: same duck, same
+  // track-pause to the host or race/cloud.js, same card waiting when the player returns. The music
+  // and the bed are audio.js's own (its visibilitychange hold), so the menu is covered too.
+  const onVis = () => {
+    last = 0;
+    let hid = false;
+    try { hid = document.hidden === true; } catch (e) { /* no document */ }
+    if (hid && W && S.running && !S.paused && !S.ended && !S.hostPaused) brake();
+  };
   document.addEventListener('visibilitychange', onVis);
 
   function start() {
