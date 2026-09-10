@@ -144,6 +144,7 @@ function main() {
   import('./board/env.js').then((m) => {
     board.env = m.createEnv({ renderer: view.renderer, scene: view.scene });
     board.env.dressBoard(view.boardGroup);
+    if (board.room) board.env.dressBoard(board.room.group);   // the floor, if it got here first
     board.env.dress(view.pieceGroup);
     feelLate.push((dt) => board.env.update(dt, view.pieceGroup));
   }).catch((e) => console.warn('[pbp] env missing', e));
@@ -213,6 +214,14 @@ function main() {
     feelLate.push((dt) => board.bloom.update(dt));
   }).catch((e) => console.warn('[pbp] bloom missing', e));
   // --- end N ---
+  // --- T: the room (floor, dome, and the light that leans to the mover) ---
+  // Loaded late and guarded like the rest: without it the board sits in the
+  // flat navy it always did. The turn tell rides the bus on its own.
+  import('./board/room.js').then((m) => {
+    board.room = m.createRoom({ view, bus, env: () => board.env });
+    feelLate.push((dt) => board.room.update(dt));
+  }).catch((e) => console.warn('[pbp] room missing', e));
+  // --- end T ---
   // Esc closes the board - but never mid-drag, where it is "put the piece back".
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
