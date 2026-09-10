@@ -41,6 +41,16 @@ const PROFILE = {
 
 const SKIN = { w: { color: 0xFFF0F5, sheen: 0xFF9EC4 }, b: { color: 0x3B2A63, sheen: 0x7B6CFF } };
 
+// The men cast shadows but do not take one. Their sculpt detail (ribs, suckers,
+// veins) is finer than any shadow texel we can afford, so every crease shadowed
+// the crease beside it and a whole flank of every piece went black: that is the
+// "hollow shell" the board used to read as. Proven by sweep: at 4096 over a
+// frustum drawn to the board it is unchanged, and at normalBias 0.6 (over half
+// a square) it only trades the black flanks for black pits. Their form comes
+// from the lights, the fake subsurface and the contact patch instead. The board
+// still receives, so the shadow a man throws is still there.
+const RECEIVES_SHADOW = false;
+
 // A glb node is allowed a transform of its own; if it has one it is baked into
 // the geometry, because only the geometry travels out of the file.
 const IDENTITY = new THREE.Matrix4();
@@ -123,7 +133,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     const mats = [mat];
     const body = new THREE.Mesh(geometryFor(type, side), mat);
     body.castShadow = true;
-    body.receiveShadow = true;
+    body.receiveShadow = RECEIVES_SHADOW;
     root.add(body);
     // Jewellery: every mesh in the glb that is not the body is metal, not
     // silicone, so it keeps the material it was exported with. It shares the
@@ -132,7 +142,7 @@ export function createPieces({ group, assetsBase = './assets/pieces/', hooks = {
     if (art) for (const bit of art.trims) {
       const jewel = new THREE.Mesh(bit.geometry, bit.material ? bit.material.clone() : mat);
       jewel.castShadow = true;
-      jewel.receiveShadow = true;
+      jewel.receiveShadow = RECEIVES_SHADOW;
       root.add(jewel);
       mats.push(jewel.material);
     }

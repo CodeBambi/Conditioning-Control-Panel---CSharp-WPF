@@ -15,6 +15,14 @@ const CREAM = 0xF5E6C8;
 const PINK = 0xFF69B4;
 const BACKDROP = 0x1A1A3E;
 
+/** Every number the lighting rig is made of. One place, on purpose. */
+export const LIGHT = Object.freeze({
+  shadowMap: 2048,          // texels per side of the key light's shadow map
+  shadowHalfExtent: 5.2,    // the frustum, in squares from the middle out
+  shadowBias: -0.0006,      // pulls the comparison off the surface it came from
+  shadowNormalBias: 0.02,   // and walks the lookup out along the normal
+});
+
 /** Square name ("e4") to the world position of its centre. */
 export function squareToWorld(sq, y = 0, out = new THREE.Vector3()) {
   const f = FILES.indexOf(sq[0]);
@@ -52,10 +60,21 @@ export function createScene({ canvas }) {
   const key = new THREE.DirectionalLight(0xFFF3E4, 2.1);
   key.position.set(4.5, 9.5, 5.5);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  // 2048 over a frustum drawn to the board, instead of 1024 over one with three
+  // squares of empty air on every side. A shadow texel is now about 5 mm of a
+  // 1.0 square, so a bent tip casts a bent tip and not a stair.
+  key.shadow.mapSize.set(LIGHT.shadowMap, LIGHT.shadowMap);
   key.shadow.radius = 3;
+  // The men are round and glossy, which is the shape self-shadowing goes wrong
+  // on. Without these the map wrote a whole flank of every piece into its own
+  // shadow and the man read as a black shell; normalBias walks the lookup off
+  // the surface along its normal, which is what a curved caster wants.
+  key.shadow.bias = LIGHT.shadowBias;
+  key.shadow.normalBias = LIGHT.shadowNormalBias;
   const cam = key.shadow.camera;
-  cam.left = -7; cam.right = 7; cam.top = 7; cam.bottom = -7; cam.near = 1; cam.far = 26;
+  const half = LIGHT.shadowHalfExtent;
+  cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half;
+  cam.near = 1; cam.far = 26;
   scene.add(key, key.target);
   const rim = new THREE.DirectionalLight(PINK, 1.15);
   rim.position.set(-5.5, 3.2, -6.5);
