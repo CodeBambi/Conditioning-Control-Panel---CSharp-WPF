@@ -6,7 +6,9 @@
  * drags a pawn and captures the frame right after it lands, dust mid-burst;
  * then loads a position with a take on the board and does it again. Every
  * `land` the bus carries is logged with its payload, the dust reports how many
- * motes are alive, and reduced motion is checked to puff smaller.
+ * motes are alive, the sound module reports which cues it scheduled for the
+ * move (and for a video card poked into the fx root), and reduced motion is
+ * checked to puff smaller.
  *
  *   node smoke/feel-shot.mjs [--url <page url>] [--out <dir>] [--wait <ms>]
  *
@@ -127,8 +129,12 @@ async function open(pageUrl) {
 
 async function drag(from, to) {
   const a = await at(from, 0.45);
-  const b = await at(to, 0);
   await mouse('mousePressed', a.x, a.y);
+  // The man hangs under the cursor at the height he was grabbed at, so the
+  // release is aimed at that height over the target square, not at the board.
+  const held = Number(await evalJs(
+    'window.PBP.board.drag && window.PBP.board.drag.holdHeight ? window.PBP.board.drag.holdHeight() : 0')) || 0;
+  const b = await at(to, held);
   for (let i = 1; i <= 8; i++) {
     await mouse('mouseMoved', a.x + (b.x - a.x) * (i / 8), a.y + (b.y - a.y) * (i / 8));
     await beat(35);
@@ -168,6 +174,21 @@ async function main() {
   d = await dust();
   console.log('dust settled: ' + JSON.stringify(d));
   if (d && d.alive !== 0) { console.log('ERROR motes never die'); failed = true; }
+
+  // --- 1b. the board made sounds for that move (a real AudioContext here) ---
+  const sfx = await evalJs(`(async () => {
+    const s = window.PBP.board.sfx; if (!s) return null;
+    const tick = () => new Promise((r) => setTimeout(r, 30));
+    const fx = document.getElementById('fx');
+    const card = document.createElement('div'); card.className = 'pbp-card'; fx.appendChild(card);
+    await tick();
+    card.classList.add('is-out'); await tick(); card.remove(); await tick();
+    return JSON.stringify({ state: s.state(), cues: s.log().map((e) => e.name + '@' + e.state) });
+  })()`).then((v) => (v ? JSON.parse(v) : null));
+  console.log('sound: ' + JSON.stringify(sfx));
+  const cues = sfx ? sfx.cues.map((c) => c.split('@')[0]) : [];
+  if (!cues.includes('grab') || !cues.includes('land')) { console.log('ERROR the move made no sound'); failed = true; }
+  if (!cues.includes('cardOpen') || !cues.includes('cardClose')) { console.log('ERROR the card made no sound'); failed = true; }
 
   // --- 2. a refused drop: a shrug of dust, flagged refused -------------------
   // black to move now, so it is a black pawn that gets told no

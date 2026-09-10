@@ -129,6 +129,9 @@ function main() {
     board.dust = m.createDust({ scene: view.scene, bus });
     feelLate.push((dt) => board.dust.update(dt, view.camera, view.renderer));
   }).catch((e) => console.warn('[pbp] dust missing', e));
+  Promise.all([import('./audio/sfx.js'), import('./board/scene.js')]).then(([m, sc]) => {
+    board.sfx = m.createSfx({ bus, game, group: view.pieceGroup, squareOf: sc.worldToSquare, root: dom.fx });
+  }).catch((e) => console.warn('[pbp] sfx missing', e));
   // --- end J ---
 
   let last = performance.now();
