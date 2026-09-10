@@ -151,8 +151,12 @@ export function createJiggle() {
     hook.pbpJiggle = true;
     material.onBeforeCompile = hook;
     // Every jiggling material compiles the same program, so they share one
-    // cache entry; without a key of our own three would key them apart.
-    material.customProgramCacheKey = () => key;
+    // cache entry; without a key of our own three would key them apart. The
+    // patch tag is part of the key because a material can carry a hook of its
+    // own (the silicone's fake subsurface): a jewel must never be handed the
+    // silicone's compiled program just because both of them jiggle.
+    const tag = (material.userData && material.userData.pbpPatch) || '';
+    material.customProgramCacheKey = () => key + tag;
     material.needsUpdate = true;
   }
 
