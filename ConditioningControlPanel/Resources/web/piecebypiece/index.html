@@ -33,6 +33,16 @@
 
   <div id="fx"></div>
 
+  <!-- Camera views. Self-contained little component, class prefix .cam-, so a
+       later HUD redesign can pick it up and move it whole. -->
+  <div id="cam-views" class="cam-views">
+    <button type="button" class="cam-btn" data-view="normal" title="Normal view (1)" aria-label="Normal view">◧</button>
+    <button type="button" class="cam-btn" data-view="top" title="Top view (2)" aria-label="Top view">▦</button>
+    <button type="button" class="cam-btn" data-view="side" title="Side view (3)" aria-label="Side view">▤</button>
+    <button type="button" class="cam-btn" data-view="opponent" title="Opponent view (4)" aria-label="Opponent view">◨</button>
+    <span class="cam-free" hidden>free</span>
+  </div>
+
   <div id="loader" class="loader">
     <div class="loader-ring" aria-hidden="true"></div>
     <p>Setting up the board...</p>
