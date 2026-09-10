@@ -77,9 +77,6 @@ function main() {
   const drag = createDrag({ view, pieces, anim, bus, game, jiggle });
   board.drag = drag;
 
-  // Host settings, with the standalone defaults already in place: the effects
-  // layer reads window.PBP.settings and must never have to wait for a frame
-  // that only arrives inside the desktop app.
   // `ramp` is filled in once the effects layer has attached. It is on the
   // object from the start so a reader never has to care whether that has
   // happened yet: it is simply null until it has.
@@ -89,11 +86,6 @@ function main() {
     const { type, ...values } = m;   // the envelope's own key is not a setting
     Object.assign(window.PBP.settings, values);
   });
-  // Esc closes the board - but never mid-drag, where it is "put the piece back".
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
-  });
-  signalReady();
 
   // --- camera: the rig the player drives ---
   // A touch that picked a man up is never an orbit, so the rig asks drag.js.
@@ -208,6 +200,11 @@ function main() {
     feelLate.push((dt) => board.bloom.update(dt));
   }).catch((e) => console.warn('[pbp] bloom missing', e));
   // --- end N ---
+  // Esc closes the board - but never mid-drag, where it is "put the piece back".
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
+  });
+  signalReady();
 
   let last = performance.now();
   function frame(now) {

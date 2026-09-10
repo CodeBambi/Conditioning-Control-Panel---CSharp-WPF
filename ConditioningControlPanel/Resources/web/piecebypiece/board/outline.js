@@ -88,12 +88,13 @@ mvPosition.xyz += pbpVN * (uSign * uPixel * uWidth * max(-mvPosition.z, 0.05));
 gl_Position = projectionMatrix * mvPosition;`;
 
 /**
- * True when a geometry's normals point INTO the body. Some of the exported
- * glbs (king, queen, rook as of 0908) came out of Blender inside-out: their
- * winding and normals agree with each other and both face inward, so the skin
- * shows its far side and a back-face hull would draw its near side over the
- * man. Lane H flips those in pieces.js; until then, and after, the hull
- * mirrors itself for such a mesh so the line reads either way. Measured once
+ * True when a geometry's normals point INTO the body. The first-pass glbs
+ * (0908) came out of Blender inside-out, five bodies of six: their winding
+ * and normals agreed with each other and both faced inward, so the skin showed
+ * its far side and a back-face hull would draw its near side over the man.
+ * tools/blender/pbp/fix_normals.py turned them outward on 0909; this stays as the safety
+ * net for any glb dropped in by hand, mirroring the hull so the line reads
+ * either way. Measured once
  * per geometry: the sign of normal . (position - axis) over every vertex, which
  * is exact for a body turned around +Y and good enough for the leaning ones.
  */
