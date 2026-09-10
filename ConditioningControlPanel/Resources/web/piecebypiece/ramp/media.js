@@ -115,7 +115,10 @@ function createPool(entries, { rnd, label } = {}) {
  */
 export function createFixtureMedia(list, opts = {}) {
   const pool = createPool(list, { rnd: opts.rnd, label: 'fixture' });
-  return { kind: 'fixture', ...pool };
+  // assign, never spread: `size` is a getter and a spread would freeze it at
+  // whatever it read once, so a later adopt() would go unnoticed
+  pool.kind = 'fixture';
+  return pool;
 }
 
 /**
@@ -132,7 +135,8 @@ export function createHostMedia(entries) {
   if (!pool.size) {
     try { console.warn('[pbp/ramp] host media pool is empty; the ramp runs without pictures.'); } catch { /* no console */ }
   }
-  return { kind: 'host', ...pool };
+  pool.kind = 'host';
+  return pool;
 }
 
 /** Load dev/media.json next to the harness. Never throws: [] on any failure. */

@@ -37,7 +37,10 @@ export function createGlitchGrab(ctx) {
   function flush() {
     raf = 0;
     if (!el || !pending || disposed) return;
-    try { el.style.transform = `translate3d(${pending.x}px, ${pending.y}px, 0) translate(-50%, -50%)`; } catch { /* gone */ }
+    // hung up and to the left of the pointer rather than centred on it: the
+    // sticker is wider than a square, and dead-centre it would cover the very
+    // square the player is aiming at. Distraction yes, blindfold no.
+    try { el.style.transform = `translate3d(${pending.x}px, ${pending.y}px, 0) translate(-82%, -82%)`; } catch { /* gone */ }
   }
 
   function moveTo(screen) {

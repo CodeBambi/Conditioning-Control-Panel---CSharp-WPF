@@ -33,8 +33,14 @@ export function cadenceMs(kind, heat, tuning = RAMP_TUNING) {
   return lerp(band.slowMs, band.fastMs, clamp01(heat));
 }
 
-/** The sustained stack for a meter value: which layers are on, and how hard. */
-export function sustainedFor(meter, tuning = RAMP_TUNING) {
+/**
+ * The sustained stack for a meter value: which layers are on, and how hard.
+ *
+ * `opts.cardLive` says a video card is currently over the board. The veils step
+ * back while it is, so the card is the thing you cannot see past, rather than
+ * the last straw on top of two other walls.
+ */
+export function sustainedFor(meter, tuning = RAMP_TUNING, opts = {}) {
   const m = clamp01(meter);
   const u = tuning.unlock;
   // each layer's own 0..1 progress from its unlock point up to a full meter
@@ -43,10 +49,24 @@ export function sustainedFor(meter, tuning = RAMP_TUNING) {
   const blurR = ramp(u.blur);
   const spiralR = ramp(u.spiral);
   const overR = ramp(u.overlay);
+
+  // the two full-screen veils share one budget: they are the only layers that
+  // can hide the board outright, and at a full meter they would otherwise sum
+  // past opaque. Damped further while a card is up.
+  const damp = opts.cardLive ? tuning.cardVeilDamp : 1;
+  let spiralA = (m >= u.spiral ? lerp(tuning.spiral.minAlpha, tuning.spiral.maxAlpha, spiralR) : 0) * damp;
+  let overA = (m >= u.overlay ? lerp(tuning.overlay.minAlpha, tuning.overlay.maxAlpha, overR) : 0) * damp;
+  const veil = spiralA + overA;
+  if (veil > tuning.veilBudget) {
+    const k = tuning.veilBudget / veil;
+    spiralA *= k; overA *= k;
+  }
   return {
     melt: {
       on: m >= u.melt,
-      alpha: m >= u.melt ? lerp(tuning.melt.minAlpha, tuning.melt.maxAlpha, meltR) : 0,
+      // the melt is a full-screen wash too, so it steps back with the veils:
+      // three transparent things stacked stop being transparent
+      alpha: (m >= u.melt ? lerp(tuning.melt.minAlpha, tuning.melt.maxAlpha, meltR) : 0) * damp,
     },
     blur: {
       on: m >= u.blur,
@@ -55,12 +75,12 @@ export function sustainedFor(meter, tuning = RAMP_TUNING) {
     },
     spiral: {
       on: m >= u.spiral,
-      alpha: m >= u.spiral ? lerp(tuning.spiral.minAlpha, tuning.spiral.maxAlpha, spiralR) : 0,
+      alpha: spiralA,
       holdMs: Math.round(lerp(tuning.spiral.minHoldMs, tuning.spiral.maxHoldMs, spiralR)),
     },
     overlay: {
       on: m >= u.overlay,
-      alpha: m >= u.overlay ? lerp(tuning.overlay.minAlpha, tuning.overlay.maxAlpha, overR) : 0,
+      alpha: overA,
     },
   };
 }
@@ -90,7 +110,7 @@ export function createSchedule({ tuning = RAMP_TUNING, seed = 'pbp' } = {}) {
     for (const k of kinds) nextAt[k] = now;
   }
 
-  function tick(now, heat, meter) {
+  function tick(now, heat, meter, opts) {
     const h = clamp01(heat);
     const fire = [];
     if (!started) { started = true; for (const k of kinds) nextAt[k] = now + cadenceMs(k, h, tuning); }
@@ -105,7 +125,7 @@ export function createSchedule({ tuning = RAMP_TUNING, seed = 'pbp' } = {}) {
       // a heat drop should pull the next spawn in, not strand it in the future
       if (nextAt[k] - now > gap) nextAt[k] = now + gap;
     }
-    return { fire, sustained: sustainedFor(meter == null ? h : meter, tuning), heat: h };
+    return { fire, sustained: sustainedFor(meter == null ? h : meter, tuning, opts), heat: h };
   }
 
   /** A capture kick: an immediate burst, bigger for the side that took a piece. */

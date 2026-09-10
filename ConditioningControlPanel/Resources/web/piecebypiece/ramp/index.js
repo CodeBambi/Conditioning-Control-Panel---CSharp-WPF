@@ -91,7 +91,14 @@ export function attachRamp(opts = {}) {
   let lastBoardPush = 0;
   let ticks = 0;   // scheduling beats served, so a harness can prove the loop runs
   let overrideMeter = null;   // dev harness: pin the meter regardless of the game
-  const applied = { melt: -1, blur: -1, spiral: -1, overlay: -1 };
+  let solo = null;            // dev harness: show ONE sustained layer, for a screenshot
+  // OFF is the "this layer is currently off" key; UNSET is "we have never
+  // written it". They must differ, or a forced re-apply of an off layer reads
+  // as no change and is skipped, which is how a solo call once left the layers
+  // it was meant to hide still showing.
+  const OFF = -1;
+  const UNSET = Number.NaN;
+  const applied = { melt: UNSET, blur: UNSET, spiral: UNSET, overlay: UNSET };
 
   const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
@@ -112,10 +119,10 @@ export function attachRamp(opts = {}) {
 
   function applySustained(sus) {
     for (const name of ['melt', 'blur', 'spiral', 'overlay']) {
-      const spec = sus[name];
-      const key = spec.on ? (spec.alpha != null ? spec.alpha : spec.px) : -1;
+      const spec = solo && solo !== name ? { on: false } : sus[name];
+      const key = spec.on ? (spec.alpha != null ? spec.alpha : spec.px) : OFF;
       // retune only on a real change, so we are not writing style every 90ms
-      if (Math.abs(key - applied[name]) < 0.005) continue;
+      if (Math.abs(key - applied[name]) < 0.005) continue;   // NaN fails this, as it should
       applied[name] = key;
       stack.setSustained(name, spec);
     }
@@ -131,7 +138,7 @@ export function attachRamp(opts = {}) {
       lastTick = t;
       ticks += 1;
       const m = liveMeter();
-      const out = schedule.tick(t, liveHeat(t), m);
+      const out = schedule.tick(t, liveHeat(t), m, { cardLive: stack.cardLive });
       for (const kind of out.fire) stack.oneshot(kind, { heat: out.heat });
       applySustained(out.sustained);
       if (t - lastBoardPush >= BOARD_PUSH_MS) { lastBoardPush = t; pushToBoard(m); }
@@ -189,7 +196,7 @@ export function attachRamp(opts = {}) {
     enabled = !!on;
     if (!enabled) {
       stack.clear();
-      for (const k of Object.keys(applied)) applied[k] = -1;
+      for (const k of Object.keys(applied)) applied[k] = UNSET;
       pushToBoard(0);
     } else { schedulePump(); }
     return enabled;
@@ -224,13 +231,20 @@ export function attachRamp(opts = {}) {
        *  wait for the next rAF beat (headless barely gets any). */
       setMeter(v) {
         overrideMeter = v == null ? null : clamp01(v);
-        applySustained(sustainedFor(liveMeter(), tuning));
+        applySustained(sustainedFor(liveMeter(), tuning, { cardLive: stack.cardLive }));
         return overrideMeter;
       },
       /** Dev harness only: fire one layer by name right now. */
       fire(kind, o) {
         if (kind === 'videoCard') stack.videoCard(o || { holdMs: videoHoldMs(liveMeter(), tuning) });
         else stack.oneshot(kind, o || { heat: liveHeat(now()) });
+      },
+      /** Dev harness only: isolate ONE sustained layer (null shows them all). */
+      only(name) {
+        solo = name || null;
+        for (const k of Object.keys(applied)) applied[k] = UNSET;
+        applySustained(sustainedFor(liveMeter(), tuning, { cardLive: stack.cardLive }));
+        return solo;
       },
       /** Dev harness only: fill the screen for a screenshot without waiting. */
       prime(n = 5) {
