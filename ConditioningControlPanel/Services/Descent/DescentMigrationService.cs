@@ -364,6 +364,14 @@ namespace ConditioningControlPanel.Services.Descent
                     return;
                 }
 
+                // THE QUIET WINDOW (first-run redesign, lane C). The ceremony is a full-screen
+                // account-lifetime event and it must not be the thing that greets somebody nine
+                // minutes into their first install. Same mechanism as the catch-up crack: take a
+                // HOLD, so the offer stays in _liveOffer and is replayed rather than cancelled,
+                // and let quiet ending release it. A row goes to the Inbox at the same time, so
+                // the user can take it earlier if they want to.
+                if (TryHoldForQuiet()) return;
+
                 DescentMigrationOffer? offer;
                 lock (_gate)
                 {
@@ -405,6 +413,70 @@ namespace ConditioningControlPanel.Services.Descent
                 lock (_gate) _ceremonyOpen = false;
                 Log.Error(ex, "[Descent] Could not open the migration ceremony window — the server will re-offer on the next sync.");
             }
+        }
+
+        // ------------------------------------------------------------------ the quiet window
+
+        /// <summary>True while this service is holding its own offer behind the startup quiet
+        /// window. Exactly one such hold ever exists, so the depth counter stays balanced.</summary>
+        private bool _quietHoldTaken;
+
+        /// <summary>
+        /// Takes (once) a hold on the ceremony while the app is quiet, posts an Inbox row that can
+        /// lift it early, and subscribes to the end of the quiet window. Returns true when the
+        /// caller should stand down and let the release replay the open.
+        /// </summary>
+        private bool TryHoldForQuiet()
+        {
+            var presenter = App.Startup;
+            if (presenter is null || !presenter.IsQuiet) return false;
+
+            lock (_gate)
+            {
+                if (_quietHoldTaken) return true;
+                _quietHoldTaken = true;
+            }
+
+            HoldOffers();
+            presenter.QuietChanged += OnStartupQuietChanged;
+            Log.Information("[Descent] Ceremony held behind the startup quiet window - it opens when the app goes quiet no longer.");
+
+            presenter.PresentOrInbox(new Startup.InboxItem
+            {
+                Key = "descent:ceremony",
+                Glyph = "🌀",
+                Title = "The Descent",
+                Summary = "Something is waiting for you. It only happens once.",
+                Open = ReleaseQuietHold,
+            });
+
+            return true;
+        }
+
+        private void OnStartupQuietChanged()
+        {
+            if (App.Startup?.IsQuiet == true) return;
+            ReleaseQuietHold();
+        }
+
+        /// <summary>
+        /// Lifts the quiet hold, once. Idempotent on purpose: the Inbox row and the end of the
+        /// quiet window can both arrive, and a second release would decrement somebody else's
+        /// hold (the catch-up crack's) and open the ceremony over a fullscreen show.
+        /// </summary>
+        private void ReleaseQuietHold()
+        {
+            lock (_gate)
+            {
+                if (!_quietHoldTaken) return;
+                _quietHoldTaken = false;
+            }
+
+            var presenter = App.Startup;
+            if (presenter != null) presenter.QuietChanged -= OnStartupQuietChanged;
+
+            Log.Information("[Descent] Startup quiet window lifted - replaying the held ceremony offer.");
+            ReleaseOffers();
         }
 
         /// <summary>

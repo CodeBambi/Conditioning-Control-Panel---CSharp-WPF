@@ -751,6 +751,13 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Nothing on the rail flashes for attention while the quiet window is on. Returns
+                // TRUE so the caller stands down too: false means "I could not announce it, do your
+                // own entry-level pulse", and an entry pulse is exactly as much of an interruption
+                // as the header one. The announcement is not lost - the door still opens on the
+                // first visit and the card behind it is still owed.
+                if (App.Startup?.IsQuiet == true) return true;
+
                 if (IsDoorExpandedForTab(tabKey)) return false;
                 var header = NavDoorHeaderForTab(tabKey);
                 if (header == null) return false;
