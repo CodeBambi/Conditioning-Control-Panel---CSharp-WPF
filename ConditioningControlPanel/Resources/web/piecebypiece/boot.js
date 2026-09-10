@@ -142,6 +142,11 @@ function main() {
     board.env.dress(view.pieceGroup);
     feelLate.push((dt) => board.env.update(dt, view.pieceGroup));
   }).catch((e) => console.warn('[pbp] env missing', e));
+  // The files and the ranks, cut into the plinth's rim. Nothing about them
+  // moves, so they are built once and never spoken to again.
+  import('./board/rim.js').then((m) => {
+    board.rim = m.createRim({ group: view.boardGroup });
+  }).catch((e) => console.warn('[pbp] rim missing', e));
   // A turn carries no squares, so the referee is asked which move it was. A new
   // game forgets, and so does a take-back, when one turns up.
   {
