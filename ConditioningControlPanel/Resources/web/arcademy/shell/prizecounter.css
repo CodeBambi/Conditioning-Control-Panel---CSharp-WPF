@@ -90,6 +90,7 @@
 }
 .pc-chip-t .pc-chip-n { color:var(--pink); }
 .pc-chip-k .pc-chip-n { color:var(--gold); }
+.pc-chip-c .pc-chip-n { color:var(--lav); }
 
 /* ------------------------------------------------------------- the payday */
 
@@ -184,6 +185,25 @@
 }
 .pc-root.is-lite .pc-sect-k::after { display:none; }
 
+/* THE BACK ROOM SHELF: green baize is the one thing a casino table is, and
+   there is no green in the token plan (see .arc-chipmark in styles.css). So the
+   felt is drawn in the school's secondary instead - a flat lavender weave, no
+   strip light, no glass. It is the DULLEST of the three surfaces on purpose:
+   the shelf is timber under a lamp and the case is lit glass because somebody
+   is selling you something, and this shelf is just where the chips end up. */
+.pc-sect-c {
+  background:
+    repeating-linear-gradient(45deg,
+      color-mix(in srgb, var(--lav), transparent 95%) 0 3px,
+      transparent 3px 6px),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--navy), black 10%),
+      color-mix(in srgb, var(--navy), black 26%));
+  border-color:color-mix(in srgb, var(--line), var(--lav) 18%);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--ink), transparent 94%);
+}
+.pc-sect-c .pc-sect-title { color:var(--lav); }
+
 /* ------------------------------------------------------------- the goods */
 
 .pc-goods {
@@ -228,6 +248,7 @@
 }
 .pc-glyph { font-size:20px; line-height:1; color:var(--lav); }
 .pc-item-k .pc-glyph { color:var(--gold); }
+.pc-item-c .pc-glyph { color:var(--lav); }
 /* THE SPRITE SITS ON THE GLYPH. Absolute, so the bed underneath keeps the box's
    size whether or not the png ever arrives; `pixelated` both ways because the
    art is pixel art and a smoothed sprite is a different drawing. */
@@ -267,6 +288,7 @@
 .pc-price-n { font-family:var(--mono); font-size:14px; line-height:1; }
 .pc-price-t .pc-price-n { color:var(--pink); }
 .pc-price-k .pc-price-n { color:var(--gold); }
+.pc-price-c .pc-price-n { color:var(--lav); }
 
 .pc-badge {
   font-family:var(--disp); font-size:10.5px; letter-spacing:.16em;

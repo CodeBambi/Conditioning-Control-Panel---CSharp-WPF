@@ -627,6 +627,31 @@ html.arc-reduced .arc-endcard-actions .arc-retake { animation:none; box-shadow:0
   box-shadow:inset 0 -1px 2px rgba(0,0,0,.45);
 }
 
+/* THE CHIP is the Back Room's money and it is a struck disc with an inset ring
+   and a bite of edge spots, which is what a casino chip is and what nothing
+   else in this school looks like. DRAWN, like the stub and the coin beside it:
+   a third glyph would have been a third font to fetch, and this page fetches
+   none (trap 2).
+
+   LAVENDER, NOT GREEN. Every colour in this school comes out of the token plan
+   at the top of this file and there is no green in it - the one brand colour
+   that ever appears here is the ID card's 6px Discord LED. So the chip takes
+   the school's SECONDARY, which reads cool against the shelf's pink and the
+   case's gold and says "after hours" without a new hue in the palette. */
+.arc-chipmark {
+  flex:none; display:inline-block; width:16px; height:16px;
+  border-radius:50%; font-style:normal;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 4.4px,
+      color-mix(in srgb, var(--lav), white 22%) 4.5px 5.6px, transparent 5.7px),
+    conic-gradient(from 20deg,
+      var(--lav) 0 12%, color-mix(in srgb, var(--lav), black 34%) 12% 25%,
+      var(--lav) 25% 37%, color-mix(in srgb, var(--lav), black 34%) 37% 50%,
+      var(--lav) 50% 62%, color-mix(in srgb, var(--lav), black 34%) 62% 75%,
+      var(--lav) 75% 87%, color-mix(in srgb, var(--lav), black 34%) 87% 100%);
+  box-shadow:inset 0 -1px 2px rgba(0,0,0,.45);
+}
+
 /* THE TILL on the report card: the night's tickets counted out, and on a rare
    night the token beside them. One row, two chips, the shell's chip primitive. */
 .arc-till { gap:10px; flex-wrap:wrap; }
