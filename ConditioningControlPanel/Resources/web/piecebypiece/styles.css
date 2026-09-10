@@ -1,0 +1,41 @@
+/* Piece by Piece - page chrome. The board itself is drawn in WebGL; everything
+   here is the frame around it. #fx is deliberately empty and untouched by the
+   board code: the effects layer owns it. */
+
+:root { --pbp-bg: #1A1A3E; --pbp-cream: #F5E6C8; --pbp-pink: #FF69B4; --pbp-ink: #E9E2F5; }
+
+* { box-sizing: border-box; }
+/* .loader/.nope are flex, which beats the user-agent rule for [hidden]. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: var(--pbp-bg); color: var(--pbp-ink);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  user-select: none; -webkit-user-select: none;
+}
+
+#stage { position: fixed; inset: 0; z-index: 1; }
+#stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+/* Owned by the effects layer. Never written to by the board code. */
+#fx { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+
+.loader, .nope {
+  position: fixed; inset: 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: var(--pbp-bg); text-align: center; transition: opacity 420ms ease;
+}
+.loader p { margin: 0; letter-spacing: 0.12em; text-transform: lowercase; opacity: 0.75; }
+.loader.gone { opacity: 0; pointer-events: none; }
+.loader-ring {
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 3px solid rgba(245, 230, 200, 0.18); border-top-color: var(--pbp-pink);
+  animation: pbp-spin 900ms linear infinite;
+}
+@keyframes pbp-spin { to { transform: rotate(360deg); } }
+
+.nope h1 { margin: 0; font-size: 28px; letter-spacing: 0.16em; color: var(--pbp-pink); }
+.nope p { margin: 0; max-width: 30rem; line-height: 1.5; opacity: 0.8; }
+
+@media (prefers-reduced-motion: reduce) { .loader-ring { animation-duration: 2400ms; } }

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Piece by Piece</title>
+<link rel="stylesheet" href="./styles.css">
+<!--
+  Piece by Piece - a 3D chess board for the in-app browser games.
+  Standard chess rules, no house rules. three.js is resolved from the shared
+  vendored ESM build; the specifiers below are relative to this document so the
+  page works from any mount point (dev server root, or the app host).
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.min.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+  <!-- 3D layer. Agent-facing contract: #fx is an empty sibling ABOVE #stage and
+       is owned entirely by the effects module (ramp/index.js). -->
+  <div id="stage"><canvas id="board-canvas"></canvas></div>
+  <div id="fx"></div>
+
+  <div id="loader" class="loader">
+    <div class="loader-ring" aria-hidden="true"></div>
+    <p>Setting up the board...</p>
+  </div>
+
+  <div id="nope" class="nope" hidden>
+    <h1>piece by piece</h1>
+    <p id="nope-msg">The 3D board could not start. Check that hardware acceleration is available.</p>
+  </div>
+
+  <script type="module" src="./boot.js"></script>
+</body>
+</html>
