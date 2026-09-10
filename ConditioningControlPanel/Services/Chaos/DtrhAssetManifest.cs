@@ -212,12 +212,19 @@ internal static class DtrhAssetManifest
         list.RemoveRange(keep, list.Count - keep);
     }
 
-    private static string ToAssetUrl(string root, string fullPath)
-    {
-        var rel = Path.GetRelativePath(root, fullPath).Replace('\\', '/');
-        var escaped = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
-        return "https://ccp.assets/" + escaped;
-    }
+    private static string ToAssetUrl(string root, string fullPath) =>
+        AssetUrl(Path.GetRelativePath(root, fullPath));
+
+    /// <summary>
+    /// An EffectiveAssetsPath-relative path (either slash) as the <c>https://ccp.assets/</c> URL a
+    /// hosted page sees. Public so a second host can turn <see cref="EnumerateActive"/>'s
+    /// <c>Rel</c> into a page URL without re-deriving the escaping - which is the whole point: the
+    /// walk, the filters and the URL shape stay in this one file, and a host that wants the active
+    /// pool gets it without owning a copy of any of them.
+    /// </summary>
+    public static string AssetUrl(string rel) =>
+        "https://ccp.assets/" + string.Join('/',
+            rel.Replace('\\', '/').Split('/').Select(Uri.EscapeDataString));
 
     // ========================= remote media (Phase 2, Contract 3) =========================
     //
