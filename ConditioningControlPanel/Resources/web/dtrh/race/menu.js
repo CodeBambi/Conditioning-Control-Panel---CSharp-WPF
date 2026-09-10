@@ -116,8 +116,14 @@ export const ROSTER = [
 ];
 // `pixel` is the one default that reads the device: off on a coarse pointer, the smallest block on a
 // fine one (race/pixel.js pixelDefault). loadOptions below migrates the old fixed default onto it.
-const DEFAULTS = { pixel: pixelDefault(), music: 0.8, sfx: 0.8, motion: 'system', seed: 'daily', seedValue: 7 };
+const DEFAULTS = { pixel: pixelDefault(), music: 0.8, sfx: 0.8, motion: 'system', lite: 'off', seed: 'daily', seedValue: 7 };
 const MOTIONS = ['system', 'on', 'off'], SEEDS = ['daily', 'random', 'custom'];
+/** LIGHTER (2026-09-10, the owner: the phone "seems to be going great unless i record my phone. It
+ *  starts to lag then"). A screen recording runs the encoder and a second composite on the GPU the
+ *  run is already filling, and a page cannot tell it is being recorded, so this is a hand switch:
+ *  the four levers the perf passes left unpulled, all at once, for the next launch (raceBoot reads
+ *  it into settings.lite; run.js does the rest). Off is the run exactly as it was. */
+const LITES = ['off', 'on'];
 const GLASS = 'EMI_glass', FADE = 0.3, ONE_SHOTS = ['wave', 'hop', 'drum'];
 const BEAT_MIN = 3, BEAT_MAX = 6, PEEK_GAP = 6;
 // Stage metres, all of them read off props.glb so the placeholders and the real props agree.
@@ -196,6 +202,7 @@ export function loadOptions() {
       if (typeof raw.pixel === 'number' && normalizeBlock(raw.pixel) !== PIXEL_LEGACY_DEFAULT) o.pixel = normalizeBlock(raw.pixel);
       for (const k of ['music', 'sfx']) if (typeof raw[k] === 'number' && isFinite(raw[k])) o[k] = clamp(raw[k], 0, 1);
       if (MOTIONS.includes(raw.motion)) o.motion = raw.motion;
+      if (LITES.includes(raw.lite)) o.lite = raw.lite;
       if (SEEDS.includes(raw.seed)) o.seed = raw.seed;
       if (typeof raw.seedValue === 'number' && isFinite(raw.seedValue)) o.seedValue = raw.seedValue >>> 0;
     }
@@ -211,6 +218,8 @@ export function seedFromOptions(o, now = new Date()) {
   return (Math.imul(day, 0x9e3779b1) ^ 0x5bd1e995) >>> 0;
 }
 export function wantsReducedMotion(o, system) { return o.motion === 'on' ? true : o.motion === 'off' ? false : !!system; }
+/** The lighter switch, as raceBoot reads it into `settings.lite`. */
+export function wantsLite(o) { return !!o && o.lite === 'on'; }
 
 // ---- textures the placeholders need ------------------------------------------------------------
 function checkerTexture(a, b, repeat = 15) {
@@ -652,6 +661,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     { id: 'music', label: 'music', get: () => pct(options.music), move: (d) => step('music', d * 0.1), dim: !canLevels },
     { id: 'sfx', label: 'sfx', get: () => pct(options.sfx), move: (d) => step('sfx', d * 0.1), dim: !canLevels },
     { id: 'motion', label: 'reduced motion', get: () => options.motion, move: (d) => { options.motion = cyc(MOTIONS, options.motion, d); stage.setReduced(reduced()); layer.dataset.motion = options.motion; }, hint: 'stage and intro now, the run on the next launch' },
+    { id: 'lite', label: 'lighter', get: () => options.lite, move: (d) => { options.lite = cyc(LITES, options.lite, d); }, hint: 'for recording: lower resolution, fewer bubbles, flat washes. the run on the next launch' },
     { id: 'seed', label: 'seed', get: () => (options.seed === 'custom' ? `custom ${options.seedValue}` : options.seed), move: (d) => { options.seed = cyc(SEEDS, options.seed, d); seedIn.hidden = options.seed !== 'custom'; }, press: () => { if (options.seed === 'custom') seedIn.focus(); } },
     { id: 'back', label: 'back', get: () => '', press: () => open('main') },
   ];

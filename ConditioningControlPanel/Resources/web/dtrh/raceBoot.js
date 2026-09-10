@@ -357,13 +357,16 @@ async function boot() {
   booted = true;
   const t0 = performance.now();
   try {
-    const [{ createRace }, { createMenu, loadOptions, seedFromOptions, wantsReducedMotion }] = await Promise.all([import('./race/run.js'), import('./race/menu.js')]);
+    const [{ createRace }, { createMenu, loadOptions, seedFromOptions, wantsReducedMotion, wantsLite }] = await Promise.all([import('./race/run.js'), import('./race/menu.js')]);
     const opts = loadOptions();
     settings = { ...((initMsg && initMsg.settings) || {}) };
     if (opts.pixel !== undefined) settings.pixel = opts.pixel;
     if (params.has('pixel') && params.get('pixel') !== '') settings.pixel = Number(params.get('pixel'));
     settings.reducedMotion = wantsReducedMotion(opts, settings.reducedMotion != null ? settings.reducedMotion : !!(matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches));
     settings.musicVolume = opts.music; settings.sfxVolume = opts.sfx;   // audio.js reads masterVolume; the two sliders go in through setLevels below
+    // LIGHTER (race/menu.js): the options row, or `?lite=1|0` for a check. run.js reads settings.lite.
+    settings.lite = wantsLite(opts);
+    if (params.get('lite') === '1') settings.lite = true; else if (params.get('lite') === '0') settings.lite = false;
     settings.seedLock = seedFromOptions(opts);
     // The file dialog is the host's; standalone loads a track off the query string. A host may also
     // say `trackPick: false` in its init: the browser host (cclabs-web scripts/race-web-ext) is

@@ -77,7 +77,7 @@ function makeDotTex() {
   } catch (e) { return null; }
 }
 
-export function createBubbleField({ scene, layout, media, getIntensity, getRoom, getElapsed, onTexture }) {
+export function createBubbleField({ scene, layout, media, getIntensity, getRoom, getElapsed, onTexture, cap = 0 }) {
   void media;   // reserved: flash media is drawn by payloadFx at pop time, never here
   void onTexture;   // see the loader below: crisp-layer sprites keep their own filters
   const T = layout.totalDepth;
@@ -114,7 +114,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   const baseKey = (kindId) => kindId + (texOf[kindId] && texOf[kindId] !== dotTex ? ':png' : ':dot');
 
   // ---- pools ---------------------------------------------------------------
-  const CAP = Q.bubbleCap || 160, SHARD_CAP = Q.bubbleShards || 64, VIEW_AHEAD = Q.bubbleViewAhead || 110;
+  // `cap` (run.js, the lighter switch): a caller's ceiling UNDER the tier's, never over it
+  const CAP = cap > 0 ? Math.min(cap, Q.bubbleCap || 160) : (Q.bubbleCap || 160), SHARD_CAP = Q.bubbleShards || 64, VIEW_AHEAD = Q.bubbleViewAhead || 110;
   /** riptide (race/pickups.js): bubbles this far ahead slide into the kart's lane over this long. */
   const PULL_M = 40, PULL_SEC = 0.5;
   const group = new THREE.Group();

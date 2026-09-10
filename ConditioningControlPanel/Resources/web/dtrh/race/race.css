@@ -560,6 +560,16 @@
 }
 #race-root[data-touch="1"][data-rm="1"] .sf-pfx-pink.is-melting { animation: none; }
 
+/* ---- LIGHTER (run.js stamps data-lite="1" for the options row of that name) ----
+   2026-09-10, the owner: the phone "seems to be going great unless i record my phone. It starts to
+   lag then". A recording is a load the page cannot see. This is the last of the four levers the perf
+   passes left unpulled, the one that changes the look: the spiral and pink holds are composited
+   FLAT instead of through `mix-blend-mode: screen`, which on WebKit isolates everything under the
+   hold into its own group before the blend. run.js caps the spiral lower (0.6) for it, since an
+   opaque canvas laid flat at the screen-blend cap reads as a dimmer. The other three levers are
+   run.js's (resolution lid, bubble cap, spiral fps); the touch block above rides along. */
+#race-root[data-lite="1"] .sf-pfx-spiral, #race-root[data-lite="1"] .sf-pfx-pink { mix-blend-mode: normal; }
+
 /* ---- THE PHONE'S LAYERS, second pass (2026-09-10: "smoother but still not good enough ... it
    gets worse on fullscreen effects (the gifs, pink filter and spiral) and the effect like the
    blink shutter effect we got on the bambi sleep trigger"). The same law as the block above, applied
