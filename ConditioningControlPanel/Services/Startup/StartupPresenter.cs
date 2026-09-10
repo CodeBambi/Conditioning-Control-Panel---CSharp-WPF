@@ -408,7 +408,11 @@ namespace ConditioningControlPanel.Services.Startup
         {
             if (_quietTimer != null) return;
 
-            _quietTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+            // Normal, and for the same reason nothing here posts at Loaded: this app starves the
+            // low priorities. Background sits BELOW Loaded, so a clock parked there is even easier
+            // to starve than the first-launch tour that silently never ran - and this clock is the
+            // only thing watching for the quiet window to end.
+            _quietTimer = new DispatcherTimer(DispatcherPriority.Normal, _dispatcher)
             {
                 Interval = TimeSpan.FromSeconds(1),
             };
