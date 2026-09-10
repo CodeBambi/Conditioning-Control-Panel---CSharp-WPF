@@ -112,7 +112,7 @@ export function createScene({ canvas }) {
   // Sits behind whichever side is to move and swings around with a small dolly.
   const RADIUS = 9.7;
   const HEIGHT = 7.0;
-  const LOOK = new THREE.Vector3(0, 0.55, 0);
+  const LOOK = new THREE.Vector3(0, 0.10, 0);
   let angleFrom = 0;
   let angleTo = 0;
   let swing = 1;
@@ -166,9 +166,11 @@ export function createScene({ canvas }) {
     const r = canvas.getBoundingClientRect();
     return { x: r.left + (tmp.x * 0.5 + 0.5) * r.width, y: r.top + (-tmp.y * 0.5 + 0.5) * r.height };
   }
-  function projectSquare(sq) {
+  // Default height is roughly where a man's middle sits, which is what the
+  // effects layer wants to draw over. Pass 0 for the square itself.
+  function projectSquare(sq, height = 0.45) {
     if (!sq || !squares.has(sq)) return { x: 0, y: 0 };
-    return projectPoint(squareToWorld(sq, 0.45, tmp.clone()));
+    return projectPoint(squareToWorld(sq, height, tmp.clone()));
   }
 
   function dispose() {

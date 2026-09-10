@@ -8,6 +8,8 @@
 
 import { createScene } from './board/scene.js';
 import { createPieces } from './board/pieces.js';
+import { createAnim } from './board/anim.js';
+import { createDrag } from './board/drag.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { DEFAULT_MS } from './game/clock.js';
@@ -39,14 +41,17 @@ function main() {
     return;
   }
 
-  const pieces = createPieces({ group: view.pieceGroup });
+  const anim = createAnim({ group: view.pieceGroup });
+  const pieces = createPieces({ group: view.pieceGroup, hooks: anim.hooks });
   // The board API the effects layer drives. Keep this surface stable.
   const board = {
     view,
     pieces,
+    anim,
+    buzzCheck(square) { anim.buzz(pieces.pieceAt(square)); },
     setWobble(v) { pieces.setWobble(v); },
     setCameraSway(v) { view.setCameraSway(v); },
-    projectSquare(sq) { return view.projectSquare(sq); },
+    projectSquare(sq, height) { return view.projectSquare(sq, height); },
     setHighlights(list) { view.setHighlights(list); },
     setSide(side, instant) { view.setSide(side, instant); },
   };
@@ -61,6 +66,9 @@ function main() {
     auto: Number(params.get('auto')) || 0,
   });
 
+  const drag = createDrag({ view, pieces, anim, bus, game });
+  board.drag = drag;
+
   window.PBP = { bus, game, board };
 
   let last = performance.now();
@@ -69,6 +77,8 @@ function main() {
     last = now;
     view.update(dt);
     pieces.update(dt);
+    anim.update(dt);
+    drag.update(dt);
     if (window.PBP.game && window.PBP.game.update) window.PBP.game.update(dt);
     view.render();
     requestAnimationFrame(frame);
