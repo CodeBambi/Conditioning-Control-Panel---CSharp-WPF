@@ -13,7 +13,7 @@
 
 import { createMeter, RAMP_TUNING, plainShare, clamp01 } from '../ramp/meter.js';
 import { createSchedule, makeRng, cadenceMs, sustainedFor, videoHoldMs } from '../ramp/schedule.js';
-import { createFixtureMedia, createHostMedia, noiseTileUrl } from '../ramp/media.js';
+import { createFixtureMedia, createHostMedia, HOST_MSG, noiseTileUrl } from '../ramp/media.js';
 
 let passed = 0;
 const failures = [];
@@ -24,7 +24,12 @@ function check(name, cond, detail) {
 }
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 function eq(name, got, want, eps = 1e-9) {
-  check(name, near(got, want, eps), `got ${got}, want ${want}`);
+  // numbers compare with a tolerance, anything else exactly: a string compared
+  // as a number is NaN, which used to fail a passing check
+  const same = typeof got === 'number' && typeof want === 'number'
+    ? near(got, want, eps)
+    : got === want;
+  check(name, same, `got ${got}, want ${want}`);
 }
 
 /* ---- the meter ----------------------------------------------------------- */
@@ -273,12 +278,110 @@ function replay(seed, heat, steps = 400, stepMs = 90) {
 }
 
 {
+  // no WebView2 around (a plain browser, or node): the host source has to
+  // behave exactly like an empty fixture pool and never throw
   const host = createHostMedia();
-  check('the host stub starts empty', host.size === 0);
+  check('with no bridge the host pool starts empty', host.size === 0);
   check('and never hands out a clip', host.draw('video') === null);
+  check('and still answers with a generated tile', typeof host.drawTile() === 'string');
+  check('and asking the host that is not there is simply false', host.request() === false);
   host.adopt([{ kind: 'image', url: 'https://ccp.assets/img/1.png' }]);
-  check('adopt() is the door the manifest will use', host.size === 1);
+  check('adopt() is the door the manifest uses', host.size === 1);
   check('and the pool answers after it', host.draw('image') === 'https://ccp.assets/img/1.png');
+}
+
+/* ---- the host bridge ----------------------------------------------------- */
+
+/** A stand-in for window.chrome.webview: records what the page posts. */
+function fakeBridge() {
+  const listeners = new Set();
+  const sent = [];
+  return {
+    sent,
+    postMessage(o) { sent.push(o); },
+    addEventListener(type, fn) { if (type === 'message') listeners.add(fn); },
+    removeEventListener(type, fn) { listeners.delete(fn); },
+    /** the host answering */
+    push(data) { for (const fn of [...listeners]) fn({ data }); },
+    get listening() { return listeners.size; },
+  };
+}
+
+{
+  const bridge = fakeBridge();
+  const host = createHostMedia([], { bridge });
+  const ask = bridge.sent[0];
+  check('the page asks the host at attach', !!ask);
+  eq('and asks with the agreed type', ask && ask.type, HOST_MSG.request);
+  check('the ask names all three kinds',
+    ask && ['image', 'gif', 'video'].every((k) => ask.kinds.includes(k)),
+    JSON.stringify(ask && ask.kinds));
+  check('and asks for a batch, not one at a time', ask && ask.count >= 8);
+
+  bridge.push({
+    type: HOST_MSG.media,
+    images: ['https://ccp.assets/a.png', 'https://ccp.assets/b.png'],
+    gifs: ['https://ccp.assets/c.gif'],
+    videos: ['https://ccp.assets/d.mp4'],
+  });
+  eq('the answer lands in the pool', host.size, 4);
+  eq('videos are drawable', host.draw('video'), 'https://ccp.assets/d.mp4');
+  check('gifs are drawable', host.draw('gif') === 'https://ccp.assets/c.gif');
+
+  // a second frame adds rather than replaces, and never duplicates
+  bridge.push({ type: HOST_MSG.media, images: ['https://ccp.assets/a.png', 'https://ccp.assets/e.png'] });
+  eq('a later frame adds only what is new', host.size, 5);
+
+  // empty lists are a normal answer, not an error
+  bridge.push({ type: HOST_MSG.media, images: [], gifs: [], videos: [] });
+  eq('an empty answer changes nothing', host.size, 5);
+
+  // and junk on the wire cannot take the page down
+  for (const junk of [null, undefined, 7, 'hello', {}, { type: 'other' }, { type: HOST_MSG.media, images: 3 }]) {
+    bridge.push(junk);
+  }
+  eq('junk frames are ignored', host.size, 5);
+
+  let got = null;
+  host.onSettings((s2) => { got = s2; });
+  bridge.push({ type: HOST_MSG.settings, videoHoldSec: 7, reducedMotion: true });
+  check('settings reach a subscriber', !!got);
+  eq('videoHoldSec comes through', got && got.videoHoldSec, 7);
+  eq('reducedMotion comes through', got && got.reducedMotion, true);
+
+  let late = null;
+  host.onSettings((s2) => { late = s2; });
+  check('a late subscriber is told at once', late && late.videoHoldSec === 7);
+
+  host.dispose();
+  eq('dispose lets go of the bridge', bridge.listening, 0);
+}
+
+{
+  // the low-water ask: a nearly spent deck must send the page back to the host
+  const bridge = fakeBridge();
+  // requestGapMs 0: the real throttle is four seconds and a test cannot wait
+  const host = createHostMedia([], { bridge, requestGapMs: 0 });
+  bridge.push({ type: HOST_MSG.media, images: ['/1.png', '/2.png', '/3.png'] });
+  const before = bridge.sent.length;
+  for (let i = 0; i < 12; i++) host.draw('image');
+  check('a drained deck asks the host for more', bridge.sent.length > before,
+    before + ' -> ' + bridge.sent.length);
+
+  // and with the real throttle in place, the same drain cannot spam the host
+  const b2 = fakeBridge();
+  const host2 = createHostMedia([], { bridge: b2 });
+  b2.push({ type: HOST_MSG.media, images: ['/1.png', '/2.png', '/3.png'] });
+  for (let i = 0; i < 12; i++) host2.draw('image');
+  eq('the throttle holds the asks to the one at attach', b2.sent.length, 1);
+}
+
+{
+  // the host's own hold setting moves the floor, and the meter still stretches it
+  eq('no host setting keeps the tuning floor', videoHoldMs(0, RAMP_TUNING, null), RAMP_TUNING.videoCard.minHoldSec * 1000);
+  eq('a host hold of 6s is the floor', videoHoldMs(0, RAMP_TUNING, 6), 6000);
+  check('and a full meter still stretches it', videoHoldMs(1, RAMP_TUNING, 6) > 6000);
+  eq('a nonsense hold falls back to the tuning', videoHoldMs(0, RAMP_TUNING, -3), RAMP_TUNING.videoCard.minHoldSec * 1000);
 }
 
 /* ---- report -------------------------------------------------------------- */
