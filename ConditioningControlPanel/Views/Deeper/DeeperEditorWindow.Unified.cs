@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -12,6 +12,7 @@ using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Deeper;
 using Microsoft.Win32;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Views.Deeper
 {
@@ -201,7 +202,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     item.EffectSpeakRequiredReps = 1;
                     item.EffectSpeakCompletion = SpeakCompletion.UntilSatisfied;
                     item.EffectSpeakHoldMode = SpeakHoldMode.LoopRegion;
-                    item.EffectSpeakCorrectMessage = "good girl";
+                    item.EffectSpeakCorrectMessage = $"that's it, {VocabTokens.VanillaPetName}";
                     item.EffectSpeakIncorrectMessage = "try again";
                 }
                 _enhancement.TimelineItems.Add(item);

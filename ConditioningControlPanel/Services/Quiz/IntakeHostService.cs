@@ -838,8 +838,8 @@ namespace ConditioningControlPanel.Services.Quiz
 
         /// <summary>Chosen niche for this run — DesiredNiche() clamped to a niche that actually has
         /// a prompt bank on disk. A niche with no banks/&lt;niche&gt;.json would drop the page onto the
-        /// engine's tiny placeholder bank, so an unbacked niche degrades to bambi LOUDLY (one warning
-        /// per app session) instead of looking intentional. Drop the bank in and the clamp lifts.</summary>
+        /// engine's tiny placeholder bank, so an unbacked niche degrades to the neutral default bank LOUDLY
+        /// (one warning per app session) instead of looking intentional. Drop the bank in and the clamp lifts.</summary>
         private static string SafeNiche()
         {
             var want = DesiredNiche();
@@ -848,10 +848,10 @@ namespace ConditioningControlPanel.Services.Quiz
             {
                 _bankFallbackWarned = true;
                 App.Logger?.Warning(
-                    "IntakeHostService: niche '{N}' has no prompt bank (Resources/web/intake/banks/{N}.json) — serving the bambi bank instead. Author that bank to fix.",
+                    "IntakeHostService: niche '{N}' has no prompt bank (Resources/web/intake/banks/{N}.json) - serving the default bank instead. Author that bank to fix.",
                     want, want);
             }
-            return "bambi";
+            return IntakeNiche.Fallback;
         }
 
         /// <summary>True once the missing-bank warning has been logged this app session.</summary>
@@ -861,7 +861,7 @@ namespace ConditioningControlPanel.Services.Quiz
         /// IO hiccup never silently downgrades a niche that does have content.</summary>
         private static bool BankExists(string niche)
         {
-            if (niche == "bambi") return true;
+            if (niche == IntakeNiche.Fallback) return true;
             try
             {
                 return File.Exists(Path.Combine(

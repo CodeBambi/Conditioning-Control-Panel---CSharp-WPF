@@ -6,7 +6,11 @@ namespace ConditioningControlPanel.Services.Quiz
 {
     /// <summary>
     /// Single source of truth for "which flavour of intake is this user in" - the niche slug
-    /// (bambi / sissy / drone / circe) derived from the active mod.
+    /// (default / bambi / sissy / drone / circe) derived from the active mod. "default" is the
+    /// neutral house niche an unmodded install gets; the four themed niches are opt-ins a mod asks
+    /// for. It is a REAL niche, not a stand-in: it ships its own pass card
+    /// (Resources/intake/pass_card_default.png) and prompt bank
+    /// (Resources/web/intake/banks/default.json).
     ///
     /// This existed first as <c>IntakeHostService.DesiredNiche()</c>, which picks the prompt bank
     /// for a run. The weekly pass card and its nudge popup need the SAME answer so the art a user
@@ -16,17 +20,20 @@ namespace ConditioningControlPanel.Services.Quiz
     /// </summary>
     internal static class IntakeNiche
     {
-        /// <summary>Every niche this app ships art and prompt banks for. Order is display order.</summary>
-        internal static readonly string[] All = { "bambi", "sissy", "drone", "circe" };
+        /// <summary>Every niche this app ships art and prompt banks for. Order is display order,
+        /// neutral first.</summary>
+        internal static readonly string[] All = { "default", "bambi", "sissy", "drone", "circe" };
 
-        internal const string Fallback = "bambi";
+        /// <summary>Niche for an install with no themed mod signal. Neutral by design - a themed
+        /// niche here would hand every unmodded user someone else's persona.</summary>
+        internal const string Fallback = "default";
 
         /// <summary>
         /// Niche the ACTIVE MOD asks for, before any bank-availability clamp. Built-in ids win;
-        /// third-party .ccpmod files declare theirs via a manifest tag. Falls back to the legacy
-        /// two-value <see cref="ContentMode"/> enum only when there is no mod signal at all - that
-        /// enum has no drone value and collapses every non-sissy mod to bambi, so it is a last
-        /// resort, never a primary source.
+        /// third-party .ccpmod files declare theirs via a manifest tag. The legacy two-value
+        /// <see cref="ContentMode"/> enum is consulted only for its one positive signal (SissyHypno)
+        /// when there is no mod signal at all; its other value is "not sissy", which is NOT a request
+        /// for bambi, so it resolves to the neutral <see cref="Fallback"/>.
         /// </summary>
         internal static string Current()
         {
@@ -51,7 +58,10 @@ namespace ConditioningControlPanel.Services.Quiz
                     }
                 }
 
-                return App.Settings?.Current?.ContentMode == ContentMode.SissyHypno ? "sissy" : Fallback;
+                // Only the positive SissyHypno reading counts. ContentMode's other value means
+                // "no sissy mod", not "bambi", so everything else lands on the neutral niche.
+                if (App.Settings?.Current?.ContentMode == ContentMode.SissyHypno) return "sissy";
+                return Fallback;
             }
             catch { return Fallback; }
         }

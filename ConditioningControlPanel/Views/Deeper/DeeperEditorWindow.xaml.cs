@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -3561,7 +3561,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (newType == EffectTypes.Speak && string.IsNullOrWhiteSpace(te.SpeakTarget))
                     {
                         te.SpeakTarget = "YES";
-                        te.SpeakCorrectMessage = "good girl";
+                        te.SpeakCorrectMessage = $"that's it, {VocabTokens.VanillaPetName}";
                         te.SpeakIncorrectMessage = "try again";
                     }
                     RebuildTypeFields();

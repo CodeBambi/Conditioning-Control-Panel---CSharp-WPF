@@ -188,7 +188,7 @@ function chartEnergy(t) {
   ok(cueFor({ kind: 'chant', label: 'x', reps: 16 }, ctx).spawn.filter((s) => s.kindId === 'golden').length === 1,
     'the longest chant the road will lay carries exactly one');
   ok(cueFor({ kind: 'chant', label: 'x', reps: 8, weight: 0.5 }, ctx).spawn.length === 4, 'a light chant is a shorter lane');
-  ok(resultTag(0, 0) === null && resultTag(9, 9) === 'every word' && resultTag(8, 10) === 'good girl' && resultTag(5, 10) === 'half of her' && resultTag(2, 10) === 'she noticed' && resultTag(0, 10) === 'you were not listening', 'the end card tag reads the ratio');
+  ok(resultTag(0, 0) === null && resultTag(9, 9) === 'every word' && resultTag(8, 10) === 'most of it' && resultTag(5, 10) === 'half of it' && resultTag(2, 10) === 'you caught a few' && resultTag(0, 10) === 'you were not listening', 'the end card tag reads the ratio');
 }
 
 /* ---- 4. a whole run ----------------------------------------------------- */

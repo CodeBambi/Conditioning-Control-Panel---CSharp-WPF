@@ -1245,7 +1245,7 @@ namespace ConditioningControlPanel
             var presets = (App.Personality?.GetAllPresets() ?? new List<PersonalityPreset>())
                 .Where(p => p.Id != PersonalityPresets.SlutModeId)
                 .ToList();
-            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.BambiSpriteId;
+            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.NeutralDefaultId;
 
             foreach (var preset in presets)
             {

@@ -793,7 +793,7 @@ namespace ConditioningControlPanel.Services
                     content.Description = "A session designed to reinforce obedience and compliance.";
                     content.SubliminalPhrases = new List<string>
                     {
-                        "Obey", "Submit", "Good girls listen", "Follow instructions",
+                        "Obey", "Submit", "Listening is easy", "Follow instructions",
                         "Compliance is bliss", "Do as you're told", "Obedience is pleasure",
                         "Listen and obey", "You love to comply", "Surrender control"
                     };
@@ -803,7 +803,7 @@ namespace ConditioningControlPanel.Services
                     };
                     content.LockCardPhrases = new List<string>
                     {
-                        "I love to obey", "Good girls follow instructions", "Obedience is pleasure",
+                        "I love to obey", "I follow instructions", "Obedience is pleasure",
                         "I submit willingly", "Compliance makes me happy", "I do as I am told",
                         "Listening is easy", "I surrender control"
                     };
@@ -836,7 +836,7 @@ namespace ConditioningControlPanel.Services
                     content.SubliminalPhrases = new List<string>
                     {
                         "Submit", "Surrender", "Give in", "You are owned",
-                        "Good girls submit", "Let go of control", "Deeper submission",
+                        "Submission is easy", "Let go of control", "Deeper submission",
                         "You belong", "Surrender completely", "Submit and feel bliss"
                     };
                     content.BouncingTextPhrases = new List<string>
@@ -846,7 +846,7 @@ namespace ConditioningControlPanel.Services
                     content.LockCardPhrases = new List<string>
                     {
                         "I submit willingly", "Surrender feels so good", "I give in completely",
-                        "I belong", "Good girls surrender", "I let go of control",
+                        "I belong", "I surrender", "I let go of control",
                         "Submission is bliss", "I am deeply submissive"
                     };
                     break;
@@ -856,17 +856,17 @@ namespace ConditioningControlPanel.Services
                     content.Description = "A personalized conditioning session.";
                     content.SubliminalPhrases = new List<string>
                     {
-                        "Good girl", "Obey", "Submit", "Let go", "Deeper",
-                        "Surrender", "Empty mind", "So pretty", "Accept it", "Drift away"
+                        "Good", "Obey", "Submit", "Let go", "Deeper",
+                        "Surrender", "Empty mind", "So good", "Accept it", "Drift away"
                     };
                     content.BouncingTextPhrases = new List<string>
                     {
-                        "OBEY", "SUBMIT", "DEEPER", "GOOD GIRL", "LET GO", "SURRENDER"
+                        "OBEY", "SUBMIT", "DEEPER", "SO GOOD", "LET GO", "SURRENDER"
                     };
                     content.LockCardPhrases = new List<string>
                     {
-                        "I am a good girl", "I love to obey", "Surrender feels good",
-                        "I submit willingly", "Empty and happy", "Good girls listen",
+                        "I am good for this", "I love to obey", "Surrender feels good",
+                        "I submit willingly", "Empty and happy", "I listen",
                         "I let go of control", "Deeper and deeper"
                     };
                     break;

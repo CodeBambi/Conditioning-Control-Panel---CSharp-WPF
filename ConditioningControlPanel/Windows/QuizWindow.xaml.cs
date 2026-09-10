@@ -106,7 +106,7 @@ namespace ConditioningControlPanel
         private static readonly (string Question, string Answer)[] TrickQuestions = new[]
         {
             ("Do you like to let go and obey?", "Yes"),
-            ("Are you a good girl?", "Obviously"),
+            ("Are you ready to let go?", "Obviously"),
             ("Do you want to go deeper?", "Yes please"),
             ("Is it easier when you don't think?", "Mmhmm"),
             ("Do you enjoy being told what to do?", "Absolutely"),
@@ -921,7 +921,7 @@ namespace ConditioningControlPanel
             if (_isTrickQuestion)
             {
                 _isTrickQuestion = false;
-                PlayGoodGirl();
+                PlayCorrectPraise();
             }
             else
             {
@@ -1185,7 +1185,14 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var path = IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "00 Bimbo Drone.mp3");
+                // Ambient loop for the quiz. Routed through the mod audio pool so an installed
+                // mod can supply its own, and preferring the neutral "quiz_drone.mp3" whenever the
+                // pool has one - Wave 4 cuts that clip, and dropping the file in switches the
+                // unmodded quiz over with no code change. Until then the bundled hum is the only
+                // drone that exists; it is audio only and its filename never reaches the UI.
+                var path = ModResourceResolver.ResolveAudioPath("quiz_drone.mp3");
+                if (!System.IO.File.Exists(path))
+                    path = ModResourceResolver.ResolveAudioPath("00 Bimbo Drone.mp3");
                 if (!System.IO.File.Exists(path)) return;
 
                 _droneReader = new AudioFileReader(path) { Volume = GetVolume(0.35f) };
@@ -1394,11 +1401,32 @@ namespace ConditioningControlPanel
             return grid;
         }
 
-        private static void PlayGoodGirl()
+        /// <summary>
+        /// Praise sting for a correct trick answer. On a themed mod this is the clip it always
+        /// was ("GOOD GIRL.mp3", routed through the mod audio pool so an installed mod can drop
+        /// its own file in resources/sounds/). Unmodded there is no neutral praise VO in the
+        /// vanilla pool yet - Wave 4 cuts one - so an unmodded run gets the reward chime instead
+        /// of a persona nobody picked.
+        /// </summary>
+        private static void PlayCorrectPraise()
         {
-            var path = IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "GOOD GIRL.mp3");
+            if (IsVanillaMod())
+            {
+                PlayRandomChime();
+                return;
+            }
+
+            var path = ModResourceResolver.ResolveAudioPath("GOOD GIRL.mp3");
             if (System.IO.File.Exists(path))
                 PlaySoundAsync(path, GetVolume(0.5f));
+        }
+
+        /// <summary>No mod, or the neutral CCP Default mod. Same test as Services/BambiSprite.cs.</summary>
+        private static bool IsVanillaMod()
+        {
+            var modId = App.Mods?.ActiveModId;
+            return string.IsNullOrWhiteSpace(modId)
+                || string.Equals(modId, BuiltInMods.CCPDefaultId, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void PlayResultSound()

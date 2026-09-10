@@ -278,14 +278,15 @@ internal static class EmergencyExitHostService
     }
 
     /// <summary>
-    /// The mod's address book, so the captcha can say "Confirm you are NOT a good girl" in the right
+    /// The mod's address book, so the captcha can say "Confirm you are NOT a {honorific}" in the right
     /// voice and the outro cards can substitute {honorific} / {subject}.
     ///
-    /// <para>The three builtin packs are mapped explicitly (read off their own bark packs' lockdown
-    /// lines, which is where each mod's second-person address actually lives). A creator mod falls
-    /// back to its manifest identity's petName when it declares one, and to "good girl" plus the
-    /// mod's display name otherwise - never to a Windows username, and never to anything the user
-    /// typed about themselves.</para>
+    /// <para>The three themed builtin packs are mapped explicitly (read off their own bark packs'
+    /// lockdown lines, which is where each mod's second-person address actually lives). No mod and
+    /// CCP Default get the neutral house pet name. A creator mod falls back to its manifest identity's
+    /// petName when it declares one, and to that same neutral word plus the mod's display name
+    /// otherwise - never to a Windows username, and never to anything the user typed about
+    /// themselves.</para>
     /// </summary>
     private static object BuildMod()
     {
@@ -312,9 +313,15 @@ internal static class EmergencyExitHostService
             // NAME in "Confirm you are NOT a pet", which is what the captcha needs it for.
             case "builtin-locked":
                 honorific = "pet"; subject = "pet"; break;
+            // No mod and CCP Default have no persona to speak as, so they use the house pet name
+            // (VocabTokens.VanillaPetName, "sweetie") for the same reason builtin-locked uses "pet":
+            // it is gender-neutral and reads as a NAME in "Confirm you are NOT a sweetie".
+            case "":
+            case "builtin-ccp-default":
+                honorific = VocabTokens.VanillaPetName; subject = VocabTokens.VanillaPetName; break;
             default:
-                honorific = string.IsNullOrWhiteSpace(petName) ? "good girl" : petName!.Trim();
-                subject = string.IsNullOrWhiteSpace(name) ? "good girl" : name;
+                honorific = string.IsNullOrWhiteSpace(petName) ? VocabTokens.VanillaPetName : petName!.Trim();
+                subject = string.IsNullOrWhiteSpace(name) ? VocabTokens.VanillaPetName : name;
                 break;
         }
 

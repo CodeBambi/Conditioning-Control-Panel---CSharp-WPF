@@ -19,13 +19,18 @@ import { ROOM_IDS, KART_BASE_SPEED, LANE_X_MAX, makeRng } from './consts.js';
 
 export const CHART_VERSION = 1;
 
-/** English v1 structure words. The words pass grammar is this list + the trigger lexicon + [unk]. */
+/** English v1 structure words. The words pass grammar is this list + the trigger lexicon + [unk].
+ *  Neutral: this applies to every track on every install, so persona words ('girl', 'bimbo',
+ *  'doll') are not in it. A themed mod still gets them - Services/Race/TrackLexicon.cs keeps the
+ *  same core list and appends its own themed half when a themed mod is active, and a mod's trigger
+ *  phrases ('good girl', 'bimbo doll') ride the lexicon either way. Keep this list and the C# one
+ *  in step. */
 export const STRUCTURE_WORDS = [
   'drop', 'dropping', 'sleep', 'sleepy', 'asleep', 'deeper', 'deep', 'down', 'sink', 'sinking',
   'relax', 'relaxing', 'breathe', 'breath', 'blank', 'empty', 'obey', 'listen', 'focus',
   'surrender', 'melt', 'float', 'floating', 'heavy', 'wake', 'awake', 'waking', 'up', 'open',
   'count', 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
-  'now', 'good', 'girl', 'bimbo', 'doll', 'mind', 'mindless', 'pink', 'spiral', 'trance', 'trigger',
+  'now', 'good', 'mind', 'mindless', 'pink', 'spiral', 'trance', 'trigger',
 ];
 
 /** A structure word outside a countdown that reads as a drop ('now' only right after a count). */
@@ -194,7 +199,7 @@ const DEMO_ACTS = [
   { kind: 'silence', frac: 0.08, name: 'the quiet', base: 0.03 },
   { kind: 'wake', frac: 0.14, name: 'the way up', base: 0.72 },
 ];
-const DEMO_TRIGGERS = ['good girl', 'bimbo', 'doll', 'spiral', 'blank'];
+const DEMO_TRIGGERS = ['deeper', 'sink', 'drop', 'spiral', 'blank'];
 const SETTLE_WORDS = ['relax', 'breathe', 'listen', 'focus', 'down'];
 const SINK_WORDS = ['deeper', 'heavy', 'float', 'sink'];
 
@@ -231,8 +236,8 @@ export function demoChart(opts = {}) {
       for (let k = 0, t = a.t0 + 4; t < a.t1 - 2; t += 6.5, k++) ev('trigger', t, { label: DEMO_TRIGGERS[k % DEMO_TRIGGERS.length], conf: 0.7 + rng() * 0.3 });
     } else if (a.kind === 'mantra') {
       const period = 2.4, reps = Math.max(3, Math.min(8, Math.floor((len - 6) / period)));
-      ev('chant', a.t0 + 3, { label: 'good girl', reps, period, dur: reps * period });
-      ev('trigger', a.t0 + 4 + reps * period, { label: 'doll', conf: 0.9 });
+      ev('chant', a.t0 + 3, { label: 'deeper', reps, period, dur: reps * period });
+      ev('trigger', a.t0 + 4 + reps * period, { label: 'blank', conf: 0.9 });
     } else if (a.kind === 'build') {
       const dur = Math.max(6, Math.min(12, len - 8));
       ev('build', a.t0 + 3, { dur });
@@ -243,7 +248,7 @@ export function demoChart(opts = {}) {
       ev('silence', a.t0 + 0.5, { dur: Math.max(3, len - 1.5) });
     } else if (a.kind === 'wake') {
       ['wake', 'awake', 'up'].forEach((w, k) => ev('word', a.t0 + 3 + k * 4.5, { label: w }));
-      ev('trigger', Math.min(a.t1 - 2, a.t0 + 17), { label: 'good girl', conf: 0.95 });
+      ev('trigger', Math.min(a.t1 - 2, a.t0 + 17), { label: 'spiral', conf: 0.95 });
     }
   }
 

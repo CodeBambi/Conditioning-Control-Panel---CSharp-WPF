@@ -1517,30 +1517,10 @@ namespace ConditioningControlPanel.Models
             set { _subliminalOpacity = Math.Clamp(value, 10, 100); OnPropertyChanged(); }
         }
 
-        private Dictionary<string, bool> _subliminalPool = new()
-        {
-            { "BAMBI FREEZE", true },
-            { "BAMBI RESET", true },
-            { "BAMBI SLEEP", true },
-            { "BIMBO DOLL", true },
-            { "GOOD GIRL", true },
-            { "DROP FOR COCK", true },
-            { "SNAP AND FORGET", true },
-            { "PRIMPED AND PAMPERED", true },
-            { "BAMBI DOES AS SHE'S TOLD", true },
-            { "BAMBI CUM AND COLLAPSE", true },
-            { "ZAP COCK DRAIN OBEY", true },
-            { "GIGGLETIME", true },
-            { "BAMBI UNIFORM LOCK", true },
-            { "COCK ZOMBIE NOW", true },
-            { "JUST OBEY", true },
-            { "TURN YOUR BRAIN OFF", true },
-            { "GOOD GIRLS DONT THINK", true },
-            { "DONT THINK SILLY", true },
-            { "COCK TURNS MY BRAIN OFF", true },
-            { "I CANT RESIST MY TRIGGERS", true },
-            { "THERES NO NEED TO THINK", true }
-        };
+        // Fresh-install pool. Copied (not shared) from the neutral CCP Default mod so an unmodded
+        // install starts neutral and the two lists can never drift apart; a themed mod overrides
+        // this at runtime, and an existing user's saved pool is loaded over it.
+        private Dictionary<string, bool> _subliminalPool = new(BuiltInMods.CCPDefault.SubliminalPool ?? new Dictionary<string, bool>());
         public Dictionary<string, bool> SubliminalPool
         {
             get => _subliminalPool;
@@ -2202,7 +2182,15 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        private string _marqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+        /// <summary>Fresh-install marquee banner text. Also the runtime fallback when the saved
+        /// message is blank (see MainWindow.Marquee.cs).</summary>
+        public const string DefaultMarqueeMessage = "CONDITION DAILY     ❤️🔒";
+
+        /// <summary>The gendered text this default used to be. Only <see cref="MigrateMarqueeMessage"/>
+        /// reads it, and only to recognise a user who never changed the old default.</summary>
+        internal const string LegacyGenderedMarqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+
+        private string _marqueeMessage = DefaultMarqueeMessage;
         /// <summary>
         /// Custom scrolling marquee banner message displayed in the UI.
         /// </summary>
@@ -2210,6 +2198,29 @@ namespace ConditioningControlPanel.Models
         {
             get => _marqueeMessage;
             set { _marqueeMessage = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _marqueeNeutralDefaultMigrated;
+        /// <summary>One-shot guard for <see cref="MigrateMarqueeMessage"/> so a user who deliberately
+        /// types the old text back in isn't overwritten at the next launch.</summary>
+        [JsonProperty]
+        public bool MarqueeNeutralDefaultMigrated
+        {
+            get => _marqueeNeutralDefaultMigrated;
+            set { _marqueeNeutralDefaultMigrated = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Move existing users off the old gendered default banner text. Keyed on an exact match of
+        /// <see cref="LegacyGenderedMarqueeMessage"/>, so anyone who customised their banner - by even
+        /// one character - keeps what they wrote. Runs once, from InitializeMarqueeBanner().
+        /// </summary>
+        internal void MigrateMarqueeMessage()
+        {
+            if (_marqueeNeutralDefaultMigrated) return;
+            if (string.Equals(_marqueeMessage?.Trim(), LegacyGenderedMarqueeMessage.Trim(), StringComparison.Ordinal))
+                MarqueeMessage = DefaultMarqueeMessage;
+            MarqueeNeutralDefaultMigrated = true;
         }
 
         private bool _dualMonitorEnabled = true;
@@ -4167,14 +4178,8 @@ namespace ConditioningControlPanel.Models
             set { _lockCardVoiceMode = value; OnPropertyChanged(); }
         }
         
-        private Dictionary<string, bool> _lockCardPhrases = new()
-        {
-            { "GOOD GIRLS OBEY", true },
-            { "I LOVE BEING PROGRAMMED", true },
-            { "BAMBI SLEEP", true },
-            { "DROP FOR ME", true },
-            { "EMPTY AND OBEDIENT", true }
-        };
+        // Fresh-install pool, copied from the neutral CCP Default mod (see _subliminalPool).
+        private Dictionary<string, bool> _lockCardPhrases = new(BuiltInMods.CCPDefault.LockCardPhrases ?? new Dictionary<string, bool>());
         public Dictionary<string, bool> LockCardPhrases
         {
             get => _lockCardPhrases;
@@ -4424,10 +4429,10 @@ namespace ConditioningControlPanel.Models
 
         private Dictionary<string, bool> _bouncingTextPool = new()
         {
-            { "GOOD GIRL", true },
+            { "DEEPER", true },
             { "OBEY", true },
             { "SUBMIT", true },
-            { "BIMBO", true },
+            { "BLANK", true },
             { "EMPTY", true },
             { "MINDLESS", true },
             { "OBEDIENT", true },
@@ -4569,17 +4574,11 @@ namespace ConditioningControlPanel.Models
         private Dictionary<string, bool> _attentionPool = new()
         {
             { "CLICK ME", true },
-            { "GOOD GIRL", true },
-            { "BAMBI FREEZE", true },
-            { "BAMBI SLEEP", true },
-            { "BAMBI RESET", true },
             { "DROP", true },
             { "OBEY", true },
             { "ACCEPT", true },
             { "SUBMIT", true },
-            { "BLANK AND EMPTY", true },
-            { "BAMBI LOVES COCK", true },
-            { "UNIFORM ON", true }
+            { "BLANK AND EMPTY", true }
         };
         public Dictionary<string, bool> AttentionPool
         {
@@ -5336,14 +5335,14 @@ namespace ConditioningControlPanel.Models
             set { _companionPrompt = value ?? new(); OnPropertyChanged(); }
         }
 
-        private string _activePersonalityPresetId = PersonalityPresets.BambiSpriteId;
+        private string _activePersonalityPresetId = PersonalityPresets.NeutralDefaultId;
         /// <summary>
         /// ID of the currently active personality preset.
         /// </summary>
         public string ActivePersonalityPresetId
         {
             get => _activePersonalityPresetId;
-            set { _activePersonalityPresetId = value ?? PersonalityPresets.BambiSpriteId; OnPropertyChanged(); }
+            set { _activePersonalityPresetId = value ?? PersonalityPresets.NeutralDefaultId; OnPropertyChanged(); }
         }
 
         private DateTime? _personaVoiceFenceUtc;
@@ -5464,26 +5463,12 @@ namespace ConditioningControlPanel.Models
             set { _randomBubbleEnabled = value; OnPropertyChanged(); }
         }
 
-        private List<string> _customTriggers = new()
+        // Fresh-install list: the neutral CCP Default triggers plus the two phrases from the old
+        // default list that carried no theme, so Trigger Mode still ships a usable spread.
+        private List<string> _customTriggers = new(BuiltInMods.CCPDefault.CustomTriggers ?? new List<string>())
         {
-            "GOOD GIRL",
-            "BAMBI SLEEP",
-            "BIMBO DOLL",
-            "BAMBI FREEZE",
-            "BAMBI RESET",
-            "DROP FOR COCK",
-            "GIGGLETIME",
-            "BLONDE MOMENT",
-            "ZAP COCK DRAIN OBEY",
             "SNAP AND FORGET",
-            "PRIMPED AND PAMPERED",
-            "SAFE AND SECURE",
-            "COCK ZOMBIE NOW",
-            "BAMBI UNIFORM LOCK",
-            "AIRHEAD BARBIE",
-            "BRAINDEAD BOBBLEHEAD",
-            "COCKBLANK LOVEDOLL",
-            "BAMBI CUM AND COLLAPSE"
+            "SAFE AND SECURE"
         };
         /// <summary>
         /// Custom trigger phrases for Trigger Mode

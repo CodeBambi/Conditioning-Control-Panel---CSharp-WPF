@@ -774,13 +774,17 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // One-shot: users still parked on the old gendered default get the neutral one.
+                // Anyone who typed their own banner is left alone.
+                App.Settings.Current.MigrateMarqueeMessage();
+
                 // Migrate old message to new default if needed
                 var currentSaved = App.Settings.Current.MarqueeMessage;
                 if (string.IsNullOrWhiteSpace(currentSaved) ||
                     currentSaved.Contains("WELCOME TO YOUR CONDITIONING") ||
                     currentSaved.Contains("RELAX AND SUBMIT"))
                 {
-                    App.Settings.Current.MarqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+                    App.Settings.Current.MarqueeMessage = AppSettings.DefaultMarqueeMessage;
                 }
 
                 // Need to wait for layout to measure text width
@@ -1198,7 +1202,7 @@ namespace ConditioningControlPanel
                 var message = App.Settings.Current.MarqueeMessage;
                 if (string.IsNullOrWhiteSpace(message))
                 {
-                    message = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
+                    message = AppSettings.DefaultMarqueeMessage;
                 }
                 message = message.ToUpperInvariant();
 
