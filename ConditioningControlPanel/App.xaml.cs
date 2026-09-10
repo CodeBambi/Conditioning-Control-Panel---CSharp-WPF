@@ -288,8 +288,6 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
-
                 // Application.MainWindow is a DependencyProperty and verifies thread access, so
                 // only touch it when we are actually on the UI thread; a null owner is fine.
                 if (owner == null && dispatcher.CheckAccess())
@@ -297,8 +295,31 @@ namespace ConditioningControlPanel
                     try { owner = Current?.MainWindow; } catch { owner = null; }
                 }
 
+                var cardOwner = owner;
                 Logger?.Information("RemoteMedia: empty assets at {Surface} — offering the online source", surface);
-                FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, owner);
+
+                // Through the presenter: shown at once when nothing is quiet (exactly as before),
+                // parked as an Inbox row inside the first-launch window. The once-per-launch claim
+                // moved INTO the open action - a card that only ever became a row must not spend
+                // the launch's one offer, or opening the row later would find it already gone.
+                Startup?.PresentOrInbox(new Services.Startup.InboxItem
+                {
+                    Key = "intro:remote-media",
+                    Glyph = "🌐",
+                    Title = "Media without the download",
+                    Summary = "Your folders are empty - she can stream from the online pool instead.",
+                    Open = () =>
+                    {
+                        if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+                        FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
+                    },
+                });
+
+                if (Startup == null)
+                {
+                    if (Interlocked.CompareExchange(ref _remoteMediaOfferClaimed, 1, 0) != 0) return;
+                    FeatureIntroPopup.ShowIfFirstTime(RemoteMediaIntroKey, cardOwner);
+                }
             }
             catch (Exception ex)
             {
@@ -416,6 +437,14 @@ namespace ConditioningControlPanel
         // Static service references
         public static ILogger Logger { get; private set; } = null!;
         public static SettingsService Settings { get; private set; } = null!;
+
+        /// <summary>
+        /// The one owner of every startup surface: the modal ladder, the quiet window and the
+        /// Inbox. Created at the top of <see cref="OnStartup"/>, before MainWindow, so anything
+        /// that wants the screen can queue rather than racing for it. See
+        /// <see cref="Services.Startup.StartupPresenter"/> for why that mattered.
+        /// </summary>
+        public static Services.Startup.StartupPresenter? Startup { get; private set; }
 
         // Transient feed of recent AI-driven effect actions, surfaced in the Companion tab's
         // "Live actions" panel. Populated by the upcoming local-LLM effect controller; not persisted.
@@ -1756,6 +1785,13 @@ namespace ConditioningControlPanel
 
             // Initialize services
             Settings = new SettingsService();
+
+            // THE STARTUP LADDER. Built here, before a single service that might want to interrupt
+            // and long before MainWindow exists, because MainWindow's constructor is the first
+            // thing that queues on it. Everything that used to decide for itself when it was
+            // allowed to open - the failed-update report, the wizard, What's New, the season
+            // recap, the mod picker, the enhance nudge, the update dialog - now asks this.
+            Startup = new Services.Startup.StartupPresenter(Current?.Dispatcher ?? System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
             // One-shot settings migrations. Must run before anything reads
             // the migrated fields (Flash UI, GazeFocusService, etc.).
@@ -3255,17 +3291,38 @@ namespace ConditioningControlPanel
                             Application.Current.Dispatcher.HasShutdownStarted) return;
 
                         // stackIndex pushes each extra toast a further (Height + 8) upward.
-                        for (int i = 0; i < rewards.Count; i++)
+                        void ShowAll()
                         {
-                            try
+                            for (int i = 0; i < rewards.Count; i++)
                             {
-                                new ItemUnlockedPopup(rewards[i], i).Show();
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                                try
+                                {
+                                    new ItemUnlockedPopup(rewards[i], i).Show();
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger?.Error(ex, "Failed to show item unlocked popup for: {Id}", rewards[i].Id);
+                                }
                             }
                         }
+
+                        // A column of toasts is the loudest thing on this list, so inside the
+                        // quiet window the whole column collapses to ONE Inbox row - opening it
+                        // still shows every toast, stacked exactly as it would have been.
+                        var names = string.Join(", ", rewards.ConvertAll(static r => r.Name));
+                        var item = new Services.Startup.InboxItem
+                        {
+                            Key = "wardrobe-unlock:" + achievementId,
+                            Glyph = "👗",
+                            Title = rewards.Count == 1
+                                ? "A new wardrobe item is yours"
+                                : rewards.Count + " new wardrobe items are yours",
+                            Summary = names,
+                            Open = ShowAll,
+                        };
+
+                        if (Startup != null) Startup.PresentOrInbox(item);
+                        else ShowAll();
                     }
                     catch (Exception ex)
                     {
@@ -3619,12 +3676,20 @@ namespace ConditioningControlPanel
                 // out the startup ladder (update dialog, What's New, season recap, the wizard) the
                 // same way MainWindow.xaml.cs:537 does - up to 5 minutes, because a mod pack can
                 // take that long to download inside the wizard - and re-check before showing.
-                for (int i = 0; i < 600 && (IsUpdateDialogActive ||
-                                           ConditioningControlPanel.MainWindow.IsStartupDialogShowing); i++)
+                // Now waits on the LADDER, not just on the flag. IsStartupDialogShowing is only
+                // true while a surface is actually on screen, so the gap between two queued
+                // modals reads as "clear" and this box used to be able to land in it. The
+                // presenter knows the difference between "nothing showing" and "nothing left".
+                static bool LadderBusy() =>
+                    IsUpdateDialogActive
+                    || ConditioningControlPanel.MainWindow.IsStartupDialogShowing
+                    || Startup?.IsLadderIdle == false;
+
+                for (int i = 0; i < 600 && LadderBusy(); i++)
                 {
                     await Task.Delay(500);
                 }
-                if (IsUpdateDialogActive || ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
+                if (LadderBusy())
                 {
                     Logger?.Information("Cloud settings restore offer deferred to the next launch — a startup dialog is still open");
                     return;
@@ -3815,39 +3880,17 @@ namespace ConditioningControlPanel
                         }
                     });
 
-                    // Wait for any startup dialogs (What's New) to be dismissed
-                    // Check every 500ms for up to 30 seconds
-                    Logger?.Information("Waiting for startup dialogs to close before showing update popup...");
-                    for (int i = 0; i < 60; i++)
-                    {
-                        if (!ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                        {
-                            Logger?.Information("No startup dialog showing, proceeding with update popup");
-                            break;
-                        }
-                        Logger?.Information("Startup dialog still showing, waiting... ({Attempt}/60)", i + 1);
-                        await Task.Delay(500);
-                    }
-
-                    // Additional small delay after dialog closes to let UI settle
-                    await Task.Delay(500);
-
-                    // Now show the update dialog on UI thread
-                    Logger?.Information("Attempting to show update dialog on UI thread...");
-
-                    Application.Current.Dispatcher.Invoke(() =>
+                    // Priority 80: last on the ladder. The button above is already lit, so the
+                    // news is delivered either way and this dialog can afford to wait behind the
+                    // wizard, What's New, the recap and the mod picker. It used to run its own
+                    // 30 s poll over IsStartupDialogShowing and then give up silently - which is
+                    // how an upgrader still reading patch notes lost the update prompt entirely.
+                    Logger?.Information("Queueing the update dialog behind the startup ladder...");
+                    Startup?.EnqueueModal("update-available", 80, owner =>
                     {
                         try
                         {
-                            // Double-check no modal dialog is showing
-                            if (ConditioningControlPanel.MainWindow.IsStartupDialogShowing)
-                            {
-                                Logger?.Warning("Startup dialog still showing after wait, skipping auto-popup");
-                                return;
-                            }
-
-                            Logger?.Information("Inside Dispatcher.Invoke - getting MainWindow");
-                            var mainWindow = Application.Current.MainWindow as MainWindow;
+                            var mainWindow = (owner as MainWindow) ?? MainWindowRef ?? Application.Current.MainWindow as MainWindow;
 
                             if (mainWindow == null)
                             {
@@ -3865,7 +3908,7 @@ namespace ConditioningControlPanel
                         }
                         catch (Exception innerEx)
                         {
-                            Logger?.Error(innerEx, "Exception inside Dispatcher.Invoke for update dialog");
+                            Logger?.Error(innerEx, "Exception showing the update dialog from the startup ladder");
                         }
                     });
                 }
@@ -3881,31 +3924,28 @@ namespace ConditioningControlPanel
         /// Consumes the marker left by the previous run's update attempt and, if the install did
         /// not take, tells the user once and points them at the manual download.
         /// </summary>
-        private static async Task ReportFailedUpdateAttemptAsync()
+        private static Task ReportFailedUpdateAttemptAsync()
         {
             try
             {
                 var outcome = UpdateService.ConsumePendingUpdateOutcome();
-                if (outcome == null || outcome.Succeeded) return;
+                if (outcome == null || outcome.Succeeded) return Task.CompletedTask;
 
-                // Don't stack on top of the What's New / startup dialogs.
-                for (int i = 0; i < 60 && ConditioningControlPanel.MainWindow.IsStartupDialogShowing; i++)
-                {
-                    await Task.Delay(500);
-                }
-
-                Application.Current?.Dispatcher.Invoke(() =>
-                {
+                // Priority 10: first on the ladder, ahead of the wizard and What's New. An install
+                // that did not take is the one piece of startup news that changes what the user
+                // should do next, and it used to hand-roll its own 30 s poll over
+                // IsStartupDialogShowing to avoid stacking. The ladder is that poll now.
+                Startup?.EnqueueModal("failed-update-report", 10, owner =>
                     OfferManualUpdateDownload(
-                        Current?.MainWindow,
+                        owner ?? Current?.MainWindow,
                         Loc.Get("title_update_failed"),
-                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion));
-                });
+                        Loc.GetF("msg_update_install_failed", outcome.Version, UpdateService.AppVersion)));
             }
             catch (Exception ex)
             {
                 Logger?.Warning(ex, "Failed to report previous update attempt");
             }
+            return Task.CompletedTask;
         }
 
         /// <summary>

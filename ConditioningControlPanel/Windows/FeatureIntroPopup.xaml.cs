@@ -100,69 +100,54 @@ namespace ConditioningControlPanel
         internal static void ShowCelebrationIfFirstTime(Window? owner) =>
             ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
 
-        /// <summary>Keys with a settle timer already running, so a tab that is shown twice during
-        /// startup arms one clock and not two.</summary>
+        /// <summary>Keys already handed to the startup presenter, so a tab that is shown twice
+        /// during startup posts one offer and not two.</summary>
         private static readonly HashSet<string> _settling = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// For the ONE card whose surface the app lands on by itself: the Dashboard is visible
         /// from XAML before anything navigates, so its card has no ShowTab case to ride and would
-        /// otherwise open in the middle of the startup ladder - update dialog, What's New, season
-        /// recap, the first-run wizard, then the guided tour.
+        /// otherwise open in the middle of the startup ladder.
         ///
-        /// <para>So it waits. A 1s clock re-tests the same conditions App.xaml.cs waits on before
-        /// its own startup offers, calls <see cref="ShowCore"/> once they are clear, and keeps
-        /// ticking until the card is actually spent - which also lets it outlast the 10-minute
-        /// pacing cooldown if another card got in first. Gives up after five minutes (the wizard
-        /// can legitimately take that long) leaving the seen-flag UNSPENT, so the next launch
-        /// simply tries again.</para>
+        /// <para>It used to wait it out on a 1 s clock of its own, re-testing the same three flags
+        /// App.xaml.cs polled, for up to five minutes. That clock is gone: the card is handed to
+        /// <c>App.Startup.PresentOrInbox</c>, which opens it at once when nothing is quiet and
+        /// otherwise makes it a row in the Inbox the user opens when they want it. Either way the
+        /// seen-flag is spent by <see cref="ShowCore"/> at OPEN time, never here, so a card that
+        /// only ever became a row is still owed on the next launch if the row is never clicked.</para>
+        ///
+        /// <para>The pacing cooldown and the per-door budget apply on the immediate path exactly as
+        /// they did (a curious first-day user must not eat a modal per tab). They do NOT apply when
+        /// the user opens the row: pacing exists to stop cards the user did not ask for, and a
+        /// clicked row is a card the user asked for.</para>
         /// </summary>
         internal static void ShowWhenStartupSettles(string key, Window? owner, string? doorKey)
         {
             try
             {
-                if (!FeatureIntros.All.ContainsKey(key)) return;
+                if (!FeatureIntros.All.TryGetValue(key, out var content)) return;
                 if (App.Settings?.Current?.SeenFeatureIntros.Contains(key) == true) return;
                 if (!_settling.Add(key)) return;
 
-                var dispatcher = Application.Current?.Dispatcher;
-                if (dispatcher == null || dispatcher.HasShutdownStarted) { _settling.Remove(key); return; }
-
-                int ticks = 0;
-                var timer = new System.Windows.Threading.DispatcherTimer(
-                    System.Windows.Threading.DispatcherPriority.Background, dispatcher)
+                var presenter = App.Startup;
+                if (presenter == null)
                 {
-                    Interval = TimeSpan.FromSeconds(1),
-                };
-                timer.Tick += (_, _) =>
+                    ShowCore(key, owner, paced: true, doorKey: doorKey);
+                    return;
+                }
+
+                // Read once, on this thread, before handing over: it decides which of the two
+                // routes the item is about to take, and the Open below has to match.
+                var quiet = presenter.IsQuiet;
+
+                presenter.PresentOrInbox(new Services.Startup.InboxItem
                 {
-                    try
-                    {
-                        var live = App.Settings?.Current;
-                        if (live == null || live.SeenFeatureIntros.Contains(key) || ++ticks > 300)
-                        {
-                            timer.Stop();
-                            _settling.Remove(key);
-                            return;
-                        }
-
-                        // Same three gates the startup ladder uses elsewhere. The tutorial is
-                        // also checked inside ShowCore; it is repeated here so a tour that runs
-                        // long simply keeps the clock ticking instead of burning a try.
-                        if (App.IsUpdateDialogActive
-                            || MainWindow.IsStartupDialogShowing
-                            || App.Tutorial?.IsActive == true) return;
-
-                        ShowCore(key, owner, paced: true, doorKey: doorKey);
-                    }
-                    catch (Exception ex)
-                    {
-                        timer.Stop();
-                        _settling.Remove(key);
-                        App.Logger?.Warning(ex, "Feature intro settle tick failed for {Key}", key);
-                    }
-                };
-                timer.Start();
+                    Key = "intro:" + key,
+                    Glyph = string.IsNullOrEmpty(content.Glyph) ? "✨" : content.Glyph,
+                    Title = string.IsNullOrEmpty(content.RailTitle) ? content.Title : content.RailTitle,
+                    Summary = content.Tagline,
+                    Open = () => ShowCore(key, owner, paced: !quiet, doorKey: quiet ? null : doorKey),
+                });
             }
             catch (Exception ex)
             {
