@@ -11,6 +11,8 @@
  *   - the eight noise starter subs (cats, aww, pokemon, ...) are DATA, not
  *     lexicon: they are subreddit names, and a mod re-voicing them would ask
  *     the host for a subreddit that does not exist.
+ *   - seven rows carry a store-build voice as well; see STORE_LEX at the foot
+ *     of the file for which and why
  *
  * G1 merges this table into the module's lexicon as
  *   lexicon: { ...SORT_LEX, ...SETUP_LEX }
@@ -20,7 +22,9 @@
  * alone, delete them here, not there.
  * ==========================================================================*/
 
-export const SETUP_LEX = Object.freeze({
+import { isStoreSafe } from '../../core/storesafe.js';
+
+const BASE_LEX = Object.freeze({
   /* ---- the door itself -------------------------------------------------- */
   sort_door_title: 'Set your sort',
   sort_door_sub: 'Right is yours. Left is the rest.',
@@ -113,5 +117,46 @@ export const SETUP_LEX = Object.freeze({
   sort_stamp_yes: 'YES',
   sort_stamp_no: 'NO',
 });
+
+/* ----------------------------------------------------------------------------
+ * THE STORE BUILD'S SEVEN ROWS.
+ *
+ * An app-store build has the online feed disarmed at the host, so the door
+ * offers folders and Quick Sort and never reaches a community on the web. Seven
+ * rows still SAID otherwise: they name subs and subreddits, which is a picker
+ * for a source this build does not have and a word Apple's reviewer has no
+ * reason to be shown. So they get a neutral voice and the door reads as what it
+ * actually is here, a picker over your own collections.
+ *
+ * NOT A TRANSLATION AND NOT A SECOND TABLE. Same keys, same meanings, still
+ * under 96 characters, still no em-dashes; only the source noun moves. Every row
+ * the store build does not touch stays byte-identical, which is what keeps this
+ * from becoming a second copy of the door's copy to maintain.
+ *
+ * THE HOST STILL WINS. These are FALLBACKS: `ctx.lexicon(key, fallback)` prefers
+ * whatever `init.lexicon` carries, and the desktop host mirrors this table key
+ * for key out of ArcademyHostService.NeutralLexicon. So a store build whose host
+ * ships the original rows will show the original rows, and the mobile host
+ * overrides these same seven keys on its side for exactly that reason. Both
+ * halves are needed and neither is redundant.
+ * -------------------------------------------------------------------------- */
+const STORE_LEX = Object.freeze({
+  sort_source_online_hint: 'Pictures from the online feed',
+  sort_lib_empty: 'Nothing here yet. Search for a collection below.',
+  sort_search_head: 'Add a collection',
+  sort_search_ph: 'collection name',
+  sort_probe_bad: 'That is not a collection name',
+  sort_overlap_note: 'Shared picks were dropped from the rest',
+  sort_quick_nag: 'Add a second folder for a real sort.',
+});
+
+/**
+ * What G1 merges into the module's lexicon. One table, chosen once at import
+ * time, because the door is built the moment the class loads and the flag was
+ * set at the handshake long before that.
+ */
+export const SETUP_LEX = Object.freeze(
+  isStoreSafe() ? { ...BASE_LEX, ...STORE_LEX } : BASE_LEX,
+);
 
 export default SETUP_LEX;

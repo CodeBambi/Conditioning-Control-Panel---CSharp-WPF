@@ -3336,9 +3336,10 @@ internal static class ArcademyHostService
         ["dt_help_chip_letter_yes"] = "ok",
         ["dt_help_yes_letter"] = "boop. that one's yours now.",
         ["dt_help_no_letter"] = "ok. my letter and i will practice waiting.",
-        // The nine band names. The KEY is the contract: it is `dt_cat_` plus the `cat` of a
+        // The ten band names. The KEY is the contract: it is `dt_cat_` plus the `cat` of a
         // THEME_GROUPS band in games/daily-trigger/words-answers.js (plus `common` for the
-        // tiny ordinary-English band), so renaming a band there orphans its row here.
+        // tiny ordinary-English band and `focus` for the store pool's own band), so renaming
+        // a band there orphans its row here.
         ["dt_cat_trance"] = "spirally",
         ["dt_cat_training"] = "training arc",
         ["dt_cat_submission"] = "yes ma'am",
@@ -3347,6 +3348,11 @@ internal static class ArcademyHostService
         ["dt_cat_arcade"] = "hometown",
         ["dt_cat_school"] = "classroom",
         ["dt_cat_melt"] = "melty",
+        // The store build's band. The desktop never draws it (that pool is
+        // picked by a host flag this host does not set), but trap 123 says a
+        // key with no host row renders in English for ever, and the mobile
+        // host reads this table through the vendored lexicon.json.
+        ["dt_cat_focus"] = "fresh air",
         ["dt_cat_common"] = "civilian",
     };
 

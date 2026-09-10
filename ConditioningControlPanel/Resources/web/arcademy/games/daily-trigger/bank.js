@@ -18,8 +18,34 @@
  * ==========================================================================*/
 
 import { hash01, makeRng, shuffled } from '../../core/rng.js';
+import { isStoreSafe } from '../../core/storesafe.js';
 import { THEME, THEME_GROUPS, COMMON, PHRASES } from './words-answers.js';
+import {
+  THEME as STORE_THEME, THEME_GROUPS_STORE, COMMON as STORE_COMMON,
+  PHRASES as STORE_PHRASES,
+} from './words-answers.store.js';
 import { ACCEPT } from './words-accept.js';
+
+/**
+ * WHICH POOL THIS BUILD DRAWS FROM.
+ *
+ * One line, and the only thing in this file that is not a pure function of the
+ * date. An app-store build draws the narrower pool (words-answers.store.js: the
+ * five niche-neutral bands plus a calm band, 433 words); every other host draws
+ * the pool it always has. `isStoreSafe()` is a host declaration, so this is
+ * still the same for everybody who is inside the same build, which is what the
+ * global-ritual rule actually asks for: the day's word is identical for every
+ * player the same page is being served to.
+ *
+ * Read through a function rather than captured at import time because this
+ * module is imported the moment the Daily Trigger class loads, and both this
+ * and `catIndex()` memoise their first answer anyway.
+ */
+function pool() {
+  return isStoreSafe()
+    ? { theme: STORE_THEME, groups: THEME_GROUPS_STORE, common: STORE_COMMON, phrases: STORE_PHRASES }
+    : { theme: THEME, groups: THEME_GROUPS, common: COMMON, phrases: PHRASES };
+}
 
 /**
  * The puzzle-number epoch. Shared with core/timetable.js on purpose (same day 0
@@ -67,14 +93,15 @@ let cached = null;
  */
 export function bank() {
   if (cached) return cached;
-  const theme = fiveOnly(toks(THEME));
-  const common = fiveOnly(toks(COMMON));
+  const src = pool();
+  const theme = fiveOnly(toks(src.theme));
+  const common = fiveOnly(toks(src.common));
   const answers = fiveOnly(theme.concat(common));
   const accept = new Set(fiveOnly(toks(ACCEPT)));
   // Every possible answer must be guessable even if the acceptance list forgot it.
   for (const w of answers) accept.add(w);
   const phrases = [];
-  for (const p of (Array.isArray(PHRASES) ? PHRASES : [])) {
+  for (const p of (Array.isArray(src.phrases) ? src.phrases : [])) {
     if (!Array.isArray(p) || p.length < 2) continue;
     const groups = p.map((g) => String(g || '').toLowerCase()).filter((g) => ALPHA.test(g));
     if (groups.length < 2) continue;
@@ -105,7 +132,7 @@ let catCache = null;
 function catIndex() {
   if (catCache) return catCache;
   const map = Object.create(null);
-  const groups = Array.isArray(THEME_GROUPS) ? THEME_GROUPS : [];
+  const groups = Array.isArray(pool().groups) ? pool().groups : [];
   for (const g of groups) {
     const key = g && typeof g.cat === 'string' ? g.cat : '';
     if (!key) continue;
