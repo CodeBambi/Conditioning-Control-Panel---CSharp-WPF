@@ -244,8 +244,149 @@ eq(JSON.parse(await ev(HOLD)).canvases, 0, 'every pop after a loss is a gif, wit
     return JSON.stringify({ desk: m.backingFor(1280, 720, false), touch: m.backingFor(390, 844, true), cap: m.TOUCH_FRAME_MS });
   })()`);
   ok(Math.max(phone.desk.w, phone.desk.h) === 512, `a 1280x720 desktop draws ${phone.desk.w}x${phone.desk.h}`);
-  ok(Math.max(phone.touch.w, phone.touch.h) === 320, `a 390x844 phone draws ${phone.touch.w}x${phone.touch.h}`);
-  eq(phone.cap, 33, 'and paces itself at 30 fps under touch');
+  ok(Math.max(phone.touch.w, phone.touch.h) === 256, `a 390x844 phone draws ${phone.touch.w}x${phone.touch.h}`);
+  eq(phone.cap, 42, 'and paces itself at 24 fps under touch');
+}
+
+/* ============================================================================
+ * 7b. the phone's layers carry no filter (2026-09-10: "we still lag a lot on the
+ *     fullscreen effects on iphone. the glitch bubble fullscreen in particular
+ *     and the spiral"). Every hold is a fullscreen DOM layer over the glass; a
+ *     `filter`, a `backdrop-filter` or a colour keyframe on one is a
+ *     device-resolution pass on every frame it changes. On the touch tier the
+ *     cap is inline (payloadFx `opacityCap`) and race.css takes the filters off.
+ * ==========================================================================*/
+{
+  const run = readFileSync(resolve(RACE, 'run.js'), 'utf8');
+  ok(/opacityCap:\s*touchTier\s*\?/.test(run), 'run.js passes the inline cap on the touch tier only');
+  ok(/dataset\.touch\s*=\s*'1'/.test(run), 'and stamps data-touch on the root for race.css');
+  const LAYER = (sel) => `(() => { const el = document.querySelector('${sel}'); if (!el) return JSON.stringify({ there: false });
+    const cs = getComputedStyle(el); return JSON.stringify({ there: true, filter: cs.filter, bf: cs.backdropFilter || cs.webkitBackdropFilter, anim: cs.animationName, mask: cs.maskImage || cs.webkitMaskImage }); })()`;
+  // the desktop this run is on: the caps and the drain's blur are the filters they always were
+  await ev(`window.__race.race.debugPayload('glitch', { strength: 70 })`);
+  await ev(`window.__race.race.debugPayload('overlay', { overlay: 'spiral', strength: 70 })`);
+  await sleep(200);
+  let d = JSON.parse(await ev(LAYER('.sf-pfx-drain'))), sp = JSON.parse(await ev(LAYER('.sf-pfx-spiral')));
+  // (mid-glitch the keyframe's hue-rotate is the computed filter, over the 0.86 cap: still a filter pass)
+  ok(d.there && d.filter !== 'none', `the desktop drain runs through a filter (${d.filter})`);
+  ok(/blur/.test(d.bf), `and its backdrop blur (${d.bf})`);
+  eq(d.anim, 'sf-pfx-glitch', 'and the glitch shudders with its colour keyframes');
+  ok(/opacity\(0\.78\)/.test(sp.filter), `the desktop spiral keeps its filter cap (${sp.filter})`);
+  // the same page stamped as a phone
+  await ev(`document.getElementById('race-root').dataset.touch = '1'`);
+  await sleep(50);
+  d = JSON.parse(await ev(LAYER('.sf-pfx-drain'))); sp = JSON.parse(await ev(LAYER('.sf-pfx-spiral')));
+  eq(d.filter, 'none', 'on the touch tier the drain carries no filter');
+  eq(d.bf, 'none', 'and no backdrop blur');
+  eq(d.anim, 'rhGlitchLite', 'the glitch shudders on transform alone');
+  ok(/radial-gradient/.test(d.mask), 'the road cutout stays (a mask is a composite, not a filter pass)');
+  eq(sp.filter, 'none', 'the spiral hold carries no filter either');
+  const g = JSON.parse(await ev(LAYER('.sf-pfx-gifwash')));
+  if (g.there) eq(g.filter, 'none', 'nor does the wash');
+  // a spiral takes the slot: the glitch's shudder is over and the drain is the hold that lost
+  await ev(`(() => { const r = document.getElementById('race-root'); r.dataset.ov = 'spiral'; document.querySelector('.sf-pfx-drain').classList.remove('sf-pfx-glitching'); return 1; })()`);
+  await sleep(600);   // the layer's own 0.45 s opacity ease
+  const cross = await ev(`(() => { const cs = getComputedStyle(document.querySelector('.sf-pfx-drain')); return cs.filter + '|' + cs.opacity; })()`);
+  eq(cross, 'none|0', 'the MIX replace crossfades the drain out through opacity, not a filter');
+  await ev(`(() => { const r = document.getElementById('race-root'); delete r.dataset.ov; delete r.dataset.touch; return 1; })()`);
+  // the cap itself: a fresh payloadFx with the seam, the numbers the desktop css holds
+  const cap = await parse(`(async () => {
+    const m = await import('/dtrh/game/payloadFx.js');
+    const hud = document.createElement('div');
+    hud.style.cssText = 'position:fixed;inset:0;pointer-events:none;opacity:0';
+    document.body.appendChild(hud);
+    const asked = [];
+    const pfx = m.createPayloadFx({ hud, fx: { pulseFlash() {} }, media: null, flashBurst: null,
+      opacityCap: (kind) => { asked.push(kind); return kind === 'spiral' ? 0.78 : kind === 'braindrain' ? 0.86 : 1; } });
+    pfx.applyPayload({ payload: { kind: 'overlay', overlay: 'spiral' }, strength: 60 }, {});
+    pfx.applyPayload({ payload: { kind: 'glitch' }, strength: 60 }, {});
+    pfx.applyPayload({ payload: { kind: 'overlay', overlay: 'pink_filter' }, strength: 60 }, {});
+    await new Promise((r) => setTimeout(r, 60));
+    const op = (c) => { const el = hud.querySelector(c); return el ? el.style.opacity : null; };
+    const got = { asked, spiral: op('.sf-pfx-spiral'), drain: op('.sf-pfx-drain'), pink: op('.sf-pfx-pink') };
+    pfx.dispose(); hud.remove();
+    return JSON.stringify(got);
+  })()`);
+  // strength 60: spiral/pink 0.25..0.70 -> 0.52; drain 0.35..0.62 -> 0.512
+  ok(Math.abs(parseFloat(cap.spiral) - 0.52 * 0.78) < 1e-6, `the spiral hold is set inline at 0.52 x 0.78 (${cap.spiral})`);
+  ok(Math.abs(parseFloat(cap.drain) - 0.512 * 0.86) < 1e-6, `the drain at 0.512 x 0.86 (${cap.drain})`);
+  ok(Math.abs(parseFloat(cap.pink) - 0.52) < 1e-6, `and a kind the seam answers 1 for is untouched (${cap.pink})`);
+  ok(cap.asked.includes('spiral') && cap.asked.includes('braindrain') && cap.asked.includes('pink'), 'the seam is asked by hold kind');
+  await sleep(4500);   // let the holds fade before the console tally
+}
+
+/* ============================================================================
+ * 7c. the second pass (2026-09-10: "smoother but still not good enough"): the
+ *     rest of the per-frame filters and repaints come off the touch tier -
+ *     the melt's drip, the flash burst's drop-shadow, the blink / melt / fog
+ *     plates, the lacquer's breath, the subliminal's rush, the strobe's blur.
+ *     And the governor has a lower rung on a coarse pointer.
+ * ==========================================================================*/
+{
+  const CS = (sel) => `(() => { const el = document.querySelector('${sel}'); if (!el) return JSON.stringify({ there: false });
+    const cs = getComputedStyle(el); return JSON.stringify({ there: true, filter: cs.filter, anim: cs.animationName, shadow: cs.boxShadow, bg: cs.backgroundPositionY }); })()`;
+  // probes: one of each kind, stamped as the phone, read, then taken away again
+  const probe = await parse(`(async () => {
+    const r = document.getElementById('race-root'); r.dataset.touch = '1';
+    const hud = r.querySelector('.race-hud') || r;
+    const pfx = r.querySelector('.sf-pfx') || r;
+    const mk = (parent, cls, tag = 'div') => { const e = document.createElement(tag); e.className = cls; parent.appendChild(e); return e; };
+    const els = [
+      mk(pfx, 'sf-pfx-layer sf-pfx-pink is-melting rh-probe'),
+      mk(pfx, 'sf-pfx-flash rh-probe', 'img'),
+      mk(pfx, 'sf-pfx-cascade rh-probe', 'img'),
+      mk(hud, 'rc-plate rc-plate--blink rh-probe'),
+      mk(hud, 'rc-plate rc-plate--melt rh-probe'),
+      mk(hud, 'rc-plate rc-plate--fog rh-probe'),
+      mk(hud, 'rh-strobe rh-probe'),
+    ];
+    const lac = mk(pfx, 'sf-pfx-freeze is-lacquer rh-probe'); const span = document.createElement('span'); span.textContent = 'x'; lac.appendChild(span);
+    const sub = mk(hud, 'rh-sub-layer is-on rh-probe'); const card = mk(sub, 'rh-sub-card');
+    await new Promise((res) => setTimeout(res, 40));
+    const read = (el) => { const cs = getComputedStyle(el); return { filter: cs.filter, anim: cs.animationName, shadow: cs.boxShadow }; };
+    const got = { melt: read(els[0]), flash: read(els[1]), cascade: read(els[2]), blink: read(els[3]), pmelt: read(els[4]), fog: read(els[5]), strobe: read(els[6]), lacquer: read(span), sub: read(card) };
+    for (const e of r.querySelectorAll('.rh-probe')) e.remove();
+    delete r.dataset.touch;
+    return JSON.stringify(got);
+  })()`);
+  eq(probe.melt.anim, 'rhSagLite', 'the melt sags on transform alone, no drip repainting the gradient');
+  eq(probe.flash.filter, 'none', 'a flash burst carries no drop-shadow filter');
+  ok(/rgba?\(/.test(probe.flash.shadow) && probe.flash.shadow !== 'none', `its glow is a box-shadow, painted once (${probe.flash.shadow.slice(0, 40)})`);
+  eq(probe.cascade.filter, 'none', 'nor does a falling gif');
+  eq(probe.blink.anim, 'rcZoom, rcBlinkLite', "the blink plate blinks in colour, not filter: brightness()");
+  eq(probe.blink.filter, 'none', 'and carries no filter');
+  eq(probe.pmelt.anim, 'rcMeltLite', 'the melt plate lets go without a blur');
+  eq(probe.fog.anim, 'rcFogLite', 'so does the fog plate');
+  eq(probe.lacquer.anim, 'rhLacquerLite', 'the doll breathes on scale alone');
+  eq(probe.sub.anim, 'rhSubRushLite', 'the subliminal card rushes without a blur');
+  eq(probe.sub.filter, 'none', 'and carries none at rest');
+  ok(!/40px/.test(probe.strobe.shadow), `the strobe edge is the 5 px line alone (${probe.strobe.shadow.slice(0, 60)})`);
+  // the desktop, untouched: the same probes without the stamp still carry what they always did
+  const desk = await parse(`(async () => {
+    const r = document.getElementById('race-root');
+    const hud = r.querySelector('.race-hud') || r;
+    const p = document.createElement('div'); p.className = 'rc-plate rc-plate--blink rh-probe'; hud.appendChild(p);
+    const f = document.createElement('img'); f.className = 'sf-pfx-flash rh-probe'; r.appendChild(f);
+    await new Promise((res) => setTimeout(res, 40));
+    const got = { blink: getComputedStyle(p).animationName, flash: getComputedStyle(f).filter };
+    p.remove(); f.remove();
+    return JSON.stringify(got);
+  })()`);
+  eq(desk.blink, 'rcZoom, rcBlink', 'the desktop blink plate still blinks with brightness');
+  ok(/drop-shadow/.test(desk.flash), 'and the desktop flash burst keeps its drop-shadow');
+  // the governor's rungs
+  const gov = await parse(`(async () => {
+    const m = await import('/dtrh/race/pixel.js');
+    const q = await import('/dtrh/shared/quality.js');
+    const st = window.__race.race.perf();
+    return JSON.stringify({ floor: m.TOUCH_DPR_FLOOR, sec: m.GOV_TOUCH_SEC,
+      coarseOn: m.coarsePointer({ location: { search: '?coarse=1' } }), coarseOff: m.coarsePointer({ location: { search: '?coarse=0' }, matchMedia: () => ({ matches: true }) }),
+      touch: st ? st.touch : null, cap: st ? st.dprCap : null });
+  })()`);
+  eq(gov.floor, 0.8, 'a coarse pointer can drop to 0.8 device pixels per css pixel');
+  eq(gov.sec, 2, 'and is read every two seconds');
+  ok(gov.coarseOn === true && gov.coarseOff === false, '?coarse= forces the answer either way');
+  eq(gov.touch, false, 'this desktop run is not on the touch ladder');
 }
 
 /* ============================================================================
