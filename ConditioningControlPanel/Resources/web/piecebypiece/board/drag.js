@@ -15,7 +15,7 @@ const LIFT = 1.15;      // how high above the board a held piece rides
 const LAG = 11;         // follow stiffness; lower is lazier
 const TILT = 0.22;      // how far it leans into the direction of travel
 
-export function createDrag({ view, pieces, anim, bus, game }) {
+export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   const canvas = view.renderer.domElement;
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
@@ -74,6 +74,7 @@ export function createDrag({ view, pieces, anim, bus, game }) {
     hover = null;
     held.userData.held = true;
     held.userData.busy = true;
+    if (jiggle) jiggle.grab(held);   // lifted off the board, so the tip sags
     target.copy(held.position);
     glow();
     canvas.setPointerCapture?.(ev.pointerId);
@@ -138,6 +139,8 @@ export function createDrag({ view, pieces, anim, bus, game }) {
     held.position.z += dz * k;
     held.rotation.z = THREE.MathUtils.clamp(-dx * TILT, -0.35, 0.35);
     held.rotation.x = THREE.MathUtils.clamp(dz * TILT, -0.35, 0.35);
+    // Whatever the body just covered, the soft top has yet to catch up on.
+    if (jiggle) jiggle.lag(held, dx * k, dz * k);
     bus.emit('dragmove', { screen: view.projectPoint(held.position) });
   }
 
