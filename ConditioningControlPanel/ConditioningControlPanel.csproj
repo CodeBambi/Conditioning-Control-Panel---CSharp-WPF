@@ -529,7 +529,8 @@
       $(MSBuildProjectDirectory)\Resources\web\intake\assets\music\**\*.mp3;
       $(MSBuildProjectDirectory)\Resources\web\dtrh\assets\**\*.mp3
     </ContentPackWebExcludeAbs>
-    <!-- The four arcademy *demo.html browser harnesses. Listed once here and referenced by
+    <!-- The four arcademy *demo.html browser harnesses, plus the games' node smoke
+         checks (games\*\smoke\*.mjs). Listed once here and referenced by
          BOTH the <Content> Exclude below AND the CopyContentAfterPublish WebFiles Exclude,
          which re-globs Resources\web independently - miss the second one and the
          harness pages come straight back into the publish tree (and so the installer). -->
@@ -537,13 +538,15 @@
       Resources\web\arcademy\annex\demo.html;
       Resources\web\arcademy\vn\demo.html;
       Resources\web\arcademy\emi\demo.html;
-      Resources\web\arcademy\shell\recordsroom.demo.html
+      Resources\web\arcademy\shell\recordsroom.demo.html;
+      Resources\web\arcademy\games\**\smoke\**\*
     </ArcademyHarnessExclude>
     <ArcademyHarnessExcludeAbs>
       $(MSBuildProjectDirectory)\Resources\web\arcademy\annex\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\vn\demo.html;
       $(MSBuildProjectDirectory)\Resources\web\arcademy\emi\demo.html;
-      $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\shell\recordsroom.demo.html;
+      $(MSBuildProjectDirectory)\Resources\web\arcademy\games\**\smoke\**\*
     </ArcademyHarnessExcludeAbs>
   </PropertyGroup>
 
@@ -583,6 +586,13 @@
     <!-- EMI desk lines (Resources\emi\desk-lines.json): read from disk at runtime by the desk
          line engine, so it ships next to the exe like the web assets above. -->
     <Content Include="Resources\emi\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Header banner line pool (Resources\banner\lines.<lang>.json): read from disk at
+         runtime by BannerPoolService, so it ships next to the exe like the EMI lines above. -->
+    <Content Include="Resources\banner\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -665,6 +675,7 @@
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
       <TutorialVideoFiles Include="$(ProjectDir)Resources\tutorial_videos\**\*" />
+      <BannerPoolFiles Include="$(ProjectDir)Resources\banner\*.json" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(WebFiles)" DestinationFolder="$(PublishDir)Resources\web\%(RecursiveDir)" SkipUnchangedFiles="true" />
@@ -673,6 +684,7 @@
     <Copy SourceFiles="@(DeeperDemoFiles)" DestinationFolder="$(PublishDir)Resources\DeeperDemos\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(TutorialVideoFiles)" DestinationFolder="$(PublishDir)Resources\tutorial_videos\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(BannerPoolFiles)" DestinationFolder="$(PublishDir)Resources\banner\" SkipUnchangedFiles="true" />
     <Message Importance="High" Text="Copied content files to publish folder" />
   </Target>
 

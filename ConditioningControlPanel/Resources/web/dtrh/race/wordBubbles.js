@@ -88,6 +88,25 @@ export const WORD_RULE = Object.freeze({
    */
   HIT_GUARD_PRE_SEC: 0.2,
   HIT_GUARD_POST_SEC: 0.1,
+  /**
+   * THE PILE, and the line between it and fast speech. Three or more words inside
+   * MERGE_SEC of each other CAN be real: "in a completely", "as a perfect", "of a trap"
+   * come out of these transcripts at 0.09 to 0.11 s a word and that is simply how a
+   * function word is said. Nineteen of the shelf's twenty-one such runs are that.
+   *
+   * A PILE is the other kind: the aligner losing the words in the audio and dropping the
+   * whole run on the last instant it was sure of. One file has seven words at 0.01 s a
+   * word - "you wear sexy bimbo girl clothes whenever" inside six hundredths of a second -
+   * with 2.7 s of silence in front of them where the voice actually said them. So the
+   * test is the RATE, not the count: at or under PILE_TIGHT_SEC a word, nobody said it.
+   * The floor is set well under the fastest run on the shelf (0.065 s) so real speech is
+   * never taken apart and put back wrong.
+   */
+  PILE_MIN: 3,
+  /** Seconds a word, at or under which a run is the aligner giving up rather than a fast mouth. */
+  PILE_TIGHT_SEC: 0.05,
+  /** The second per word a pile is spread at when the speech around it has no rate of its own. */
+  PILE_RATE_SEC: 0.18,
   /** The silence a line needs before the next one may sit in another lane. */
   LANE_MOVE_SEC: 0.3,
   /** And how many lanes it may move when it does. One. */
@@ -136,6 +155,80 @@ function inGuard(windows, i, t) {
 }
 
 /**
+ * THE RATE THE VOICE IS GOING either side of a pile: the median gap between the words
+ * around it that are neither piled themselves nor across a pause. Used to decide how
+ * far apart the pile's words belong once they are put back.
+ */
+function localRate(list, i, j, R) {
+  const merge = Math.max(0, num(R.MERGE_SEC, WORD_RULE.MERGE_SEC));
+  const gaps = [];
+  for (let k = Math.max(1, i - 12); k < Math.min(list.length, j + 12); k++) {
+    if (k > i && k < j + 1) continue;                       // nothing from inside the pile
+    const g = list[k].t - list[k - 1].t;
+    if (g >= merge && g <= 1) gaps.push(g);
+  }
+  if (!gaps.length) return Math.max(merge, num(R.PILE_RATE_SEC, 0.18));
+  gaps.sort((a, b) => a - b);
+  return Math.max(merge, gaps[gaps.length >> 1]);
+}
+
+/**
+ * UN-PILING, which is the whole of the second bug: "some words are still isolated and
+ * not in sync, like I get the bubble sinking way before the words" - the owner, 2026-09-08.
+ *
+ * A run of PILE_MIN or more words inside MERGE_SEC of each other did not happen. What
+ * happened is that the aligner could not find the words in the audio and dropped them all
+ * on the last instant it was sure of, leaving the silence in front of them empty. The road
+ * then said two of the run in one bubble on one instant and threw the rest away, so the
+ * player read half a phrase seconds away from where the voice says it.
+ *
+ * So the run is put back into the silence beside it: the bigger of the two gaps is where
+ * the speech actually was, and the words are laid back across it at the local rate,
+ * anchored on the end of the pile going backwards or its start going forwards, so the one
+ * timestamp the aligner WAS sure of does not move. A word that moves is marked `est`, which
+ * rides all the way to the chart event. If there is no silence to spread into (the step
+ * would be under MERGE_SEC) the run is left exactly as it was and the merge rule below
+ * handles it: a guess with no room is worse than the collision.
+ *
+ * `list` is mutated in place, which is safe because readWords() built it.
+ */
+function unpile(list, R) {
+  const min = Math.max(3, Math.round(num(R.PILE_MIN, 3)));
+  const merge = Math.max(0, num(R.MERGE_SEC, WORD_RULE.MERGE_SEC));
+  let piles = 0, moved = 0, left = 0;
+  for (let i = 0; i < list.length;) {
+    let j = i + 1;
+    while (j < list.length && list[j].t - list[j - 1].t < merge) j++;
+    const n = j - i;
+    if (n < min) { i = j; continue; }
+    // fast speech or a collapse? the rate the run itself is going says which
+    if ((list[j - 1].t - list[i].t) / (n - 1) > Math.max(0, num(R.PILE_TIGHT_SEC, 0.05))) { i = j; continue; }
+    const prev = list[i - 1], next = list[j];
+    const before = prev ? list[i].t - (prev.t + prev.d) : list[i].t;
+    const after = next ? next.t - (list[j - 1].t + list[j - 1].d) : Infinity;
+    const back = before >= after;
+    const room = Math.max(0, (back ? before : after) - merge);
+    // and never further apart than a line stays a line: PHRASE_GAP_SEC is where the next
+    // bubble becomes a new phrase in a new lane, and a run put back as seven single-word
+    // lines zig-zagging the road is worse than the pile was.
+    const hold = Math.max(merge, num(R.PHRASE_GAP_SEC, WORD_RULE.PHRASE_GAP_SEC) * 0.9);
+    const step = Math.min(Math.min((n - 1) * localRate(list, i, j, R), room) / (n - 1), hold);
+    if (!(step >= merge)) { left++; i = j; continue; }       // no silence to put them in
+    piles++;
+    if (back) {
+      const end = list[j - 1].t;
+      for (let k = 0; k < n - 1; k++) { list[i + k].t = end - (n - 1 - k) * step; list[i + k].est = true; moved++; }
+    } else {
+      const start = list[i].t;
+      for (let k = 1; k < n; k++) { list[i + k].t = start + k * step; list[i + k].est = true; moved++; }
+    }
+    for (let k = i; k < j; k++) list[k].d = Math.min(list[k].d, step);
+    i = j;
+  }
+  return { piles, moved, left };
+}
+
+/**
  * The road's script.
  *
  * @param words  the caption track: [{ t, d, w }], the shape `chart.words` is in
@@ -151,6 +244,7 @@ export function phrasesFrom(words, hits = [], opts = {}) {
   const R = { ...WORD_RULE, ...(opts.rule || {}) };
   const rng = typeof opts.rng === 'function' ? opts.rng : Math.random;
   const list = readWords(words);
+  const pile = unpile(list, R);          // a run the aligner collapsed goes back where it was said
   const windows = guardWindows(hits, R.HIT_GUARD_PRE_SEC, R.HIT_GUARD_POST_SEC);
 
   // ---- 1. the bubbles: guarded words dropped, close words merged ------------
@@ -172,9 +266,10 @@ export function phrasesFrom(words, hits = [], opts = {}) {
       last.n = 2;
       last.d = Math.max(last.d, w.t + w.d - last.t);
       last.cut = CUT_PUNCT.test(w.w);
+      if (w.est) last.est = true;
       continue;
     }
-    bubbles.push({ t: w.t, d: w.d, w: w.w, n: 1, cut: CUT_PUNCT.test(w.w), guarded });
+    bubbles.push({ t: w.t, d: w.d, w: w.w, n: 1, cut: CUT_PUNCT.test(w.w), guarded, est: w.est === true });
     guarded = false;
   }
 
@@ -188,7 +283,9 @@ export function phrasesFrom(words, hits = [], opts = {}) {
       cur = { t: b.t, t1: b.t + b.d, gap: cur ? gap : Infinity, closed: false, words: [] };
       phrases.push(cur);
     }
-    cur.words.push({ t: b.t, d: b.d, w: b.w });
+    const bw = { t: b.t, d: b.d, w: b.w };
+    if (b.est) bw.est = true;             // a second this file guessed, not one the aligner found
+    cur.words.push(bw);
     cur.t1 = Math.max(cur.t1, b.t + b.d);
     cur.closed = b.cut;
   }
@@ -212,6 +309,9 @@ export function phrasesFrom(words, hits = [], opts = {}) {
     delete p.closed;
   }
   phrases.collided = collided;
+  phrases.piles = pile.piles;             // runs the aligner collapsed that went back into a silence
+  phrases.unpiled = pile.moved;           // and the words that moved doing it
+  phrases.pilesLeft = pile.left;          // runs with no silence to go back into
   return phrases;
 }
 
@@ -229,7 +329,11 @@ export function wordEventsFrom(words, hits = [], opts = {}) {
     // rest of the game where one thing said ends and the next begins: race/score.js steps the combo
     // ladder once per phrase taken whole (forty word pops is twenty seconds of a chant and an 8x
     // nobody drove for) and race/chart.js stats() counts a phrase as one thing to take.
-    for (const b of p.words) out.push({ kind: 'word', t: b.t, dur: b.d, label: '', conf: 1, weight: 1, w: b.w, x: p.x, p: n });
+    for (const b of p.words) {
+      const e = { kind: 'word', t: b.t, dur: b.d, label: '', conf: 1, weight: 1, w: b.w, x: p.x, p: n };
+      if (b.est) e.est = true;            // this second is this file's estimate; race/chart.js keeps the flag
+      out.push(e);
+    }
     n++;
   }
   return out;
@@ -261,6 +365,80 @@ export function rateOf(phrases, winSec = 5) {
     perPhrase: phrases.length ? flat.length / phrases.length : 0 };
 }
 
+/* ---- THE COVERAGE CHECK -------------------------------------------------- *
+ * "we should recheck after generating the track that actually all the words gets
+ * displayed" - the owner, 2026-09-08. So every road built off a transcript counts
+ * itself as it leaves race/cloudChart.js wordedRoad, stamps the count on
+ * `analysis.coverage`, and says one line to the host log.
+ *
+ * A word is ON THE ROAD if it is either wearing a bubble of its own (`placed`) or
+ * inside a trigger row's own span (`rows`), because the row of five is a line of
+ * faces all saying that phrase - the words of a `good girl` hit are not missing, they
+ * are what the whole width of the road says for those seconds.
+ *
+ * A word is DROPPED three ways, and the line names each so nobody has to guess:
+ *   margin - inside HIT_GUARD_PRE/POST_SEC of a row but not in its span. This is the
+ *            pop box, not taste: two bubbles under 2 x POP_HIT_D of road apart sit in
+ *            the box together and one pass takes both, so a word this close to the
+ *            wall could not be taken separately anyway. 3.3 percent of the shelf.
+ *   piled  - three or more words the aligner collapsed onto one instant (see
+ *            MERGE_SEC). Physically impossible speech; race/wordBubbles.js un-piles
+ *            what it can and merges the rest.
+ *   short  - anything else, which should be nothing.
+ */
+
+/** The one number: how much of what she said the player can read, and what took the rest. */
+export function coverageOf(words, hits = [], events = [], opts = {}) {
+  const R = { ...WORD_RULE, ...(opts.rule || {}) };
+  const list = readWords(words);
+  const pile = unpile(list, R);          // count what the road counts: phrasesFrom un-piles too
+  const windows = guardWindows(hits, R.HIT_GUARD_PRE_SEC, R.HIT_GUARD_POST_SEC);
+  const spans = (Array.isArray(hits) ? hits : [])
+    .filter((h) => h && isFinite(num(h.t, NaN)))
+    .map((h) => ({ t0: num(h.t, 0), t1: num(h.t, 0) + Math.max(0, num(h.dur, 0)) }));
+
+  let placed = 0, lines = 0, singles = 0;
+  const seen = new Set();
+  for (const e of Array.isArray(events) ? events : []) {
+    if (!e || e.kind !== 'word' || typeof e.w !== 'string' || !e.w) continue;
+    placed += e.w.trim().split(/\s+/).length;
+    const key = e.p == null ? 'e' + e.t : 'p' + e.p;
+    if (!seen.has(key)) { seen.add(key); lines++; }
+  }
+  // a line of ONE bubble: the thing the owner saw when the field was thinning them
+  const perLine = new Map();
+  for (const e of Array.isArray(events) ? events : []) {
+    if (!e || e.kind !== 'word' || typeof e.w !== 'string' || !e.w) continue;
+    const key = e.p == null ? 'e' + e.t : 'p' + e.p;
+    perLine.set(key, (perLine.get(key) || 0) + 1);
+  }
+  for (const n of perLine.values()) if (n === 1) singles++;
+
+  let rows = 0, margin = 0, gi = 0;
+  for (const w of list) {
+    const g = inGuard(windows, gi, w.t);
+    gi = g.i;
+    if (!g.hit) continue;
+    if (spans.some((s) => w.t >= s.t0 && w.t <= s.t1)) rows++; else margin++;
+  }
+  const said = list.length;
+  const onRoad = placed + rows;
+  const short = Math.max(0, said - onRoad - margin);
+  return { said, placed, rows, onRoad, margin, piled: short, lines, singles,
+    unpiled: pile.moved, pilesLeft: pile.left,
+    pct: said ? onRoad / said : 1 };
+}
+
+/** The line the host log gets, and the one race/smoke/coverage-check.mjs prints. Never quotes a word. */
+export function coverageLine(name, cov) {
+  const pc = (100 * (cov.pct || 0)).toFixed(1);
+  return `[race-coverage] ${name || 'track'}: ${pc}% (${cov.onRoad}/${cov.said}) - ${cov.placed} on their own bubble, `
+    + `${cov.rows} said by a trigger row; dropped ${cov.said - cov.onRoad}: ${cov.margin} in a row's margin, `
+    + `${cov.piled} piled; ${cov.lines} lines, ${cov.singles} of one word`
+    + (cov.unpiled ? `; ${cov.unpiled} words put back into a silence the aligner collapsed` : '');
+}
+
 export default phrasesFrom;
 
-// self-check: node race/smoke/words-rate-check.mjs holds all eleven transcripts against WORD_RULE.
+// self-check: node race/smoke/words-rate-check.mjs holds all eleven transcripts against WORD_RULE,
+// and node race/smoke/coverage-check.mjs drives the whole shelf through the field's own refusals.

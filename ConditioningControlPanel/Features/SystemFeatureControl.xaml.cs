@@ -43,7 +43,6 @@ namespace ConditioningControlPanel.Features
             _isLoading = true;
             try
             {
-                ChkMultiMon.IsChecked = s.DualMonitorEnabled;
                 ChkFillAllMon.IsChecked = s.FillAllMonitorsWithVideo;
                 ChkVideoGpuDecode.IsChecked = s.VideoForceHardwareDecoding;
                 ChkVideoBlurBg.IsChecked = s.VideoBlurredBackgroundEnabled;
@@ -74,8 +73,7 @@ namespace ConditioningControlPanel.Features
 
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(Models.AppSettings.DualMonitorEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.FillAllMonitorsWithVideo) ||
+            if (e.PropertyName == nameof(Models.AppSettings.FillAllMonitorsWithVideo) ||
                 e.PropertyName == nameof(Models.AppSettings.VideoForceHardwareDecoding) ||
                 e.PropertyName == nameof(Models.AppSettings.VideoBlurredBackgroundEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.BrowserVideoEngineEnabled) ||
@@ -94,14 +92,12 @@ namespace ConditioningControlPanel.Features
 
         // ---- Simple local toggles (write directly to settings) ----
 
-        private void ChkMultiMon_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current;
-            if (s == null) return;
-            s.DualMonitorEnabled = ChkMultiMon.IsChecked ?? false;
-            App.Settings?.Save();
-        }
+        // ChkMultiMon is gone: the checkbox could only express "all screens" or "the Windows
+        // primary", and the app had no control at all for "just this one screen" (ask-support
+        // 2026-09-08). Features/MonitorTargetPicker replaced it in place and owns both settings -
+        // DualMonitorEnabled (unchanged meaning, so presets and every existing reader keep working)
+        // and GlobalTargetMonitor. It also restores the mid-session surface refresh that died with
+        // ChkDualMon in the 6.8 rework (see MainWindow.UiUpdates.cs).
 
         private void ChkFillAllMon_Changed(object sender, RoutedEventArgs e)
         {

@@ -17,9 +17,11 @@
  * meaning one thing on one page and something else on the other.
  * ==========================================================================*/
 
-import { TRIGGER_SETS, SET_GROUPS, SET_COLORS, normalizeTriggers } from '../editor/triggerSets.js';
+import { TRIGGER_SETS, SET_GROUPS, SET_COLORS, SET_RANK, normalizeTriggers,
+  rankOf, laysRow, compareHits } from '../editor/triggerSets.js';
 
-export { TRIGGER_SETS, SET_GROUPS, SET_COLORS, normalizeTriggers };
+export { TRIGGER_SETS, SET_GROUPS, SET_COLORS, SET_RANK, normalizeTriggers,
+  rankOf, laysRow, compareHits };
 
 /** What a set matches over before its own options narrow it. */
 export const DEFAULT_SCOPE = { acts: null, t0: 0, t1: null, every: 1, offset: 0 };
@@ -61,19 +63,63 @@ function regexMatches(ws, toks, src) {
   return out;
 }
 
+/* ---- the countdown, its own mode ---------------------------------------- */
+
+/**
+ * THE COUNTDOWN (2026-09-08). The catalogue used to look for one with a regex over
+ * the joined words, which wants the numbers side by side - "five four three two
+ * one" - and it found NEITHER of the two real countdowns on the shelf, because both
+ * scripts put a whole sentence between one number and the next ("five... feeling
+ * heavier now... four..."). No regex over a word stream can hold "and no more than
+ * forty seconds later", so the count is a mode of its own instead.
+ *
+ * The rule: a number of five or under, then a SMALLER one within MAX_GAP_SEC, and
+ * again, at least MIN_RUN numbers long. Counting UP is not a countdown.
+ */
+export const COUNTDOWN = { MAX_FROM: 5, MIN_RUN: 3, MAX_GAP_SEC: 40 };
+const COUNT_NUM = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  seven: 7, eight: 8, nine: 9, ten: 10 };
+const numOf = (tok) => (/^\d{1,2}$/.test(tok) ? Number(tok) : (tok in COUNT_NUM ? COUNT_NUM[tok] : null));
+
+/**
+ * ONE span per countdown, not one per number: the span is the FIRST number's own
+ * word, and `reps` is how many numbers the run had. It is deliberately short - a
+ * trigger event's span is seconds of road the word bubbles step around
+ * (race/wordBubbles.js guardWindows), and a span covering the whole count would
+ * take forty seconds of the script off the road to mark one moment.
+ */
+function countdownMatches(ws, toks) {
+  const out = [];
+  let run = [];
+  const close = () => { if (run.length >= COUNTDOWN.MIN_RUN) out.push({ ...span(ws, run[0].i, run[0].i), reps: run.length }); };
+  for (let i = 0; i < toks.length; i++) {
+    const v = numOf(toks[i]);
+    if (v == null || v > COUNTDOWN.MAX_FROM) continue;
+    const t = Number(ws[i].t) || 0;
+    const prev = run[run.length - 1];
+    if (prev && v < prev.v && t - prev.t <= COUNTDOWN.MAX_GAP_SEC) run.push({ i, v, t });
+    else { close(); run = [{ i, v, t }]; }
+  }
+  close();
+  return out;
+}
+
 /**
  * findMatches(words, phrase, mode) -> [{ i0, i1, t, dur }]
  * A phrase is matched over consecutive words joined by single spaces,
  * case insensitive, punctuation stripped. Matches never overlap.
- *  - 'exact'    every phrase token equals its word
- *  - 'contains' every phrase token is inside its word ("good" finds "goodness")
- *  - 'regex'    the phrase runs over the joined text, mapped back to indices
+ *  - 'exact'     every phrase token equals its word
+ *  - 'contains'  every phrase token is inside its word ("good" finds "goodness")
+ *  - 'regex'     the phrase runs over the joined text, mapped back to indices
+ *  - 'countdown' the phrase is ignored: descending numbers, however far apart
  */
 export function findMatches(words, phrase, mode = 'exact') {
   const ws = wordArray(words);
   const src = String(phrase == null ? '' : phrase);
-  if (!ws.length || !src.trim()) return [];
+  if (!ws.length) return [];
   const toks = ws.map((w) => normWord(w.w));
+  if (mode === 'countdown') return countdownMatches(ws, toks);
+  if (!src.trim()) return [];
   if (mode === 'regex') return regexMatches(ws, toks, src);
   const want = normWord(src).split(' ').filter(Boolean);
   if (!want.length) return [];

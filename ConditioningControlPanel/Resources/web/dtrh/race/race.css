@@ -86,6 +86,9 @@
 .race-hud .rh-next.is-top { color: #fff0b8; }
 .race-hud .rh-bank { font-size: 0.78rem; color: #ffe082; opacity: 0.85; }
 .race-hud .rh-bank.is-pop { animation: rhThud 0.34s cubic-bezier(0.2, 1.6, 0.4, 1); }
+/* the thoughts line: quieter than the kept line, because it is a count and not a prize */
+.race-hud .rh-popped { font-size: 0.72rem; letter-spacing: 0.06em; color: rgba(255, 214, 234, 0.72); }
+.race-hud .rh-popped[hidden] { display: none; }
 
 /* ---- MARQUEE: the room banner as a LEFT RIBBON under the score block.
    It used to sit top-centre, which is exactly where payload cards land and
@@ -494,9 +497,123 @@
 #race-root[data-tint="2"] .sf-pfx-pink { filter: opacity(0.92) saturate(1.3); }
 #race-root[data-ov="spiral"] .sf-pfx-drain:not(.sf-pfx-glitching) { filter: opacity(0); }
 #race-root[data-ov="braindrain"] .sf-pfx-spiral { filter: opacity(0); }
+/* THE WASH AND THE BLACK (bubbleKinds.js `gifwash` / `blackout`, drawn by game/payloadFx.js).
+   The spiral's 0.78 cap above is deliberately NOT extended to .sf-pfx-gifwash. The whole of the
+   owner's ask is that it read as a gif taking the screen rather than the drain's faint bruise,
+   and styles.css already keeps the road open with a soft mask instead of a ceiling. What the
+   race does add (2026-09-09, phone testing: "15% less opacity on the fullscreen gifs") is a
+   flat 0.85 on the hold, so payloadFx's own 0.55-0.80 strength ramp lands at 0.47-0.68: still
+   the picture that took the road, a little more road through it. The live Loom canvas inherits
+   it (loomSpiralFx's layering contract), so a woven wash and a gif wash sit at the same weight.
+   The other thing is the motion switch: `data-rm` is run.js's own reducedMotion (the race
+   menu's toggle), and the media query answers a browser whose player never opened that menu.
+   A blackout only ever fades, so it has nothing to take away. */
+#race-root .sf-pfx-gifwash { filter: opacity(0.85); }
+#race-root[data-rm="1"] .sf-pfx-gifwash.is-washing { animation: none; }
+/* THE MELT AND THE DOLL (bubbleKinds.js `melt` / `lock`). Reduced motion keeps the COLOUR and the
+   words, which is the effect, and drops the movement: the melt stops sinking and wobbling but its
+   opacity still ramps up over the whole hold (a transition, not an animation, and the slow arrival
+   is the point of the kind), and the lacquer card stops breathing. */
+#race-root[data-rm="1"] .sf-pfx-pink.is-melting,
+#race-root[data-rm="1"] .sf-pfx-freeze.is-lacquer span { animation: none; }
+
+/* ---- THE PHONE'S LAYERS (run.js stamps data-touch="1" on the touch tier) ----
+   2026-09-10, phone testing: "we still lag a lot on the fullscreen effects on iphone. the glitch
+   bubble fullscreen in particular and the spiral". Every hold above is a fullscreen DOM layer over
+   the WebGL glass, composited at device resolution (3x on an iPhone, ~3 M px). Three things on
+   them cost a full-resolution pass on EVERY frame the layer changes, and these layers change every
+   frame (the live spiral canvas at 24 fps, the wash's shudder, the glitch's 6 Hz steps):
+     - `filter: opacity()` - the cap and the MIX crossfade above, and the tint-2 saturate
+     - `backdrop-filter: blur()` on the drain - a blur of everything under it, re-done on each step
+       of the glitch's translate
+     - the glitch's `hue-rotate` / `saturate` keyframes - a colour filter swapped at 6 Hz
+   So on this tier the cap is applied INLINE by payloadFx (`opacityCap`, run.js passes the same
+   0.78 / 0.7 / 0.86 / 0.85 the rules above hold, and 0.92 for tint 2, so the intensities are the
+   ones the desktop gets) and the filters come off. The road cutout and the wash's feather stay:
+   a mask is a GPU composite, not a per-frame filter pass. What the phone gives up is the drain's
+   blur (a heavier fill stands in for it), the glitch's colour shift (its shudder stays, on
+   transform alone) and the tint-2 saturate. */
+#race-root[data-touch="1"] .sf-pfx-spiral,
+#race-root[data-touch="1"] .sf-pfx-pink,
+#race-root[data-touch="1"] .sf-pfx-drain,
+#race-root[data-touch="1"] .sf-pfx-gifwash { filter: none; transition: opacity 0.45s ease; }
+#race-root[data-touch="1"] .sf-pfx-drain {
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  background-color: rgba(12, 5, 20, 0.74);   /* the blur's dimming, without the blur */
+}
+#race-root[data-touch="1"] .sf-pfx-drain.sf-pfx-glitching { animation: rhGlitchLite 0.16s steps(2) infinite; }
+@keyframes rhGlitchLite {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(-1.2%, 0); }
+  100% { transform: translate(1.2%, 0); }
+}
+/* the MIX on this tier: the crossfade goes through opacity itself (the inline value is the hold's
+   own, so the replace has to out-rank it), and the tint-2 deepening is payloadFx's inline 0.92 */
+#race-root[data-touch="1"][data-ov="spiral"] .sf-pfx-drain:not(.sf-pfx-glitching) { filter: none; opacity: 0 !important; }
+#race-root[data-touch="1"][data-ov="braindrain"] .sf-pfx-spiral { filter: none; opacity: 0 !important; }
+#race-root[data-touch="1"][data-tint="2"] .sf-pfx-pink { filter: none; }
+/* the melt's sag keeps its sink and wobble and drops the saturate the desktop animates with it */
+#race-root[data-touch="1"] .sf-pfx-pink.is-melting { animation: rhSagLite var(--pfx-sag, 3000ms) ease-in both, sf-pfx-drip 3.6s ease-in-out infinite alternate; }
+@keyframes rhSagLite {
+  from { transform: translateY(-2.5%) scaleY(1); }
+  to   { transform: translateY(1.5%)  scaleY(1.075); }
+}
+#race-root[data-touch="1"][data-rm="1"] .sf-pfx-pink.is-melting { animation: none; }
+
+/* ---- THE PHONE'S LAYERS, second pass (2026-09-10: "smoother but still not good enough ... it
+   gets worse on fullscreen effects (the gifs, pink filter and spiral) and the effect like the
+   blink shutter effect we got on the bambi sleep trigger"). The same law as the block above, applied
+   to everything that is still a per-frame filter or a per-frame repaint on this tier:
+     - the melt's drip animated background-position: a 3 M px gradient repainted every frame. The
+       sag (transform) stays, the drip goes.
+     - the flash bursts and the gif rain carried `filter: drop-shadow()` on an element in a transform
+       animation: a filter pass per burst per frame, and a word flash lands every trigger word. A
+       box-shadow paints once.
+     - the plates: `pink-blink` blinked with `filter: brightness()` (the owner's "blink shutter"),
+       `melt` and `fog` blurred out with `filter: blur()`. The blink is two colour steps now, and
+       the two blurs fade on transform and opacity alone.
+     - the doll's lacquer breathed with `filter: brightness()`; it breathes on scale alone.
+     - the subliminal card rushed in through `filter: blur()`; it rushes on transform and opacity.
+     - the strobe edge painted a 40 px inset blur across the whole glass on every charge; on this
+       tier the frame is the 5 px line alone. */
+#race-root[data-touch="1"] .sf-pfx-pink.is-melting { animation: rhSagLite var(--pfx-sag, 3000ms) ease-in both; }
+#race-root[data-touch="1"] .sf-pfx-flash { filter: none; box-shadow: 0 0 26px rgba(255, 105, 180, 0.85); }
+#race-root[data-touch="1"] .sf-pfx-cascade { filter: none; box-shadow: 0 0 14px rgba(255, 105, 180, 0.7); }
+#race-root[data-touch="1"] .sf-pfx-freeze.is-lacquer span { animation: rhLacquerLite 0.9s ease-in-out infinite alternate; }
+@keyframes rhLacquerLite { from { transform: scale(1); } to { transform: scale(1.035); } }
+#race-root[data-touch="1"] .race-hud .rc-plate--blink { animation: rcZoom 1400ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards, rcBlinkLite 1400ms steps(1) forwards; }
+@keyframes rcBlinkLite { 0%, 44% { color: var(--rc-glow, #fff); } 48% { color: #3a0d26; } 52% { color: #fff; } 60% { color: #3a0d26; } 64%, 100% { color: var(--rc-glow, #fff); } }
+#race-root[data-touch="1"] .race-hud .rc-plate--melt { animation: rcMeltLite 1400ms cubic-bezier(0.3, 0.6, 0.2, 1) forwards; }
+@keyframes rcMeltLite {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.15); }
+  8% { opacity: 1; }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.35) skewY(0deg); }
+  78% { opacity: 0.85; transform: translate(-50%, -44%) scale(1.35) skewY(2.5deg); }
+  100% { opacity: 0; transform: translate(-50%, -34%) scale(1.4) skewY(6deg); }
+}
+#race-root[data-touch="1"] .race-hud .rc-plate--fog { animation: rcFogLite 1400ms cubic-bezier(0.25, 0.7, 0.2, 1) forwards; }
+@keyframes rcFogLite {
+  0%   { opacity: 0; letter-spacing: 0.06em; transform: translate(-50%, -50%) scale(0.2); }
+  10%  { opacity: 1; }
+  46%  { opacity: 1; letter-spacing: 0.06em; transform: translate(-50%, -50%) scale(1.24); }
+  76%  { opacity: 0.7; letter-spacing: 0.3em; transform: translate(-50%, -50%) scale(1.3); }
+  100% { opacity: 0; letter-spacing: 0.6em; transform: translate(-50%, -50%) scale(1.34); }
+}
+#race-root[data-touch="1"] .race-hud .rh-sub-card { will-change: transform, opacity; }
+#race-root[data-touch="1"] .race-hud .rh-sub-layer.is-on .rh-sub-card { animation: rhSubRushLite 1250ms cubic-bezier(0.14, 0.86, 0.28, 1) forwards; filter: none; }
+@keyframes rhSubRushLite {
+  0%   { opacity: 0; transform: scale(0.62); }
+  26%  { opacity: 1; transform: scale(1); }
+  62%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 0; transform: scale(1.7); }
+}
+#race-root[data-touch="1"] .race-hud .rh-sub-layer.is-on .rh-sub-card.is-still { animation: rhSubHold 1250ms linear forwards; }
+#race-root[data-touch="1"] .race-hud .rh-strobe { box-shadow: inset 0 0 0 5px rgba(255, 255, 255, var(--rh-strobe, 0.6)); }
 
 @media (prefers-reduced-motion: reduce) {
   #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
+  #race-root .sf-pfx-gifwash.is-washing { animation: none; }
+  #race-root .sf-pfx-pink.is-melting, #race-root .sf-pfx-freeze.is-lacquer span { animation: none; }
 }
 
 /* ============================================================================
@@ -584,6 +701,41 @@
   to { text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95); }
 }
 
+/* ---- THE SLOT: the script on the band, and the word you popped sliding into it ----
+   The owner, phone testing 2026-09-09: "when popped a bubble the word rises and slides into the
+   typewriter we got (the missed ones appear as dimmed like now) the words we get go slot themselves
+   as visible". So the whole phrase is on the band from the moment the clock opens it, dim, and the
+   pop lights its own word: same band, same box, same two line cap, same measured top. Dim is the
+   ghost's own grey, so a line half taken reads as a line half taken and nothing has to be explained.
+   The flight is one shot and one element, parented to the layer rather than to the line, so it can
+   start anywhere on the glass without ever reflowing the sentence it is on its way into. */
+.race-hud .rc-cap.is-slot .rc-cap-word {
+  opacity: 0.35; color: #d6d0dd; text-shadow: 0 2px 5px rgba(0, 0, 0, 0.95);
+  transition: opacity 0.16s linear, color 0.16s linear, text-shadow 0.16s linear;
+}
+.race-hud .rc-cap.is-slot .rc-cap-word.is-said {
+  opacity: 1; color: var(--rc-ink, #fff);
+  text-shadow: 0 0 16px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95);
+}
+/* captions.js sets left/top to the bubble's own place on the glass and --rc-fly-dx/dy to the trip
+   from there to the slot's middle. The lift at 55 percent is the RISE the ask asks for: the word
+   comes up out of the road before it slides, rather than skating flat across the screen. */
+.race-hud .rc-slot-fly {
+  position: absolute; left: 0; top: 0; white-space: nowrap; z-index: 1;
+  font-size: 1rem; font-weight: 800; letter-spacing: 0.02em; color: var(--rc-ink, #fff);
+  text-shadow: 0 0 18px var(--rc-ink, rgba(255, 105, 180, 0.9)), 0 2px 5px rgba(0, 0, 0, 0.95);
+  transform: translate(-50%, -50%);
+  animation: rcSlotFly 300ms cubic-bezier(0.3, 0.86, 0.28, 1) both;
+}
+@keyframes rcSlotFly {
+  from { opacity: 0.25; transform: translate(-50%, -50%) scale(1.22); }
+  22% { opacity: 1; }
+  55% {
+    transform: translate(calc(-50% + var(--rc-fly-dx, 0px) * 0.42), calc(-50% + var(--rc-fly-dy, 0px) * 0.42 - 24px)) scale(1.1);
+  }
+  to { opacity: 1; transform: translate(calc(-50% + var(--rc-fly-dx, 0px)), calc(-50% + var(--rc-fly-dy, 0px))) scale(1); }
+}
+
 /* ---- the plate: out of the vanishing point, into your face ---- */
 .race-hud .rc-plates { position: absolute; inset: 0; perspective: 900px; }
 .race-hud .rc-plate {
@@ -613,7 +765,7 @@
 .race-hud .rc-dim.is-on { animation: rcDim 300ms ease-out forwards; }
 @keyframes rcDim { 0% { opacity: 0; } 30% { opacity: 0.62; } 100% { opacity: 0; } }
 
-/* ---- the thirteen themes (race/triggerTheme.js THEME_BY_PRESET) ---- */
+/* ---- the seventeen themes (race/triggerTheme.js THEME_BY_PRESET) ---- */
 /* blackout: a near black card, white letters, and the room goes with it */
 .race-hud .rc-plate--ink {
   /* the card is wide, not tall: vertical padding here is height the measured air has to hold */
@@ -695,6 +847,77 @@
   background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0 2px, rgba(0, 0, 0, 0) 2px 5px);
   mix-blend-mode: multiply;
 }
+/* gif-rain: gold, and it falls. It comes IN from over the top and keeps going out the bottom, so the
+   plate moves the way the pictures behind it do, with a streak trailing the letters on the way down. */
+.race-hud .rc-plate--rain {
+  color: #ffdf8f; text-shadow: 0 0 30px rgba(255, 200, 61, 0.95), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcRain 1400ms cubic-bezier(0.3, 0.1, 0.3, 1) forwards;
+}
+.race-hud .rc-plate--rain::before {
+  content: ''; position: absolute; left: 50%; top: -46vh; width: 2px; height: 44vh; transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(255, 200, 61, 0), rgba(255, 223, 143, 0.75));
+  animation: rcRainStreak 620ms ease-in forwards;
+}
+@keyframes rcRain {
+  0%   { opacity: 0; transform: translate(-50%, -190%) scale(0.9); }
+  16%  { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
+  62%  { opacity: 1; transform: translate(-50%, -46%) scale(1.18); }
+  100% { opacity: 0; transform: translate(-50%, 40%) scale(1.06); }
+}
+@keyframes rcRainStreak { 0% { opacity: 0.9; } 70% { opacity: 0.35; } 100% { opacity: 0; } }
+/* THE FOUR THE CATALOGUE WAVE NEEDED (2026-09-08) */
+/* card-whisper: praise and commands. Lilac, no charge at the face: it fades up, spreads, and hangs
+   there long enough to be read back, which is the whole of what a whispered card is for. */
+.race-hud .rc-plate--card {
+  color: #d9c6ff; text-shadow: 0 0 26px rgba(176, 128, 255, 0.9), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcCard 1400ms cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+}
+@keyframes rcCard {
+  0%   { opacity: 0; letter-spacing: 0.02em; transform: translate(-50%, -50%) scale(0.94); }
+  18%  { opacity: 1; }
+  30%, 76% { opacity: 1; letter-spacing: 0.16em; transform: translate(-50%, -50%) scale(1.06); }
+  100% { opacity: 0; letter-spacing: 0.22em; transform: translate(-50%, -50%) scale(1.1); }
+}
+/* drain-fog: the blank words. The letters keep their shape for a moment and then stop having edges. */
+.race-hud .rc-plate--fog {
+  color: #dfe4ff; text-shadow: 0 0 32px rgba(125, 139, 208, 0.95), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcFog 1400ms cubic-bezier(0.25, 0.7, 0.2, 1) forwards;
+}
+@keyframes rcFog {
+  0%   { opacity: 0; filter: blur(0); letter-spacing: 0.06em; transform: translate(-50%, -50%) scale(0.2); }
+  10%  { opacity: 1; }
+  46%  { opacity: 1; filter: blur(0); letter-spacing: 0.06em; transform: translate(-50%, -50%) scale(1.24); }
+  76%  { opacity: 0.85; filter: blur(3px); letter-spacing: 0.3em; transform: translate(-50%, -50%) scale(1.3); }
+  100% { opacity: 0; filter: blur(12px); letter-spacing: 0.6em; transform: translate(-50%, -50%) scale(1.34); }
+}
+/* lock-hold: the doll words. It arrives at scale 1 and it does NOT move again: a satin frame closes
+   on it and the plate sits inside, held, which is the opposite of every other theme here. */
+.race-hud .rc-plate--hold {
+  color: #ffe0f0; padding: 0.04em 0.34em;
+  border: 2px solid rgba(255, 158, 203, 0.9); border-radius: 0.08em;
+  box-shadow: 0 0 34px rgba(255, 158, 203, 0.55), inset 0 0 22px rgba(255, 158, 203, 0.25);
+  text-shadow: 0 0 24px rgba(255, 158, 203, 0.95), 0 4px 10px rgba(0, 0, 0, 0.9);
+  animation: rcHoldLock 1400ms cubic-bezier(0.1, 0.9, 0.1, 1) forwards;
+}
+@keyframes rcHoldLock {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  9%   { opacity: 1; }
+  22%, 84% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+/* gif-wash: the cock words. The screen goes under the picture, so the plate stops being a word in the
+   air and becomes a caption ON it: a scrim behind the letters, and nothing that comes at you. */
+.race-hud .rc-plate--wash {
+  color: #fff1e2; padding: 0.06em 0.5em; border-radius: 0.1em;
+  background: rgba(12, 6, 2, 0.55);
+  text-shadow: 0 0 30px rgba(255, 138, 61, 0.95), 0 3px 12px rgba(0, 0, 0, 0.95);
+  animation: rcWash 1400ms cubic-bezier(0.2, 0.85, 0.25, 1) forwards;
+}
+@keyframes rcWash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(1.16); }
+  12%, 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.98); }
+}
 /* treats: warm pink, and it lands on a bounce rather than a glide */
 .race-hud .rc-plate--bounce { animation: rcZoom 1400ms cubic-bezier(0.2, 1.7, 0.35, 1) forwards; }
 /* mark: a marked word, not a trigger moment. Small, and it does not come at you. */
@@ -715,12 +938,117 @@
 @media (prefers-reduced-motion: reduce) {
   .race-hud .rc-plate, .race-hud .rc-plate--blink, .race-hud .rc-plate--wall, .race-hud .rc-plate--frost,
   .race-hud .rc-plate--snap, .race-hud .rc-plate--split, .race-hud .rc-plate--spiral, .race-hud .rc-plate--melt,
-  .race-hud .rc-plate--bounce, .race-hud .rc-plate--mark {
+  .race-hud .rc-plate--bounce, .race-hud .rc-plate--mark, .race-hud .rc-plate--rain,
+  .race-hud .rc-plate--card, .race-hud .rc-plate--fog, .race-hud .rc-plate--hold, .race-hud .rc-plate--wash {
     animation: rcHold 1400ms linear forwards; transform: translate(-50%, -50%) scale(1); filter: none;
   }
-  .race-hud .rc-plate--pulse::before, .race-hud .rc-plate--gold .rc-plate-sparks { animation: none; opacity: 0; }
+  .race-hud .rc-plate--pulse::before, .race-hud .rc-plate--gold .rc-plate-sparks,
+  .race-hud .rc-plate--rain::before { animation: none; opacity: 0; }
   /* the flash fades in place too; the ghost keeps its own faintness, which is a reading and not a motion */
   .race-hud .rc-cap-word.rc-flash-word, .race-hud .rc-flash-word.is-accent,
   .race-hud .rc-flash-word.is-ghost { animation: none; }
+  /* and the slot simply lights: captions.js already flies nothing under reduced motion, so this is
+     the belt to that brace rather than the rule itself */
+  .race-hud .rc-slot-fly { animation: none; opacity: 0; }
   .race-hud .rc-dim.is-on { animation: none; }
 }
+
+/* ============================================================================
+ * THE WHISPER, COMING AT YOU (race/subliminal.js).
+ *
+ * The RACE's subliminal card. game/payloadFx.js still owns the tube's `.sf-pfx-sub`
+ * blip and not one rule below names it, so dtrh.html is untouched; this is a second
+ * presentation the race page alone asks for through payloadFx's `subliminalFx` seam.
+ *
+ * It is built to be the opposite of the chrome in all four ways at once - size, face,
+ * ink and motion - because the owner drove the blip and could not tell a payload from
+ * a HUD label. The size comes from race/subliminal.js (fitPx, written inline in px: an
+ * eight word phrase steps down until its longest word fits 86% of the glass, which is a
+ * cap a `vw` font-size cannot express). Everything else is here.
+ *
+ * z14: over the chrome (z3), the caption band (z4) and all of payloadFx (inside .sf-hud,
+ * z10); under the Brake/End screens (z20), the countdown (z21), the menu (z25) and the
+ * shutter (z40). Click-through, like the rest of the glass.
+ * ==========================================================================*/
+.race-hud .rh-sub-layer {
+  position: fixed; inset: 0; z-index: 14; pointer-events: none; overflow: hidden;
+  display: grid; place-items: center;
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+}
+.race-hud .rh-sub-layer * { pointer-events: none; }
+.race-hud.is-lobby .rh-sub-layer { display: none; }
+
+/* The room goes dark around it: a payload dims the glass, a label never does. It carries the SAME
+   road cutout the sustained washes above carry, for the same reason - a soft hole over the lower
+   centre so the cup and the cornering line are still there to steer by while the card is up. The
+   card itself rides the middle of the glass, over the hole's soft edge, not inside it. */
+.race-hud .rh-sub-veil {
+  grid-area: 1 / 1; width: 100%; height: 100%; opacity: 0;
+  background: radial-gradient(ellipse 62% 52% at 50% 44%, rgba(26, 6, 28, 0.42), rgba(6, 3, 12, 0.66) 74%, rgba(6, 3, 12, 0.72));
+  -webkit-mask-image: radial-gradient(ellipse 40% 34% at 50% 90%, transparent 0%, rgba(0, 0, 0, 0.5) 58%, #000 100%);
+  mask-image: radial-gradient(ellipse 40% 34% at 50% 90%, transparent 0%, rgba(0, 0, 0, 0.5) 58%, #000 100%);
+  will-change: opacity;
+}
+.race-hud .rh-sub-layer.is-on .rh-sub-veil { animation: rhSubVeil 1250ms linear forwards; }
+
+/* cream, on a hot-pink bloom. 900 with wide tracking is heavy and soft where the chrome
+   is small and tight; the family is the page's own, so nothing is fetched at pop time and
+   a WebView2 with no network draws the same card. */
+.race-hud .rh-sub-card {
+  grid-area: 1 / 1; max-width: 86vw; overflow-wrap: break-word; text-align: center; text-wrap: balance;
+  font-family: var(--rh-font); font-weight: 900; font-style: normal;
+  font-size: 9vmin;   /* the pre-measure fallback only: subliminal.js writes px inline */
+  line-height: 0.98; letter-spacing: 0.055em; text-transform: lowercase;
+  color: #fff3e2; opacity: 0;
+  text-shadow: 0 0 0.34em rgba(255, 32, 150, 0.95), 0 0 0.1em rgba(255, 150, 205, 0.9), 0 0.03em 0.09em rgba(20, 4, 18, 0.85);
+  will-change: transform, opacity, filter;
+}
+/* THE RUSH: small and blurred deep in the scene, at you by ~330 ms, readable through a
+   ~450 ms hold, then past the POV while it lets go. transform / opacity / filter only. */
+.race-hud .rh-sub-layer.is-on .rh-sub-card { animation: rhSubRush 1250ms cubic-bezier(0.14, 0.86, 0.28, 1) forwards; }
+@keyframes rhSubRush {
+  0%   { opacity: 0; transform: scale(0.62); filter: blur(4px); }
+  18%  { opacity: 1; }
+  26%  { transform: scale(1); filter: blur(0px); }
+  62%  { opacity: 1; transform: scale(1.08); filter: blur(0px); }
+  100% { opacity: 0; transform: scale(1.7); filter: blur(2px); }
+}
+@keyframes rhSubVeil { 0% { opacity: 0; } 22%, 62% { opacity: 1; } 100% { opacity: 0; } }
+
+/* REDUCED MOTION (Law VI): nothing comes at you. The card is born at full size and only
+   fades, and the vignette fades with it. `is-still` is the race menu's own motion switch
+   (race/subliminal.js takes run.js's reducedMotion); the media query answers a browser
+   whose player never opened that menu. Both land on the same keyframes. */
+.race-hud .rh-sub-layer.is-on .rh-sub-card.is-still { animation: rhSubHold 1250ms linear forwards; filter: none; }
+@keyframes rhSubHold { 0% { opacity: 0; transform: scale(1); } 12%, 78% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .race-hud .rh-sub-layer.is-on .rh-sub-card { animation: rhSubHold 1250ms linear forwards; filter: none; }
+}
+
+/* ============================================================================
+ * THE SHUTTER (race/shutter.js): two hard-edged panels that close over the
+ * screen between the menu, the intro and the run, with one pink line at the
+ * seam. It sits above everything the page can put up - the Brake and End
+ * screens (z20), the menu (z25) and the introduction cards (z26) - and it is
+ * `pointer-events: none` throughout, so no tap ever lands on the curtain.
+ * Display: none while it is open, transform-only while it moves, and the step
+ * timing keeps the edges pixel-hard instead of easing them into a slide.
+ * ==========================================================================*/
+#race-root .rh-shutter { position: fixed; inset: 0; z-index: 40; pointer-events: none; display: none; }
+#race-root .rh-shutter.is-on { display: block; }
+#race-root .rh-shutter-p {
+  position: absolute; left: -1px; right: -1px; height: calc(50% + 1px);
+  background: #0d0a14; box-shadow: inset 0 0 0 2px #2b1b3f;
+  transition: transform var(--rh-shut-ms, 350ms) steps(12, end);
+  will-change: transform;
+}
+#race-root .rh-shutter-a { top: 0; transform: translate3d(0, -101%, 0); border-bottom: 3px solid var(--pink, #ff69b4); }
+#race-root .rh-shutter-b { bottom: 0; transform: translate3d(0, 101%, 0); border-top: 3px solid var(--pink, #ff69b4); }
+#race-root .rh-shutter.is-closed .rh-shutter-p { transform: translate3d(0, 0, 0); }
+/* reduced motion: one flat fade, no moving parts */
+#race-root .rh-shutter.is-flat .rh-shutter-p {
+  top: 0; bottom: auto; height: 101%; transform: none; opacity: 0; border: 0; box-shadow: none;
+  transition: opacity var(--rh-shut-ms, 150ms) linear;
+}
+#race-root .rh-shutter.is-flat .rh-shutter-b { display: none; }
+#race-root .rh-shutter.is-flat.is-closed .rh-shutter-p { opacity: 1; }

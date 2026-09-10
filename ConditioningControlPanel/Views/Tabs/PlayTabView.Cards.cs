@@ -117,5 +117,10 @@ namespace ConditioningControlPanel.Views.Tabs
         // .Launch owns every gate (T2, then AudioOnlySession, then idempotency).
         private void BtnStartArcademy_Click(object sender, RoutedEventArgs e)
             => Owner?.BtnStartArcademy_Click(sender, e);
+
+        // Piece by Piece is a LAUNCH too, and forwards for the same reason: no tab of its own, and
+        // PieceByPieceHostService.Launch owns both of its gates (idempotency, then T2).
+        private void BtnStartPieceByPiece_Click(object sender, RoutedEventArgs e)
+            => Owner?.BtnStartPieceByPiece_Click(sender, e);
     }
 }

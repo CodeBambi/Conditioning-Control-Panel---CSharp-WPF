@@ -22,7 +22,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W, LANE_H } from './consts.js';
+import { makeRng, CAM_BACK, KERB_INNER_W, KERB_OUTER_W, LANE_H, RAMP_LEN, RAMP_H } from './consts.js';
 import { CRISP_LAYER } from './pixel.js';
 import { Q } from '../shared/quality.js';
 import { biomeById } from '../game/biomes.js';
@@ -32,22 +32,24 @@ import { propPack, packGeo, geoSize } from './propPack.js';
 // ---- the eight rooms -------------------------------------------------------------
 // colors: road = ribbon tint, edge = kerb lines, prop = wall props, fog = the room's haze
 // (informational; the biome palette is what fx.js grades), banner = the MARQUEE plate.
-// bubbleBias multiplies bubbles.js kind weights; ambient names a fieldFx particle field.
+// bubbleBias multiplies bubbles.js kind weights; ambient names a fieldFx particle field. A bias on a
+// DARKENED kind (bubbleKinds.js `spawn: false`) is dead weight, because rollKind drops those rows out
+// of every pool before the bias is read: the `flash` entries came off on 2026-09-08 with the bubble.
 export const ROOMS = [
   { id: 'teagarden', name: 'The Tea Garden', tagline: 'nothing here fights you', biome: 'mirrorlake',
     colors: { road: 0x2f6e50, edge: 0xf6e7c8, prop: 0xffb6d9, fog: 0x12261f, banner: 0x5fa98a },
     propKind: 'teacup', loud: false,
-    bubbleBias: { treat: 1.4, golden: 0.8, lucky: 1.2, flash: 0.5, subliminal: 0.5, video: 0 },
+    bubbleBias: { treat: 1.4, subliminal: 0.5, video: 0 },
     ambient: { kind: 'petals', colors: [[255, 182, 217], [191, 235, 216], [246, 231, 200]] } },
   { id: 'toybox', name: 'The Toybox', tagline: 'the floor bounces. so do you', biome: 'toybox',
     colors: { road: 0x33307f, edge: 0xffd23f, prop: 0xffd23f, fog: 0x14103a, banner: 0x6c63d8 },
     propKind: 'block', loud: true, propAlt: [0xff4d6d, 0x3a86ff],
-    bubbleBias: { treat: 1.2, prism: 1.5, flash: 1.3, glitch: 0.6 },
+    bubbleBias: { treat: 1.2, prism: 1.5, glitch: 0.6 },
     ambient: { kind: 'confetti', colors: [[255, 77, 109], [255, 210, 63], [58, 134, 255]] } },
   { id: 'casino', name: "The Fool's Casino", tagline: 'the wheel always pays. eventually', biome: 'casino',
     colors: { road: 0x5c1128, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x0b0508, banner: 0xa3122e },
     propKind: 'chip', loud: true, propAlt: [0xa3122e],
-    bubbleBias: { golden: 2.0, lucky: 2.0, glitch: 1.3, treat: 0.9 },
+    bubbleBias: { golden: 2.5, lucky: 2.5, glitch: 1.4, pink: 1.2, treat: 0.9 },
     ambient: { kind: 'coins', colors: [[242, 193, 78], [255, 240, 160]] } },
   { id: 'undertow', name: 'The Undertow', tagline: 'the lane drifts. let it', biome: 'undertow',
     colors: { road: 0x15446c, edge: 0x7fe7f0, prop: 0x1fa9b5, fog: 0x06202a, banner: 0x2a8fa8 },
@@ -57,7 +59,7 @@ export const ROOMS = [
   { id: 'mirrors', name: 'The Hall of Mirrors', tagline: 'the picture flips. your hand does not', biome: 'mirrors',
     colors: { road: 0x44454f, edge: 0x5be7d8, prop: 0xdde3f0, fog: 0x1a1e2c, banner: 0x9aa3c8 },
     propKind: 'mirror', loud: false,
-    bubbleBias: { prism: 1.6, glitch: 1.5, spiral: 1.2, flash: 1.2 },
+    bubbleBias: { prism: 1.6, glitch: 1.5, spiral: 1.2 },
     ambient: { kind: 'glints', colors: [[221, 227, 240], [91, 231, 216]] } },
   { id: 'chapel', name: 'The Pink Chapel', tagline: 'the spiral pins itself here', biome: 'chapel',
     colors: { road: 0x6c1c4c, edge: 0xf2c14e, prop: 0xffffff, fog: 0x2a0820, banner: 0xe23c9c },
@@ -72,7 +74,7 @@ export const ROOMS = [
   { id: 'coronation', name: 'The Coronation', tagline: 'the run remembers. so will you', biome: 'coronation',
     colors: { road: 0x661838, edge: 0xf2c14e, prop: 0xf2c14e, fog: 0x3a0716, banner: 0x7a0f2b },
     propKind: 'crown', loud: true,
-    bubbleBias: { golden: 1.5, video: 1.6, gifrain: 1.4, pink: 1.2 },
+    bubbleBias: { golden: 2.0, video: 1.6, gifrain: 1.6, pink: 1.4, spiral: 1.2 },
     ambient: { kind: 'goldleaf', colors: [[242, 193, 78], [255, 105, 180]] } },
 ];
 const ROOM_BY_ID = Object.fromEntries(ROOMS.map((r) => [r.id, r]));
@@ -256,17 +258,20 @@ export function createRoomDresser({ scene, layout, rooms = ROOMS }) {
   const AIR_DOTS = 10, AIR_X = 2.4;
   const DOT_NEAR = 6, DOT_FAR = 11, DOT_BEHIND = -(CAM_BACK + 2.5);
   const airBase = [], airD = [];   // per dot: its resting matrix and wrapped depth
-  const wedges = new THREE.InstancedMesh(track(wedgeGeometry(KERB_OUT, 4, 0.8)), wedgeMat, Math.max(1, ramps.length));
+  // the wedge's length and crest are consts.js's, because spine.js measures the reachable line off
+  // the same two numbers and kart.js stands the kart on them (see consts.js RAMP_LEN / RAMP_H)
+  const wedges = new THREE.InstancedMesh(track(wedgeGeometry(KERB_OUT, RAMP_LEN, RAMP_H)), wedgeMat, Math.max(1, ramps.length));
   const lips = new THREE.InstancedMesh(track(new THREE.BoxGeometry(KERB_OUT * 2 + 0.1, 0.2, 0.3)), pinkGlow, Math.max(1, ramps.length));
   const airDots = new THREE.InstancedMesh(track(new THREE.BoxGeometry(0.3, 0.3, 0.3)), gold, Math.max(1, ramps.length * AIR_DOTS));
   ramps.forEach((r, i) => {
     wedges.setMatrixAt(i, roadMatrix(r.d, 0, 0.01, 0, 1, _m));
     wedges.setColorAt(i, roomColorAt(r.d, 'road', _c).lerp(_c2.set(0xffffff), 0.45));
-    lips.setMatrixAt(i, roadMatrix(r.d, 0, 0.85, 0, 1, _m));
+    lips.setMatrixAt(i, roadMatrix(r.d, 0, RAMP_H + 0.05, 0, 1, _m));
     for (let k = 0; k < AIR_DOTS; k++) {
       const prog = (Math.floor(k / 2) + 1) / (AIR_DOTS / 2 + 1), side = k & 1 ? AIR_X : -AIR_X;
       const dd = r.d + prog * r.airLen;
-      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(dd, side, 0.5 + r.height * Math.sin(Math.PI * prog), prog * 2, 1, _m));
+      // the dots mark the flight ITSELF (spine.js rideH), which is the line the bubbles ride too
+      airDots.setMatrixAt(i * AIR_DOTS + k, roadMatrix(dd, side, layout.rideH ? layout.rideH(dd) + 0.4 : 0.5 + r.height * Math.sin(Math.PI * prog), prog * 2, 1, _m));
       airBase.push(_m.clone()); airD.push(layout.wrap(dd));
     }
   });

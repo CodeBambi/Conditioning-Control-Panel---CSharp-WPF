@@ -45,6 +45,8 @@ internal static class CaucusHostService
     private static bool _pinged;
     private static bool _runActive;
     private static bool _exiting;
+    // THE LOOM: one DtrhLoomStore.Changed subscription per open page, dropped on teardown.
+    private static bool _loomHooked;
     private static bool _disposing;
     private static bool _videoHooked;
 
@@ -243,6 +245,12 @@ internal static class CaucusHostService
                 if (favorites.Count > 0) _host?.Post(new { type = "favorites", names = favorites });
             }
             catch (Exception ex) { App.Logger?.Debug("RaceHost favorites post failed: {E}", ex.Message); }
+            // THE LOOM: the player's own woven spirals. The race draws them live off the
+            // params sidecar (raceBoot `loom-list` -> engine/loomSpirals.js), so a pop can be
+            // one of theirs instead of a shipped gif. Subscribe once so a spiral woven in the
+            // Boudoir mid-session reaches a race that is already open.
+            PostLoomList();
+            if (!_loomHooked) { DtrhLoomStore.Changed += OnLoomChanged; _loomHooked = true; }
         }
         catch (Exception ex) { App.Logger?.Warning("CaucusHostService.OnPageReady: {E}", ex.Message); }
     }
@@ -560,6 +568,47 @@ internal static class CaucusHostService
     /// <summary>The one funnel every exit reaches: graceful close, watchdogs, the window's own
     /// Closed event, process death. Idempotent - _host.Dispose() closes the window, which
     /// re-raises Closed back into here.</summary>
+    /// <summary>THE LOOM: post the saved-spiral library to the race page, the same frame
+    /// DtrhHostService posts to the descent (slug + ccp.spirals url + the params sidecar). The
+    /// page weaves an entry that has params and falls back to the gif for one that does not.</summary>
+    private static void PostLoomList()
+    {
+        try
+        {
+            _host?.Post(new
+            {
+                type = "loom-list",
+                spirals = DtrhLoomStore.List().Select(s => new
+                {
+                    slug = s.Slug,
+                    url = $"https://ccp.spirals/loom_{s.Slug}.gif",
+                    @params = TryParseLoomParams(s.ParamsJson),
+                }),
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.PostLoomList: {E}", ex.Message); }
+    }
+
+    private static JObject? TryParseLoomParams(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return JObject.Parse(json); } catch { return null; }
+    }
+
+    /// <summary>A save or delete in the Boudoir: re-post, on the UI thread, only while a race
+    /// page is actually up.</summary>
+    private static void OnLoomChanged()
+    {
+        try
+        {
+            if (_host == null) return;
+            var d = Application.Current?.Dispatcher;
+            if (d == null || d.HasShutdownStarted) return;
+            d.BeginInvoke(new Action(() => { if (_host != null) PostLoomList(); }));
+        }
+        catch (Exception ex) { App.Logger?.Debug("RaceHost.OnLoomChanged: {E}", ex.Message); }
+    }
+
     private static void DisposeAll()
     {
         if (_disposing) return;
@@ -582,6 +631,7 @@ internal static class CaucusHostService
             _devTrackLog = false;
             try { _meta?.FlushSave(); } catch { }
             _runActive = false;
+            if (_loomHooked) { try { DtrhLoomStore.Changed -= OnLoomChanged; } catch { } _loomHooked = false; }
             try { _host?.Dispose(); } catch { }
             _host = null;
             _meta = null;

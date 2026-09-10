@@ -81,6 +81,10 @@ export function normalizeChart(json) {
     analysis: Object.freeze({
       energy: str(an.energy, ''), words: str(an.words, 'none'), generatedAt: str(an.generatedAt, ''), partial: an.partial === true, offsetSec: num(an.offsetSec, 0),
       lexicon: Object.freeze((Array.isArray(an.lexicon) ? an.lexicon : []).filter((w) => typeof w === 'string')),
+      // how much of the transcript reached the road (race/wordBubbles.js coverageOf), stamped by
+      // cloudChart.js wordedRoad and kept here so the cache, the host log and window.__race read
+      // the same number. null on a road with no transcript under it.
+      coverage: (an.coverage && typeof an.coverage === 'object') ? Object.freeze({ ...an.coverage }) : null,
     }),
     // THE TRANSCRIPT (race/words.js, CHART.md `chart.words`). The lines the voice says, with
     // the second each word lands on: it is what the captions layer reads and what tells the
@@ -153,6 +157,10 @@ function normalizeEvents(raw, durationSec) {
         // and the LINE it belongs to (race/wordBubbles.js wordEventsFrom). A phrase is what the
         // ladder and the end card count in, so losing this turns a sentence back into loose words.
         if (isFinite(num(e.p, NaN))) ev.p = Math.max(0, Math.round(num(e.p, 0)));
+        // and whether this second is the transcript's or this build's estimate: a run the
+        // aligner collapsed onto one instant is spread back over the silence it was said in
+        // (race/wordBubbles.js unpile), and the bubbles that moved say so.
+        if (e.est === true) ev.est = true;
       }
       if (e.kind === 'chant') { ev.reps = Math.max(1, Math.round(num(e.reps, 3))); ev.period = Math.max(0, num(e.period, 0)); }
       // An author marks the events they placed by hand inside a road, names the cue they
@@ -164,6 +172,10 @@ function normalizeEvents(raw, durationSec) {
       // what race/triggerTheme.js looks the plate and the bubble up by, so a trigger that lost
       // it falls back to matching on its label, which two sets may share.
       if (typeof e.setId === 'string' && e.setId) ev.setId = e.setId.slice(0, 40);
+      // The transcript was aligned to a script that already held the words, so this event's `conf`
+      // is the aligner's doubt about WHEN and never about WHAT (race/cloudChart.js triggersFromHits).
+      // race/cues.js reads it to decide whether a low confidence is worth taking the effect away for.
+      if (e.aligned === true) ev.aligned = true;
       if (typeof e.note === 'string' && e.note) ev.note = e.note.slice(0, 200);
       return Object.freeze(ev);
     });

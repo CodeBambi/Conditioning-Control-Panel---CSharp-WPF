@@ -33,7 +33,10 @@
   /* `safe center` so a column taller than the screen starts at the top and scrolls, instead of
      centring and putting the first verbs above the scrollable area where nothing can reach them */
   justify-content: center; justify-content: safe center;
-  padding: calc(6vh + var(--rm-sa-t)) calc(28px + var(--rm-sa-r)) calc(6vh + var(--rm-sa-b)) calc(5vw + var(--rm-sa-l));
+  /* the bottom pad is a variable because a sticky foot inside this column (the levels panel's
+     `back`) has to reach past it to the real bottom edge: Chrome sticks to the CONTENT box. */
+  --rm-pad-b: calc(6vh + var(--rm-sa-b));
+  padding: calc(6vh + var(--rm-sa-t)) calc(28px + var(--rm-sa-r)) var(--rm-pad-b) calc(5vw + var(--rm-sa-l));
   min-width: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   scrollbar-width: thin; scrollbar-color: rgba(255, 105, 180, 0.5) transparent;
   background: linear-gradient(90deg, rgba(18, 11, 36, 0.92) 0%, rgba(18, 11, 36, 0.86) 78%, rgba(18, 11, 36, 0) 100%);
@@ -137,7 +140,7 @@
 #race-root .rm-levels { display: flex; flex-direction: column; gap: 4px; }
 #race-root .rm-levels-set { margin-top: 0; margin-bottom: 6px; color: #ffd6ea; letter-spacing: 0.08em; text-transform: uppercase; }
 #race-root .rm-level-btn {
-  display: grid; grid-template-columns: 2.4em 1fr auto; grid-template-areas: 'n title len' 'n mark mark';
+  display: grid; grid-template-columns: 2.4em 1fr auto; grid-template-areas: 'n title len' 'n bar bar' 'n mark best';
   gap: 0 10px; align-items: center; width: 100%; min-height: 48px; text-align: left;
   padding: 7px 14px 7px 28px; font-size: 16px;
 }
@@ -145,12 +148,44 @@
 #race-root .rm-level-title { grid-area: title; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #race-root .rm-level-len { grid-area: len; color: rgba(255, 214, 234, 0.75); font-variant-numeric: tabular-nums; }
 #race-root .rm-level-mark { grid-area: mark; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255, 214, 234, 0.55); }
+/* the best on this level, on the same line as the mark and hard against the right edge */
+#race-root .rm-level-best { grid-area: best; justify-self: end; font-size: 11px; letter-spacing: 0.04em; color: rgba(255, 214, 234, 0.6); font-variant-numeric: tabular-nums; }
+#race-root .rm-level-best[hidden] { display: none; }
 /* a hand-made road is the one thing on this list worth pointing at, so it is the one thing lit */
 #race-root .rm-level-btn.is-hand .rm-level-mark { color: var(--pink, #ff69b4); }
 #race-root .rm-level-btn.is-on .rm-level-title { color: #fff; }
 #race-root .rm-level-btn.is-on .rm-level-mark { color: #ffd6ea; }
+/* THE PICKED ROW. The row a player tapped is the only status this panel has: a lit plate with a
+   hard stripe down its left edge and its own bar under the title. Nothing opens below the list,
+   so there is nothing to scroll down to and read. The stripe is background, never box-shadow, so
+   the FOCUS ring still fits around it and the two states never fight over one property: focus is
+   where the arrows are, picked is what is loading. */
+#race-root .rm-level-btn.is-picked {
+  background-color: rgba(255, 105, 180, 0.2);
+  background-image: linear-gradient(90deg, var(--pink, #ff69b4) 0 5px, rgba(255, 105, 180, 0) 5px);
+}
+#race-root .rm-level-btn.is-picked .rm-level-title { color: #fff; }
+#race-root .rm-level-btn.is-picked .rm-level-mark { color: #ffd6ea; }
+#race-root .rm-level-bar { grid-area: bar; display: none; height: 5px; margin: 5px 0 3px; background: rgba(255, 255, 255, 0.12); box-shadow: 0 0 0 2px #2b1b3f; }
+#race-root .rm-level-bar > i { display: block; height: 100%; width: 0; background: var(--pink, #ff69b4); transition: width 0.25s linear; }
+#race-root .rm-level-btn.is-picked .rm-level-bar { display: block; }
+/* in hand: the bar fills and goes the same teal the track plate has always gone when a road is ready */
+#race-root .rm-level-btn.is-loaded {
+  background-color: rgba(91, 231, 216, 0.16);
+  background-image: linear-gradient(90deg, #5be7d8 0 5px, rgba(91, 231, 216, 0) 5px);
+}
+#race-root .rm-level-btn.is-loaded .rm-level-bar > i { background: #5be7d8; }
+#race-root .rm-level-btn.is-loaded .rm-level-mark { color: #5be7d8; }
 #race-root .rm-levels-tail, #race-root .rm-levels-foot { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
 #race-root .rm-levels-btn { align-self: flex-start; }
+/* `back` IS ALWAYS ON SCREEN. Eleven levels are taller than any phone and taller than most windows,
+   so the foot rides the bottom edge of the scrolling column instead of sitting at the end of it.
+   Still the last row in the DOM, so the arrows, the pad and the smokes walk the same order. */
+#race-root .rm-levels-foot {
+  position: sticky; bottom: calc(-1 * var(--rm-pad-b, 0px)); z-index: 2; align-items: flex-start;
+  padding: 10px 0 calc(var(--rm-pad-b, 0px) + 8px); margin-top: 8px;
+  background: linear-gradient(180deg, rgba(13, 10, 20, 0) 0%, rgba(13, 10, 20, 0.9) 38%, rgba(13, 10, 20, 0.97) 100%);
+}
 #race-root .rm-cloud-paste { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 105, 180, 0.22); }
 #race-root .rm-cloud-paste[hidden] { display: none; }
 
@@ -165,6 +200,16 @@
    their links did nothing and why. The row is still pressable, and says so again when pressed. */
 #race-root .rm-cloud-btn.is-off .rm-cloud-label, #race-root .rm-cloud-btn.is-off .rm-cloud-val { opacity: 0.5; }
 #race-root .rm-cloud-btn.is-on .rm-cloud-label { color: #fff; }
+
+/* ---- the status lines under the verbs: the track and the media the next run is made of ---- */
+#race-root .rm-status { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; font-size: 12px; color: rgba(255, 214, 234, 0.72); letter-spacing: 0.02em; }
+#race-root .rm-status[hidden] { display: none; }
+#race-root .rm-status-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#race-root .rm-status-line[hidden] { display: none; }
+/* the media line can name a feed AND a pile: it may take a second line, never a third */
+#race-root .rm-status-media { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* `start · <a long track name>` never wraps a verb: it is cut with an ellipsis instead */
+#race-root .rm-list .rm-btn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- the track plate: a file in hand, or the host still reading it ---- */
 #race-root .rm-track {
@@ -181,6 +226,9 @@
 #race-root .rm-track.is-error .rm-track-bar { display: none; }
 #race-root .rm-track-cap { font-size: 12px; color: rgba(255, 214, 234, 0.75); }
 #race-root .rm-track.is-busy .rm-track-cap::after { content: '…'; animation: rmDots 1.2s steps(3, end) infinite; }
+/* The best on this track: a count, so it reads quieter than the caption above it. */
+#race-root .rm-track-best { font-size: 11px; letter-spacing: 0.04em; color: rgba(255, 214, 234, 0.6); }
+#race-root .rm-track-best[hidden] { display: none; }
 /* The authored mark: a chart a person wrote, not one the analysis found. */
 #race-root .rm-track-mark { display: inline-block; margin-top: 6px; padding: 1px 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #0d0a14; background: #5be7d8; }
 #race-root .rm-track-mark[hidden] { display: none; }
@@ -216,7 +264,8 @@
   #race-root .rm-root { grid-template-columns: 1fr; }
   #race-root .rm-col {
     justify-content: flex-start;
-    padding: calc(4vh + var(--rm-sa-t)) calc(22px + var(--rm-sa-r)) calc(4vh + var(--rm-sa-b)) calc(22px + var(--rm-sa-l));
+    --rm-pad-b: calc(4vh + var(--rm-sa-b));
+    padding: calc(4vh + var(--rm-sa-t)) calc(22px + var(--rm-sa-r)) var(--rm-pad-b) calc(22px + var(--rm-sa-l));
     background: linear-gradient(180deg, rgba(18, 11, 36, 0.94) 0%, rgba(18, 11, 36, 0.86) 70%, rgba(18, 11, 36, 0) 100%);
   }
   /* the verbs go to the bottom. A column too tall to fit eats the auto margin and scrolls, top first. */
@@ -315,7 +364,8 @@
    The keyboard footer and the tagline are the two lines a thumb never needs, so they go first. */
 @media (max-height: 480px) {
   #race-root .rm-col, #race-root .rc-col {
-    gap: 8px; padding-top: calc(8px + var(--rm-sa-t)); padding-bottom: calc(8px + var(--rm-sa-b));
+    gap: 8px; --rm-pad-b: calc(8px + var(--rm-sa-b));
+    padding-top: calc(8px + var(--rm-sa-t)); padding-bottom: var(--rm-pad-b);
   }
   #race-root .rm-title, #race-root .rc-word { font-size: clamp(20px, 3.2vw, 26px); }
   #race-root .rm-tag, #race-root .rm-foot { display: none; }
@@ -333,6 +383,9 @@
   /* the rows keep their 48 px: a short screen scrolls the column, it does not shrink the target */
   #race-root .rm-level-btn { font-size: 15px; padding: 5px 14px 5px 28px; }
   #race-root .rm-level-mark { font-size: 10px; }
+  #race-root .rm-level-best { font-size: 10px; }
+  #race-root .rm-level-bar { height: 4px; margin: 3px 0 2px; }
+  #race-root .rm-levels-foot { margin-top: 4px; padding: 4px 0 2px; }
   #race-root .rm-h { margin-bottom: 2px; font-size: 16px; }
   #race-root .rm-row { padding: 5px 12px; font-size: 15px; }
   #race-root .rm-row-hint, #race-root .rm-hint { font-size: 10px; margin-top: 2px; }
@@ -340,6 +393,7 @@
   #race-root .rm-sub { font-size: 10px; margin: 4px 0 0; }
   #race-root .rm-panel { gap: 4px; }
   #race-root .rm-track { margin-top: 8px; padding: 6px 12px; }
+  #race-root .rm-status { margin-top: 4px; font-size: 10px; }
   #race-root .rm-plate { bottom: calc(10px + var(--rm-sa-b)); }
   #race-root .rc-deck { min-height: 0; }
   #race-root .rc-card { gap: 8px; }

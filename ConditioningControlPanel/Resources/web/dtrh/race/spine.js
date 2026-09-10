@@ -21,10 +21,24 @@
  * like buildLoopLayout (fx.js calls layout.frameAt(Math.random())) and the frames also
  * carry normal/binormal aliases for up/right. Each room's first chunk is its gate; the
  * Tea Garden gate sits at d = 0 and the start straight follows it.
+ *
+ * THE REACHABLE LINE (2026-09-08). Track space measures h from the road PLANE, and climbs, dips
+ * and the Big Wheel are all baked into the spine, so on open road the plane is the surface. A ramp
+ * is not: rooms.js stands a solid RAMP_LEN by RAMP_H wedge on the asphalt in front of the lip and
+ * the kart flies an arc off its crest. A bubble hung at a flat LANE_H through those metres is
+ * inside the wedge or a long way under the flight - the owner, driving it: "some bubbles get placed
+ * under the slopes and we can't get to them". So the layout now answers where the kart IS:
+ *   surfaceH(d)   the solid furniture under the wheels (the wedge, 0 elsewhere)
+ *   surfaceSlope(d) its gradient, so the cup can lie along the slope
+ *   airLineAt(d)  the flight arc off the lip, or null
+ *   rideH(d)      THE REACHABLE LINE: the arc when there is one, else the surface
+ * Every placement is measured off rideH and the smoke race/smoke/slope-check.mjs holds it there.
+ * A ramp's airLen is the flight's own length now (the cruise off the crest), not a random 22..30,
+ * so the arc lands exactly where the air line ends.
  * ==========================================================================*/
 
 import * as THREE from 'three';
-import { RADIUS, ROAD_DROP, ROOM_IDS, makeRng } from './consts.js';
+import { RADIUS, ROAD_DROP, ROOM_IDS, makeRng, RAMP_LEN, RAMP_H, GRAVITY, KART_BASE_SPEED } from './consts.js';
 
 const FRAME_STEP = 0.5;                 // metres between cached frames
 const CP_STEP = 6;                      // control-point spacing along the ring, metres
@@ -67,6 +81,17 @@ const ROOM_POOLS = {
   coronation: ['ramp', 'climb', 'bendR', 'sCurve', 'straight', 'climb'],
 };
 const BOOST_ODDS = { casino: 0.75, toybox: 0.45, coronation: 0.45 };
+
+/** The nominal flight off a ramp lip: launched from the wedge crest (RAMP_H) at the cruise, under
+ *  kart.js's own GRAVITY. `vh` is the launch speed kart.js gives it at scale 1, `sec` the hang time
+ *  and `len` the metres of road it covers - which is what a ramp's airLen IS, so the arc cannot
+ *  disagree with the air line drawn under it. A faster kart flies further and a slow one lands
+ *  early; this is the line the road is dressed to. */
+function flightOf(height) {
+  const vh = Math.sqrt(2 * GRAVITY * Math.max(0.5, height));
+  const sec = (vh + Math.sqrt(vh * vh + 2 * GRAVITY * RAMP_H)) / GRAVITY;
+  return { vh, sec, len: KART_BASE_SPEED * sec };
+}
 
 const bump = (u) => Math.sin(Math.PI * u) ** 4;                    // 0 -> 1 -> 0, flat ends
 const smooth = (u) => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
@@ -180,7 +205,9 @@ export function createSpine({ seed = 1, roomOrder } = {}) {
     if (c.kind === 'gate') features.push({ type: 'gate', d: d0 + len * 0.5, room: c.room });
     else if (c.kind === 'loop') features.push({ type: 'loop', d0, d1 });
     else if (c.kind === 'ramp') {
-      features.push({ type: 'ramp', d: d0 + 14, airLen: range(rng, [22, 30]), height: range(rng, [3, 4]) });
+      // the lip is the wedge's crest; the air line is the flight the kart actually makes off it
+      const height = range(rng, [3, 4]), fl = flightOf(height);
+      features.push({ type: 'ramp', d: d0 + 14, airLen: fl.len, height, vh: fl.vh, airSec: fl.sec });
     } else {
       if (rng() < boostOdds) features.push({ type: 'boost', d: d0 + len * 0.5, x: range(rng, [-1.2, 1.2]) });
       if (rng() < 0.5) features.push({ type: 'pickup', d: d0 + len * (rng() < 0.5 ? 0.28 : 0.76), x: range(rng, [-1.8, 1.8]) });
@@ -297,6 +324,38 @@ export function createSpine({ seed = 1, roomOrder } = {}) {
     return null;
   }
 
+  // ---- THE REACHABLE LINE (see the header) ---------------------------------------
+  /** Signed metres from `from` to `d`, folded into (-T/2, T/2] so the start line is nothing special. */
+  const relD = (d, from) => { let r = (d - from) % totalDepth; if (r > totalDepth / 2) r -= totalDepth; else if (r <= -totalDepth / 2) r += totalDepth; return r; };
+  /** Height of the solid road furniture above the road plane at `d`: the ramp wedge, which rises
+   *  over the RAMP_LEN metres in front of its lip, and 0 on open road. */
+  function surfaceH(d) {
+    let h = 0;
+    for (const r of ramps) {
+      const s = relD(d, r.d);                                    // -RAMP_LEN..0 while on the wedge
+      if (s <= 0 && s >= -RAMP_LEN) h = Math.max(h, RAMP_H * (1 + s / RAMP_LEN));
+    }
+    return h;
+  }
+  /** The gradient of that surface, metres of rise per metre of road (kart.js lies the cup on it). */
+  function surfaceSlope(d) {
+    for (const r of ramps) { const s = relD(d, r.d); if (s <= 0 && s >= -RAMP_LEN) return RAMP_H / RAMP_LEN; }
+    return 0;
+  }
+  /** The flight off a lip, when `d` is inside one: `{ ramp, u (0..1 of the air line), h }`, else null. */
+  function airLineAt(d) {
+    for (const r of ramps) {
+      const s = relD(d, r.d);
+      if (s <= 0 || s >= r.airLen) continue;
+      const t = s / KART_BASE_SPEED;
+      return { ramp: r, u: s / r.airLen, h: Math.max(0, RAMP_H + r.vh * t - 0.5 * GRAVITY * t * t) };
+    }
+    return null;
+  }
+  /** Where the kart rides at `d`: its flight arc over a lip, else the surface under its wheels.
+   *  Everything the road hangs on it (bubbles.js) is measured from here, never from h = 0. */
+  function rideH(d) { const a = airLineAt(d); return a ? a.h : surfaceH(d); }
+
   // ---- tunnel.js / fx.js compat (normalized t in 0..1, as buildLoopLayout) ---------
   const wrap01 = (t) => ((t % 1) + 1) % 1;
   const pointAt = (t, out) => spine.getPointAt(wrap01(t), out);
@@ -305,6 +364,7 @@ export function createSpine({ seed = 1, roomOrder } = {}) {
   return {
     RADIUS, totalDepth, loopDepth: totalDepth, spine, pointAt, frameAt,
     frameAtDepth, toWorld, wrap, chunks, featuresBetween, roomAtDepth, rampAt,
+    surfaceH, surfaceSlope, airLineAt, rideH,
     seed, roomOrder: [...new Set(chunks.map((c) => c.room))],
   };
 }

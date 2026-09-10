@@ -23,7 +23,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { TRIGGER_SETS } from '../../chart/editor/triggerSets.js';
+import { TRIGGER_SETS, laysRow } from '../../chart/editor/triggerSets.js';
 import { detect } from '../../chart/maker/triggers.js';
 import { loadWords, forgetWords } from '../words.js';
 
@@ -113,7 +113,8 @@ ok(all >= found.length, 'the whole catalogue over that file: ' + all + ' hits');
 
 /* ---- 5. the fingerprinted hits, in every file and through the loader ------- */
 const setIds = new Set(TRIGGER_SETS.map((s) => s.id));
-let fp = 0, kept = 0, filesWithHits = 0;
+const SET_BY_ID = new Map(TRIGGER_SETS.map((s) => [s.id, s]));
+let fp = 0, kept = 0, filesWithHits = 0, unheard = 0, freshHits = 0;
 for (const row of index.rows) {
   const j = read('words/' + row.file);
   if (!Array.isArray(j.hits)) continue;
@@ -123,16 +124,31 @@ for (const row of index.rows) {
     && typeof x.dur === 'number' && x.dur >= 0 && typeof x.score === 'number' && x.score >= 0 && x.score <= 1 && (x.src === 'fp' || x.src === 'words')
     && typeof x.conf === 'number' && x.conf >= 0 && x.conf <= 1 && Object.keys(x).length === 6);
   const sorted = h.every((x, i) => i === 0 || x.t >= h[i - 1].t);
-  // the fingerprint refines the scan, it never invents: every hit sits within 0.6 s of a scan hit of its set
+  // THE FINGERPRINT REFINES THE SCAN, IT NEVER INVENTS. Every shipped hit is still a second the
+  // catalogue hears - but not always for the SAME set: since 2026-09-08 the precedence rule hands an
+  // overlap to the longer phrase, so "pink satin" is w-satin's now and not w-pink's, and "drop for
+  // cock" is its own set rather than a spiral. A hit whose word is still said and whose set changed
+  // hands is the rule working; a hit nobody hears at all would be the fingerprint inventing.
+  // A scan span covers its own cluster, so `near` reads the span and not only its first second.
   const scan = [];
-  for (const set of TRIGGER_SETS) for (const m of detect(j, set, [], { durationSec: j.durationSec })) scan.push({ setId: set.id, t: m.t });
-  const refined = h.every((x) => scan.some((s) => s.setId === x.setId && Math.abs(s.t - x.t) <= 0.6));
-  const whole = scan.every((s) => h.some((x) => x.setId === s.setId && Math.abs(s.t - x.t) <= 0.6));
+  for (const set of TRIGGER_SETS) for (const m of detect(j, set, [], { durationSec: j.durationSec })) scan.push({ setId: set.id, t: m.t, dur: m.dur });
+  const near = (x, sp) => Math.abs(sp.t - x.t) <= 0.6 || (x.t >= sp.t - 0.6 && x.t <= sp.t + sp.dur + 0.6);
+  const rowHits = h.filter((x) => laysRow(SET_BY_ID.get(x.setId)));
+  const own = rowHits.filter((x) => scan.some((sp) => sp.setId === x.setId && near(x, sp)));
+  const moved = rowHits.filter((x) => !own.includes(x) && scan.some((sp) => near(x, sp)));
+  const lost = rowHits.length - own.length - moved.length;
+  unheard += lost;
+  // and the other half of the wave: what the scan hears that the fingerprint never carried
+  const fresh = scan.filter((sp) => !h.some((x) => x.setId === sp.setId && near(x, sp))).length;
+  freshHits += fresh;
   fp += h.filter((x) => x.src === 'fp').length; kept += h.filter((x) => x.src === 'words').length;
-  ok(shaped && sorted && refined && whole, row.title + ': ' + h.length + ' hits, shaped, sorted, every one a scan hit refined and no scan hit lost');
+  ok(shaped && sorted && lost === 0, row.title + ': ' + h.length + ' hits, shaped, sorted, ' + own.length +
+    ' still their own set and ' + moved.length + ' handed to a longer phrase, none unheard; the scan hears ' + fresh + ' more');
 }
 eq(filesWithHits, index.rows.length, 'every transcript carries its fingerprinted hits');
 ok(fp > 0 && kept >= 0, 'between them: ' + fp + ' hits placed by the fingerprint, ' + kept + ' kept at the aligner\'s second');
+eq(unheard, 0, 'and not one shipped hit is a second the catalogue hears nowhere');
+ok(freshHits > 600, 'the catalogue now hears ' + freshHits + ' phrases these files were never fingerprinted for, which is the whole of the 2026-09-08 wave');
 forgetWords();
 const withHits = await loadWords({ cloudId: first.cloudId, fetch: localFetch, indexUrl: INDEX_URL });
 ok(Array.isArray(withHits.hits) && withHits.hits.length === read('words/' + first.file).hits.length, 'the loader passes the hits through, every one');

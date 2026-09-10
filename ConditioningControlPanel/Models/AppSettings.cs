@@ -952,6 +952,58 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Header Banner Pool
+
+        // The rotating line pool behind the header banner's third beat (BannerPoolService).
+        // Local settings only: the seen-set never leaves this machine.
+
+        private const int BannerSeenCap = 400;
+
+        private bool _bannerPoolEnabled = true;
+        /// <summary>
+        /// Whether the header banner rotates a line from the shipped pool alongside its fixed
+        /// beats. Off leaves the banner exactly as it was before the pool existed.
+        /// </summary>
+        public bool BannerPoolEnabled
+        {
+            get => _bannerPoolEnabled;
+            set { _bannerPoolEnabled = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _bannerSeenIds = new();
+        /// <summary>
+        /// Ids of banner pool lines already shown to this user, oldest first. Capped at
+        /// <see cref="BannerSeenCap"/>; one bucket's entries are dropped wholesale by
+        /// <see cref="ResetBannerSeen"/> once that bucket has nothing unseen left.
+        /// </summary>
+        [JsonProperty]
+        public List<string> BannerSeenIds
+        {
+            get => _bannerSeenIds;
+            set { _bannerSeenIds = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        /// <summary>Record one shown line id, dropping the oldest entries past the cap.</summary>
+        public void RecordBannerSeen(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+            var list = new List<string>(_bannerSeenIds);
+            list.Remove(id);
+            list.Add(id);
+            if (list.Count > BannerSeenCap) list.RemoveRange(0, list.Count - BannerSeenCap);
+            BannerSeenIds = list;
+        }
+
+        /// <summary>Forget every seen id carrying <paramref name="prefix"/> (one exhausted bucket).</summary>
+        public void ResetBannerSeen(string prefix)
+        {
+            if (string.IsNullOrEmpty(prefix)) return;
+            var list = _bannerSeenIds.FindAll(x => !x.StartsWith(prefix, StringComparison.Ordinal));
+            if (list.Count != _bannerSeenIds.Count) BannerSeenIds = list;
+        }
+
+        #endregion
+
         #region Flash Images
 
         private bool _flashEnabled = true;
@@ -2170,6 +2222,29 @@ namespace ConditioningControlPanel.Models
         {
             get => _dualMonitorEnabled;
             set { _dualMonitorEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _globalTargetMonitor = -1;
+        /// <summary>
+        /// Which monitor(s) the app's full-screen content covers, app-wide. Same sentinel
+        /// alphabet as the per-effect targets below: -1 = follow <see cref="DualMonitorEnabled"/>
+        /// (the legacy behaviour - every screen when multi-monitor is on, else the Windows
+        /// primary), -2 = every connected monitor, 0..N = that one screen index in
+        /// <c>Screen.AllScreens</c>.
+        ///
+        /// <para>Default -1, so a settings file written before this existed behaves exactly as it
+        /// did. This is the setting behind Settings / General / "Show content on", the only way to
+        /// pin content to a specific NON-primary screen: the multi-monitor checkbox alone can say
+        /// only "all screens" or "the Windows primary".</para>
+        ///
+        /// <para>An index past the current monitor count is NOT clamped here - it falls back to the
+        /// -1 behaviour at resolve time (<c>App.ResolveScreens</c>) so an unplugged monitor's target
+        /// survives a reconnect.</para>
+        /// </summary>
+        public int GlobalTargetMonitor
+        {
+            get => _globalTargetMonitor;
+            set { _globalTargetMonitor = value; OnPropertyChanged(); }
         }
 
         // ---- Per-effect monitor targeting (suggestion #639) ----------------
@@ -6317,16 +6392,14 @@ namespace ConditioningControlPanel.Models
 
         #region The Descent — Spiral rail
 
-        private bool _descentSpiralRailEnabled = false;
+        private bool _descentSpiralRailEnabled = true;
         /// <summary>
         /// Shows the Spiral Track miniature in the nav rail (CONTRACTS-0812-FINISH §9).
         ///
-        /// FALSE IN EVERY SHIPPED BUILD, and deliberately without a settings editor: the
-        /// `/embed/spiral` route it hosts has not deployed, and a visible toggle for a
-        /// surface that cannot draw yet is worse than no toggle. Flip it by hand in
-        /// settings.json to exercise the host. When the Spiral goes public this becomes a
-        /// normal preference with a normal editor — or disappears, if the rail ends up
-        /// always-on.
+        /// ON BY DEFAULT since 6.9.3 (the Spiral went public for every account on
+        /// 2026-09-01 and the `/embed/spiral?mode=mini` route is live). Still without a
+        /// settings editor: set it to false by hand in settings.json to keep the nav rail
+        /// free of the WebView2 miniature. It was false and dark in every build before.
         ///
         /// Even set true the rail stays dark unless the server has shipped this account a
         /// descent block (SpiralRailHost.Arm), so turning it on cannot conjure a spiral

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -737,11 +737,12 @@ namespace ConditioningControlPanel
             // Track characters typed for achievement
             _totalCharsTyped++;
             
-            // Check for errors (input doesn't match phrase prefix)
+            // Check for errors (input doesn't match phrase prefix).
+            // Both sides go through LockCardText so typing "..." against a phrase that holds a
+            // typographic ellipsis is not scored as a mistake (ccp-bugs#1169).
             if (input.Length > 0)
             {
-                var expectedPrefix = _phrase.Substring(0, Math.Min(input.Length, _phrase.Length));
-                if (!string.Equals(input, expectedPrefix, StringComparison.OrdinalIgnoreCase))
+                if (!LockCardText.IsPrefixOf(input, _phrase))
                 {
                     _totalErrors++;
                 }
@@ -750,13 +751,22 @@ namespace ConditioningControlPanel
             // Sync to all other windows
             SyncInputToAllWindows(input);
             
-            // Check if the input matches the phrase (case-insensitive)
-            if (string.Equals(input.Trim(), _phrase, StringComparison.OrdinalIgnoreCase))
+            // Check if the input matches the phrase (case-insensitive, punctuation-shape-insensitive).
+            // A phrase carrying a character with no keyboard route (U+2026, curly quotes, an NBSP)
+            // used to make the card unpassable: the user types the only thing they CAN type and an
+            // ordinal compare says no forever (ccp-bugs#1169).
+            if (LockCardText.Matches(input, _phrase))
             {
                 // The gate lives at THIS call site only. The spoken-solve path calls
                 // RegisterSuccessfulRepeat directly and must never be gated on typing (in voice mode
                 // the whole InputBorder is collapsed and nothing is ever typed).
-                if (HasTypedEnough(_keystrokes, _phrase.Length))
+                //
+                // The bar is the SHORTER of the two lengths. The match above already proved the
+                // input is equivalent to the phrase, so a shorter input can only mean the user
+                // typed a compact form of something the phrase spells out (an IME's single "..."
+                // glyph for three full stops). Charging them for characters they had no reason to
+                // type would re-brick the card the normaliser just unbricked.
+                if (HasTypedEnough(_keystrokes, Math.Min(_phrase.Length, input.Length)))
                 {
                     RegisterSuccessfulRepeat();
                 }

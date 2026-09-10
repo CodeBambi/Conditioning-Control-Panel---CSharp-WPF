@@ -1,13 +1,29 @@
 /* ============================================================================
  * race/menu.js - the main menu and the character stage of Racing Thoughts.
  *
- *   createMenu({ root, renderer, pixel, audio, settings, log, send }) ->
+ *   createMenu({ root, renderer, pixel, audio, settings, log, send, levels, media }) ->
  *     { show(), hide(), onPick(cb), options, stage: { update(dt), render(), dispose() }, dispose() }
- *   onPick yields 'race' | 'track' | 'clear' | 'story' | 'surface'; setTrack(state | null) drives the
- *   track plate (CHART.md: the host's track-progress and the chart that lands). refreshView() parks
+ *   onPick yields 'race' | 'track' | 'clear' | 'story' | 'surface'; setTrack(state | null, onRow) drives the
+ *   track plate (CHART.md: the host's track-progress and the chart that lands) - `onRow` is the levels
+ *   panel saying it painted that state on the picked row itself, so the plate stands down only while
+ *   THAT panel is open; on the main list the plate is the status and always shows. refreshView() parks
  *   the stage where the column would park it even while the menu is hidden (race/cards.js borrows it).
  *   setLocalMedia(frame) and settingEcho(frame) feed the media panel below; `send` is the only way out
- *   to the host from in here, and only that panel uses it.
+ *   to the host from in here, and only that panel uses it. `media` is dtrh/hostMedia.js's pool, read
+ *   (stats() only) for the STATUS LINES under the verbs on a host with no media panel of its own.
+ *
+ * THE STATUS LINES. Two short lines under the verbs say what the next run is made of, so nobody has
+ * to open a panel to find out: `track · <name>` or `track · just the road`, and `media · online feed
+ * (niches)`, `media · your files (counts)`, `media · your library (counts)` on the desktop, or
+ * `media · no assets, the walls stay bare`. While a track is in hand the plate carries its name and
+ * its bar, so the track line stands down for it. When the chart is ready the first verb reads
+ * `start · <name>`.
+ *
+ * THE BEST ON THIS TRACK (race/popped.js). A file that has been driven to its end at least once
+ * carries `popped 345 / 560 thoughts`: the word bubbles taken on the best run of it, of every word
+ * the file says. It rides the plate while the plate is up and the `track ·` line when it is not, so
+ * the number is under the player's eye wherever the name of the track is. No record is no line, and
+ * the seeded road never has one.
  *
  * YOUR MEDIA (web only). `settings.mediaControls === true` adds a `your media` verb and a panel of
  * pickers: the browser host has no library of its own to enumerate, so the player hands it one. Each
@@ -82,7 +98,9 @@
 import * as THREE from 'three';
 import { wantsTouch } from './touch.js';
 import { loadPack, preparePixel, toInstanceGeometry, flattenRig, setFace, FACES } from './gltf.js';
-import { PIXEL_STEPS, PIXEL_DEFAULT, normalizeBlock } from './pixel.js';
+import { snapshotRest } from './emiPoses.js';
+import { PIXEL_STEPS, PIXEL_LEGACY_DEFAULT, pixelDefault, normalizeBlock } from './pixel.js';
+import { readBests, bestFor, bestLine } from './popped.js';
 import { createMenuFlashes } from './menuFlashes.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createFeedGroup } from './feedGroup.js';
@@ -96,7 +114,9 @@ export const ROSTER = [
     clips: { idle: 'idle', wave: 'wave', hop: 'hop', peek: 'peek', drum: 'drum' },
     faces: { idle: 0, wave: 1, hop: 2, peek: 3, drum: 4, starry: 5, spiral: 6 } },
 ];
-const DEFAULTS = { pixel: PIXEL_DEFAULT, music: 0.8, sfx: 0.8, motion: 'system', seed: 'daily', seedValue: 7 };
+// `pixel` is the one default that reads the device: off on a coarse pointer, the smallest block on a
+// fine one (race/pixel.js pixelDefault). loadOptions below migrates the old fixed default onto it.
+const DEFAULTS = { pixel: pixelDefault(), music: 0.8, sfx: 0.8, motion: 'system', seed: 'daily', seedValue: 7 };
 const MOTIONS = ['system', 'on', 'off'], SEEDS = ['daily', 'random', 'custom'];
 const GLASS = 'EMI_glass', FADE = 0.3, ONE_SHOTS = ['wave', 'hop', 'drum'];
 const BEAT_MIN = 3, BEAT_MAX = 6, PEEK_GAP = 6;
@@ -167,7 +187,13 @@ export function loadOptions() {
   try {
     const raw = JSON.parse(localStorage.getItem(OPTIONS_KEY) || 'null');
     if (raw && typeof raw === 'object') {
-      if (typeof raw.pixel === 'number') o.pixel = normalizeBlock(raw.pixel);
+      // THE PIXEL MIGRATION. The menu saves the WHOLE options table, so everyone who ever opened
+      // the menu has a `pixel` written down whether or not they ever pressed that row: a saved
+      // value equal to the old default (PIXEL_LEGACY_DEFAULT, 3) is therefore read as "never
+      // chosen" and takes the new per-device default instead (off on glass, the smallest block on
+      // a mouse). A player who deliberately sat on 3 pays for it once and sets it again; every
+      // other number they picked is kept exactly as it is.
+      if (typeof raw.pixel === 'number' && normalizeBlock(raw.pixel) !== PIXEL_LEGACY_DEFAULT) o.pixel = normalizeBlock(raw.pixel);
       for (const k of ['music', 'sfx']) if (typeof raw[k] === 'number' && isFinite(raw[k])) o[k] = clamp(raw[k], 0, 1);
       if (MOTIONS.includes(raw.motion)) o.motion = raw.motion;
       if (SEEDS.includes(raw.seed)) o.seed = raw.seed;
@@ -337,6 +363,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
     });
     preparePixel(model, pixel);
     emi.root.add(model); emi.model = model;
+    snapshotRest(model);   // the authored stance, banked before the mixer below ever moves a shoulder
     // her real silhouette, for the band framing: the box the idle pose sits in, taken once.
     emi.root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
@@ -478,7 +505,7 @@ export function createStage({ renderer, pixel, reducedMotion = false, log = null
 }
 
 // ---- the menu ------------------------------------------------------------------------------------
-export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null, send = null, levels = null }) {
+export function createMenu({ root, renderer, pixel, audio, settings = {}, log = null, send = null, levels = null, media = null }) {
   const options = loadOptions();
   const systemReduced = !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const reduced = () => wantsReducedMotion(options, settings.reducedMotion != null ? settings.reducedMotion : systemReduced);
@@ -507,8 +534,15 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   const trackName = el('div', 'rm-track-name', trackEl, '');
   const trackBar = el('div', 'rm-track-bar', trackEl); const trackFill = el('i', '', trackBar);
   const trackCap = el('div', 'rm-track-cap', trackEl, '');
+  // THE BEST ON THIS TRACK (race/popped.js): `popped 345 / 560 thoughts`, off the last completed
+  // run of this same file. No record is no line, and a track nobody finished never grows one.
+  const trackBest = el('div', 'rm-track-best', trackEl, ''); trackBest.hidden = true;
   // shown only for a chart a person wrote (host: track-chart authored:true)
   const trackMark = el('div', 'rm-track-mark', trackEl, 'hand-tuned'); trackMark.hidden = true;
+  // ---- the status lines: what the next run is made of, under the verbs (header: THE STATUS LINES) ----
+  const statusEl = el('div', 'rm-status', col); statusEl.setAttribute('aria-live', 'polite');
+  const statTrack = el('div', 'rm-status-line rm-status-track', statusEl, '');
+  const statMedia = el('div', 'rm-status-line rm-status-media', statusEl, '');
   el('div', 'rm-foot', col, 'arrows move · enter picks · esc back · p pixels · m mute');
   const stageEl = el('div', 'rm-stage', layer);
   const plate = el('div', 'rm-plate', stageEl);
@@ -576,11 +610,17 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   if (webMedia) {
     el('h3', 'rm-h', mediaPanel, 'your media');
     countEl = el('div', 'rm-media-count rh-num', mediaPanel, mediaLine()); countEl.setAttribute('aria-live', 'polite');
-    mediaEls = MEDIA_ROWS.map((r, i) => {
+    // The index is read off the LIVE list at event time, never captured at build: the online feed's
+    // rows are spliced in above `back` further down, and a captured index for `back` then landed on
+    // the feed's consent row, so a thumb leaving the panel switched the feed off instead.
+    const wireMedia = (b) => {
+      b.addEventListener('click', (e) => { e.stopPropagation(); idx.media = mediaEls.indexOf(b); act('press'); });
+      b.addEventListener('pointerenter', () => { idx.media = mediaEls.indexOf(b); ui('tick'); refresh(); });
+    };
+    mediaEls = MEDIA_ROWS.map((r) => {
       const b = el('button', 'rm-btn rm-media-btn', mediaPanel, r.label); b.type = 'button';
       b.dataset.id = r.id; b.setAttribute('role', 'menuitem');
-      b.addEventListener('click', (e) => { e.stopPropagation(); idx.media = i; act('press'); });
-      b.addEventListener('pointerenter', () => { idx.media = i; ui('tick'); refresh(); });
+      wireMedia(b);
       return b;
     });
     el('div', 'rm-hint', mediaPanel, 'nothing is uploaded. your files stay in this tab and go when you close it.');
@@ -596,11 +636,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       const at = Math.max(0, MEDIA_ROWS.length - 1);
       MEDIA_ROWS.splice(at, 0, ...feed.rows);
       mediaEls.splice(at, 0, ...feed.els);
-      feed.els.forEach((b, i) => {
-        const at2 = at + i;
-        b.addEventListener('click', (e) => { e.stopPropagation(); idx.media = at2; act('press'); });
-        b.addEventListener('pointerenter', () => { idx.media = at2; ui('tick'); refresh(); });
-      });
+      feed.els.forEach(wireMedia);
     }
     mediaPanel.appendChild(mediaEls[mediaEls.length - 1]);   // `back` was built with the rest: put it last again
   }
@@ -673,17 +709,60 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     return from;
   };
   const STAGE_CAP = { picking: 'pick a file', opening: 'over to bambicloud', fetching: 'pulling the audio down', decode: 'reading the file', energy: 'feeling the pulse', words: 'listening for the words', cancelled: '', error: '' };
-  let trackState = null;
+  let trackState = null, trackOnRow = false;
+  /** The stored best for the track in hand, read ONCE per setTrack: the paints below run every frame. */
+  let trackBestRec = null;
+  function paintPlate() {
+    const st = trackState;
+    trackEl.hidden = !st || st.stage === 'cancelled' || (trackOnRow && panel === CLOUD_VERB);
+  }
+  /** The two lines under the verbs (header: THE STATUS LINES). `known` is false on a host that
+   *  gave the menu no way to count anything, and then the media line is not shown at all. */
+  function statusLines() {
+    const st = trackState, name = st && st.stage !== 'cancelled' ? String(st.name || '') : '';
+    const counts = (im, vd) => [im ? plural(im, 'image') : '', vd ? plural(vd, 'video') : ''].filter(Boolean).join(', ');
+    const parts = [];
+    if (feed) {
+      const f = feed.state;
+      if (f.consent) parts.push(`online feed (${f.niches.length ? f.niches.join(', ') : 'nothing picked yet'})`);
+    }
+    let known = webMedia;
+    if (webMedia) { if (pile.images || pile.videos) parts.push(`your files (${counts(pile.images, pile.videos)})`); }
+    else if (media && typeof media.stats === 'function') {
+      let c = null; try { c = media.stats(); } catch (e) { c = null; }
+      if (c) { known = true; if (c.images || c.videos) parts.push(`your library (${counts(c.images | 0, c.videos | 0)})`); }
+    }
+    // the best on this track rides the track line when the plate is not up to carry it (paintStatus)
+    const best = name ? bestLine(trackBestRec) : '';
+    return {
+      track: name ? `track · ${name}${best ? ` · ${best}` : ''}` : 'track · just the road',
+      media: parts.length ? `media · ${parts.join(' and ')}` : 'media · no assets, the walls stay bare',
+      known,
+    };
+  }
+  function paintStatus() {
+    const s = statusLines();
+    statusEl.hidden = panel !== 'main';
+    statTrack.hidden = !trackEl.hidden;   // the plate carries the name and the bar while a track is in hand
+    if (statTrack.textContent !== s.track) statTrack.textContent = s.track;
+    statMedia.hidden = !s.known;
+    if (statMedia.textContent !== s.media) statMedia.textContent = s.media;
+  }
   /**
    * setTrack(state | null): the plate and the verbs follow the host. state = { stage, pct, name,
    * durationSec, countable, partial, authored, message }; stage 'ready' is a chart in hand (partial
    * while the words are still landing, authored when a person wrote it rather than the analysis).
    * Null clears the plate and the verbs read as the seeded run again.
+   *
+   * `onRow` is raceBoot saying the LEVELS panel already painted this state on the picked row
+   * (race/levels.js). Two places saying the same thing is one place too many, so the plate stands
+   * down while THAT panel is open; back on the main list (where a tap on a level lands, levels.js
+   * tap()) the plate is the status and shows, bar and all. paintPlate() re-reads that on open().
    */
-  function setTrack(state) {
-    trackState = state && state.stage ? state : null;
+  function setTrack(state, onRow) {
+    trackState = state && state.stage ? state : null; trackOnRow = !!onRow;
     const st = trackState, ready = !!st && st.stage === 'ready';
-    trackEl.hidden = !st || st.stage === 'cancelled';
+    paintPlate();
     trackEl.classList.toggle('is-ready', ready); trackEl.classList.toggle('is-error', !!st && st.stage === 'error');
     trackEl.classList.toggle('is-busy', !!st && !ready && st.stage !== 'error');
     if (st) {
@@ -697,7 +776,13 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       } else trackCap.textContent = st.stage === 'error' ? (st.message || 'the track would not load') : (STAGE_CAP[st.stage] || st.stage);
     }
     trackMark.hidden = !(ready && st && st.authored);
-    verbEl('race').textContent = ready ? 'race the track' : 'race';
+    // the best on THIS file, keyed the way race/popped.js keys it (the hash, or the cloud id when
+    // the file was never hashed). Read here and nowhere else: the paints below run every frame.
+    trackBestRec = ready ? bestFor(readBests(), { hash: st.hash, cloudId: st.cloudId }) : null;
+    const bLine = bestLine(trackBestRec);
+    trackBest.hidden = !bLine;
+    if (bLine && trackBest.textContent !== bLine) trackBest.textContent = bLine;
+    verbEl('race').textContent = ready ? `start · ${st.name || 'the track'}` : 'race';
     verbEl('track').textContent = ready ? 'another track' : 'load a track';
     verbEl('clear').hidden = !ready;
     if (verbEls[idx.main].hidden) idx.main = stepVerb(idx.main, 1);
@@ -710,7 +795,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
   if (canCloud) {
     cloudUi = levels.buildPanel({
       slot: cloudPanel,
-      pick: (i) => { idx.cloud = i; act('press'); },
+      pick: (i) => { if (panel !== CLOUD_VERB) return; idx.cloud = i; act('press'); },
       close: () => open('main'),
       refresh: () => { const n = cloudRows().length; idx.cloud = n ? clamp(idx.cloud, 0, n - 1) : 0; refresh(); },
     });
@@ -720,6 +805,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     panel = p; list.hidden = p !== 'main'; optPanel.hidden = p !== 'options'; mediaPanel.hidden = p !== 'media'; howPanel.hidden = p !== 'how';
     cloudPanel.hidden = p !== CLOUD_VERB;
     if (p === 'options') idx.options = 0; if (p === 'media') idx.media = 0; if (p === CLOUD_VERB) idx.cloud = 0;
+    paintPlate();
     refresh(); if (p !== 'options') seedIn.blur(); onResize();
   }
   function focusRow(i) { idx.options = clamp(i, 0, ROWS.length - 1); ui('tick'); refresh(); }
@@ -729,6 +815,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
     mediaEls.forEach((b, i) => b.classList.toggle('is-focus', panel === 'media' && i === idx.media));
     cloudEls().forEach((b, i) => b.classList.toggle('is-focus', panel === CLOUD_VERB && i === idx.cloud));
     if (feed) feed.paint();   // equality-guarded, like the options rows above
+    paintStatus();            // same guard; the feed's echo and the pile both land here
     // The feed's niche rows make this panel taller than the column, which scrolls (menu.css
     // .rm-col). A pad or an arrow walking past the fold has to bring the row with it; `nearest` is
     // a no-op while the row is already on screen, so a finger scrolling by hand is left alone.
@@ -864,6 +951,7 @@ export function createMenu({ root, renderer, pixel, audio, settings = {}, log = 
       for (const k of ['images', 'videos', 'skipped']) if (typeof m[k] === 'number') pile[k] = m[k] | 0;
       pile.active = !!m.active;
       if (countEl) countEl.textContent = mediaLine();
+      paintStatus();
     },
     /** The host's `setting` echo. Contract law: only this takes the pending paint back off. The
      *  online feed owns two of the keys and its rows paint their own pending, so it gets first

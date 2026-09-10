@@ -2,13 +2,27 @@
  * race/run.js - the run brain of Racing Thoughts. Implements CONTRACT.md
  * "race/run.js + raceBoot.js + race.html (PR 5, integration)".
  *
- *   createRace({ root, bridge, media, settings, seed }) -> { start(), setPaused(b), dispose() }
+ *   createRace({ root, bridge, media, settings, seed, onExit }) -> { start(), setPaused(b), dispose() }
  *
  * Composes renderer + spine + tunnel + fx + rooms + bubbles + kart + score + hud
  * + pickups + payloadFx + screen shake and runs the frame loop. `root` holds the
  * <canvas>, the `.race-hud` div, the `.sf-hud` layer payloadFx draws into and, when
  * the online feed is on, race/wallDom.js's `.rh-wall3d` layer over the canvas.
  * Nothing here subtracts: the run ends only from the Brake (Esc) or the host.
+ *
+ * THE END SCREEN'S `surface` GOES BACK TO THE MENU, it does not close the page.
+ * `onExit` is raceBoot's way home: the run stops the file, drops the world and
+ * the run state, re-arms the same chart at t = 0 and hands the frame back, and
+ * raceBoot puts the menu stage up. Only two things still post exit / exit-done:
+ * the host's exit-request and the menu's own `surface` verb. With no onExit (or
+ * one that answers false, which is what `?autostart=1` does: there is no menu)
+ * the End screen falls back to the old ending and closes the page.
+ *
+ * THE SHUTTER (race/shutter.js) is the seam either side of a run: it claps shut
+ * on the countdown's `go` (fast, never awaited, so it cannot cost the first
+ * steer) and it covers the whole handover back to the menu. raceBoot drives the
+ * menu -> intro half of it through `race.shutter`. Reduced motion turns all of
+ * it into one flat 150 ms fade.
  *
  * Host traffic owned here: sends heartbeat, run-started, sfx, fire-payload
  * (video only), run-ended, exit, exit-done, and with a track loaded track-play,
@@ -42,7 +56,9 @@ import { Q } from '../shared/quality.js';
 import { createTunnel, FOG_DENSITY } from '../engine/tunnel.js';
 import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
-import { setBundledSpiralPool, prefetchSpirals, LEAN_SPIRALS } from '../engine/loomSpirals.js';
+import { setBundledSpiralPool, prefetchSpirals, setLoomBook, LEAN_SPIRALS } from '../engine/loomSpirals.js';
+import { createLoomBook } from './loomBook.js';
+import { createLoomSpiralFx, isTouchTier } from './loomSpiralFx.js';
 import { createScreenShake } from '../game/screenShake.js';
 import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, COMBO_HOLD_SEC, makeRng } from './consts.js';
 import { createPace } from './pace.js';
@@ -56,19 +72,22 @@ import { KIND_BY_ID } from './bubbleKinds.js';
 import { createCocktail, CATEGORIES } from './cocktail.js';
 import { createBubbleField } from './bubbles.js';
 import { createTrackState } from './track.js';
-import { cueFor, resultTag, LANE_X } from './cues.js';
+import { cueFor, resultTag, LANE_X, wordFlash, WORD_FLASH, WORD_FLASH_GAP_MS } from './cues.js';
 import { createKart } from './kart.js';
 import { createScore } from './score.js';
 import { createRaceHud } from './hud.js';
 import { createCaptions } from './captions.js';
+import { createSubliminal, ECHO_SEC } from './subliminal.js';
 import { createMediaLane } from './mediaLane.js';
 import { createInput } from './input.js';
 import { createPickups, TUNE as PICK } from './pickups.js';
-import { createPixelizer, PIXEL_DEFAULT } from './pixel.js';
+import { createPixelizer, pixelDefault } from './pixel.js';
+import { saveBest } from './popped.js';
 import { createSpeedFx } from './speed.js';
 import { vFovForAspect, bindViewportResize } from './viewport.js';
 import { createRaceAudio } from './audio.js';
 import { resultTier, resultsCamera, preRollCamera } from './intro.js';
+import { createShutter } from './shutter.js';
 
 const HEARTBEAT_MS = 2000, PAYOUT_WAIT_MS = 2000, NEAR_MISS_M = 1.15, FOV_BASE = 72;   // 1.6 read as ALMOST spam: the next lane over qualified
 // FOV_BASE is the VERTICAL fov at 16:9 only; race/viewport.js re-solves it per aspect (see the header).
@@ -90,7 +109,7 @@ function flag(key) {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = (n) => '#' + ((n >>> 0) & 0xffffff).toString(16).padStart(6, '0');
 
-export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
+export function createRace({ root, bridge, media, settings = {}, seed = 1, onExit = null }) {
   const canvas = root.querySelector('canvas');
   const hudRoot = root.querySelector('.race-hud');
   const sfHud = root.querySelector('.sf-hud');
@@ -104,7 +123,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, alpha: false, powerPreference: 'high-performance' });
   // the big-pixel look: the world at low resolution, bubbles + wall media crisp on top (race/pixel.js);
   // host settings.pixel / ?pixel=N override, 0 = off; draw-call stats go to the host log every ~5 s
-  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? PIXEL_DEFAULT : settings.pixel, log: (m) => { if (bridge.log) bridge.log(m); } });
+  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? pixelDefault() : settings.pixel, log: (m) => { if (bridge.log) bridge.log(m); } });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12261f);
@@ -133,14 +152,23 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // ---- the parts that outlive a run ----
   const hud = createRaceHud(hudRoot);
   // the voice on the glass: the band under the chrome and the trigger plate over it.
-  // The band ANSWERS THE POPS now (race/captions.js showWord): the words are on the road, so the
-  // word the kart just took is what lands, and the word it drove past lands as a ghost. The old
-  // word-timed typewriter is one release behind `?cap=type`; a track with no words file had no
-  // caption either way and is untouched.
-  const CAP_MODE = flag('cap') === 'type' ? 'type' : 'flash';
+  // The band is the SCRIPT and the pops LIGHT it (race/captions.js, mode 'slot'): the phrase the
+  // file is on sits there dim, and the word the kart pops rises out of the bubble and slides into
+  // its own slot. The wave 3 flash band, where a pop WROTE the word instead, is one release behind
+  // `?cap=flash`, and the word-timed typewriter two behind `?cap=type`; a track with no words file
+  // had no caption on any of the three and is untouched.
+  const CAP_MODE = flag('cap') === 'type' ? 'type' : flag('cap') === 'flash' ? 'flash' : 'slot';
   /** `?words=unread`: a word the kart drove past writes nothing. Ghost is the default. */
   const GHOST_MISSES = flag('words') !== 'unread';
   const captions = hudRoot ? createCaptions(hudRoot, { mode: CAP_MODE }) : null;
+  // THE WHISPER, COMING AT YOU (race/subliminal.js): the RACE's own subliminal card. The tube's
+  // blip is a HUD-sized word in the HUD's own white, which on this page reads as one more label,
+  // so the race hands game/payloadFx.js a presentation of its own through the `subliminalFx` seam
+  // and payloadFx's `.sf-pfx-sub` is left exactly as dtrh.html has always drawn it.
+  const subl = hudRoot ? createSubliminal(hudRoot, { reducedMotion }) : null;
+  // THE SHUTTER (race/shutter.js): the seam between the menu, the intro and the run. raceBoot drives
+  // the menu side of it through `race.shutter`; in here it is the countdown ending and the way home.
+  const shutter = createShutter({ root, reducedMotion, log: bridge.log });
   /** The word a word bubble wears, by the event that spawned it. race/bubbles.js is the layer that
    *  DRAWS a bubble and it stays that: the pop and the ghost read the text off here instead. */
   const wordOf = new Map();
@@ -150,6 +178,17 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // track), `lineGot` how many of them the kart has taken this run, and the pop that finishes one
   // calls race/score.js chain(). A phrase left half-taken simply never pays.
   const lineN = new Map(), lineGot = new Map(), lineDone = new Set();
+  // THE THOUGHTS COUNT (race/popped.js). `total` is every `word` event of the chart, counted the
+  // moment it loads, so the number on the HUD is knowable before the first metre; `popped` is how
+  // many of those bubbles the kart has taken this run. A trigger row is one trigger, not five
+  // thoughts, so it is not in either. A completed run files this as a per-track best.
+  const TH = { popped: 0, total: 0 };
+  const thoughtsIn = (chart) => {
+    let n = 0;
+    for (const e of (chart && Array.isArray(chart.events) ? chart.events : [])) if (e.kind === 'word') n++;
+    return n;
+  };
+  const paintThoughts = () => { try { if (hud && hud.setPopped) hud.setPopped(TH.popped, TH.total); } catch (e) { /* no hud yet */ } };
   // THE SYNC WIN (race/wordSync.js). Every word bubble and every trigger row popped or driven past
   // writes how far from its second it landed into a ring in localStorage; `[` `]` move this track's
   // offset; `\` copies the numbers. `rowOf` is the trigger rows still on the road (a row is not in
@@ -158,6 +197,29 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   // without words, and the panel is only built for `?wsync=1` or the first nudge.
   const popLog = createPopLog();
   const rowOf = new Map(), rowWatch = [];
+  // THE WORD FLASH (race/cues.js WORD_FLASH). The flash bubble is dark: half the words the player
+  // TAKES pop a brief bloom of light instead, off the run's own seeded rng so a seed replays the
+  // same. `wordyRows` is the trigger rows whose bubbles are plain word faces (a mark or treats
+  // preset, or a phrase the room dressed as a treat) - those pops are word beats and roll for a
+  // flash; a row that already fires an effect kind has its own light and rolls for nothing. The
+  // delete is the one-shot: a row is many bubbles and one word, so it flashes once at most.
+  const wordyRows = new Set();
+  let lastFlashAt = -1e9;
+  const flashStats = { pops: 0, capped: 0, rolls: 0, flashes: 0 };
+  // THE ECHO (race/subliminal.js). A subliminal card would rather say the ROAD's own phrase than a
+  // word out of payloadFx's built-in whisper pool, so the last thing the voice actually said is kept
+  // here with the run clock it was said on. A bubble that wears its own word beats this; nothing
+  // older than ECHO_SEC is used at all, so a quiet stretch falls back to the pool rather than
+  // repeating a line from a minute ago. `S.elapsed` is the RUN's clock: a paused game is not a gap.
+  let echoWord = '', echoAt = -1e9;
+  const echo = (w) => { const s = String(w || '').trim(); if (s) { echoWord = s; echoAt = S.elapsed; } };
+  /** The phrase this subliminal shows: the word the popped bubble wore, else a fresh echo, else ''
+   *  (empty hands it back to payloadFx, which draws from its own pool). */
+  function subText(eventId) {
+    const rec = eventId ? (wordOf.get(eventId) || rowOf.get(eventId)) : null;
+    if (rec && rec.w) return String(rec.w);
+    return S.elapsed - echoAt <= ECHO_SEC ? echoWord : '';
+  }
   const WSYNC = flag('wsync') === '1';
   const ROW_LATE_SEC = 0.6;
   let syncHud = null;
@@ -214,15 +276,51 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     return text;
   }
   const fxProxy ={ pulseFlash: (a) => { if (W) W.fx.pulseFlash(a); } };   // fx is rebuilt on "again"
-  const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media });
-  // Q.leanSpirals (mobile): spiral pops draw from the two lightest bundled gifs, fetched while the intro plays
-  // (warmFx) rather than 2-5 MB mid-lap; the desktop pool and the Loom's own spirals are untouched
+  // OUR OWN SPIRALS (race/loomBook.js + race/loomSpiralFx.js). The owner's law is that every
+  // game's spirals come out of the Loom, so a spiral pop is WOVEN for this seed and this room
+  // and drawn live on a canvas inside payloadFx's hold - not one of seven stock gifs. The book
+  // reads the live room and the road's last phrase off this closure, so the picker downstream
+  // (engine/loomSpirals.js pickSpiral) never has to know what a room is.
+  const loomBook = createLoomBook({
+    seed,
+    room: () => (S.room && S.room.id) || '',
+    // the phrase the voice just said, while it is still worth echoing - the spiral wears it
+    word: () => (S.elapsed - echoAt <= ECHO_SEC ? echoWord : ''),
+  });
+  setLoomBook(loomBook.draw);
+  const spiralFx = createLoomSpiralFx({ reducedMotion, log: bridge.log });
+  // THE PHONE'S LAYERS (2026-09-10, phone testing: "we still lag a lot on the fullscreen effects
+  // on iphone. the glitch bubble fullscreen in particular and the spiral"). Every sustained hold is
+  // a fullscreen DOM layer over the WebGL glass, composited at device resolution (3x on an iPhone).
+  // race.css capped them with `filter: opacity()` and blurred the drain's backdrop; on a phone each
+  // of those is a full-resolution filter pass on every frame the layer changes, and the spiral
+  // canvas, the wash's shudder and the glitch's steps change it every frame. So on the touch tier
+  // the cap is applied INLINE through payloadFx's `opacityCap` seam (the same numbers race.css
+  // holds for the desktop, so nothing looks different) and `#race-root[data-touch="1"]` takes every
+  // filter and the backdrop blur off. The tint-2 deepening (0.92) rides the same seam; its saturate
+  // is the one thing the phone does not get.
+  const touchTier = isTouchTier();
+  const TOUCH_CAP = { spiral: 0.78, pink: 0.7, braindrain: 0.86, gifwash: 0.85 };
+  const holdCap = (kind) => (kind === 'pink' && root.dataset.tint === '2' ? 0.92 : (TOUCH_CAP[kind] || 1));
+  const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media,
+    subliminalFx: subl ? ({ text }) => subl.show({ text }) : null, spiralFx,
+    opacityCap: touchTier ? holdCap : null });
+  // Q.leanSpirals (mobile): the GIF FLOOR under a live spiral (and the wash's own fallback) draws
+  // from the two lightest bundled gifs, fetched while the intro plays (warmFx) rather than 2-5 MB
+  // mid-lap. With WebGL up nothing here is ever fetched at all; this is what a lost context lands on.
   setBundledSpiralPool(Q.leanSpirals ? LEAN_SPIRALS : null);
   let fxWarm = false;
   function warmFx() { if (fxWarm || !Q.leanSpirals) return; fxWarm = true; prefetchSpirals(LEAN_SPIRALS); }
   const lane = createMediaLane(sfHud);   // re-homes payload cards off the road
   const shake = createScreenShake({ el: root });
   if (reducedMotion) shake.setEnabled(false);
+  // The race menu's motion toggle, on the root, so a CSS-only payload layer can answer it. The
+  // payloadFx layers are drawn by a file that knows nothing about this run, and race.css cannot
+  // read a JS flag, so this attribute is the seam: `#race-root[data-rm="1"]` drops the gif wash's
+  // shudder exactly the way `prefers-reduced-motion` does for a player who never opened the menu.
+  if (reducedMotion) root.dataset.rm = '1'; else root.removeAttribute('data-rm');
+  // the tier, for the same reason: race.css lightens the payload layers under `[data-touch="1"]`
+  if (touchTier) root.dataset.touch = '1'; else root.removeAttribute('data-touch');
   const input = createInput({ root });   // root: the touch layer, on a phone, is built inside its .race-hud
   const audio = createRaceAudio({ bridge, hud, settings, input });
   const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
@@ -288,7 +386,10 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     };
     const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
     const pickups = createPickups({ rng, spots: layout.chunks.flatMap((c) => c.features || []).filter((f) => f.type === 'pickup'), totalDepth: layout.totalDepth });
-    const w = { layout, tunnel, fx, dresser, walls, wallDom, kart, score, field, pickups, rng };
+    // the word flash rolls off its OWN seeded stream, for the same reason the DOM posters do: a draw
+    // that depends on what the player popped must never shift the rolls the ROAD is built from.
+    const popRng = makeRng(runSeed ^ 0x1d872b41);
+    const w = { layout, tunnel, fx, dresser, walls, wallDom, kart, score, field, pickups, rng, popRng };
     field.onPop((p) => onPop(w, p));
     field.onMiss((m) => onMiss(w, m));
     kart.onEvent((e) => onKart(w, e));
@@ -312,6 +413,13 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       trackHold: 0, trackHoldFrom: 0, trackFog: 0, trackPaused: false, statsAt: 0, trackGap: 0, quiet: false, quietAt: -9 });
     trailClear();
     mix.reset(); PACE.reset(); S.wobble = 0; clearMixChrome(); sync.reset(); wordOf.clear(); lineGot.clear(); lineDone.clear();
+    wordyRows.clear(); lastFlashAt = -1e9; flashStats.pops = 0; flashStats.capped = 0; flashStats.rolls = 0; flashStats.flashes = 0;
+    echoWord = ''; echoAt = -1e9; if (subl) subl.clear();   // "again" starts with nothing said and a clear glass
+    TH.popped = 0; paintThoughts();   // the same road again is the same total and a fresh count
+    // the spiral book is the run's, not the page's: "again" on the same seed weaves the same
+    // spirals in the same order, and a new seed opens a new book (race/loomBook.js)
+    loomBook.reseed(runSeed); spiralFx.cancel();
+    fxFired.clear();
     hud.setScore(0); hud.setCombo(0, 1); hud.setBank(0); hud.setSpeed(0); hud.setFraught(0); hud.passiveClear(); TR.gild(0);
   }
 
@@ -331,26 +439,53 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   }
 
   // ---- pops ----
+  /** THE TAKE the jackpot toast is owed: gold is rare and pays like it now, so the rail says what
+   *  the bubble AND its bonus were worth, not just the bonus. A jackpot off a combo rung leaves
+   *  this at 0 and reads exactly as it always did. */
+  let goldTake = 0;
   function treat(w, p, word) {
-    w.score.pop(p.points, p.id, word ? { combo: false } : undefined);   // a word is worth its treat and no rung
+    const gain = w.score.pop(p.points, p.id, word ? { combo: false } : undefined);   // a word is worth its treat and no rung
     if (p.id === 'golden') {
+      goldTake = gain;
       w.score.jackpot(S.jackpotBias > 1 ? 'major' : 'minor');
-      sfx('golden_pop', 0.9); shake.shake(0.35, 240); poke('jackpot', 1.4); w.kart.pose('cheer');
+      sfx('golden_pop', 0.9); shake.shake(0.55, 320); poke('jackpot', 1.6); w.kart.pose('cheer');
+    } else if (p.id === 'lucky' || p.id === 'prism') {
+      hud.toast(`${p.id} +${gain}`, 'jackpot');
+      shake.shake(0.3, 220); poke('smug', 1.2);
     }
   }
+  /** THE POP'S PLACE ON THE GLASS. A bubble's world point through the run's own camera, in viewport
+   *  pixels: race/captions.js starts the slot flight there, so the word rises out of the bubble the
+   *  player actually took rather than out of a corner. Null when the point is behind the camera or
+   *  the canvas has no box to speak of yet, and the slot then simply lights where it stands. */
+  const _pop3 = new THREE.Vector3();
+  function screenOf(v) {
+    if (!v || typeof v.x !== 'number') return null;
+    _pop3.set(v.x, v.y, v.z).project(camera);
+    if (!Number.isFinite(_pop3.x) || !Number.isFinite(_pop3.y) || _pop3.z > 1) return null;
+    const b = root.getBoundingClientRect ? root.getBoundingClientRect() : null;
+    const cw = (b && b.width) || root.clientWidth || 0, ch = (b && b.height) || root.clientHeight || 0;
+    if (!(cw > 0) || !(ch > 0)) return null;
+    return { x: (b ? b.left : 0) + (_pop3.x * 0.5 + 0.5) * cw, y: (b ? b.top : 0) + (0.5 - _pop3.y * 0.5) * ch };
+  }
   /**
-   * THE FLASH. The word that bubble wore goes on the band: bright on a pop, a grey ghost on a
-   * word the kart drove past. Pops inside race/captions.js FLASH_JOIN_MS join one line, so a line
-   * of word bubbles taken clean reads back as the sentence the voice said.
+   * THE WORD, ON THE BAND. The default band is the SCRIPT (race/captions.js mode 'slot'): the word
+   * the kart popped rises out of its bubble and slides into its own slot in the line, and a word
+   * driven past stays dim in the slot it already had. Behind `?cap=flash` the same call writes the
+   * word onto the band instead, bright on a pop and a grey ghost on a miss.
    * @param eventId the chart event that spawned the bubble, @param ghost true for a miss
+   * @param from the bubble's world position (the pop payload's `worldPos`), for the slot flight
    */
-  function spendWord(w, eventId, ghost, passT) {
+  function spendWord(w, eventId, ghost, passT, from) {
     if (!eventId) return;
     const rec = wordOf.get(eventId);
     if (!rec) return;
     wordOf.delete(eventId);                       // one bubble, one flash: it is popped or it is past
+    echo(rec.w);                                  // the voice said it: a subliminal may repeat it back
+    if (!ghost) { TH.popped++; paintThoughts(); }  // a thought taken off the road (race/popped.js)
     logWord(rec, passT == null ? (TR.track ? TR.track.t : 0) : passT, ghost);
-    if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w, { ink: rec.ink, accent: rec.accent, ghost: !!ghost });
+    if (captions && (!ghost || GHOST_MISSES)) captions.showWord(rec.w,
+      { ink: rec.ink, accent: rec.accent, ghost: !!ghost, at: rec.t, from: ghost ? null : screenOf(from) });
     if (ghost || rec.p == null || lineDone.has(rec.p)) return;
     const n = lineN.get(rec.p) || 0, got = (lineGot.get(rec.p) || 0) + 1;
     lineGot.set(rec.p, got);
@@ -365,13 +500,34 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const early = sync.claim(eventId);
     if (early && early.event.kind === 'trigger' && early.cue.word) captions.showPlate(early.event);
   }
+  /** THE WORD FLASH. Half the words the player TAKES pop a brief bloom of light with them: the
+   *  flash bubble is dark (bubbleKinds.js, 2026-09-08) and this is where its light went. Cosmetic
+   *  and nothing else - it never touches THE MIX, so it is no strobe charge, no recipe and no
+   *  change to what the pop scores. Two words taken inside WORD_FLASH_GAP_MS share one, so a line
+   *  read clean reads as a sentence rather than a strobe, and reduced motion takes none at all. */
+  function wordFlashPop(w) {
+    flashStats.pops++;
+    if (reducedMotion) return;
+    const since = (S.elapsed - lastFlashAt) * 1000;   // the RUN's clock: a paused game is not a gap
+    if (since < WORD_FLASH_GAP_MS) { flashStats.capped++; return; }
+    flashStats.rolls++;
+    if (!wordFlash(w.popRng, since)) return;
+    lastFlashAt = S.elapsed;
+    flashStats.flashes++;
+    payloadFx.applyPayload({ payload: { kind: 'flash' }, strength: WORD_FLASH.strength }, { durationMult: WORD_FLASH.durationMult });
+  }
   function onPop(w, p) {
     const word = !!p.eventId && wordOf.has(p.eventId);   // a bubble off the transcript, not a chunk golden
+    // read BEFORE spendWord/rowOf spend the event: a subliminal says the word its own bubble wore
+    const said = SPEAKING.has(p.payload) ? subText(p.eventId) : '';
+    // a plain word face: the transcript's own bubble, or one of a trigger row that wears the phrase
+    // without firing an effect. delete() is the row's one-shot: many bubbles, one word, one flash.
+    if ((word || (!!p.eventId && wordyRows.delete(p.eventId))) && p.kind === 'treat') wordFlashPop(w);
     if (p.eventId) {
       const at = passTime(w, p.d);
-      TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false, at);
+      TR.taken(p.eventId); platePop(p.eventId); spendWord(w, p.eventId, false, at, p.worldPos);
       const row = rowOf.get(p.eventId);   // a trigger row: one log line for the row, on its first pop
-      if (row) { rowOf.delete(p.eventId); logWord(row, at, false); }
+      if (row) { rowOf.delete(p.eventId); echo(row.w); logWord(row, at, false); }
     }
     w.kart.pulseTarget(); w.kart.pose('grab', { side: (p.x == null ? w.kart.state.x : p.x) >= w.kart.state.x ? 1 : -1 });
     if (S.sweep) sfx('chain_pop', 0.5);          // the pump: every pop on the road sounds like the chain
@@ -381,21 +537,37 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const r = mix.add(p.id, { durationMult });
     if (r.action === 'held' || r.action === 'ignore') { w.score.pop(p.points, 'treat'); hud.toast('held', 'effect'); return; }
     w.score.pop(p.points, p.id);
-    pour(w, p, r, Math.round(clamp(p.strength, 0, 1) * 100), durationMult);
+    pour(w, p, r, Math.round(clamp(p.strength, 0, 1) * 100), durationMult, said);
     shake.shake(p.payload === 'video' ? 0.9 : 0.5, 300);
     poke('shock', 0.9);
     if (r.recipe) serve(w, r.recipe);
   }
 
   // ---- THE MIX: actions -> payloadFx + chrome, recipes -> the ledger ----
-  const fire = (p, strength, durationMult) => {
+  /** Every payload the mixer pours passes through here, so this tally is the whole truth about what
+   *  the run fired: race/smoke/gifrain-row-check.mjs reads it to hold a rain row to ONE cascade. */
+  const fxFired = new Map();
+  /** The payloads that put WORDS on the screen, and so want the road's own phrase handed to them. */
+  const SPEAKING = new Set(['subliminal', 'bambiLock']);
+  const fire = (p, strength, durationMult, text) => {
+    // THE BLACK IS FOR THE ROAD, NOT FOR THE SEAMS. A blackout cuts the screen for the best part
+    // of a second, so it is only ever allowed while the run is actually being driven: never over
+    // the countdown (S.running is false until the count says go) and never once the End card is
+    // owed one (S.ended). It is a payload like any other everywhere else, and it still SCORES -
+    // only the picture is withheld, the same way THE MIX withholds a held pop's effect.
+    if (p.payload === 'blackout' && (!S.running || S.ended)) return;
+    fxFired.set(p.payload, (fxFired.get(p.payload) || 0) + 1);
     if (p.payload === 'video') { trackPause(true); send({ type: 'fire-payload', kind: 'video', strength, durationMult }); }
-    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind }, strength }, { durationMult });
+    // `text` is the phrase, and only the kinds that SAY something read it: the bubble's own word if
+    // it wore one, else the road's last line inside ECHO_SEC, else '' - which hands the pick back to
+    // payloadFx's own pool. The doll (`lock`) speaks for the same reason the subliminal does: the
+    // road just said the words, so the card should be holding those words and not a stock two.
+    else payloadFx.applyPayload({ payload: { kind: p.payload, overlay: p.overlayKind, text: SPEAKING.has(p.payload) ? (text || subText(null)) : undefined }, strength }, { durationMult });
   };
   function clearMixChrome() { root.removeAttribute('data-ov'); root.removeAttribute('data-tint'); if (hud.setTint) hud.setTint(0); }
   /** Pour one action. Sustained holds (tint / overlay / corruption) get a durationMult that lands payloadFx's
    *  fade on the mixer's drain, so a tint that was extended stays pink for as long as the rail says it will. */
-  function pour(w, p, r, strength, durationMult) {
+  function pour(w, p, r, strength, durationMult, text) {
     const label = (KIND_BY_ID[p.id] || {}).label || p.id;
     const slot = mix.live(r.category);
     const holdMult = slot && CATEGORIES[r.category].scaled ? clamp(slot.sec / CATEGORIES[r.category].sec, 0.1, 10) : durationMult;
@@ -407,14 +579,20 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
         if (hud.strobe) hud.strobe(r.charges);
         break;
       case 'tint':
-        fire(p, strength, holdMult);
         root.dataset.tint = String(r.depth); if (hud.setTint) hud.setTint(r.depth);   // race.css deepens the wash and the chrome
+        fire(p, strength, holdMult);   // after the depth is on the root: the phone's inline cap reads it at holdOn
         hud.toast(r.action === 'extend' ? (r.depth >= 2 ? 'pinker' : 'pink, longer') : label, 'effect');
         break;
       case 'overlay':
         fire(p, strength, holdMult);
         root.dataset.ov = p.overlayKind;   // race.css crossfades the other hold out (the replace)
         hud.toast(r.action === 'refresh' ? 'deeper' : r.action === 'replace' ? `${label} takes over` : label, 'effect');
+        break;
+      // THE WASH: a gif over the whole screen. Its own slot, so it does not touch data-ov and
+      // cannot crossfade the spiral out; the picture holds for as long as the rail says it does.
+      case 'wash':
+        fire(p, strength, holdMult);
+        hud.toast(r.action === 'refresh' ? 'another one' : label, 'effect');
         break;
       case 'corruption':
         fire(p, strength, holdMult); hud.flicker();
@@ -425,8 +603,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
         hud.toast(r.action === 'refresh' ? 'more static' : label, 'effect');
         break;
       case 'video': fire(p, strength, durationMult); hud.toast(label, 'effect'); break;
-      default:   // cards, freeze
-        fire(p, strength, durationMult); w.kart.applySlow(0.92, 2.0);
+      default:   // cards (the subliminal lives here, and it is the one kind that carries a phrase), freeze
+        fire(p, strength, durationMult, text); w.kart.applySlow(0.92, 2.0);
         hud.toast(r.charges > 1 ? `${label} x${r.charges}` : label, 'effect');
     }
   }
@@ -478,7 +656,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       case 'miss': hud.setCombo(0, e.mult); break;
       case 'almost': hud.setScore(e.score); hud.toast(`almost +${e.gain}`, 'almost'); break;
       case 'bank': hud.setBank(e.banked); hud.setScore(0); hud.toast(`kept +${e.amount}`, 'bank'); break;
-      case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain}`, 'jackpot'); break;
+      case 'jackpot': hud.setScore(e.score); hud.toast(`jackpot +${e.gain + goldTake}`, 'jackpot'); goldTake = 0; break;
     }
   }
   // ---- THE PICKUPS (race/pickups.js): passive, taken by driving through them ----
@@ -536,11 +714,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     const t = TR.setTrack(chart);
     audio.setRoute(routeOf(t));
     S.trackHold = 0; S.statsAt = 0; S.quiet = false; S.quietAt = -9; sync.reset(); wordOf.clear();
-    lineN.clear(); lineGot.clear(); lineDone.clear(); rowOf.clear(); rowWatch.length = 0;
+    lineN.clear(); lineGot.clear(); lineDone.clear(); rowOf.clear(); rowWatch.length = 0; wordyRows.clear();
     if (WSYNC && t && TR.lyrics) showSync(0); else refreshSync();
     for (const e of (t && t.chart && Array.isArray(t.chart.events) ? t.chart.events : [])) {
       if (e.kind === 'word' && e.p != null) lineN.set(e.p, (lineN.get(e.p) || 0) + 1);
     }
+    TH.total = t ? thoughtsIn(t.chart) : 0; TH.popped = 0; paintThoughts();   // the total, off the chart, before the first metre
     if (W) { W.field.setTracked(!!t); W.field.setSparse(TR.lyrics); W.field.setDensity(1); if (!t) applyFog(W, 0); }
     if (captions) captions.setTrack(t ? t.chart : null);
     audio.duck(!!t, 'track');   // the file is the soundtrack: the room OST sits under it until it is cleared
@@ -550,6 +729,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
   /** The words pass landing live, or a nudge: keep the clock, adopt only what is still ahead (track.js replace). */
   function replaceTrack(chart) {
     TR.replace(chart); audio.setRoute(routeOf(TR.track));
+    // the words pass is what a partial road was waiting for: the total it carries is the real one now
+    TH.total = TR.track ? thoughtsIn(TR.track.chart) : 0; paintThoughts();
     if (W) W.field.setSparse(TR.lyrics);
     if (captions) captions.setTrack(TR.track ? TR.track.chart : null);
     refreshSync();
@@ -588,7 +769,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (row.length) {
       const at = e.t + (row[0].at || 0), d = sync.depthFor(t, ks.d, ks.speed, at);
       const rowId = w.field.spawnRow({ kindId: row[0].kindId, kindIds: row.map((sp) => sp.kindId), placement: row[0].placement, d, h: row[0].h, xs: row.map((sp) => sp.x), eventId: e.id,
-        w: row[0].w || '', ink: row[0].ink || null, big: !!row[0].big });   // the tag, on the middle bubble alone
+        w: row[0].w || '', ink: row[0].ink || null, big: !!row[0].big, script: !!row[0].script });   // the tag, on the middle bubble alone
       if (rowId) sync.trackRow(rowId, e, at, d, t);
       // the word this bubble wears, kept until it is popped or driven past (flashWord spends it).
       // A trigger ROW is not one of these: its word flies at the camera on the plate instead.
@@ -599,9 +780,16 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
         if (rowOf.size >= WORD_MEM) rowOf.delete(rowOf.keys().next().value);
         rowOf.set(e.id, { w: e.label, p: null, t: e.t, i: eventIndex(e.id), lane: null });
       }
+      // a row of plain word FACES (the mark and treats presets, and any phrase the room dressed as
+      // a treat) is a word beat: its pop rolls for the brief flash the same way a transcript word
+      // does. A row wearing an effect kind already fires one and is left out of the roll.
+      if (rowId && e.kind === 'trigger' && row[0].w && (KIND_BY_ID[row[0].kindId] || {}).kind === 'treat') {
+        if (wordyRows.size >= WORD_MEM) wordyRows.delete(wordyRows.values().next().value);
+        wordyRows.add(e.id);
+      }
     }
     for (const sp of loose) {
-      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d: sync.depthFor(t, ks.d, ks.speed, e.t + (sp.at || 0)), x: sp.x, h: sp.h, eventId: e.id });
+      w.field.spawnAt({ kindId: sp.kindId, placement: sp.placement, d: sync.depthFor(t, ks.d, ks.speed, e.t + (sp.at || 0)), x: sp.x, h: sp.h, eventId: e.id, script: !!sp.script });
     }
     sync.defer(e, cue, t);
   }
@@ -789,6 +977,9 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (!W) return;
     if (S.running && !S.paused && !S.hostPaused) {
       try { step(W, dt); } catch (e) { bridge.log && bridge.log('race step: ' + (e && e.stack || e)); }
+    } else if (!S.running && !S.ended) {
+      // the pre-roll count: the world is parked but she is not. Her pose springs only, no physics.
+      try { W.kart.idle(dt); } catch (e) { /* an old kart without idle() just stands there */ }
     }
     if (camOverride && camOverride(camera, dt, W, camOut) === false) camOverride = null;
     pixel.render(scene, camera);
@@ -814,12 +1005,26 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     S.ended = true; S.running = false; S.paused = false;
     try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
     if (captions) captions.clear();   // nothing of the last phrase is left over the end card
+    if (subl) subl.clear();           // nor a whisper card mid-rush: the End card owns the screen
     const st = w.score.state;
     const summary = { score: st.score, banked: st.banked, bestCombo: st.bestCombo, popped: st.popped, treats: st.treats, effects: st.effects,
       nearMisses: st.nearMisses, laps: w.kart.state.lap, durationSec: Math.round(S.elapsed), seed: S.seed,
       personalBest: st.banked + st.score > S.bestAtStart && st.banked + st.score > 0 };
     const track = TR.summary();   // "you took N of M" on a charted run (the results screen is PR c7)
     if (track) Object.assign(summary, { taken: track.taken, countable: track.countable, trackName: track.name });
+    // THE THOUGHTS (race/popped.js): the word bubbles of the file taken, of every word in it. Only a
+    // run that reached the END of the chart files a best - a quit is not a score - and the best is
+    // beaten on the count alone, so a longer cut of a file never reads as a worse run.
+    if (track && TH.total > 0) {
+      Object.assign(summary, { thoughts: TH.popped, thoughtsTotal: TH.total });
+      if (TR.ended) {
+        const src = (TR.track && TR.track.chart && TR.track.chart.source) || {};
+        const filed = saveBest(undefined, { hash: track.hash, cloudId: src.cloudId, name: track.name, popped: TH.popped, total: TH.total });
+        summary.thoughtsBest = filed.rec ? filed.rec.popped : 0;
+        summary.thoughtsRecord = filed.wrote;
+        if (bridge.log) bridge.log(`race popped: ${TH.popped} of ${TH.total} thoughts${filed.wrote ? ', a new best' : ''}`);
+      }
+    }
     send({ type: 'run-ended', ...summary, ...(track ? { track } : {}) });
     trackSend('track-stop');
     sfx('surface', 0.8);
@@ -832,7 +1037,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (payout && payout.finalXp != null) shown.title = (shown.title || 'the tea party') + ` · +${Math.round(payout.finalXp)} xp` + (payout.sparksEarned ? ` · ${payout.sparksEarned} sparks` : '');
     const pick = await hud.showEnd(shown, { beside: true });
     if (S.disposed) return;
-    if (pick === 'again') again(); else exit();
+    if (pick === 'again') again(); else leave();
   }
   /** Rebuild the world on a new seed (again, or the menu changing the seed rule). settings.seedLock pins again to one track.
    *  A world that was never built (the menu changing the rule before "race") stays unbuilt: prepare() / start() own that. */
@@ -845,10 +1050,52 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     W = build(S.seed);
     try { renderer.compile(scene, camera); } catch (e) { /* a warm-up only: the first frame compiles what this missed */ }
   }
+  /** The same tick idle the intro plays, on the run's own rig: a bob per number, a shove on GO. */
+  function countTick() {
+    let beat = 0;
+    const amp = reducedMotion ? 0.3 : 1;
+    return (s) => {
+      if (!W || !W.kart.pose) return;
+      try { W.kart.pose(s === 'go' ? 'launch' : 'ready', { side: (beat++ % 2) ? -1 : 1, amp }); } catch (e) { /* no glb, no pose */ }
+    };
+  }
   function again() {
     reseed(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
     setCameraOverride(preRollCamera());   // again skips the intro: the chase seat, then 3 2 1
-    hud.countdown().then(start);
+    // the shutter claps shut on `go` and is open again a quarter second later. Not awaited: the
+    // run starts on the same tick the countdown ends, so the first steer is never the shutter's.
+    // EMI's tick idle (countTick) rides the same onTick.
+    const tick = countTick();
+    hud.countdown({ onTick: (s) => { tick(s); if (s === 'go') shutter.flash(); } }).then(start);
+  }
+  /**
+   * `surface` on the End screen: the way back to the MENU. The world goes (the menu does not need
+   * it and `race` builds it again through prepare()), the run state resets, and the chart is re-armed
+   * at t = 0 so picking that same level again replays it from the top. raceBoot's onExit puts the
+   * menu stage and the menu theme back and answers true; false (no menu: `?autostart=1`) or no hook
+   * at all falls through to exit(), the old ending.
+   * The file is already stopped: endRun posted track-stop before the card came up and a second one
+   * would roll the cloud playlist a lap early (race/cloud.js onEnded).
+   */
+  function leave() {
+    if (!onExit) { exit(); return Promise.resolve(); }
+    // the whole handover happens behind a shut door: the world goes, the menu comes back, and the
+    // player sees one transition instead of the seam between them.
+    return shutter.sweep({
+      mid: () => {
+        try { payloadFx.cancelHeavy(); } catch (e) { /* nothing heavy */ }
+        if (captions) captions.clear();
+        audio.duck(false, 'end');
+        setCameraOverride(null);
+        teardown();
+        resetRunState(settings.seedLock != null ? settings.seedLock >>> 0 : (Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+        S.started = false; S.hostPaused = false;
+        if (TR.track) setTrack(TR.track.chart);
+        let took = false;
+        try { took = onExit() !== false; } catch (e) { if (bridge.log) bridge.log('to menu: ' + e); }
+        if (!took) exit();
+      },
+    });
   }
   function exit() {
     trackSend('track-stop');
@@ -866,7 +1113,18 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     else if (a === 'nudgeUp' || a === 'nudgeDown') nudge((a === 'nudgeUp' ? 1 : -1) * (shift ? NUDGE_BIG_SEC : NUDGE_SEC));
     else if (a === 'export') exportSync();
   });
-  const onVis = () => { last = 0; };
+  // THE SCREEN GOES DARK (2026-09-09, phone testing: "the audio seems to keep going while screen is
+  // off"). The rAF already stops with the document, so the world freezes on its own - but the loaded
+  // file (CHART.md: the file is the clock) played on under a locked phone, and the run would leap
+  // to wherever it had got to when the screen came back. So hidden IS the Brake: same duck, same
+  // track-pause to the host or race/cloud.js, same card waiting when the player returns. The music
+  // and the bed are audio.js's own (its visibilitychange hold), so the menu is covered too.
+  const onVis = () => {
+    last = 0;
+    let hid = false;
+    try { hid = document.hidden === true; } catch (e) { /* no document */ }
+    if (hid && W && S.running && !S.paused && !S.ended && !S.hostPaused) brake();
+  };
   document.addEventListener('visibilitychange', onVis);
 
   function start() {
@@ -894,7 +1152,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
     if (payoutResolve) payoutResolve(null);
     teardown();
     audio.dispose();
-    input.dispose(); hud.dispose(); if (captions) captions.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    input.dispose(); hud.dispose(); if (captions) captions.dispose(); if (subl) subl.dispose(); shutter.dispose(); shake.dispose(); payloadFx.dispose(); speedFx.dispose(); lane.dispose();
+    setLoomBook(null); spiralFx.dispose();   // the page may go back to the menu: leave no weaver and no GL context behind
     pixel.dispose();
     scene.clear(); renderer.dispose();
   }
@@ -938,22 +1197,54 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1 }) {
       frameMs: st.frameMs || 0, programs: info.programs ? info.programs.length : -1,
       geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
       audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
+      dprCap: st.dprCap == null ? null : st.dprCap, touch: !!st.touch,   // the governor's lid and its ladder (race/pixel.js)
       world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
       // the pace envelope and what the kart actually did with it (race/pace.js, race/smoke/pace-check.mjs)
       speed: W ? W.kart.state.speed : 0, boosting: W ? W.kart.state.boostSec > 0 : false, pace: S.pace ? { ...S.pace } : null,
     };
   }
   function setStage(s) { stage = s && typeof s.update === 'function' ? s : null; if (!stage) pixel.retexture(scene); }   // the menu may have changed the block
-  return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf,
+  return { start, prepare, setPaused, dispose, setCameraOverride, setStage, reseed, renderer, pixel, audio, hud, camera, perf, shutter,
     // track charts (CHART.md): setTrack before start(), replaceTrack for the words pass landing live,
     // trackClock for the host's 250 ms tick, trackEnded when the file runs out at the host's end
     setTrack, replaceTrack, trackClock: (t, playing) => TR.clock(t, playing),
     trackEnded: () => { TR.end(); if (TR.track && S.running) endRun(); }, trackStats: () => TR.stats(), syncTrace: () => sync.trace(), debugPickup,
+    /** THE THOUGHTS COUNT: { popped, total } word bubbles this run (race/popped.js). The check's window on it. */
+    thoughts: () => ({ ...TH }),
     /** What race/smoke/face-check.mjs reads: the word faces on the road this frame. */
     wordFaces: () => (W ? W.field.faceReport() : null),
-    /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. */
+    /** THE WORD FLASH, for race/smoke/word-flash-check.mjs: word pops, the ones the 250 ms cap ate,
+     *  the rolls that reached the rng and the flashes that came out of them. Never read by the game. */
+    wordFlashStats: () => ({ ...flashStats }),
+    /** GIF RAIN, for race/smoke/gifrain-row-check.mjs: how many of each payload the mixer poured. */
+    fxStats: () => Object.fromEntries(fxFired),
+    /** race/smoke/captions-check.mjs: one word at the band, the same call a pop makes. `o` carries
+     *  the slot band's `at` (the word's own second) and `from` (a point on the glass) untouched. */
     debugWord: (text, o) => (captions ? captions.showWord(text, o || {}) != null : false),
-    /** Which half of race/captions.js is driving the band on this build: 'flash' or 'type'. */
+    /** race/smoke/captions-check.mjs: what the slot line is holding - words, taken, still flying. */
+    capSlots: () => (captions ? captions.slots : null),
+    capSlotsReset: () => { if (captions && captions.resetSlots) captions.resetSlots(); },
+    /** race/smoke/subliminal-check.mjs and the shot harness: fire ONE payload by hand, rendered
+     *  exactly as a pop of that kind renders it. THE MIX is never touched, so a shot cannot change
+     *  what the run is holding, and an empty `text` falls back to payloadFx's own whisper pool. */
+    debugPayload: (kind, o = {}) => {
+      if (!kind || S.disposed) return false;
+      payloadFx.applyPayload({ payload: { kind: String(kind), overlay: o.overlay || null, text: o.text || '' },
+        strength: o.strength == null ? 45 : o.strength }, { durationMult: o.durationMult == null ? 1 : o.durationMult });
+      return true;
+    },
+    /** race/smoke/subliminal-check.mjs: how many cards were painted and how many the queue held. */
+    subliminalStats: () => (subl ? subl.stats() : null),
+    /** race/smoke/loom-spiral-check.mjs + the shot harness: the live Loom canvases, and a way to
+     *  ask the book for one spiral by hand (a named room, a chosen phrase) without a world under it. */
+    loom: {
+      stats: () => spiralFx.diagnostics(),
+      draw: (o) => loomBook.draw(o || {}),
+      count: () => loomBook.count(),
+      /** Pretend the context went: the gif floor takes every hold from here on. */
+      breakGl: () => spiralFx.loseContext(),
+    },
+    /** Which third of race/captions.js drives the band on this build: 'slot', 'flash' or 'type'. */
     capMode: () => CAP_MODE,
     /** THE SYNC WIN, for race/smoke/wsync-check.mjs: the log rows, the offset, a nudge, the export. */
     wordSync: { rows: () => popLog.rows(trackKey()), size: () => popLog.size, offset: offsetOf, nudge, exportJson: exportSync, overlay: () => (syncHud ? syncHud.el : null) },

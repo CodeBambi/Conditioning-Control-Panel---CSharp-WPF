@@ -478,6 +478,11 @@ namespace ConditioningControlPanel
 
             // Stop other services
             App.Subliminal.Stop();
+            // Before the overlay service goes down: hand back anything a TAKEOVER pulse borrowed
+            // (#1180). Takeover itself may legitimately outlive the engine (see the block below), but
+            // an in-flight pink/spiral pulse must not - it had boosted the user's opacity and taken
+            // ownership of the overlay service, and its own restore is 30 s away.
+            App.Autonomy?.CancelActivePulses();
             App.Overlay.Stop();
             App.LockCard.Stop();   // scheduler only — the visible card is dropped by ForceCloseAll below
             App.BubbleCount.Stop();
@@ -527,6 +532,11 @@ namespace ConditioningControlPanel
             // topmost, chrome-less, taskbar-less window, so a session that ends behind one leaves
             // the completion dialog modal and invisible - the reporter had to reboot the machine.
             ExitBrowserFullscreenForTeardown();
+            // Same shape, same list: the Deeper player pops its WebView out into a
+            // borderless topmost host for fullscreen video. Left standing it is a
+            // window with no title bar to drag, no resize grip, and nothing in it
+            // once the video is over (Discord report BUG-J9PPPJT274).
+            Views.Deeper.EnhancementPlayerWindow.ForceExitFullscreenAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();

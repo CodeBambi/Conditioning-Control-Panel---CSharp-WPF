@@ -649,10 +649,20 @@ public partial class EmiDeskWindow
             var up = new CubicEase { EasingMode = EasingMode.EaseOut };
             var down = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
+            // HoldEnd, NOT Stop, and this is the second half of the "EMI turns into a pink pixel"
+            // fix (ccp-bugs #1173, #1183 - see ResetCrtBase in EmiDeskWindow.Fx.cs). A Stop
+            // animation does not settle on its last keyframe; it hands the property straight back
+            // to the BASE value, and the base of CrtScale is whatever the last local write left
+            // there. The stretch is the only CrtScale animation in the widget that ever released
+            // the property, so it was the only one that could publish a stale base - and on the
+            // rarest clock in the file, which is why it read as random. Its last keyframe is
+            // already exactly 1.0, so holding it is what the animation was always meant to leave
+            // behind, and it now costs nothing whether the base is right or not. The other three
+            // CrtScale animators (CrtOn, CrtOff, AnimateScalePulse) have always held their end.
             var a = new DoubleAnimationUsingKeyFrames
             {
                 Duration = TimeSpan.FromMilliseconds(total),
-                FillBehavior = FillBehavior.Stop
+                FillBehavior = FillBehavior.HoldEnd
             };
             a.KeyFrames.Add(new EasingDoubleKeyFrame(
                 EmiAlive.StretchScale, KeyTime.FromPercent(EmiAlive.StretchUpMs / total), up));

@@ -63,9 +63,63 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// The screens the app's full-screen content should cover right now, per the global
+        /// "Show content on" picker (<see cref="Models.AppSettings.GlobalTargetMonitor"/>) and the
+        /// multi-monitor toggle behind it. Every service that spawns a fullscreen surface should
+        /// ask this instead of reading <c>DualMonitorEnabled</c> raw - reading the flag raw is what
+        /// made "Primary only" mean "the Windows primary" and nothing else. Never null, never empty
+        /// unless the display set itself is unenumerable.
+        /// </summary>
+        public static WinScreen[] GetGlobalScreens() => ResolveScreens(MonitorTargetFollowGlobal);
+
+        /// <summary>
+        /// The one screen that carries "the main copy" of a piece of content (the video window with
+        /// audio, a single message window): the Windows primary when it is in the targeted set,
+        /// else the first targeted screen. Null only when nothing can be enumerated.
+        /// </summary>
+        public static WinScreen? GetPrimaryContentScreen()
+        {
+            var screens = GetGlobalScreens();
+            if (screens.Length == 0) return WinScreen.PrimaryScreen;
+            return screens.FirstOrDefault(s => s.Primary) ?? screens[0];
+        }
+
+        /// <summary>Warn once per missing index, so an unplugged monitor doesn't spam the log every spawn.</summary>
+        private static int _warnedMissingGlobalMonitor = int.MinValue;
+
         private static WinScreen[] ResolveFollowGlobal(WinScreen[] all)
         {
+            var pick = Settings?.Current?.GlobalTargetMonitor ?? MonitorTargetFollowGlobal;
+
+            if (pick == MonitorTargetAll) return all;
+
+            if (pick >= 0)
+            {
+                if (pick < all.Length)
+                {
+                    if (_warnedMissingGlobalMonitor == pick) _warnedMissingGlobalMonitor = int.MinValue; // it came back
+                    return new[] { all[pick] };
+                }
+
+                // The picked monitor is gone (unplugged, or the adapter re-ordered). Fall back to
+                // the primary and say so ONCE - the setting is deliberately not rewritten, so
+                // plugging the screen back in restores the user's choice with no re-pick.
+                if (_warnedMissingGlobalMonitor != pick)
+                {
+                    _warnedMissingGlobalMonitor = pick;
+                    Logger?.Warning("Monitor {Index} from Settings is not connected ({Count} monitor(s) present) - " +
+                                    "showing content on the primary until it is back.", pick + 1, all.Length);
+                }
+                return PrimaryOnly(all);
+            }
+
             if (Settings?.Current?.DualMonitorEnabled == true) return all;
+            return PrimaryOnly(all);
+        }
+
+        private static WinScreen[] PrimaryOnly(WinScreen[] all)
+        {
             var primary = WinScreen.PrimaryScreen ?? all.FirstOrDefault(s => s.Primary) ?? all[0];
             return new[] { primary };
         }

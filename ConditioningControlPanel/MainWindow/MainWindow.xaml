@@ -1334,10 +1334,9 @@
                 <!-- Settings door: pinned to the bottom and visually separated. Phase 1 routes
                      it at the Dashboard; Phase 2 gives it its own view (key "appsettings"). -->
                 <StackPanel Grid.Row="2">
-                    <!-- THE SPIRAL RAIL (CONTRACTS-0812-FINISH §9). Collapsed in every shipped
-                         build: AppSettings.DescentSpiralRailEnabled is false and has no editor,
-                         and even with it set the control stays collapsed until the server ships
-                         this account a descent block. Collapsed measures as zero, so the rail's
+                    <!-- THE SPIRAL RAIL (CONTRACTS-0812-FINISH §9). On by default since 6.9.3
+                         (AppSettings.DescentSpiralRailEnabled, no editor), and the control still
+                         stays collapsed until the server ships this account a descent block. Collapsed measures as zero, so the rail's
                          layout is identical to the build before this element existed.
                          See Controls/SpiralRailHost.cs - especially the airspace note. -->
                     <controls:SpiralRailHost x:Name="SpiralRail"/>
@@ -1790,6 +1789,18 @@
                                     <Run Text="{loc:Str label_banner_web_link}" FontWeight="Bold"/>
                                 </Hyperlink>
                             </TextBlock>
+                            <!-- Rotating pool beat (BannerPoolService). Joins the crossfade only
+                                 while a pool line is actually loaded - MainWindow.Marquee.cs
+                                 rebuilds _bannerBeats around it exactly the way
+                                 RetireWebBannerBeat does, so an empty pool, a missing
+                                 Resources/banner file or BannerPoolEnabled=false all leave the
+                                 banner as the two-beat rotation it was before. No hyperlink and
+                                 no Run children: the text is authored content set from code. -->
+                            <TextBlock x:Name="TxtBannerPool" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Opacity="0" IsHitTestVisible="False"/>
                             <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the
                                  message changes. Its own ClipToBounds host so the band can't
                                  escape the card - deliberately NOT ClipToBounds on the shared

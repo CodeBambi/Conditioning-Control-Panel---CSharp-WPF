@@ -45,9 +45,9 @@ import { peaksInto, binsPer, binCount } from '../chart/editor/audio.js';
 import { cloudIdFrom, hashUrl, hashBytes, loadIndex, findAuthored, isAuthored } from './chartSource.js';
 import { loadWords, loadWordsRow } from './words.js';
 import { shiftRoad, readNudge } from './wordSync.js';
-import { TRIGGER_SETS } from '../chart/editor/triggerSets.js';
+import { TRIGGER_SETS, rankOf, laysRow, compareHits } from '../chart/editor/triggerSets.js';
 import { detect } from '../chart/maker/triggers.js';
-import { wordEventsFrom } from './wordBubbles.js';
+import { wordEventsFrom, coverageOf, coverageLine } from './wordBubbles.js';
 import { themeFor } from './triggerTheme.js';
 
 /**
@@ -63,8 +63,11 @@ import { themeFor } from './triggerTheme.js';
  * v4 (the word bubbles): the whole script is on the road now, one word a bubble in
  * its phrase's lane (race/wordBubbles.js), so a v3 road carries a few dozen loose
  * treats where the new one carries the lyric and cannot be served in its place.
+ * v5 (the trigger catalogue, 2026-09-08): the catalogue says every trigger and every
+ * alluring word the eleven scripts use, so a v4 road holds a fraction of the rows the
+ * new one does and half of those wear the wrong effect. It has to be laid again.
  */
-export const GENERATOR_ID = 'web-road-v4';
+export const GENERATOR_ID = 'web-road-v5';
 
 /* ---- the knobs, and why each one is what it is --------------------------- */
 /**
@@ -249,7 +252,15 @@ export const SET_BY_ID = new Map(TRIGGER_SETS.map((s) => [s.id, s]));
  * scan (chart/maker/words.js `scan`), in the shape generate.js reads, so a hit here
  * means what a hit means on the Track Maker page.
  *
- * @returns [{ id, t, dur, setId, n }] sorted by t
+ * A set marked `row: false` in the catalogue is skipped: it keeps its id and its place
+ * in the Track Maker, but it is an ACCENT WORD on this road, not a row (triggerSets.js).
+ *
+ * The order is the catalogue's own precedence rule (`compareHits`), not the alphabet:
+ * the thinning below keeps the FIRST hit of a second, so the sort IS which set wins a
+ * second two of them are true of. Each hit carries the two things that rule reads -
+ * `rank` (the set's group) and `nw` (how many words the match covered).
+ *
+ * @returns [{ id, t, dur, setId, n, rank, nw }] in precedence order
  */
 export function scanTriggers(words, durationSec) {
   const list = (words && Array.isArray(words.words)) ? words.words : [];
@@ -266,32 +277,83 @@ export function scanTriggers(words, durationSec) {
   };
   const out = [];
   for (const set of TRIGGER_SETS) {
+    if (!laysRow(set)) continue;
+    const rank = rankOf(set);
     const ms = detect(words, set, [], { durationSec });
     ms.forEach((m, n) => out.push({ id: 'h:' + set.id + ':' + n, t: m.t, dur: r3(Number(m.dur) || 0),
-      setId: set.id, n, conf: conf(m.i0, m.i1) }));
+      setId: set.id, n, conf: conf(m.i0, m.i1), rank, nw: Math.max(1, (m.i1 - m.i0) + 1) }));
   }
-  return out.sort((a, b) => a.t - b.t || a.setId.localeCompare(b.setId));
+  return out.sort(compareHits);
+}
+
+/** How far a scanned hit may be moved onto a fingerprinted second of the same set. The
+ *  fingerprint shifts a phrase by about a quarter second in the median; a whole second is
+ *  room to spare, and still much less than the gap a catalogue set clusters two sayings by,
+ *  so a hit can never be snapped onto the NEXT time she says the same thing. */
+export const FP_SNAP_SEC = 1;
+
+/**
+ * THE FINGERPRINT IS THE CLOCK, THE SCAN IS THE ROLL CALL (2026-09-08).
+ *
+ * `tools/racechart/fingerprint.py` correlates a handful of phrases against the audio
+ * itself and writes the seconds it finds into the words file's `hits`, which are truer
+ * than the aligner's guess and worth keeping. But that list was written against the
+ * catalogue OF THE DAY: every one of the eleven shelf transcripts carries hits for a
+ * dozen or so of the old sets and none at all for the fifty the survey added. Reading
+ * the file's hits INSTEAD of the scan, which is what this did, meant a new set could
+ * never reach the road however plainly the voice says it - the catalogue would grow and
+ * nothing would change, silently.
+ *
+ * So the two are merged, each doing the half it is good at. The live scan says WHICH
+ * phrases are said, over the whole catalogue. Then every scanned hit that has a
+ * fingerprinted hit of its own set within FP_SNAP_SEC takes that second, that length and
+ * that confidence: the phrase keeps the truer clock it had. A fingerprinted hit the scan
+ * does not claim is dropped, because the scan is the roll call and the phrase it was
+ * found for has either moved to another set (the old flat `pink` hits inside "pink
+ * satin") or is not a row any more (`accept`, `relax`, `sleep`).
+ */
+function snapToFingerprint(scan, fp) {
+  const bySet = new Map();
+  for (const h of fp) {
+    if (!bySet.has(h.setId)) bySet.set(h.setId, []);
+    bySet.get(h.setId).push(h);
+  }
+  const used = new Set();
+  return scan.map((s) => {
+    const list = bySet.get(s.setId);
+    if (!list) return s;
+    let best = null, bestD = FP_SNAP_SEC;
+    for (const h of list) {
+      if (used.has(h)) continue;
+      const d = Math.abs((Number(h.t) || 0) - s.t);
+      if (d <= bestD) { bestD = d; best = h; }
+    }
+    if (!best) return s;
+    used.add(best);
+    return { ...s, t: r3(Number(best.t) || 0), dur: r3(Number(best.dur) || s.dur), src: best.src === 'fp' ? 'fp' : 'words',
+      conf: Math.round(clamp01(typeof best.conf === 'number' ? best.conf : s.conf) * 100) / 100 };
+  });
 }
 
 /**
- * The trigger seconds for a transcript: the fingerprinted `hits` the words file
- * carries when tools/racechart/fingerprint.py has been over it (each one's `t` is
- * the correlation peak in the audio itself, a quarter second truer than the
- * aligner's guess in the median), in scanTriggers' shape; the live scan when it
- * has none. A hit for a set the catalogue no longer has is dropped.
+ * The trigger seconds for a transcript: the live scan over the whole catalogue, with
+ * every phrase the words file was fingerprinted for moved onto the second the audio
+ * itself put it (see snapToFingerprint). A file with no `hits` is the scan, exactly.
  */
 export function triggerHits(words, durationSec) {
-  const fp = words && Array.isArray(words.hits) ? words.hits : null;
-  if (!fp || !fp.length) return scanTriggers(words, durationSec);
-  const perSet = new Map(), out = [];
-  for (const h of fp.slice().sort((a, b) => a.t - b.t || a.setId.localeCompare(b.setId))) {
-    if (!SET_BY_ID.has(h.setId) || !(h.t >= 0) || (durationSec > 0 && h.t > durationSec)) continue;
+  const scan = scanTriggers(words, durationSec);
+  const raw = (words && Array.isArray(words.hits)) ? words.hits : null;
+  if (!raw || !raw.length) return scan;
+  const fp = raw.filter((h) => h && typeof h.setId === 'string' && SET_BY_ID.has(h.setId)
+    && laysRow(SET_BY_ID.get(h.setId)) && Number(h.t) >= 0
+    && !(durationSec > 0 && Number(h.t) > durationSec));
+  if (!fp.length) return scan;
+  const perSet = new Map();
+  return snapToFingerprint(scan, fp).sort(compareHits).map((h) => {
     const n = perSet.get(h.setId) || 0;
     perSet.set(h.setId, n + 1);
-    out.push({ id: 'h:' + h.setId + ':' + n, t: r3(h.t), dur: r3(Number(h.dur) || 0), setId: h.setId, n,
-      conf: Math.round(clamp01(typeof h.conf === 'number' ? h.conf : 1) * 100) / 100, src: h.src === 'fp' ? 'fp' : 'words' });
-  }
-  return out.length ? out : scanTriggers(words, durationSec);
+    return { ...h, n, id: 'h:' + h.setId + ':' + n };
+  });
 }
 
 /**
@@ -315,18 +377,34 @@ export function triggerHits(words, durationSec) {
  * a jump and a trigger on the same second is the file doing both, and cues.js spends
  * them differently.
  */
-export function triggersFromHits(events, hits, setById) {
+/**
+ * THE CONFIDENCE ON A SCRIPT-ALIGNED FILE IS A TIMING DOUBT, NOT A WORD DOUBT (2026-09-08).
+ * `aligned` says the transcript was aligned to a script that already had the words in it, so a low
+ * `conf` means the aligner was unsure WHEN it was said and never whether it was said. captionWords
+ * above has lifted CAPTION_CONF for those files since the words road landed; the trigger rows never
+ * got the same lift, and race/cues.js was quietly throwing 37 of them away set-wide - eleven of the
+ * twelve "bimbo doll" rows of Bubble Induction among them. The flag rides the event so the cue pass
+ * can tell the two kinds of doubt apart without knowing where the file came from.
+ */
+export function triggersFromHits(events, hits, setById, { aligned = false } = {}) {
   const kept = [];
   for (const h of hits) {
     const set = setById.get(h.setId);
     if (!set) continue;
+    // `prev` is a { h, set } pair, so `prev.t` was undefined and `h.t - undefined` is NaN, and
+    // NaN < TRIGGER_GAP is false: the gap has never thinned a single hit (fixed 2026-09-08). It
+    // did not show, because fingerprint.py had already spaced the seconds it wrote into the words
+    // files and the whole catalogue only landed a dozen phrases a track. With the survey's
+    // catalogue on it the live scan finds twelve hundred, and the gap is the only thing between
+    // the player and a wall of rows.
     const prev = kept[kept.length - 1];
-    if (prev && h.t - prev.t < TRIGGER_GAP) continue;
+    if (prev && h.t - prev.h.t < TRIGGER_GAP) continue;
     kept.push({ h, set });
   }
   const triggers = kept.map(({ h, set }) => ({
     kind: 'trigger', t: r3(h.t), dur: r3(h.dur || 0), label: String(set.name).toLowerCase(),
     conf: typeof h.conf === 'number' ? h.conf : 1, weight: 1, setId: set.id, cue: set.preset,
+    ...(aligned ? { aligned: true } : null),
   }));
   const near = (t) => triggers.some((x) => Math.abs(x.t - t) < TRIGGER_GAP);
   return events.filter((e) => !(e.kind === 'word' && near(e.t))).concat(triggers);
@@ -374,7 +452,7 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
   const g = generate({ peaks, perSec, durationSec, words, hits, setById: SET_BY_ID, binSec: WORD_BIN_SEC, now });
   const energy = g.energy.map(clamp01);
   const caps = captionWords(words);
-  const road = triggersFromHits(g.events, hits, SET_BY_ID);
+  const road = triggersFromHits(g.events, hits, SET_BY_ID, { aligned: isAligned(words) });
   const triggers = road.filter((e) => e.kind === 'trigger');
   // THE SCRIPT IS THE ROAD. generate.js spends a handful of STRUCTURE words as loose treats in
   // random lanes, which was the right answer while the road had no transcript on it and is the
@@ -387,11 +465,15 @@ export function wordedRoad({ peaks, perSec = PEAKS_PER_SEC, durationSec, name = 
     .sort((a, b) => a.t - b.t)
     .map((e, i) => ({ ...e, id: 'g' + i }));
   const lexicon = [...new Set(events.filter((e) => e.kind === 'trigger').map((e) => e.label))].sort();
+  // THE COVERAGE CHECK (2026-09-08, the owner's "recheck after generating the track that actually
+  // all the words gets displayed"). Counted here, where the road is finished and the transcript is
+  // still in hand, and carried on the chart so the cache keeps it and window.__race can read it back.
+  const coverage = coverageOf(caps, triggers, events);
   return {
     version: 1, binSec: WORD_BIN_SEC, energy, events, acts: g.acts,
     words: caps,
     source: { name, hash, durationSec, sampleRate: DECODE_RATE },
-    analysis: { energy: 'web-rms-v1', words: 'script-align-v1', lexicon, generatedAt: g.generatedAt, partial: false },
+    analysis: { energy: 'web-rms-v1', words: 'script-align-v1', lexicon, coverage, generatedAt: g.generatedAt, partial: false },
   };
 }
 
@@ -538,7 +620,10 @@ export function createChartSource({ indexUrl, cache = null, onUpgrade = null, on
     const road = (words && words.words.length)
       ? wordedRoad({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash, words })
       : roadFromPeaks({ peaks: walked.peaks, perSec: walked.perSec, durationSec: dur, name: title, hash });
-    if (words && words.words.length) say(`${title}: ${road.words.length} words and ${road.analysis.lexicon.length} triggers on the road`);
+    if (words && words.words.length) {
+      say(`${title}: ${road.words.length} words and ${road.analysis.lexicon.length} triggers on the road`);
+      if (road.analysis.coverage) say(coverageLine(title, road.analysis.coverage));   // the owner's recheck
+    }
     if (hash && cache) await cache.put(hash, road, GENERATOR_ID);   // at offset 0: tuned() shifts on the way out
     return { chart: await tuned(normalizeChart(road), { cloudId, hash, row: words }), door: 'generated' };
   }

@@ -149,6 +149,30 @@ smoke; `race/smoke/rows-check.mjs` holds the geometry against `consts.js`. `ctx.
 road came out of a transcript: it halves the `peak` rain and nothing else, because on a worded
 track the rows are the loud thing and a rain over them takes the reading away.
 
+THE CATALOGUE (2026-09-08). Which phrases lay a trigger row at all is one file,
+`chart/editor/triggerSets.js`, shared by the Track Maker and the road, and every set carries a
+`preset`. `race/triggerTheme.js` is the only place a preset turns into a bubble kind and a plate
+theme, so what the kart drives into and what flies at the face come off one row and cannot drift.
+
+- **Precedence.** Sets overlap on purpose ("bimbo doll" lives inside the chant, "drop" inside "drop
+  for cock"). When two land on the same tenth of a second the winner is, in order: the lower group
+  rank (`named` 0, `sequence` 1, `words` 2, an author's own set 3), then the LONGER match, then the
+  set id. `rankOf` / `compareHits` in `triggerSets.js`; the comparator sorts on the quantized tenth,
+  not the raw second, because an order that is not transitive silently un-sorts the list.
+- **`row: false`.** A set may be a colour in the Track Maker and lay no road at all. The words said
+  a hundred times a track (accept, relax, sleep) are accents on the word bubbles, not rows: a row
+  every four seconds is not a trigger, it is a wall.
+- **`mode: 'countdown'`.** A count is its own mode, not a regex: the scripts put a whole sentence
+  between one number and the next, so the rule is a number of five or under, then a smaller one
+  within 40 s, at least three long. One span per count, on the first number.
+- **The scan is the roll call, the fingerprint is the clock.** A words file may ship `hits` measured
+  off the audio. Those no longer REPLACE the live scan (a set the file was never fingerprinted for
+  could then never reach the road, however the catalogue grew); the scan says which phrases are
+  said, and a scanned hit within `FP_SNAP_SEC` of a fingerprinted one of the same set adopts its
+  second and its confidence. `GENERATOR_ID` is `web-road-v5` since.
+- `TRIGGER_GAP` (2.2 s) thins what is left, first wins. `race/smoke/catalogue-check.mjs` holds all
+  of the above, plus a per-track share cap so no one kind swallows a track.
+
 The plain mapping (c2): `trigger` -> the row above, lane placement, `word: label`; `word` -> a treat bubble; `count` -> a golden air bubble, `last` adds
 `jump: 6`; `drop` -> `jump: 7`, `mix: 'spiral'`, `mood: 'streamed'`, three golden air bubbles at
 `at = 0.2, 0.5, 0.8`; `chant` -> `reps` treats in lane placement alternating `x = +-1.2` at
@@ -175,8 +199,8 @@ A loaded track ducks the room OST to `TRACK_DUCK` (0.12) and the bed to silence 
 
 ### `race/bubbles.js` additions (PR c2)
 ```js
-field.spawnAt({ kindId, placement, d, x, h, eventId })   // an explicit placement; returns the slot id or -1 when the pool is full
-field.spawnRow({ kindId, placement, d, h, xs, eventId }) // a whole row at one depth (PR L4); returns how many went down, 0 for none
+field.spawnAt({ kindId, placement, d, x, h, eventId, script })   // an explicit placement; the slot id, or -1 when it was refused
+field.spawnRow({ kindId, placement, d, h, xs, eventId, script }) // a whole row at one depth (PR L4); how many went down, 0 for none
 field.setDensity(mult)                                  // already in CONTRACT.md; with a track this scales only the cue spawns
 field.setSparse(on)                                     // the loaded road came out of a transcript (PR L4): seedChunk stands down
 ```
@@ -188,6 +212,34 @@ also SPENDS as one thing: the first of its bubbles to pop or to slip past settle
 bubbles are one `taken` on the scheduler (`takenIds` is a set) and at worst one broken combo. With
 `setSparse(true)` `seedChunk` lays only the chunk's own golden and no lanes or ramp lines,
 so what the player drives through is the lyric. Too many bubbles is no bubbles.
+
+**THE SCRIPT IS NOT DRESSING** (2026-09-08). `script: true` marks a spawn the FILE asked for -
+`cues.js` puts it on the word bubbles (`case 'word'`) and on the trigger rows (`case 'trigger'`) -
+and neither refusal above may touch one: no density roll, and a full pool recycles the bubble
+farthest from the kart rather than dropping the line. `density` thins the road's DRESSING, and it
+is turned down to 0.6 on every `release` and to 0 through a `silence`; rolling each word bubble
+against it separately was taking 22 percent of the shelf's words and leaving 44 percent of the
+lines short, which is the owner's "i see maybe 1 word out of a phrase".
+
+**THE COVERAGE CHECK.** `wordedRoad` counts itself as it finishes (`wordBubbles.js coverageOf`),
+stamps `analysis.coverage` (kept by `normalizeChart`, so the cache and `window.__race` both have
+it) and says one `[race-coverage]` line to the host log. A word is on the road when it wears a
+bubble or when it is inside a trigger row's own span; what is left is the guard margin, which is
+the pop box. `node race/smoke/coverage-check.mjs` drives the whole shelf through the field's own
+refusals and fails under 96 percent on the shelf, under 90 on a track, or on ONE word bubble the
+chart asked for and the field did not lay.
+
+**THE PILE, AND WHY MOST OF THEM ARE NOT ONE.** Twenty-one runs on the shelf have three or more
+words inside `MERGE_SEC` of each other, and nineteen of them are real: "in a completely", "as a
+perfect", "of a trap", said at 0.09 to 0.11 s a word. The other kind is the aligner losing the
+words and dropping the whole run on the last instant it was sure of - seven words at 0.01 s a
+word with 2.7 s of empty road in front of them. So the test is the RATE, `PILE_TIGHT_SEC`
+(0.05 s a word, well under the fastest real run on the shelf), and a run that fails it is spread
+back over the silence beside it at the local speech rate, anchored on the second the aligner DID
+have, never further apart than `PHRASE_GAP_SEC` so it comes back as one line in one lane rather
+than a word per lane. Those bubbles carry `est: true` to the chart event. A run with no silence to
+go back into is left exactly where it is and counted (`coverage.pilesLeft`) - a guess with no room
+is worse than the collision. `node race/smoke/word-sync-check.mjs` holds all of it.
 
 ### `race/run.js` + `raceBoot.js` (PR c2)
 ```js

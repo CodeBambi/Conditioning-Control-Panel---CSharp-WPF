@@ -131,7 +131,13 @@ function chartEnergy(t) {
   // a sure trigger is a ROW across the road now (rows-check.mjs holds its geometry), all one kind
   ok(t.spawn.length > 1 && t.spawn.every((sp) => sp.row) && KIND_BY_ID[t.spawn[0].kindId].kind === 'effect' && t.word === 'good girl',
     'a trigger is a row of ' + t.spawn.length + ' effect bubbles and the word: ' + t.spawn[0].kindId);
-  ok(cueFor({ kind: 'trigger', label: 'never analysed' }, ctx).spawn.every((sp) => sp.kindId === 'flash'), 'an unmapped phrase falls back to flash');
+  // an unmapped phrase falls back to the room's own effect, else cues.js FALLBACK_TRIGGER. Whatever
+  // it lands on must be a kind that still SPAWNS: bubbles.js lays no row at all for a darkened one,
+  // and a trigger row that never lands is the one thing this road may not do.
+  const un = cueFor({ kind: 'trigger', label: 'never analysed' }, ctx).spawn;
+  const unKind = KIND_BY_ID[un[0].kindId];
+  ok(un.every((sp) => sp.kindId === un[0].kindId) && !!unKind && unKind.spawn !== false,
+    'an unmapped phrase falls back to a bubble that still spawns (' + un[0].kindId + ')');
   const w = cueFor({ kind: 'word', label: 'deeper' }, ctx);
   ok(w.spawn.length === 1 && w.spawn[0].kindId === 'treat' && w.spawn[0].h === LANE_H, 'a structure word is one lane treat');
   const c = cueFor({ kind: 'count', label: '1', n: 1, of: 10, last: true }, ctx);
@@ -139,6 +145,11 @@ function chartEnergy(t) {
   const dr = cueFor({ kind: 'drop', strength: 1 }, ctx);
   ok(dr.jump === 7 && dr.mix === 'spiral' && dr.mood === 'streamed' && dr.spawn.length === 3, 'a drop is jump 7, a spiral and three rings');
   ok(dr.spawn.map((s) => s.at).join() === '0.2,0.5,0.8', 'the three land at 0.2, 0.5, 0.8');
+  // GOLD IS THE JACKPOT (2026-09-08): one at the top of a hard drop's climb, none on a dip.
+  ok(dr.spawn.filter((x) => x.kindId === 'golden').length === 1 && dr.spawn[2].kindId === 'golden',
+    'and only the top ring of the climb is gold');
+  ok(dr.spawn.slice(0, 2).every((x) => KIND_BY_ID[x.kindId] && KIND_BY_ID[x.kindId].kind === 'effect'),
+    'the rings under it are the room\'s own effect');
   const ch = cueFor({ kind: 'chant', label: 'good girl', reps: 5, period: 2.4 }, ctx);
   ok(ch.spawn.length === 5 && ch.spawn.every((s, i) => Math.abs(s.at - i * 2.4) < 1e-9), 'a chant is one treat per rep on the chant beat');
   ok(new Set(ch.spawn.map((s) => s.x)).size === 2, 'alternating between two lanes');
@@ -162,15 +173,20 @@ function chartEnergy(t) {
   const fl = cueFor({ kind: 'word', label: 'float' }, ctx);
   ok(fl.spawn[0].placement === 'air' && fl.spawn[0].h > LANE_H, 'a lifting word hangs in the air');
   ok(cueFor({ kind: 'trigger', label: 'never analysed' }, { ...ctx, room: { id: 'chapel' } }).spawn[0].kindId === 'spiral', 'an unmapped phrase in the chapel wears the spiral');
-  ok(cueFor({ kind: 'peak' }, { ...ctx, room: { id: 'casino' } }).spawn.every((s) => s.kindId === 'lucky'), 'a peak in the casino rains lucky bubbles');
+  const pk = cueFor({ kind: 'peak' }, { ...ctx, room: { id: 'casino' } }).spawn;
+  ok(pk.slice(0, -1).every((s) => s.kindId === 'pink') && pk[pk.length - 1].kindId === 'lucky',
+    'a peak in the casino rains the room\'s own colour with ONE gold on the end of it');
   ok(cueFor({ kind: 'peak' }, { ...ctx, intensity: 1 }).spawn.length === 8 && cueFor({ kind: 'peak' }, { ...ctx, intensity: 0 }).spawn.length === 4, 'and rains more the louder the file is');
   const soft = cueFor({ kind: 'drop', strength: 0.4, label: 'sink' }, ctx);
   ok(soft.jump === 5 && soft.mix === null && soft.spawn.length === 2 && soft.toast.text === 'sink', 'a soft drop is a lower jump, two rings, no spiral, its word on the chrome');
+  ok(soft.spawn.every((x) => x.kindId !== 'golden'), 'and no gold at all: a dip is not a fall');
   ok(dr.toast && dr.toast.kind === 'jackpot', 'a hard drop puts its word up in gold');
   const c5 = cueFor({ kind: 'count', label: 'five', n: 5, of: 10 }, ctx), c10 = cueFor({ kind: 'count', label: 'ten', n: 10, of: 10 }, ctx);
   ok(c5.toast.text === 'five' && c5.spawn[0].h < c10.spawn[0].h && c.spawn[0].h < c5.spawn[0].h, 'a countdown sinks its rings toward the road as it runs down');
   ok(c.pose === 'clamp' && c.toast.kind === 'item', 'and she braces on the last one');
-  ok(ch.spawn.filter((s) => s.kindId === 'golden').length === 1 && ch.pose === 'cheer', 'every fourth chant treat is gold, and she cheers the chant');
+  ok(ch.spawn.every((s) => s.kindId !== 'golden') && ch.pose === 'cheer', 'a short chant carries no gold, and she cheers the chant');
+  ok(cueFor({ kind: 'chant', label: 'x', reps: 16 }, ctx).spawn.filter((s) => s.kindId === 'golden').length === 1,
+    'the longest chant the road will lay carries exactly one');
   ok(cueFor({ kind: 'chant', label: 'x', reps: 8, weight: 0.5 }, ctx).spawn.length === 4, 'a light chant is a shorter lane');
   ok(resultTag(0, 0) === null && resultTag(9, 9) === 'every word' && resultTag(8, 10) === 'good girl' && resultTag(5, 10) === 'half of her' && resultTag(2, 10) === 'she noticed' && resultTag(0, 10) === 'you were not listening', 'the end card tag reads the ratio');
 }

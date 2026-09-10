@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -2226,6 +2226,12 @@ namespace ConditioningControlPanel
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
             KeywordTriggers = new KeywordTriggerService();
             KeywordPresets = new KeywordTriggerPresetService();
+
+            // ccp-bugs#1185: repair any installed CUSTOM preset whose source trigger list has
+            // drifted from its live clones before the user can deactivate it. After a deactivate
+            // the clones are gone and the edits are unrecoverable, so this has to run at launch.
+            try { KeywordPresets.SyncInstalledCustomSources(); }
+            catch (Exception ex) { Logger?.Warning("Custom preset source sync failed: {Error}", ex.Message); }
 
             // Drain any preset re-installs queued by SettingsService.MergeBuiltInAwarenessPresets
             // when a built-in preset's version was bumped on this launch. This re-clones the
@@ -4913,6 +4919,11 @@ Application State:
             // Close() is safe from here - it has no state to flush and never touches the lockdown (any
             // verdict was applied the moment it was rolled).
             try { Services.EmergencyExit.EmergencyExitHostService.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
+
+            // Piece by Piece: same reason, same posture as the friction door above. Close() there
+            // and here is a straight dispose - the board has nothing to flush and no verdict to
+            // protect, so there is no graceful wind-down whose 1200ms timer would never tick.
+            try { Services.PieceByPiece.PieceByPieceHostService.Close(); } catch (Exception ex) { Diag.Swallowed(ex); }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it

@@ -71,6 +71,25 @@ worked on (`naming`, `reading`, `decoding`, `charting`, then `playing` / `paused
 Deciding `hand-tuned` costs NO NETWORK: the index is same origin and already
 fetched, and the key is the `cloudId` off the url.
 
+**The picked row IS the status.** A tap opens nothing under the list: THAT row lights
+(`is-picked`, a lit plate with a hard stripe down its left edge - background, never
+`box-shadow`, so the focus ring still fits around it) and grows its own progress bar under
+the title, teal and full once the road is in hand (`is-loaded`). The bar carries the same
+number the menu's track plate used to: the web lane's chart steps through
+`levels.setStage(id, word)`, a host's `track-progress` pct through `levels.setTrack(state)`.
+`setTrack` answers TRUE when it painted that state on a row, and `raceBoot.plate()` passes
+the answer on as `menu.setTrack(state, onRow)`: the verbs still follow it (`race the track`)
+and the plate stays down. A pasted link and a file the host picked are claimed by nobody, so
+they still get the plate. WHICH row is picked is read live off `cloud.state` on the web -
+`play the set` rolling on to level 4 lights level 4, a pasted link playing lights nothing -
+and off the last tap on a desktop host, which owns playback.
+
+**`back` is always on screen.** Eleven rows are taller than a phone, so `.rm-levels-foot` is
+`position: sticky` against the bottom of the scrolling column (`.rm-col`, whose bottom
+padding is now the `--rm-pad-b` variable the foot reaches past, since sticky sticks to the
+content box). It is still the LAST row in the DOM, so `rows()` / `els()` and the arrow, pad
+and smoke walks keep the order they always had.
+
 **Two hosts, one panel.** On the web a tap hands that one track to `race/cloud.js`
 and the run follows the element. On a desktop host (`trackPick: true`) the desktop
 owns playback, so a tap posts `cloud-open { url }` with the track's PAGE url and

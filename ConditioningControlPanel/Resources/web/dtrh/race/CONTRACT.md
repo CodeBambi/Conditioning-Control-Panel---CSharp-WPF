@@ -92,7 +92,9 @@ Returns a `layout` object that is ALSO a valid argument to `engine/tunnel.js cre
 - `chunks` -> ordered array of `{ id, kind, d0, d1, room, features }`.
   `kind` in `straight | bendL | bendR | sCurve | climb | dip | ramp | chicane | loop | gate`.
   `features` is an array of:
-  - `{ type:'ramp', d, airLen, height }` - lip at `d`, air line from `d` to `d + airLen`, apex `height`
+  - `{ type:'ramp', d, airLen, height, vh, airSec }` - lip at `d`, apex `height`; `vh`/`airSec` are
+    the launch speed and the hang time the kart really flies at cruise, and `airLen` is that
+    flight's own length, so the air line ends where the saucer lands
   - `{ type:'boost', d, x }` - boost pad centre
   - `{ type:'loop', d0, d1 }` - the Big Wheel occupies `d0..d1`
   - `{ type:'gate', d, room }` - room boundary; MARQUEE fires here
@@ -100,6 +102,15 @@ Returns a `layout` object that is ALSO a valid argument to `engine/tunnel.js cre
 - `featuresBetween(d0, d1)` -> features whose `d` (or `d0`) falls in the wrapped range.
 - `roomAtDepth(d)` -> room id.
 - `rampAt(d)` -> the ramp feature whose air line covers `d`, else `null`.
+- THE REACHABLE LINE, the one height everything on the road is measured from:
+  - `surfaceH(d)` -> the asphalt at `d`. 0 on open road; over the `RAMP_LEN` metres of wedge in
+    front of a lip it climbs to `RAMP_H` (consts.js owns both, rooms.js draws the wedge to them).
+  - `surfaceSlope(d)` -> that wedge's gradient, 0 elsewhere (kart.js pitches the saucer to it).
+  - `airLineAt(d)` -> `{ ramp, u, h }` inside a flight window, else `null`: the kart's own
+    ballistic arc off the lip at cruise.
+  - `rideH(d)` -> the arc where there is one, else the asphalt. NOTHING may hang at a flat height
+    over a ramp: bubbles.js measures every height off `rideH(d)`, so a bubble is never drawn
+    inside the wedge nor left metres under a kart in the air.
 
 Track shape rules: one Tea Garden start straight, then the rooms in `roomOrder`, each room = 4..7
 chunks, exactly one loop somewhere after the first two rooms, at least one ramp per room, the whole
@@ -153,7 +164,9 @@ field.update(dt, t, kart)               // kart = { d, x, h, speed }; runs motio
 field.onPop(cb)                         // cb(popEvent)
 field.onMiss(cb)                        // cb({ id, points, d, x, h }) when a treat passes behind the kart unpopped
 field.setDensity(mult)
-field.spawnAt({ kindId, placement, d, x, h, eventId })   // PR c2: an explicit placement from a track cue; the slot id, or -1 when the pool is full
+field.spawnAt({ kindId, placement, d, x, h, eventId, script })   // PR c2: an explicit placement from a track cue; the slot id, or -1 when it was refused
+                                        // `script: true` is a spawn the FILE asked for (a word bubble, a trigger row): no density roll, and a
+                                        // full pool recycles the farthest bubble rather than refusing the line (see CHART.md, 2026-09-08)
 field.setTracked(on)                    // PR c2: a track is loaded, so setDensity gates the CUE spawns and leaves the seeded lanes alone
 field.dispose()
 ```
@@ -164,15 +177,25 @@ Pop event: `{ id, kind, payload, strength, points, placement, x, d, eventId, wor
 where relevant (`spiral | braindrain | pink_filter`). `strength` is 0..1.
 
 Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
-`/dtrh/assets/bubbles/effects/*.png` and `https://ccp.art/bubbles/*.png`):
+`/dtrh/assets/bubbles/effects/*.png` and `https://ccp.art/bubbles/*.png`).
+GOLD IS THE JACKPOT, NOT THE FILLER (2026-09-08): every effect is colour coded, so a coloured
+bubble has to mean "something happens here". The three gold rows are rare and pay like it, and
+the frequency they gave up went to the effect kinds. Measured over five 3-minute seeded runs,
+gold went 13.0% -> 2.2% of what is laid and effects 21.8% -> 30.9%; over the track cues it went
+44.4% -> 5.2% gold and 35.8% -> 57.5% effects. Every gold source in the game is in that count:
+the roll's weights, the room `bubbleBias` leans, the air line (which favours EFFECTS now), the
+chunk-end marker on a transcript road, and the cue tables in `race/cues.js` - a peak rains the
+room's own colour with at most ONE gold on the end, a hard drop's rings are the room's effect
+with one gold at the top of the climb, a countdown golds only its last ring, and a chant golds
+one bubble in twelve, so only the longest chant carries one at all:
 
 | id | kind | payload | points | notes |
 |----|------|---------|--------|-------|
-| treat | treat | null | 10 | the common bubble, plain sprite |
-| golden | treat | null | 50 | rare, JACKPOT chime |
-| lucky | treat | null | 25 | a plain 25 point treat, nothing else |
-| prism | treat | null | 30 | rainbow, pops neighbours |
-| flash | effect | flash | 15 | flash media from the pool |
+| treat | treat | null | 10 | the common bubble, plain sprite; the filler, and nothing but |
+| golden | treat | null | 300 | THE JACKPOT: weight 0.16, the rarest thing on the road, biggest burst, its own chime stack and a `jackpot +N` toast |
+| lucky | treat | null | 150 | weight 0.22, a smaller gold take with a toast of its own |
+| prism | treat | null | 180 | weight 0.3, rainbow, pops neighbours |
+| flash | effect | flash | 15 | DARK since 2026-09-08, never spawns; the WORD carries the flash now (see below) |
 | subliminal | effect | subliminal | 15 | |
 | pink | effect | overlay/pink_filter | 20 | |
 | spiral | effect | overlay/spiral | 20 | |
@@ -181,21 +204,175 @@ Bubble kinds (mirror `game/variants.js` and `engine/bubbles.js`; sprites from
 | freeze | effect | bambiFreeze | 25 | minIntensity 0.15 |
 | gifrain | effect | gifCascade | 25 | minIntensity 0.45 |
 | video | effect | video | 40 | DARK since 2026-09-06, never spawns (see below) |
+| gifwash | effect | gifWash | 20 | weight 7, minIntensity 0.1, THE MIX slot `wash` (see below) |
+| blackout | effect | blackout | 30 | weight 1.8, minIntensity 0.5, THE MIX slot `overlay` (see below) |
+| lock | effect | bambiLock | 30 | weight 1.8, minIntensity 0.5, THE MIX slot `freeze`, says the road's phrase (see below) |
+| melt | effect | melt | 20 | weight 3, minIntensity 0.15, THE MIX slot `tint` (see below) |
 
-Spiral pops (`payloadFx.showSpiral`, untouched) take their url from `engine/loomSpirals.js`
-`pickSpiralUrl()`. On the mobile tier `Q.leanSpirals` has run.js narrow that module's bundled pool
-to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the other five are 2.2-5.3 MB) with
-`setBundledSpiralPool` and prefetch both in `prepare()` (while the intro plays; `start()` covers
-`?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full pool and the Descent
-never calls the setter.
+THE GIF TAKES THE SCREEN (`gifwash`, 2026-09-08, the owner's ask: "we should also use often the
+fullscreen gif overlay, the one we use for the glitch bubble in the dtrh"). `payloadFx.showGifWash`
+is the glitch bubble's wash off the leash: no backdrop blur, no dark luminosity blend and no 0.62
+ceiling, so the picture is the thing on the glass. Opacity `0.55-0.8` by strength, hold `1.5-3 s`
+stretched by strength and `durationMult`, a light `is-washing` scale shudder, and a soft mask
+(`styles.css .sf-pfx-gifwash`) that both feathers the edges and lands its falloff over the lower
+centre so the road stays drivable - the spiral's 0.78 `filter: opacity()` cap is deliberately NOT
+extended to it; what the race does put on the hold is a flat `opacity(0.85)` (2026-09-09, phone
+testing: "15% less opacity on the fullscreen gifs"), so the ramp lands at `0.47-0.68` and the live
+Loom canvas, which inherits the hold's filter, sits at the same weight as a gif. The url comes from
+`pickWashUrl()`, which draws up to four times from the DOM-safe
+pool and takes the first entry whose name or url says `.gif`/`.webp`, keeping the last draw if none
+do; with an empty pool it takes a BUNDLED SPIRAL (`pickSpiralUrl()`, all animated) rather than one
+of the still png `FALLBACK_SPRITES`. It has its OWN MIX slot, `wash` (`cocktail.js CATEGORIES`,
+mode `replace`, 3 s): a picture over the lot is not the spiral's spin, and the weight the owner
+asked for (7, level with the subliminal) only reads as often if a spiral pop cannot evict it. No recipe names
+`wash`, so every `RECIPES` row still resolves off the ingredients it always did.
+
+SLEEP NOW (`blackout`, 2026-09-08). The screen cuts to black over 120 ms (`.sf-pfx-black.is-cut`),
+holds `600-900 ms` by strength and `durationMult`, then lets go over a full second while
+`showBraindrain` fades the blur back in underneath, so the player comes back up through the drain
+rather than straight onto the road. One reused hold, so overlapping pops refresh a deadline instead
+of stacking; `cancelHeavy()` takes the glass back at once, so a run can never end with the screen
+dark. It rides the `overlay` slot (its `overlayKind` is `braindrain`, which is what it hands back
+to) and `fire()` in run.js refuses it unless `S.running && !S.ended`, so it never lands on the
+countdown or once the End card is owed - the pop still scores, only the picture is withheld.
+Both layers live inside `.sf-pfx` (z4), under the countdown (z21) and the End card (z25).
+
+THE DOLL (`lock`, 2026-09-08). The freeze card and the freeze timing (`.sf-pfx-freeze`, in at
+0.25 s, out at 1.2 s, gone at 1.7 s, `w.kart.applySlow(0.92, 2.0)` under it), with two differences.
+It wears `.is-lacquer`: satin sheen over a poured pink frame instead of the frost tint, the phrase
+allowed to wrap. And it SPEAKS the road's own words - `payloadFx.bambiFreeze(text, lacquer)` takes
+an optional phrase the same way `subliminal` took `p.text`, and run.js's `SPEAKING` set (`subliminal`,
+`bambiLock`) hands it the popped bubble's word, else the road's last line inside `ECHO_SEC`, else
+nothing, which drops it back on payloadFx's own pool. It shares the solo `freeze` slot with the
+plain freeze, so two cards can never talk over each other, and the `freeze` row is untouched: that
+one still says the literal BAMBI FREEZE, in the tube as well as on the road.
+
+MELTING (`melt`, 2026-09-08). The pink filter that sags. Same `tint` slot and the same
+`.sf-pfx-pink` layer a pink pop uses, so one colour on the glass stays one colour, but
+`payloadFx.showMelt` retimes the layer's opacity ease to the whole hold (`2-4 s` by strength, then
+`durationMult`) and ramps from whatever the tint already is up to `0.30-0.78`, so the colour arrives
+instead of snapping. `.is-melting` re-centres the gradient high, sinks and stretches the layer
+(`sf-pfx-sag`, transform and filter only) and runs the wash slowly downward (`sf-pfx-drip`, on
+`background-position` over a `145%`-tall background). `showPink` takes the class, the retimed
+transition and `--pfx-sag` back off the shared layer, so a plain pink still snaps. `cocktail.js
+KIND_LIFE` gives it 3.4 s rather than the tint's 4.5, since a good part of its life is the ramp.
+
+Reduced motion (run.js stamps `#race-root[data-rm="1"]` from the run's own toggle; race.css also
+answers `prefers-reduced-motion`) keeps every colour and every word and drops only movement: no
+wash shudder, no sag or drip, no breathing on the lacquer card.
+
+**SPIRALS ARE WOVEN, NOT SHIPPED (2026-09-09).** A race spiral is drawn live by the Loom now, not
+loaded as one of seven stock gifs. `engine/loomSpirals.js` grew a second picker beside the old one:
+`pickSpiral()` returns either a gif url (what the Descent still gets) or a weave
+`{loom:true, params, id, href}`, and `setLoomBook(fn)` is the seam the race fills. The mix is the
+player's own saved spirals ~50% of the time (params-first: a `loom-list` entry with a `params`
+sidecar renders live, one without stays its gif), the race's BOOK otherwise; `href` is always a
+bundled gif, kept only as the floor for a lost GL context. `pickSpiralUrl()` is unchanged, so the
+Descent is byte-identical: it never sets a book and never sees a weave.
+
+THE BOOK (`race/loomBook.js`) is the race's own spiral set, seeded off the run seed so a seed
+replays. `paletteFor(roomId)` reads `rooms.js` `colors.edge/prop/banner` + `propAlt` for the thread
+colours and darkens `colors.fog` for ground and outer, so a ninth room needs no edit here.
+`ROOM_CHARACTER` then hand-tunes style/glow/pulse/wobble/speed/arms per room - tea garden soft log
+and arch, toybox loud petals, casino golden, undertow wobbling ribbon and tunnel, mirrors tunnel,
+chapel high-glow log and golden, greyward dim arch, coronation golden and petal. Every draw snaps
+`turns` to 1.5-4, takes two threads (three one draw in four) rotated off a `lead` index, sets
+`hueCycles: 0` (a race spiral does not rainbow), and, when the road phrase is still echoing, puts
+that word in the centrepiece as a `mantra` - the spiral says what the voice said.
+
+`race/loomSpiralFx.js` mounts it. payloadFx takes an optional `spiralFx` seam (defaults null, the
+same shape as `subliminalFx`); when a weave is picked it mounts a canvas inside the `sf-pfx-spiral`
+hold rather than setting a background-image, inheriting the hold's opacity fade so intensity stays
+one channel, and neutralises only the css the canvas replaces (the 14 s spin, the 1.6 overscan). The
+canvas backing store is capped at 512 px on the long side, 256 px on the touch tier, where it also
+drops layer 2 and the wobble and paces frames at 42 ms. One WebGL context and one compiled shader
+serve every hold for the manager's life (2026-09-09: a context per pop was the phone's lag - a
+shader compile on every spiral); a hold is only a 2D view over that surface. Reduced motion paints
+one still frame.
+THE PHONE'S LAYERS (2026-09-10: "we still lag a lot on the fullscreen effects on iphone. the glitch
+bubble fullscreen in particular and the spiral"). Every sustained hold is a fullscreen DOM layer over
+the WebGL glass, composited at device resolution (3x on an iPhone), and three things on them cost a
+full-resolution pass on every frame the layer changes: race.css's `filter: opacity()` caps (and the
+MIX crossfade and tint-2 saturate through the same channel), the drain's `backdrop-filter: blur()`,
+and the glitch's `hue-rotate` / `saturate` keyframes. So run.js stamps `#race-root[data-touch="1"]`
+on the touch tier (`isTouchTier`, the same stamp the spiral canvas tiers on) and passes payloadFx
+its third seam, `opacityCap(kind)`: the same 0.78 / 0.7 / 0.86 / 0.85 (0.92 for tint 2) multiplied
+INLINE into the hold's opacity at `holdOn` / `showMelt`, so the intensities are the desktop's and
+race.css can take every filter, the backdrop blur and the colour keyframes off that tier (the
+glitch shudders on transform alone, a heavier fill stands in for the blur, the melt's sag drops its
+saturate). The masks stay: a mask is a composite, not a per-frame filter pass. The desktop rules
+are untouched, the Descent passes no cap. `race/smoke/loom-spiral-check.mjs` section 7b.
+The second pass (2026-09-10, "smoother but still not good enough ... the gifs, pink filter and
+spiral ... the blink shutter effect on the bambi sleep trigger"): under the same stamp the melt's
+drip (an animated background-position, a 3 M px repaint per frame) is gone and only the sag stays;
+the flash bursts and the gif rain swap `filter: drop-shadow()` for a box-shadow; the `pink-blink`
+plate blinks in colour instead of `filter: brightness()`, and the `melt` and `fog` plates let go
+without `filter: blur()`; the doll's lacquer breathes on scale alone; the subliminal card rushes
+without its blur; the strobe edge is the 5 px line without the 40 px inset blur. `shared/quality.js`
+mobile: `bubbleShards` 24 (was 32) and `bubbleViewAhead` 64 m (was 76): every visible sprite is a
+draw call, and 64 m is still 2.9 s ahead at cruise. The governor in `race/pixel.js` has a lower rung
+on a coarse pointer, `TOUCH_DPR_FLOOR` 0.8, read every `GOV_TOUCH_SEC` 2 s, climbing back one rung
+at a time. Section 7c.
+`webglcontextlost`, or no WebGL at all, drops the canvas and paints `href` - the old gif path is the
+floor, not a dead branch. Each mount self-unmounts at `durMs + 700`, so nothing spins behind an
+invisible layer. `gifwash`'s own fallback goes through the same seam, so it gets a weave too.
+
+The bundled gifs still ship as that floor. On the mobile tier `Q.leanSpirals` has run.js narrow the
+module's bundled pool to `LEAN_SPIRALS` (sp6.gif 123 KB + sp7.gif 721 KB; the other five are
+2.2-5.3 MB) with `setBundledSpiralPool` and prefetch both in `prepare()` (while the intro plays;
+`start()` covers `?autostart=1`), so a lap never fetches a spiral mid-run. Desktop keeps the full
+pool and the Descent never calls the setter.
+
+On the desktop `raceBoot.js` answers the host's `loom-list` the way `boot.js` does and
+`CaucusHostService` posts it on ready and again on every `DtrhLoomStore.Changed`, so a spiral woven
+in the Boudoir mid-session is on the road at the next pop. An entry with a `params` sidecar is
+woven live; one without is still its gif, so nothing fetches multiple MB mid-lap. On the web there
+is no account library (the site Loom is anonymous), so the web gets the race book only.
+Checks: `race/smoke/loom-book-check.mjs` (the book per room, the seed replay, the mantra),
+`race/smoke/spiral-pool-check.mjs` (the picker mix and the floor under it) and
+`race/smoke/loom-spiral-check.mjs` (the live canvas in the hold, the backing sizes, the
+lost-context floor, reduced motion, and that a Descent pop is still a url).
 A row may carry `spawn: false`. Video bubbles are dark since 2026-09-06: `rollKind` leaves the row out
 of every pool and `field.spawnAt` returns -1 for it, so no roll, lane line, rain or track cue can put
 one on the road, and `CaucusHostService` refuses a `fire-payload {kind:'video'}` as well. The row, its
-sprite and its THE MIX `video` slot stay put for a later use.
+sprite and its THE MIX `video` slot stay put for a later use. `field.spawnRow` refuses a dark kind
+too, and refuses the WHOLE row rather than laying it with a hole in it, so anything that names a kind
+for a row (`cues.js` FALLBACK_TRIGGER / ROOM_TRIGGER, `triggerTheme.js` FALLBACK_KIND and every
+`THEME_BY_PRESET` row, `track.js` TRIGGER_KINDS) has to name one that still spawns.
 
-Placements: `lane` (rests on the road, h ~0.9, bobbing), `air` (along a ramp air line, h rises
-2..5), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` to the road in
-about 4 s, rests 2 s, then fizzles). Collision is pass-through: pop when
+**THE WORD FLASH (2026-09-08).** The flash bubble is dark as well: the flash is a beat on a WORD now,
+not a bubble of its own. A pop of a bubble that WEARS a word (a transcript word bubble, or one of a
+trigger row whose kind is a treat) fires `payloadFx` `flash` at `WORD_FLASH` strength for ~185 ms
+half the time, rolled off the run's own seeded stream (`w.popRng`), one flash per `WORD_FLASH_GAP_MS`
+(250 ms) and none at all under reduced motion. It is cosmetic: it never reaches THE MIX, so it is no
+strobe charge and no recipe, and the pop scores as the treat it always was. The odds, the cap and the
+constants live in `race/cues.js` (`wordFlash`, `WORD_FLASH*`), so `race/smoke/rows-check.mjs` holds
+them; run.js only keeps the clock. `race/smoke/word-flash-check.mjs` drives a real headless run and
+reads the two counters back: `race.wordFlashStats()` (pops, capped, rolls, flashes) and
+`race.wordFaces().placed`, the tally of every kind the field has actually put on the road. The one preset that MEANT the flash, `flash-pulse`, goes the other
+way: its row is a line of plain word faces and its beat sets `cue.mix = 'flash'`, which is now the
+only door a strobe charge comes through, so the recipes that need one still have a way to be served.
+
+**GIF RAIN ON A ROAD BLOCK (2026-09-08).** A trigger row is unavoidable, and most rows are the many
+`mark` word sets: a line of plain word faces with no effect of their own. One such row in six
+(`cues.js` `GIFRAIN_ROW_CHANCE`, rolled off the ROAD's seeded rng so a seed lays the same rain
+twice), from the gifrain bubble's own `minIntensity` upward and no other floor, puts a gifrain
+bubble in the MIDDLE of the line. Only the centre, so a row can pour exactly one cascade and never
+five; never over a golden centre the rabbit foot is owed; and never on a row that already pours
+something, which is why a `flash-pulse` line stays plain. The `gif-rain` preset itself
+(`triggerTheme.js`, plate theme `rain`, gold) is what a set asks for by name: `cockslut` asks for it
+since 2026-09-08, having pointed at the dark `video` bubble since that one went dark.
+`race/smoke/rows-check.mjs` holds the odds, the floor and the one-bubble rule;
+`race/smoke/gifrain-row-check.mjs` drives a real run and holds the cascades against the rain
+bubbles that were laid, reading `race.fxStats()` - every payload the mixer has poured.
+
+Placements, ALL of them measured off `layout.rideH(d)` (the spine's reachable line) and never off
+the flat road plane: `lane` (rests `LANE_H` over the line, bobbing), `air` (`LANE_H` over the
+flight arc, one every 2 m for the first 10 m of it, the stretch every pace in the band can still
+reach), `spawn` (materialises ahead, wobbles laterally), `rain` (falls from `h = 9` and lands ON
+the line, rests 2 s, then fizzles). A row that walks onto a ramp climbs the wedge with it.
+`race/smoke/slope-check.mjs` walks every chart and seed through the real placement and holds it:
+nothing inside a slope, nothing outside the pop box of the line, at every pace. Collision is pass-through: pop when
 `|dd| < POP_HIT_D && |dx| < POP_HIT_X && |dh| < POP_HIT_H`.
 
 ### `race/score.js` (PR 2)
@@ -208,6 +385,11 @@ Combo drops to 0 after `COMBO_HOLD_SEC` with no word DUE: a pop resets that cloc
 `unread()`, the word bubble the kart drove past (no rung, no release), so a line read with one word
 missed cannot time the ladder out on two gaps that are each inside the hold. `bank()` moves `score` into `banked` at the
 Tea Garden gate (THE BANK). Events: `{ type:'pop'|'miss'|'combo'|'mult'|'bank'|'jackpot'|'almost', ... }`.
+
+A word event may also carry `est: true`: the second is this build's estimate, not the aligner's,
+because the run it is in was collapsed onto one instant and `race/wordBubbles.js` put it back over
+the silence it was said in. Nothing in the game reads it yet; it is there so a bad transcript is
+visible in the chart rather than only on the road.
 
 ### `race/kart.js` (PR 3)
 ```js
@@ -225,6 +407,7 @@ kart.emiModel()                  // the mounted race/assets/emi.glb root, or nul
 kart.emiReady(cb)                // cb(root) when she is mounted (fires at once if she already is)
 kart.setFace(i)                  // face atlas frame 0..4 (menus and results; never seen in race)
 kart.pose(name, opts)            // the pose layer, race/emiPoses.js
+kart.idle(dt)                    // the rider only, world parked (the `again` count: no physics, no camera)
 kart.dispose()
 ```
 `createKart` also takes `pixel` (race/pixel.js): the glb's textures land after the run's one
@@ -236,7 +419,8 @@ lathe cup, its rim torus, the handle tube, the saucer cylinder and its rim are t
 the tea disc, the pink saucer mark, `cupLight`, the seat and `TEA_Y` are shared by both paths.
 Speed: cruise `KART_BASE_SPEED`, cap `KART_MAX_SPEED`, floor `KART_MIN_SPEED`. Ramps: when
 `layout.rampAt(d)` matches the lip, give `vh` an upward impulse scaled by speed; `GRAVITY` pulls
-back; `airborne` while `h > 0.05`. Steering moves `x` with inertia, clamped to `KART_X_MAX` (soft wall,
+back. The saucer RIDES THE WEDGE up to the lip (`layout.surfaceH`) and is airborne while it is
+above it, so the ground under the kart is the same line the bubbles hang off. Steering moves `x` with inertia, clamped to `KART_X_MAX` (soft wall,
 no bounce-off shock): THE KERB HOLDS THE SAUCER, NOT THE CUP, so the limit is measured from the
 saucer's outer rim (`KERB_INNER_W - SAUCER_R_ROAD - KERB_KISS` = 1.775 m) and the dish stops on the
 kerb line instead of hanging a metre and a half past it. Drift = tighter steer + sparks, no penalty. EMI: CRT body seen
@@ -246,17 +430,45 @@ emoticons only, never a drawn face, never a speech line.
 
 ### `race/emiPoses.js` (pass four, EMI's body)
 ```js
-export const POSES, PIVOTS;   // the pure preset table, and the four glb pivots a preset may name
+export const POSES, PIVOTS;   // the pure preset table (rotations + per-arm `reach`), and the four glb pivots a preset may name
 export function resolvePose(name, opts) -> flattened target
 export function createPoseLayer(model) -> { set(name, opts), update(dt, ctx), dispose, fraught, name }
+export function snapshotRest(model)     // bank the authored stance before a mixer moves it
 ```
 Poses: `cruise` (the rest), `drift`, `boost` -> `boostOut`, `air`, `landing` / `landingKerb`,
-`grab`, `clamp`, `tuck`, `throw`, `cheer`. `opts` = `{ side:-1|1, tier:1..3, hold:sec }`; sided
+`grab`, `clamp`, `tuck`, `throw`, `cheer`, and the countdown set `ready` -> `grip` and `launch`.
+`opts` = `{ side:-1|1, tier:1..3, hold:sec, amp:0..1 }` (`amp` scales the whole-body part only, so
+reduced motion keeps the gesture and loses the bounce); sided
 presets are authored for +1 and mirrored for -1. Every value is an offset on the pack's authored
 rest rotation, blended on damped springs (Law XI, never a linear tween), and a pose with a `hold`
 falls back to `next` on its own. `clamp` and `landingKerb` report `fraught` and emi.js takes the
 max of that and the run brain's. run.js only ever calls `kart.pose(...)`; the layer exists only
 while the glb is mounted (the primitive EMI has no limbs to pose).
+
+**The rim grip.** Every pose that is meant to be *holding on* parks the glove on the SIDE of the
+cup's brim, the widest point of the lip on screen: lip top y 0.785, lip radius 0.500 in kart-body
+metres, the seat at (0, 0.395, 0.22) and the shoulder pivot at (-+0.312, 0.787, 0.196). The
+authored glove reach is only 0.206 m, which meets the lip between about 32 and 77 degrees around
+from dead ahead - the far arc, where the case hides the hands from the chase camera. So a holding
+pose also carries `reach: [L, R]`: `GRIP` = 1.28 stretches that arm along its own axis (a y-scale
+on the shoulder pivot, with `handL`/`thumbL` counter-scaled off their mounted base so the mitt does
+not go egg-shaped), which walks the grip out to 82..87 degrees, x -+0.51, z +0.02..0.07. A free
+hand keeps `reach` 1 (`grab`, `throw` right; `cheer` has no `reach` at all), and `opts.arms` fades
+the stretch with the angles. Re-solve, do not eyeball, and solve each pose against its OWN root
+attitude - lean, tilt, lift and squash move the shoulder, which is why `drift`'s two arms differ
+and `landingKerb` is asymmetric. A hand that drops below the lip vanishes inside the cup. The hands
+ride the cup through the steer lean for free - the seat and `kart_cup` share the body group that
+tips. So the mitts read at the game's real scale (the cup mouth is only ~113 px wide in a 1280
+frame), emi.js repaints `handL`/`handR`/`thumbL`/`thumbR` with their own white `emi_glove` material
+BEFORE `flattenRig` (the repaint is what splits them out of the merge) and scales the two hand
+nodes by `GLOVE_SCALE` 1.4. The case material is untouched.
+
+**The countdown.** `ready` -> `grip` is one beat of the 3 2 1 and `launch` is GO. Both counts drive
+them off the HUD's own ticks, never a hand-timed script: `intro.js` builds a layer over the menu
+stage's glb inside `count()` (written after `stage.update`, so it beats the idle clip, and disposed
+with the intro), and `run.js`'s `again` passes an `onTick` and leans on `kart.idle(dt)` to turn the
+springs while the world is still parked. `menu.js` calls `snapshotRest` the moment the glb lands so
+the layer offsets from the pack's stance and not from whatever frame the mixer was on.
 
 ### `race/pickups.js` (the passive pickups)
 ```js
@@ -316,7 +528,7 @@ below every `.sf-pfx` layer, and the Brake/End screens at z20 pick their own sta
 
 ### `race/run.js` + `raceBoot.js` + `race.html` (PR 5, integration)
 ```js
-export function createRace({ root, bridge, media, settings, seed }) ->
+export function createRace({ root, bridge, media, settings, seed, onExit }) ->
   { start(), prepare(), setPaused(b), dispose(), setCameraOverride(fn), setStage(s), reseed(seed), renderer, pixel, audio, hud, camera,
     setTrack(chart | null), replaceTrack(chart), trackClock(t, playing), trackEnded(), track }
 ```
@@ -334,6 +546,31 @@ and gates which bubble kinds may appear. Treat pops go to score; effect pops cal
 `payloadFx.applyPayload({ payload, strength }, { durationMult })`, `video`/`audio` go to the host
 through the `fire-payload` bridge message exactly like `chaosRun.js` does today. ESC = Brake
 (pause + end screen). Run end sends `run-ended` (below).
+
+**The subliminal payload has a RACE-ONLY presentation.** `payloadFx` takes one optional
+`subliminalFx` seam and run.js is its only caller: the race draws `race/subliminal.js`'s card
+(`.rh-sub-layer` in `.race-hud` at z14, styled in race.css) instead of the tube's `.sf-pfx-sub`
+blip, and dtrh.html - which passes no seam - is unchanged. It is `fitPx`-sized off the viewport
+(176 px at 1280x720, 78 px on a 390 px phone, stepping down by word count so eight words still
+fit), cream on a hot-pink bloom over a dimmed vignette carrying the same road cutout the
+sustained washes carry, and it rushes the POV over 1250 ms (scale 0.62 blurred -> 1.0 by ~330 ms
+-> a ~450 ms readable hold -> 1.7 while it fades). Reduced motion fades it in place at full size.
+One card at a time: a second pop inside `MIN_SHOW_MS` (700 ms) queues at depth one, newest wins.
+The phrase is the popped bubble's own word if it wore one, else the last thing the road said
+inside `ECHO_SEC`, else `payloadFx`'s built-in whisper pool. `race/smoke/subliminal-check.mjs`.
+
+**The End screen's `surface` goes BACK TO THE MENU, it never closes the page.** `onExit` is the way
+home: run.js stops the file, drops the world (`teardown`), resets the run state, re-arms the same
+chart at `t = 0` (so picking that level again replays it) and calls `onExit()`. raceBoot's
+`backToMenu` puts the lobby chrome, the menu stage, the menu theme and the levels panel's picked row
+back, clears `started` so `race` (and a host `cloud-run`) can fire again, and answers `true`. It
+answers `false` when there is no menu to go back to (`?autostart=1`, `?scene=intro`), and only then
+does the End screen fall through to `exit()` and close the page. `run-ended` is still sent exactly
+once per run, before any of this, and `payout-result` still resolves against it. The two REAL exits
+are unchanged: the host's `exit-request` and the menu's own `surface` verb, both of which post
+`exit` + `exit-done`. No host-protocol change: a host that only ever saw `exit` after a run now
+simply does not see one until the player asks to leave. `node race/smoke/menu-return-check.mjs`
+drives that whole path through the real page and holds it down.
 
 As built (PR 5 reality notes):
 - `race/input.js` is the single reader of keyboard + gamepad + touch:
@@ -378,7 +615,7 @@ As built (PR 5 reality notes):
 - `bridge.isHosted` is a BOOLEAN export, not a function. `raceBoot.js` reads it to pick standalone dev mode
   (synthesised `init`, every would-be host message logged as `[race->host]`).
 - `run.js` registers the `pause` and `payout-result` bridge handlers itself; `raceBoot.js` owns `init`,
-  `manifest`, `favorites`, `ping`, `exit-request`, `fullscreen`.
+  `manifest`, `favorites`, `loom-list`, `ping`, `exit-request`, `fullscreen`.
 - Only `video` pops go to the host (`fire-payload {kind:'video', strength 0..100, durationMult}`);
   `payloadFx` never sends it. There is no `audio` bubble kind. Since 2026-09-06 no video bubble spawns
   and the host refuses the message, so this path is dark at both ends.
@@ -395,6 +632,14 @@ As built (PR 5 reality notes):
   renderer's programs, and `start()` builds it if nothing did (`?autostart=1`). `reseed` on a world that was
   never built only resets state, so the menu changing the seed rule costs nothing until `race`.
 - Extra `run-ended` fields: `nearMisses`, `personalBest`. `exit` is followed by `exit-done` once torn down.
+- THE THOUGHTS COUNT (`race/popped.js`). A thought is one word bubble: one `word` event of the chart, one
+  bubble on the road. The total is read off the chart when it loads (never off what spawned) and a trigger
+  row is not in it. The HUD carries `popped N / M` under the kept line while a track is in hand, the End card
+  adds a `thoughts` row, and `run-ended` grows `thoughts`, `thoughtsTotal` and, on a run that reached the end
+  of the chart, `thoughtsBest` / `thoughtsRecord`. Only a COMPLETED run files a best, into localStorage
+  `race.popped` keyed by `source.hash` (or `cid:<cloudId>` where there is no hash); a best is beaten on the
+  count alone. race/menu.js paints it on the track plate and the `track ·` status line, race/levels.js on the
+  level's own row (by cloud id, because a row knows a url and not a hash).
 - Boot and reduced motion: `raceBoot.js` calls `detectMode({ reducedIs3d: true })`, so `prefers-reduced-motion: reduce`
   boots the 3D race and only turns motion down through `settings.reducedMotion`; a boot error is reserved for a real
   hard wall (no WebGL, no import maps).
@@ -415,6 +660,10 @@ add to 4, `freeze` and `video` are solo (`video` holds everything else). `action
 pop scores as a treat. Live category sets match `RECIPES` (first row whose `needs` are all live);
 run.js maps a served recipe to `score.boostMult` (never below x1), a toast, a mood poke and, for
 `marquee` rows, the banner. Durations for effects live in `CATEGORIES`, not run.js.
+Since 2026-09-08 no flash bubble spawns, so the `strobe` slot is lit by the `flash-pulse` trigger row
+alone (`cue.mix`), never by a pop: a seeded run with no chart under it now goes the whole way without
+one, and the word flash is deliberately not a charge. The slot, its bursts and the recipes that need
+it stay in the machine, the way the `video` slot did.
 
 ### `race/gltf.js` (pass four, the Blender packs)
 
@@ -443,6 +692,12 @@ createIntro({ stage, hud, audio, reducedMotion, log }) -> { play(): Promise, ski
 cameraWhip(sec) / resultsCamera({ tier, reducedMotion }) / preRollCamera() -> fn(camera, dt, w, camOut), `false` when done
 resultTier(total, best, personalBest) -> 0..4 (the face index)
 ```
+- THE LEVELS PANEL owns its own status (race/levels.js, CLOUD.md "the picked row IS the status"): the row a
+  player tapped lights and carries the load bar itself, so `menu.setTrack(state, onRow)` takes a second
+  argument - `onRow` true (raceBoot got it from `levels.setTrack(state)`) keeps the verbs following the state
+  and holds the plate down, because the row is already saying it. A pasted link or a picked file is claimed by
+  nobody and still gets the plate. `.rm-levels-foot` is `position: sticky` at the bottom of `.rm-col` so `back`
+  is on screen at every scroll position, and it is still the last row `rows()` / `els()` hand over.
 - Boot order: splash (a 1 s title flash) -> menu (the resting state) -> `race` -> intro on the menu stage -> run under the
   camera whip. `?autostart=1` skips menu and intro (the headless checks depend on it), `?intro=0` skips the intro only,
   `?scene=intro` boots straight into the intro. `surface` from the menu sends the same `exit` + `exit-done` the End screen does.
@@ -478,7 +733,9 @@ resultTier(total, best, personalBest) -> 0..4 (the face index)
   `--rm-scrim-b` to the band's complement and `is-band` on `.rm-root`: menu.css draws those two scrims
   instead of its one sheet, so no dark plate and no verb ever lies over her.
 - Options persist under the single localStorage key `race.options` (`pixel, music, sfx, motion, seed, seedValue`), not in
-  `engine/settings.js`. Precedence for the block: `?pixel` > `race.options.pixel` > host `settings.pixel` > `PIXEL_DEFAULT`.
+  `engine/settings.js`. Precedence for the block: `?pixel` > `race.options.pixel` > host `settings.pixel` > `pixelDefault()`,
+  which answers 0 (off) on a coarse pointer and `PIXEL_MIN` on a fine one. A stored value equal to the old fixed default
+  (`PIXEL_LEGACY_DEFAULT`, 3) is read by `loadOptions` as "never chosen" and takes that per-device default instead.
   The seed rule (daily / random / custom) sets `settings.seedLock`, which `again` honours; a change in the menu calls `reseed`.
 - Music / sfx sliders store their values and call `audio.setLevels({ music, sfx })` when audio.js grows one; until then
   the rows are dimmed with a note. Reduced motion from the menu drives the stage and the intro at once, the run on the next launch.
@@ -504,6 +761,27 @@ export const CARDS_KEY = 'race.cards', CARDS;
 - The boot shows them once after the splash and again from the menu's `the story` verb. `?cards=1`
   forces them, `?cards=0` skips them, `?card=N` opens on card N (screenshot aid). `?autostart=1` and
   `?scene=intro` never reach them.
+
+### `race/shutter.js` (the transition between the menu, the intro and the run)
+```js
+createShutter({ root, reducedMotion, log })
+  -> { close(ms), open(ms), sweep({ closeMs, holdMs, openMs, mid }), flash(), setReduced(b), closed, el, dispose() }
+```
+- Two hard-edged panels (race.css `.rh-shutter`, z40, above the Brake and End screens at z20, the menu
+  at z25 and the cards at z26) that close over the screen with one pink line at the seam and open
+  again. `display: none` while it is open, transform-only while it moves, `pointer-events: none`
+  throughout: it is decoration, it never takes a tap and it never gates a start.
+- Built by run.js (`race.shutter`, disposed with the run). It plays in three places: raceBoot's
+  `startRun` closes it on `race` and opens it once the intro is up (the world is built behind a shut
+  door); `intro.play()` resolves on `go`, so raceBoot claps it there with `flash()` (0.25 s each way,
+  never awaited, so the first steer is the player's) and run.js's `again()` does the same off
+  `hud.countdown({ onTick })`; and run.js's `leave()` runs the whole way home from the End screen
+  inside one `sweep({ mid })`. `?autostart=1` has no menu to leave and plays none of it.
+- `sweep` closes, awaits `mid` (the swap nobody should see), holds a beat and opens. Reduced motion,
+  as the MENU has it (raceBoot `motionOff()`: the option beats the system), drops both panels for one
+  flat 150 ms fade - same calls, same promises, one class (`is-flat`).
+- `node race/smoke/menu-return-check.mjs` section 5 records the class changes through a real
+  `race` press and holds the close, the open and the flat fade down.
 
 ### `race/chart.js` (track charts, PR c1)
 ```js
@@ -542,6 +820,8 @@ and with a track loaded (PR c2): `track-play {name}` (the run started, start the
 
 Host -> page: `init {protocol, settings:{masterVolume, reducedMotion}, modId, modContent}`,
 `manifest {images:[{name,url}], videos, skipped, truncated}`, `favorites {names}`,
+`loom-list {spirals:[{slug, url, params}]}` (the player's own woven spirals; `CaucusHostService`
+posts it on ready and on every `DtrhLoomStore.Changed`),
 `payout-result {baseXp, skillMult, finalXp, sparksEarned, previousBest, dryRun}`, `pause {on}`,
 `ping`, `exit-request`, and the track messages (PR c2): `track-progress {stage, pct, name}`,
 `track-chart {chart, partial}`, `track-clock {t, playing, durationSec}`, `track-ended`,

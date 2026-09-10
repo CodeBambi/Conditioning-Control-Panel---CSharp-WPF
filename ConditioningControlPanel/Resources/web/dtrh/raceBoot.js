@@ -11,10 +11,18 @@
  * module import, the world build and the glb fetch, and hosts the wait note
  * and boot errors) -> on a first open the four introduction cards
  * (race/cards.js) -> the MENU is the resting state -> `race` plays the intro
- * on the menu stage -> the run starts under the camera whip. `surface` from
- * the menu is the same exit the End screen takes.
+ * on the menu stage -> the run starts under the camera whip. The End
+ * screen's `surface` comes BACK HERE (backToMenu, run.js `onExit`): the menu is
+ * the resting state either side of a run, and only the menu's own `surface`
+ * verb and the host's exit-request take the page away.
  *
- * Host messages owned here: init, manifest, favorites, ping, exit-request,
+ * THE SHUTTER (race/shutter.js, `race.shutter`) covers every one of those cuts:
+ * it closes on `race` and opens on the intro (the world is built behind it), it
+ * claps on the countdown's `go`, and run.js closes it over the whole way home
+ * from the End screen. `?autostart=1` has no menu to leave, so it plays none of
+ * it. Reduced motion, as the MENU has it (motionOff()), is one flat fade.
+ *
+ * Host messages owned here: init, manifest, favorites, loom-list, ping, exit-request,
  * fullscreen, local-media, setting (run.js owns pause + payout-result). Sent
  * here: pong, boot-error, fullscreen-set, exit + exit-done on a host
  * exit-request or a menu surface. A `manifest` that lands AFTER boot is honoured
@@ -45,7 +53,10 @@
  * either they show once, gated on localStorage `race.cards`), and `?card=N`
  * opens them on card N (1..4, a screenshot aid the way `?hold=` is one);
  * `?pixel=N` (0 = off) beats `race.options` which beats `settings.pixel` from
- * the host init; `?pickup=<id>` stands that pickup up on the next spot ahead
+ * the host init, and with none of the three the block is race/pixel.js's own
+ * pixelDefault(): off on a coarse pointer, the smallest step on a mouse
+ * (`?coarse=1` / `?coarse=0` force that answer for a check);
+ * `?pickup=<id>` stands that pickup up on the next spot ahead
  * once the run is up, a screenshot aid for it (race/pickups.js);
  * `?panel=howto` opens the menu on the key card (race/menu.js).
  *
@@ -92,6 +103,8 @@ import { createHostMediaSource } from './hostMedia.js';
 // The feed's pictures start loading the moment a manifest carrying them lands, so a run built
 // later opens with pictures already on the wall. Imports nothing itself: this is the boot path.
 import { warmWallPosters } from './race/wallWarm.js';
+// THE LOOM: the player's own woven spirals, so a race pop can draw one of theirs.
+import { setLoomSpirals } from './engine/loomSpirals.js';
 
 const INIT_TIMEOUT_MS = 4000, SPLASH_MS = 1000, TRACK_TICK_MS = 250, PERF_LOG_MS = 2000;
 const params = new URLSearchParams(location.search);
@@ -159,7 +172,28 @@ function fail(err) {
   const msg = String((err && (err.stack || err.message)) || err || 'unknown').slice(0, 600);
   console.error('[race] boot-error', msg);
   note('something broke. the host has the log.');
+  showDetail(msg);
   host.send({ type: 'boot-error', msg, message: msg });
+}
+/**
+ * The first line of the error, on the splash under the note. A phone has no console and no host
+ * log to open (cclabs-web's race host only console.errors the frame), so without this a boot that
+ * dies on an iPhone is a sad face and nothing to report. Selectable, so it can be copied.
+ */
+function showDetail(msg) {
+  if (!waitEl || !waitEl.parentNode) return;
+  let el = document.getElementById('race-err');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'race-err';
+    const s = el.style;
+    s.marginTop = '12px'; s.padding = '0 24px'; s.fontSize = '11px'; s.lineHeight = '1.4';
+    s.fontFamily = 'ui-monospace, Menlo, Consolas, monospace'; s.color = 'rgba(255,255,255,0.45)';
+    s.whiteSpace = 'pre-wrap'; s.wordBreak = 'break-word'; s.userSelect = 'text'; s.webkitUserSelect = 'text';
+    s.maxWidth = '92vw'; s.textAlign = 'center';
+    waitEl.parentNode.insertBefore(el, waitEl.nextSibling);
+  }
+  el.textContent = String(msg || '').split('\n').slice(0, 4).join('\n').slice(0, 320);
 }
 window.addEventListener('error', (e) => {
   const src = e.filename ? ` @ ${String(e.filename).split('/').pop()}:${e.lineno}` : '';
@@ -189,7 +223,11 @@ if (mode.hardBlock || !mode.canTry3d) {
 
 // ---- host wiring ----
 bridge.on('init', (m) => { initMsg = m; maybeBoot(); });
-bridge.on('manifest', (m) => { try { media.setManifest(m); warmWallPosters(media); } catch (e) { host.log('manifest: ' + e); } haveManifest = true; maybeBoot(); });
+bridge.on('manifest', (m) => {
+  try { media.setManifest(m); warmWallPosters(media); } catch (e) { host.log('manifest: ' + e); }
+  haveManifest = true; maybeBoot();
+  if (menu) { try { menu.refresh(); } catch (e) { /* the status line reads the pool on its next paint */ } }
+});
 bridge.on('favorites', (m) => { try { media.setFavorites(m && m.names || []); } catch (e) { host.log('favorites: ' + e); } });
 // The media panel's two frames (race/menu.js "YOUR MEDIA"). Both can land before the menu exists -
 // the pickers are only reachable from the menu, but the host pushes the pile it already holds on
@@ -203,6 +241,22 @@ bridge.on('setting', (m) => {
 bridge.on('ping', (m) => host.send({ type: 'pong', t: m && m.t }));
 bridge.on('fullscreen', (m) => host.send({ type: 'fullscreen-set', on: !!(m && m.on) }));
 bridge.on('exit-request', surface);
+// THE LOOM (crafting Part 2): the host's saved-spiral library, the same frame boot.js takes.
+// An entry carrying `params` is woven live by race/loomSpiralFx.js; one without is still its
+// gif. The host pushes this on `ready` and again after every save or delete, so a spiral woven
+// mid-session is on the road the next time one pops. Nothing here reaches into a run: the pool
+// lives in engine/loomSpirals.js and the picker reads it when it draws.
+bridge.on('loom-list', (m) => { try { setLoomSpirals((m && m.spirals) || []); } catch (e) { host.log('loom-list: ' + e); } });
+/**
+ * The two names a chart answers to, carried on every `ready` plate state: race/menu.js looks the
+ * track's popped best up by them (race/popped.js keys by the file hash, and by the cloud id for a
+ * file that was never hashed). Nothing else in the plate reads them.
+ */
+const keysOf = (chart) => {
+  const s = (chart && chart.source) || {};
+  return { hash: String(s.hash || ''), cloudId: String(s.cloudId || '') };
+};
+
 // ---- track charts (CHART.md host protocol). The run owns the clock; this only relays. ----
 bridge.on('track-chart', (m) => {
   if (!race || !m || !m.chart) return;
@@ -211,7 +265,7 @@ bridge.on('track-chart', (m) => {
   const t = race.track, st = race.trackStats ? race.trackStats() : null;
   // `authored` is the host saying a person wrote this chart: the plate marks it, and nothing
   // fuller is coming behind it (an authored chart is never partial and never replaced).
-  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial, authored: !!m.authored } : null;
+  trackReady = t ? { stage: 'ready', name: t.name, durationSec: t.durationSec, countable: st ? st.countable : 0, partial: !!m.partial, authored: !!m.authored, ...keysOf(t.chart) } : null;
   plate(trackReady);
 });
 bridge.on('track-clock', (m) => { if (race && m) race.trackClock(Number(m.t) || 0, m.playing !== false); });
@@ -228,15 +282,47 @@ bridge.on('track-progress', (m) => {
   // a cancelled dialog leaves whatever was loaded before in place; any other stage is the host at work
   plate(m.stage === 'cancelled' ? trackReady : { stage: m.stage, pct: m.pct, name: m.name });
 });
-/** The menu's plate, when there is a menu to show it on (the run has the toast instead). */
-function plate(state) { try { if (menu && !started) menu.setTrack(state); } catch (e) { host.log('plate: ' + e); } }
+/**
+ * Where a track's progress goes while the menu is up (the run has the toast instead). The LEVELS
+ * panel gets first refusal: a state that belongs to a row picked in there is painted ON that row,
+ * bar and all, and the menu keeps its plate down while that panel is open. On the main list (where a
+ * tap on a level lands) the plate shows the same state, bar and all, and the first verb reads
+ * `start · <name>` once the chart is in. Anything the panel does not claim - a pasted link, a file
+ * the host picked, the seeded road - is the plate's, exactly as it always was.
+ */
+function plate(state) {
+  let onRow = false;
+  try { onRow = !!(levels && levels.setTrack(state)); } catch (e) { host.log('levels plate: ' + e); }
+  try { if (menu && !started) menu.setTrack(state, onRow); } catch (e) { host.log('plate: ' + e); }
+}
 function trackError(message) {
   host.log('track-error: ' + message);
   try { if (race && race.hud) race.hud.toast(String(message).slice(0, 60).toLowerCase(), 'effect'); } catch (e) { /* no hud yet */ }
   plate({ stage: 'error', message: String(message).slice(0, 80).toLowerCase() });
   errorTimer = setTimeout(() => plate(trackReady), 4000);
 }
-/** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes through run.js). */
+/**
+ * THE WAY BACK FROM THE END SCREEN (run.js `leave()` calls this through `onExit`). The run has
+ * already stopped the file, dropped its world and reset itself; this puts the front door back:
+ * the lobby chrome, the menu stage, the menu theme (menu.show -> theme(true)) and the levels
+ * panel's picked row. `started` goes false so `race` can fire again (race.prepare() rebuilds the
+ * world it just dropped) and a `cloud-run` from the host is heard again.
+ * Answers false when there is no menu to go back to (`?autostart=1` never built one, `?scene=intro`
+ * is on its way into a run) and run.js then closes the page the old way.
+ */
+function backToMenu() {
+  if (exiting || !race || !menu) return false;
+  started = false;
+  stopTrackClock();
+  if (errorTimer) { clearTimeout(errorTimer); errorTimer = 0; }
+  if (hudRoot) hudRoot.classList.add('is-lobby');
+  try { race.setStage(menu.stage); } catch (e) { host.log('to menu stage: ' + e); }
+  menu.show();
+  if (trackReady) plate(trackReady);
+  host.log('back to the menu');
+  return true;
+}
+/** The one exit: the menu's `surface` and the host's exit-request (the End screen's own goes back to the menu). */
 function surface() {
   if (exiting) return;
   exiting = true;
@@ -298,7 +384,7 @@ async function boot() {
     if (cloud && !hosted) settings.hostSfx = false;
     seed = settings.seedLock != null ? settings.seedLock : rollSeed();
     note('the road is drawing');
-    race = createRace({ root, bridge: cloud ? { ...host, isHosted: true } : host, media, settings, seed });
+    race = createRace({ root, bridge: cloud ? { ...host, isHosted: true } : host, media, settings, seed, onExit: backToMenu });
     // the persisted option sliders, before the first frame: the menu theme comes up at the right level
     try { if (race.audio && race.audio.setLevels) race.audio.setLevels({ music: opts.music, sfx: opts.sfx }); } catch (e) { host.log('levels: ' + e); }
     note('');
@@ -308,7 +394,7 @@ async function boot() {
     if (params.get('autostart') === '1') { startRun(false); debugPickup(); return; }
     if (hudRoot) hudRoot.classList.add('is-lobby');   // the run's chrome stays out of the menu and the intro
     levels = await makeLevels();
-    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, levels });
+    menu = createMenu({ root, renderer: race.renderer, pixel: race.pixel, audio: race.audio, settings, log: host.log, send: host.send, levels, media });
     if (localMedia) { try { menu.setLocalMedia(localMedia); } catch (e) { host.log('local-media: ' + e); } }
     while (settingEchoes.length) { try { menu.settingEcho(settingEchoes.shift()); } catch (e) { host.log('setting: ' + e); } }
     // Nowhere to surface to: no host and no `?back=`, or a host that says outright it cannot take
@@ -356,7 +442,7 @@ async function standaloneTrack() {
     else chart = mod.normalizeChart(await (await fetch(want)).json());
     race.setTrack(chart);
     const st = race.trackStats ? race.trackStats() : null;
-    trackReady = { stage: 'ready', name: chart.source.name, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false };
+    trackReady = { stage: 'ready', name: chart.source.name, durationSec: chart.source.durationSec, countable: st ? st.countable : 0, partial: false, ...keysOf(chart) };
   } catch (err) {
     trackError('chart: ' + ((err && err.message) || err));
     return;
@@ -368,7 +454,9 @@ async function standaloneTrack() {
   const dur = chart.source.durationSec;
   startTrackClock = () => {
     if (trackTimer) return;
-    if (trackAudio) { const p = trackAudio.play(); if (p && p.catch) p.catch((e) => host.log('track audio: ' + e)); }
+    // from the top every time, the way race/cloud.js starts its element on `track-play`: a run
+    // taken again after the End screen sent us back to the menu is a replay, not a resume.
+    if (trackAudio) { try { trackAudio.currentTime = 0; } catch (e) { /* not seekable yet */ } const p = trackAudio.play(); if (p && p.catch) p.catch((e) => host.log('track audio: ' + e)); }
     race.trackClock(0, true);
     trackTimer = setInterval(() => {
       // with audio the file is the authority and its currentTime snaps the clock. Without it the run
@@ -405,7 +493,7 @@ function showTrack(chart) {
   const st = race && race.trackStats ? race.trackStats() : null;
   const partial = !!(chart.analysis && chart.analysis.partial);
   trackReady = { stage: 'ready', name: chart.source.name + cloudWhere, durationSec: chart.source.durationSec,
-    countable: st ? st.countable : 0, partial };
+    countable: st ? st.countable : 0, partial, ...keysOf(chart) };
   plate(trackReady);
 }
 
@@ -575,27 +663,39 @@ async function firstCards() {
   }
   if (!exiting && !started) menu.show();
 }
+/** Reduced motion as the MENU has it: the option beats the system, `system` defers to the host's init. */
+function motionOff() {
+  if (!menu) return !!settings.reducedMotion;
+  return menu.options.motion === 'on' || (menu.options.motion === 'system' && !!settings.reducedMotion);
+}
 /** race: the intro on the menu stage, then the run under the camera whip. autostart / intro=0 go straight to the run. */
 async function startRun(withIntro) {
   if (started || !race) return;
   started = true;
   hideSplash();
   try {
+    const reducedMotion = motionOff();
+    // THE SHUTTER (race/shutter.js): the menu goes and the world is built behind a shut door, so
+    // neither the cut nor the build hitch is something the player watches. There is nothing to
+    // transition FROM without a menu (`?autostart=1`), so that boot keeps going straight in.
+    const shut = menu ? race.shutter : null;
+    if (shut) { shut.setReduced(reducedMotion); await shut.close(); }
     if (menu) { menu.hide(); menu.seedCheck(); }
     if (race.prepare) race.prepare();   // the world is built here, not under the menu (race/CONTRACT.md); the intro's clock starts after
     // the menu theme keeps playing: the run's first room crossfades over it (race/AUDIO.md)
     try { if (race.audio && race.audio.menu) race.audio.menu(false); } catch (e) { /* audio gone */ }
     if (menu && withIntro && params.get('intro') !== '0') {
       const { createIntro, cameraWhip } = await import('./race/intro.js');
-      const reducedMotion = menu.options.motion === 'on' || (menu.options.motion === 'system' && settings.reducedMotion);
       const intro = createIntro({ stage: menu.stage.live, hud: race.hud, audio: race.audio, reducedMotion, log: host.log });
       const hold = Number(params.get('hold')) / 1000;   // screenshot aid: freeze the intro at that intro time
       race.setStage(hold > 0 ? { update(dt) { if (intro.time < hold) intro.update(dt); }, render: intro.render } : intro);
+      if (shut) shut.open();   // the intro is already up behind it; the play() below is not made to wait on a curtain
       await intro.play();
       if (exiting) return;
       race.setStage(null);
       intro.dispose();
       if (hudRoot) hudRoot.classList.remove('is-lobby');
+      if (shut) shut.flash();   // intro.play() resolves ON `go`: the countdown's shutter, 0.25 s each way
       race.start();
       if (startTrackClock) startTrackClock();
       race.setCameraOverride(cameraWhip(0.8));
@@ -604,9 +704,11 @@ async function startRun(withIntro) {
       if (hudRoot) hudRoot.classList.remove('is-lobby');
       race.start();
       if (startTrackClock) startTrackClock();
+      if (shut) shut.open();
     }
   } catch (err) {
     host.log('start: ' + ((err && err.stack) || err));
+    try { if (race.shutter) race.shutter.open(); } catch (e) { /* no curtain is left down over a fallback start */ }
     try { race.setStage(null); race.start(); } catch (e) { fail(e); }
   }
 }

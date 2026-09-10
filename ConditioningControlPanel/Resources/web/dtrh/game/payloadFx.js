@@ -23,7 +23,7 @@
 
 import { S } from '../engine/settings.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
-import { pickSpiralUrl } from '../engine/loomSpirals.js';
+import { pickSpiralUrl, pickSpiral } from '../engine/loomSpirals.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
@@ -43,7 +43,34 @@ const pick = (a) => a[(Math.random() * a.length) | 0];
 const MAX_FLASH = 6;
 const MAX_CASCADE = 14;
 
-export function createPayloadFx({ hud, fx, media, flashBurst }) {
+/**
+ * `subliminalFx` is the ONE presentation seam in this file, and Racing Thoughts is the
+ * only caller that passes it (race/run.js -> race/subliminal.js). The tube hands it
+ * nothing, so DtRH's whisper blip is byte-for-byte the card it always was. A race pop
+ * calls the override with the phrase already resolved and skips the blip entirely.
+ * Anything else that wants its own look adds a seam of its own; never restyle .sf-pfx-sub.
+ *
+ * `spiralFx` is the SECOND seam, and the same shape (2026-09-09). Racing Thoughts is
+ * again the only caller (race/run.js -> race/loomSpiralFx.js): with it, a spiral is
+ * WOVEN LIVE off Loom params on a canvas inside the hold instead of being a stock gif
+ * background, per the owner's law that every game's spirals come out of the Loom. It
+ * needs `mount(el, wrap, {kind, durMs, onLost}) -> bool`, `drop(el)` and `cancel()`.
+ * With nothing passed the file draws the exact gif backgrounds it always has, so
+ * dtrh.html is untouched - and even with it, a `false` from mount() falls straight
+ * back onto the gif, so the screen can never go bare.
+ *
+ * `opacityCap` is the THIRD seam (2026-09-10, phone testing: "we still lag a lot on the fullscreen
+ * effects on iphone"). Racing Thoughts caps its sustained holds (spiral 0.78, pink 0.7, drain 0.86,
+ * wash 0.85) so the road stays readable, and it did that in race.css with `filter: opacity()`,
+ * because the intensity is set INLINE here and a stylesheet cannot multiply an inline opacity. On a
+ * phone that filter is the lag: a fullscreen layer with a `filter` is rendered through a filter
+ * pass at device resolution on every composited frame, and these layers change every frame (the
+ * live spiral canvas, the wash's shudder, the glitch's steps). So the cap moves to where the
+ * intensity is set: `opacityCap(kind)` -> 0..1 (or a `{kind: mul}` map), multiplied into every
+ * sustained hold's inline opacity in `holdOn` and `showMelt`. Default null = 1, the Descent's
+ * layers are untouched, and race.css can drop the filter on the tier that cannot afford it.
+ */
+export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = null, spiralFx = null, opacityCap = null }) {
   // Two layers: washes/bursts render BEHIND the bubble field (.cf-layer, z6) so
   // bubbles stay crisp and clickable on top of pink/spiral/glitch/braindrain;
   // the video card rides a FRONT layer above the bubbles (in front of the POV).
@@ -56,6 +83,13 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
 
   // sustained overlays: one persistent element per kind, opacity-toggled
   const holds = {};   // kind -> { el, hideTimer }
+  /** The caller's ceiling for a hold kind (see the header): 1 unless it says otherwise. */
+  function capFor(kind) {
+    let c = 1;
+    try { c = typeof opacityCap === 'function' ? opacityCap(kind) : (opacityCap ? opacityCap[kind] : 1); } catch (e) { c = 1; }
+    c = Number(c);
+    return Number.isFinite(c) && c > 0 && c <= 1 ? c : 1;
+  }
   const loops = new Set();   // active rAF loops (cascade / bouncer) for teardown
   const cascades = new Set(); // the gif-rain subset of loops (room arrival cuts these)
   let liveFlash = 0, liveCascade = 0;
@@ -90,6 +124,56 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   // an image url for washes/cascades: user media first, bundled sprite otherwise
   const anyImageUrl = async () => (await pickImageUrl()) || pick(FALLBACK_SPRITES);
 
+  /** A url for the FULL-SCREEN WASH, and the one place in this file that would rather have a gif.
+   *  There is no gif-only door in hostMedia.js - the pool is split local/remote and image/video,
+   *  never by whether a picture moves - so this draws a few times and takes the first entry whose
+   *  name or url says gif/webp, keeping whatever it drew last if none of them do. With nothing in
+   *  the pool at all it takes a BUNDLED SPIRAL rather than one of the still FALLBACK_SPRITES:
+   *  those are all pngs, and a still png is exactly what this effect is not.
+   *
+   *  With a `spiralFx` seam that last fallback is a LIVE LOOM SPIRAL instead of a stock gif
+   *  (the owner's law), so this may hand back a params wrapper rather than a url - hence
+   *  `pickWash`, not `pickWashUrl`. The media pool still wins whenever it has a moving
+   *  picture: the wash is meant to be the player's own gif, and the Loom is its floor. */
+  const MOVING_RE = /\.(gif|webp)(\?|#|$)/i;
+  /** The spiral source for a hold: a `{loom:true,...}` wrapper where the race can draw one,
+   *  and the same url every build has always drawn where it cannot. */
+  const spiralSource = () => (spiralFx && spiralFx.supported() ? pickSpiral() : pickSpiralUrl());
+  /** Paint `src` (a url, or a wrapper) onto a hold. Returns true if a live canvas took it. */
+  function paintSpiral(h, kind, src, durMs) {
+    if (src && typeof src === 'object' && src.loom && spiralFx) {
+      const took = spiralFx.mount(h.el, src, {
+        kind,
+        durMs,
+        // context lost MID-HOLD: the canvas is gone, so the gif takes the element at
+        // once and the screen never goes bare.
+        onLost: () => { if (!disposed && src.href) h.el.style.backgroundImage = `url('${src.href}')`; },
+      });
+      if (took) { h.el.style.backgroundImage = 'none'; return true; }
+    }
+    if (spiralFx) spiralFx.drop(h.el);      // a url is taking this element back
+    const url = src && typeof src === 'object' ? src.href : src;
+    // double quotes: a wash url is a media name, and a media name may carry an apostrophe
+    if (url) h.el.style.backgroundImage = `url("${url}")`;
+    return false;
+  }
+  async function pickWash(tries = 4) {
+    let last = null;
+    for (let i = 0; i < tries; i++) {
+      try {
+        if (!hasDomMedia()) break;
+        const p = drawDom('image');
+        if (!p) break;
+        const got = await p.acquire();
+        const url = got && got.url ? got.url : null;
+        if (!url) break;
+        last = url;
+        if (MOVING_RE.test(String(p.name || '')) || MOVING_RE.test(url)) return url;
+      } catch (e) { break; }
+    }
+    return last || spiralSource();
+  }
+
   // ---- sustained overlays (spiral / pink / braindrain) -----------------------
   function ensureHold(kind, cls) {
     let h = holds[kind];
@@ -106,20 +190,62 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   function holdOn(kind, cls, opacity, durMs) {
     const h = ensureHold(kind, cls);
     if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
-    h.el.style.opacity = String(opacity);
+    h.el.style.opacity = String(opacity * capFor(kind));
     h.hideTimer = setTimeout(() => { if (!disposed) h.el.style.opacity = '0'; h.hideTimer = 0; }, durMs);
     return h;
   }
 
   function showSpiral(strength, durMult) {
-    const h = holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    const durMs = scale(1500, 4500, strength) * durMult;
+    const h = holdOn('spiral', 'sf-pfx-spiral', scaleD(0.25, 0.70, strength), durMs);
     // Draw from the shared pool (bundled sp1..8 + the player's Loom spirals)
     // instead of the single hardcoded spiral.png in .sf-pfx-spiral - the CSS
     // still owns cover/blend/spin, we only swap the image so in-run spirals vary.
-    h.el.style.backgroundImage = `url('${pickSpiralUrl()}')`;
+    // With a `spiralFx` seam the pick may be a LIVE weave instead of a picture,
+    // and then a canvas takes the element and the CSS spin stands down.
+    paintSpiral(h, 'spiral', spiralSource(), durMs);
   }
   function showPink(strength, durMult) {
-    holdOn('pink', 'sf-pfx-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    const h = holdOn('pink', 'sf-pfx-pink', scaleD(0.25, 0.70, strength), scale(1500, 4500, strength) * durMult);
+    // a plain pink SNAPS on, so take back anything a melt left on the shared layer (see showMelt)
+    h.el.classList.remove('is-melting');
+    h.el.style.transitionDuration = '';
+    h.el.style.removeProperty('--pfx-sag');
+  }
+  /**
+   * MELTING. The same pink wash on the same layer - so the tint slot still means one colour on the
+   * glass - except the colour does not arrive, it SAGS in: opacity ramps from wherever the tint
+   * already is up to its peak across the whole hold (the layer's own 0.45 s ease, retimed), while
+   * styles.css sinks and wobbles the layer on transform/filter only. 2-4 s by strength.
+   *
+   * Racing Thoughts is the only caller (bubbleKinds.js `melt`, THE MIX slot 'tint'); the tube deals
+   * no bubble that fires it, so the pink dtrh.html draws still snaps on exactly as it did.
+   */
+  function showMelt(strength, durMult) {
+    const dur = Math.round(scale(2000, 4000, strength) * clamp(durMult, 0.3, 3));
+    const peak = scaleD(0.30, 0.78, strength) * capFor('pink');
+    const h = ensureHold('pink', 'sf-pfx-pink');
+    if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
+    const from = Math.max(0.06, parseFloat(h.el.style.opacity || '0') || 0);   // deepen what is there
+    h.el.style.transitionDuration = '0ms';
+    h.el.style.opacity = String(from);
+    h.el.style.setProperty('--pfx-sag', dur + 'ms');
+    h.el.classList.add('is-melting');
+    // FLUSH, or there is no ramp. The first melt of a run is also the moment ensureHold makes the
+    // pink layer, and a brand-new element has no before-change style for a transition to start
+    // from: without this the browser's first recalc sees the peak and snaps straight to it. One
+    // forced reflow per melt pop, which is a pop every few seconds at most.
+    void h.el.offsetWidth;
+    h.el.style.transitionDuration = dur + 'ms';
+    h.el.style.opacity = String(peak);
+    h.hideTimer = setTimeout(() => {
+      h.hideTimer = 0;
+      if (disposed) return;
+      h.el.classList.remove('is-melting');
+      h.el.style.transitionDuration = '';   // back to the layer's own 0.45 s release
+      h.el.style.removeProperty('--pfx-sag');
+      h.el.style.opacity = '0';
+    }, dur);
   }
   async function showBraindrain(strength, durMult) {
     // full-screen dim + blur-behind (the iconic "drain") with a faint random-image
@@ -147,6 +273,59 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
       clearTimeout(h.hideTimer);
       h.hideTimer = setTimeout(() => { if (!disposed) { h.el.style.opacity = '0'; } h.hideTimer = 0; }, glitchMs);
     }
+  }
+
+  /**
+   * THE GIF TAKES THE SCREEN. The same wash `showBraindrain` puts under the glitch, off the leash:
+   * NO backdrop blur, NO dark luminosity blend and NO 0.62 ceiling, so the picture is the thing on
+   * the glass rather than a bruise behind one. `pickWash` prefers a moving entry (see above) and
+   * styles.css feathers the edges so the road underneath stays drivable at 0.8. With an empty
+   * media pool its floor is a LIVE LOOM SPIRAL where the caller can draw one, and a bundled gif
+   * where it cannot - either way the wash is never a still png.
+   *
+   * Racing Thoughts is the only caller today (bubbleKinds.js `gifwash`, THE MIX slot 'wash'); the
+   * tube deals no bubble that fires it, so nothing dtrh.html draws changes.
+   */
+  async function showGifWash(strength, durMult) {
+    const durMs = scale(1500, 3000, strength) * durMult;
+    const h = holdOn('gifwash', 'sf-pfx-gifwash', scaleD(0.55, 0.80, strength), durMs);
+    h.el.classList.add('is-washing');   // the light shudder; race.css drops it under reduced motion
+    const src = await pickWash();
+    if (!disposed && src) paintSpiral(h, 'gifwash', src, durMs);
+  }
+
+  /**
+   * SLEEP NOW. The screen CUTS to black (120 ms, hard), holds there, then lets go over ~1 s while
+   * the braindrain blur fades back in underneath it - so the player comes back up through the drain
+   * rather than straight onto the road.
+   *
+   * It is one reused `.sf-pfx-black` hold like every other sustained layer, so overlapping pops
+   * refresh a deadline instead of stacking cards, and `cancelHeavy()` takes the glass back at once
+   * (run end / room arrival) so a run can never end with the screen still dark.
+   */
+  function blackout(strength, durMult) {
+    const h = ensureHold('blackout', 'sf-pfx-black');
+    if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
+    h.el.classList.add('is-cut');       // the 120 ms transition, in place of the layer's 450 ms
+    h.el.style.opacity = '1';
+    const holdMs = scale(600, 900, strength) * clamp(durMult, 0.5, 3);
+    h.hideTimer = setTimeout(() => {
+      h.hideTimer = 0;
+      if (disposed) return;
+      h.el.classList.remove('is-cut');  // back to the slow release
+      h.el.style.opacity = '0';
+      showBraindrain(strength, durMult);
+    }, holdMs);
+  }
+  /** Take the black back NOW, with nothing behind it (run end, room arrival). */
+  function endBlackout() {
+    const h = holds.blackout;
+    if (!h) return false;
+    if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
+    if (h.el.style.opacity === '0') return false;
+    h.el.classList.remove('is-cut');
+    h.el.style.opacity = '0';
+    return true;
   }
 
   // ---- transient bursts (flash / subliminal / bambi freeze) ------------------
@@ -180,7 +359,11 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     }
   }
 
-  async function subliminal(strength) {
+  async function subliminal(strength, text) {
+    // the race's own presentation takes the whole payload, phrase and all (see the seam note above)
+    if (subliminalFx) {
+      try { subliminalFx({ strength, text: String(text || pick(WORDS)) }); return; } catch (e) { /* fall through to the blip */ }
+    }
     const dur = scale(320, 560, strength);   // a quick blip, like FlashSubliminal
     const url = Math.random() < 0.5 ? await pickImageUrl() : null;
     let el;
@@ -191,11 +374,17 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     setTimeout(() => el.remove(), dur + 300);
   }
 
-  function bambiFreeze() {
+  /**
+   * The freeze card. `text` is the road's own phrase when the caller has one (race only; the tube
+   * never passes it, so dtrh.html still reads BAMBI FREEZE off the same two words it always has).
+   * `lacquer` is the race's `lock` kind: the same card and the same timing behind a pink lacquer
+   * frame, because a doll being posed is not the same beat as a freeze being called.
+   */
+  function bambiFreeze(text, lacquer) {
     const el = document.createElement('div');
-    el.className = 'sf-pfx-freeze';
+    el.className = lacquer ? 'sf-pfx-freeze is-lacquer' : 'sf-pfx-freeze';
     const word = document.createElement('span');
-    word.textContent = 'BAMBI FREEZE';
+    word.textContent = String(text || '').trim().toUpperCase() || (lacquer ? pick(WORDS).toUpperCase() : 'BAMBI FREEZE');
     el.appendChild(word);
     root.appendChild(el);
     setTimeout(() => { if (!disposed) el.classList.add('sf-pfx-out'); }, 1200);
@@ -336,11 +525,12 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     setTimeout(() => loops.delete(handle), holdMs + 900);
   }
 
-  /** Room arrival cuts the heavies short: the stuck video card recedes and any
-   * running gif rain stops spawning (falling gifs finish their slide). Returns
-   * true if anything live was actually cut. */
+  /** Room arrival cuts the heavies short: the stuck video card recedes, any
+   * running gif rain stops spawning (falling gifs finish their slide) and a
+   * blackout hands the glass straight back. Returns true if anything live was
+   * actually cut. */
   function cancelHeavy() {
-    let cut = false;
+    let cut = endBlackout();
     heavyGen++;   // invalidate any video card still mid-acquire (see videoCard's gen check)
     if (videoCardCancel) { try { videoCardCancel(); } catch { /* ignore */ } cut = true; }
     for (const c of cascades) { try { c.cancel(); } catch { /* ignore */ } cut = true; }
@@ -394,14 +584,21 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     const p = spec.payload;
     switch (p.kind) {
       case 'flash':        flash(strength, durMult); break;
-      case 'subliminal':   subliminal(strength); break;
+      // p.text: the road's own phrase when the caller has one, read by the two kinds that SAY
+      // something (race only; the tube never sets it, so both fall back to their own pools)
+      case 'subliminal':   subliminal(strength, p.text); break;
       case 'overlay':
         if (p.overlay === 'spiral') showSpiral(strength, durMult);
         else if (p.overlay === 'braindrain') showBraindrain(strength, durMult);
         else showPink(strength, durMult);   // pink_filter (default)
         break;
       case 'glitch':       showGlitch(strength, durMult); break;
-      case 'bambiFreeze':  bambiFreeze(); break;
+      // race-only kinds (bubbleKinds.js): the tube deals no bubble that fires any of these
+      case 'gifWash':      showGifWash(strength, durMult); break;
+      case 'blackout':     blackout(strength, durMult); break;
+      case 'bambiLock':    bambiFreeze(p.text, true); break;
+      case 'melt':         showMelt(strength, durMult); break;
+      case 'bambiFreeze':  bambiFreeze(p.text); break;
       case 'bouncingText': bouncingText(durMult); break;
       case 'gifCascade':   gifCascade(durMult); break;
       case 'video':        videoCard(); break;
@@ -418,6 +615,8 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     cascades.clear();
     videoCardEl = null;
     videoCardCancel = null;
+    // give every live Loom canvas its GL context back before the holds go with root
+    if (spiralFx) { try { spiralFx.cancel(); } catch (e) { /* best effort */ } }
     root.remove();
     front.remove();
   }

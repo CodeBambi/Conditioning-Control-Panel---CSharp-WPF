@@ -90,4 +90,45 @@ public class EmiDeskLiveRunRegressionTests
         Assert.DoesNotContain("WinWidthDip", Read("Services", "EmiDesk", "EmiState.cs"));
         Assert.DoesNotContain("WinWidthDip", Read("Windows", "EmiDesk", "EmiDeskWindow.xaml.cs"));
     }
+
+    [Fact]
+    public void The_crt_scale_never_falls_back_to_a_collapsed_base_value()
+    {
+        // "EMI disappears after a while into a small pink pixel" and "the avatar is gone but I can
+        // still see her speech bubbles" (ccp-bugs #1173, #1183). CrtScale has four animators; three
+        // of them hold their last keyframe, so the BASE value under them is invisible. The summon
+        // wrote 0.02 into that base to hide her behind the smoke and never wrote anything back, and
+        // the one animation that RELEASED the property - the stretch, on its 20-to-40 minute clock
+        // - handed the transform to that stale 0.02 and collapsed her whole body onto its transform
+        // origin. Everything outside BodyRoot (the bubble host, the FX layers) kept drawing, which
+        // is exactly what the reporters saw.
+        //
+        // Two source tripwires rather than a behavioural test, in the spirit of this file: the
+        // failure needs a live widget and the better part of an hour to show itself.
+        var fx = Read("Windows", "EmiDesk", "EmiDeskWindow.Fx.cs");
+        var alive = Read("Windows", "EmiDesk", "EmiDeskWindow.Alive.cs");
+
+        // 1. The summon puts the base back to full size once the power-on has landed.
+        Assert.Contains("private void ResetCrtBase(bool clearAnimations)", fx);
+        int preroll = fx.IndexOf("CrtScale.ScaleX = 0.02;", StringComparison.Ordinal);
+        int restore = fx.IndexOf("ResetCrtBase(clearAnimations: false);", StringComparison.Ordinal);
+        Assert.True(preroll >= 0 && restore > preroll,
+            "the summon's 0.02 pre-roll must be followed by a base reset in the same method");
+
+        // 2. And no CrtScale animation may release the property onto whatever the base happens to
+        //    be. The stretch is the only one that ever did; its last keyframe is already 1.0.
+        Assert.DoesNotContain("FillBehavior = FillBehavior.Stop", StretchBlockOf(alive));
+    }
+
+    /// <summary>The stretch's animation set-up, which is the only place in Alive.cs where a
+    /// FillBehavior lands on CrtScale (the weight shift's Stop is on WobbleRotate, whose base is a
+    /// harmless zero).</summary>
+    private static string StretchBlockOf(string alive)
+    {
+        int end = alive.IndexOf("CrtScale.BeginAnimation(ScaleTransform.ScaleXProperty", StringComparison.Ordinal);
+        Assert.True(end > 0, "Alive.cs no longer animates CrtScale - re-point this tripwire");
+        int start = alive.LastIndexOf("private void RunStretch()", end, StringComparison.Ordinal);
+        Assert.True(start >= 0, "the CrtScale animation in Alive.cs moved out of RunStretch");
+        return alive.Substring(start, end - start);
+    }
 }

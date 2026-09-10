@@ -17,6 +17,14 @@
  * (engine/audioBus) and throws a few sparkle shards, the WPF BubbleService way.
  * Sprite textures come from the two locally mapped hosts (never remote media). Every sprite
  * (bubbles and shards) sits on pixel.js's CRISP_LAYER: full resolution over the blocky world.
+ *
+ * EVERY HEIGHT RIDES THE ROAD (2026-09-08). A bubble's `h` is metres above THE REACHABLE LINE
+ * (spine.js rideH: the ramp wedge under the wheels, then the flight arc off its lip), not above the
+ * flat road plane. Hung at a flat LANE_H a lane bubble on a ramp sat inside the wedge and one over
+ * an air line sat metres under the kart - the owner: "some bubbles get placed under the slopes and
+ * we can't get to them". The line is read ONCE, at placement, and kept on the slot as `ride`, so a
+ * bob or a rain landing costs no extra lookup; moveRow re-reads it because the row moved. Only rain
+ * starts absolute: it falls from the tube's own ceiling and lands on the line.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -33,6 +41,11 @@ export { BUBBLE_KINDS };
 // hidden, not freed: every visible sprite is a draw call, and past ~80 m the world has folded into fog anyway)
 // are shared/quality.js knobs read when the field is built: desktop 160 / 64 / 110, the mobile tier 100 / 32 / 76.
 const LANE_STEP = 3.2;        // metres between bubbles in a lane line
+/** Metres between the bubbles of a ramp's air line, and how many of them. The line covers the FIRST
+ *  ten metres of the flight on purpose: every pace from the gentle opening to a boosted lap crosses
+ *  those metres within the pop box of the same arc (race/smoke/slope-check.mjs measures it), where
+ *  the far end of a flight is only ever reachable at exactly one speed. */
+const AIR_STEP = 2.0, AIR_N = 5;
 const MISS_BEHIND = 6;        // a treat this far behind the kart unpopped = miss
 const DROP_BEHIND = 12;       // freed once this far behind
 const PASS_FADE_M = 1.6;      // metres behind the pop box over which a passed bubble fades away (before it balloons into the seat)
@@ -46,6 +59,11 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const sizeOf = (id) => (id === 'video' || id === 'gifrain') ? 1.5 : id === 'golden' ? 0.95 : id === 'lucky' ? 0.8 : 1.15;
 /** A trigger row's centre bubble, and an accent word, are drawn this much bigger than the rest. */
 const BIG_SCALE = 1.15;
+/** A bubble wearing a word is drawn this much bigger than a plain one of its kind: the owner
+ *  could not read the words at speed on the phone (0909), so the glass the word sits on grew:
+ *  a quarter first, then to 1.6 once the word was kept inside the glass (the sprite's glass is
+ *  only 72 percent of its canvas, see wordFace.js GLASS_FRAC). The pop box is unchanged. */
+const WORD_SCALE = 1.6;
 
 /** Soft radial dot: the fallback face while a sprite loads, and the shard face. */
 function makeDotTex() {
@@ -65,6 +83,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   const T = layout.totalDepth;
   /** Signed depth from `from` to `d`, folded into (-T/2, T/2] so the start line is nothing special. */
   const relD = (d, from) => { let r = (d - from) % T; if (r > T / 2) r -= T; else if (r <= -T / 2) r += T; return r; };
+  /** THE REACHABLE LINE at this depth (spine.js rideH). A layout without one is all road, at 0. */
+  const rideAt = (d) => (typeof layout.rideH === 'function' ? layout.rideH(d) : 0);
   const intensity = () => clamp(getIntensity ? getIntensity() : 0, 0, 1);
   const roomBias = () => { const r = getRoom && getRoom(); return (r && r.bubbleBias) || null; };
   /** 0 while the opening is treats only, then a ramp to 1 over the next minute. */
@@ -107,7 +127,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     sprite.visible = false; sprite.layers.set(CRISP_LAYER);
     group.add(sprite);
     pool.push({ sprite, mat, slot: i, eventId: null, rowId: 0, alive: false, kindId: 'treat', placement: 'lane', d: 0, x: 0, h: LANE_H,
-      x0: 0, baseH: LANE_H, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false,
+      x0: 0, baseH: LANE_H, ride: 0, phase: 0, age: 0, size: 1, scale: 1, popT: -1, missed: false,
       w: '', ink: null, big: false, rowN: 0 });   // the word painted on this bubble's face (race/wordFace.js)
   }
   const shards = [];
@@ -157,19 +177,28 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
       if (k.kind === 'effect' && gate < 1) { if (gate <= 0) return 0; return gate * (placement === 'rain' ? 0.5 : 1); }
       if (k.id === 'video' && liveOf('video') > 0) return 0;      // one video on the road at a time
       if (k.id === 'freeze' && liveOf('freeze') > 1) return 0;
-      if (placement === 'air' && k.id === 'golden') return 3;     // gold favours the air line
+      if (placement === 'air' && k.kind === 'effect') return 1.6;  // the air line is where the effects live
       if (placement === 'rain' && k.kind === 'effect') return 0.5;
       return 1;
     };
     return rollKind(intensity(), roomBias(), extra).id;
   }
 
+  /** Every kind this field has PUT ON THE ROAD, counted. Never read by the game: it is the one
+   *  honest answer to "did a darkened kind ever spawn" (race/smoke/word-flash-check.mjs), because
+   *  place() is the single door every roll, lane line, rain, cue and row goes through. */
+  const placed = new Map();
+
   function place(kindId, placement, d, x, h) {
     const k = KIND_BY_ID[kindId] || KIND_BY_ID.treat;
+    placed.set(k.id, (placed.get(k.id) || 0) + 1);
     const s = takeSlot();
     s.kindId = k.id; s.placement = placement;
     s.d = layout.wrap(d); s.x = clamp(x, -LANE_X_MAX, LANE_X_MAX); s.x0 = s.x;
-    s.h = h; s.baseH = h; s.phase = Math.random() * Math.PI * 2; s.age = 0;
+    // `h` is metres above THE REACHABLE LINE, except rain, which starts at the tube's own ceiling
+    // and falls onto it (update below): a ceiling that rode a 4 m flight arc would be outside the tube.
+    s.ride = rideAt(s.d);
+    s.h = placement === 'rain' ? h : h + s.ride; s.baseH = s.h; s.phase = Math.random() * Math.PI * 2; s.age = 0;
     s.size = sizeOf(k.id); s.scale = placement === 'spawn' ? 0 : 1; s.popT = -1; s.missed = false; s.eventId = null; s.rowId = 0;
     s.w = ''; s.ink = null; s.big = false; s.rowN = 0;
     s.mat.map = texOf[k.id]; s.mat.color.set(k.tint); s.mat.opacity = 1; s.mat.needsUpdate = true;
@@ -181,14 +210,15 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
 
   /** The bubble puts a word ON its face. The material goes white because the kind's tint is
    *  already multiplied into the canvas: tinting a second time would drag the ink toward it.
-   *  `big` is the trigger row's centre bubble and the accent word, drawn BIG_SCALE larger. */
+   *  `big` is the trigger row's centre bubble and the accent word, drawn BIG_SCALE larger; every
+ *  worded bubble is WORD_SCALE larger than its plain kind. */
   function wear(s, w, ink, big, rowN) {
     const text = String(w || '');
     if (!text) return;
     const k = KIND_BY_ID[s.kindId] || KIND_BY_ID.treat;
     const tex = faces.faceFor({ key: baseKey(k.id), word: text, ink: ink || undefined, image: texOf[k.id] && texOf[k.id].image, tint: k.tint });
     s.w = text; s.ink = ink || null; s.big = !!big; s.rowN = rowN || 1;
-    s.size = sizeOf(k.id) * (s.big ? BIG_SCALE : 1);
+    s.size = sizeOf(k.id) * WORD_SCALE * (s.big ? BIG_SCALE : 1);
     if (!tex) return;
     s.mat.map = tex; s.mat.color.set('#ffffff'); s.mat.needsUpdate = true;
     s.sprite.scale.setScalar(s.size * s.scale);
@@ -218,8 +248,8 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     seeded.add(chunk.id);
     chunkRecs.push({ id: chunk.id, d0: chunk.d0, d1: chunk.d1 });
     const len = Math.max(0, chunk.d1 - chunk.d0);
-    if (sparse) {   // the file dresses this road, not us: one golden to say where the chunk ended, nothing else
-      if (chunk.kind !== 'gate' && len > 8) place('golden', 'lane', chunk.d1 - 2.5, 0, LANE_H);
+    if (sparse) {   // the file dresses this road, not us: one bubble to say where the chunk ended, nothing else
+      if (chunk.kind !== 'gate' && len > 8) place(roll('lane'), 'lane', chunk.d1 - 2.5, 0, LANE_H);
       return;
     }
     if (chunk.id === 1 && chunk.room === 'teagarden' && chunk.kind === 'straight') seedStartStraight(chunk);
@@ -238,11 +268,10 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     }
     for (const f of chunk.features || []) {
       if (f.type === 'ramp') {
-        const n = 5, x = rand(-0.6, 0.6);
-        for (let i = 0; i < n; i++) {
-          const u = (i + 0.5) / n;
-          place(roll('air'), 'air', f.d + f.airLen * u, x, 2 + 3 * (4 * u * (1 - u)));
-        }
+        // the air line is the kart's own flight now: `h` is above the arc (rideAt), so the line
+        // threads the jump instead of hanging a metre and a half over the top of it
+        const x = rand(-0.6, 0.6);
+        for (let i = 0; i < AIR_N; i++) place(roll('air'), 'air', f.d + AIR_STEP * (i + 1), x, LANE_H);
       }
     }
   }
@@ -255,13 +284,15 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   }
   /** An explicit placement from a track cue (CHART.md): the run has already worked the depth out at
    *  the kart's speed, so nothing is rolled or gated by intensity here. Returns the slot id, -1 when
-   *  the pool is full (a cue never steals a live bubble), when the kind is dark (bubbleKinds.js
-   *  spawn:false), or when density has gated this one out.
-   *  Over 1, density is the chance of a second bubble beside the first. */
-  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null, w = '', ink = null, big = false } = {}) {
-    if (liveCount >= CAP) return -1;
+   *  the pool is full (a decorative cue never steals a live bubble), when the kind is dark
+   *  (bubbleKinds.js spawn:false), or when density has gated this one out.
+   *  Over 1, density is the chance of a second bubble beside the first.
+   *  `script` is THE ROAD'S OWN SCRIPT (race/cues.js marks the word bubbles and the trigger rows):
+   *  see spawnRow below for why it goes down whatever the density knob is saying. */
+  function spawnAt({ kindId, placement = 'lane', d, x = 0, h, eventId = null, w = '', ink = null, big = false, script = false } = {}) {
+    if (liveCount >= CAP && !script) return -1;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return -1;   // a dark kind: no chart may place one
-    if (tracked) {
+    if (tracked && !script) {
       if (density <= 0) return -1;
       if (density < 1 && Math.random() >= density) return -1;
     }
@@ -279,13 +310,26 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
    *  not laid at all (a row with a hole in it is a row the kart drives through), the density gate is
    *  rolled ONCE for the whole line rather than per bubble, and density over 1 never doubles it,
    *  because a doubled row is just a thicker wall and the wall was already unavoidable.
+   *
+   *  THE SCRIPT IS NOT DECORATION (2026-09-08). `script` marks a row the FILE asked for - a word
+   *  bubble off the transcript, a trigger row - and neither of the two refusals above may touch one.
+   *  `density` is the road-dressing knob: race/cues.js turns it down to 0.6 on a release and to 0
+   *  through a silence, and until now every word bubble was rolled against it one at a time. On a
+   *  worded road that is the road losing three words of a four word line at random and leaving one
+   *  bubble sitting on its own, which is exactly what the owner saw ("I see maybe 1 word out of a
+   *  phrase"): 22 percent of every word on the shelf, 44 percent of the lines thinned, 353 lines
+   *  gone altogether. A line the voice is saying is not the road being busy, so a script row skips
+   *  the density roll and, when the pool is full, RECYCLES the bubble farthest from the kart
+   *  (takeSlot already does, and 60 m of road behind the kart is a cheaper thing to lose than the
+   *  word she is saying) instead of refusing to lay the line at all.
    *  Returns how many went down, 0 for a row that was gated out. */
-  function spawnRow({ kindId, kindIds = null, placement = 'lane', d, h, xs, eventId = null, w = '', ink = null, big = false } = {}) {
+  function spawnRow({ kindId, kindIds = null, placement = 'lane', d, h, xs, eventId = null, w = '', ink = null, big = false, script = false } = {}) {
     const list = Array.isArray(xs) ? xs.filter((x) => Number.isFinite(Number(x))) : [];
     if (!list.length) return 0;
     if (KIND_BY_ID[kindId] && KIND_BY_ID[kindId].spawn === false) return 0;   // a dark kind: no chart may place one
-    if (liveCount + list.length > CAP) return 0;
-    if (tracked) {
+    // a script row may evict, but never more than half the pool: a line longer than that is not a line
+    if (liveCount + list.length > CAP && !(script && list.length * 2 <= CAP)) return 0;
+    if (tracked && !script) {
       if (density <= 0) return 0;
       if (density < 1 && Math.random() >= density) return 0;
     }
@@ -310,8 +354,10 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
   function moveRow(id, d) {
     if (!id || !Number.isFinite(Number(d))) return 0;
     const dd = layout.wrap(Number(d));
+    const ride = rideAt(dd);
     let n = 0;
-    for (const s of pool) if (s.alive && s.rowId === id && s.popT < 0 && !s.missed) { s.d = dd; n++; }
+    // the row moved, so the line under it moved: keep its height above the line, not above 0
+    for (const s of pool) if (s.alive && s.rowId === id && s.popT < 0 && !s.missed) { s.d = dd; s.baseH += ride - s.ride; s.ride = ride; n++; }
     return n;
   }
   /** The row has been settled by one of its own: nobody else in it may report a miss. `missed` is
@@ -332,14 +378,14 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const f = layout.frameAtDepth(s.d);
     const dirs = dirRing[dirNext]; dirNext = (dirNext + 1) % DIR_RING;
     dirs.r.copy(f.right); dirs.u.copy(f.up);
-    const n = golden ? 12 : 7;
+    const n = golden ? 16 : 7;
     for (let i = 0; i < n; i++) {
       // next free shard scanning from where the last burst stopped; a full ring steals the oldest slot
       let sh = null;
       for (let j = 0; j < SHARD_CAP; j++) { const c = shards[(shardNext + j) % SHARD_CAP]; if (!c.alive) { sh = c; shardNext = (shardNext + j + 1) % SHARD_CAP; break; } }
       if (!sh) { sh = shards[shardNext]; shardNext = (shardNext + 1) % SHARD_CAP; }
       const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
-      const v = rand(2.2, 4.6) * (golden ? 1.3 : 1);
+      const v = rand(2.2, 4.6) * (golden ? 1.5 : 1);
       sh.alive = true; sh.age = 0; sh.life = rand(0.35, 0.6);
       sh.p0.copy(s.sprite.position); sh.r = dirs.r; sh.u = dirs.u;
       sh.vr = Math.cos(ang) * v; sh.vu = Math.sin(ang) * v + 1.2;
@@ -354,7 +400,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     const k = KIND_BY_ID[s.kindId];
     s.popT = 0;
     spendRow(s.rowId);              // one of the row is the row: the rest may not be missed behind it
-    const golden = k.id === 'golden';
+    const golden = k.id === 'golden' || k.id === 'lucky' || k.id === 'prism';   // a gold take is the loud one now
     burst(s, golden);
     const strength = k.strength > 0 ? clamp(k.strength + 0.35 * intensity() + Math.random() * 0.1, 0, 1) : 0;
     emit(popCbs, { id: k.id, kind: k.kind, payload: k.payload, overlayKind: k.overlayKind, strength,
@@ -390,13 +436,14 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
           const a = Math.min(1, s.age / 0.45);
           s.scale = 1 - (1 - a) * (1 - a);
           s.x = clamp(s.x0 + 0.55 * Math.sin(t * 1.7 + s.phase), -LANE_X_MAX, LANE_X_MAX);
-          s.h = LANE_H + bob;
+          s.h = s.ride + LANE_H + bob;
         } else if (s.placement === 'rain') {
-          if (s.age < RAIN_FALL) { const k = s.age / RAIN_FALL; s.h = CEILING_H - (CEILING_H - LANE_H) * k * k; }
-          else if (s.age < RAIN_FALL + RAIN_REST) { s.h = LANE_H + bob; }
+          const rest = s.ride + LANE_H;   // it lands ON the line, wherever the line is at its depth
+          if (s.age < RAIN_FALL) { const k = s.age / RAIN_FALL; s.h = CEILING_H - (CEILING_H - rest) * k * k; }
+          else if (s.age < RAIN_FALL + RAIN_REST) { s.h = rest + bob; }
           else {
             const f = (s.age - RAIN_FALL - RAIN_REST) / RAIN_FIZZLE;
-            s.h = LANE_H + bob; s.scale = 1 - 0.4 * f; s.mat.opacity = 1 - f;
+            s.h = rest + bob; s.scale = 1 - 0.4 * f; s.mat.opacity = 1 - f;
             if (f >= 1) { freeSlot(s); continue; }
           }
         }
@@ -466,8 +513,17 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
     setSweep(on) { sweep = !!on; },
     /** riptide: while on, everything inside PULL_M ahead slides into the kart's lane. */
     setPull(on) { pull = !!on; },
+    /** Every live bubble in track space, as it was placed. Never read by the game: it is what
+     *  race/smoke/slope-check.mjs holds against THE REACHABLE LINE, so the one honest answer to
+     *  "is anything hung inside a slope or under a flight" comes out of the real placement code. */
+    slots() {
+      const out = [];
+      for (const s of pool) if (s.alive) out.push({ kindId: s.kindId, placement: s.placement, d: s.d, x: s.x, h: s.h, baseH: s.baseH, ride: s.ride, rowId: s.rowId });
+      return out;
+    },
     /** What race/smoke/face-check.mjs reads: the face cache, and what every live word bubble
-     *  is wearing this frame, nearest the kart first. Never read by the game itself. */
+     *  is wearing this frame, nearest the kart first, plus `placed`, every kind this run has put
+     *  on the road counted by id. Never read by the game itself. */
     faceReport() {
       const worn = [];
       for (const s of pool) {
@@ -476,7 +532,7 @@ export function createBubbleField({ scene, layout, media, getIntensity, getRoom,
           ahead: relD(s.d, lastKartD), size: s.size, popped: s.popT >= 0, faced: !!(s.mat.map && s.mat.map !== dotTex && s.mat.map.isCanvasTexture) });
       }
       worn.sort((a, b) => a.ahead - b.ahead);
-      return { ...faces.report(), pool: pool.length, live: liveCount, worn };
+      return { ...faces.report(), pool: pool.length, live: liveCount, worn, placed: Object.fromEntries(placed) };
     },
     get liveCount() { return liveCount; },
   };

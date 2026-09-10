@@ -14,6 +14,17 @@
  *   audio.toggleMute() -> bool   M key; shared with the dive's master mute (shared/audioMute.js)
  *   audio.dispose()
  *
+ * THE SCREEN GOES DARK (2026-09-09, phone testing: "the audio seems to keep going while
+ * screen is off"). A phone that locks, or a tab that goes to the back, hides the document;
+ * the run's rAF stops with it, but an <audio> element plays on and a WebAudio graph keeps
+ * its loops (the bed) and its session alive. So this module listens to visibilitychange
+ * itself - it covers the menu theme as well as the run - and on hidden it pauses the music
+ * element and suspends the context; on visible it resumes the context and plays the same
+ * element back if it was the one playing. A rejected play() on the way back arms the usual
+ * pointer/key retry (startEl -> armGesture), and engine/audioBus's own gesture hooks resume
+ * the context on the first tap regardless. The loaded track (CHART.md) is not this module's:
+ * run.js brakes the run on hidden, which posts track-pause the way the Brake always has.
+ *
  * Resident music: at most TWO <audio> elements live at once, the room's track and
  * the next room's (residentTracks, prefetched at the gate so it is buffered by the
  * time its room comes). Every other track is released after its crossfade (element
@@ -493,7 +504,16 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
     const semis = pitchSemis(combo()), pan = panOf(p.x);
     const asEffect = p.kind === 'effect' && (!scored || scored.kindId !== 'treat');
     if (asEffect) { play('pop', { level: LEVELS.effect, semis: semis - 5, pan, lowpass: 1100 }); synth({ kind: 'sine', f0: 140, f1: 50, sec: 0.16, level: 0.28 }); return; }
-    if (p.id === 'golden') { play('pop3', { level: LEVELS.pop, semis: semis + 2, pan }); play('chime3', { level: LEVELS.chime * 0.8, semis: 7, pan, at: 0.05 }); play('chime3', { level: LEVELS.chime * 0.6, semis: 12, pan, at: 0.14 }); return; }
+    // the jackpot: the gold bubble is rare now, so its take is the biggest sound on the road - the
+    // pop, a chime stack that keeps climbing, and a low knock under it.
+    if (p.id === 'golden') {
+      play('pop3', { level: LEVELS.pop, semis: semis + 2, pan });
+      play('chime3', { level: LEVELS.chime * 0.8, semis: 7, pan, at: 0.05 });
+      play('chime3', { level: LEVELS.chime * 0.7, semis: 12, pan, at: 0.14 });
+      play('chime3', { level: LEVELS.chime * 0.5, semis: 19, pan, at: 0.24 });
+      synth({ kind: 'sine', f0: 96, f1: 42, sec: 0.28, level: 0.26 });
+      return;
+    }
     if (p.id === 'prism') { play('pop2', { level: LEVELS.pop, semis: 3 + semis, pan }); play('chime1', { level: LEVELS.chime * 0.45, semis: 5 + semis, pan, at: 0.04 }); return; }
     if (p.id === 'lucky') { play('pop2', { level: LEVELS.pop, semis, pan }); play('chime1', { level: LEVELS.chime * 0.5, semis: 5, pan, at: 0.05 }); return; }
     play(POPS[popRR++ % POPS.length], { level: LEVELS.pop, semis, pan });
@@ -635,11 +655,36 @@ export function createRaceAudio({ bridge, hud, settings = {}, input } = {}) {
   if (input && input.onAction) input.onAction((a) => { if (a === 'mute') toggleMute(); });
   if (isMuted() && hud && hud.toast) setTimeout(() => { try { hud.toast('muted. m to unmute', 'item'); } catch (e) { /* hud gone */ } }, 800);
 
+  // ---- the screen goes dark (see the header) ----
+  let heldByDark = null;   // the track the lock paused, so only that one comes back
+  function onVisibility() {
+    if (disposed) return;
+    let hid = false;
+    try { hid = document.hidden === true; } catch (e) { return; }
+    if (hid) {
+      heldByDark = null;
+      const cur = music.cur;
+      for (const t of tracks.values()) {
+        let playing = false;
+        try { playing = !t.el.paused; t.el.pause(); } catch (e) { /* ignore */ }
+        if (playing && t === cur) heldByDark = t;
+      }
+      if (ctx && ctx.state === 'running') { try { const p = ctx.suspend(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
+      log('screen off: ' + (heldByDark ? heldByDark.name + ' held' : 'no music playing') + ', graph suspended');
+    } else {
+      if (ctx && ctx.state === 'suspended') { try { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ } }
+      const t = heldByDark; heldByDark = null;
+      if (t && music.cur === t && tracks.get(t.name) === t && !t.failed) { startEl(t); log('screen on: ' + t.name + ' back'); }
+    }
+  }
+  try { document.addEventListener('visibilitychange', onVisibility); } catch (e) { /* no document */ }
+
   function dispose() {
     if (disposed) return;
     disposed = true;
     offMute();
     setDucked(false);
+    try { document.removeEventListener('visibilitychange', onVisibility); } catch (e) { /* ignore */ }
     for (const v of voices.splice(0)) { try { v.src.stop(); } catch (e) { /* ignore */ } }
     stopMusic(); stopBed();
     try { master && master.disconnect(); } catch (e) { /* ignore */ }

@@ -213,6 +213,7 @@ namespace ConditioningControlPanel
 
         // Banner rotation (cycles through 3 messages: support, welcome, thanks)
         private DispatcherTimer? _bannerRotationTimer;
+        private DispatcherTimer? _bannerPoolTimer;
         private int _bannerCurrentIndex = 0; // 0=Primary (support), 1=Secondary (welcome)
         private List<string> _bannerMessages = new();
 
