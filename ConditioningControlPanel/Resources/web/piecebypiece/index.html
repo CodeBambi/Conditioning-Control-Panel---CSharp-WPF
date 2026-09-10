@@ -65,6 +65,32 @@
       <p class="hint" id="hud-hint" hidden>hold esc to leave the board</p>
       <div class="dots" id="hud-dots" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     </div>
+
+    <!-- Resign and the draw: the two things a player can say to the referee
+         in an online game that are not a move. hud.js shows this block only
+         while an online seat is in the chair (game.isOnline); a hotseat game
+         never sees it. Bottom right rather than under the status line, which
+         slides with the turn: a button that moves is a button a stray tap
+         lands on, and "resign" is the one tap that must not be stray. The
+         rows swap in place - the question, or his offer, in the buttons'
+         stead - so the eye learns one spot. -->
+    <div class="online" id="hud-online" hidden>
+      <p class="online-note" id="hud-online-note" hidden></p>
+      <div class="online-row" id="hud-draw-ask" hidden>
+        <span class="word">he offers a draw</span>
+        <button type="button" class="hud-btn warm" id="hud-draw-accept">accept</button>
+        <button type="button" class="hud-btn" id="hud-draw-decline">decline</button>
+      </div>
+      <div class="online-row" id="hud-resign-ask" hidden>
+        <span class="word">resign?</span>
+        <button type="button" class="hud-btn warm" id="hud-resign-yes">yes</button>
+        <button type="button" class="hud-btn" id="hud-resign-no">no</button>
+      </div>
+      <div class="online-row" id="hud-online-btns">
+        <button type="button" class="hud-btn" id="hud-draw">offer draw</button>
+        <button type="button" class="hud-btn" id="hud-resign">resign</button>
+      </div>
+    </div>
   </div>
 
   <div id="fx"></div>

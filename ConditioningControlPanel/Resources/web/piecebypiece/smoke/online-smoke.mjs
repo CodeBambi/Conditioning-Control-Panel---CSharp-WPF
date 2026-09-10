@@ -37,6 +37,18 @@
  *   what door/door.js calls, including the shapes it never sees a server
  *   produce - an outgoing challenge accepted with no colour attached to it.
  *
+ *   THE SWITCH GOES BOTH WAYS. net/online.js puts an online seat in the chair
+ *   and, afterwards, puts the hotseat back - disposing the seat - and forwards
+ *   record() from whichever is there, or the shelf keeps games with no moves.
+ *
+ *   ABANDONMENT IS CLAIMED. Sixty seconds of the server saying he is not there
+ *   (ABANDON_MS, the server's own number) is one claim, retried on the backoff
+ *   ladder while the server says "not yet", and a fresh spell of silence is a
+ *   fresh claim. Never one a tick.
+ *
+ *   THE LOBBY POLLS UNDER THE CAPS. The list every tick at POLL_MS, the
+ *   challenge list every other one, except while one of ours is out.
+ *
  * The whole thing runs on an injected clock and an injected sleep, so it is
  * deterministic and finishes in milliseconds.
  * ==========================================================================*/
@@ -44,8 +56,10 @@
 import { Chess } from '../vendor/chess.js';
 import { createBus } from '../game/events.js';
 import * as api from '../net/api.js';
-import { createOnlineMatch, createRemoteClock, parseUci, toUci } from '../net/match.js';
-import { createServerLobby } from '../net/lobbyServer.js';
+import { createOnlineMatch, createRemoteClock, parseUci, toUci, ABANDON_MS } from '../net/match.js';
+import { createServerLobby, POLL_MS, CHALLENGE_TICKS } from '../net/lobbyServer.js';
+import { createDriverSwitch } from '../net/online.js';
+import { createHotseat } from '../game/hotseat.js';
 
 let passed = 0;
 const failures = [];
@@ -94,6 +108,8 @@ function createFakeServer({
     drawOffer: null,
     left: { w: initialMs, b: initialMs },
     turnStarted: SERVER_EPOCH,
+    opponentOnline: true,      // what the events envelope reports
+    grantAbandon: false,       // when set, claim_timeout finds him gone and says so
   };
   let nowMs = SERVER_EPOCH;
   const calls = [];          // every path the client asked for, for assertions
@@ -194,7 +210,7 @@ function createFakeServer({
         server_now_ms: nowMs,
         events: events.filter((e) => e.seq > since),
         status: state.status,
-        opponent_online: true,
+        opponent_online: state.opponentOnline,
       });
     }
 
@@ -235,8 +251,17 @@ function createFakeServer({
       return json(200, { ok: true, seq: state.seq });
     }
 
-    if (method === 'POST' && route === `${M}/heartbeat`) return json(200, { ok: true, opponent_online: true, seq: state.seq, status: state.status });
-    if (method === 'POST' && route === `${M}/claim_timeout`) return json(409, { error: 'not_expired', clocks: clocks() });
+    if (method === 'POST' && route === `${M}/heartbeat`) return json(200, { ok: true, opponent_online: state.opponentOnline, seq: state.seq, status: state.status });
+    if (method === 'POST' && route === `${M}/claim_timeout`) {
+      // Condition 2 of the contract's claim_timeout: the opponent unseen for
+      // ABANDON_MS. The caller wins. Otherwise "not yet", with the clocks.
+      if (state.grantAbandon && state.status === 'live') {
+        const result = finishWith(you, 'abandon');
+        push('abandon', { side: you === 'w' ? 'b' : 'w', result });
+        return json(200, snapshot());
+      }
+      return json(409, { error: 'not_expired', clocks: clocks() });
+    }
 
     return json(404, {});
   }
@@ -720,50 +745,51 @@ function harness(opts = {}) {
 /* ---------------------------------------------------------------------------
  * 13. THE LOBBY, WEARING THE FRONT DOOR'S INTERFACE
  * ------------------------------------------------------------------------- */
-{
-  // Enough of the lobby surface to answer a door, with the contract's shapes.
-  function lobbyServerFixture() {
-    const lobby = [
-      { id: 'p_aaaaaaaaaaaa', display_name: 'velvet', rating: 1301, since_ms: 1000, self: false, time_control: { initial_ms: 600000, increment_ms: 0 } },
-      { id: 'p_bbbbbbbbbbbb', display_name: 'moth', rating: null, since_ms: 500, self: false, time_control: { initial_ms: 600000, increment_ms: 0 } },
-      { id: 'p_meeeeeeeeeee', display_name: 'you', rating: 1200, since_ms: 2000, self: true, time_control: { initial_ms: 600000, increment_ms: 0 } },
-    ];
-    const st = { incoming: [], outgoing: [], quickPaired: null, calls: [], matchYou: 'b' };
-    const json = (status, obj) => ({ status, body: JSON.stringify(obj) });
-    async function transport(method, path, body) {
-      const route = String(path).split('?')[0];
-      st.calls.push(`${method} ${route}`);
-      if (route === `${api.BASE}/lobby/enter`) return json(200, { ok: true, ticket: 't_1', expires_in_sec: 180 });
-      if (route === `${api.BASE}/lobby/leave`) return json(200, { ok: true, left: true });
-      if (route === `${api.BASE}/lobby`) return json(200, { ok: true, players: lobby, server_now_ms: 1 });
-      if (route === `${api.BASE}/challenges`) return json(200, { ok: true, incoming: st.incoming, outgoing: st.outgoing });
-      if (route === `${api.BASE}/quick`) {
-        return st.quickPaired ? json(200, { ok: true, match_id: st.quickPaired, color: 'w' })
-          : json(200, { ok: true, waiting: true, queued_ms: 100 });
-      }
-      if (route === `${api.BASE}/challenge`) {
-        if (body.target === 'p_gonegonegone') return json(404, { error: 'no_such_player' });
-        st.outgoing = [{ challenge_id: 'c_mine', to: lobby[0], time_control: { initial_ms: 600000, increment_ms: 0 }, status: 'pending' }];
-        return json(200, { ok: true, challenge_id: 'c_mine', expires_in_sec: 300 });
-      }
-      if (route === `${api.BASE}/challenge/c_theirs/accept`) return json(200, { ok: true, match_id: 'm_accepted', color: 'b' });
-      if (route.startsWith(`${api.BASE}/challenge/`) && route.endsWith('/decline')) return json(200, { ok: true, declined: true });
-      if (route.startsWith(`${api.BASE}/match/`)) {
-        const id = route.split('/')[4];
-        return json(200, {
-          ok: true, id, you: st.matchYou,
-          white: { id: 'p_aaaaaaaaaaaa', display_name: 'velvet', rating: 1301, self: st.matchYou === 'w', online: true },
-          black: { id: 'p_meeeeeeeeeee', display_name: 'you', rating: 1200, self: st.matchYou === 'b', online: true },
-          time_control: { initial_ms: 600000, increment_ms: 0 },
-          fen: new Chess().fen(), moves: [], clocks: { w_ms: 600000, b_ms: 600000, turn: 'w', server_now_ms: 1, turn_started_ms: 1 },
-          status: 'live', result: null, draw_offer: null, seq: 0, started_ms: 1,
-        });
-      }
-      return json(404, {});
-    }
-    return { transport, st };
-  }
 
+/** Enough of the lobby surface to answer a door, with the contract's shapes. */
+function lobbyServerFixture() {
+  const lobby = [
+    { id: 'p_aaaaaaaaaaaa', display_name: 'velvet', rating: 1301, since_ms: 1000, self: false, time_control: { initial_ms: 600000, increment_ms: 0 } },
+    { id: 'p_bbbbbbbbbbbb', display_name: 'moth', rating: null, since_ms: 500, self: false, time_control: { initial_ms: 600000, increment_ms: 0 } },
+    { id: 'p_meeeeeeeeeee', display_name: 'you', rating: 1200, since_ms: 2000, self: true, time_control: { initial_ms: 600000, increment_ms: 0 } },
+  ];
+  const st = { incoming: [], outgoing: [], quickPaired: null, calls: [], matchYou: 'b' };
+  const json = (status, obj) => ({ status, body: JSON.stringify(obj) });
+  async function transport(method, path, body) {
+    const route = String(path).split('?')[0];
+    st.calls.push(`${method} ${route}`);
+    if (route === `${api.BASE}/lobby/enter`) return json(200, { ok: true, ticket: 't_1', expires_in_sec: 180 });
+    if (route === `${api.BASE}/lobby/leave`) return json(200, { ok: true, left: true });
+    if (route === `${api.BASE}/lobby`) return json(200, { ok: true, players: lobby, server_now_ms: 1 });
+    if (route === `${api.BASE}/challenges`) return json(200, { ok: true, incoming: st.incoming, outgoing: st.outgoing });
+    if (route === `${api.BASE}/quick`) {
+      return st.quickPaired ? json(200, { ok: true, match_id: st.quickPaired, color: 'w' })
+        : json(200, { ok: true, waiting: true, queued_ms: 100 });
+    }
+    if (route === `${api.BASE}/challenge`) {
+      if (body.target === 'p_gonegonegone') return json(404, { error: 'no_such_player' });
+      st.outgoing = [{ challenge_id: 'c_mine', to: lobby[0], time_control: { initial_ms: 600000, increment_ms: 0 }, status: 'pending' }];
+      return json(200, { ok: true, challenge_id: 'c_mine', expires_in_sec: 300 });
+    }
+    if (route === `${api.BASE}/challenge/c_theirs/accept`) return json(200, { ok: true, match_id: 'm_accepted', color: 'b' });
+    if (route.startsWith(`${api.BASE}/challenge/`) && route.endsWith('/decline')) return json(200, { ok: true, declined: true });
+    if (route.startsWith(`${api.BASE}/match/`)) {
+      const id = route.split('/')[4];
+      return json(200, {
+        ok: true, id, you: st.matchYou,
+        white: { id: 'p_aaaaaaaaaaaa', display_name: 'velvet', rating: 1301, self: st.matchYou === 'w', online: true },
+        black: { id: 'p_meeeeeeeeeee', display_name: 'you', rating: 1200, self: st.matchYou === 'b', online: true },
+        time_control: { initial_ms: 600000, increment_ms: 0 },
+        fen: new Chess().fen(), moves: [], clocks: { w_ms: 600000, b_ms: 600000, turn: 'w', server_now_ms: 1, turn_started_ms: 1 },
+        status: 'live', result: null, draw_offer: null, seq: 0, started_ms: 1,
+      });
+    }
+    return json(404, {});
+  }
+  return { transport, st };
+}
+
+{
   const fx = lobbyServerFixture();
   api.setTransport(fx.transport);
   const bus = createBus();
@@ -836,6 +862,167 @@ function harness(opts = {}) {
 
   lobby.dispose();
   eq('a page with no host and no account gets no server lobby', createServerLobby({ api }), null);
+}
+
+/* ---------------------------------------------------------------------------
+ * 14. THE SWITCH, BOTH WAYS
+ *
+ * boot.js hands everything the switch, never a driver. It has to reach the
+ * online seat while one is there, and hand the hotseat back - with the seat
+ * disposed - when the next game is dealt "here", or "play here" after an
+ * online game resets a finished seat and fires its gameover again.
+ * ------------------------------------------------------------------------- */
+{
+  const h = harness();
+  const hot = createHotseat({ bus: h.bus, board: h.board });
+  const sw = createDriverSwitch(hot);
+  eq('the hotseat starts in the chair', [sw.isOnline, sw.current === hot], [false, true]);
+  eq('record() is forwarded from a hotseat', sw.record().plies, 0);
+  eq('the draw verbs answer quietly in a hotseat', [sw.drawOffer(), sw.offerDraw()], [null, undefined]);
+
+  let disposed = false;
+  const realDispose = h.game.dispose;
+  h.game.dispose = () => { disposed = true; realDispose(); };
+  sw.switchTo(h.game);
+  eq('an online seat reads as online', sw.isOnline, true);
+  eq('and as one seat', sw.seats, ['w']);
+  await h.game._resync();
+  h.server.play('e2e4');
+  h.game._applyEnvelope({ events: h.server.events.slice(), server_now_ms: h.server.now() });
+  const rec = sw.record();
+  eq('record() is forwarded from the online seat, moves in SAN', rec.moves, ['e4']);
+  eq('in hotseat.record()\'s shape', Object.keys(rec).sort().join(','), 'clocks,me,moves,plies,result');
+  eq('with the seat on it', rec.me, 'w');
+  eq('and no result while it is live', rec.result, null);
+  eq('the draw verbs reach the seat', typeof sw.offerDraw === 'function' && sw.drawOffer(), null);
+  sw.offerDraw();
+  eq('our own offer is known at once, not a poll later', sw.drawOffer(), 'me');
+
+  const back = sw.switchBack();
+  eq('switchBack puts the hotseat back', [back === hot, sw.current === hot, sw.isOnline], [true, true, false]);
+  ok('and the online seat was disposed on the way out', disposed);
+  eq('the switch is the hotseat\'s again', sw.seats, ['w', 'b']);
+  eq('switching back twice is nothing', sw.switchBack() === hot, true);
+  api.setTransport(null);
+}
+
+/* ---------------------------------------------------------------------------
+ * 15. ABANDONMENT
+ *
+ * The server says he is gone; sixty seconds later we ask it to say so on the
+ * record. Once - and if it says not yet, again on the backoff ladder - and a
+ * fresh spell of silence is a fresh claim. The ticker is driven by hand.
+ * ------------------------------------------------------------------------- */
+{
+  const h = harness();
+  await h.game._resync();
+  const claims = () => h.server.calls.filter((c) => c.endsWith('/claim_timeout')).length;
+  const envelope = (online) => h.game._applyEnvelope({ events: [], server_now_ms: h.server.now(), opponent_online: online });
+
+  eq('the client\'s number is the server\'s', ABANDON_MS, 60000);
+  h.game._tick();
+  eq('while he is here nothing is claimed', claims(), 0);
+
+  envelope(false);
+  eq('the page hears he has gone', h.of('opponent').pop().payload.online, false);
+  ok('and the seat starts counting', h.game._silence() !== null);
+  h.game._tick();
+  eq('nothing is claimed at once', claims(), 0);
+  h.tick(ABANDON_MS - 1000);
+  h.game._tick();
+  eq('nor a second before the server would agree', claims(), 0);
+  h.tick(1000);
+  h.game._tick();
+  eq('at sixty seconds of silence, one claim goes out', claims(), 1);
+  h.game._tick();
+  h.game._tick();
+  eq('and the next ticks do not repeat it', claims(), 1);
+  await settle();
+  // The server said not_expired: its count of his silence started later than
+  // ours. The next ask waits the first step of the ladder, not the next tick.
+  h.game._tick();
+  eq('a refused claim is not retried on the very next tick', claims(), 1);
+  h.tick(499);
+  h.game._tick();
+  eq('nor a moment early', claims(), 1);
+  h.tick(1);
+  h.game._tick();
+  eq('but after the first backoff step it is', claims(), 2);
+  await settle();
+  ok('the board is still live: the server never said otherwise', !h.game.isOver());
+
+  envelope(true);
+  eq('his return ends the spell', h.game._silence(), null);
+  h.tick(5000);
+  h.game._tick();
+  eq('and nothing more is claimed for it', claims(), 2);
+
+  envelope(false);
+  h.tick(ABANDON_MS);
+  h.server.state.grantAbandon = true;
+  h.game._tick();
+  eq('a fresh silence is a fresh claim', claims(), 3);
+  await settle();
+  ok('the server\'s verdict finishes the board here, without waiting for the poll', h.game.isOver());
+  eq('as an abandonment in our favour', [h.game.result().result, h.game.result().winner], ['abandon', 'w']);
+  eq('the page was told once', h.of('gameover').length, 1);
+  h.game._tick();
+  eq('and a finished game claims nothing', claims(), 3);
+  api.setTransport(null);
+}
+
+/* ---------------------------------------------------------------------------
+ * 16. THE LOBBY'S POLL, AGAINST THE CAPS
+ *
+ * GET /lobby is 30/min/user and GET /challenges 30/min/user. The tick is
+ * driven through the injectable timer, so the cadence is counted, not timed.
+ * ------------------------------------------------------------------------- */
+{
+  const fx = lobbyServerFixture();
+  api.setTransport(fx.transport);
+  const queue = [];
+  const timer = {
+    set(fn, ms) { const t = { fn, ms }; queue.push(t); return t; },
+    clear(t) { const i = queue.indexOf(t); if (i >= 0) queue.splice(i, 1); },
+  };
+  const lobby = createServerLobby({ api, force: true, timer });
+  const count = (route) => fx.st.calls.filter((c) => c === `GET ${api.BASE}/${route}`).length;
+  /** Fire the armed tick and let its refresh run to the point of re-arming. */
+  const fire = async () => {
+    const t = queue.shift();
+    t.fn();
+    for (let i = 0; i < 60 && queue.length === 0; i++) await Promise.resolve();
+  };
+
+  ok('the poll is slower than the list cap (30/min is 2s)', POLL_MS > 2000);
+  eq('and is the number the contract\'s freshness allows', POLL_MS, 3000);
+  eq('the challenge list is asked for every other tick', CHALLENGE_TICKS, 2);
+
+  await lobby.enter({ name: 'you' });
+  eq('enter asks for the list and the challenges once', [count('lobby'), count('challenges')], [1, 1]);
+  eq('and arms the poll at POLL_MS', [queue.length, queue[0] && queue[0].ms], [1, POLL_MS]);
+  await fire();
+  eq('tick 2: the list, not the challenges', [count('lobby'), count('challenges')], [2, 1]);
+  await fire();
+  eq('tick 3: both', [count('lobby'), count('challenges')], [3, 2]);
+  await fire();
+  eq('tick 4: the list alone again', [count('lobby'), count('challenges')], [4, 2]);
+  ok('the poll re-arms itself each time', queue.length === 1);
+
+  // Our own challenge is out: the challenge list is the only place its answer
+  // can land, so it is watched every tick until it does.
+  const asked = lobby.challenge('p_aaaaaaaaaaaa');
+  await settle(6);
+  await fire();
+  await fire();
+  eq('an outgoing challenge is watched every tick', [count('lobby'), count('challenges')], [6, 4]);
+  lobby.cancel();
+  try { await asked; } catch (e) { /* cancelled, as intended */ }
+  await fire();
+  await fire();
+  eq('and the cadence resumes once it is gone', count('challenges') - 4 <= 1, true);
+  lobby.dispose();
+  eq('dispose disarms the poll', queue.length, 0);
 }
 
 /* ------------------------------------------------------------------------- */

@@ -17,7 +17,7 @@ import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
-import { postToHost, onHostMessage, signalReady } from './bridge.js';
+import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -99,6 +99,15 @@ function main() {
     const { type, ...values } = m;   // the envelope's own key is not a setting
     Object.assign(window.PBP.settings, values);
   });
+  // The host names the player from the account (pbp:identity, displayName),
+  // and that is the name the server lists in the lobby - so it is the name the
+  // door has to show, or "you are visible as" says one thing and the room sees
+  // another. Subscribed rather than read: the frame lands after `ready`, which
+  // is after everything below has run, and settings is read fresh here because
+  // the object is merged into a new one twice further down.
+  onIdentity((id) => {
+    if (id && id.displayName) window.PBP.settings.playerName = String(id.displayName);
+  });
 
   // --- camera: the rig the player drives ---
   // A touch that picked a man up is never an orbit, so the rig asks drag.js.
@@ -144,6 +153,7 @@ function main() {
   import('./board/env.js').then((m) => {
     board.env = m.createEnv({ renderer: view.renderer, scene: view.scene });
     board.env.dressBoard(view.boardGroup);
+    if (board.room) board.env.dressBoard(board.room.group);   // the floor, if it got here first
     board.env.dress(view.pieceGroup);
     feelLate.push((dt) => board.env.update(dt, view.pieceGroup));
   }).catch((e) => console.warn('[pbp] env missing', e));
@@ -194,8 +204,10 @@ function main() {
   // --- end M ---
 
   // --- N: the theatre (parade, poses, bloom, the room watches) ---
-  window.PBP.settings = Object.assign({ bloom: true }, window.PBP.settings);
-  { const prev = board.setMeter; board.setMeter = (m) => { if (prev) prev(m); if (board.bloom) board.bloom.setMeter(m); if (board.watch) board.watch.setMeter(m); if (board.sfx && board.sfx.setMeter) board.sfx.setMeter(m); }; }
+  // The bishop's whip (board/whip.js) is parked: off unless the host says so,
+  // or a dev page asks with ?whip=1. Host-provided settings still win.
+  window.PBP.settings = Object.assign({ bloom: true, whip: params.get('whip') === '1' }, window.PBP.settings);
+  { const prev = board.setMeter; board.setMeter = (m) => { if (prev) prev(m); if (board.bloom) board.bloom.setMeter(m); if (board.watch) board.watch.setMeter(m); if (board.sfx && board.sfx.setMeter) board.sfx.setMeter(m); if (board.room && board.room.setMeter) board.room.setMeter(m); }; }
   import('./board/parade.js').then((m) => {
     board.parade = m.createParade({ view, bus, jiggle });
     feelLate.push((dt) => board.parade.update(dt));
@@ -213,6 +225,19 @@ function main() {
     feelLate.push((dt) => board.bloom.update(dt));
   }).catch((e) => console.warn('[pbp] bloom missing', e));
   // --- end N ---
+  // --- T: the room (floor, dome, and the light that leans to the mover) ---
+  // Loaded late and guarded like the rest: without it the board sits in the
+  // flat navy it always did. The turn tell rides the bus on its own.
+  import('./board/room.js').then((m) => {
+    board.room = m.createRoom({ view, bus, game, env: () => board.env });
+    feelLate.push((dt) => board.room.update(dt));
+  }).catch((e) => console.warn('[pbp] room missing', e));
+  // The air in it: motes drifting round the board, scenery only.
+  import('./board/motes.js').then((m) => {
+    board.motes = m.createMotes({ scene: view.scene });
+    feelLate.push((dt) => board.motes.update(dt, view.camera, view.renderer));
+  }).catch((e) => console.warn('[pbp] motes missing', e));
+  // --- end T ---
   // Esc closes the board - but never mid-drag, where it is "put the piece back".
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
@@ -258,6 +283,11 @@ function main() {
     // an online seat is built and switched in by net/online.js; the hotseat's
     // reset-and-start is not what it wants
     if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
+    // A finished online seat may still be in the chair from the last game
+    // (it stays for the end card). Reset-and-start against it would resync
+    // the finished match and fire its gameover a second time, so the hotseat
+    // goes back in first - which also disposes the seat - and is dealt.
+    if (game.switchBack) game.switchBack();
     if (game.reset) game.reset();
     bus.emit('local', { sides: ['w', 'b'], mode, match });
     game.start();

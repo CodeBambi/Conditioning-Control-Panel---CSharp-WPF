@@ -110,7 +110,7 @@ slide entry; the early shiver is one `delay` on the shiver list.
 
 ## Bishop
 
-### B1 - The Whip (BUILT, `board/whip.js`, `anim.js`) [N]
+### B1 - The Whip (BUILT but GATED OFF by default: `settings.whip` / `?whip=1`; `board/whip.js`, `anim.js`) [N]
 The tentacle takes the man. The bishop stops one stand-off short on the diagonal, drops,
 draws back, cracks across the victim, and strides onto the square while the tentacle rings.
 

@@ -70,6 +70,10 @@
   50% { box-shadow: 0 0 26px rgba(255, 105, 180, 0.6); }
 }
 .door-btn.primary:hover { background: #FF7DBE; border-color: #FF7DBE; }
+/* off (no lobby, or nobody to play as): dim, still, and it does not breathe -
+   a button that glows and does nothing reads as broken */
+.door-btn:disabled, .door-btn.primary:disabled { opacity: 0.4; cursor: default; animation: none; box-shadow: none; transform: none; }
+.door-btn.primary:disabled:hover { background: var(--pbp-pink); border-color: var(--pbp-pink); }
 .door-btn .k { font-size: 10px; opacity: 0.55; letter-spacing: 0.1em; }
 .door-row { display: flex; gap: 10px; }
 .door-row .door-btn { flex: 1; }
@@ -168,6 +172,9 @@
   font: 14px 'Segoe UI', system-ui, sans-serif;
 }
 .door-name input:focus { outline: 2px solid var(--pbp-pink); outline-offset: 1px; }
+/* hosted, the name is the account's and is shown, not typed */
+.door-name input[readonly] { opacity: 0.6; cursor: default; }
+.door-name input[readonly]:focus { outline: none; }
 
 /* --- replay: the card folds down to a strip so the board is the subject --- */
 .door.screen-replay { align-items: flex-end; padding-bottom: 26px; }

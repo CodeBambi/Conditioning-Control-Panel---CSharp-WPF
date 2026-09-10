@@ -14,6 +14,15 @@
  * off game.rules for the material count, so the match code never has to know the
  * HUD changed shape.
  *
+ * ONLINE, TWO MORE WORDS. An online seat (net/match.js) can resign and can
+ * offer, accept or decline a draw, and a hotseat cannot: there is nobody to
+ * say it to. So the resign and draw buttons exist only while `game.isOnline`
+ * says an online seat is in the chair (the `local` event carries the mode, and
+ * the switch in net/online.js exposes the getter), and are hidden outright in
+ * a hotseat, not merely disabled. Resign asks once - "resign? yes / no" - so a
+ * stray tap cannot end a game; his offer is a line with accept and decline,
+ * fed by the `draw-offer` / `draw-decline` events the seat emits.
+ *
  *   createHud({ bus, game, board, root, params }) -> { setMeter, debug, dispose }
  *
  * Nothing here may throw at import or at attach time: a missing node, a missing
@@ -32,6 +41,8 @@ export const TUNING = Object.freeze({
   vigMax: 0.9,         // and how strong full is
   vigBreathe: 0.7,     // past this the glow breathes
   unlocks: Object.freeze([0.25, 0.40, 0.55, 0.70]),   // the debug dot row
+  askMs: 6000,         // "resign?" withdraws itself if nobody answers it
+  noteMs: 2600,        // how long a passing note ("draw declined") stays
 });
 
 const T = TUNING;
@@ -98,6 +109,20 @@ export function createHud(opts = {}) {
     dots: pick('hud-dots'),
     chip: { w: pick('chip-w'), b: pick('chip-b') },
     tally: { w: pick('tally-w'), b: pick('tally-b') },
+    // the online block; every node optional, a page without it is a quieter HUD
+    online: {
+      root: pick('hud-online'),
+      note: pick('hud-online-note'),
+      btns: pick('hud-online-btns'),
+      resign: pick('hud-resign'),
+      draw: pick('hud-draw'),
+      ask: pick('hud-resign-ask'),
+      yes: pick('hud-resign-yes'),
+      no: pick('hud-resign-no'),
+      offer: pick('hud-draw-ask'),
+      accept: pick('hud-draw-accept'),
+      decline: pick('hud-draw-decline'),
+    },
   };
 
   let active = 'w';         // whose clock is running
@@ -105,8 +130,15 @@ export function createHud(opts = {}) {
   let meter = 0;
   let lastSecond = -1;      // so the shiver fires once a second, not every tick
   let hinted = false;
+  let online = false;       // an online seat is in the chair (see the header)
+  let asking = false;       // "resign?" is up
+  let askTimer = null;
+  let away = false;         // the server's last word: he is not there
+  let flash = '';           // a passing note, and the timer that takes it down
+  let flashTimer = null;
   const timers = new Set();
   const unbind = [];
+  const undom = [];         // DOM listeners, taken off on dispose
 
   const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; };
   const on = (type, fn) => {
@@ -216,6 +248,97 @@ export function createHud(opts = {}) {
     return sideWord(other(end.winner)) + ' kneels';
   }
 
+  /* ---- resign and the draw, online only ---------------------------------- */
+
+  /** What the seat says stands: 'me' | 'them' | null. A hotseat says null. */
+  function drawOffer() {
+    try { return game && game.drawOffer ? game.drawOffer() : null; } catch { return null; }
+  }
+
+  /** The seat this client is in, for telling his decline from the echo of ours. */
+  function mySide() {
+    try { const s = game && game.seats; return Array.isArray(s) && s.length === 1 ? s[0] : null; } catch { return null; }
+  }
+
+  /** The one line over the buttons. A passing note wins; then whatever stands. */
+  function noteText() {
+    if (flash) return flash;
+    if (drawOffer() === 'me') return 'draw offered';
+    if (away) return 'he seems to have left';
+    return '';
+  }
+
+  /**
+   * Show the block as the state says. Everything reads from state rather than
+   * being toggled in place, so an event arriving in any order lands on the
+   * same picture: no online seat, or a finished game, and the whole thing is
+   * gone; his offer takes the buttons' row; the question takes it too.
+   */
+  function paintOnline() {
+    const o = el.online;
+    if (!o.root) return;
+    const show = online && !over;
+    o.root.hidden = !show;
+    if (!show) return;
+    const offer = drawOffer();
+    const theirs = offer === 'them';
+    if (o.btns) o.btns.hidden = asking || theirs;
+    if (o.ask) o.ask.hidden = !asking;
+    if (o.offer) o.offer.hidden = asking || !theirs;
+    if (o.draw) o.draw.disabled = offer === 'me';
+    const text = noteText();
+    if (o.note) { o.note.textContent = text; o.note.hidden = !text; }
+  }
+
+  function stopAsking() {
+    asking = false;
+    if (askTimer) { clearTimeout(askTimer); timers.delete(askTimer); askTimer = null; }
+  }
+
+  function note(text) {
+    flash = text;
+    if (flashTimer) { clearTimeout(flashTimer); timers.delete(flashTimer); }
+    flashTimer = later(() => { flash = ''; flashTimer = null; paintOnline(); }, T.noteMs);
+    paintOnline();
+  }
+
+  /** A new deal. The mode on the `local` event is the word; the getter is the fallback. */
+  function newDeal(p) {
+    let isOnline = false;
+    try { isOnline = !!(game && game.isOnline); } catch { isOnline = false; }
+    if (p && typeof p.mode === 'string') isOnline = p.mode === 'online';
+    online = isOnline;
+    over = null;
+    away = false;
+    flash = '';
+    stopAsking();
+    paintOnline();
+  }
+
+  const click = (node, fn) => {
+    if (!node) return;
+    const h = (e) => {
+      e.preventDefault();
+      try { fn(); } catch (err) { console.warn('[pbp/hud] ' + (err && err.message)); }
+    };
+    node.addEventListener('click', h);
+    undom.push(() => node.removeEventListener('click', h));
+  };
+  const verb = (name) => { try { if (game && typeof game[name] === 'function') game[name](); } catch { /* the seat said no */ } };
+
+  click(el.online.resign, () => {
+    // Asked, never done: the tap that ends a game is the second one.
+    stopAsking();
+    asking = true;
+    askTimer = later(() => { askTimer = null; asking = false; paintOnline(); }, T.askMs);
+    paintOnline();
+  });
+  click(el.online.no, () => { stopAsking(); paintOnline(); });
+  click(el.online.yes, () => { stopAsking(); verb('resign'); paintOnline(); });
+  click(el.online.draw, () => { verb('offerDraw'); paintOnline(); });
+  click(el.online.accept, () => { verb('acceptDraw'); paintOnline(); });
+  click(el.online.decline, () => { verb('declineDraw'); paintOnline(); });
+
   /* ---- wiring ------------------------------------------------------------- */
 
   on('clock', (snap) => {
@@ -226,10 +349,20 @@ export function createHud(opts = {}) {
     setActive(p && p.side === 'b' ? 'b' : 'w');
     paintCheck();
     paintTally();
+    // a move clears any standing offer, server-side and in the seat, so the
+    // block is repainted off the seat's word rather than told
+    paintOnline();
   });
   on('check', () => paintCheck());
   on('capture', () => paintTally());
-  on('local', () => { paintTally(); place(true); });
+  on('local', (p) => { newDeal(p); paintTally(); place(true); });
+  on('draw-offer', () => { stopAsking(); paintOnline(); });
+  on('draw-decline', (p) => {
+    const by = p && (p.by === 'w' || p.by === 'b') ? p.by : null;
+    // his no, not the echo of ours
+    if (by && by !== mySide()) note('draw declined'); else paintOnline();
+  });
+  on('opponent', (p) => { away = !!(p && p.online === false); paintOnline(); });
   on('gameover', (p) => {
     over = p || { result: 'over' };
     const line = endLine(over);
@@ -239,6 +372,8 @@ export function createHud(opts = {}) {
       el.chip[s].classList.remove('low', 'check', 'shiver', 'shiver-hard');
     }
     if (el.line) el.line.classList.remove('on');
+    stopAsking();
+    paintOnline();
   });
 
   // The one piece of teaching copy, and it leaves on its own. The first pointer
@@ -277,11 +412,16 @@ export function createHud(opts = {}) {
   paintTally();
   paintCheck();
   setMeter(0);
+  // The HUD may be built mid-game (it is loaded late), so the block starts
+  // from whatever is in the chair rather than waiting for the next deal.
+  newDeal(null);
 
   function dispose() {
     if (moves) { try { moves.dispose(); } catch { /* already gone */ } moves = null; }
     for (const off of unbind) { try { off(); } catch { /* already gone */ } }
     unbind.length = 0;
+    for (const off of undom) { try { off(); } catch { /* already gone */ } }
+    undom.length = 0;
     for (const id of timers) clearTimeout(id);
     timers.clear();
     try { window.removeEventListener('pointermove', onPointer); } catch { /* gone */ }
@@ -307,6 +447,16 @@ export function createHud(opts = {}) {
         line: el.line ? el.line.style.transform : null,
         reducedMotion: reducedMotion(),
         moves: moves ? moves.debug() : null,
+        online: {
+          on: online,
+          shown: !!(el.online.root && !el.online.root.hidden),
+          asking,
+          offer: drawOffer(),
+          away,
+          note: el.online.note && !el.online.note.hidden ? el.online.note.textContent : null,
+          buttons: !!(el.online.btns && !el.online.btns.hidden),
+          offerRow: !!(el.online.offer && !el.online.offer.hidden),
+        },
       };
     },
   };

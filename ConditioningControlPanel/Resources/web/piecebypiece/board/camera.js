@@ -24,6 +24,7 @@
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { fitScaleFor } from './frame.js';
 
 const DEG = Math.PI / 180;
 
@@ -93,7 +94,7 @@ export function createCameraRig({ camera, canvas, isDragging = null }) {
 
   const listeners = new Set();
   const notify = () => { for (const fn of listeners) { try { fn(state()); } catch { /* a listener is not the rig's problem */ } } };
-  const state = () => ({ preset, free, theta, phi, radius });
+  const state = () => ({ preset, free, theta, phi, radius, fit: fitScaleFor(camera.aspect, camera.fov), fov: camera.fov });
 
   const sideAngle = (side) => (side === 'b' ? Math.PI : 0);
 
@@ -299,7 +300,10 @@ export function createCameraRig({ camera, canvas, isDragging = null }) {
       if (Math.abs(velTheta) < T.inertiaFloor && Math.abs(velPhi) < T.inertiaFloor) { velTheta = 0; velPhi = 0; }
     }
 
-    const r = radius * dolly;
+    // On a narrow screen every preset stands further back, so the whole
+    // board is in the picture; on the wide window this was tuned on, fit is 1.
+    const fit = fitScaleFor(camera.aspect, camera.fov);
+    const r = radius * dolly * fit;
     const sinPhi = Math.sin(phi);
     camera.position.set(
       target.x + Math.sin(theta) * sinPhi * r + Math.sin(clock * 0.53) * T.swayPos[0] * sway,

@@ -42,6 +42,11 @@
  * its own. Under reduced motion the bishop takes the plain way, like everyone
  * else. The victim's SHIVER (house book) is a forced tremor across the whip
  * line at the crack: no colour, no emissive, a flinch and nothing more.
+ *
+ * Gate: window.PBP.settings.whip (default FALSE). The owner has parked the
+ * capture animations, so the whip is built but off: a bishop takes the plain
+ * way, like a rook, unless the setting is true (boot.js reads ?whip=1 into
+ * it for dev pages and harnesses). whipOn() is the one place that asks.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -75,6 +80,12 @@ function prefersReducedMotion() {
   if ((s && s.reducedMotion) || (window.PBP && window.PBP.reducedMotion)) return true;
   try { return !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   catch { return false; }
+}
+
+/** The whip is parked: off unless the setting says so (bloom.js's bloomOn, inverted default). */
+function whipOn() {
+  const s = (typeof window !== 'undefined' && window.PBP && window.PBP.settings) || {};
+  return s.whip === true;
 }
 
 // A man is not always one material: a modelled king wears a metal crown over
@@ -179,7 +190,8 @@ export function createAnim({ group, jiggle = null }) {
         // The bishop does not land on him. He stops one stand-off short on the
         // diagonal and the whip does the taking; the victim stands and waits
         // for the crack (board/whip.js), then goes over faster and further.
-        if (d.type === 'b' && !refused && !prefersReducedMotion() && dir.lengthSq() > 1e-6) {
+        // Only when the whip is switched on; off, he lands on him like anyone.
+        if (d.type === 'b' && whipOn() && !refused && !prefersReducedMotion() && dir.lengthSq() > 1e-6) {
           const near = dest.clone().addScaledVector(dir, -W.standOff);
           s.to = near;
           s.dur = W.approachSec;

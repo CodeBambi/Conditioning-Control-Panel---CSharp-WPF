@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { createCameraRig } from './camera.js';
+import { fovForAspect } from './frame.js';
 
 export const SQUARE = 1.0;
 export const FILES = 'abcdefgh';
@@ -99,7 +100,8 @@ export function createScene({ canvas }) {
   // instead of the void, and the fill stands opposite the key at about a
   // quarter of its strength: enough to find the far edge of a man, not enough
   // to flatten the modelling the key is doing. The fill casts nothing.
-  scene.add(new THREE.HemisphereLight(LIGHT.skyColor, LIGHT.groundColor, LIGHT.hemi));
+  const hemi = new THREE.HemisphereLight(LIGHT.skyColor, LIGHT.groundColor, LIGHT.hemi);
+  scene.add(hemi);
   const key = new THREE.DirectionalLight(LIGHT.keyColor, LIGHT.key);
   key.position.set(4.5, 9.5, 5.5);
   key.castShadow = true;
@@ -118,14 +120,21 @@ export function createScene({ canvas }) {
   const half = LIGHT.shadowHalfExtent;
   cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half;
   cam.near = 1; cam.far = 26;
-  scene.add(key, key.target);
+  // The three directionals and their targets ride in ONE group, so the whole
+  // rig can be swung about +Y as a unit: board/room.js turns it to stand
+  // behind whoever is to move, and key, fill and rim keep their places
+  // relative to each other. At rotation 0 nothing about the light has moved.
+  const lightRig = new THREE.Group();
+  lightRig.name = 'pbp-light-rig';
+  lightRig.add(key, key.target);
   const fill = new THREE.DirectionalLight(LIGHT.fillColor, LIGHT.fill);
   fill.position.set(-5.0, 4.0, 4.5);
   fill.castShadow = false;
-  scene.add(fill, fill.target);
+  lightRig.add(fill, fill.target);
   const rim = new THREE.DirectionalLight(LIGHT.rimColor, LIGHT.rim);
   rim.position.set(-5.5, 3.2, -6.5);
-  scene.add(rim, rim.target);
+  lightRig.add(rim, rim.target);
+  scene.add(lightRig);
 
   // --- board ----------------------------------------------------------------
   const boardGroup = new THREE.Group();
@@ -217,6 +226,7 @@ export function createScene({ canvas }) {
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h);
+    camera.fov = fovForAspect(camera.aspect);   // opens up on a phone held upright
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize);
@@ -251,6 +261,7 @@ export function createScene({ canvas }) {
 
   return {
     renderer, scene, camera, boardGroup, pieceGroup, squares,
+    lightRig, lights: { hemi, key, fill, rim },
     update, render, resize, dispose,
     setSide, setHighlights, setHighlightSink, projectPoint, projectSquare,
     cameraRig: rig,

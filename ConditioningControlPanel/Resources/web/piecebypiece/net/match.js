@@ -2,8 +2,8 @@
  * net/match.js - one seat at an online game.
  *
  * THE SAME SHAPE AS hotseat.js, deliberately and exactly: rules, clock, start,
- * update, tryMove, takeBack, canPick, legalTargets, resign, plies, turn,
- * isOver, result, autoRemaining. boot.js swaps one for the other and nothing
+ * update, tryMove, takeBack, canPick, legalTargets, resign, record, plies,
+ * turn, isOver, result, autoRemaining. boot.js swaps one for the other and nothing
  * downstream - drag.js, promote.js, hud.js, sfx.js, the whole board - is told
  * which one it got. Every move still lands on the board through the same
  * rules-then-pieces-then-bus path, so the animation, the dust, the thud and
@@ -54,6 +54,24 @@ export const HEARTBEAT_MS = 20000;
 
 /** The long poll comes straight back on an error; these are the waits between retries. */
 const BACKOFF_MS = [500, 1000, 2000, 4000, 8000, 15000];
+
+/**
+ * How long the opponent's silence has to last before this seat asks the server
+ * to call the game abandoned. Mirrors ABANDON_MS on the server (proxy/pbp.js;
+ * contract section 3, claim_timeout condition 2: "not seen for 60 s"). The
+ * server grants the claim only once ITS record of his last contact is this
+ * old, so asking sooner is a guaranteed 409 not_expired. What starts the count
+ * here is `opponent_online: false` on the events envelope - the server's word,
+ * never a guess of ours - and the claim is retried on the poll's own backoff
+ * ladder, because the server's count began later than ours by up to one poll.
+ */
+export const ABANDON_MS = 60000;
+
+/** performance.now() where it exists, else Date.now() - see createRemoteClock for why. */
+function monotonic(now) {
+  if (now) return now;
+  return (typeof performance !== 'undefined' && performance.now) ? () => performance.now() : () => Date.now();
+}
 
 const other = (side) => (side === 'w' ? 'b' : 'w');
 
@@ -121,9 +139,7 @@ export function toUci(from, to, promotion) {
 const DISCOUNT_PROBE_MS = 250;
 
 export function createRemoteClock({ perSideMs = DEFAULT_MS, now = null } = {}) {
-  const clockNow = now || ((typeof performance !== 'undefined' && performance.now)
-    ? () => performance.now()
-    : () => Date.now());
+  const clockNow = monotonic(now);
 
   const base = { w: perSideMs, b: perSideMs };
   let total = perSideMs;
@@ -275,7 +291,8 @@ export function createOnlineMatch({
   let seatKnown = (color === 'w' || color === 'b');
   const rules = createRules();
   const pieces = board.pieces;
-  const clock = createRemoteClock({ now });
+  const monoNow = monotonic(now);
+  const clock = createRemoteClock({ now: monoNow });
   const sleep = wait || ((ms) => new Promise((r) => { const t = setTimeout(r, ms); if (t.unref) t.unref(); }));
 
   let seq = 0;                 // the last event seq we have accounted for
@@ -291,6 +308,14 @@ export function createOnlineMatch({
   let drawOffer = null;        // 'me' | 'them' | null, as the last draw_offer event left it
   let resyncing = false;
   let opponentOnline = true;   // last word from the server, not a guess of ours
+  /**
+   * His current spell of silence, or null while he is here. One object per
+   * spell, so the whole claim story - how long he has been gone, how many times
+   * we have asked, when we may ask again - ends the moment he is back and
+   * starts clean the next time he goes.
+   * @type {{since:number, attempts:number, nextAt:number, busy:boolean}|null}
+   */
+  let silence = null;
   /**
    * When the server last heard from us. The events long poll stamps our
    * heartbeat server-side (contract section 3), so a client that is polling
@@ -329,21 +354,68 @@ export function createOnlineMatch({
     hud.status.textContent = rules.turn() === me ? 'your move' : 'waiting for his move';
   }
 
+  /**
+   * Ask the server to look at its own clock and its own record of who it has
+   * heard from (contract section 3, claim_timeout: one route, two conditions).
+   * A verdict comes back as the finished match state, so it finishes the board
+   * here rather than waiting for the poll to bring the same verdict round;
+   * anything else - 409 not_expired, a network miss - is simply "not yet".
+   * Resolves true when the game ended on this answer.
+   */
+  async function claim() {
+    let res = null;
+    try { res = await api.claimTimeout(matchId); } catch (err) { res = null; }
+    if (disposed || !res || !res.ok || !res.data) return false;
+    const end = endingFrom(res.data);
+    if (end) finish(end);
+    return !!end;
+  }
+
+  /** One beat of the clock: repaint, and say so if a claim is due. */
+  function tick() {
+    if (over || disposed) return;
+    bus.emit('clock', clock.snapshot());
+    paint();
+    // OUR reading says a flag is down. We do not act on that; we ask the
+    // server to look at its own clock, once, and wait for its verdict.
+    const down = clock.flagged();
+    if (down && !claimedTimeout) {
+      claimedTimeout = true;
+      claim();
+    }
+    // He has been gone for as long as the server needs him to be. Ask it to
+    // say so - once, and if it says "not yet" (its count of his silence began
+    // later than ours), again on the backoff ladder, and no more than the
+    // ladder has rungs. A spell that outlasts the ladder is left to the poll's
+    // `abandon` event, if he ever comes back to be claimed by.
+    const t = monoNow();
+    if (silence && !silence.busy && silence.attempts < BACKOFF_MS.length
+      && t - silence.since >= ABANDON_MS && t >= silence.nextAt) {
+      const spell = silence;
+      spell.busy = true;
+      spell.attempts += 1;
+      claim().then((granted) => {
+        spell.busy = false;
+        if (granted) return;
+        spell.nextAt = monoNow() + BACKOFF_MS[Math.min(spell.attempts - 1, BACKOFF_MS.length - 1)];
+      });
+    }
+  }
+
   function startTicker() {
     if (ticker || disposed) return;
-    ticker = setInterval(() => {
-      if (over) return;
-      bus.emit('clock', clock.snapshot());
-      paint();
-      // OUR reading says a flag is down. We do not act on that; we ask the
-      // server to look at its own clock, once, and wait for its verdict.
-      const down = clock.flagged();
-      if (down && !claimedTimeout) {
-        claimedTimeout = true;
-        api.claimTimeout(matchId).catch(() => {});
-      }
-    }, TICK_MS);
+    ticker = setInterval(tick, TICK_MS);
     if (ticker.unref) ticker.unref();
+  }
+
+  /** The server's word on whether he is still there, from whichever answer carried it. */
+  function noteOpponent(flag) {
+    if (flag === undefined) return;
+    const on = flag !== false;
+    if (on === opponentOnline) return;
+    opponentOnline = on;
+    silence = on ? null : { since: monoNow(), attempts: 0, nextAt: 0, busy: false };
+    bus.emit('opponent', { online: on });
   }
 
   function startHeartbeat() {
@@ -353,7 +425,9 @@ export function createOnlineMatch({
       // Only when the poll has gone quiet. A healthy match never gets here.
       if (Date.now() - lastContactMs < HEARTBEAT_MS) return;
       lastContactMs = Date.now();
-      api.heartbeat(matchId).catch(() => {});
+      api.heartbeat(matchId)
+        .then((res) => { if (res && res.ok && res.data) noteOpponent(res.data.opponent_online); })
+        .catch(() => {});
     }, HEARTBEAT_MS);
     if (beat.unref) beat.unref();
   }
@@ -640,10 +714,7 @@ export function createOnlineMatch({
   function applyEnvelope(data) {
     if (!data || typeof data !== 'object') return 'resync';
     if (Number.isFinite(Number(data.server_now_ms))) clock.noteServerNow(Number(data.server_now_ms));
-    if (data.opponent_online !== undefined) {
-      const on = data.opponent_online !== false;
-      if (on !== opponentOnline) { opponentOnline = on; bus.emit('opponent', { online: on }); }
-    }
+    noteOpponent(data.opponent_online);
     const list = Array.isArray(data.events) ? data.events : [];
     // Ordered by seq before anything is applied: the gap check is only worth
     // having if the stream it checks is actually in order.
@@ -767,9 +838,46 @@ export function createOnlineMatch({
     api.resign(matchId).catch(() => {});
   }
 
-  function offerDraw() { if (!over) api.draw(matchId, 'offer').catch(() => {}); }
+  /**
+   * The draw verbs. Our own offer and our own decline are noted locally at
+   * once, so a HUD reading `drawOffer()` on the click sees the state the
+   * player just made rather than waiting a poll for the echo. Neither is a
+   * result, so neither decides anything: the server's `draw_offer` and
+   * `draw_decline` events say the same thing a moment later, and a refusal
+   * (409 already_offered, a match that ended first) is corrected by the next
+   * state that comes down, which applyState re-derives from `draw_offer`.
+   */
+  function offerDraw() {
+    if (over) return;
+    if (drawOffer !== 'them') drawOffer = 'me';
+    api.draw(matchId, 'offer').catch(() => {});
+  }
   function acceptDraw() { if (!over) api.draw(matchId, 'accept').catch(() => {}); }
-  function declineDraw() { if (!over) api.draw(matchId, 'decline').catch(() => {}); }
+  function declineDraw() {
+    if (over) return;
+    if (drawOffer === 'them') drawOffer = null;
+    api.draw(matchId, 'decline').catch(() => {});
+  }
+
+  /**
+   * The game as a record for the shelf, in hotseat.record()'s shape exactly -
+   * moves in SAN off the referee's own history, plies, the result if there is
+   * one, where the clocks stood - plus `me`. door/store.js keys win and loss
+   * off the seat, and the seat this driver ended in is the server's word (see
+   * `me`), which the lobby's guess at the deal may not have been.
+   */
+  function record() {
+    let moves = [];
+    try { moves = rules.chess.history(); } catch (err) { moves = []; }
+    const s = clock.snapshot();
+    return {
+      moves,
+      plies: moves.length,
+      result: over ? { result: over.result, winner: over.winner === undefined ? null : over.winner, reason: over.reason || null } : null,
+      clocks: { w: s.w, b: s.b, total: s.total },
+      me,
+    };
+  }
 
   /* --------------------------------------------------------------- lifecycle */
 
@@ -810,6 +918,7 @@ export function createOnlineMatch({
     canPick,
     legalTargets,
     resign,
+    record,
     plies: () => rules.ply(),
     turn: () => rules.turn(),
     isOver: () => !!over,
@@ -829,7 +938,7 @@ export function createOnlineMatch({
     offerDraw,
     acceptDraw,
     declineDraw,
-    claimTimeout: () => api.claimTimeout(matchId).catch(() => {}),
+    claimTimeout: claim,
     /** 'me' when we offered, 'them' when he did, null when nothing stands. */
     drawOffer: () => drawOffer,
     /** The server's last word on whether he is still there. */
@@ -844,5 +953,7 @@ export function createOnlineMatch({
     _applyEnvelope: applyEnvelope,
     _applyState: applyState,
     _inFlight: () => inFlight,
+    _tick: tick,
+    _silence: () => silence,
   };
 }

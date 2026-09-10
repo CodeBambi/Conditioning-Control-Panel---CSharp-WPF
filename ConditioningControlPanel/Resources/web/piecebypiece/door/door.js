@@ -17,9 +17,24 @@
  *
  * startGame({ mode, match }) is boot's: it deals the game and hides the door.
  * The door never touches the referee mid-game; it reads the record at the end.
+ *
+ * THE LOBBY IS LEFT WHEN THE GAME DEALS, not when the lobby screen goes. The
+ * found screen keeps the lobby entered on purpose (the pairing has to land
+ * through its poll), so the one place the door can stand up is go(): a lobby
+ * still entered during a game keeps re-advertising a player who is mid-game,
+ * and the server would pair a third player against a ghost.
+ *
+ * THE HOST NAMES THE PLAYER. Hosted, the account's display name is what the
+ * server lists and what "you are visible as" has to say (boot.js copies it
+ * into settings.playerName off pbp:identity), so the profile's name box is
+ * read-only there. And a hosted page whose account is signed out cannot play
+ * anybody: the lobby says so in one line, with quick match off, rather than
+ * showing an empty room and a quick match that fails - and never the mock,
+ * whose invented names a desktop player would try to join.
  * ==========================================================================*/
 
 import { Chess } from '../vendor/chess.js';
+import { isHosted, identity, whenIdentity } from '../bridge.js';
 import { listGames, getGame, saveGame, playerName, setPlayerName, profileStats, outcome, fmtDuration, fmtMoves, fmtWhen } from './store.js';
 
 /** Every number the door decides with. */
@@ -53,7 +68,9 @@ function positionOf(chess) {
 export function createDoor(opts = {}) {
   const { bus, game, board, params } = opts;
   const root = opts.root || (typeof document !== 'undefined' ? document.getElementById('door') : null);
-  const lobby = opts.lobby || null;
+  // A hosted page never gets the mock (see the header). No lobby at all reads
+  // as "not available", which is at least true.
+  const lobby = (opts.lobby && !(isHosted && opts.lobby.debug && opts.lobby.debug.isMock)) ? opts.lobby : null;
   const settings = () => (opts.settings ? opts.settings() : ((typeof window !== 'undefined' && window.PBP && window.PBP.settings) || {}));
   const startGame = typeof opts.startGame === 'function' ? opts.startGame : () => {};
   if (!root) return { show() {}, hide() {}, isUp: () => false, debug: () => ({ ok: false, why: 'no #door' }), dispose() {} };
@@ -71,6 +88,30 @@ export function createDoor(opts = {}) {
   let replay = null;            // { moves, positions, marks, i, timer }
   const timers = new Set();
   const unbind = [];
+
+  /**
+   * Who the host says we are, behind one object so a harness can stand in for
+   * the desktop (debug.host). Unhosted, whenIdentity resolves at once with the
+   * empty identity and none of the account states below can happen.
+   */
+  let host = { isHosted, identity, whenIdentity };
+  let signedOut = false;        // hosted, and there is no signed-in account behind the page
+
+  /** Wait for the host's word, then remember whether there is anyone to play as. */
+  async function askHost() {
+    let id = null;
+    try { id = await host.whenIdentity(); } catch { id = null; }
+    if (!id) { try { id = host.identity(); } catch { id = null; } }
+    signedOut = !!host.isHosted && !(id && id.online !== false && id.unifiedId);
+    return id;
+  }
+
+  /** Nothing is asked of the lobby before the host has spoken, and nothing at all for nobody. */
+  async function afterHost(fn) {
+    await askHost();
+    if (signedOut) throw new Error('cancelled');    // the quiet rejection: look() re-renders, no squelch
+    return fn();
+  }
 
   function later(fn, ms) { const t = setTimeout(() => { timers.delete(t); fn(); }, ms); timers.add(t); return t; }
   function hudEl() { return document.getElementById('hud'); }
@@ -107,7 +148,7 @@ export function createDoor(opts = {}) {
     const body = document.createElement('div'); body.className = 'door-body';
     body.innerHTML = ({ menu, lobby: lobbyScreen, found, games, profile, replay: replayScreen, end }[screen] || menu)();
     card.append(body);
-    if (screen === 'profile') { const inp = body.querySelector('input'); if (inp) inp.addEventListener('change', () => setPlayerName(inp.value)); }
+    if (screen === 'profile') { const inp = body.querySelector('input'); if (inp && !inp.readOnly) inp.addEventListener('change', () => setPlayerName(inp.value)); }
     if (screen === 'replay') { const r = body.querySelector('.door-scrub'); if (r) r.addEventListener('input', () => stepReplay(Number(r.value))); }
     const focus = body.querySelector('.door-btn.primary') || body.querySelector('button');
     if (focus && !still()) later(() => { try { focus.focus({ preventScroll: true }); } catch { /* fine */ } }, 60);
@@ -130,6 +171,10 @@ export function createDoor(opts = {}) {
   }
 
   function lobbyScreen() {
+    // Three rooms: the one with people in it, the one with nobody to play as
+    // (hosted, signed out), and the one with no lobby behind it at all. The
+    // last two are one line each and quick match is off, never a dead button.
+    const canPlay = !!lobby && !signedOut;
     const rows = people.map((p) => `
       <li class="door-item" data-id="${esc(p.id)}">
         <span class="who">${esc(p.name)}</span>
@@ -140,12 +185,18 @@ export function createDoor(opts = {}) {
       <div class="door-ask"><span><b>${esc(ask.name)}</b> wants a game</span>
         <button type="button" class="door-pill" data-act="accept">play</button>
         <button type="button" class="door-link" data-act="decline">ignore</button></div>` : '';
+    const sub = signedOut ? 'not signed in'
+      : !lobby ? 'online play is not available right now'
+        : `${people.length ? `<b>${people.length}</b> at the board` : 'nobody else here yet'} - you are visible as <b>${esc(me())}</b>`;
+    const empty = signedOut ? 'sign in to play online'
+      : !lobby ? 'the board here still works - play here from the menu'
+        : '<span class="door-dot"></span>nobody at the board yet - you are first in line';
     return `
       <h1 class="door-title">lobby</h1>
-      <p class="door-sub">${people.length ? `<b>${people.length}</b> at the board` : 'nobody else here yet'} - you are visible as <b>${esc(me())}</b></p>
+      <p class="door-sub">${sub}</p>
       ${askRow}
-      <button type="button" class="door-btn primary" data-act="quick" ${looking ? 'disabled' : ''}>${looking ? 'looking for a game' : 'quick match'} ${looking ? '<span class="door-dot"></span>' : '<span class="k">whoever waited longest</span>'}</button>
-      ${people.length ? `<ul class="door-list">${rows}</ul>` : `<div class="door-empty"><span class="door-dot"></span>nobody at the board yet - you are first in line</div>`}
+      <button type="button" class="door-btn primary" data-act="quick" ${(looking || !canPlay) ? 'disabled' : ''}>${looking ? 'looking for a game' : 'quick match'} ${looking ? '<span class="door-dot"></span>' : '<span class="k">whoever waited longest</span>'}</button>
+      ${people.length && canPlay ? `<ul class="door-list">${rows}</ul>` : `<div class="door-empty">${empty}</div>`}
       <div class="door-foot"><span>esc - back</span>${looking ? '<button type="button" class="door-link" data-act="cancel">stop looking</button>' : ''}</div>`;
   }
 
@@ -182,9 +233,13 @@ export function createDoor(opts = {}) {
   function profile() {
     const s = profileStats();
     const stat = (n, l, pink) => `<div class="door-stat"><span class="n${pink ? ' pink' : ''}">${n}</span><span class="l">${l}</span></div>`;
+    // Hosted, the name is the account's: the server lists it, so it is shown
+    // here and not typed. Unhosted (a plain browser), typed and kept locally.
+    const hosted = !!host.isHosted;
     return `
       <h1 class="door-title">profile</h1>
-      <div class="door-name"><input type="text" maxlength="24" value="${esc(me())}" aria-label="your name at the board" spellcheck="false"></div>
+      <div class="door-name"><input type="text" maxlength="24" value="${esc(me())}" aria-label="your name at the board" spellcheck="false"${hosted ? ' readonly' : ''}></div>
+      ${hosted ? '<p class="door-sub">your name comes from your account</p>' : ''}
       <div class="door-stats">
         ${stat(s.games, 'games')}${stat(s.wins, 'wins', true)}${stat(s.losses, 'losses')}
         ${stat(s.draws, 'draws')}${stat(s.streak, 'streak', s.streak > 1)}${stat(s.captures, 'taken')}
@@ -237,7 +292,10 @@ export function createDoor(opts = {}) {
   // ---------------------------------------------------------------- lobby
   let offList = null, offAsk = null;
   async function enterLobby() {
-    if (!lobby) return;
+    // The host first: a signed-out account has nothing to enter with, and
+    // the screen has to say so rather than sit on an empty list.
+    await askHost();
+    if (signedOut || !lobby) { if (screen === 'lobby') render(); return; }
     try { await lobby.enter({ name: me() }); } catch { /* the door still opens */ }
     if (offList) offList();
     offList = lobby.onList((l) => { people = l || []; if (screen === 'lobby') render(); });
@@ -304,8 +362,31 @@ export function createDoor(opts = {}) {
   function go() {
     if (!current) return;
     if (countTimer) { timers.delete(countTimer); clearTimeout(countTimer); countTimer = null; }
+    const m = current.match;
+    // An accepted challenge is a round trip on a server, and the lobby handed
+    // the door its Match before the answer landed (net/lobbyServer.js,
+    // offer()): the id is filled in behind it, on `ready`. Dealing a match
+    // with no id throws in startOnlineMatch, so the count holds at zero until
+    // the id is there - or until it is not, which is the lobby's way of
+    // saying he is not playing after all.
+    if (current.mode === 'online' && m && !m.id && m.ready && typeof m.ready.then === 'function') {
+      const mine = current;
+      m.ready.then((r) => {
+        if (current !== mine) return;
+        if (r && r.id) { go(); return; }
+        current = null;
+        sfx('squelch');
+        show('lobby');
+      }).catch(() => { if (current === mine) { current = null; show('lobby'); } });
+      return;
+    }
+    // The lobby was kept through the found screen so the pairing could land;
+    // the game has, so stand up (see the header). The next visit to the lobby
+    // screen enters again, because leaveLobby drops the subscription show()
+    // keys the re-entry on.
+    leaveLobby();
     if (screen === 'found') { screen = null; }
-    deal(current.mode, current.match);
+    deal(current.mode, m);
   }
 
   // ---------------------------------------------------------------- the game itself
@@ -322,8 +403,11 @@ export function createDoor(opts = {}) {
     let rec = {};
     try { rec = game.record ? game.record() : {}; } catch { rec = {}; }
     const m = current.match;
+    // the seat off the record when the driver knows it (an online seat may have
+    // been corrected by the server after the deal), else the lobby's word
+    const seat = (rec.me === 'w' || rec.me === 'b') ? rec.me : (m ? m.side : null);
     lastEnd = saveGame({
-      mode: current.mode, me: m ? m.side : null, opponent: m ? m.opponent.name : 'a friend here',
+      mode: current.mode, me: seat, opponent: m ? m.opponent.name : 'a friend here',
       moves: rec.moves || [], plies: rec.plies || 0, result: rec.result || null,
       durationMs: Date.now() - current.startedAt, captures: { ...current.captures }, clocks: rec.clocks || null,
     });
@@ -344,6 +428,11 @@ export function createDoor(opts = {}) {
   }
 
   function toMenu() {
+    // A finished online seat stays in the chair for the end card, so the
+    // board under the card is the finished position. The menu wants the
+    // hotseat's fresh one, and that only exists once the switch has gone
+    // back; reset() on the online seat is a no-op and would leave the mate.
+    try { if (typeof game.switchBack === 'function') game.switchBack(); } catch { /* one driver only */ }
     try { game.reset(); board.pieces.setPosition(game.rules.position()); } catch { /* the board stays as it is */ }
     try { board.setSide('w', true); } catch { /* no rig */ }
     show('menu');
@@ -396,12 +485,14 @@ export function createDoor(opts = {}) {
   // ---------------------------------------------------------------- input
   function act(name, id) {
     switch (name) {
-      case 'quick': if (screen !== 'lobby') show('lobby'); if (lobby) look(lobby.quickMatch()); break;
+      // the lobby is asked only once the host has said who we are, and not at
+      // all for nobody (afterHost); look() reads the quiet rejection as a re-render
+      case 'quick': if (screen !== 'lobby') show('lobby'); if (lobby) look(afterHost(() => lobby.quickMatch())); break;
       case 'hotseat': deal('hotseat'); break;
       case 'lobby': show('lobby'); break;
       case 'games': show('games'); break;
       case 'profile': show('profile'); break;
-      case 'challenge': if (lobby) look(lobby.challenge(id)); break;
+      case 'challenge': if (lobby) look(afterHost(() => lobby.challenge(id))); break;
       case 'cancel': try { if (lobby) lobby.cancel(); } catch { /* fine */ } break;
       // accepting is a round trip on a server; the mock answers at once and
       // Promise.resolve makes both read the same
@@ -455,11 +546,22 @@ export function createDoor(opts = {}) {
     screen: () => screen,
     /** For the harness: the door's state, and levers to pull. */
     debug: {
-      state: () => ({ screen, looking, ask: ask ? ask.name : null, people: people.length, current: current ? current.mode : null, replay: replay ? replay.i : null, games: listGames().length }),
+      state: () => ({ screen, looking, ask: ask ? ask.name : null, people: people.length, current: current ? current.mode : null, replay: replay ? replay.i : null, games: listGames().length, signedOut, hosted: !!host.isHosted, inLobby: !!offList }),
       act,
       openReplay,
       matched,
       shelf: { save: saveGame, list: listGames },
+      /**
+       * Stand in for the desktop host: { isHosted, identity(), whenIdentity() },
+       * any subset. What lets a plain browser photograph the hosted states
+       * (a read-only name, a signed-out lobby) that only a host can put it in.
+       */
+      host(fake) {
+        host = Object.assign({}, host, fake || {});
+        signedOut = false;
+        if (offList) leaveLobby();
+        if (screen) render();
+      },
     },
     dispose() {
       card.removeEventListener('click', onClick);
