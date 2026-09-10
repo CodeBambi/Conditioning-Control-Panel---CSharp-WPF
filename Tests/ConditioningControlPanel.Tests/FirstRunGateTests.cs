@@ -40,4 +40,27 @@ public class FirstRunGateTests
         // must still fail closed rather than inherit the bug.
         => Assert.Equal(FirstRunOutcome.DeclineAndShutDown,
             FirstRunGate.Decide(ageChecked: false, enterPressed: true));
+
+    // ---- MustShutDown: the launch that never reached the gate ----
+    //
+    // Decide covers the wizard's two buttons. This covers everything that happens INSTEAD of them,
+    // and it is the half that was missing. ShouldRunAndClaim spends Welcomed and
+    // FirstRunClaimedThisLaunch before the window is constructed - deliberately, so the old age
+    // MessageBox cannot fire on top of the wizard - and App.OnStartup's gate then stands down for
+    // the rest of the launch. So a constructor that threw, a ShowDialog that threw (both caught and
+    // swallowed in Run), or a ladder that gave up after five minutes each left an adult app running
+    // with HasAcceptedAgeVerification false and nothing left in the process that would ever ask.
+
+    [Fact]
+    public void NoAcceptanceOnFile_MustShutDown()
+        // The wizard never reached its gate. There is no second gate behind it.
+        => Assert.True(FirstRunGate.MustShutDown(ageAccepted: false));
+
+    [Fact]
+    public void AcceptanceOnFile_KeepsRunning()
+        // Not hypothetical: an earlier launch that was handed back (the ladder gave up, the wizard
+        // was closed after Enter) leaves Welcomed false and HasAcceptedAgeVerification true, and
+        // this launch is properly gated even though its wizard did not finish. Shutting that down
+        // would be an app that refuses to start.
+        => Assert.False(FirstRunGate.MustShutDown(ageAccepted: true));
 }

@@ -587,6 +587,15 @@ namespace ConditioningControlPanel
                             App.IsUpdateDialogActive ? "update dialog still open" : "window never loaded");
                         // Nothing was shown, so nothing is owed the screen.
                         try { App.EmiDesk?.ReleaseHold("firstLaunchEver"); } catch { }
+
+                        // ...and the launch does not get to CONTINUE unshown either. The wizard's
+                        // Welcome step is the only 18+ gate a fresh install has - App.OnStartup's
+                        // MessageBox stands down for any launch the wizard claimed - so carrying on
+                        // here would be an adult app running with the question never asked. The
+                        // hand-back above means the next launch offers the screen properly.
+                        // No-op when an earlier launch already accepted (the hand-back path leaves
+                        // that flag alone on purpose).
+                        FirstRunWizard.AbortUngatedLaunch("the ladder gave up on the wizard", handBack: false);
                     });
 
                 // THE KNOCK (Ask EMI wave 1). The far side of the wizard, on both paths: the

@@ -206,6 +206,22 @@ namespace ConditioningControlPanel
         /// wizard.</para>
         /// </summary>
         public static bool ModPickerShownAfterOfflineFlavourStep(int offersAfterShowing) => true;
+
+        /// <summary>
+        /// Must this launch stop, given what the settings say about the 18+ gate?
+        ///
+        /// <para>The question is not "did the user decline" - it is "is this process about to keep
+        /// running with nobody having answered". <see cref="Decide"/> covers the wizard's own two
+        /// buttons; this covers everything that happens INSTEAD of them. The flags are claimed
+        /// before the window exists (that is what stops the old MessageBox firing on top of it), and
+        /// the App-level gate stands down for the whole launch once they are, so a wizard whose
+        /// constructor threw, whose ShowDialog threw, or that the ladder gave up on left the app
+        /// running an adult product with <c>HasAcceptedAgeVerification</c> still false and nothing
+        /// left to ask. One line, so the answer is the same on all three paths and can be asserted
+        /// without a Window.</para>
+        /// </summary>
+        /// <param name="ageAccepted">AppSettings.HasAcceptedAgeVerification as it stands now.</param>
+        public static bool MustShutDown(bool ageAccepted) => !ageAccepted;
     }
 
     /// <summary>
@@ -386,6 +402,50 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>True once some path has already handed the first run back and asked for the
+        /// shutdown, so the others neither log it again nor call Shutdown twice.</summary>
+        private static bool _ungatedShutdownHandled;
+
+        /// <summary>
+        /// Stops a launch that is about to continue with the 18+ question unanswered.
+        ///
+        /// <para>Three paths reach it and all three mean the same thing: the wizard declined
+        /// (OnWizardClosed), the wizard never reached its gate (a throwing constructor or
+        /// ShowDialog, see <see cref="Run"/>), or the ladder gave up on it after five minutes
+        /// (MainWindow's onAbandoned). The verdict itself is
+        /// <see cref="FirstRunGate.MustShutDown"/> so it can be asserted without a Window.</para>
+        ///
+        /// <para>Does nothing when the flag IS set. That is not a hypothetical: a launch that was
+        /// handed back after the user had already accepted on an earlier launch arrives here with a
+        /// perfectly good acceptance on file, and shutting that down would be an app that refuses to
+        /// start.</para>
+        /// </summary>
+        /// <param name="reason">For the log line; also the hand-back's reason when it makes one.</param>
+        /// <param name="handBack">False when the caller has already handed the first run back with a
+        /// more specific reason of its own, so the log does not say it twice.</param>
+        internal static void AbortUngatedLaunch(string reason, bool handBack = true)
+        {
+            try
+            {
+                if (_ungatedShutdownHandled) return;
+
+                bool accepted = App.Settings?.Current?.HasAcceptedAgeVerification == true;
+                if (!FirstRunGate.MustShutDown(accepted)) return;
+
+                _ungatedShutdownHandled = true;
+
+                if (handBack) HandBackFirstRun(reason);
+                App.Logger?.Information(
+                    "[FirstRun] The 18+ gate was never accepted ({Reason}) - shutting down rather than running ungated", reason);
+
+                try { Application.Current?.Shutdown(); } catch { }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[FirstRun] Could not stop an ungated launch");
+            }
+        }
+
         /// <summary>
         /// Opens the wizard modally and performs whatever the user asked for on the way out: the
         /// content-folder picker (it is modal too, so it runs alone), and then the quiet window that
@@ -410,11 +470,18 @@ namespace ConditioningControlPanel
                 MainWindow.IsStartupDialogShowing = false;
             }
 
-            if (wizard == null) return;
-
-            // The gate said no: the shutdown is already in flight and the first run has been handed
-            // back. Nothing after this point belongs to a session that is ending.
-            if (!wizard.AgeAccepted) return;
+            // Every exit that is not "Enter, with the box ticked" lands here: the gate said no (the
+            // shutdown is already in flight, see OnWizardClosed), the constructor threw, or
+            // ShowDialog threw and was swallowed above. On the last two the window never reached the
+            // gate at all, and because the flags were claimed BEFORE it opened - and the App-level
+            // age MessageBox stands down for the whole launch once they are - the app would
+            // otherwise carry on with nobody having answered the 18+ question and nothing left to
+            // ask it. Idempotent with the decline path, which already did both.
+            if (wizard == null || !wizard.AgeAccepted)
+            {
+                AbortUngatedLaunch("wizard never reached the gate");
+                return;
+            }
 
             bool pickFolder = wizard.PickAssetsFolderRequested;
 
@@ -1104,7 +1171,9 @@ namespace ConditioningControlPanel
             {
                 // Exactly what the old age-verification MessageBox's "No" did, plus the hand-back
                 // the MessageBox never had: the flags were spent before this window opened, so a
-                // later launch would otherwise never offer the screen again.
+                // later launch would otherwise never offer the screen again. Latching it here is
+                // what keeps Run's safety net from saying the same thing a second time.
+                _ungatedShutdownHandled = true;
                 HandBackFirstRun("age gate declined");
                 App.Logger?.Information("[FirstRun] The 18+ gate was not accepted - shutting down");
                 try { Application.Current?.Shutdown(); } catch { }
