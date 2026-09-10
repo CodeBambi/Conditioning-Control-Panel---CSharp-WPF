@@ -53,8 +53,8 @@ export function setQuality(tier) {
     deeperRadial: 14,
     leanLights: true,    // 7 lights -> 3: every lit material's fragment loop shrinks with the light count
     bubbleCap: 100,      // the run holds 46-93 live on desktop's 160; the pool is 100 sprite materials smaller
-    bubbleShards: 32,
-    bubbleViewAhead: 76, // what the fog has already folded away is not drawn (a quarter fewer sprite draw calls)
+    bubbleShards: 24,    // 2026-09-10 (phone: "fps drop a lot ... too many effects or bubbles"): a pop's sparkle is 24 draw calls, not 32
+    bubbleViewAhead: 64, // what the fog has already folded away is not drawn; 64 m is 2.9 s ahead at cruise, still past where a bubble first reads
     leanSpirals: true,   // sp6 + sp7 (0.8 MB together) instead of a 2.2-5.3 MB gif fetched mid-lap
   });
 }

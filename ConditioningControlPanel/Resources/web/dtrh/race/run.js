@@ -58,7 +58,7 @@ import { createFx } from '../engine/fx.js';
 import { createPayloadFx } from '../game/payloadFx.js';
 import { setBundledSpiralPool, prefetchSpirals, setLoomBook, LEAN_SPIRALS } from '../engine/loomSpirals.js';
 import { createLoomBook } from './loomBook.js';
-import { createLoomSpiralFx } from './loomSpiralFx.js';
+import { createLoomSpiralFx, isTouchTier } from './loomSpiralFx.js';
 import { createScreenShake } from '../game/screenShake.js';
 import { INTENSITY_RAMP_SEC, TREATS_ONLY_SEC, KART_BASE_SPEED, MULT_LADDER, COMBO_HOLD_SEC, makeRng } from './consts.js';
 import { createPace } from './pace.js';
@@ -289,8 +289,22 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   });
   setLoomBook(loomBook.draw);
   const spiralFx = createLoomSpiralFx({ reducedMotion, log: bridge.log });
+  // THE PHONE'S LAYERS (2026-09-10, phone testing: "we still lag a lot on the fullscreen effects
+  // on iphone. the glitch bubble fullscreen in particular and the spiral"). Every sustained hold is
+  // a fullscreen DOM layer over the WebGL glass, composited at device resolution (3x on an iPhone).
+  // race.css capped them with `filter: opacity()` and blurred the drain's backdrop; on a phone each
+  // of those is a full-resolution filter pass on every frame the layer changes, and the spiral
+  // canvas, the wash's shudder and the glitch's steps change it every frame. So on the touch tier
+  // the cap is applied INLINE through payloadFx's `opacityCap` seam (the same numbers race.css
+  // holds for the desktop, so nothing looks different) and `#race-root[data-touch="1"]` takes every
+  // filter and the backdrop blur off. The tint-2 deepening (0.92) rides the same seam; its saturate
+  // is the one thing the phone does not get.
+  const touchTier = isTouchTier();
+  const TOUCH_CAP = { spiral: 0.78, pink: 0.7, braindrain: 0.86, gifwash: 0.85 };
+  const holdCap = (kind) => (kind === 'pink' && root.dataset.tint === '2' ? 0.92 : (TOUCH_CAP[kind] || 1));
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media,
-    subliminalFx: subl ? ({ text }) => subl.show({ text }) : null, spiralFx });
+    subliminalFx: subl ? ({ text }) => subl.show({ text }) : null, spiralFx,
+    opacityCap: touchTier ? holdCap : null });
   // Q.leanSpirals (mobile): the GIF FLOOR under a live spiral (and the wash's own fallback) draws
   // from the two lightest bundled gifs, fetched while the intro plays (warmFx) rather than 2-5 MB
   // mid-lap. With WebGL up nothing here is ever fetched at all; this is what a lost context lands on.
@@ -305,6 +319,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // read a JS flag, so this attribute is the seam: `#race-root[data-rm="1"]` drops the gif wash's
   // shudder exactly the way `prefers-reduced-motion` does for a player who never opened the menu.
   if (reducedMotion) root.dataset.rm = '1'; else root.removeAttribute('data-rm');
+  // the tier, for the same reason: race.css lightens the payload layers under `[data-touch="1"]`
+  if (touchTier) root.dataset.touch = '1'; else root.removeAttribute('data-touch');
   const input = createInput({ root });   // root: the touch layer, on a phone, is built inside its .race-hud
   const audio = createRaceAudio({ bridge, hud, settings, input });
   const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
@@ -563,8 +579,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
         if (hud.strobe) hud.strobe(r.charges);
         break;
       case 'tint':
-        fire(p, strength, holdMult);
         root.dataset.tint = String(r.depth); if (hud.setTint) hud.setTint(r.depth);   // race.css deepens the wash and the chrome
+        fire(p, strength, holdMult);   // after the depth is on the root: the phone's inline cap reads it at holdOn
         hud.toast(r.action === 'extend' ? (r.depth >= 2 ? 'pinker' : 'pink, longer') : label, 'effect');
         break;
       case 'overlay':
@@ -1097,7 +1113,18 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     else if (a === 'nudgeUp' || a === 'nudgeDown') nudge((a === 'nudgeUp' ? 1 : -1) * (shift ? NUDGE_BIG_SEC : NUDGE_SEC));
     else if (a === 'export') exportSync();
   });
-  const onVis = () => { last = 0; };
+  // THE SCREEN GOES DARK (2026-09-09, phone testing: "the audio seems to keep going while screen is
+  // off"). The rAF already stops with the document, so the world freezes on its own - but the loaded
+  // file (CHART.md: the file is the clock) played on under a locked phone, and the run would leap
+  // to wherever it had got to when the screen came back. So hidden IS the Brake: same duck, same
+  // track-pause to the host or race/cloud.js, same card waiting when the player returns. The music
+  // and the bed are audio.js's own (its visibilitychange hold), so the menu is covered too.
+  const onVis = () => {
+    last = 0;
+    let hid = false;
+    try { hid = document.hidden === true; } catch (e) { /* no document */ }
+    if (hid && W && S.running && !S.paused && !S.ended && !S.hostPaused) brake();
+  };
   document.addEventListener('visibilitychange', onVis);
 
   function start() {
@@ -1170,6 +1197,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       frameMs: st.frameMs || 0, programs: info.programs ? info.programs.length : -1,
       geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
       audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
+      dprCap: st.dprCap == null ? null : st.dprCap, touch: !!st.touch,   // the governor's lid and its ladder (race/pixel.js)
       world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
       // the pace envelope and what the kart actually did with it (race/pace.js, race/smoke/pace-check.mjs)
       speed: W ? W.kart.state.speed : 0, boosting: W ? W.kart.state.boostSec > 0 : false, pace: S.pace ? { ...S.pace } : null,
