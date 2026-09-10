@@ -25,10 +25,34 @@
        is owned entirely by the effects module (ramp/index.js). -->
   <div id="stage"><canvas id="board-canvas"></canvas></div>
 
+  <!-- The HUD. Clocks in the left corners, out of the lane the ramp's video
+       card slides through; the status column rides under whichever clock is on
+       the move. hud.js layers the behaviour on top by listening to the bus, so
+       the three ids hotseat.js writes into (time-w, time-b, status) stay exactly
+       where they were. #hud sits under #fx on purpose: the effects layer washes
+       over it, and the meter vignette lives in here for the same reason. -->
   <div id="hud" class="hud">
-    <div class="chip"><span class="who">black</span><span class="time" id="time-b">15:00</span></div>
-    <p class="status" id="status">white to move</p>
-    <div class="chip"><span class="who">white</span><span class="time" id="time-w">15:00</span></div>
+    <div class="vig" id="hud-vig" aria-hidden="true"></div>
+
+    <div class="chip chip-b" id="chip-b" data-side="b">
+      <span class="who">black</span>
+      <span class="time" id="time-b">15:00</span>
+      <span class="tally" id="tally-b"></span>
+    </div>
+    <div class="chip chip-w" id="chip-w" data-side="w">
+      <span class="who">white</span>
+      <span class="time" id="time-w">15:00</span>
+      <span class="tally" id="tally-w"></span>
+    </div>
+
+    <!-- the light that moves between the chips IS the turn indicator -->
+    <span class="turn-line" id="turn-line" aria-hidden="true"></span>
+
+    <div class="statuscol" id="status-col">
+      <p class="status" id="status">white to move</p>
+      <p class="hint" id="hud-hint" hidden>hold esc to leave the board</p>
+      <div class="dots" id="hud-dots" hidden aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    </div>
   </div>
 
   <div id="fx"></div>

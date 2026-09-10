@@ -144,6 +144,7 @@ export function attachRamp(opts = {}) {
       if (!board) return;
       if (typeof board.setWobble === 'function') board.setWobble(clamp01(m * tuning.wobbleScale));
       if (typeof board.setCameraSway === 'function') board.setCameraSway(clamp01(m * tuning.swayScale));
+      if (typeof board.setMeter === 'function') board.setMeter(clamp01(m));
     } catch { /* A's board is optional and may change under us */ }
   }
 

@@ -160,6 +160,17 @@ function main() {
     bus.on('local', () => { if (marks) marks.setLastMove(null); });
   }
   // --- end K ---
+  // --- L: the HUD (corner clocks, sliding light, tally, meter vignette) ---
+  // The chain never replaces what is already there: another lane may want the
+  // meter too. hudL is filled in when the module lands; until then the meter is
+  // simply dropped, which is what a HUD that has not arrived should do.
+  let hudL = null;
+  { const prev = board.setMeter; board.setMeter = (m) => { if (prev) prev(m); if (hudL) hudL.setMeter(m); }; }
+  import('./hud.js').then((m) => {
+    hudL = m.createHud({ bus, game, board, root: document.getElementById('hud'), params });
+    board.hud = hudL;
+  }).catch((e) => console.warn('[pbp] hud missing', e));
+  // --- end L ---
 
   let last = performance.now();
   function frame(now) {
