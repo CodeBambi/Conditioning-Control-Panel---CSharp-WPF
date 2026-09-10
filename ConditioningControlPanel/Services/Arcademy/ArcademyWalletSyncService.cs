@@ -65,6 +65,13 @@ internal static class ArcademyWalletSyncService
     private const string ClassEndedPath = "/v2/arcademy/class-ended";
     private const string PrizeBuyPath = "/v2/arcademy/prize-buy";
 
+    /// <summary>THE BACK ROOM. Three routes behind one call, because they share every rule that
+    /// matters here: the same token door, the same 5s page wait, the same tier gate, and the same
+    /// "the server resolved it, this desk only renders it" posture the counter already has.</summary>
+    private const string CasinoPath = "/v2/arcademy/casino";
+    private const string CasinoCagePath = "/v2/arcademy/casino/cage";
+    private const string CasinoPlayPath = "/v2/arcademy/casino/play";
+
     /// <summary>How long a call the PAGE is waiting on may take. The Prize Counter puts its own
     /// watchdog down at 6s (<c>shell/prizecounter.js</c> ECHO_WAIT_MS) and answers "the counter
     /// went quiet" when it fires, so a request that has not landed by 5s has to be turned into a
@@ -79,6 +86,9 @@ internal static class ArcademyWalletSyncService
     /// <summary>The wire's id shape for both <c>deviceId</c> and <c>mintId</c>. A GUID in "N" form
     /// is 32 hex characters, comfortably inside it.</summary>
     private static readonly Regex IdShape = new("^[A-Za-z0-9_-]{8,64}$", RegexOptions.Compiled);
+
+    /// <summary>The wire's date shape, used to sanity-check a <c>localDay</c> the page sent up.</summary>
+    private static readonly Regex DayShape = new("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", RegexOptions.Compiled);
 
     /// <summary>The launch pull can take its time (nobody is watching it); the two page-facing
     /// calls carry their own shorter cancellation instead.</summary>
@@ -191,6 +201,12 @@ internal static class ArcademyWalletSyncService
     /// counter refuses and the local wallet is left exactly as it was.</summary>
     internal readonly record struct BuyOutcome(bool Answered, bool Ok, string? Reason, JObject? Wallet);
 
+    /// <summary>What came back from one Back Room call. <c>Answered</c> false is the offline case
+    /// and carries <c>Status</c> 0; anything the server actually said rides back whole, status code
+    /// and body together, because the room reads its own refusals off that body and this class has
+    /// no business deciding what a stake meant.</summary>
+    internal readonly record struct CasinoOutcome(bool Answered, int Status, JObject? Body);
+
     /// <summary>
     /// Bank one graded finish. Fire-and-forget with a guaranteed single callback on a background
     /// thread - the caller owns marshalling it to the dispatcher, exactly like the mirror's
@@ -233,6 +249,29 @@ internal static class ArcademyWalletSyncService
             try { settled(outcome); }
             catch (Exception ex) { App.Logger?.Debug("ArcademyWallet.Buy callback: {E}", ex.Message); }
         }, "buy");
+    }
+
+    /// <summary>
+    /// One Back Room call: <c>status</c>, <c>cage</c> or <c>play</c>. Same shape as <see cref="Buy"/>
+    /// (fire and forget, exactly one callback, on a background thread), and ONLINE ONLY for the same
+    /// reason: the chips live on the server, so a stake this desk settled by itself would be
+    /// overwritten by the next answer and the player would watch a win turn back into nothing.
+    /// </summary>
+    public static void Casino(string op, JObject body, string localDay, Action<CasinoOutcome> settled)
+    {
+        int generation = Volatile.Read(ref _generation);
+        Run(async () =>
+        {
+            CasinoOutcome outcome;
+            try { outcome = await PostCasinoAsync(op, body, localDay, generation).ConfigureAwait(false); }
+            catch (Exception ex)
+            {
+                App.Logger?.Information("[ArcademyWallet] casino '{Op}' failed: {E}", op, ex.Message);
+                outcome = new CasinoOutcome(false, 0, null);
+            }
+            try { settled(outcome); }
+            catch (Exception ex) { App.Logger?.Debug("ArcademyWallet.Casino callback: {E}", ex.Message); }
+        }, "casino");
     }
 
     // ============================ launch ============================
@@ -704,6 +743,95 @@ internal static class ArcademyWalletSyncService
         {
             App.Logger?.Information("[ArcademyWallet] buy failed: {E}", ex.Message);
             return new BuyOutcome(false, false, "offline", null);
+        }
+    }
+
+    // ============================ the back room ============================
+
+    /// <summary>
+    /// Send one Back Room call and hand the server's answer back untouched. Nothing is adopted
+    /// here: the casino answers with balances rather than a whole wallet, so the host writes the
+    /// two chip fields into the cache itself and this lane stays a pure courier.
+    ///
+    /// <para>The refusal mapping is <see cref="PostBuyAsync"/>'s, deliberately. A game refusal
+    /// (not enough chips, a hand already open) arrives as a 200 with <c>ok:false</c> and rides
+    /// back whole. The tier wall and the account lock keep their own status codes so the room can
+    /// say the right sentence. The identity door and a dead token are the offline answer, because
+    /// there is nothing a player can do about either from inside a cabinet.</para>
+    /// </summary>
+    private static async Task<CasinoOutcome> PostCasinoAsync(string op, JObject body, string localDay,
+        int generation)
+    {
+        if (!Identity(out var unifiedId, out var token)) return new CasinoOutcome(false, 0, null);
+
+        // THE PLAYER'S DAY, CHECKED RATHER THAN TRUSTED. The free scratcher is bounded by it, so a
+        // page that sent nothing readable gets this desk's own date instead of a free card a day.
+        var day = DayShape.IsMatch(localDay ?? "")
+            ? localDay!
+            : DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        using var cts = new CancellationTokenSource(PageWait);
+        try
+        {
+            HttpRequestMessage request;
+            if (string.Equals(op, "status", StringComparison.Ordinal))
+            {
+                request = new HttpRequestMessage(HttpMethod.Get,
+                    $"{ProxyBaseUrl}{CasinoPath}?unified_id={Uri.EscapeDataString(unifiedId)}" +
+                    $"&localDay={Uri.EscapeDataString(day)}");
+            }
+            else
+            {
+                bool cage = string.Equals(op, "cage", StringComparison.Ordinal);
+                var payload = (JObject)(body ?? new JObject()).DeepClone();
+                payload["unified_id"] = unifiedId;
+                // Only a play is dated: the cage takes Sparkle whatever the clock says, and an
+                // extra field on that route is one more thing for the server to have to ignore.
+                if (!cage) payload["localDay"] = day;
+                request = new HttpRequestMessage(HttpMethod.Post,
+                    ProxyBaseUrl + (cage ? CasinoCagePath : CasinoPlayPath))
+                {
+                    Content = new StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json"),
+                };
+            }
+
+            using (request)
+            {
+                request.Headers.Add("X-Auth-Token", token);
+                using var response = await Http.SendAsync(request, cts.Token).ConfigureAwait(false);
+                var text = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+                var reply = Parse(text);
+                int status = (int)response.StatusCode;
+
+                if (response.StatusCode == HttpStatusCode.Forbidden && !IsTierRefusal(reply))
+                {
+                    App.Logger?.Information("[ArcademyWallet] casino refused at the identity door: {Body}", Truncate(text));
+                    return new CasinoOutcome(false, 0, null);
+                }
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    App.Logger?.Information("[ArcademyWallet] casino refused at the token door: {Body}", Truncate(text));
+                    return new CasinoOutcome(false, 0, null);
+                }
+
+                if (!response.IsSuccessStatusCode)
+                    App.Logger?.Information("[ArcademyWallet] casino '{Op}' answered {Status}: {Body}",
+                        op, status, Truncate(text));
+                else if (Retired(generation))
+                    App.Logger?.Debug("[ArcademyWallet] casino '{Op}' landed after the window closed", op);
+
+                return new CasinoOutcome(true, status, reply);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            App.Logger?.Information("[ArcademyWallet] the back room did not answer inside {S}s", PageWait.TotalSeconds);
+            return new CasinoOutcome(false, 0, null);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Information("[ArcademyWallet] casino '{Op}' failed: {E}", op, ex.Message);
+            return new CasinoOutcome(false, 0, null);
         }
     }
 

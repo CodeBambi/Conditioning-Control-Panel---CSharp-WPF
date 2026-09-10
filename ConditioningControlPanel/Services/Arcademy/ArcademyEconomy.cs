@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Services.Arcademy;
 /// for the same reason the streak does: a stale or edited page must never be able to mint currency.
 /// Shape (all fields ensured by <see cref="EnsureShape"/>):</para>
 /// <code>
-/// { "t":0, "k":0, "earnedT":0, "earnedK":0,
+/// { "t":0, "k":0, "c":0, "earnedT":0, "earnedK":0, "earnedC":0,
 ///   "tokenDays":["yyyy-MM-dd"],
 ///   "payDays":{ "yyyy-MM-dd": { "&lt;gameKey&gt;": 2 } },
 ///   "inv":{ "late_slip": { "n":2, "at":"yyyy-MM-dd" } },
@@ -236,6 +236,16 @@ internal static class ArcademyEconomy
     public const string CurTickets = "t";
     public const string CurTokens = "k";
 
+    /// <summary>CHIPS, the Back Room's third purse. Bought one way at the cage with Sparkle Points
+    /// and spendable only on the Back Room shelf: chips never cash out and nothing else ever mints
+    /// them, so the school's two earned currencies keep their meaning.</summary>
+    public const string CurChips = "c";
+
+    /// <summary>The cage's one and only rate. One number, here, because the page prints it, the
+    /// counter quotes it and the server debits by it, and a rate that disagrees across those three
+    /// is a player watching Sparkle vanish into the wrong pile.</summary>
+    public const int ChipsPerSparkle = 100;
+
     public const string SkuLateSlip = "late_slip";
 
     /// <summary>How many Tardy Slips the desk will hold — and therefore the longest absence one
@@ -420,8 +430,13 @@ internal static class ArcademyEconomy
         var wallet = w ?? new JObject();
         EnsureInt(wallet, "t");
         EnsureInt(wallet, "k");
+        // The Back Room's purse rides the same bag as the other two so one adopt carries the lot.
+        // A build that has never heard of chips still round-trips them: the field is ensured here
+        // and nothing local ever mints it, so an older desk cannot zero what the server holds.
+        EnsureInt(wallet, "c");
         EnsureInt(wallet, "earnedT");
         EnsureInt(wallet, "earnedK");
+        EnsureInt(wallet, "earnedC");
         if (wallet["tokenDays"] is not JArray) wallet["tokenDays"] = new JArray();
         if (wallet["payDays"] is not JObject) wallet["payDays"] = new JObject();
         if (wallet["inv"] is not JObject) wallet["inv"] = new JObject();
@@ -660,7 +675,16 @@ internal static class ArcademyEconomy
     public static JObject BalanceJson(JObject w)
     {
         var wallet = EnsureShape(w);
-        return new JObject { ["t"] = (int?)wallet["t"] ?? 0, ["k"] = (int?)wallet["k"] ?? 0 };
+        return new JObject
+        {
+            ["t"] = (int?)wallet["t"] ?? 0,
+            ["k"] = (int?)wallet["k"] ?? 0,
+            // Chips carry their lifetime total on the same frame because the Back Room's floor
+            // shows both at once (balance on the chip, "won so far" on the cage sign) and a second
+            // round trip for the second number would repaint the room a beat late.
+            ["c"] = (int?)wallet["c"] ?? 0,
+            ["earnedC"] = (int?)wallet["earnedC"] ?? 0,
+        };
     }
 
     // ============================ dates ============================

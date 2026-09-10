@@ -657,6 +657,23 @@ internal sealed class ArcademyMetaStore
         }
     }
 
+    /// <summary>
+    /// Write the Back Room's two numbers back after the server moved them. A TARGETED write rather
+    /// than <see cref="AdoptServerWallet"/> because a casino answer carries balances and nothing
+    /// else: adopting one whole would blank the tickets, the shelf and the two lever rungs.
+    /// </summary>
+    public void NoteChips(int? chips, int? earnedChips)
+    {
+        if (chips == null && earnedChips == null) return;
+        lock (_lock)
+        {
+            var wallet = WalletUnlocked();
+            if (chips.HasValue) wallet["c"] = Math.Max(0, chips.Value);
+            if (earnedChips.HasValue) wallet["earnedC"] = Math.Max(0, earnedChips.Value);
+            Touch();
+        }
+    }
+
     /// <summary>The parked mint frames, oldest first - a clone, and only the rows still carrying a
     /// <c>mintId</c> (a frame without one cannot be paid idempotently, so it is not a frame).</summary>
     public JArray PendingMints()
