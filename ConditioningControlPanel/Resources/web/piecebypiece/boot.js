@@ -17,7 +17,7 @@ import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { createDriverSwitch, startOnlineMatch } from './net/online.js';
 import { DEFAULT_MS } from './game/clock.js';
-import { postToHost, onHostMessage, signalReady } from './bridge.js';
+import { postToHost, onHostMessage, onIdentity, signalReady } from './bridge.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -98,6 +98,15 @@ function main() {
     if (m.type !== 'pbp:settings') return;
     const { type, ...values } = m;   // the envelope's own key is not a setting
     Object.assign(window.PBP.settings, values);
+  });
+  // The host names the player from the account (pbp:identity, displayName),
+  // and that is the name the server lists in the lobby - so it is the name the
+  // door has to show, or "you are visible as" says one thing and the room sees
+  // another. Subscribed rather than read: the frame lands after `ready`, which
+  // is after everything below has run, and settings is read fresh here because
+  // the object is merged into a new one twice further down.
+  onIdentity((id) => {
+    if (id && id.displayName) window.PBP.settings.playerName = String(id.displayName);
   });
 
   // --- camera: the rig the player drives ---
@@ -274,6 +283,11 @@ function main() {
     // an online seat is built and switched in by net/online.js; the hotseat's
     // reset-and-start is not what it wants
     if (mode === 'online' && match) { window.PBP.startOnline(match); return; }
+    // A finished online seat may still be in the chair from the last game
+    // (it stays for the end card). Reset-and-start against it would resync
+    // the finished match and fire its gameover a second time, so the hotseat
+    // goes back in first - which also disposes the seat - and is dealt.
+    if (game.switchBack) game.switchBack();
     if (game.reset) game.reset();
     bus.emit('local', { sides: ['w', 'b'], mode, match });
     game.start();

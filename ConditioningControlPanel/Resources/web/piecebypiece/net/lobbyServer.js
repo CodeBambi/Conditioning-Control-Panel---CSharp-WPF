@@ -44,10 +44,24 @@ import * as defaultApi from './api.js';
 import { isHosted, identity, whenIdentity } from '../bridge.js';
 
 /**
- * The contract asks for ~2s while a lobby screen is open, and caps /quick at
- * 40/min/user, which is 1.5s. This is the fastest this may honestly poll.
+ * The contract asks for ~2s while a lobby screen is open, but every tick of
+ * this poll spends a call on GET /lobby, which is capped at 30/min/user - a
+ * 2s tick sits EXACTLY on that cap, and enter()'s own refresh and the 60s
+ * re-enter push it over. 3s is 20/min, which leaves room for both, and the
+ * list going stale by one extra second is not something a person in a lobby
+ * can see. /quick (40/min) and /challenges (30/min, and asked for only every
+ * CHALLENGE_TICKS-th tick) both sit comfortably under this.
  */
-export const POLL_MS = 2000;
+export const POLL_MS = 3000;
+
+/**
+ * The challenge list is asked for on every this-many-th tick. Incoming
+ * challenges live 300s and an ignored one ignores itself after 8s, so seeing
+ * one 6s late costs nothing; the outgoing challenge we are waiting on is the
+ * exception and is watched every tick (see refresh), which is where the
+ * contract's "~2s while a challenge screen is open" is actually needed.
+ */
+export const CHALLENGE_TICKS = 2;
 
 /**
  * A lobby listing expires after 180s of no enter/quick refresh. While the
@@ -251,7 +265,15 @@ export function createServerLobby({
 
   /* ------------------------------------------------------------------ poll */
 
-  async function refresh() {
+  /** Polls made so far, for the every-other-tick cadence. A forced refresh does not count. */
+  let polls = 0;
+
+  /**
+   * One poll. `everything` asks for the challenge list whatever the cadence
+   * says - what debug.refresh passes, so a harness that plants a challenge
+   * and refreshes sees it on that refresh and not the one after.
+   */
+  async function refresh(everything = false) {
     if (disposed || !entered) return;
 
     // Keep the listing alive. /quick counts as a refresh, so this only fires
@@ -262,7 +284,15 @@ export function createServerLobby({
       api.lobbyEnter(tc).catch(() => {});
     }
 
-    const [lob, chal] = await Promise.all([api.lobbyList(), api.challenges()]);
+    // The list every tick; the challenges every CHALLENGE_TICKS-th, unless one
+    // of ours is out, because the challenge list is the only place its answer
+    // can arrive and a person waiting on a yes can feel every second of it.
+    if (!everything) polls += 1;
+    const askChallenges = everything
+      || !!(pending && pending.kind === 'challenge')
+      || ((polls - 1) % CHALLENGE_TICKS === 0);
+
+    const [lob, chal] = await Promise.all([api.lobbyList(), askChallenges ? api.challenges() : Promise.resolve(null)]);
     if (disposed || !entered) return;
 
     if (lob.ok && Array.isArray(lob.data.players)) {
@@ -270,7 +300,7 @@ export function createServerLobby({
       emit(listListeners, list());
     }
 
-    if (chal.ok) {
+    if (chal && chal.ok) {
       const incoming = Array.isArray(chal.data.incoming) ? chal.data.incoming : [];
       const outgoing = Array.isArray(chal.data.outgoing) ? chal.data.outgoing : [];
 
@@ -403,6 +433,13 @@ export function createServerLobby({
         entered = true;
         if (!handle) handle = setT(tick, pollMs);
         (async () => {
+          // The door may press QUICK MATCH before the host's identity frame
+          // has landed - only enter() waited for it, and the menu's own quick
+          // button never went through enter(). A /quick with no unified_id on
+          // it is a 400, read here as "he left", which is a lie.
+          await whenIdentity();
+          if (disposed || !pending || pending.settled || pending.kind !== 'quick') return;
+          if (!signedIn()) { rejectLook('left'); return; }
           const res = await api.quick(tc);
           if (disposed || !pending || pending.settled || pending.kind !== 'quick') return;
           lastEnter = Date.now();
@@ -429,6 +466,10 @@ export function createServerLobby({
         entered = true;
         if (!handle) handle = setT(tick, pollMs);
         (async () => {
+          // Same wait as quickMatch, for the same reason.
+          await whenIdentity();
+          if (disposed || !pending || pending.settled || pending.kind !== 'challenge') return;
+          if (!signedIn()) { rejectLook('left'); return; }
           const res = await api.challenge(String(id), tc);
           if (disposed || !pending || pending.settled || pending.kind !== 'challenge') return;
           // He is not there any more, or the server refused the pairing. The
@@ -463,8 +504,9 @@ export function createServerLobby({
     /** Matches the mock's `debug` block, so a harness can poke either one. */
     debug: {
       isMock: false,
-      state: () => ({ entered, looking: pending ? pending.kind : null, people: list(), timeControl: tc }),
-      refresh,
+      state: () => ({ entered, looking: pending ? pending.kind : null, people: list(), timeControl: tc, polls }),
+      /** A full poll, challenges included, off the cadence - see refresh. */
+      refresh: () => refresh(true),
     },
   };
 }

@@ -145,6 +145,35 @@ html, body {
 .mv .m.gap { cursor: default; }
 .mv .m.sel { background: rgba(255, 105, 180, 0.34); color: #FFF3FA; opacity: 1; }
 .mv.empty { display: block; padding: 2px 5px; font-size: 11px; letter-spacing: 0.12em; opacity: 0.3; }
+/* resign and the draw, online only (hud.js shows the block; index.html says
+   why it sits here). Bottom right: under the move list's column, clear of the
+   ramp's centred card and of the .cam- row on the left. The same glass as the
+   .chip and the .moves-tab, and like the tab only the buttons take a click -
+   the words around them stay click-through with the rest of the HUD. */
+.online {
+  position: absolute; right: 18px; bottom: 22px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
+.online-row { display: flex; align-items: center; gap: 6px; }
+.online-row .word, .online-note {
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.55;
+}
+.online-row .word { margin-right: 4px; }
+.online-note { margin: 0 4px 0 0; }
+.hud-btn {
+  pointer-events: auto; cursor: pointer;
+  padding: 6px 11px; border-radius: 10px;
+  font: 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--pbp-ink); opacity: 0.55;
+  background: rgba(20, 20, 46, 0.55); border: 1px solid rgba(245, 230, 200, 0.12);
+  backdrop-filter: blur(3px);
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.hud-btn:hover { opacity: 0.9; }
+.hud-btn:focus-visible { outline: 2px solid var(--pbp-pink); outline-offset: 2px; }
+.hud-btn:disabled { opacity: 0.22; cursor: default; }
+/* the answer that ends something - yes to "resign?", accept on his offer */
+.hud-btn.warm { color: var(--pbp-pink); border-color: rgba(255, 105, 180, 0.55); }
 /* --- end the HUD ---------------------------------------------------------- */
 
 /* Owned by the effects layer. Never written to by the board code. */

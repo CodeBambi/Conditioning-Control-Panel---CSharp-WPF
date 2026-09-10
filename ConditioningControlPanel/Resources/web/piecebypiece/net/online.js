@@ -47,6 +47,23 @@ export function createDriverSwitch(initial) {
     result() { return cur.result(); },
     autoRemaining() { return cur.autoRemaining ? cur.autoRemaining() : 0; },
     reset(...a) { return cur.reset ? cur.reset(...a) : undefined; },
+    /**
+     * The game for the shelf. The door reads this on gameover, so a driver
+     * without one hands back an empty game rather than a TypeError - but both
+     * drivers have one, and forwarding it is what makes the shelf keep moves.
+     */
+    record(...a) { return cur.record ? cur.record(...a) : { moves: [], plies: 0, result: null, clocks: null }; },
+
+    // --- what only an online seat answers; a hotseat gets the quiet no-op ---
+    // The HUD holds this switch, never the driver, so the draw verbs have to
+    // come through here to reach the seat at all.
+    offerDraw(...a) { return cur.offerDraw ? cur.offerDraw(...a) : undefined; },
+    acceptDraw(...a) { return cur.acceptDraw ? cur.acceptDraw(...a) : undefined; },
+    declineDraw(...a) { return cur.declineDraw ? cur.declineDraw(...a) : undefined; },
+    /** 'me' | 'them' | null online; null in a hotseat, where nobody offers anybody anything. */
+    drawOffer() { return cur.drawOffer ? cur.drawOffer() : null; },
+    /** The server's last word on the opponent; a hotseat opponent is always here. */
+    opponentOnline() { return cur.opponentOnline ? cur.opponentOnline() : true; },
 
     /** The driver underneath, for anything that genuinely needs the real one. */
     get current() { return cur; },
@@ -66,6 +83,24 @@ export function createDriverSwitch(initial) {
       cur = next;
       if (old && typeof old.dispose === 'function') {
         try { old.dispose(); } catch (err) { console.warn('[pbp] old driver dispose threw', err); }
+      }
+      return cur;
+    },
+
+    /**
+     * Put the hotseat back. The seat it was holding for the page is the one
+     * the page started with, never disposed (a hotseat has nothing to stop),
+     * and it is what "play here" after an online game has to be dealt against:
+     * reset-and-start on a FINISHED online seat resyncs the finished match and
+     * fires its gameover a second time. Idempotent - the hotseat in the chair
+     * already is simply left there.
+     */
+    switchBack() {
+      if (cur === initial) return cur;
+      const old = cur;
+      cur = initial;
+      if (old && typeof old.dispose === 'function') {
+        try { old.dispose(); } catch (err) { console.warn('[pbp] online driver dispose threw', err); }
       }
       return cur;
     },
