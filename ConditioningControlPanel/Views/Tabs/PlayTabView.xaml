@@ -1400,6 +1400,77 @@
                         </Grid>
                     </Border>
                 </Grid>
+                <!-- PIECE BY PIECE: the 3D chess board (Services\PieceByPiece\
+                     PieceByPieceHostService). A STRIP built to the Arcademy's pattern directly
+                     above, for the same reason it is one: there is no Resources/features art for
+                     it yet, and a card built around a missing ImageSource is the failure mode this
+                     wall already knows about. When art lands it can become a full card.
+
+                     Same launch posture as its neighbour: the band below is decoration (it is
+                     IsHitTestVisible=False like every other one here) and
+                     PieceByPieceHostService.Launch does the refusing, through the same
+                     TierGate.DemandLab door FALL IN, Racing Thoughts and Attend all ask. Unlike
+                     the Arcademy there is no Visibility default to assert - the board has no door
+                     flag, so the strip is simply present, and the band is what tells a free
+                     account why Play refuses.
+
+                     Unlike the DtRH hero's buttons this one IS localized: the neighbouring
+                     Arcademy strip already reads every string off loc keys, and matching the
+                     nearest neighbour is what keeps this zone one surface. -->
+                <Grid x:Name="SlotPieceByPiece" x:FieldModifier="internal" Margin="0,0,0,10">
+                    <Border Style="{StaticResource PlayCardT2}" Padding="0" MinHeight="118">
+                        <Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="22,20,20,20">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <Border Style="{StaticResource PlayTitleGlyphPlate}">
+                                            <Image Width="18" Height="18" Source="{Binding Source='♟', Converter={StaticResource EmojiToImageSource}}"/>
+                                        </Border>
+                                        <TextBlock Text="{loc:Str play_pbp_title}" Style="{StaticResource PlayCardTitle}"/>
+                                        <Border Style="{StaticResource PlayBadgePill}" Margin="12,2,0,0" Padding="7,2">
+                                            <TextBlock Text="{loc:Str play_pbp_new}" Style="{StaticResource PlayBadgePillText}" FontSize="10"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{loc:Str play_pbp_blurb}"
+                                               Style="{StaticResource PlayCardBlurb}" MaxWidth="560" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                                <!-- The sign gets its OWN Auto column rather than the corner
+                                     posture, exactly as the Arcademy strip does and for the same
+                                     measured reason: on a 118px strip a corner badge is taller
+                                     than the row and lands on the vertically-centred button. No
+                                     explicit Width - an Auto column measures with an infinite
+                                     constraint, which is the branch TierBadge answers with its
+                                     FallbackWidth. -->
+                                <fx:TierBadge Grid.Column="1" x:Name="PlayBadgePieceByPiece" x:FieldModifier="internal"
+                                              Tier="2" VerticalAlignment="Center"
+                                              Margin="0,0,18,0" Panel.ZIndex="9"/>
+                                <Button Grid.Column="2" x:Name="BtnPlayPieceByPiece" x:FieldModifier="internal"
+                                        Content="{loc:Str play_pbp_cta}" Cursor="Hand"
+                                        VerticalAlignment="Center" Margin="0,0,24,0" Padding="24,10"
+                                        Background="{DynamicResource PinkBrush}" Foreground="White"
+                                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                                        ToolTip="{loc:Str play_pbp_tooltip}"
+                                        Click="BtnStartPieceByPiece_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style>
+                                    </Button.Resources>
+                                </Button>
+                            </Grid>
+                            <Border x:Name="PlayLockPieceByPiece" x:FieldModifier="internal"
+                                    Style="{StaticResource PlayLockBandT2}">
+                                <StackPanel VerticalAlignment="Center">
+                                    <helpers:EmojiTextBlock Text="🧪" Style="{StaticResource PlayLockGlyph}"/>
+                                    <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
                 <Grid x:Name="SlotLoom" x:FieldModifier="internal">
                     <!-- Padding 0 overrides PlayCard's 22 so the art bleeds to the strip's rounded
                          left edge; the copy carries its own inset instead. -->
