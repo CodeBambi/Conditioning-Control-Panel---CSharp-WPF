@@ -43,8 +43,8 @@ const FEN = {
   knightTake: 'rnbqkbnr/pppp1ppp/8/4p3/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2',
   // white queen and rook vs a lone black king: four takes then a mate
   parade: 'k7/pppp4/8/8/8/8/8/R3Q2K w - - 0 1',
-  mate: '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1',           // Ra8 is mate
-  draw: '7k/8/6Q1/8/8/8/8/K7 w - - 0 1',              // Qg7?? no: Qf7 stalemates... use Qg6-> h6? see scene
+  mate: '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1',            // Ra8 is mate
+  draw: '7k/8/6K1/8/8/8/8/5Q2 w - - 0 1',           // Qf7 is stalemate
 };
 
 const profile = join(tmpdir(), 'pbp-theatre-' + Date.now());
@@ -109,7 +109,7 @@ const HIJACK = "window.__pbp = null; (async () => {"
   + " let q = [];"
   + " window.requestAnimationFrame = (fn) => { q.push(fn); return q.length; };"
   + " window.cancelAnimationFrame = () => {};"
-  + " await new Promise((r) => setTimeout(r, 400));"
+  + " for (let i = 0; i < 40 && !q.length; i++) await new Promise((r) => setTimeout(r, 100));"
   + " let t = performance.now();"
   + " window.__pbp = { step(ms, n) { for (let i = 0; i < n; i++) { t += ms; const c = q; q = []; for (const fn of c) fn(t); } return q.length; } };"
   + " return q.length; })()";
@@ -229,6 +229,79 @@ const scenes = {
     await shot('capture-side-2-landing.png', await closeUp('d5', 0.5, 520, 360));
     await beat(260);
     await shot('capture-side-3-rolling.png', await closeUp('d5', 0.5, 520, 360));
+  },
+  // --- PR 2: the taken stand and watch ------------------------------------------
+  async parade() {
+    await open();
+    const seq = [['e2', 'e4'], ['d7', 'd5'], ['e4', 'd5'], ['d8', 'd5'], ['b1', 'c3'], ['d5', 'g2'], ['f1', 'g2']];
+    for (const [a, b] of seq) { const r = await move(a, b); await beat(r && r.captured ? 1700 : 450); }
+    await beat(600);
+    const st = await json('window.PBP.board.parade && window.PBP.board.parade.stats()');
+    console.log('parade: ' + JSON.stringify(st));
+    if (!st || st.w.length !== 2 || st.b.length !== 2) bad('the parade does not hold four men');
+    if (st && st.w.concat(st.b).some((e) => e.rising)) bad('a parade man is still rising');
+    const sunk = (await events()).filter((e) => e.t === 'sunk').length;
+    console.log('sunk events: ' + sunk);
+    await shot('parade-normal.png');
+    await shot('parade-white-rim.png', { x: 0, y: 380, width: 1280, height: 480, scale: 1.5 });
+    await shot('parade-black-rim.png', { x: 200, y: 60, width: 900, height: 340, scale: 1.5 });
+    await view('top');
+    await beat(1200);
+    await shot('parade-top.png');
+    // Straight down on each rim: white's is +z (the a-file end holds his first man).
+    const rim = async (name, sq) => { const c = await closeUp(sq, 0, 420, 200); c.y += 55 * (sq[1] === '1' ? 1 : -1); await shot(name, c); };
+    await rim('parade-top-white-rim.png', 'b1');
+    await rim('parade-top-black-rim.png', 'g8');
+    const pick = await json("(() => { const P = window.PBP.board.parade; const g = window.PBP.board.view.boardGroup; return g.children.filter((o) => o.userData && o.userData.parade).map((o) => ({ raycast: o.children.every((c) => !c.isMesh || c.raycast.length === 0 && c.raycast() === undefined), busy: !!o.userData.busy, scale: +o.scale.x.toFixed(3) })); })()");
+    console.log('parade men: ' + JSON.stringify(pick));
+    await evalJs("window.PBP.bus.emit('takeback', { from: 'f1', to: 'g2', ply: 7 })");
+    await beat(400);
+    console.log('after takeback: ' + JSON.stringify(await json('window.PBP.board.parade.stats()')));
+    await evalJs("window.PBP.bus.emit('local', { sides: ['w', 'b'] })");
+    await beat(50);
+    console.log('after local: ' + JSON.stringify(await json('window.PBP.board.parade.stats()')));
+  },
+  async mate() {
+    await open(FEN.mate);
+    await move('a1', 'a8');
+    await beat(2000);
+    let st = await json('window.PBP.board.poses.stats()');
+    console.log('mate at 2.0 s: ' + JSON.stringify(st));
+    if (!st || st.kind !== 'mate' || !st.hit || st.kings[0].up > 0.15) bad('the king did not fall');
+    const l = (await events()).filter((e) => e.t === 'land' && e.p.pose);
+    console.log('pose land events: ' + l.length);
+    await shot('mate-pose.png');
+    await shot('mate-pose-near.png', await closeUp('g8', 0.3, 520, 360));
+    await beat(1200);
+    await shot('mate-pose-settled.png');
+    const ov = await json('window.PBP.board.outline.stats()');
+    console.log('outline: ' + JSON.stringify(ov));
+  },
+  async mateWarm() {
+    await open(FEN.mate);
+    await move('a1', 'a8');
+    await beat(1450);
+    console.log('mate at 1.45 s: ' + JSON.stringify(await json('window.PBP.board.poses.stats()')));
+    await shot('mate-warm.png');
+    await shot('mate-hit-near.png', await closeUp('g8', 0.3, 520, 360));
+  },
+  async draw() {
+    await open(FEN.draw);
+    const r = await move('f1', 'f7');
+    console.log('draw played: ' + JSON.stringify(r && r.san) + ' over=' + await evalJs('JSON.stringify(window.PBP.game.result())'));
+    await beat(1300);
+    const st = await json('window.PBP.board.poses.stats()');
+    console.log('draw at 1.3 s: ' + JSON.stringify(st));
+    if (!st || st.kind !== 'draw') bad('the kings did not lean');
+    await shot('draw-pose.png');
+    await shot('draw-pose-near.png', await closeUp('g7', 0.3, 640, 400));
+  },
+  async resign() {
+    await open();
+    await evalJs("window.PBP.game.resign('w')");
+    await beat(1500);
+    console.log('resign at 1.5 s: ' + JSON.stringify(await json('window.PBP.board.poses.stats()')));
+    await shot('resign-pose.png', await closeUp('e1', 0.3, 640, 400));
   },
   async knightTake() {
     await open(FEN.knightTake);
