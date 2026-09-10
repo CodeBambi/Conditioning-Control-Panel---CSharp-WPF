@@ -26,6 +26,12 @@
  * | wind 100 | snap 80, crack 36 in | stride 100 from the crack. Crack at
  * 336 ms from the move, the bishop stands on the square at 436 ms; the ring
  * dies by 800 ms, the victim is sunk by ~1420 and on the rim by ~1970.
+ *
+ * Gate: window.PBP.settings.whip (default FALSE; ?whip=1 sets it on a dev
+ * page). anim.js asks it once, where the bishop's capture slide would be
+ * marked as a whip; off, the bishop takes the plain capture like every other
+ * man and nothing in this file runs. The functions below are pure and do not
+ * look at the gate, so the node smoke and the phone preview stand as they are.
  * ==========================================================================*/
 
 /** Every number that decides how the whip plays. One place, on purpose. */

@@ -11,6 +11,9 @@
  *
  *   node smoke/whip-shot.mjs [--url <page url>] [--out <dir>] [--wait <ms>]
  *
+ * The whip is gated off by default (settings.whip, see board/anim.js), so the
+ * page is opened with &whip=1; every assertion below is as it was.
+ *
  * Needs a static server on the web root, for example:
  *   python -m http.server 8853   (run from Resources/web)
  * Exits non-zero when the page logged an error, when the whip did not crack,
@@ -171,7 +174,7 @@ async function main() {
   await cdp.send('Page.enable');
 
   const sep = url.includes('?') ? '&' : '?';
-  const page = url + sep + 'fen=' + encodeURIComponent(FEN);
+  const page = url + sep + 'fen=' + encodeURIComponent(FEN) + '&whip=1';   // the gate: off by default
 
   // --- 1. the whip, frame by frame --------------------------------------------
   await open(page);
