@@ -249,6 +249,73 @@ eq(JSON.parse(await ev(HOLD)).canvases, 0, 'every pop after a loss is a gif, wit
 }
 
 /* ============================================================================
+ * 7b. the phone's layers carry no filter (2026-09-10: "we still lag a lot on the
+ *     fullscreen effects on iphone. the glitch bubble fullscreen in particular
+ *     and the spiral"). Every hold is a fullscreen DOM layer over the glass; a
+ *     `filter`, a `backdrop-filter` or a colour keyframe on one is a
+ *     device-resolution pass on every frame it changes. On the touch tier the
+ *     cap is inline (payloadFx `opacityCap`) and race.css takes the filters off.
+ * ==========================================================================*/
+{
+  const run = readFileSync(resolve(RACE, 'run.js'), 'utf8');
+  ok(/opacityCap:\s*touchTier\s*\?/.test(run), 'run.js passes the inline cap on the touch tier only');
+  ok(/dataset\.touch\s*=\s*'1'/.test(run), 'and stamps data-touch on the root for race.css');
+  const LAYER = (sel) => `(() => { const el = document.querySelector('${sel}'); if (!el) return JSON.stringify({ there: false });
+    const cs = getComputedStyle(el); return JSON.stringify({ there: true, filter: cs.filter, bf: cs.backdropFilter || cs.webkitBackdropFilter, anim: cs.animationName, mask: cs.maskImage || cs.webkitMaskImage }); })()`;
+  // the desktop this run is on: the caps and the drain's blur are the filters they always were
+  await ev(`window.__race.race.debugPayload('glitch', { strength: 70 })`);
+  await ev(`window.__race.race.debugPayload('overlay', { overlay: 'spiral', strength: 70 })`);
+  await sleep(200);
+  let d = JSON.parse(await ev(LAYER('.sf-pfx-drain'))), sp = JSON.parse(await ev(LAYER('.sf-pfx-spiral')));
+  // (mid-glitch the keyframe's hue-rotate is the computed filter, over the 0.86 cap: still a filter pass)
+  ok(d.there && d.filter !== 'none', `the desktop drain runs through a filter (${d.filter})`);
+  ok(/blur/.test(d.bf), `and its backdrop blur (${d.bf})`);
+  eq(d.anim, 'sf-pfx-glitch', 'and the glitch shudders with its colour keyframes');
+  ok(/opacity\(0\.78\)/.test(sp.filter), `the desktop spiral keeps its filter cap (${sp.filter})`);
+  // the same page stamped as a phone
+  await ev(`document.getElementById('race-root').dataset.touch = '1'`);
+  await sleep(50);
+  d = JSON.parse(await ev(LAYER('.sf-pfx-drain'))); sp = JSON.parse(await ev(LAYER('.sf-pfx-spiral')));
+  eq(d.filter, 'none', 'on the touch tier the drain carries no filter');
+  eq(d.bf, 'none', 'and no backdrop blur');
+  eq(d.anim, 'rhGlitchLite', 'the glitch shudders on transform alone');
+  ok(/radial-gradient/.test(d.mask), 'the road cutout stays (a mask is a composite, not a filter pass)');
+  eq(sp.filter, 'none', 'the spiral hold carries no filter either');
+  const g = JSON.parse(await ev(LAYER('.sf-pfx-gifwash')));
+  if (g.there) eq(g.filter, 'none', 'nor does the wash');
+  // a spiral takes the slot: the glitch's shudder is over and the drain is the hold that lost
+  await ev(`(() => { const r = document.getElementById('race-root'); r.dataset.ov = 'spiral'; document.querySelector('.sf-pfx-drain').classList.remove('sf-pfx-glitching'); return 1; })()`);
+  await sleep(600);   // the layer's own 0.45 s opacity ease
+  const cross = await ev(`(() => { const cs = getComputedStyle(document.querySelector('.sf-pfx-drain')); return cs.filter + '|' + cs.opacity; })()`);
+  eq(cross, 'none|0', 'the MIX replace crossfades the drain out through opacity, not a filter');
+  await ev(`(() => { const r = document.getElementById('race-root'); delete r.dataset.ov; delete r.dataset.touch; return 1; })()`);
+  // the cap itself: a fresh payloadFx with the seam, the numbers the desktop css holds
+  const cap = await parse(`(async () => {
+    const m = await import('/dtrh/game/payloadFx.js');
+    const hud = document.createElement('div');
+    hud.style.cssText = 'position:fixed;inset:0;pointer-events:none;opacity:0';
+    document.body.appendChild(hud);
+    const asked = [];
+    const pfx = m.createPayloadFx({ hud, fx: { pulseFlash() {} }, media: null, flashBurst: null,
+      opacityCap: (kind) => { asked.push(kind); return kind === 'spiral' ? 0.78 : kind === 'braindrain' ? 0.86 : 1; } });
+    pfx.applyPayload({ payload: { kind: 'overlay', overlay: 'spiral' }, strength: 60 }, {});
+    pfx.applyPayload({ payload: { kind: 'glitch' }, strength: 60 }, {});
+    pfx.applyPayload({ payload: { kind: 'overlay', overlay: 'pink_filter' }, strength: 60 }, {});
+    await new Promise((r) => setTimeout(r, 60));
+    const op = (c) => { const el = hud.querySelector(c); return el ? el.style.opacity : null; };
+    const got = { asked, spiral: op('.sf-pfx-spiral'), drain: op('.sf-pfx-drain'), pink: op('.sf-pfx-pink') };
+    pfx.dispose(); hud.remove();
+    return JSON.stringify(got);
+  })()`);
+  // strength 60: spiral/pink 0.25..0.70 -> 0.52; drain 0.35..0.62 -> 0.512
+  ok(Math.abs(parseFloat(cap.spiral) - 0.52 * 0.78) < 1e-6, `the spiral hold is set inline at 0.52 x 0.78 (${cap.spiral})`);
+  ok(Math.abs(parseFloat(cap.drain) - 0.512 * 0.86) < 1e-6, `the drain at 0.512 x 0.86 (${cap.drain})`);
+  ok(Math.abs(parseFloat(cap.pink) - 0.52) < 1e-6, `and a kind the seam answers 1 for is untouched (${cap.pink})`);
+  ok(cap.asked.includes('spiral') && cap.asked.includes('braindrain') && cap.asked.includes('pink'), 'the seam is asked by hold kind');
+  await sleep(4500);   // let the holds fade before the console tally
+}
+
+/* ============================================================================
  * 8. and nothing said a word about it
  * ==========================================================================*/
 ok(errs.length === 0, 'not one console error in the whole run' + (errs.length ? ':\n    ' + errs.slice(0, 5).join('\n    ') : ''));

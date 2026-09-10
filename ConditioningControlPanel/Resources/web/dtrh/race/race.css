@@ -517,6 +517,49 @@
 #race-root[data-rm="1"] .sf-pfx-pink.is-melting,
 #race-root[data-rm="1"] .sf-pfx-freeze.is-lacquer span { animation: none; }
 
+/* ---- THE PHONE'S LAYERS (run.js stamps data-touch="1" on the touch tier) ----
+   2026-09-10, phone testing: "we still lag a lot on the fullscreen effects on iphone. the glitch
+   bubble fullscreen in particular and the spiral". Every hold above is a fullscreen DOM layer over
+   the WebGL glass, composited at device resolution (3x on an iPhone, ~3 M px). Three things on
+   them cost a full-resolution pass on EVERY frame the layer changes, and these layers change every
+   frame (the live spiral canvas at 24 fps, the wash's shudder, the glitch's 6 Hz steps):
+     - `filter: opacity()` - the cap and the MIX crossfade above, and the tint-2 saturate
+     - `backdrop-filter: blur()` on the drain - a blur of everything under it, re-done on each step
+       of the glitch's translate
+     - the glitch's `hue-rotate` / `saturate` keyframes - a colour filter swapped at 6 Hz
+   So on this tier the cap is applied INLINE by payloadFx (`opacityCap`, run.js passes the same
+   0.78 / 0.7 / 0.86 / 0.85 the rules above hold, and 0.92 for tint 2, so the intensities are the
+   ones the desktop gets) and the filters come off. The road cutout and the wash's feather stay:
+   a mask is a GPU composite, not a per-frame filter pass. What the phone gives up is the drain's
+   blur (a heavier fill stands in for it), the glitch's colour shift (its shudder stays, on
+   transform alone) and the tint-2 saturate. */
+#race-root[data-touch="1"] .sf-pfx-spiral,
+#race-root[data-touch="1"] .sf-pfx-pink,
+#race-root[data-touch="1"] .sf-pfx-drain,
+#race-root[data-touch="1"] .sf-pfx-gifwash { filter: none; transition: opacity 0.45s ease; }
+#race-root[data-touch="1"] .sf-pfx-drain {
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  background-color: rgba(12, 5, 20, 0.74);   /* the blur's dimming, without the blur */
+}
+#race-root[data-touch="1"] .sf-pfx-drain.sf-pfx-glitching { animation: rhGlitchLite 0.16s steps(2) infinite; }
+@keyframes rhGlitchLite {
+  0%   { transform: translate(0, 0); }
+  50%  { transform: translate(-1.2%, 0); }
+  100% { transform: translate(1.2%, 0); }
+}
+/* the MIX on this tier: the crossfade goes through opacity itself (the inline value is the hold's
+   own, so the replace has to out-rank it), and the tint-2 deepening is payloadFx's inline 0.92 */
+#race-root[data-touch="1"][data-ov="spiral"] .sf-pfx-drain:not(.sf-pfx-glitching) { filter: none; opacity: 0 !important; }
+#race-root[data-touch="1"][data-ov="braindrain"] .sf-pfx-spiral { filter: none; opacity: 0 !important; }
+#race-root[data-touch="1"][data-tint="2"] .sf-pfx-pink { filter: none; }
+/* the melt's sag keeps its sink and wobble and drops the saturate the desktop animates with it */
+#race-root[data-touch="1"] .sf-pfx-pink.is-melting { animation: rhSagLite var(--pfx-sag, 3000ms) ease-in both, sf-pfx-drip 3.6s ease-in-out infinite alternate; }
+@keyframes rhSagLite {
+  from { transform: translateY(-2.5%) scaleY(1); }
+  to   { transform: translateY(1.5%)  scaleY(1.075); }
+}
+#race-root[data-touch="1"][data-rm="1"] .sf-pfx-pink.is-melting { animation: none; }
+
 @media (prefers-reduced-motion: reduce) {
   #race-root .rh-laned { animation: rhFade var(--rh-lane-dur, 2600ms) linear forwards !important; }
   #race-root .sf-pfx-gifwash.is-washing { animation: none; }
