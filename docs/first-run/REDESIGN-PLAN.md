@@ -1,6 +1,8 @@
 # First-run experience redesign - implementation plan
 
 Branch: `feat/first-run-redesign` (worktree `C:/wt-firstrun`). Sep 10 2026.
+
+**Status (Sep 10 2026, evening):** all five lanes merged, reviewed (5 findings + 3 risks fixed), full suite green except 3 pre-existing VatFill failures, PR open against main. Server half on CCP-Server `feat/announcement-dismissal`, PR open, NOT deployed. Manual verification checklist at the bottom still owed.
 Design source: the "CCP First Run Redesign" canvas (owner accepted the Proposed direction).
 
 ## What the owner complained about
