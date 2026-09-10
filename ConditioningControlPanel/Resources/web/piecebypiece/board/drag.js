@@ -98,6 +98,8 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   let press = null;            // { x, y, t } of the pointer that is down
   let pending = false;         // this press could still turn out to be a click
   let toggledOff = null;       // the square this press let go of, so it cannot re-take it
+  let moveHook = null;         // something that may take a move over (see play)
+  let suspended = false;       // the board stands down while a picker is up
   let selected = null;         // the man waiting for his square
   let selSquare = null;
   let selLegal = [];
@@ -291,15 +293,25 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     if (repaint) paint();
   }
 
+  /**
+   * Play a move, unless something wants it first. The promotion picker takes a
+   * pawn's last step over this way: it answers true, the move waits on the
+   * board, and it plays the move itself once the player has chosen.
+   */
+  function play(from, to) {
+    if (moveHook && moveHook(from, to)) return { deferred: true };
+    return game.tryMove(from, to);
+  }
+
   /** A click on a legal square: the man waiting on his own flies over. */
   function playSelected(to) {
     const start = selSquare;
     clearSelection();
-    return game.tryMove(start, to);
+    return play(start, to);
   }
 
   function onDown(ev) {
-    if (held || ev.button > 0) return;
+    if (held || suspended || ev.button > 0) return;
     pointerIn = true;
     const found = pieceUnder(ev);
     const square = found ? null : squareUnder(ev);
@@ -412,7 +424,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
 
     // A legal drop is played by the game, which moves the man and lets anim.js
     // fly it down from where it was being held.
-    const played = to && to !== start ? game.tryMove(start, to) : null;
+    const played = to && to !== start ? play(start, to) : null;
     if (played) {
       bus.emit('drop', { ok: true });
     } else {
@@ -453,7 +465,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
   }
 
   function onKey(ev) {
-    if (ev.ctrlKey || ev.altKey || ev.metaKey || typing()) return;
+    if (ev.ctrlKey || ev.altKey || ev.metaKey || typing() || suspended) return;
     // Take the last ply back, with nothing in hand. Backspace is the one every
     // player tries first; z is there for the hand that never leaves the board.
     if (!held && (ev.key === 'Backspace' || ev.key === 'z' || ev.key === 'Z')) {
@@ -476,7 +488,7 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     markers.update(dt);
     updateLifts(dt);
     if (!held) {
-      if (pointerMoved || cameraMoved()) { look(); pointerMoved = false; }
+      if (!suspended && (pointerMoved || cameraMoved())) { look(); pointerMoved = false; }
       return;
     }
     if (pending && press && performance.now() - press.t > T.tapMs) pending = false;
@@ -515,6 +527,21 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     update,
     markers,
     /** A man in hand OR a man waiting on his square: the board is busy either way. */
+    /**
+     * Let something else answer a move first. The hook is called with the two
+     * squares and returns true when it has taken the move over.
+     */
+    setMoveHook(fn) { moveHook = typeof fn === 'function' ? fn : null; },
+    /** Stand the board down while a picker is up: no hover, no grab, no keys. */
+    suspend(on) {
+      suspended = !!on;
+      if (!suspended) { pointerMoved = true; return; }
+      onCancel();
+      clearSelection();
+      if (hoverPiece) { hoverPiece.userData.hover = false; wantLift(hoverPiece, 0); hoverPiece = null; }
+      setCursor('default');
+    },
+    isSuspended: () => suspended,
     isDragging: () => !!held || !!selected,
     /** The narrower question: is one actually in the hand right now? */
     isHolding: () => !!held,

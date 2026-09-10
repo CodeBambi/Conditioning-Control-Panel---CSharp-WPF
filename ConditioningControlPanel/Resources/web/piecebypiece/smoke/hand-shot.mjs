@@ -199,19 +199,9 @@ async function artSettled(ms = 20000) {
   return false;
 }
 
-async function main() {
-  mkdirSync(outDir, { recursive: true });
-  const wsUrl = await target();
-  const ws = new WebSocket(wsUrl);
-  await new Promise((res, rej) => {
-    ws.addEventListener('open', res, { once: true });
-    ws.addEventListener('error', rej, { once: true });
-  });
-  cdp = client(ws);
-  await cdp.send('Runtime.enable');
-  await cdp.send('Log.enable');
-  await cdp.send('Page.enable');
-  await cdp.send('Page.navigate', { url });
+/** Open a board and take its frame loop over, ready to be driven. */
+async function load(where) {
+  await cdp.send('Page.navigate', { url: where });
   await sleep(waitMs);
   await evalJs('window.PBP.ramp && window.PBP.ramp.setEnabled(false)');
   await evalJs('window.PBP.board.setWobble(0); window.PBP.board.setCameraSway(0)');
@@ -224,6 +214,21 @@ async function main() {
   await beat(200);
   await artSettled();
   await beat(200);
+}
+
+async function main() {
+  mkdirSync(outDir, { recursive: true });
+  const wsUrl = await target();
+  const ws = new WebSocket(wsUrl);
+  await new Promise((res, rej) => {
+    ws.addEventListener('open', res, { once: true });
+    ws.addEventListener('error', rej, { once: true });
+  });
+  cdp = client(ws);
+  await cdp.send('Runtime.enable');
+  await cdp.send('Log.enable');
+  await cdp.send('Page.enable');
+  await load(url);
 
   // --- 1. hover: his own man lifts, the other side does not ------------------
   await evalJs("window.__pt(20, 20, 'pointermove')");   // nothing under him
@@ -322,6 +327,56 @@ async function main() {
   const empty = await fen();
   console.log('nothing left to take back: ' + empty.split(' ').slice(0, 2).join(' '));
   if (empty.split(' ')[0] !== 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR') bad('an empty history still changed the board');
+
+  // --- 8. promotion: he is asked what he comes up as -------------------------
+  const promoUrl = url + '&fen=' + encodeURIComponent('8/P7/8/8/8/8/8/k6K w - - 0 1');
+  await load(promoUrl);
+  const fan = () => evalJs('JSON.stringify(window.PBP.board.promote.debug())').then(JSON.parse);
+  await click('a7');
+  await click('a8', { man: false });
+  await beat(400);
+  let f = await fan();
+  console.log('the fan: ' + JSON.stringify(f) + ' ' + (await fen()).split(' ').slice(0, 2).join(' '));
+  if (f.open !== 'a8') bad('the fan did not open on the eighth');
+  if (f.kinds.join('') !== 'qrbn') bad('the fan is not queen rook bishop knight');
+  if ((await fen()).split(' ')[1] !== 'w') bad('the move was played before he had chosen');
+  // Put the cursor on the knight and let the fan say so.
+  const at = await evalJs(`(() => {
+    const g = window.PBP.board.view.scene.getObjectByName('promote');
+    const s = g.children[3];
+    const p = window.PBP.board.view.projectPoint(s.position.clone());
+    window.__mark(p.x, p.y);
+    window.__pt(p.x, p.y, 'pointermove');
+    return JSON.stringify({ x: Math.round(p.x), y: Math.round(p.y) });
+  })()`);
+  await beat(120);
+  f = await fan();
+  console.log('the cursor on the knight at ' + at + ': ' + JSON.stringify(f));
+  console.log('  ' + await shot('promo-fan.png'));
+  if (f.hover !== 'n') bad('the fan did not brighten the one under the cursor');
+  // And take him.
+  const { x, y } = JSON.parse(at);
+  await evalJs(`window.__pt(${x}, ${y}, 'pointerdown'); window.__pt(${x}, ${y}, 'pointerup');`);
+  await beat(160);
+  console.log('  ' + await shot('promo-flight.png'));
+  await beat(700);
+  const promoted = await fen();
+  console.log('promoted: ' + promoted.split(' ').slice(0, 2).join(' ') + ' fan open: ' + (await fan()).open);
+  console.log('  ' + await shot('promo-landed.png'));
+  if (promoted.split(' ')[0] !== 'N7/8/8/8/8/8/8/k6K') bad('the knight he picked is not on the eighth');
+  if ((await fan()).open) bad('the fan stayed up after he chose');
+  if (await evalJs('window.PBP.board.drag.isSuspended()')) bad('the board was left standing down');
+
+  // Auto queen: no answer inside the four seconds, and he comes up a queen.
+  await load(promoUrl);
+  await click('a7');
+  await click('a8', { man: false });
+  await beat(300);
+  if (!(await fan()).open) bad('the second fan did not open');
+  await beat(4200);
+  const queened = await fen();
+  console.log('left alone for four seconds: ' + queened.split(' ').slice(0, 2).join(' '));
+  if (queened.split(' ')[0] !== 'Q7/8/8/8/8/8/8/k6K') bad('an unanswered fan did not queen him');
 
   const problems = [];
   for (const ev of cdp.events) {

@@ -176,6 +176,16 @@ function main() {
   // in the way of the camera: one finger may still orbit around him, and only a
   // real grab stands the rig off.
   view.cameraRig.setDragGuard(() => drag.isHolding());
+  // A pawn on the eighth is asked what he comes up as. Loaded late and guarded,
+  // so a board without the module simply queens him the way it always did.
+  import('./board/promote.js').then((m) => {
+    board.promote = m.createPromote({ view, pieces, anim, bus, game, drag, jiggle });
+    drag.setMoveHook((from, to) => board.promote.intercept(from, to));
+    // On the loop's own dt, so the four second offer counts game time and a
+    // harness that steps the clock by hand sees it run out.
+    const base = view.update;
+    view.update = (dt) => { base(dt); board.promote.update(dt); };
+  }).catch((e) => console.warn('[pbp] the promotion picker is missing', e));
   // --- end M ---
 
   // --- N: the theatre (parade, poses, bloom, the room watches) ---
