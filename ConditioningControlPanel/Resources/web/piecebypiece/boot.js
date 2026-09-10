@@ -195,8 +195,10 @@ function main() {
   // --- end M ---
 
   // --- N: the theatre (parade, poses, bloom, the room watches) ---
-  window.PBP.settings = Object.assign({ bloom: true }, window.PBP.settings);
-  { const prev = board.setMeter; board.setMeter = (m) => { if (prev) prev(m); if (board.bloom) board.bloom.setMeter(m); if (board.watch) board.watch.setMeter(m); if (board.sfx && board.sfx.setMeter) board.sfx.setMeter(m); }; }
+  // The bishop's whip (board/whip.js) is parked: off unless the host says so,
+  // or a dev page asks with ?whip=1. Host-provided settings still win.
+  window.PBP.settings = Object.assign({ bloom: true, whip: params.get('whip') === '1' }, window.PBP.settings);
+  { const prev = board.setMeter; board.setMeter = (m) => { if (prev) prev(m); if (board.bloom) board.bloom.setMeter(m); if (board.watch) board.watch.setMeter(m); if (board.sfx && board.sfx.setMeter) board.sfx.setMeter(m); if (board.room && board.room.setMeter) board.room.setMeter(m); }; }
   import('./board/parade.js').then((m) => {
     board.parade = m.createParade({ view, bus, jiggle });
     feelLate.push((dt) => board.parade.update(dt));
@@ -218,7 +220,7 @@ function main() {
   // Loaded late and guarded like the rest: without it the board sits in the
   // flat navy it always did. The turn tell rides the bus on its own.
   import('./board/room.js').then((m) => {
-    board.room = m.createRoom({ view, bus, env: () => board.env });
+    board.room = m.createRoom({ view, bus, game, env: () => board.env });
     feelLate.push((dt) => board.room.update(dt));
   }).catch((e) => console.warn('[pbp] room missing', e));
   // The air in it: motes drifting round the board, scenery only.
