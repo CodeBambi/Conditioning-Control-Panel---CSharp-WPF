@@ -107,23 +107,28 @@ function main() {
   // --- J: the feel (outline, dust, sound) ---
   // Settings are merged, never replaced: the host bridge may have filled some.
   window.PBP.settings = Object.assign({ outline: true, sfxVolume: 0.6 }, window.PBP.settings || {});
+  anim.bindBus(bus, (v) => view.projectPoint(v));   // anim.js speaks `land` and `sunk`
   // Loaded late and guarded, so a missing module never holds the game. The
   // per-frame updates ride on view.render, which the loop calls last, after
-  // jiggle.update has written the flex the outline reads.
+  // jiggle.update has written the flex the outline reads; the dt is the
+  // loop's own (taken off view.update), so a stepped harness clock stays true.
   const feelLate = [];
-  let feelLast = performance.now();
+  let feelDt = 0;
+  const updateBase = view.update;
+  view.update = (dt) => { feelDt = dt; updateBase(dt); };
   const renderBase = view.render;
   view.render = () => {
-    const now = performance.now();
-    const dt = Math.min(0.1, (now - feelLast) / 1000);
-    feelLast = now;
-    for (const fn of feelLate) fn(dt);
+    for (const fn of feelLate) fn(feelDt);
     renderBase();
   };
   import('./board/outline.js').then((m) => {
     board.outline = m.createOutline({ group: view.pieceGroup, bus });
     feelLate.push((dt) => board.outline.update(dt, view.camera, view.renderer));
   }).catch((e) => console.warn('[pbp] outline missing', e));
+  import('./board/dust.js').then((m) => {
+    board.dust = m.createDust({ scene: view.scene, bus });
+    feelLate.push((dt) => board.dust.update(dt, view.camera, view.renderer));
+  }).catch((e) => console.warn('[pbp] dust missing', e));
   // --- end J ---
 
   let last = performance.now();
