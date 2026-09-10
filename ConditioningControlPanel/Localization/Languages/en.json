@@ -5528,5 +5528,22 @@
   "label_gaze_interaction": "Gaze interaction",
   "label_stare_to_pop": "Stare to pop",
   "tooltip_bubble_gaze_pop": "Look at a bubble for about 1 second to pop it, no clicking. Covers bubbles only; flashes have their own switch on the Flashes page.",
-  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze."
+  "label_gaze_needs_calibration": "Needs the webcam running and eye tracking calibrated. Set it up under Play, Focus Gaze.",
+  "wb_heading": "Welcome back, {0}.",
+  "wb_heading_anon": "Welcome back.",
+  "wb_sub_level": "Level {0}",
+  "wb_sub_backup": "backup from {0}",
+  "wb_restore_label": "Restore my settings from the cloud backup",
+  "wb_restore_hint": "Your sliders, doors and preferences replace this PC's defaults. Your content folder, your level and your unlocks stay exactly as they are.",
+  "wb_flavour_label": "Bring {0} with me",
+  "wb_flavour_generic": "your flavour",
+  "wb_flavour_hint": "It downloads in the background. You can use the app while it lands.",
+  "wb_flavour_hint_size": "{0}, downloading in the background. You can use the app while it lands.",
+  "wb_whats_new_toggle": "What changed since you were last here",
+  "wb_whats_new_toggle_version": "What changed since you were last here (v{0})",
+  "wb_tour": "Show me around (60 s)",
+  "wb_season_line": "The monthly leaderboard rotated to season {0} while you were away. Your level, your XP and everything you unlocked carried over.",
+  "wb_go": "Let's go",
+  "wb_restore_failed_title": "Restore failed",
+  "wb_restore_failed_summary": "Your cloud settings did not come down. Open this to try again."
 }
