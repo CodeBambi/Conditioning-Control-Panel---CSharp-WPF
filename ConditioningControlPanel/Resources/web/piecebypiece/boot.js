@@ -13,6 +13,7 @@ import { createDrag } from './board/drag.js';
 import { createBus } from './game/events.js';
 import { createHotseat } from './game/hotseat.js';
 import { DEFAULT_MS } from './game/clock.js';
+import { postToHost, onHostMessage, signalReady } from './bridge.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -69,7 +70,20 @@ function main() {
   const drag = createDrag({ view, pieces, anim, bus, game });
   board.drag = drag;
 
-  window.PBP = { bus, game, board };
+  // Host settings, with the standalone defaults already in place: the effects
+  // layer reads window.PBP.settings and must never have to wait for a frame
+  // that only arrives inside the desktop app.
+  window.PBP = { bus, game, board, settings: { videoHoldSec: 15, reducedMotion: false } };
+  onHostMessage((m) => {
+    if (m.type !== 'pbp:settings') return;
+    const { type, ...values } = m;   // the envelope's own key is not a setting
+    Object.assign(window.PBP.settings, values);
+  });
+  // Esc closes the board - but never mid-drag, where it is "put the piece back".
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !drag.isDragging()) postToHost({ type: 'pbp:exit' });
+  });
+  signalReady();
 
   let last = performance.now();
   function frame(now) {
