@@ -498,12 +498,17 @@
 #race-root[data-ov="spiral"] .sf-pfx-drain:not(.sf-pfx-glitching) { filter: opacity(0); }
 #race-root[data-ov="braindrain"] .sf-pfx-spiral { filter: opacity(0); }
 /* THE WASH AND THE BLACK (bubbleKinds.js `gifwash` / `blackout`, drawn by game/payloadFx.js).
-   The overlay cap above is deliberately NOT extended to .sf-pfx-gifwash. The whole of the
+   The spiral's 0.78 cap above is deliberately NOT extended to .sf-pfx-gifwash. The whole of the
    owner's ask is that it read as a gif taking the screen rather than the drain's faint bruise,
-   and styles.css already keeps the road open with a soft mask instead of a ceiling. The one
-   thing the race adds is the motion switch: `data-rm` is run.js's own reducedMotion (the race
+   and styles.css already keeps the road open with a soft mask instead of a ceiling. What the
+   race does add (2026-09-09, phone testing: "15% less opacity on the fullscreen gifs") is a
+   flat 0.85 on the hold, so payloadFx's own 0.55-0.80 strength ramp lands at 0.47-0.68: still
+   the picture that took the road, a little more road through it. The live Loom canvas inherits
+   it (loomSpiralFx's layering contract), so a woven wash and a gif wash sit at the same weight.
+   The other thing is the motion switch: `data-rm` is run.js's own reducedMotion (the race
    menu's toggle), and the media query answers a browser whose player never opened that menu.
    A blackout only ever fades, so it has nothing to take away. */
+#race-root .sf-pfx-gifwash { filter: opacity(0.85); }
 #race-root[data-rm="1"] .sf-pfx-gifwash.is-washing { animation: none; }
 /* THE MELT AND THE DOLL (bubbleKinds.js `melt` / `lock`). Reduced motion keeps the COLOUR and the
    words, which is the effect, and drops the movement: the melt stops sinking and wobbling but its
