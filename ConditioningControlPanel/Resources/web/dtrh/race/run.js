@@ -116,6 +116,15 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   const reducedMotion = settings.reducedMotion != null ? !!settings.reducedMotion
     : !!(typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const intensityFloor = clamp(Number(settings.intensityFloor) || 0, 0, 1);
+  // LIGHTER (race/menu.js `lighter`, raceBoot -> settings.lite; 2026-09-10, the owner: the phone lags
+  // "unless i record my phone"). A recording is a load the page cannot see, so this is the player
+  // asking for the headroom up front: the resolution lid at 0.6 from the first frame (race/pixel.js
+  // LITE_DPR), live bubbles capped at LITE_BUBBLE_CAP, the spiral canvas at 20 fps
+  // (loomSpiralFx LITE_FRAME_MS), and the spiral and pink holds composited flat instead of through
+  // their screen blend (race.css `[data-lite="1"]`, with the touch tier's no-filter rules along for
+  // the ride, since the same law applies). Off is the run exactly as it was.
+  const lite = !!settings.lite;
+  const LITE_BUBBLE_CAP = 80;
   const send = (m) => { try { bridge.send(m); } catch (e) { /* host gone */ } };
   const sfx = (name, scale = 0.8) => audio.sfx(name, scale);   // race/audio.js: host legs + in-page beats
 
@@ -123,7 +132,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.antialias, alpha: false, powerPreference: 'high-performance' });
   // the big-pixel look: the world at low resolution, bubbles + wall media crisp on top (race/pixel.js);
   // host settings.pixel / ?pixel=N override, 0 = off; draw-call stats go to the host log every ~5 s
-  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? pixelDefault() : settings.pixel, log: (m) => { if (bridge.log) bridge.log(m); } });
+  const pixel = createPixelizer({ renderer, canvas, block: settings.pixel == null ? pixelDefault() : settings.pixel, lite, log: (m) => { if (bridge.log) bridge.log(m); } });
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12261f);
@@ -288,7 +297,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
     word: () => (S.elapsed - echoAt <= ECHO_SEC ? echoWord : ''),
   });
   setLoomBook(loomBook.draw);
-  const spiralFx = createLoomSpiralFx({ reducedMotion, log: bridge.log });
+  const spiralFx = createLoomSpiralFx({ reducedMotion, log: bridge.log, lite });
   // THE PHONE'S LAYERS (2026-09-10, phone testing: "we still lag a lot on the fullscreen effects
   // on iphone. the glitch bubble fullscreen in particular and the spiral"). Every sustained hold is
   // a fullscreen DOM layer over the WebGL glass, composited at device resolution (3x on an iPhone).
@@ -301,10 +310,12 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // is the one thing the phone does not get.
   const touchTier = isTouchTier();
   const TOUCH_CAP = { spiral: 0.78, pink: 0.7, braindrain: 0.86, gifwash: 0.85 };
-  const holdCap = (kind) => (kind === 'pink' && root.dataset.tint === '2' ? 0.92 : (TOUCH_CAP[kind] || 1));
+  // under lighter the spiral's opaque canvas is composited flat (no screen blend), so its cap is lower or it reads as a dimmer
+  const LITE_SPIRAL_CAP = 0.6;
+  const holdCap = (kind) => (kind === 'pink' && root.dataset.tint === '2' ? 0.92 : kind === 'spiral' && lite ? LITE_SPIRAL_CAP : (TOUCH_CAP[kind] || 1));
   const payloadFx = createPayloadFx({ hud: sfHud, fx: fxProxy, media,
     subliminalFx: subl ? ({ text }) => subl.show({ text }) : null, spiralFx,
-    opacityCap: touchTier ? holdCap : null });
+    opacityCap: touchTier || lite ? holdCap : null });
   // Q.leanSpirals (mobile): the GIF FLOOR under a live spiral (and the wash's own fallback) draws
   // from the two lightest bundled gifs, fetched while the intro plays (warmFx) rather than 2-5 MB
   // mid-lap. With WebGL up nothing here is ever fetched at all; this is what a lost context lands on.
@@ -320,7 +331,8 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
   // shudder exactly the way `prefers-reduced-motion` does for a player who never opened the menu.
   if (reducedMotion) root.dataset.rm = '1'; else root.removeAttribute('data-rm');
   // the tier, for the same reason: race.css lightens the payload layers under `[data-touch="1"]`
-  if (touchTier) root.dataset.touch = '1'; else root.removeAttribute('data-touch');
+  if (touchTier || lite) root.dataset.touch = '1'; else root.removeAttribute('data-touch');
+  if (lite) root.dataset.lite = '1'; else root.removeAttribute('data-lite');
   const input = createInput({ root });   // root: the touch layer, on a phone, is built inside its .race-hud
   const audio = createRaceAudio({ bridge, hud, settings, input });
   const speedFx = createSpeedFx({ scene, camera, root, reducedMotion });
@@ -384,7 +396,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       if (!r || S.jackpotBias === 1) return r;
       return { ...r, bubbleBias: { ...r.bubbleBias, golden: (r.bubbleBias.golden == null ? 1 : r.bubbleBias.golden) * S.jackpotBias } };
     };
-    const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture });
+    const field = createBubbleField({ scene, layout, media, getIntensity: () => S.intensity, getRoom, getElapsed: () => S.elapsed, onTexture: pixel.filterTexture, cap: lite ? LITE_BUBBLE_CAP : 0 });
     const pickups = createPickups({ rng, spots: layout.chunks.flatMap((c) => c.features || []).filter((f) => f.type === 'pickup'), totalDepth: layout.totalDepth });
     // the word flash rolls off its OWN seeded stream, for the same reason the DOM posters do: a draw
     // that depends on what the player popped must never shift the rolls the ROAD is built from.
@@ -1197,7 +1209,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       frameMs: st.frameMs || 0, programs: info.programs ? info.programs.length : -1,
       geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
       audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
-      dprCap: st.dprCap == null ? null : st.dprCap, touch: !!st.touch,   // the governor's lid and its ladder (race/pixel.js)
+      dprCap: st.dprCap == null ? null : st.dprCap, touch: !!st.touch, lite,   // the governor's lid and its ladder (race/pixel.js), and the lighter switch
       world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
       // the pace envelope and what the kart actually did with it (race/pace.js, race/smoke/pace-check.mjs)
       speed: W ? W.kart.state.speed : 0, boosting: W ? W.kart.state.boostSec > 0 : false, pace: S.pace ? { ...S.pace } : null,
