@@ -221,6 +221,11 @@ function main() {
     board.room = m.createRoom({ view, bus, env: () => board.env });
     feelLate.push((dt) => board.room.update(dt));
   }).catch((e) => console.warn('[pbp] room missing', e));
+  // The air in it: motes drifting round the board, scenery only.
+  import('./board/motes.js').then((m) => {
+    board.motes = m.createMotes({ scene: view.scene });
+    feelLate.push((dt) => board.motes.update(dt, view.camera, view.renderer));
+  }).catch((e) => console.warn('[pbp] motes missing', e));
   // --- end T ---
   // Esc closes the board - but never mid-drag, where it is "put the piece back".
   window.addEventListener('keydown', (e) => {

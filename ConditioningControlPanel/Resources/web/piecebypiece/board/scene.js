@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { createCameraRig } from './camera.js';
+import { fovForAspect } from './frame.js';
 
 export const SQUARE = 1.0;
 export const FILES = 'abcdefgh';
@@ -225,6 +226,7 @@ export function createScene({ canvas }) {
     const h = canvas.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h);
+    camera.fov = fovForAspect(camera.aspect);   // opens up on a phone held upright
     camera.updateProjectionMatrix();
   }
   window.addEventListener('resize', resize);

@@ -12,6 +12,7 @@
  * ==========================================================================*/
 
 import { ROOM as T, domeColorAt, yawFor, glowTargets, createTweens, easeOutCubic } from '../board/roomMath.js';
+import { FRAME, fovForAspect, fitScaleFor } from '../board/frame.js';
 
 let passed = 0;
 function ok(cond, what) {
@@ -96,6 +97,29 @@ ok(T.glowHit > T.glowRest && T.glowRest > T.glowOver && T.glowOver > T.glowOff, 
   tw.to(yaw, 'value', 0, T.leanMs);
   tw.settle();
   ok(yaw.value === 0 && tw.count() === 0, 'settle jumps to the end');
+}
+
+// --- the frame: the whole board on any screen --------------------------------
+{
+  const wide = 1280 / 860;
+  ok(fovForAspect(wide) === FRAME.fovMin, 'the wide window keeps the 40 degree lens');
+  ok(fitScaleFor(wide, fovForAspect(wide)) === 1, 'and its presets stand where they always did');
+  const phone = 390 / 844;
+  const fov = fovForAspect(phone);
+  ok(fov === FRAME.fovMax, 'a phone held upright opens the lens to the cap');
+  const fit = fitScaleFor(phone, fov);
+  ok(fit > 1.5 && fit < 2.5, 'and stands the presets well back (' + fit.toFixed(2) + 'x)');
+  const half = Math.atan(Math.tan((fov * Math.PI) / 360) * phone);
+  ok(FRAME.base * fit * Math.tan(half) >= FRAME.reach * FRAME.margin - 1e-9, 'the a and h files are both inside the picture');
+  const square = fovForAspect(1);
+  ok(square > FRAME.fovMin && square < FRAME.fovMax, 'a square window sits between the two');
+  let prevFit = fitScaleFor(0.4, fovForAspect(0.4));
+  for (let a = 0.45; a <= 2.2; a += 0.05) {
+    const f = fitScaleFor(a, fovForAspect(a));
+    ok(f <= prevFit + 1e-9, 'a wider window never stands further back at ' + a.toFixed(2));
+    prevFit = f;
+  }
+  ok(fitScaleFor(NaN, NaN) >= 1 && Number.isFinite(fovForAspect(undefined)), 'garbage in, a sane lens out');
 }
 
 console.log('room smoke: ' + passed + ' checks passed');

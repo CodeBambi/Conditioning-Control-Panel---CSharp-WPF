@@ -11,6 +11,8 @@
  *                                        window.PBP.ramp.debug() into the log
  *                       [--after <ms>]   how long to let the page run on after
  *                                        that expression (default 1200)
+ *                       [--size W,H]     the window, default 1280,860; a phone
+ *                                        held upright is about 390,844
  *
  * Needs a static server on the web root, for example:
  *   python -m http.server 8821   (run from Resources/web)
@@ -38,13 +40,14 @@ const drag = arg('drag', '');
 const hold = arg('hold', '');
 const evalExpr = arg('eval', '');
 const afterMs = Number(arg('after', '1200'));
+const size = arg('size', '1280,860');
 
 const profile = join(tmpdir(), 'pbp-edge-' + Date.now());
 const edge = spawn(EDGE, [
   '--headless=new',
   '--remote-debugging-port=' + port,
   '--user-data-dir=' + profile,
-  '--window-size=1280,860',
+  '--window-size=' + size,
   '--hide-scrollbars',
   '--no-first-run',
   '--no-default-browser-check',
