@@ -21,6 +21,25 @@ namespace ConditioningControlPanel.Services.Startup
     }
 
     /// <summary>
+    /// Where a surface goes right now.
+    ///
+    /// <para><b>Present</b> opens it. <b>Inbox</b> parks it as a row the user opens when they feel
+    /// like it. <b>Defer</b> is the third answer, and it exists because the second one was being
+    /// given far too often: the ladder counts as quiet from the instant a modal is QUEUED, and on
+    /// an ordinary launch the ladder is briefly non-empty while its predicates resolve even when
+    /// every one of them says no. A card that arrived in that gap was filed away unread on a
+    /// launch where nothing modal ever appeared. Deferred means "ask me again once the ladder is
+    /// drained": if quiet has really ended by then it opens, and if a modal did run it becomes a
+    /// row after all.</para>
+    /// </summary>
+    public enum StartupRouting
+    {
+        Present,
+        Inbox,
+        Defer,
+    }
+
+    /// <summary>
     /// Everything the quiet-window rule reads, in one struct so the rule itself is a pure
     /// function of its inputs and can be tested without a Dispatcher, an App, or a clock.
     /// </summary>
@@ -28,6 +47,18 @@ namespace ConditioningControlPanel.Services.Startup
     {
         /// <summary>A ladder surface is on screen right now.</summary>
         public bool ModalUp { get; init; }
+
+        /// <summary>
+        /// The ladder has something queued or a pump in flight, but nothing is on screen yet.
+        ///
+        /// <para>Kept apart from <see cref="ModalUp"/> even though both make it quiet, because the
+        /// two deserve different answers: a modal really on screen means a passive surface has to
+        /// wait for the user, while a merely busy ladder is usually the few hundred milliseconds in
+        /// which the ladder's own predicates are still deciding, and is worth re-asking about
+        /// rather than filing away. See <see cref="Route"/>.
+        /// </para>
+        /// </summary>
+        public bool LadderBusy { get; init; }
 
         /// <summary>The guided tour / spotlight overlay is running.</summary>
         public bool TutorialActive { get; init; }
@@ -124,10 +155,23 @@ namespace ConditioningControlPanel.Services.Startup
             return next;
         }
 
-        /// <summary>Drops a queued surface without running it. Returns false when it was not queued.</summary>
+        /// <summary>
+        /// Drops a queued surface without running it. Returns false when it was not queued.
+        ///
+        /// <para>This is also how the presenter CONSUMES a turn: it peeks with <see cref="Next"/>,
+        /// waits for the screen, and then takes that exact key rather than re-asking who is best.
+        /// A higher-priority surface arriving mid-wait must not inherit the waiter's give-up
+        /// verdict - it gets its own turn, and its own five minutes, on the next lap.</para>
+        ///
+        /// <para>Both stores are swept whatever the other one says. They cannot disagree through
+        /// the public API, but the pump loops on <see cref="Next"/> until this returns the key it
+        /// asked for, so a list entry surviving a set-only removal would spin forever.</para>
+        /// </summary>
         public bool Remove(string key)
         {
-            if (string.IsNullOrWhiteSpace(key) || !_keys.Remove(key)) return false;
+            if (string.IsNullOrWhiteSpace(key)) return false;
+
+            bool wasQueued = _keys.Remove(key);
             for (int i = 0; i < _pending.Count; i++)
             {
                 if (string.Equals(_pending[i].Key, key, StringComparison.OrdinalIgnoreCase))
@@ -136,7 +180,7 @@ namespace ConditioningControlPanel.Services.Startup
                     return true;
                 }
             }
-            return true;
+            return wasQueued;
         }
 
         /// <summary>Everything queued, in the order it will run. Snapshot; for tests and logging.</summary>
@@ -170,6 +214,7 @@ namespace ConditioningControlPanel.Services.Startup
         public static bool IsQuiet(in QuietInputs w)
         {
             if (w.ModalUp) return true;
+            if (w.LadderBusy) return true;
             if (w.TutorialActive) return true;
             if (w.SessionRunning) return true;
             if (w.FirstLaunchUntilUtc is DateTime until && w.NowUtc < until) return true;
@@ -183,7 +228,37 @@ namespace ConditioningControlPanel.Services.Startup
         /// ordered against every other modal, and the ladder is what keeps it from stacking.</para>
         /// </summary>
         public static bool ShouldInbox(StartupSurfaceKind kind, in QuietInputs w)
-            => kind == StartupSurfaceKind.Passive && IsQuiet(w);
+            => Route(kind, w) == StartupRouting.Inbox;
+
+        /// <summary>
+        /// The whole routing rule for one surface: open it, file it, or ask again later.
+        ///
+        /// <para>Modals never route anywhere but Present - the ladder, not this rule, is what
+        /// keeps them from stacking, and a modal that quietly became a row nobody clicked is a
+        /// modal that never ran.</para>
+        ///
+        /// <para>For a passive surface, the reason it is quiet decides the answer. A real modal on
+        /// screen, a tour, a session, or the first-launch grace window are all somebody ELSE owning
+        /// the user, and the honest response is a row they can come back to. A merely busy ladder
+        /// is not: on every ordinary launch the ladder holds queued entries for a second or two
+        /// while What's New, the recap and the picker each decide they have nothing to do, and the
+        /// dashboard's feature card or a fast announcement landing in that window was being filed
+        /// away unread on launches where no modal ever appeared. Those DEFER, and the presenter
+        /// asks again when the ladder drains.</para>
+        /// </summary>
+        public static StartupRouting Route(StartupSurfaceKind kind, in QuietInputs w)
+        {
+            if (kind != StartupSurfaceKind.Passive) return StartupRouting.Present;
+            if (!IsQuiet(w)) return StartupRouting.Present;
+
+            bool somebodyElseOwnsTheUser =
+                w.ModalUp ||
+                w.TutorialActive ||
+                w.SessionRunning ||
+                (w.FirstLaunchUntilUtc is DateTime until && w.NowUtc < until);
+
+            return somebodyElseOwnsTheUser ? StartupRouting.Inbox : StartupRouting.Defer;
+        }
 
         /// <summary>
         /// May the ladder start its next surface right now?

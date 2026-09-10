@@ -100,8 +100,17 @@ namespace ConditioningControlPanel
         internal static void ShowCelebrationIfFirstTime(Window? owner) =>
             ShowCore(CelebrationKey, owner, paced: false, doorKey: null);
 
-        /// <summary>Keys already handed to the startup presenter, so a tab that is shown twice
-        /// during startup posts one offer and not two.</summary>
+        /// <summary>
+        /// Keys currently in the presenter's hands, so a tab that is shown twice during startup
+        /// posts one offer and not two.
+        ///
+        /// <para>IN THE PRESENTER'S HANDS, not "ever offered": the key comes back out the moment
+        /// the offer is resolved either way - opened, or dismissed from the Inbox row. It is a
+        /// duplicate-post guard, and the thing that decides whether a card is owed at all is the
+        /// persistent SeenFeatureIntros list. Leaving a key latched here after its row was waved
+        /// away used to mean the card could never be offered again for the life of the process,
+        /// even though ShowCore had never spent its seen-flag and the card was still owed.</para>
+        /// </summary>
         private static readonly HashSet<string> _settling = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
@@ -132,7 +141,10 @@ namespace ConditioningControlPanel
                 var presenter = App.Startup;
                 if (presenter == null)
                 {
-                    ShowCore(key, owner, paced: true, doorKey: doorKey);
+                    // No ladder to settle behind: the offer is resolved here and now, so the guard
+                    // comes straight back off.
+                    try { ShowCore(key, owner, paced: true, doorKey: doorKey); }
+                    finally { _settling.Remove(key); }
                     return;
                 }
 
@@ -146,7 +158,17 @@ namespace ConditioningControlPanel
                     Glyph = string.IsNullOrEmpty(content.Glyph) ? "✨" : content.Glyph,
                     Title = string.IsNullOrEmpty(content.RailTitle) ? content.Title : content.RailTitle,
                     Summary = content.Tagline,
-                    Open = () => ShowCore(key, owner, paced: !quiet, doorKey: quiet ? null : doorKey),
+
+                    // Both endings release the guard. Opening it resolves the offer (and, if the
+                    // card really opened, SeenFeatureIntros is what stops it coming back); waving
+                    // the row away resolves it too, and that one is a card the user has NOT seen,
+                    // so a later visit to the tab is entitled to offer it again.
+                    Open = () =>
+                    {
+                        try { ShowCore(key, owner, paced: !quiet, doorKey: quiet ? null : doorKey); }
+                        finally { _settling.Remove(key); }
+                    },
+                    Dismiss = () => _settling.Remove(key),
                 });
             }
             catch (Exception ex)

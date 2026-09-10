@@ -54,6 +54,10 @@ namespace ConditioningControlPanel.Services.Startup
         private readonly Dictionary<string, (Action<Window?> Show, Action? Abandoned)> _shows =
             new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Passive surfaces waiting for the ladder to finish deciding. See
+        /// <see cref="PresentOrInbox"/> and <see cref="FlushDeferred"/>.</summary>
+        private readonly List<InboxItem> _deferred = new();
+
         private bool _pumpRunning;
         private bool _modalUp;
         private bool _lastQuiet;
@@ -158,8 +162,16 @@ namespace ConditioningControlPanel.Services.Startup
         // ------------------------------------------------------------------ inbox
 
         /// <summary>
-        /// Opens <paramref name="item"/> now if nothing is quiet, otherwise parks it as an Inbox
-        /// row. Safe from any thread.
+        /// Opens <paramref name="item"/> now if nothing is quiet, parks it as an Inbox row while
+        /// somebody else owns the user, and HOLDS it while the only thing in the way is a ladder
+        /// that has not finished deciding. Safe from any thread.
+        ///
+        /// <para>The held case is the common one and it used to be the filed one: the ladder counts
+        /// as quiet from the instant a modal is queued, so on every ordinary launch the surfaces
+        /// that resolve in the first second or three (the dashboard's feature card, a fast server
+        /// announcement) were becoming Inbox rows behind a ladder whose entries all turned out to
+        /// have nothing to show. Held items are re-asked in <see cref="FlushDeferred"/> when the
+        /// ladder drains, and take whichever of the other two answers is true by then.</para>
         /// </summary>
         public void PresentOrInbox(InboxItem item)
         {
@@ -171,7 +183,9 @@ namespace ConditioningControlPanel.Services.Startup
                 return;
             }
 
-            if (!StartupQueueCore.ShouldInbox(StartupSurfaceKind.Passive, ReadWorld()))
+            var routing = StartupQueueCore.Route(StartupSurfaceKind.Passive, ReadWorld());
+
+            if (routing == StartupRouting.Present)
             {
                 App.Logger?.Debug("[Startup] '{Key}' presented immediately - nothing is quiet", item.Key);
                 RunSafely(item.Open, item.Key, "open");
@@ -185,6 +199,22 @@ namespace ConditioningControlPanel.Services.Startup
                     App.Logger?.Debug("[Startup] '{Key}' is already in the Inbox - not posting it twice", item.Key);
                     return;
                 }
+            }
+
+            foreach (var held in _deferred)
+            {
+                if (string.Equals(held.Key, item.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    App.Logger?.Debug("[Startup] '{Key}' is already held for the drain - not holding it twice", item.Key);
+                    return;
+                }
+            }
+
+            if (routing == StartupRouting.Defer)
+            {
+                _deferred.Add(item);
+                App.Logger?.Debug("[Startup] '{Key}' held until the ladder drains ({Count} held)", item.Key, _deferred.Count);
+                return;
             }
 
             Inbox.Insert(0, item);
@@ -249,12 +279,15 @@ namespace ConditioningControlPanel.Services.Startup
 
         private QuietInputs ReadWorld() => new()
         {
-            // "A modal is up" for the purposes of QUIET means the whole ladder, not just the
-            // surface currently on screen. The gap between two queued modals is a fraction of a
-            // second in which nothing is showing, and letting a card or a ceremony fire into it
-            // would be the pile-up all over again, one frame narrower. IsModalUp stays literal
-            // for callers that really do mean "is something on screen right now".
-            ModalUp = _modalUp || !IsLadderIdle,
+            // Both of these make it quiet, and they are reported separately on purpose. The gap
+            // between two queued modals is a fraction of a second in which nothing is showing, and
+            // letting a card or a ceremony fire into it would be the pile-up all over again, one
+            // frame narrower - but it is ALSO not a reason to file that card away unread, which is
+            // what a single conflated flag made it. StartupQueueCore.Route reads them apart:
+            // a real modal inboxes, a merely busy ladder defers. IsModalUp stays literal for
+            // callers that really do mean "is something on screen right now".
+            ModalUp = _modalUp,
+            LadderBusy = !IsLadderIdle,
             TutorialActive = SafeTutorialActive(),
             SessionRunning = SafeSessionRunning(),
             FirstLaunchUntilUtc = _firstLaunchUntilUtc,
@@ -311,6 +344,15 @@ namespace ConditioningControlPanel.Services.Startup
                     var next = _core.Next();
                     if (next == null) break;
 
+                    // THE key this lap belongs to, carried through the wait. It used to re-read
+                    // the queue afterwards, which quietly handed the give-up verdict to the wrong
+                    // surface: a higher-priority modal arriving during the five minutes we spent
+                    // waiting for an update dialog became "best" by the time we looked again, and
+                    // was abandoned - onAbandoned and all, so a first-run wizard queued mid-wait
+                    // could hand the first run back without ever having had a turn of its own.
+                    // Each surface gets its own lap and its own five minutes.
+                    var key = next.Value.Key;
+
                     await Task.Delay(SettleDelay);
 
                     var waited = TimeSpan.Zero;
@@ -321,24 +363,28 @@ namespace ConditioningControlPanel.Services.Startup
                         waited += PollInterval;
                     }
 
-                    // The queue can have changed while we waited (a higher-priority surface can
-                    // arrive mid-wait), so re-read rather than trusting the peek from before.
-                    var entry = _core.Dequeue();
-                    if (entry == null) break;
+                    // Take that exact key. False means somebody dropped it while we waited, which
+                    // is a legitimate cancel - drop its show with it and start the next lap.
+                    if (!_core.Remove(key))
+                    {
+                        App.Logger?.Debug("[Startup] '{Key}' left the ladder while it waited for the screen", key);
+                        _shows.Remove(key);
+                        continue;
+                    }
 
-                    if (!_shows.TryGetValue(entry.Value.Key, out var surface)) continue;
-                    _shows.Remove(entry.Value.Key);
+                    if (!_shows.TryGetValue(key, out var surface)) continue;
+                    _shows.Remove(key);
 
                     if (!StartupQueueCore.CanStartModal(false, SafeUpdateDialogActive(), SafeTutorialActive(), SafeWindowReady()))
                     {
                         App.Logger?.Information(
                             "[Startup] gave up on '{Key}' after {Seconds:0}s - the screen never came free; it is owed the next launch",
-                            entry.Value.Key, waited.TotalSeconds);
-                        if (surface.Abandoned != null) RunSafely(surface.Abandoned, entry.Value.Key, "abandon");
+                            key, waited.TotalSeconds);
+                        if (surface.Abandoned != null) RunSafely(surface.Abandoned, key, "abandon");
                         continue;
                     }
 
-                    RunModal(entry.Value.Key, surface.Show);
+                    RunModal(key, surface.Show);
                 }
             }
             catch (Exception ex)
@@ -359,8 +405,33 @@ namespace ConditioningControlPanel.Services.Startup
             }
 
             App.Logger?.Information("[Startup] the ladder is drained");
+
+            // Before anything else hears about it: the surfaces that were only waiting on the
+            // ladder get their real answer now, while the ladder is provably idle.
+            FlushDeferred();
+
             try { Drained?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug(ex, "[Startup] a Drained handler threw"); }
+        }
+
+        /// <summary>
+        /// Re-asks every held passive surface now that the ladder is idle. Each one takes the
+        /// answer that is true at this moment: presented when nothing is quiet any more, and filed
+        /// as an Inbox row when a tour, a session or the first-launch window is still on.
+        ///
+        /// <para>The list is emptied BEFORE the re-ask, because <see cref="PresentOrInbox"/> can
+        /// legitimately put an item straight back into it - a Drained-time enqueue makes the ladder
+        /// busy again - and re-holding into a list we are iterating would either be lost or loop.</para>
+        /// </summary>
+        private void FlushDeferred()
+        {
+            if (_deferred.Count == 0) return;
+
+            var held = _deferred.ToArray();
+            _deferred.Clear();
+            App.Logger?.Information("[Startup] the ladder is idle - re-asking {Count} held surface(s)", held.Length);
+
+            foreach (var item in held) PresentOrInbox(item);
         }
 
         /// <summary>

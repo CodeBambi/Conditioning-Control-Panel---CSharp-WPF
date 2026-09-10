@@ -173,6 +173,50 @@ public class StartupQueueCoreTests
         Assert.Equal("mod-picker", q.Dequeue()!.Value.Key);
     }
 
+    [Fact]
+    public void RemoveByKeyTakesThatSurfaceAndNotTheBestOne()
+    {
+        // How the pump consumes a turn. It peeks with Next(), waits up to five minutes for the
+        // screen, and then takes THE KEY IT PEEKED. It used to call Dequeue() instead, which asks
+        // "who is best now" - so a higher-priority surface arriving during that wait was handed the
+        // waiter's verdict: on a timeout it got the give-up branch, onAbandoned and all, without
+        // ever having had a turn or a wait of its own. For the first-run wizard (priority 20)
+        // arriving behind a mod picker, that meant handing the first run back unshown.
+        var q = new StartupQueueCore();
+        q.Enqueue("mod-picker", 50);
+
+        var peeked = q.Next()!.Value.Key;
+        Assert.Equal("mod-picker", peeked);
+
+        // ...the wizard cuts in while the pump is waiting.
+        q.Enqueue("first-run-wizard", 20);
+        Assert.Equal("first-run-wizard", q.Next()!.Value.Key);
+
+        // The lap that was already under way still resolves its own key.
+        Assert.True(q.Remove(peeked));
+        // And the wizard is intact, waiting for a lap of its own.
+        Assert.Equal("first-run-wizard", q.Next()!.Value.Key);
+        Assert.Equal(1, q.Count);
+    }
+
+    [Fact]
+    public void RemovingTheSameKeyTwiceIsRefusedAndLeavesNothingBehind()
+    {
+        // The pump loops on Next() until Remove() says it took the key, so an entry that survived
+        // a removal would spin the ladder forever. Both stores are swept whatever the other says.
+        var q = new StartupQueueCore();
+        q.Enqueue("whats-new", 30);
+
+        Assert.True(q.Remove("whats-new"));
+        Assert.False(q.Remove("whats-new"));
+        Assert.Null(q.Next());
+        Assert.True(q.IsEmpty);
+        Assert.Equal(0, q.Count);
+
+        // ...and the key is free to be offered again, which is what a re-enqueue after a cancel is.
+        Assert.True(q.Enqueue("whats-new", 30));
+    }
+
     // ---------------------------------------------------------------- quiet window
 
     [Fact]
@@ -242,6 +286,68 @@ public class StartupQueueCoreTests
         Assert.False(StartupQueueCore.ShouldInbox(StartupSurfaceKind.Modal, Calm() with { ModalUp = true }));
         Assert.False(StartupQueueCore.ShouldInbox(StartupSurfaceKind.Modal, Calm(T0.AddMinutes(10), T0)));
     }
+
+    [Fact]
+    public void ABusyLadderIsQuietButOnlyDefers()
+    {
+        // The risk this closes. The presenter reports "a modal is on screen" and "the ladder has
+        // something queued" separately, and both make it quiet - but they are not the same news.
+        // On EVERY ordinary launch the ladder holds entries for a second or three while What's New,
+        // the season recap and the mod picker each decide they have nothing to show, and the
+        // surfaces that resolve inside that window (the dashboard's feature card, a fast server
+        // announcement) were being filed away as unread Inbox rows on a launch where no modal ever
+        // appeared. Deferred means "ask me again when the ladder drains".
+        var busyLadder = Calm() with { LadderBusy = true };
+
+        Assert.True(StartupQueueCore.IsQuiet(busyLadder));
+        Assert.Equal(StartupRouting.Defer, StartupQueueCore.Route(StartupSurfaceKind.Passive, busyLadder));
+        Assert.False(StartupQueueCore.ShouldInbox(StartupSurfaceKind.Passive, busyLadder));
+    }
+
+    [Fact]
+    public void SomebodyElseOwningTheUserStillInboxes()
+    {
+        // The other four reasons are all "somebody has the user right now", and none of them is
+        // over in a second, so a row they can come back to is the right answer. A busy ladder
+        // alongside any of them changes nothing.
+        foreach (var world in new[]
+                 {
+                     Calm() with { ModalUp = true, LadderBusy = true },
+                     Calm() with { TutorialActive = true },
+                     Calm() with { SessionRunning = true },
+                     Calm(T0.AddMinutes(10), T0),
+                     Calm(T0.AddMinutes(10), T0) with { LadderBusy = true },
+                 })
+        {
+            Assert.Equal(StartupRouting.Inbox, StartupQueueCore.Route(StartupSurfaceKind.Passive, world));
+        }
+    }
+
+    [Fact]
+    public void ADrainedLadderPresentsWhatItWasHolding()
+    {
+        // What the presenter re-asks with when the pump reaches the end: same item, quiet gone,
+        // and the answer flips from Defer to Present. This is the whole point of deferring.
+        var duringTheLadder = Calm() with { LadderBusy = true };
+        var afterTheLadder = Calm();
+
+        Assert.Equal(StartupRouting.Defer, StartupQueueCore.Route(StartupSurfaceKind.Passive, duringTheLadder));
+        Assert.Equal(StartupRouting.Present, StartupQueueCore.Route(StartupSurfaceKind.Passive, afterTheLadder));
+    }
+
+    [Fact]
+    public void ADeferredItemStillInboxesIfTheDrainLandsInsideTheQuietWindow()
+    {
+        // The first-launch case: the ladder drains (the wizard is done) but the ten-minute grace
+        // window it opened is still on, so the re-ask files the row exactly as before.
+        var afterTheWizard = Calm(T0.AddMinutes(10), T0.AddMinutes(1));
+        Assert.Equal(StartupRouting.Inbox, StartupQueueCore.Route(StartupSurfaceKind.Passive, afterTheWizard));
+    }
+
+    [Fact]
+    public void AModalIsNeverDeferredEither()
+        => Assert.Equal(StartupRouting.Present,
+            StartupQueueCore.Route(StartupSurfaceKind.Modal, Calm() with { LadderBusy = true }));
 
     [Fact]
     public void TheAnnouncementParksOnAFirstLaunchAndPopsOnEveryOtherOne()
