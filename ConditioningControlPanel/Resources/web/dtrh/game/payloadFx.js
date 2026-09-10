@@ -58,8 +58,19 @@ const MAX_CASCADE = 14;
  * With nothing passed the file draws the exact gif backgrounds it always has, so
  * dtrh.html is untouched - and even with it, a `false` from mount() falls straight
  * back onto the gif, so the screen can never go bare.
+ *
+ * `opacityCap` is the THIRD seam (2026-09-10, phone testing: "we still lag a lot on the fullscreen
+ * effects on iphone"). Racing Thoughts caps its sustained holds (spiral 0.78, pink 0.7, drain 0.86,
+ * wash 0.85) so the road stays readable, and it did that in race.css with `filter: opacity()`,
+ * because the intensity is set INLINE here and a stylesheet cannot multiply an inline opacity. On a
+ * phone that filter is the lag: a fullscreen layer with a `filter` is rendered through a filter
+ * pass at device resolution on every composited frame, and these layers change every frame (the
+ * live spiral canvas, the wash's shudder, the glitch's steps). So the cap moves to where the
+ * intensity is set: `opacityCap(kind)` -> 0..1 (or a `{kind: mul}` map), multiplied into every
+ * sustained hold's inline opacity in `holdOn` and `showMelt`. Default null = 1, the Descent's
+ * layers are untouched, and race.css can drop the filter on the tier that cannot afford it.
  */
-export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = null, spiralFx = null }) {
+export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = null, spiralFx = null, opacityCap = null }) {
   // Two layers: washes/bursts render BEHIND the bubble field (.cf-layer, z6) so
   // bubbles stay crisp and clickable on top of pink/spiral/glitch/braindrain;
   // the video card rides a FRONT layer above the bubbles (in front of the POV).
@@ -72,6 +83,13 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
 
   // sustained overlays: one persistent element per kind, opacity-toggled
   const holds = {};   // kind -> { el, hideTimer }
+  /** The caller's ceiling for a hold kind (see the header): 1 unless it says otherwise. */
+  function capFor(kind) {
+    let c = 1;
+    try { c = typeof opacityCap === 'function' ? opacityCap(kind) : (opacityCap ? opacityCap[kind] : 1); } catch (e) { c = 1; }
+    c = Number(c);
+    return Number.isFinite(c) && c > 0 && c <= 1 ? c : 1;
+  }
   const loops = new Set();   // active rAF loops (cascade / bouncer) for teardown
   const cascades = new Set(); // the gif-rain subset of loops (room arrival cuts these)
   let liveFlash = 0, liveCascade = 0;
@@ -172,7 +190,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
   function holdOn(kind, cls, opacity, durMs) {
     const h = ensureHold(kind, cls);
     if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
-    h.el.style.opacity = String(opacity);
+    h.el.style.opacity = String(opacity * capFor(kind));
     h.hideTimer = setTimeout(() => { if (!disposed) h.el.style.opacity = '0'; h.hideTimer = 0; }, durMs);
     return h;
   }
@@ -205,7 +223,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst, subliminalFx = nul
    */
   function showMelt(strength, durMult) {
     const dur = Math.round(scale(2000, 4000, strength) * clamp(durMult, 0.3, 3));
-    const peak = scaleD(0.30, 0.78, strength);
+    const peak = scaleD(0.30, 0.78, strength) * capFor('pink');
     const h = ensureHold('pink', 'sf-pfx-pink');
     if (h.hideTimer) { clearTimeout(h.hideTimer); h.hideTimer = 0; }
     const from = Math.max(0.06, parseFloat(h.el.style.opacity || '0') || 0);   // deepen what is there

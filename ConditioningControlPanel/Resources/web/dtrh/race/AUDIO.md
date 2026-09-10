@@ -32,6 +32,11 @@ per-frame edges (airborne, boost, drift, the Big Wheel span, the room).
 - Autoplay: the run starts on a key, so the context is unlocked; if `play()` still rejects
   (`?autostart=1`), the track retries on the next pointer/key. A missing file marks the track dead,
   re-rolls that room from what is left, and never throws.
+- The screen goes dark (2026-09-09, phone testing: "the audio seems to keep going while screen is
+  off"): audio.js watches `visibilitychange` itself. Hidden pauses the music element and suspends
+  the context (the bed's loops with it); visible resumes the context and plays the same element
+  back if it was the one playing, with the usual gesture retry if `play()` rejects. It covers the
+  menu theme too. The loaded file is run.js's: hidden brakes the run, which posts `track-pause`.
 
 ## The speed bed
 

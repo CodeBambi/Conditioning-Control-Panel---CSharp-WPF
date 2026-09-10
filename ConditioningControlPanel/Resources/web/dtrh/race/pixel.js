@@ -31,6 +31,12 @@
  * given, a line goes out every PERF_LOG_SEC seconds. THE GOVERNOR: on a
  * high-DPI screen an average frame above SLOW_MS drops the canvas to one
  * device pixel per CSS pixel, and one under FAST_MS restores the native ratio.
+ * On a COARSE POINTER (2026-09-10, the owner's phone: "fps drop a lot" under
+ * effects and bubbles) the ladder has one more rung, TOUCH_DPR_FLOOR, and it is
+ * read every GOV_TOUCH_SEC instead of every PERF_LOG_SEC: a phone's fill rate is
+ * the frame, and a hold that drops it needs an answer in two seconds, not five.
+ * It climbs back the same way, one rung at a time, when the average frame is
+ * under FAST_MS again.
  * ==========================================================================*/
 
 import * as THREE from 'three';
@@ -53,6 +59,19 @@ const FAR_FADE = [42, 80];     // metres: the world pass fades to the fog colour
 const PERF_LOG_SEC = 5;
 const FRAME_WIN = 300;         // frames kept for the avg / p95
 const SLOW_MS = 24, FAST_MS = 13;   // governor thresholds on the avg frame (about 42 and 77 fps)
+/** The coarse pointer's lower rung and its faster read (see THE GOVERNOR in the header). */
+export const TOUCH_DPR_FLOOR = 0.8, GOV_TOUCH_SEC = 2;
+/** `(pointer: coarse)` and nothing else, the way pixelDefault reads it - `?coarse=` forces it for a check. */
+export function coarsePointer(win) {
+  const w = win || (typeof window !== 'undefined' ? window : null);
+  if (!w) return false;
+  try {
+    const q = new URLSearchParams(w.location.search).get('coarse');
+    if (q === '1' || q === 'on') return true;
+    if (q === '0' || q === 'off') return false;
+  } catch (e) { /* no location */ }
+  try { return typeof w.matchMedia === 'function' && !!w.matchMedia('(pointer: coarse)').matches; } catch (e) { return false; }
+}
 
 /**
  * THE DEFAULT BLOCK, which is not one number any more. On glass the big pixels cost the most and
@@ -117,7 +136,8 @@ const BLIT_FRAG = `
 export function createPixelizer({ renderer, canvas, block = pixelDefault(), log = null }) {
   let cur = normalizeBlock(block);
   let w = 1, h = 1;
-  let dprCap = Infinity;         // the governor's lid on the device pixel ratio (1 while slow)
+  let dprCap = Infinity;         // the governor's lid on the device pixel ratio (1 while slow, the touch floor while slower)
+  const touch = coarsePointer();
   const screenDpr = () => Math.min(window.devicePixelRatio || 1, Q.maxDpr, 1.5);
   const nativeDpr = () => Math.min(screenDpr(), dprCap);
   const caps = renderer.capabilities || {};
@@ -173,7 +193,7 @@ export function createPixelizer({ renderer, canvas, block = pixelDefault(), log 
   }
 
   // ---- the frame ---------------------------------------------------------------------------
-  const stats = { calls: 0, triangles: 0, passes: 0, frameMs: 0, frameP95: 0 };
+  const stats = { calls: 0, triangles: 0, passes: 0, frameMs: 0, frameP95: 0, dprCap: Infinity, touch };
   let fCalls = 0, fTris = 0, fPasses = 0, perfLast = 0;
   const info = renderer.info;
   function tally() { if (!info || !info.render) return; fCalls += info.render.calls; fTris += info.render.triangles; fPasses++; }
@@ -192,18 +212,25 @@ export function createPixelizer({ renderer, canvas, block = pixelDefault(), log 
     if (gapN < 60) return;
     const native = screenDpr();
     if (avg > SLOW_MS && dprCap > 1 && native > 1) { dprCap = 1; apply(); if (log) log(`[race-perf] governor: dpr 1 (avg frame ${avg.toFixed(1)} ms)`); }
+    else if (avg > SLOW_MS && touch && dprCap > TOUCH_DPR_FLOOR) { dprCap = TOUCH_DPR_FLOOR; apply(); if (log) log(`[race-perf] governor: dpr ${TOUCH_DPR_FLOOR} (avg frame ${avg.toFixed(1)} ms)`); }
+    else if (avg < FAST_MS && dprCap < 1) { dprCap = 1; apply(); if (log) log(`[race-perf] governor: dpr 1, climbing (avg frame ${avg.toFixed(1)} ms)`); }
     else if (avg < FAST_MS && dprCap < native) { dprCap = Infinity; apply(); if (log) log(`[race-perf] governor: dpr native (avg frame ${avg.toFixed(1)} ms)`); }
   }
+  let govLast = 0;
   function closeFrame() {
-    stats.calls = fCalls; stats.triangles = fTris; stats.passes = fPasses;
+    stats.calls = fCalls; stats.triangles = fTris; stats.passes = fPasses; stats.dprCap = dprCap;
     fCalls = fTris = fPasses = 0;
     const nowMs = performance.now();
     if (lastFrameAt) { const g = nowMs - lastFrameAt; if (g < 250) { gaps[gapI] = g; gapI = (gapI + 1) % FRAME_WIN; if (gapN < FRAME_WIN) gapN++; } }
     lastFrameAt = nowMs;
     const now = nowMs / 1000;
     if (!perfLast) perfLast = now;
+    if (touch && now - govLast >= GOV_TOUCH_SEC && now - perfLast < PERF_LOG_SEC) {
+      govLast = now;                       // the phone's faster read, between the log lines
+      govern(frameStats().avg);
+    }
     if (now - perfLast < PERF_LOG_SEC) return;
-    perfLast = now;
+    perfLast = govLast = now;
     const { avg, p95 } = frameStats();
     stats.frameMs = avg; stats.frameP95 = p95;
     govern(avg);
