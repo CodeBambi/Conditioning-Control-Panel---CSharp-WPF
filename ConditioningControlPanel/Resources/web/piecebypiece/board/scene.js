@@ -91,21 +91,22 @@ export function createScene({ canvas }) {
     }
   }
 
-  /** Tint squares for legal-move hints. `list` is [{square, color, glow}]. */
-  const tinted = new Set();
+  /**
+   * Legal-move hints. `list` is [{square, kind, hover}]; the hints themselves
+   * are objects standing on the board, drawn by board/markers.js, because an
+   * emissive tint on a pink or cream square cannot be seen. drag.js owns the
+   * markers and installs them here, so a caller holding only the view (the
+   * effects layer, through board.setHighlights) still lights squares up.
+   */
+  let markerSink = null;
+  let waiting = null;
   function setHighlights(list = []) {
-    for (const name of tinted) {
-      const m = squares.get(name);
-      if (m) m.material.emissive.setHex(0x000000);
-    }
-    tinted.clear();
-    for (const hit of list) {
-      const m = squares.get(hit.square);
-      if (!m) continue;
-      m.material.emissive.setHex(hit.color ?? 0xFF3FA4);
-      m.material.emissiveIntensity = hit.glow ?? 0.45;
-      tinted.add(hit.square);
-    }
+    if (markerSink) markerSink(list);
+    else waiting = list;          // asked before the markers existed; keep it
+  }
+  function setHighlightSink(fn) {
+    markerSink = fn || null;
+    if (markerSink && waiting) { markerSink(waiting); waiting = null; }
   }
 
   // --- camera rig -----------------------------------------------------------
@@ -181,7 +182,7 @@ export function createScene({ canvas }) {
   return {
     renderer, scene, camera, boardGroup, pieceGroup, squares,
     update, render, resize, dispose,
-    setSide, setHighlights, projectPoint, projectSquare,
+    setSide, setHighlights, setHighlightSink, projectPoint, projectSquare,
     setCameraSway(v) { sway = Math.max(0, Math.min(1, Number(v) || 0)); },
   };
 }

@@ -106,11 +106,17 @@ async function dragPiece(cdp, spec) {
   await cdp.send('Runtime.evaluate', { expression:
     `window.__ev = []; for (const t of ['grab','dragmove','drop','turn']) window.PBP.bus.on(t, (p) => window.__ev.push(t + (p && p.ok === false ? ':refused' : '')));` });
   const a = await at(fromSq, 0.45);
-  const b = await at(toSq, 0);
   const mouse = (type, x, y) => cdp.send('Input.dispatchMouseEvent', {
     type, x, y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, pointerType: 'mouse',
   });
   await mouse('mousePressed', a.x, a.y);
+  // The man now hangs under the cursor at the height he was grabbed at, so the
+  // release is aimed at that height over the target square, not at board level.
+  const held = await cdp.send('Runtime.evaluate', {
+    expression: 'window.PBP.board.drag && window.PBP.board.drag.holdHeight ? window.PBP.board.drag.holdHeight() : 0',
+    returnByValue: true,
+  });
+  const b = await at(toSq, Number(held.result.value) || 0);
   for (let i = 1; i <= 8; i++) {
     await mouse('mouseMoved', a.x + (b.x - a.x) * (i / 8), a.y + (b.y - a.y) * (i / 8));
     await sleep(40);
