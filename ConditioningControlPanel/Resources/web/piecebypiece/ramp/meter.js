@@ -47,7 +47,11 @@ export const RAMP_TUNING = Object.freeze({
 
   // --- the video card + the drag glitch ------------------------------------
   videoCard: Object.freeze({ minHoldSec: 4, maxHoldSec: 13, riseMs: 620, startJitter: 0.7 }),
-  glitchGrab: Object.freeze({ sizePx: 132, alpha: 0.85 }),
+  // The sticker is measured against the BOARD, not the window: squareShare of
+  // one square's on-screen width, clamped. A fixed pixel size was tuned in a
+  // board-free harness and came out taller than a real piece, which turned the
+  // sticker into a tile floating over the board.
+  glitchGrab: Object.freeze({ sizePx: 72, alpha: 0.85, squareShare: 0.62, minPx: 44, maxPx: 110 }),
 
   // --- what we hand back to the board (A's side, always guarded) -----------
   wobbleScale: 1.0,

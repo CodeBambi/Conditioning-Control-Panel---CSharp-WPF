@@ -5,6 +5,12 @@
  *   node smoke/shot.mjs [--url <page url>] [--out <png path>] [--wait <ms>]
  *                       [--drag e2:e4]   drag a man from one square to another
  *                       [--hold <png>]   also capture the moment mid-drag
+ *                       [--eval <js>]    run an expression once the page has
+ *                                        settled and print what it returns, so
+ *                                        a run can pin the ramp meter or dump
+ *                                        window.PBP.ramp.debug() into the log
+ *                       [--after <ms>]   how long to let the page run on after
+ *                                        that expression (default 1200)
  *
  * Needs a static server on the web root, for example:
  *   python -m http.server 8821   (run from Resources/web)
@@ -30,6 +36,8 @@ const waitMs = Number(arg('wait', '6000'));
 const port = Number(arg('port', '9222'));
 const drag = arg('drag', '');
 const hold = arg('hold', '');
+const evalExpr = arg('eval', '');
+const afterMs = Number(arg('after', '1200'));
 
 const profile = join(tmpdir(), 'pbp-edge-' + Date.now());
 const edge = spawn(EDGE, [
@@ -118,6 +126,8 @@ async function dragPiece(cdp, spec) {
   await sleep(700);
 }
 
+let failed = false;
+
 async function main() {
   const wsUrl = await target();
   const ws = new WebSocket(wsUrl);
@@ -132,6 +142,21 @@ async function main() {
   await cdp.send('Page.enable');
   await cdp.send('Page.navigate', { url });
   await sleep(waitMs);
+
+  // --eval: a hook for the effects layer. The page has no dev UI, so pinning
+  // the meter or reading the ramp's debug snapshot happens from here.
+  if (evalExpr) {
+    const r = await cdp.send('Runtime.evaluate', {
+      expression: evalExpr, returnByValue: true, awaitPromise: true,
+    });
+    if (r.exceptionDetails) {
+      console.log('ERROR eval: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text));
+      failed = true;
+    } else {
+      console.log('eval: ' + JSON.stringify(r.result?.value));
+    }
+    await sleep(afterMs);
+  }
 
   if (drag) await dragPiece(cdp, drag);
 
@@ -157,7 +182,7 @@ async function main() {
   try { rmSync(profile, { recursive: true, force: true }); } catch { /* profile is disposable */ }
 
   for (const w of warns) console.log('warn: ' + w);
-  if (problems.length) {
+  if (problems.length || failed) {
     for (const p of problems) console.log('ERROR ' + p);
     process.exit(1);
   }
