@@ -302,6 +302,17 @@ race.css can take every filter, the backdrop blur and the colour keyframes off t
 glitch shudders on transform alone, a heavier fill stands in for the blur, the melt's sag drops its
 saturate). The masks stay: a mask is a composite, not a per-frame filter pass. The desktop rules
 are untouched, the Descent passes no cap. `race/smoke/loom-spiral-check.mjs` section 7b.
+The second pass (2026-09-10, "smoother but still not good enough ... the gifs, pink filter and
+spiral ... the blink shutter effect on the bambi sleep trigger"): under the same stamp the melt's
+drip (an animated background-position, a 3 M px repaint per frame) is gone and only the sag stays;
+the flash bursts and the gif rain swap `filter: drop-shadow()` for a box-shadow; the `pink-blink`
+plate blinks in colour instead of `filter: brightness()`, and the `melt` and `fog` plates let go
+without `filter: blur()`; the doll's lacquer breathes on scale alone; the subliminal card rushes
+without its blur; the strobe edge is the 5 px line without the 40 px inset blur. `shared/quality.js`
+mobile: `bubbleShards` 24 (was 32) and `bubbleViewAhead` 64 m (was 76): every visible sprite is a
+draw call, and 64 m is still 2.9 s ahead at cruise. The governor in `race/pixel.js` has a lower rung
+on a coarse pointer, `TOUCH_DPR_FLOOR` 0.8, read every `GOV_TOUCH_SEC` 2 s, climbing back one rung
+at a time. Section 7c.
 `webglcontextlost`, or no WebGL at all, drops the canvas and paints `href` - the old gif path is the
 floor, not a dead branch. Each mount self-unmounts at `durMs + 700`, so nothing spins behind an
 invisible layer. `gifwash`'s own fallback goes through the same seam, so it gets a weave too.

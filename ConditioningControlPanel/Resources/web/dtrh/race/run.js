@@ -1197,6 +1197,7 @@ export function createRace({ root, bridge, media, settings = {}, seed = 1, onExi
       frameMs: st.frameMs || 0, programs: info.programs ? info.programs.length : -1,
       geometries: mem.geometries == null ? -1 : mem.geometries, textures: mem.textures == null ? -1 : mem.textures, texMax,
       audio: audio._tracks ? audio._tracks.size : -1, dpr: renderer.getPixelRatio(), block: pixel.block,
+      dprCap: st.dprCap == null ? null : st.dprCap, touch: !!st.touch,   // the governor's lid and its ladder (race/pixel.js)
       world: !!W, stage: !!stage, running: S.running, bubbles: W ? W.field.liveCount : 0,
       // the pace envelope and what the kart actually did with it (race/pace.js, race/smoke/pace-check.mjs)
       speed: W ? W.kart.state.speed : 0, boosting: W ? W.kart.state.boostSec > 0 : false, pace: S.pace ? { ...S.pace } : null,

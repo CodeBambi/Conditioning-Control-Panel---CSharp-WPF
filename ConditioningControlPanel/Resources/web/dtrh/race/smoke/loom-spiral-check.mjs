@@ -316,6 +316,80 @@ eq(JSON.parse(await ev(HOLD)).canvases, 0, 'every pop after a loss is a gif, wit
 }
 
 /* ============================================================================
+ * 7c. the second pass (2026-09-10: "smoother but still not good enough"): the
+ *     rest of the per-frame filters and repaints come off the touch tier -
+ *     the melt's drip, the flash burst's drop-shadow, the blink / melt / fog
+ *     plates, the lacquer's breath, the subliminal's rush, the strobe's blur.
+ *     And the governor has a lower rung on a coarse pointer.
+ * ==========================================================================*/
+{
+  const CS = (sel) => `(() => { const el = document.querySelector('${sel}'); if (!el) return JSON.stringify({ there: false });
+    const cs = getComputedStyle(el); return JSON.stringify({ there: true, filter: cs.filter, anim: cs.animationName, shadow: cs.boxShadow, bg: cs.backgroundPositionY }); })()`;
+  // probes: one of each kind, stamped as the phone, read, then taken away again
+  const probe = await parse(`(async () => {
+    const r = document.getElementById('race-root'); r.dataset.touch = '1';
+    const hud = r.querySelector('.race-hud') || r;
+    const pfx = r.querySelector('.sf-pfx') || r;
+    const mk = (parent, cls, tag = 'div') => { const e = document.createElement(tag); e.className = cls; parent.appendChild(e); return e; };
+    const els = [
+      mk(pfx, 'sf-pfx-layer sf-pfx-pink is-melting rh-probe'),
+      mk(pfx, 'sf-pfx-flash rh-probe', 'img'),
+      mk(pfx, 'sf-pfx-cascade rh-probe', 'img'),
+      mk(hud, 'rc-plate rc-plate--blink rh-probe'),
+      mk(hud, 'rc-plate rc-plate--melt rh-probe'),
+      mk(hud, 'rc-plate rc-plate--fog rh-probe'),
+      mk(hud, 'rh-strobe rh-probe'),
+    ];
+    const lac = mk(pfx, 'sf-pfx-freeze is-lacquer rh-probe'); const span = document.createElement('span'); span.textContent = 'x'; lac.appendChild(span);
+    const sub = mk(hud, 'rh-sub-layer is-on rh-probe'); const card = mk(sub, 'rh-sub-card');
+    await new Promise((res) => setTimeout(res, 40));
+    const read = (el) => { const cs = getComputedStyle(el); return { filter: cs.filter, anim: cs.animationName, shadow: cs.boxShadow }; };
+    const got = { melt: read(els[0]), flash: read(els[1]), cascade: read(els[2]), blink: read(els[3]), pmelt: read(els[4]), fog: read(els[5]), strobe: read(els[6]), lacquer: read(span), sub: read(card) };
+    for (const e of r.querySelectorAll('.rh-probe')) e.remove();
+    delete r.dataset.touch;
+    return JSON.stringify(got);
+  })()`);
+  eq(probe.melt.anim, 'rhSagLite', 'the melt sags on transform alone, no drip repainting the gradient');
+  eq(probe.flash.filter, 'none', 'a flash burst carries no drop-shadow filter');
+  ok(/rgba?\(/.test(probe.flash.shadow) && probe.flash.shadow !== 'none', `its glow is a box-shadow, painted once (${probe.flash.shadow.slice(0, 40)})`);
+  eq(probe.cascade.filter, 'none', 'nor does a falling gif');
+  eq(probe.blink.anim, 'rcZoom, rcBlinkLite', "the blink plate blinks in colour, not filter: brightness()");
+  eq(probe.blink.filter, 'none', 'and carries no filter');
+  eq(probe.pmelt.anim, 'rcMeltLite', 'the melt plate lets go without a blur');
+  eq(probe.fog.anim, 'rcFogLite', 'so does the fog plate');
+  eq(probe.lacquer.anim, 'rhLacquerLite', 'the doll breathes on scale alone');
+  eq(probe.sub.anim, 'rhSubRushLite', 'the subliminal card rushes without a blur');
+  eq(probe.sub.filter, 'none', 'and carries none at rest');
+  ok(!/40px/.test(probe.strobe.shadow), `the strobe edge is the 5 px line alone (${probe.strobe.shadow.slice(0, 60)})`);
+  // the desktop, untouched: the same probes without the stamp still carry what they always did
+  const desk = await parse(`(async () => {
+    const r = document.getElementById('race-root');
+    const hud = r.querySelector('.race-hud') || r;
+    const p = document.createElement('div'); p.className = 'rc-plate rc-plate--blink rh-probe'; hud.appendChild(p);
+    const f = document.createElement('img'); f.className = 'sf-pfx-flash rh-probe'; r.appendChild(f);
+    await new Promise((res) => setTimeout(res, 40));
+    const got = { blink: getComputedStyle(p).animationName, flash: getComputedStyle(f).filter };
+    p.remove(); f.remove();
+    return JSON.stringify(got);
+  })()`);
+  eq(desk.blink, 'rcZoom, rcBlink', 'the desktop blink plate still blinks with brightness');
+  ok(/drop-shadow/.test(desk.flash), 'and the desktop flash burst keeps its drop-shadow');
+  // the governor's rungs
+  const gov = await parse(`(async () => {
+    const m = await import('/dtrh/race/pixel.js');
+    const q = await import('/dtrh/shared/quality.js');
+    const st = window.__race.race.perf();
+    return JSON.stringify({ floor: m.TOUCH_DPR_FLOOR, sec: m.GOV_TOUCH_SEC,
+      coarseOn: m.coarsePointer({ location: { search: '?coarse=1' } }), coarseOff: m.coarsePointer({ location: { search: '?coarse=0' }, matchMedia: () => ({ matches: true }) }),
+      touch: st ? st.touch : null, cap: st ? st.dprCap : null });
+  })()`);
+  eq(gov.floor, 0.8, 'a coarse pointer can drop to 0.8 device pixels per css pixel');
+  eq(gov.sec, 2, 'and is read every two seconds');
+  ok(gov.coarseOn === true && gov.coarseOff === false, '?coarse= forces the answer either way');
+  eq(gov.touch, false, 'this desktop run is not on the touch ladder');
+}
+
+/* ============================================================================
  * 8. and nothing said a word about it
  * ==========================================================================*/
 ok(errs.length === 0, 'not one console error in the whole run' + (errs.length ? ':\n    ' + errs.slice(0, 5).join('\n    ') : ''));
