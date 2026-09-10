@@ -171,6 +171,12 @@ function main() {
     board.hud = hudL;
   }).catch((e) => console.warn('[pbp] hud missing', e));
   // --- end L ---
+  // --- M: the hand ---
+  // A man waiting on his square counts as being in hand for Esc, but he is not
+  // in the way of the camera: one finger may still orbit around him, and only a
+  // real grab stands the rig off.
+  view.cameraRig.setDragGuard(() => drag.isHolding());
+  // --- end M ---
 
   let last = performance.now();
   function frame(now) {

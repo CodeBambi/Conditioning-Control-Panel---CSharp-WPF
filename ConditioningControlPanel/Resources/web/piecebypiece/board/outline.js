@@ -167,7 +167,11 @@ export function createOutline({ group, bus = null }) {
     const mats = [];
     const skins = [];
     const sources = [];
-    piece.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.pbpHull) sources.push(o); });
+    // The contact patch is a picture of shade lying on the board, not a part of
+    // the man: it stays welded to the board while he rises, and a hull pinned to
+    // his root would ride up with him and show as a flat square of line colour.
+    const patch = piece.userData.contact || null;
+    piece.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.pbpHull && o !== patch) sources.push(o); });
     for (const src of sources) {
       const mat = hullMaterial(u, base, insideOut(src.geometry));
       const hull = new THREE.Mesh(src.geometry, mat);
