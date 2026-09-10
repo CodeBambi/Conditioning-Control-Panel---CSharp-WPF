@@ -541,9 +541,9 @@ namespace ConditioningControlPanel
             // (and latches) the same Welcomed flag WelcomeDialog.ShowIfNeeded did, at the same
             // instant, so the else branch below - What's New, season recap, the upgrader's mod
             // picker - is reached by exactly the same population as before. The wizard itself
-            // owns what used to be three separate modals: the welcome card, the first-run mod
+            // owns what used to be four separate modals: the age check, the welcome card, the first-run mod
             // picker (ModPickerDialog.ShowIfNeeded's one-shot + offline guards included) and the
-            // "choose a content folder" MessageBox; StartTutorial is launched from its last step.
+            // "choose a content folder" MessageBox. No tour starts from it: EMI offers the walk once, later.
             // ASK EMI WAVE 1: read LastSeenVersion HERE, before anything on this launch stamps it.
             // ShowWhatsNewIfNeeded (the first statement of the else branch, a few lines down) writes
             // the current version into that setting synchronously, minutes before the knock's own
