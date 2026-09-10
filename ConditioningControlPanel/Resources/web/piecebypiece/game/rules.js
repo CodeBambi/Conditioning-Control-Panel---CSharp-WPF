@@ -84,6 +84,33 @@ export function createRules(fen) {
     };
   }
 
+  /**
+   * Take the last ply back. Returns the same shape `move` does for the ply that
+   * came off, or null when there is nothing to take back. The board is not
+   * touched here: the caller puts the men where the new position says.
+   */
+  function undo() {
+    let back = null;
+    try { back = chess.undo(); } catch { return null; }
+    if (!back) return null;
+    const side = back.color;
+    const flags = String(back.flags || '');
+    const enPassant = flags.includes('e');
+    return {
+      from: back.from,
+      to: back.to,
+      san: back.san,
+      piece: back.piece,
+      side,
+      captured: back.captured || null,
+      capturedSide: back.captured ? (side === 'w' ? 'b' : 'w') : null,
+      promotion: back.promotion || null,
+      enPassant,
+      castle: flags.includes('k') ? 'k' : (flags.includes('q') ? 'q' : null),
+      turn: chess.turn(),
+    };
+  }
+
   /** A castling king move drags the rook with it. Returns {from,to} or null. */
   function rookHop(played) {
     if (!played || !played.castle) return null;
@@ -103,7 +130,7 @@ export function createRules(fen) {
 
   return {
     chess,
-    position, movesFrom, targets, legalMove, move, rookHop, randomMove,
+    position, movesFrom, targets, legalMove, move, undo, rookHop, randomMove,
     turn: () => chess.turn(),
     inCheck: () => chess.isCheck(),
     isOver: () => chess.isGameOver(),

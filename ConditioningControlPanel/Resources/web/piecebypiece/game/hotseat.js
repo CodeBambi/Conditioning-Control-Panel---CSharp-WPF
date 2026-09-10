@@ -16,6 +16,11 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
   let over = null;
   let autoLeft = Math.max(0, Number(auto) || 0);
   let autoWait = 0.6;
+  // One entry a ply, so a take-back can put the clocks back where they
+  // stood before it. Nothing else reads it.
+  const history = [];
+  let lastBack = 0;
+  const TAKEBACK_GAP_MS = 400;   // two in a row need a breath between them
 
   const clock = createClock({
     perSideMs: clockMs,
@@ -70,8 +75,10 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
 
   function tryMove(from, to, promotion = 'q') {
     if (over) return null;
+    const before = { w: clock.remaining('w'), b: clock.remaining('b') };
     const played = rules.move(from, to, promotion);
     if (!played) return null;
+    history.push({ from: played.from, to: played.to, side: played.side, before });
 
     // The men follow the referee.
     if (played.capturedSquare && played.capturedSquare !== to) pieces.remove(played.capturedSquare);
@@ -105,6 +112,48 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
     return played;
   }
 
+  /**
+   * Take the last ply back. Hotseat only, and only while the game is on: after
+   * a result there is nothing to undo, the board is a record.
+   *
+   * The referee goes back a ply, the mover slides home through anim (so the
+   * landing dust and the thud play as they would for any move), and whatever
+   * else the ply did - a man taken, a rook that castled, a pawn that came back
+   * a pawn - is put right by rebuilding from the position. The clocks go back
+   * to what they read before the ply, so a take-back costs the mover nothing
+   * but the time he spends thinking again.
+   */
+  function takeBack(now = Date.now()) {
+    if (over) return null;
+    if (now - lastBack < TAKEBACK_GAP_MS) return null;
+    const record = history[history.length - 1] || null;
+    const back = rules.undo();
+    if (!back) return null;
+    history.pop();
+    lastBack = now;
+
+    // A promotion undo swaps the man for a pawn, so there is nothing to slide:
+    // the rebuild below stands him back on his square.
+    if (!back.promotion) {
+      pieces.move(back.to, back.from);
+      const hop = rules.rookHop(back);
+      if (hop) pieces.move(hop.to, hop.from);
+    }
+    pieces.setPosition(rules.position());
+
+    const side = rules.turn();          // the side that moved has the move again
+    if (record) {
+      clock.credit('w', record.before.w - clock.remaining('w'));
+      clock.credit('b', record.before.b - clock.remaining('b'));
+    }
+    clock.press(side);
+    board.setSide(side);
+    bus.emit('takeback', { from: back.from, to: back.to, ply: rules.ply() });
+    bus.emit('turn', { side, ply: rules.ply(), clocks: clocks(), total: clockMs });
+    paint();
+    return back;
+  }
+
   function resign(side) {
     finish({ result: 'resign', winner: side === 'w' ? 'b' : 'w', reason: 'resignation' });
   }
@@ -131,7 +180,8 @@ export function createHotseat({ bus, board, hud = null, clockMs = DEFAULT_MS, fe
   }
 
   return {
-    rules, clock, start, update, tryMove, canPick, legalTargets, resign,
+    rules, clock, start, update, tryMove, takeBack, canPick, legalTargets, resign,
+    plies: () => history.length,
     turn: () => rules.turn(),
     isOver: () => !!over,
     result: () => over,

@@ -446,8 +446,23 @@ export function createDrag({ view, pieces, anim, bus, game, jiggle = null }) {
     setCursor('default');
   }
 
+  /** The house sound, if the sound lane is loaded. It is optional, always. */
+  function cue(name) {
+    const sfx = window.PBP && window.PBP.board && window.PBP.board.sfx;
+    if (sfx && sfx.play) sfx.play(name);
+  }
+
   function onKey(ev) {
     if (ev.ctrlKey || ev.altKey || ev.metaKey || typing()) return;
+    // Take the last ply back, with nothing in hand. Backspace is the one every
+    // player tries first; z is there for the hand that never leaves the board.
+    if (!held && (ev.key === 'Backspace' || ev.key === 'z' || ev.key === 'Z')) {
+      ev.preventDefault();
+      if (!game.takeBack) return;
+      clearSelection();
+      if (!game.takeBack()) cue('boing');   // nothing to take back, or too soon
+      return;
+    }
     if (ev.key !== 'Escape' || !selected) return;
     // Esc belongs to whoever wants to leave the board as well, and they ask
     // isDragging() inside this same event: the man is only let go once the

@@ -131,6 +131,14 @@ const POINTER = `window.__pt = (x, y, type) => {
 };
 window.__pointAt = (sq, h) => { const p = window.PBP.board.projectSquare(sq, h); window.__mark(p.x, p.y); return p; };`;
 
+/** One key press, through the real input path: no page-side shortcut needed. */
+async function key(name) {
+  const code = name === 'Backspace' ? 8 : name.toUpperCase().charCodeAt(0);
+  const p = { key: name, code: name === 'Backspace' ? 'Backspace' : 'Key' + name.toUpperCase(), windowsVirtualKeyCode: code };
+  await cdp.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown' }, p));
+  await cdp.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyUp' }, p));
+}
+
 const hand = () => evalJs('JSON.stringify(window.PBP.board.drag.debug())').then(JSON.parse);
 const fen = () => evalJs('window.PBP.game.rules.fen()');
 
@@ -288,6 +296,32 @@ async function main() {
   if (h.cursor !== 'grab') bad('reduced motion lost the cursor');
   if (h.hoverLift > 0.005) bad('reduced motion still lifted him');
   await evalJs('window.PBP.reducedMotion = false');
+
+  // --- 7. take back: the last ply comes home ---------------------------------
+  await evalJs("window.__back = []; window.PBP.bus.on('takeback', (p) => window.__back.push(p));");
+  const beforeBack = await fen();
+  await key('Backspace');
+  await beat(90);
+  console.log('  ' + await shot('takeback-slide.png'));    // he is on his way home
+  await beat(900);
+  const afterBack = await fen();
+  const backs = await evalJs('JSON.stringify(window.__back)');
+  console.log('take back: ' + beforeBack.split(' ').slice(0, 2).join(' ') + ' -> '
+    + afterBack.split(' ').slice(0, 2).join(' ') + ' ' + backs);
+  console.log('  ' + await shot('takeback-done.png'));
+  if (afterBack.split(' ')[0] !== 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR') bad('the ply did not come back');
+  if (afterBack.split(' ')[1] !== 'w') bad('the side that moved did not get the move back');
+  if (!JSON.parse(backs).length) bad('nothing said a ply had been taken back');
+  // The gap between two of them, and then an empty history.
+  await key('z');
+  await beat(60);
+  if ((await fen()).split(' ')[1] !== 'w') bad('a take-back inside the 400 ms gap went through');
+  await beat(700);
+  await key('z');
+  await beat(120);
+  const empty = await fen();
+  console.log('nothing left to take back: ' + empty.split(' ').slice(0, 2).join(' '));
+  if (empty.split(' ')[0] !== 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR') bad('an empty history still changed the board');
 
   const problems = [];
   for (const ev of cdp.events) {
