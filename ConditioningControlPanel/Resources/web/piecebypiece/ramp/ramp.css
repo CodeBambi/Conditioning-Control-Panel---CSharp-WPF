@@ -1,0 +1,36 @@
+/* ============================================================================
+ * ramp/ramp.css - the ramp's two planes.
+ *
+ * BACK plane (.pbp-fx, the page's #fx): washes, flashes, falling gifs, the
+ * spiral veil. It sits over the board but under the HUD.
+ * FRONT plane (.pbp-fx-front): the video card only, so a tape can ride in front
+ * of the POV while everything else stays behind it.
+ *
+ * Both planes and everything in them are click-through. The player must always
+ * be able to reach a piece, even under a card they cannot see past - that is
+ * the whole point of the card. Layer styles land on top of this file.
+ * ==========================================================================*/
+
+.pbp-fx {
+  position: absolute; inset: 0; z-index: 4; overflow: hidden;
+  pointer-events: none !important;
+}
+.pbp-fx * { pointer-events: none !important; }
+
+/* a #fx the page never supplied: pin it to the viewport instead of a stage */
+.pbp-fx-fallback { position: fixed; }
+
+.pbp-fx-front {
+  position: fixed; inset: 0; z-index: 9; overflow: hidden;
+  pointer-events: none !important;
+}
+.pbp-fx-front * { pointer-events: none !important; }
+
+/* The stage carries the CSS filters (melt tint, blur). Transitioning the filter
+ * rather than snapping it keeps a retune from strobing; will-change keeps the
+ * board on its own layer so a filter change never repaints the whole page. */
+.pbp-stage-fx { transition: filter 420ms ease; will-change: filter; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pbp-fx *, .pbp-fx-front * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+}
