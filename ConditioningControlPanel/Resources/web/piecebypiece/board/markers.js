@@ -8,11 +8,18 @@
  * victim actually stands on). The square he was picked up from gets a faint
  * outline, so it is clear where putting him back means.
  *
+ * The board also remembers the move that was just played: setLastMove(from, to)
+ * leaves a thin ring where the man was standing and a soft fill where he came
+ * to rest, faint enough to sit under everything else and kept until the next
+ * move. That memory is deliberately NOT part of the hint layer, which is wiped
+ * every time a man is picked up and put down.
+ *
  * Wiring:
  *   drag.js   builds one of these, calls show() on pick up and on hover, and
  *             pumps update(dt) from its own frame step
  *   scene.js  setHighlights() forwards here through setHighlightSink(), so a
  *             caller that only holds the view still lights squares up
+ *   boot.js   watches the bus for a turn and hands the move over
  *
  * Markers never take a raycast (drag.js picks men, and a marker lying over a
  * square must not shadow the man standing on it) and they neither cast nor
@@ -50,6 +57,17 @@ export const TUNING = Object.freeze({
   captureGlowOpacity: 0.42,
   originColor: 0xF7E7CC,
   originOpacity: 0.3,
+  // The last move, kept until the next one. Lower than the hints and drawn
+  // before them, so a legal dot always sits on top of the memory.
+  lastY: 0.008,
+  lastFade: 0.30,          // s, in and out
+  lastFromColor: 0xFFF1DA, // a thin ring around where he was standing
+  lastFromOpacity: 0.21,
+  lastToColor: 0xFFE6C9,   // and a soft fill where he came to rest
+  lastToOpacity: 0.19,
+  lastToSize: 1.02,
+  lastRingInner: 0.385,
+  lastRingOuter: 0.435,
 });
 
 const T = TUNING;
@@ -99,6 +117,8 @@ export function createMarkers({ group }) {
     glow: new THREE.PlaneGeometry(T.glowSize, T.glowSize).rotateX(-Math.PI / 2),
     ring: new THREE.RingGeometry(T.ringInner, T.ringOuter, 44).rotateX(-Math.PI / 2),
     origin: new THREE.RingGeometry(T.originInner, T.originOuter, 44).rotateX(-Math.PI / 2),
+    lastRing: new THREE.RingGeometry(T.lastRingInner, T.lastRingOuter, 44).rotateX(-Math.PI / 2),
+    lastFill: new THREE.PlaneGeometry(T.lastToSize, T.lastToSize).rotateX(-Math.PI / 2),
   };
 
   const live = new Map();   // square -> marker
@@ -174,8 +194,76 @@ export function createMarkers({ group }) {
 
   function clear() { show([]); }
 
+  // --- the last move ---------------------------------------------------------
+  // A move leaves something behind: a thin cream ring on the square he was
+  // standing on and a soft fill on the one he came to rest on, both faint, both
+  // kept until the next move is played. They live in their own group, so the
+  // show()/clear() cycle the hints go through every time a man is picked up
+  // cannot touch them, and they draw before the hints, so a legal dot landing
+  // on the same square still reads over the top.
+  const lastRoot = new THREE.Group();
+  lastRoot.name = 'pbp-lastmove';
+  lastRoot.raycast = NOPE;
+  root.add(lastRoot);
+  let lastMark = null;      // { key, node, parts, t }
+  const lastDying = [];
+
+  function lastLayer(mark, key, color, opacity, square, mapped) {
+    const material = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0, depthWrite: false, fog: false,
+      toneMapped: false, side: THREE.DoubleSide, map: mapped ? tex : null,
+    });
+    const mesh = new THREE.Mesh(geo[key], material);
+    mesh.raycast = NOPE;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.renderOrder = 2;
+    mesh.position.copy(squareToWorld(square, T.lastY));
+    mark.node.add(mesh);
+    mark.parts.push({ material, base: opacity });
+  }
+
+  function dropLast(mark) {
+    for (const part of mark.parts) part.material.dispose();
+    lastRoot.remove(mark.node);
+  }
+
+  /**
+   * Remember a move. `setLastMove('e2', 'e4')` marks it; `setLastMove()` or
+   * `setLastMove(null)` forgets it, which is what a new game and a take-back
+   * both want. Setting the same move twice is a no-op, so a caller may pump
+   * this on every turn without restarting the fade.
+   */
+  function setLastMove(from = null, to = null) {
+    const key = from || to ? String(from) + '>' + String(to) : '';
+    if ((lastMark ? lastMark.key : '') === key) return;
+    if (lastMark) { lastDying.push(lastMark); lastMark = null; }
+    if (!key) return;
+    const mark = { key, node: new THREE.Group(), parts: [], t: reducedMotion() ? 1 : 0 };
+    mark.node.raycast = NOPE;
+    if (to) lastLayer(mark, 'lastFill', T.lastToColor, T.lastToOpacity, to, true);
+    if (from) lastLayer(mark, 'lastRing', T.lastFromColor, T.lastFromOpacity, from, false);
+    lastRoot.add(mark.node);
+    lastMark = mark;
+  }
+
+  function updateLast(dt) {
+    const still = reducedMotion();
+    if (lastMark) {
+      if (lastMark.t < 1) lastMark.t = still ? 1 : Math.min(1, lastMark.t + dt / T.lastFade);
+      for (const part of lastMark.parts) part.material.opacity = part.base * lastMark.t;
+    }
+    for (let i = lastDying.length - 1; i >= 0; i--) {
+      const m = lastDying[i];
+      m.t = still ? 0 : m.t - dt / T.lastFade;
+      if (m.t <= 0) { dropLast(m); lastDying.splice(i, 1); continue; }
+      for (const part of m.parts) part.material.opacity = part.base * m.t;
+    }
+  }
+
   function update(dt) {
     clock += dt;
+    updateLast(dt);
     const still = reducedMotion();
     const k = still ? 1 : 1 - Math.exp(-T.hoverEase * dt);
     for (const m of live.values()) {
@@ -201,10 +289,17 @@ export function createMarkers({ group }) {
     for (const m of dying) drop(m);
     live.clear();
     dying.length = 0;
+    if (lastMark) { dropLast(lastMark); lastMark = null; }
+    for (const m of lastDying) dropLast(m);
+    lastDying.length = 0;
     for (const key of Object.keys(geo)) geo[key].dispose();
     tex.dispose();
     if (root.parent) root.parent.remove(root);
   }
 
-  return { show, clear, update, dispose, root, count: () => live.size };
+  return {
+    show, clear, update, dispose, root, setLastMove, lastRoot,
+    count: () => live.size,
+    lastMove: () => (lastMark ? lastMark.key : null),
+  };
 }
