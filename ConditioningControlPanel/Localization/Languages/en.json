@@ -5169,7 +5169,7 @@
   "fr8_welcome_title": "Welcome.",
   "fr8_welcome_body": "Two choices and you are in. Nothing runs until you press START, and the camera, mic and screen-reading features each ask before they switch on.",
   "fr8_welcome_language": "Language",
-  "fr8_welcome_language_hint": "You can change this any time from the title bar.",
+  "fr8_welcome_language_hint": "You can change this later in Settings.",
   "fr8_welcome_folder": "Your own content",
   "fr8_welcome_folder_hint": "Optional. Point the app at a folder of your own images and videos.",
   "fr8_welcome_pick_folder": "Choose a content folder",
