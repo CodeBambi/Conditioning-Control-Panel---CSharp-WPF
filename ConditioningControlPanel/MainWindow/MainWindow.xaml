@@ -1338,7 +1338,10 @@
                          (AppSettings.DescentSpiralRailEnabled, no editor), and the control still
                          stays collapsed until the server ships this account a descent block. Collapsed measures as zero, so the rail's
                          layout is identical to the build before this element existed.
-                         See Controls/SpiralRailHost.cs - especially the airspace note. -->
+                         Native WPF (a SpiralGlyph in a medallion) since 2026-09-09: the WebView2
+                         it used to host was a native child HWND, and an HWND on the rail stole
+                         the pointer from NavSidebar and made the flyout open and shut on a loop.
+                         See Controls/SpiralRailHost.cs. -->
                     <controls:SpiralRailHost x:Name="SpiralRail"/>
                     <Border Height="1" Background="{DynamicResource PanelAccentBrush}" Margin="10,8,10,6"/>
                     <!-- THE FUSE RAIL CHIP (CONTRACT-FUSE-0816 2.2). A gold clock that appears
