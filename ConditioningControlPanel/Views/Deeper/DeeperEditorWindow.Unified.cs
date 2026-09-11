@@ -202,7 +202,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     item.EffectSpeakRequiredReps = 1;
                     item.EffectSpeakCompletion = SpeakCompletion.UntilSatisfied;
                     item.EffectSpeakHoldMode = SpeakHoldMode.LoopRegion;
-                    item.EffectSpeakCorrectMessage = $"that's it, {VocabTokens.VanillaPetName}";
+                    item.EffectSpeakCorrectMessage = $"that's it, {VocabTokens.PetName}";
                     item.EffectSpeakIncorrectMessage = "try again";
                 }
                 _enhancement.TimelineItems.Add(item);

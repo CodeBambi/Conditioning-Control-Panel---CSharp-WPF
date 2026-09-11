@@ -65,7 +65,7 @@ namespace ConditioningControlPanel.Services.Deeper
             _requiredReps = Math.Clamp(effect.SpeakRequiredReps, 1, 5);
             _completion = effect.SpeakCompletion;
             _holdMode = effect.SpeakHoldMode;
-            _correctMsg = string.IsNullOrWhiteSpace(effect.SpeakCorrectMessage) ? $"that's it, {VocabTokens.VanillaPetName}" : effect.SpeakCorrectMessage!.Trim();
+            _correctMsg = string.IsNullOrWhiteSpace(effect.SpeakCorrectMessage) ? $"that's it, {VocabTokens.PetName}" : effect.SpeakCorrectMessage!.Trim();
             _incorrectMsg = string.IsNullOrWhiteSpace(effect.SpeakIncorrectMessage) ? "try again" : effect.SpeakIncorrectMessage!.Trim();
             _source = source;
             _regionStart = effect.SpeakRegionStartSec;

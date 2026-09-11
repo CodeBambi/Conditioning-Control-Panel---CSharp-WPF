@@ -103,6 +103,13 @@ namespace ConditioningControlPanel
         };
         private static readonly string[] ChimeFiles = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
 
+        /// <summary>
+        /// The neutral trick pool. Slot <see cref="ModTrickSlot"/> is the one an active mod may
+        /// speak for: in 6.9.3 it held a Bambi-flavoured line that every user saw, and a themed
+        /// mod now supplies its own wording there through the manifest (see
+        /// <see cref="ResolveTrickQuestions"/>). Never index this array directly - go through the
+        /// resolver, or a modded user silently loses their line again.
+        /// </summary>
         private static readonly (string Question, string Answer)[] TrickQuestions = new[]
         {
             ("Do you like to let go and obey?", "Yes"),
@@ -1220,9 +1227,32 @@ namespace ConditioningControlPanel
             _droneReader = null;
         }
 
+        /// <summary>The one slot in <see cref="TrickQuestions"/> a themed mod may overwrite.</summary>
+        internal const int ModTrickSlot = 1;
+
+        /// <summary>
+        /// The trick pool as the ACTIVE mod sees it. A mod that names both a question and its
+        /// answer takes over slot <see cref="ModTrickSlot"/> - one substitution, not an append, so
+        /// the odds of drawing a themed line stay exactly what they were before Wave 1. A mod that
+        /// names only half of the pair is ignored: pairing a mod's question with the neutral reply
+        /// would read as a bug on the card. Pure and static so it can be tested without an App.
+        /// </summary>
+        internal static (string Question, string Answer)[] ResolveTrickQuestions(string? modQuestion, string? modAnswer)
+        {
+            if (string.IsNullOrWhiteSpace(modQuestion) || string.IsNullOrWhiteSpace(modAnswer))
+                return TrickQuestions;
+
+            var pool = ((string Question, string Answer)[])TrickQuestions.Clone();
+            pool[ModTrickSlot] = (modQuestion!.Trim(), modAnswer!.Trim());
+            return pool;
+        }
+
         private static QuizQuestion CreateTrickQuestion(int number)
         {
-            var (question, answer) = TrickQuestions[_random.Next(TrickQuestions.Length)];
+            var pool = ResolveTrickQuestions(
+                App.Mods?.GetQuizTrickQuestionOverride(),
+                App.Mods?.GetQuizTrickAnswerOverride());
+            var (question, answer) = pool[_random.Next(pool.Length)];
             return new QuizQuestion
             {
                 Number = number,
