@@ -18,6 +18,23 @@ public class FeatureDayEntry
     /// <summary>The 11 counter keys, in contract order. <c>d</c> is not a counter.</summary>
     public static readonly string[] CounterKeys = { "xp", "cm", "fl", "bb", "pf", "sp", "vd", "lk", "ac", "bc", "ss" };
 
+    /// <summary>
+    /// The engagement event keys (wire contract 2): how many times that day a session started
+    /// with the feature enabled, or a Lab mode was launched. Fed by
+    /// <c>FeatureDayLogService.Note</c> from the hooks (via SeasonRecapService.TrackFeature),
+    /// not diffed from a lifetime counter, so they carry no baseline. Kept in
+    /// <see cref="Events"/> (local file field <c>ev</c>) and flattened onto the wire beside the
+    /// counters; the server whitelists exactly this list, so a key that is not here never leaves
+    /// the machine.
+    /// </summary>
+    public static readonly string[] EventKeys =
+    {
+        "e_fl", "e_vd", "e_sb", "e_ov", "e_bb", "e_bc", "e_bt", "e_lk", "e_mw",
+        "e_pq", "e_bl", "e_cp", "e_ch", "e_dt", "e_rc", "e_pb"
+    };
+
+    public static bool IsEventKey(string key) => Array.IndexOf(EventKeys, key) >= 0;
+
     [JsonProperty("d")]
     [JsonPropertyName("d")]
     public string D { get; set; } = "";
@@ -45,6 +62,11 @@ public class FeatureDayEntry
     /// <summary>Sessions started.</summary>
     [JsonProperty("ss")] [JsonPropertyName("ss")] public int Ss { get; set; }
 
+    /// <summary>Engagement events for the day, keyed by <see cref="EventKeys"/>.</summary>
+    [JsonProperty("ev", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("ev")]
+    public Dictionary<string, int> Events { get; set; } = new();
+
     public FeatureDayEntry() { }
 
     public FeatureDayEntry(string day) { D = day; }
@@ -53,7 +75,7 @@ public class FeatureDayEntry
     {
         "xp" => Xp, "cm" => Cm, "fl" => Fl, "bb" => Bb, "pf" => Pf, "sp" => Sp,
         "vd" => Vd, "lk" => Lk, "ac" => Ac, "bc" => Bc, "ss" => Ss,
-        _ => 0
+        _ => Events != null && Events.TryGetValue(key, out var ev) ? ev : 0
     };
 
     /// <summary>Add <paramref name="amount"/> (never negative) to one counter.</summary>
@@ -73,13 +95,18 @@ public class FeatureDayEntry
             case "ac": Ac += amount; break;
             case "bc": Bc += amount; break;
             case "ss": Ss += amount; break;
+            default:
+                if (!IsEventKey(key)) return;
+                Events ??= new();
+                Events[key] = (Events.TryGetValue(key, out var cur) ? cur : 0) + amount;
+                break;
         }
     }
 
     /// <summary>True when every counter is zero: such a day is never put on the wire.</summary>
     [Newtonsoft.Json.JsonIgnore]
     [System.Text.Json.Serialization.JsonIgnore]
-    public bool IsEmpty => CounterKeys.All(k => Get(k) <= 0);
+    public bool IsEmpty => CounterKeys.All(k => Get(k) <= 0) && (Events == null || Events.All(kv => kv.Value <= 0));
 
     /// <summary>
     /// The wire shape: <c>d</c> always, then only the counters that are above zero. Zero-valued
@@ -89,6 +116,11 @@ public class FeatureDayEntry
     {
         var wire = new Dictionary<string, object> { ["d"] = D };
         foreach (var key in CounterKeys)
+        {
+            var v = Get(key);
+            if (v > 0) wire[key] = v;
+        }
+        foreach (var key in EventKeys)
         {
             var v = Get(key);
             if (v > 0) wire[key] = v;

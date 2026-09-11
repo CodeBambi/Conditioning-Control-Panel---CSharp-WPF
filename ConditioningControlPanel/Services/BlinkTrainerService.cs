@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using XamlAnimatedGif;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services;
 
@@ -173,6 +174,7 @@ public class BlinkTrainerService : IDisposable
             _durationTimer.Start();
 
             IsRunning = true;
+            SeasonRecapService.TrackFeature(SeasonFeatureKeys.BlinkTrainer);
             LastError = "";
             App.Logger?.Information(
                 "BlinkTrainer: started — pool={Count} assets, duration={Mins}m, opacity={Opacity}%, screens={Screens}",

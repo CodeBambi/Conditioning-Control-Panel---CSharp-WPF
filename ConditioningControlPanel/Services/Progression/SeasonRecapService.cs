@@ -205,6 +205,15 @@ namespace ConditioningControlPanel.Services
 
         public static void TrackFeature(string featureKey)
         {
+            // The one hook every feature calls also feeds the per-day engagement log the server
+            // aggregates (stats.feature_day_log event keys). Keys with no wire name stay local.
+            var ev = SeasonFeatureKeys.ToDayLogEvent(featureKey);
+            if (ev != null) App.FeatureDayLog?.Note(ev);
+
+            // The season bucket (recap card badge row, Ditzy Data lifetime bars) only knows the
+            // Catalog: a Lab launch or a chat message counted there would skew those bars.
+            if (SeasonFeatureKeys.Find(featureKey) == null) return;
+
             var s = App.Settings?.Current; if (s == null) return;
             EnsureBucket(s);
             s.TrackSeasonFeature(featureKey);

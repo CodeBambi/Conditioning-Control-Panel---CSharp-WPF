@@ -3,6 +3,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Services.Chaos;
 
@@ -294,6 +296,7 @@ public sealed class ChaosModeService
     public void StartRun(ChaosRunConfig? config = null, bool isRestart = false)
     {
         if (_active) return;
+        if (!isRestart) SeasonRecapService.TrackFeature(SeasonFeatureKeys.ChaosMode);
 
         // A chaos run takes over the screen with its own overlays/HUD; stop any running
         // conditioning engine or AI session first so the two don't fight over the display.
