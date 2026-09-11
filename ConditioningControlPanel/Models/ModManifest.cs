@@ -296,6 +296,14 @@ namespace ConditioningControlPanel.Models
         /// <summary>The answer shown on all four buttons for <see cref="QuizTrickQuestion"/>.</summary>
         [JsonProperty("quizTrickAnswer")]
         public string? QuizTrickAnswer { get; set; }
+
+        /// <summary>
+        /// This mod's default scrolling banner over the Settings marquee. Only ever used for a
+        /// banner the user has NOT written themselves: a blank saved message, or one of the two
+        /// retired house defaults. A user who typed their own banner keeps it in every mod.
+        /// </summary>
+        [JsonProperty("marqueeBanner")]
+        public string? MarqueeBanner { get; set; }
     }
 
     public class ModBrowser

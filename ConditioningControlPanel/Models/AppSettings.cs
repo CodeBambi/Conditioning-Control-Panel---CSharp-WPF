@@ -2098,15 +2098,31 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Move existing users off the old gendered default banner text. Keyed on an exact match of
-        /// <see cref="LegacyGenderedMarqueeMessage"/>, so anyone who customised their banner - by even
-        /// one character - keeps what they wrote. Runs once, from InitializeMarqueeBanner().
+        /// Move users with NO themed mod off the old gendered default banner text. Keyed on an exact
+        /// match of <see cref="LegacyGenderedMarqueeMessage"/>, so anyone who customised their banner
+        /// - by even one character - keeps what they wrote. Runs once, from InitializeMarqueeBanner().
+        ///
+        /// <para>A themed mod is skipped and the one-shot flag is still latched, deliberately. The
+        /// old text is that mod's own voice, so rewriting it is the visible, one-way change 6.9.4
+        /// promised would not happen to anyone with a mod active; and latching means a later switch
+        /// to CCP Default does not spring the same rewrite on them months afterwards.</para>
         /// </summary>
-        internal void MigrateMarqueeMessage()
+        /// <param name="activeModId">
+        /// <see cref="Services.ModService.ActiveModId"/>. Null means the mod layer is not up yet, and
+        /// the migration DEFERS - it neither rewrites nor latches, so the next launch that does know
+        /// the mod decides. ModService is constructed in App.OnStartup, well before the only caller,
+        /// so the deferral is a safety net rather than an expected path.
+        /// </param>
+        internal void MigrateMarqueeMessage(string? activeModId)
         {
             if (_marqueeNeutralDefaultMigrated) return;
-            if (string.Equals(_marqueeMessage?.Trim(), LegacyGenderedMarqueeMessage.Trim(), StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(activeModId)) return;
+
+            if (string.Equals(activeModId, BuiltInMods.CCPDefaultId, StringComparison.Ordinal) &&
+                string.Equals(_marqueeMessage?.Trim(), LegacyGenderedMarqueeMessage.Trim(), StringComparison.Ordinal))
+            {
                 MarqueeMessage = DefaultMarqueeMessage;
+            }
             MarqueeNeutralDefaultMigrated = true;
         }
 
