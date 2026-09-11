@@ -29,8 +29,8 @@ namespace ConditioningControlPanel.Services.EmiDesk;
 /// <param name="IsLocked">True paints the padlock and routes the click to the tier gate prompt.</param>
 /// <param name="Open">Opens the feature. Always goes through <c>Pick</c>, which owns the usage
 /// counter and the moments.</param>
-/// <param name="Gate">The premium rail's own enum value where one exists, for callers that want to
-/// cross-reference the rail. Null for free doors and for Lab doors (the enum has no Lab members).</param>
+/// <param name="Gate">The <see cref="PremiumFeature"/> value where one exists, for callers that want
+/// to cross-reference the gated feature. Null for free doors and for Lab doors (the enum has no Lab members).</param>
 public sealed record EmiTarget(
     string Id,
     string LabelKey,

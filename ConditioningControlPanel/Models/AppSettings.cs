@@ -8006,11 +8006,34 @@ namespace ConditioningControlPanel.Models
         public bool HasSeenProgramsIntro { get; set; }
 
         /// <summary>
-        /// Right-click toggles the user has performed on the dashboard (tiles or premium chips).
-        /// Drives the "right-click a tile to switch it on or off" caption via
+        /// Right-click toggles the user has performed on the dashboard tiles. Drives the
+        /// "right-click a tile to switch it on or off" caption on the logo face via
         /// <see cref="Services.DashboardToggleHintRule"/>; stops counting once the caption is retired.
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
+
+        private List<string> _railFavorites = new();
+        /// <summary>
+        /// The dashboard rail's FAVORITES: Ctrl+K palette row ids ("tab.deeper", "door.play",
+        /// "launch.mods", "card.arcademy") in the order the user pinned them. Rules, cap and
+        /// dedupe live in <see cref="Services.FavoritesRailRule"/>.
+        /// </summary>
+        [JsonProperty("rail_favorites")]
+        public List<string> RailFavorites
+        {
+            get => _railFavorites;
+            set { _railFavorites = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private List<string> _railRecent = new();
+        /// <summary>The dashboard rail's RECENT: the last few destinations opened, most recent
+        /// first, same id scheme as <see cref="RailFavorites"/>.</summary>
+        [JsonProperty("rail_recent")]
+        public List<string> RailRecent
+        {
+            get => _railRecent;
+            set { _railRecent = value ?? new List<string>(); OnPropertyChanged(); }
+        }
 
         #endregion
 

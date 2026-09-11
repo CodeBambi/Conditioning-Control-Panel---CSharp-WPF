@@ -471,8 +471,8 @@ namespace ConditioningControlPanel
                 App.Settings.Current.PropertyChanged += OnSettingsPropertyChangedForWall;
             }
 
-            // A landed server override for the ? box repaints the wall + rail + lockbands: the
-            // rail refresh is the one funnel that already fans out to all three. The Velvet
+            // A landed server override for the ? box repaints the wall and the rail: the
+            // dashboard refresh is the one funnel that already fans out to both. The Velvet
             // Vault rides the SAME event (never its own timer) so the FREE TODAY card and the
             // dashboard's ? box can never name two different features; the call no-ops until
             // the tab has been built at least once.
@@ -481,7 +481,7 @@ namespace ConditioningControlPanel
                 App.DailyFree.TodayChanged += () =>
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        RefreshPremiumRail();
+                        RefreshDashboardRail();
                         RefreshExclusivesTab();
                         // The Play wall rides it too, for its lockbands AND its FREE TODAY
                         // re-stamps (MainWindow.PlayTab.cs). It is not reached by the rail
@@ -729,10 +729,10 @@ namespace ConditioningControlPanel
             // ToggleRequested handler that used to be registered here are gone with the twelve FX
             // tiles they served. The wall is eight destinations now — "on" is not a state Down the
             // Rabbit Hole has — so there is nothing to highlight and nothing to quick-toggle. The
-            // gesture moved to the premium rail, where the chips genuinely are toggles, and the
-            // per-feature state dots live in the Studio rack beside the dials.
+            // gesture lives on the tiles' right-click; the premium rail that carried it too is
+            // gone (2026-09-11), and the per-feature state dots live in the Studio rack.
             //
-            // The mosaic's own repaint (tier price tags) hangs off RefreshPremiumRail instead,
+            // The mosaic's own repaint (tier price tags) hangs off RefreshDashboardRail instead,
             // which already carries the three triggers it needs: patron status arriving or being
             // lost, the Home door being shown, and the weekly intake pass changing.
         }
@@ -2638,48 +2638,6 @@ namespace ConditioningControlPanel
                         img.Source = resolved;
                 }
 
-                // Premium quick-launch rail chip art. These live as ImageBrush resources
-                // inside PremiumRail.Resources with a hardcoded pack:// UriSource, so the
-                // rail was the one place on the Dashboard that kept the base art after a
-                // mod switch. Mutate each brush's ImageSource in place — the chips bind to
-                // them with {StaticResource}, so they all repaint from the one assignment.
-                // The DecodePixelWidth values mirror the XAML: the rail only ever shows
-                // these ~170px wide, and re-resolving without a decode cap would pull the
-                // full-size neon PNGs into memory.
-                //
-                // The surfaceId on each row is what ApplyArtFraming crops against: the six
-                // ordinary chips are railChip; Blink and Lockdown are the two taller launchers
-                // that carry live controls over their whole face (railCard). The shapes those
-                // ids stand for live in Services/ModArtFraming.cs, not here.
-                var railArtMap = new (string key, string resourcePath, int decodeWidth, string surfaceId)[]
-                {
-                    ("ArtTakeover",  "features/takeover.png",       384, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtAwareness", "features/awareness.png",      512, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtHaptics",   "features/vibe.png",           384, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtIntake",    "features/lab_quiz_hero.png",  512, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtRemote",    "features/remote_control.png", 768, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtBlink",     "features/blink_trainer.png",  512, ModArtFramingRegistry.SurfaceRailCard),
-                    ("ArtFyp",       "features/fyp.png",           512, ModArtFramingRegistry.SurfaceRailChip),
-                    ("ArtLockdown",  "lockdown_icon.png",          1024, ModArtFramingRegistry.SurfaceRailCard),
-                };
-                var railResources = SettingsTab.PremiumRail?.Resources;
-                if (railResources != null)
-                {
-                    foreach (var (key, path, decodeWidth, surfaceId) in railArtMap)
-                    {
-                        if (railResources[key] is not ImageBrush brush || brush.IsFrozen) continue;
-                        var image = LoadModImageDecoded(path, decodeWidth);
-                        if (image != null)
-                            brush.ImageSource = image;
-                        // Unconditional, and NOT inside the image != null guard: the crop has to
-                        // be re-decided on every pass or a mod that overrides only some slots
-                        // leaves the rest wearing whatever the previous mod was framed by, and
-                        // switching back to built-in art never restores the shipped rect.
-                        ApplyArtFraming(brush, path, surfaceId,
-                                        image != null && ModResourceResolver.HasActiveModOverride(path));
-                    }
-                }
-
                 // "Lab" hero headers (mod-sensitive): drone-mode ships green versions under
                 // resources/features/lab_*_hero.png; the embedded pink ones are the fallback.
                 // Only two rows left - the Lab tab's own three moved to playHeroMap below with the
@@ -2720,8 +2678,8 @@ namespace ConditioningControlPanel
                 //
                 // Unlike labHeroMap above, this block goes through LoadModImageDecoded: these are
                 // 132-138px card headers, and ResolveImage decodes at full resolution, which is how
-                // the rail's neon PNGs used to cost a few MB apiece for a thumbnail. The caps mirror
-                // railArtMap's, and the brush's ImageSource is mutated IN PLACE - the cards bind the
+                // the old rail's neon PNGs used to cost a few MB apiece for a thumbnail. The caps are
+                // the same idea, and the brush's ImageSource is mutated IN PLACE - the cards bind the
                 // brush itself, so replacing the brush would repaint nothing.
                 var playHeroMap = new (string resourcePath, ImageBrush? brush, int decodeWidth, string surfaceId)[]
                 {
@@ -2766,13 +2724,6 @@ namespace ConditioningControlPanel
                                     image != null && ModResourceResolver.HasActiveModOverride(path));
                 }
 
-                // The rail chips do NOT all paint straight from the resources above: the hover
-                // nudge (PrepareRailArtNudge) hands each of them a private Clone(), which stops
-                // observing the resource the moment it is made. Push the freshly mutated art into
-                // those clones or a runtime mod switch repaints the resource and nothing else.
-                // No-op before the dashboard FX are wired (the list is empty), which is exactly
-                // the startup case where the clones are made AFTER this method and are correct.
-                RefreshRailArtClones();
             }
             catch (Exception ex)
             {
@@ -3373,8 +3324,8 @@ namespace ConditioningControlPanel
             // etc.) reflect on this button too.
             EnsureBrowserWebcamStateSubscribed();
 
-            // Dashboard premium quick-toggle rail: paint state + subscribe to patron changes.
-            InitPremiumRail();
+            // Dashboard favorites rail: pin menus, first paint, patron-change subscription.
+            InitFavoritesRail();
 
             // Header "Remember" button: reflect whether a setup is already saved.
             SyncRememberButton();

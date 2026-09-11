@@ -327,5 +327,22 @@ namespace ConditioningControlPanel
         // rules it obeyed are the ones to carry with it: element.BeginAnimation, never
         // Storyboard.SetTargetName (which silently no-ops across the tab UserControl namescopes),
         // and skip entirely under MotionLevel.Off.
+
+        // ---- lockbands --------------------------------------------------------------------
+
+        /// <summary>
+        /// Paints a tier band from a <see cref="TierVerdict"/>: locked means Visible. Lived in
+        /// the dashboard's premium rail until that rail went (2026-09-11); the Play wall is the
+        /// surface that still wears bands. One helper on purpose - two copies of "locked means
+        /// Visible" is how a band ends up inverted on one surface and nobody notices.
+        /// </summary>
+        internal static void SetLockband(FrameworkElement? band, in TierVerdict verdict)
+            => SetLockbandVisible(band, !verdict.Allowed);
+
+        internal static void SetLockbandVisible(FrameworkElement? band, bool locked)
+        {
+            if (band == null) return;
+            band.Visibility = locked ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 }

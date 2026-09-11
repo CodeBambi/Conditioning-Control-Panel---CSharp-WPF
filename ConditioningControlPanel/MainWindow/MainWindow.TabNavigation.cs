@@ -115,6 +115,11 @@ namespace ConditioningControlPanel
             // them without touching a single comparison.
             tab = (tab ?? string.Empty).ToLowerInvariant();
 
+            // The dashboard's RECENT rail. At the door, before the three intercepts below, so a
+            // window key (fyp, justdrop) counts as an open like any tab; the rule itself skips
+            // the dashboard, its aliases, "patreon" and any row the server has withheld.
+            NoteDestinationOpened(tab);
+
             // Legacy redirect: the "patreon" tab was eliminated; its account/data
             // content lives in the Settings door's Account section now, so this IS
             // a tab switch (ShowAppInfoPopup -> ShowAccountSettings -> appsettings).
@@ -253,7 +258,7 @@ namespace ConditioningControlPanel
                 case "settings":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
-                    RefreshPremiumRail(); // recompute chip dots (incl. Voice) from live state on every show
+                    RefreshDashboardRail(); // rail + price tags from live state on every show
                     // Training Programs own the day's feature mix. Re-derived (never latched) on
                     // every show of the Dashboard, so arriving here can never find a stale lock -
                     // not after a crash, an abort, or a session event that fired out of order.
@@ -294,7 +299,7 @@ namespace ConditioningControlPanel
                 case "progression":
                     SettingsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(SettingsTab);
-                    RefreshPremiumRail();
+                    RefreshDashboardRail();
                     break;
 
                 case "quests":
@@ -968,7 +973,7 @@ namespace ConditioningControlPanel
         /// so the x:Name MainWindow.xaml used to declare is a passthrough now.
         ///
         /// This one property is why the move cost nothing: all ~71 <c>HapticsTab.&lt;x:Name&gt;</c>
-        /// dereferences across MainWindow.Haptics.cs, .Patreon.cs, .PremiumRail.cs, .Presets.cs,
+        /// dereferences across MainWindow.Haptics.cs, .Patreon.cs, .Presets.cs,
         /// .Remember.cs, .SessionFeatureLock.cs, .TabFxTakeoverLabStatus.cs and .xaml.cs (incl.
         /// both <c>features/vibe.png</c> repaint rows and the IsVisibleChanged live-status hook)
         /// resolve through it unchanged. Never rename it.

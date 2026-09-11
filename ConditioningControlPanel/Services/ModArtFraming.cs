@@ -150,12 +150,13 @@ namespace ConditioningControlPanel.Services
         // says where. If a surface is restyled, change it HERE and both the runtime crop and the
         // editor's preview follow — that is the reason this table exists.
 
-        /// <summary>Premium quick-launch rail chip: 69x42 (SettingsTabView PremiumChipStyle
-        /// Height=42, PremiumRailContent Width=69).</summary>
+        /// <summary>The old dashboard premium rail's chip, 69x42. The rail went on 2026-09-11
+        /// (favorites + recent took the column) and nothing paints this surface now; the id
+        /// stays because mod manifests (artFraming) may still name it.</summary>
         public const string SurfaceRailChip = "railChip";
 
-        /// <summary>The two taller rail launchers that carry live controls (Lockdown, Blink).
-        /// Same 69 width, ~62 tall once the stepper row is in.</summary>
+        /// <summary>The old rail's two taller launcher cards (Lockdown, Blink), 69x62. Retired
+        /// with the rail; kept for the same manifest reason as <see cref="SurfaceRailChip"/>.</summary>
         public const string SurfaceRailCard = "railCard";
 
         /// <summary>Play door card header plate: full card width, 138 tall (PlayCardArtPlate).</summary>
@@ -237,7 +238,9 @@ namespace ConditioningControlPanel.Services
 
         private static readonly ArtSlotBinding[] _bindings =
         {
-            // Rail chips — rects from SettingsTabView.xaml's Art* ImageBrush resources.
+            // The old dashboard rail's chips. Lifted from SettingsTabView.xaml's Art* resources
+            // when the rail existed; the rail went on 2026-09-11 and nothing paints these
+            // surfaces now, but the rows stay so a mod manifest naming them still previews.
             new("features/takeover.png",       SurfaceRailChip, new Rect(0,    0.06, 1,    0.54)),
             new("features/awareness.png",      SurfaceRailChip, new Rect(0.02, 0.05, 0.40, 0.43)),
             new("features/vibe.png",           SurfaceRailChip, new Rect(0,    0.07, 1,    0.61)),
