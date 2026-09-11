@@ -393,8 +393,17 @@ namespace ConditioningControlPanel.Services
             foreach (var ender in SentenceEnders)
                 if (text[i] == ender) return false;
 
+            // A text emoticon is a full stop in this companion's dialect (":3", "<3", ":D", "uwu").
+            // Its last char is a digit or letter, so without this it reads as mid-sentence and the
+            // whole closing sentence would be cut.
+            if (EmoticonTail.IsMatch(text.Substring(0, i + 1))) return false;
+
             return true;
         }
+
+        private static readonly Regex EmoticonTail = new(
+            @"(?:[:;=xX]-?[3DPpOo(\)\[\]]|<3|\^\^|[uUoO][wW][uUoO]|[xX][dD])\s*$",
+            RegexOptions.Compiled);
 
         /// <summary>
         /// Cuts the half-written last sentence off a reply the provider's token cap guillotined.
@@ -438,6 +447,8 @@ namespace ConditioningControlPanel.Services
                 var ch = body[i];
                 if (ch != '.' && ch != '!' && ch != '?' && ch != '…' && ch != '~') continue;
                 if (InsideAny(urls, i)) continue;   // "naughty-bambi-109749.html" is not a sentence end
+                if (ch == '.' && i > 0 && i + 1 < body.Length && char.IsDigit(body[i - 1]) && char.IsDigit(body[i + 1]))
+                    continue;                       // "10.5 times" is a number, not a sentence end
                 cut = i;
                 break;
             }

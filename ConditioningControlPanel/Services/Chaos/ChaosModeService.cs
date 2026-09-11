@@ -2213,6 +2213,10 @@ public sealed class ChaosModeService
     /// the teardown quarantine so no cascade rises into the LibVLC disposal churn.</summary>
     private void OnVideoEndedDuringRun(object? sender, EventArgs e)
     {
+        // The ownership mark means "the tape chaos started is still up". A tape dismissed early
+        // (Esc on a non-strict video, a short source) must drop it here, or a session video that
+        // starts inside the 15 s cap window would read as chaos-owned and get torn down on exit.
+        _chaosVideoCapUtc = DateTime.MinValue;
         try { Application.Current?.Dispatcher?.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(false))); } catch (Exception ex) { Diag.Swallowed(ex); }
         ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);
     }
