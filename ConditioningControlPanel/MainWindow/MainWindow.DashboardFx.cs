@@ -196,6 +196,16 @@ namespace ConditioningControlPanel
                 var tab = SettingsTab;
                 if (tab == null) return;
 
+                // Phase F: the rolodex is a native HWND over this entire grid, and half a dozen
+                // callers re-run this method. Without the gate, any one of them would restart the
+                // fog behind a browser nobody can see it through.
+                if (_dashboardRolodexParked)
+                {
+                    try { tab.MosaicFx?.Pause(); }
+                    catch (Exception ex) { Diag.Swallowed(ex, "the canvas is already parked"); }
+                    return;
+                }
+
                 // The canvas parks itself on deactivate/minimise/tab-hide. This call is for the
                 // other direction: coming back UP from Reduced/Off, nothing else would poke it.
                 if (tab.MosaicFx != null &&

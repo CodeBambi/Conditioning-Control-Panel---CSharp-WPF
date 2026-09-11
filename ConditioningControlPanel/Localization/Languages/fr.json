@@ -5124,6 +5124,8 @@
   "dash_picker_split": "Partager",
   "dash_picker_cancel": "Annuler",
   "dash_pencil_tip": "Changer cette tuile",
+  "dash_tour_title": "Votre mur d'accueil",
+  "dash_tour_pick_three": "Choisissez-en trois pour commencer.",
   "dash_toggle_hint_rail": "clic droit = on/off",
   "inbox_programs_title": "Programmes",
   "inbox_programs_summary": "ce qu'est un programme, et le choix du jour.",

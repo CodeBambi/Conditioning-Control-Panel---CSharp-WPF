@@ -5115,6 +5115,8 @@
   "dash_picker_split": "Dividir",
   "dash_picker_cancel": "Cancelar",
   "dash_pencil_tip": "Cambiar esta casilla",
+  "dash_tour_title": "Tu muro de inicio",
+  "dash_tour_pick_three": "Elige tres para empezar.",
   "dash_toggle_hint_rail": "clic derecho = on/off",
   "inbox_programs_title": "Programas",
   "inbox_programs_summary": "qué es un programa, y la elección de hoy.",

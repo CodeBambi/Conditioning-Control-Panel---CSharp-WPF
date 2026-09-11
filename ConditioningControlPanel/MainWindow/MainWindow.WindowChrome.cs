@@ -183,8 +183,19 @@ namespace ConditioningControlPanel
                 _startSheenTimer?.Stop();
                 _staggerCleanupTimer?.Stop();
 
+                // The Home wall's browser, if one is up. Disposed by hand rather than left to the
+                // teardown: an HWND is not a WPF child that goes quietly with its parent.
+                //
+                // Unknown, not Close: quitting the app is not skipping the first-run tour. Every
+                // other way out of it spends the once-ever offer (Esc, Done, leaving the tab); a
+                // user who closed the window mid-tour is owed it again next launch.
+                CloseRolodex(Services.Dashboard.RolodexMessageKind.Unknown);
+
                 // Unsubscribe service events to allow GC of this window
                 UnsubscribeWebcamDebug();
+                // ProfileSyncService.DashboardLayoutAdopted is STATIC; an instance handler left on
+                // it pins this window for the life of the process.
+                UnhookDashboardCloudAdopt();
                 if (_onPillStateChanged != null && App.Webcam != null)
                 {
                     App.Webcam.OnTrackingStateChanged -= _onPillStateChanged;

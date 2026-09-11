@@ -48,6 +48,12 @@ namespace ConditioningControlPanel.Views.Controls.Dashboard
         /// <summary>Done, Escape, or a click that finished the job.</summary>
         internal event Action? CloseRequested;
 
+        /// <summary>The Replace / Split question was backed out of. Separate from
+        /// <see cref="CloseRequested"/> because the shelf normally stays up after a cancel - the
+        /// user is still picking - but a shelf that was opened ONLY to host this question has
+        /// nothing left to be, and the host is the one that knows which it is.</summary>
+        internal event Action? AskCancelled;
+
         /// <summary>The slot this picker was opened for. Read by the host when a pick comes back.</summary>
         internal int Slot { get; private set; }
 
@@ -229,7 +235,16 @@ namespace ConditioningControlPanel.Views.Controls.Dashboard
 
         private void OnAskSplitClick(object sender, RoutedEventArgs e) => Answer(true);
 
-        private void OnAskCancelClick(object sender, RoutedEventArgs e) => HideAsk();
+        /// <summary>Never mind. The strip goes away and the host is told, because the answer to
+        /// "should the shelf go too" depends on why the shelf is there.</summary>
+        private void CancelAsk()
+        {
+            var wasAsking = AskStrip.Visibility == Visibility.Visible;
+            HideAsk();
+            if (wasAsking) AskCancelled?.Invoke();
+        }
+
+        private void OnAskCancelClick(object sender, RoutedEventArgs e) => CancelAsk();
 
         // ---- footer --------------------------------------------------------------------
 
@@ -254,7 +269,7 @@ namespace ConditioningControlPanel.Views.Controls.Dashboard
             if (e.Key != Key.Escape) return;
             e.Handled = true;
 
-            if (AskStrip.Visibility == Visibility.Visible) { HideAsk(); return; }
+            if (AskStrip.Visibility == Visibility.Visible) { CancelAsk(); return; }
             CloseRequested?.Invoke();
         }
     }
