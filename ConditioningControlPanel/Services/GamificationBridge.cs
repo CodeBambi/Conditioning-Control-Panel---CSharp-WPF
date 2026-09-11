@@ -25,21 +25,24 @@ public class GamificationBridge : IDisposable
     private bool _started;
 
     // --- tunable thresholds (chosen here, flagged for review) ---
+    // The internal ones are the lifetime-counter bars; AchievementMeters reads them for the
+    // gallery's progress bars, so the card and the unlock share one number.
     private const int BestFriendsCompanionLevel = 25;   // "reach a companion level milestone"
-    private const int PillowTalkMessages = 100;          // "exchange 100 messages"
-    private const int PavlovKeywordTriggers = 500;       // "fire 500 keyword triggers"
-    private const int CuratorDistinctMods = 10;          // "activate 10 different mods"
+    internal const int PillowTalkMessages = 100;         // "exchange 100 messages"
+    internal const int PavlovKeywordTriggers = 500;      // "fire 500 keyword triggers"
+    internal const int CuratorDistinctMods = 10;         // "activate 10 different mods"
     private const int MadScientistRules = 5;             // "build using 5+ triggers" (Rules)
     private const int PuppetStringsCommands = 100;        // "100 remote commands in one session"
     private const int ThrowAwayKeyMinutes = 60;           // "60+ minute lockdown"
-    private const int CommunityModsCount = 3;             // "activate 3 community mods"
-    private const int DownTheRabbitHolePlays = 25;        // "play 25 enhancements"
+    internal const int CommunityModsCount = 3;            // "activate 3 community mods"
+    internal const int DownTheRabbitHolePlays = 25;       // "play 25 enhancements"
     private const int OnRailsTriggerTypes = 5;            // "5+ distinct trigger types"
-    private const int HandsFreeGazePops = 50;             // "pop 50 bubbles by gaze"
-    private const int HonorRollCategories = 3;            // "top marks in 3 different categories"
+    internal const int HandsFreeGazePops = 50;            // "pop 50 bubbles by gaze"
+    internal const int HonorRollCategories = 3;           // "top marks in 3 different categories"
+    internal const int BlinkAndYoullMissItBlinks = 100;   // "log 100 blinks in the Blink Trainer"
     // 25 -> 10 with the quiz retired: an intake is a 20+ minute banded descent, not a 10-question
     // quiz, so 25 of them was a different order of ask than the requirement text implied.
-    private const int TeachersPetPasses = 10;             // "pass 10 graded runs"
+    internal const int TeachersPetPasses = 10;            // "pass 10 graded runs"
     private const int HeldBackFailStreak = 3;             // "fail 3 in a row" (classic quiz only)
     private const int HeldBackQuitStreak = 3;             // "quit 3 intakes early" (the live path)
 
@@ -477,7 +480,7 @@ public class GamificationBridge : IDisposable
                 var p = Prog; if (p == null) return;
                 p.BlinkTrainerBlinks++;
                 Ach?.MarkDirty();
-                if (p.BlinkTrainerBlinks >= 100)
+                if (p.BlinkTrainerBlinks >= BlinkAndYoullMissItBlinks)
                     Ach?.TryUnlockExclusive("blink_and_youll_miss_it");
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "GamificationBridge: blink handler failed"); }
