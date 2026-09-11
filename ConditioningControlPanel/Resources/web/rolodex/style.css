@@ -1,0 +1,148 @@
+/* ============================================================================
+ * style.css - the rolodex HUD. The 3D layer paints itself; everything here is
+ * chrome laid over it.
+ *
+ * Dark first, always: the host swaps a WebView2 HWND straight over the velvet
+ * feature grid, and an HWND cannot fade in, so a single white frame would read
+ * as a flash. html and body carry the velvet colour before any script runs.
+ * ==========================================================================*/
+
+:root {
+  --velvet-0: #0b0710;   /* deepest, the canvas clear colour in rolodex.js too */
+  --velvet-1: #150c1d;
+  --ink:      #f3ecff;
+  --ink-dim:  #b9a9cf;
+  --gold:     #e2b755;
+  --lab:      #bef0ff;
+  --accent:   #c48cff;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--velvet-0);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;      /* we own drag; never let the page pan */
+  cursor: grab;
+}
+#stage.dragging { cursor: grabbing; }
+
+/* A vignette sold in CSS rather than in a postprocessing pass: the rings read
+   as lit from the middle and the HWND edges stay dark. */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;    /* children opt back in */
+  background: radial-gradient(ellipse at 50% 46%,
+              rgba(0,0,0,0) 38%, rgba(6,3,10,0.55) 78%, rgba(6,3,10,0.9) 100%);
+}
+
+#bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+}
+
+#title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+#count {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  padding: 3px 11px;
+  border: 1px solid rgba(196,140,255,0.45);
+  border-radius: 999px;
+  background: rgba(196,140,255,0.10);
+}
+
+#btn-close {
+  margin-left: auto;
+  pointer-events: auto;
+  width: 34px;
+  height: 34px;
+  line-height: 1;
+  font-size: 22px;
+  color: var(--ink-dim);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms linear, color 120ms linear;
+}
+#btn-close:hover { background: rgba(255,255,255,0.12); color: var(--ink); }
+
+#hint {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 16px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: rgba(185,169,207,0.6);
+}
+
+#btn-done {
+  position: absolute;
+  left: 50%;
+  bottom: 46px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  padding: 10px 30px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #180d22;
+  background: linear-gradient(180deg, #e6c6ff 0%, var(--accent) 100%);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(150,80,220,0.45);
+  cursor: pointer;
+}
+#btn-done:hover { filter: brightness(1.08); }
+
+/* Mock harness only. Never visible under the host. */
+#status {
+  position: absolute;
+  left: 14px;
+  bottom: 40px;
+  max-width: 62vw;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8de8c0;
+  background: rgba(0,0,0,0.45);
+  border-left: 2px solid #8de8c0;
+  padding: 6px 10px;
+  white-space: pre-wrap;
+}
+
+/* The host also passes reducedMotion in init; this covers a plain browser. */
+@media (prefers-reduced-motion: reduce) {
+  #btn-close, #btn-done { transition: none; }
+}
