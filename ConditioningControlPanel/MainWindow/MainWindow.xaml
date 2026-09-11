@@ -1113,26 +1113,7 @@
                                         <TextBlock Text="{loc:Str nav_deeper_editor}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
-                                <!-- JUST DROP (owner decision, 2026-09-11): a creator tool, not a game, so its
-                                     row is here under Creator Tools and the Play rack card is gone. Still a
-                                     WINDOW: ShowTab("justdrop") intercepts the key, owns the withheld refusal
-                                     and launches the shop - the same path the Exclusives shelf, the dashboard
-                                     tease tile and the Ctrl+K row take. Collapsed by default: the row is never
-                                     shown by markup, only by ApplyJustDropDoorVisibility once the server has
-                                     opened the door for this account. The pill wears the Tier 2 tooltip. -->
-                                <Button x:Name="BtnNavJustDrop" Tag="JustDrop" Style="{StaticResource NavEntryButton}"
-                                        Visibility="Collapsed"
-                                        Click="BtnNavJustDrop_Click" ToolTip="{loc:Str jd_door_title}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
-                                               Source="{Binding Source='🎚', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str jd_door_title}" VerticalAlignment="Center"/>
-                                        <Border x:Name="TagPremiumJustDrop" Style="{StaticResource NavEntryPremiumTag}"
-                                                ToolTip="{loc:Str nav_tag_lab_tip}">
-                                            <TextBlock Style="{StaticResource NavEntryPremiumTagText}"/>
-                                        </Border>
-                                    </StackPanel>
-                                </Button>
+                                <!-- Just Drop's door goes here (Creator Tools, [Premium]) - added by the next PR in this stack, which also takes the Quick Drop button off the Play hero. -->
                             </StackPanel>
                         </Border>
 
@@ -1403,18 +1384,18 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ===== JUST DROP: NO DOOR OF ITS OWN, BY DECISION =====
+                        <!-- ===== NO JUST DROP DOOR HERE, DELIBERATELY =====
                              Just Drop had a rail door and a tab until it became a WINDOW
                              (Services/JustDrop/JustDropHostService.cs), the same shell the Graded
-                             Intake and DtRH use. On 2026-09-11 the owner placed it: a creator
-                             tool, not a game. So it is one ROW, under Studio > Creator Tools
-                             (BtnNavJustDrop, above), and nothing else on this rail. The Play rack
-                             card that used to open it went with that call; the Exclusives shelf,
-                             the dashboard tease tile and the Ctrl+K row stay.
+                             Intake and DtRH use. A shop that opens borderless over the app has no
+                             business also being a row in the rail, and the two places it is
+                             actually reached from - the Play door's rack and the Exclusives shelf -
+                             are where someone looking for a session already is.
 
-                             The key "justdrop" still routes through ShowTab, which intercepts it
-                             and launches the window (exactly as it does for "fyp"), so none of
-                             those callers know a window is involved. -->
+                             The key "justdrop" still exists and still routes through ShowTab, which
+                             intercepts it and launches the window (exactly as it does for "fyp").
+                             That is what keeps the dashboard tease tile and the Ctrl+K palette row
+                             working without either of them knowing a window is involved. -->
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>
@@ -2666,9 +2647,8 @@
                 <views:StudioTabView x:Name="StudioTab" Margin="10,5,10,10" Visibility="Collapsed" />
 
 
-                <!-- No Just Drop tab. It is a window now (Services/JustDrop/JustDropHostService.cs),
-                     opened from its Studio > Creator Tools row - owner call 2026-09-11, see the
-                     rail comment above. -->
+                <!-- No Just Drop tab. It is a window now - see the rail comment above and
+                     Services/JustDrop/JustDropHostService.cs. -->
             </Grid>
         </AdornerDecorator>
 

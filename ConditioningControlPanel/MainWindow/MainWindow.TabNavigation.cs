@@ -625,10 +625,8 @@ namespace ConditioningControlPanel
             ("play",      "play",      new[] { "play", "deeper", "blinktrainer", "gradedintake", "fyp",
                                                "exclusives", "quests", "programs" }),
             ("playtogether", "availablesubjects", new[] { "availablesubjects", "remotecontrol" }),
-            // "justdrop" is a window key like "fyp": filed here so the Creator Tools row's door
-            // resolves; ShowTab intercepts it before any door would expand.
             ("studio",    "studio",    new[] { "studio", "presets", "haptics", "awareness", "bambitakeover",
-                                               "lockdown", "justdrop" }),
+                                               "lockdown" }),
             ("companion", "companion", new[] { "companion", "shelistening" }),
             // "spiral" sits right after "discord": the Spiral Room's other two doors are both on
             // the profile (the Trainer Card plate and the account menu row), so the rail row belongs
@@ -1038,10 +1036,6 @@ namespace ConditioningControlPanel
         // name revealed - one palette row each, so Ctrl+K, the favorites rail and the tutorial all
         // agree on where the thing is. None of these is a real page split yet.
         private void BtnNavFyp_Click(object sender, RoutedEventArgs e) => ShowTab("fyp");
-
-        // ShowTab("justdrop"), never JustDropHostService.LaunchShop(): ShowTab owns the withheld
-        // refusal and is the path the Exclusives shelf, the tease tile and the palette row take.
-        private void BtnNavJustDrop_Click(object sender, RoutedEventArgs e) => ShowTab("justdrop");
 
         private void BtnNavAiEffects_Click(object sender, RoutedEventArgs e) => OpenPaletteRow("part.aieffects");
 
