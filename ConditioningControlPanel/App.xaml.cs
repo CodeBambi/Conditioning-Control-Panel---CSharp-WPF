@@ -3968,6 +3968,9 @@ namespace ConditioningControlPanel
                 if (backup == null) { PostRestoreFailedInboxItem(); return; }
 
                 ApplyRestoredSettings(backup);
+                // The restore takes the higher TotalConditioningMinutes; that history belongs to
+                // the days it happened on, not to today's day-log entry.
+                FeatureDayLog?.Rebaseline("welcome-back restore");
 
                 // The backup remembers an OLDER LastSeenVersion, and ApplyRestoredSettings does not
                 // preserve this one - so without this line the restore re-arms What's New for a

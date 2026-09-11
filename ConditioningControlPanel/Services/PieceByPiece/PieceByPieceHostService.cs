@@ -10,6 +10,8 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Services.Chaos;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Services.PieceByPiece;
 
@@ -142,6 +144,7 @@ internal static class PieceByPieceHostService
         // The same door the Arcademy and the descent ask for: a card's lockband is decoration, and
         // the one code path that actually opens the window has to be the one that can say no.
         if (!TierGate.DemandLab(ProductName)) return;
+        SeasonRecapService.TrackFeature(SeasonFeatureKeys.PieceByPiece);
 
         try
         {

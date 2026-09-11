@@ -3,6 +3,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Services
 {
@@ -244,6 +246,7 @@ namespace ConditioningControlPanel.Services
                     // Don't set Owner — WPF ties owned window z-order to owner,
                     // which fights with our Win32 HWND_TOPMOST positioning
                     window.Show();
+                    if (!isTest) SeasonRecapService.TrackFeature(SeasonFeatureKeys.PopQuiz);
 
                     App.Logger?.Information("Pop Quiz shown: {Question}", question.QuestionText);
                 }

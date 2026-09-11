@@ -1872,6 +1872,7 @@ namespace ConditioningControlPanel.Services
                         // ConsecutiveDays, daily_quest_streak, completion dates, etc.) was never refreshed
                         // from cloud, so admin restores / cross-device progress stayed invisible until the
                         // V1 fallback ran. Mirror MergeCloudProfile's stats merge for V2.
+                        var liftedLifetime = false;
                         if (v2Result?.User?.Stats != null)
                         {
                             if (MergeV2CloudStatsIntoLocalProgress(v2Result.User.Stats, v2Result.ForceStreakOverride == true))
@@ -1882,8 +1883,9 @@ namespace ConditioningControlPanel.Services
                                 App.Settings?.Save();
                                 App.Achievements?.Save();
                                 // Same rule as the legacy path: a lifted lifetime counter is
-                                // another device's history, not today's use.
-                                App.FeatureDayLog?.Rebaseline("v2 cloud merge");
+                                // another device's history, not today's use. The re-baseline
+                                // itself waits until after the minutes merge below.
+                                liftedLifetime = true;
                             }
                         }
 
@@ -1921,7 +1923,16 @@ namespace ConditioningControlPanel.Services
                                 v2Result.TotalConditioningMinutes.Value, settings.TotalConditioningMinutes);
                             settings.TotalConditioningMinutes = v2Result.TotalConditioningMinutes.Value;
                             App.Settings?.Save();
+                            liftedLifetime = true;
                         }
+
+                        // A take-higher merge just lifted lifetime counters to what another device
+                        // banked. That gain is not today's: move the day log's baseline past it.
+                        // AFTER the minutes merge, deliberately: the day log diffs
+                        // TotalConditioningMinutes too, and a re-baseline taken before that lift
+                        // booked another device's whole history onto today (the 1,000-minute days
+                        // in the server archive).
+                        if (liftedLifetime) App.FeatureDayLog?.Rebaseline("v2 cloud merge");
 
                         // Merge companion progress from server (per-companion, higher level wins)
                         if (v2Result?.CompanionProgress != null && v2Result.CompanionProgress.Count > 0)
