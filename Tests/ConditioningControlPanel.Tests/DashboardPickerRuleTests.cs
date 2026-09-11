@@ -15,13 +15,34 @@ namespace ConditioningControlPanel.Tests;
 /// mouse or a session - and so Phase F's rolodex answers it the same way rather than growing a
 /// second opinion behind a bridge.
 ///
-/// <para>One fact does a lot of work in these cases: the shipped wall already holds all eleven FX
-/// keys, so <c>focusgaze</c> is the only splittable feature that is NOT on it. That makes it the
-/// one key that can test "a new FX landing on an occupied slot" without the move rule catching it
-/// first.</para>
+/// <para>One fact does a lot of work in these cases: the shipped wall already holds all eleven
+/// ungated FX keys, so nothing splittable is off it. <c>focusgaze</c> is the only FX that is not
+/// on the wall, and it is Tier 2 - which is exactly why it CANNOT be a half - so any case that
+/// needs "a new splittable FX landing on an occupied slot" builds the room for it first, with
+/// <see cref="WallWithout"/>.</para>
 /// </summary>
 public class DashboardPickerRuleTests
 {
+    /// <summary>
+    /// The shipped wall with one feature lifted off it, partner promoted. Every UNGATED FX ships
+    /// on the default wall, so a case that needs "a splittable feature which is not already
+    /// somewhere" has to make one. <c>focusgaze</c> used to be that key for free; it stopped
+    /// being splittable the day the rule became "FX and ungated", because a tier-locked feature
+    /// has to keep a whole tile to have anywhere to wear its lockband.
+    /// </summary>
+    private static DashboardLayout WallWithout(string key)
+    {
+        var l = DashboardLayout.Default();
+        for (int i = 0; i < DashboardLayout.SlotCount; i++)
+        {
+            var s = l.Slots[i];
+            if (string.Equals(s.Secondary, key, StringComparison.OrdinalIgnoreCase)) s.Secondary = null;
+            if (string.Equals(s.Primary, key, StringComparison.OrdinalIgnoreCase))
+            { s.Primary = s.Secondary; s.Secondary = null; }
+        }
+        return l;
+    }
+
     // ── the pencil ───────────────────────────────────────────────
 
     [Theory]
@@ -29,6 +50,20 @@ public class DashboardPickerRuleTests
     [InlineData(true, false)]
     public void The_pencil_is_shown_unless_a_session_is_running(bool sessionLocked, bool shown)
         => Assert.Equal(shown, DashboardPickerRule.ShowPencil(sessionLocked));
+
+    [Theory]
+    [InlineData(false, false, false)]   // on screen but faded out: the corner belongs to the card
+    [InlineData(false, true, true)]     // pointer in the cell, pencil fading in: it is the target
+    [InlineData(true, true, false)]     // a session owns the wall; there is no pencil to hit
+    [InlineData(true, false, false)]
+    public void The_pencil_is_hit_testable_only_while_it_is_visible_and_faded_in(
+        bool sessionLocked, bool pointerInCell, bool hittable)
+    {
+        // A Button at Opacity 0 is still a Button. An invisible pencil that answered the
+        // hit-test swallowed every click in its corner of the tile - including the right-click
+        // that toggles the FX there - with nothing on screen to explain it.
+        Assert.Equal(hittable, DashboardPickerRule.PencilHitTestable(sessionLocked, pointerInCell));
+    }
 
     // ── the prompt matrix ────────────────────────────────────────
 
@@ -43,9 +78,21 @@ public class DashboardPickerRuleTests
     [Fact]
     public void An_occupied_single_that_can_share_offers_replace_or_split()
     {
-        // Slot 0 is flash, one FX; focusgaze is another. Two FX in one cell is a split tile.
+        // Slot 0 is flash, one ungated FX; bubbles (lifted off slot 7 so this is not a move) is
+        // another. Two ungated FX in one cell is a split tile.
         Assert.Equal(PickPrompt.AskReplaceOrSplit,
+            DashboardPickerRule.Decide(WallWithout("bubbles"), 0, "bubbles"));
+    }
+
+    [Fact]
+    public void A_tier_locked_feature_is_never_offered_as_a_half()
+    {
+        // focusgaze is FX but Tier 2, so it takes a whole tile: half a cell has no lockband, no
+        // tier rim and no price badge to put on it. Slot 0 is a plain FX, which used to be the
+        // textbook Replace-or-Split case for this key.
+        Assert.Equal(PickPrompt.AskReplaceOnly,
             DashboardPickerRule.Decide(DashboardLayout.Default(), 0, "focusgaze"));
+        Assert.False(DashboardPickerRule.CanOfferSplit(DashboardLayout.Default(), 0, "focusgaze"));
     }
 
     [Fact]
@@ -99,7 +146,7 @@ public class DashboardPickerRuleTests
         DashboardLayoutRule.Clear(empty, 0);
 
         seen.Add(DashboardPickerRule.Decide(empty, 0, "focusgaze"));
-        seen.Add(DashboardPickerRule.Decide(DashboardLayout.Default(), 0, "focusgaze"));
+        seen.Add(DashboardPickerRule.Decide(WallWithout("bubbles"), 0, "bubbles"));
         seen.Add(DashboardPickerRule.Decide(DashboardLayout.Default(), 1, "focusgaze"));
         seen.Add(DashboardPickerRule.Decide(DashboardLayout.Default(), 0, "lockcard"));
 
@@ -120,31 +167,59 @@ public class DashboardPickerRuleTests
     [Fact]
     public void Split_is_offered_only_where_the_pair_can_actually_form()
     {
-        var layout = DashboardLayout.Default();
+        var layout = WallWithout("bubbles");
 
-        Assert.True(DashboardPickerRule.CanOfferSplit(layout, 0, "focusgaze"));   // FX + FX
-        Assert.False(DashboardPickerRule.CanOfferSplit(layout, 1, "focusgaze"));  // already split
-        Assert.False(DashboardPickerRule.CanOfferSplit(layout, 4, "focusgaze"));  // occupant is a door
+        Assert.True(DashboardPickerRule.CanOfferSplit(layout, 0, "bubbles"));     // FX + FX
+        Assert.False(DashboardPickerRule.CanOfferSplit(layout, 1, "bubbles"));    // already split
+        Assert.False(DashboardPickerRule.CanOfferSplit(layout, 4, "bubbles"));    // occupant is a door
         Assert.False(DashboardPickerRule.CanOfferSplit(layout, 0, "fyp"));        // pick is a door
+        Assert.False(DashboardPickerRule.CanOfferSplit(layout, 0, "focusgaze"));  // pick is tier-locked
         Assert.False(DashboardPickerRule.CanOfferSplit(layout, 0, "flash"));      // itself, both halves
         Assert.False(DashboardPickerRule.CanOfferSplit(layout, 0, "nonsense"));
 
         DashboardLayoutRule.Clear(layout, 0);
-        Assert.False(DashboardPickerRule.CanOfferSplit(layout, 0, "focusgaze"));  // nothing to share with
+        Assert.False(DashboardPickerRule.CanOfferSplit(layout, 0, "bubbles"));    // nothing to share with
     }
 
     [Fact]
     public void What_the_rule_offers_is_what_Place_accepts()
     {
-        // The two must not drift: an offered Split that Place refuses is a dead button.
-        foreach (var key in new[] { "focusgaze", "fyp", "flash", "lockcard" })
+        // The two must not drift: an offered Split that Place refuses is a dead button, and a
+        // Split that Place makes without being offered is a tile nobody asked for. "bubbles" is
+        // the one key here that can legally become a half, so it is what makes this test able to
+        // fail in BOTH directions.
+        foreach (var key in new[] { "focusgaze", "fyp", "flash", "lockcard", "bubbles" })
             for (int slot = 0; slot < DashboardLayout.SlotCount; slot++)
             {
-                var probe = DashboardLayout.Default();
+                var probe = WallWithout("bubbles");
                 var offered = DashboardPickerRule.CanOfferSplit(probe, slot, key);
                 var outcome = DashboardLayoutRule.Place(probe, slot, key, split: true);
                 Assert.Equal(offered, outcome == PlaceOutcome.Split);
             }
+    }
+
+    // ── what counts as an edit ───────────────────────────────────
+
+    [Theory]
+    [InlineData(PlaceOutcome.Placed, true)]
+    [InlineData(PlaceOutcome.Replaced, true)]
+    [InlineData(PlaceOutcome.Split, true)]
+    [InlineData(PlaceOutcome.MovedFrom, true)]
+    [InlineData(PlaceOutcome.Unchanged, false)]
+    [InlineData(PlaceOutcome.RefusedNotSplittable, false)]
+    [InlineData(PlaceOutcome.RefusedUnknownKey, false)]
+    public void Only_an_outcome_that_moved_something_is_committed(PlaceOutcome outcome, bool commit)
+        => Assert.Equal(commit, DashboardPickerRule.ShouldCommit(outcome));
+
+    [Fact]
+    public void Re_picking_the_tile_that_is_already_in_the_slot_is_not_an_edit()
+    {
+        // Committing this wrote DashboardLayoutTouched = true for an edit that never happened,
+        // and Touched never comes back off - it is what the cloud's fill-if-empty adopt reads,
+        // so one no-op pick cost the account every other machine's layout for good.
+        var l = DashboardLayout.Default();
+        Assert.False(DashboardPickerRule.ShouldCommit(DashboardLayoutRule.Place(l, 0, "flash", false)));
+        Assert.True(l.IsDefault);
     }
 
     // ── what an edit writes ──────────────────────────────────────
@@ -262,6 +337,47 @@ public class DashboardPickerSurfaceTests
         Assert.Contains("DashboardPickerRule.ShowPencil(locked)", edit, StringComparison.Ordinal);
         Assert.Contains("Visibility.Collapsed", edit, StringComparison.Ordinal);
         Assert.DoesNotContain("pencil.IsEnabled", edit, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_pencil_sits_in_the_one_corner_the_card_has_not_already_claimed()
+    {
+        // Both TOP corners are taken inside the card, at an 8px inset on a 6px-margined,
+        // 1px-bordered border - 15px in from the host's own corner: BtnHelp ("?") top-right and
+        // TierBadgeHost top-left. A 22px chip at a 1px inset reaches 23px in, so it overlaps
+        // either by about 8x8px, and over BtnHelp it also wins the hit-test and the "?" stops
+        // opening. Bottom-right is clear: the lockband under it is IsHitTestVisible=False and
+        // centres its padlock, and the title is lifted by the band's own height while it is up.
+        var edit = File.ReadAllText(EditPath);
+        var xaml = File.ReadAllText(Path.Combine(ClientDir(), "Features", "FeatureCard.xaml"));
+
+        Assert.Contains("VerticalAlignment = VerticalAlignment.Bottom", edit, StringComparison.Ordinal);
+        Assert.Contains("new Thickness(0, 0, 1, 1)", edit, StringComparison.Ordinal);
+        // The premise: if either of those two ever moves out of a top corner, re-argue the corner.
+        Assert.Matches(@"x:Name=""BtnHelp""[\s\S]{0,400}?VerticalAlignment=""Top""", xaml);
+        Assert.Matches(@"x:Name=""TierBadgeHost""[\s\S]{0,400}?VerticalAlignment=""Top""", xaml);
+    }
+
+    [Fact]
+    public void The_pencil_is_not_a_hit_test_target_while_it_is_invisible()
+    {
+        // A Button at Opacity 0 still answers the hit-test, so an unfaded pencil ate the tile's
+        // right-click in that corner. Built untouchable; the fade is what turns it on and off.
+        var edit = File.ReadAllText(EditPath);
+        Assert.Contains("IsHitTestVisible = false", edit, StringComparison.Ordinal);
+        Assert.Contains("DashboardPickerRule.PencilHitTestable", edit, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void An_edit_is_written_before_it_is_painted_and_a_no_op_pick_is_neither()
+    {
+        // Order: the settings write is attempted first, so a write that cannot land rolls the
+        // layout back instead of leaving a repainted wall the next launch will not remember. And
+        // Unchanged never reaches either step - committing it would latch Touched for nothing.
+        var edit = File.ReadAllText(EditPath);
+        Assert.Contains("DashboardPickerRule.ShouldCommit(outcome)", edit, StringComparison.Ordinal);
+        Assert.Matches(@"if \(!SaveDashboardLayout[\s\S]{0,400}?RenderDashboardSlots\(CurrentLayout\)", edit);
+        Assert.Contains("DashboardLayoutRule.FromWire(before)", edit, StringComparison.Ordinal);
     }
 
     [Fact]

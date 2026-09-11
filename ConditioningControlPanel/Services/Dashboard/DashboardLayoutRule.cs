@@ -94,12 +94,15 @@ namespace ConditioningControlPanel.Services.Dashboard
 
             if (split)
             {
-                // A split needs a free second half and two FX. The pick cannot be the occupant
-                // itself - one feature on both halves - but the guard above has already said so.
+                // A split needs a free second half and two halves that may BE halves. Both sides
+                // are asked through CanSplit rather than one of them being spot-checked for Kind:
+                // the rule is "ungated FX", and a Kind test alone would let a tier-locked FX into
+                // half a cell where its lockband and rim cannot follow. The pick cannot be the
+                // occupant itself - one feature on both halves - but the guard above said so.
                 if (target.Secondary != null
                     || target.Primary == null
                     || !FeatureCatalog.CanSplit(target.Primary)
-                    || row.Kind != DashboardKind.Fx)
+                    || !FeatureCatalog.CanSplit(row.Key))
                     return PlaceOutcome.RefusedNotSplittable;
 
                 Remove(layout, row.Key);

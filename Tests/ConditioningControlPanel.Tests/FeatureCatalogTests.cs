@@ -40,14 +40,24 @@ public class FeatureCatalogTests
     private static string[] Sorted(IEnumerable<string> keys) => keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
 
     [Fact]
-    public void Catalog_holds_27_rows_with_unique_keys_and_only_fx_can_split()
+    public void Catalog_holds_27_rows_with_unique_keys_and_only_ungated_fx_can_split()
     {
         Assert.Equal(27, FeatureCatalog.All.Count);
         var keys = FeatureCatalog.All.Select(f => f.Key).ToList();
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.All(keys, k => Assert.False(string.IsNullOrWhiteSpace(k)));
+
+        // FX *and* Tier 0. A gated feature takes a whole tile so it has somewhere to wear the
+        // locked livery: the lockband, the tier rim and the price badge all live on FeatureCard,
+        // and SplitFeatureCard has no half-sized version of any of them.
         foreach (var f in FeatureCatalog.All)
-            Assert.Equal(f.Kind == DashboardKind.Fx, FeatureCatalog.CanSplit(f.Key));
+            Assert.Equal(f.Kind == DashboardKind.Fx && f.Tier == 0, FeatureCatalog.CanSplit(f.Key));
+
+        Assert.True(FeatureCatalog.CanSplit("flash"));
+        // focusgaze is the only row the tier half of that rule reaches: Fx, Tier 2. The server's
+        // FX_KEYS list still names it, which stays harmless - every wire is sanitized through
+        // CanSplit on the way in, so a "flash|focusgaze" reduces to "flash" before it renders.
+        Assert.False(FeatureCatalog.CanSplit("focusgaze"));
         Assert.False(FeatureCatalog.CanSplit("nonsense"));
     }
 

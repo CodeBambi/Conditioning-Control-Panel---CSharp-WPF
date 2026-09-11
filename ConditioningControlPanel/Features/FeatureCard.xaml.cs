@@ -354,11 +354,18 @@ namespace ConditioningControlPanel.Features
             }
             c.TxtTierBadge.Text = text;
             c.TierBadgeHost.Visibility = Visibility.Visible;
-            // A teased card's badge is worn in the livery metal, not in pink. Re-applied here
-            // (not only on the TeaseTier change) because the two properties are written in
-            // whichever order the caller happens to use, and the badge is rewritten far more
-            // often than the tease is.
+            // A costumed card's badge is worn in the livery metal, not in pink - and that is true
+            // of a LOCKED card as much as a teased one. Re-applied here (not only on the
+            // TeaseTier / LockedTier change) because the properties are written in whichever
+            // order the caller happens to use, and the badge is rewritten far more often than
+            // either costume is: the wall's livery pass sets TierBadge then LockedTier on every
+            // render, so a badge written second would otherwise come out pink on a locked tile.
+            //
+            // Whichever costume owns the rim is the one asked. Tease wins - it is the louder of
+            // the two and ApplyLockedLivery defers to it - so asking the owner directly here is
+            // what keeps the two from handing the rim back and forth.
             if (c.TeaseTier > 0) c.ApplyTeaseState();
+            else if (c.LockedTier > 0) c.ApplyLockedLivery();
         }
 
         private static void OnTeaseTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

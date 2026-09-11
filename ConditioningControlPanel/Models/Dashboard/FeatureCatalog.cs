@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -23,8 +23,26 @@ namespace ConditioningControlPanel.Models.Dashboard
         public static DashboardFeature? Find(string? key)
             => string.IsNullOrEmpty(key) ? null : _byKey.TryGetValue(key!, out var f) ? f : null;
 
-        /// <summary>True when this feature may be half of a split tile. Only FX split.</summary>
-        public static bool CanSplit(string? key) => Find(key)?.Kind == DashboardKind.Fx;
+        /// <summary>
+        /// True when this feature may be half of a split tile: an FX, and an UNGATED one.
+        ///
+        /// <para>The tier half of that rule is not taste, it is livery. A tile the account cannot
+        /// open wears a lockband, a tier rim and a price badge, and all three of those live on
+        /// <c>FeatureCard</c> - <c>SplitFeatureCard</c> has no half-sized version of any of them,
+        /// so a gated feature dropped into half a cell would be the one tile on the wall that
+        /// never names its price. A gated feature therefore always gets a whole tile.</para>
+        ///
+        /// <para><c>focusgaze</c> is the only row this reaches: Fx, Tier 2. The server's
+        /// <c>FX_KEYS</c> list still names it, and that stays harmless - every wire that arrives
+        /// goes through <c>DashboardLayoutRule.Sanitize</c>, which asks this, so a
+        /// <c>flash|focusgaze</c> from anywhere reduces to <c>flash</c> before anything is
+        /// rendered or written back.</para>
+        /// </summary>
+        public static bool CanSplit(string? key)
+        {
+            var row = Find(key);
+            return row != null && row.Kind == DashboardKind.Fx && row.Tier == 0;
+        }
 
         private static List<DashboardFeature> Build()
         {

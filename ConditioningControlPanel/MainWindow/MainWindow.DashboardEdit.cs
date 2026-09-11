@@ -86,13 +86,25 @@ namespace ConditioningControlPanel
                         Width = PencilSize,
                         Height = PencilSize,
                         Opacity = 0,
+                        // An invisible pencil is not a target: see DashboardPickerRule
+                        // .PencilHitTestable. Turned on by the fade-in and off again by the
+                        // fade-out, so the corner belongs to the card whenever nothing is drawn
+                        // there - which is what gives that corner its right-click back.
+                        IsHitTestVisible = false,
                         Focusable = false,
                         Cursor = System.Windows.Input.Cursors.Hand,
+                        // BOTTOM-RIGHT. Both top corners are already claimed INSIDE the card, at
+                        // an 8px inset on a 6px-margined, 1px-bordered border - so 15px in from
+                        // the host's own corner: the "?" (BtnHelp) top-right, the tier badge
+                        // (TierBadgeHost) top-left. A 22px chip at a 1px inset reaches 23px in, so
+                        // it overlaps either by about 8x8px, and over BtnHelp it also wins the
+                        // hit-test and the "?" stops opening. The bottom-right corner is clear:
+                        // the only thing under it is the lockband, a 15px scrim that is
+                        // IsHitTestVisible=False and carries its padlock dead centre, and the
+                        // title above it is lifted by the band's own height while it is up.
                         HorizontalAlignment = HorizontalAlignment.Right,
-                        VerticalAlignment = VerticalAlignment.Top,
-                        // Clear of the card's own top-right "?" (8px inside a 6px-margined card),
-                        // so the two affordances never sit on each other.
-                        Margin = new Thickness(0, 1, 1, 0),
+                        VerticalAlignment = VerticalAlignment.Bottom,
+                        Margin = new Thickness(0, 0, 1, 1),
                         Template = _pencilTemplate ??= BuildPencilTemplate(),
                         ToolTip = Loc.Get("dash_pencil_tip"),
                     };
@@ -166,6 +178,12 @@ namespace ConditioningControlPanel
                 // A hidden pencil is hidden: a session is running and this is not the moment.
                 if (pencil.Visibility != Visibility.Visible) return;
 
+                // Hit-testing follows the paint, in both directions and immediately: on the way in
+                // so the pencil is clickable from the first frame of the fade rather than 140ms
+                // later, and on the way out so the corner hands its clicks - and its right-click -
+                // straight back to the tile instead of at the end of the fade.
+                pencil.IsHitTestVisible = DashboardPickerRule.PencilHitTestable(IsSessionFeatureLockActive, show);
+
                 double to = show ? PencilShownOpacity : 0;
                 if (!MotionFx.AllowTransitions)
                 {
@@ -199,6 +217,13 @@ namespace ConditioningControlPanel
             foreach (var pencil in _dashboardPencilByHost.Values)
             {
                 pencil.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+
+                // Either way the pencil goes back to being invisible AND untouchable until the
+                // pointer next enters the cell: unlocking shows the pencils again but does not
+                // fade any of them in, and a shown-but-transparent Button that still answered the
+                // hit-test would be exactly the bug PencilHitTestable exists to close.
+                pencil.IsHitTestVisible = DashboardPickerRule.PencilHitTestable(locked, pointerInCell: false);
+
                 if (show) continue;
                 pencil.BeginAnimation(UIElement.OpacityProperty, null);
                 pencil.Opacity = 0;
@@ -307,14 +332,21 @@ namespace ConditioningControlPanel
         // ---- the accepted edit ---------------------------------------------------------
 
         /// <summary>
-        /// The one place the layout changes. Mutate, re-render, save, nudge - in that order,
-        /// because the render is what proves the mutation was legal and the save must not write a
-        /// layout the wall refused to paint.
+        /// The one place the layout changes. Mutate, SAVE, then re-render.
+        ///
+        /// <para>Save before paint, not after. <c>RenderDashboardSlots</c> swallows its own
+        /// exceptions, so a render never proved anything about the mutation; what it can do is
+        /// repaint the wall around an edit the settings never took, which is a phantom the user
+        /// loses on the next launch with no idea why. So the write is attempted first, and a
+        /// write that cannot land rolls the layout back to the wire it had and paints nothing.</para>
         /// </summary>
         internal void CommitDashboardPick(int slot, string key, bool split)
         {
             try
             {
+                // Taken BEFORE Place, which mutates in place and has no undo of its own.
+                var before = DashboardLayoutRule.ToWire(CurrentLayout);
+
                 var outcome = DashboardLayoutRule.Place(CurrentLayout, slot, key, split);
                 if (outcome is PlaceOutcome.RefusedUnknownKey or PlaceOutcome.RefusedNotSplittable)
                 {
@@ -322,8 +354,26 @@ namespace ConditioningControlPanel
                     return;
                 }
 
+                if (!DashboardPickerRule.ShouldCommit(outcome))
+                {
+                    // Unchanged: the tile the user picked is the tile that was already there.
+                    // Nothing rendered, nothing written, and above all nothing marked Touched -
+                    // that latch is permanent and the cloud's fill-if-empty adopt reads it. The
+                    // pencil has still been answered, so the picker closes.
+                    App.Logger?.Debug("[Dashboard] Slot {Slot} already held {Key}; not an edit", slot, key);
+                    CloseDashboardPicker();
+                    return;
+                }
+
+                if (!SaveDashboardLayout(DashboardPickerRule.Commit(CurrentLayout)))
+                {
+                    _dashboardLayout = DashboardLayoutRule.FromWire(before);
+                    App.Logger?.Warning("[Dashboard] Slot {Slot} edit rolled back: settings unavailable", slot);
+                    CloseDashboardPicker();
+                    return;
+                }
+
                 RenderDashboardSlots(CurrentLayout);
-                SaveDashboardLayout(DashboardPickerRule.Commit(CurrentLayout));
                 App.Logger?.Information("[Dashboard] Slot {Slot} changed ({Outcome})", slot, outcome);
 
                 // One ask per pencil. The pencil was for THIS cell, and it has been answered.
@@ -343,8 +393,16 @@ namespace ConditioningControlPanel
             if (RefuseActionIfSessionLocked("dashboard:edit")) return;
             try
             {
+                // Settings first, the same order an accepted pick uses: a reset the app cannot
+                // remember must not repaint the wall out from under the layout it will load back.
+                if (!SaveDashboardLayout(DashboardPickerRule.Reset()))
+                {
+                    App.Logger?.Warning("[Dashboard] Reset not written; the wall is left as it was");
+                    CloseDashboardPicker();
+                    return;
+                }
+
                 RenderDashboardSlots(DashboardLayout.Default());
-                SaveDashboardLayout(DashboardPickerRule.Reset());
                 CloseDashboardPicker();
                 App.Logger?.Information("[Dashboard] Layout reset to default");
             }
@@ -358,20 +416,26 @@ namespace ConditioningControlPanel
         /// <c>NudgeSyncSoon</c> coalesces, so nine edits in a row cost one write and one sync.
         /// Phase D is what makes that sync carry the field; until then the string still reaches the
         /// cloud inside the settings backup, which is why it is not on the excluded list.
+        ///
+        /// <para>Answers whether the edit was actually recorded. False means there was nowhere to
+        /// put it - no settings object yet, or the write threw - and the caller is the one that
+        /// has to decide what to do about a layout it has already mutated.</para>
         /// </summary>
-        private static void SaveDashboardLayout((string Wire, bool Touched) state)
+        private static bool SaveDashboardLayout((string Wire, bool Touched) state)
         {
             try
             {
-                var current = App.Settings?.Current;
-                if (current == null) return;
+                var settings = App.Settings;
+                var current = settings?.Current;
+                if (settings == null || current == null) return false;
 
                 current.DashboardLayoutWire = state.Wire;
                 current.DashboardLayoutTouched = state.Touched;
-                App.Settings?.Save();
+                settings.Save();
                 App.ProfileSync?.NudgeSyncSoon("dashboard-layout");
+                return true;
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "SaveDashboardLayout failed"); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SaveDashboardLayout failed"); return false; }
         }
 
         /// <summary>

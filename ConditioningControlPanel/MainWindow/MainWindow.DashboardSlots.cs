@@ -117,6 +117,13 @@ namespace ConditioningControlPanel
                 _dashboardCardRows.Clear();
                 _dashboardSplitRows.Clear();
 
+                // The pencils go with the cards: the loop below empties every host. Cleared HERE
+                // rather than only in BuildDashboardPencils, which is the last thing this method
+                // does - a render that throws in the middle would never reach it, and the map
+                // would keep nine ghosts that ApplyDashboardEditLock and the hover fade would
+                // then go on addressing for the rest of the session.
+                _dashboardPencilByHost.Clear();
+
                 var hosts = new[] { tab.Slot0, tab.Slot1, tab.Slot2, tab.Slot3, tab.Slot4,
                                     tab.Slot5, tab.Slot6, tab.Slot7, tab.Slot8 };
 

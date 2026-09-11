@@ -44,6 +44,32 @@ namespace ConditioningControlPanel.Services.Dashboard
         public static bool ShowPencil(bool sessionLocked) => !sessionLocked;
 
         /// <summary>
+        /// Is the pencil a hit-test target right now? Only while it is both on screen AND faded
+        /// in, which is exactly while the pointer is in its cell.
+        ///
+        /// <para>Visibility alone is not enough. A pencil resting at Opacity 0 is still a Button,
+        /// and a Button still answers the hit-test - so an invisible one eats every click in its
+        /// corner of the tile, including the RIGHT-click that toggles the FX there. Nothing on
+        /// screen explains that, because there is nothing on screen.</para>
+        /// </summary>
+        public static bool PencilHitTestable(bool sessionLocked, bool pointerInCell)
+            => ShowPencil(sessionLocked) && pointerInCell;
+
+        /// <summary>
+        /// Is this outcome a real edit - one that earns a re-render, a settings write and a sync
+        /// nudge? Only the four that moved something.
+        ///
+        /// <para><see cref="PlaceOutcome.Unchanged"/> is a user re-picking the tile that is
+        /// already in the slot, and committing it would write <c>DashboardLayoutTouched = true</c>
+        /// for an edit that never happened. Touched is permanent and the cloud's fill-if-empty
+        /// adopt reads it, so that one no-op would cost this account every other machine's layout
+        /// for good. The two Refused values never changed the layout either.</para>
+        /// </summary>
+        public static bool ShouldCommit(PlaceOutcome outcome)
+            => outcome is PlaceOutcome.Placed or PlaceOutcome.Replaced
+                       or PlaceOutcome.Split or PlaceOutcome.MovedFrom;
+
+        /// <summary>
         /// What a click on <paramref name="key"/> means for <paramref name="slot"/>.
         ///
         /// <para>Order is the whole rule. "Already on the wall" is asked FIRST because a move is

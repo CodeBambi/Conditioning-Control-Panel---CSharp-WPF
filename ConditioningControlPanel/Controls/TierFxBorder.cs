@@ -56,7 +56,18 @@ namespace ConditioningControlPanel.Controls
                 "Tier", typeof(int), typeof(TierFxBorder),
                 new PropertyMetadata(0, OnTierChanged));
 
-        public static void SetTier(DependencyObject d, int value) => d.SetValue(TierProperty, value);
+        public static void SetTier(DependencyObject d, int value)
+        {
+            d.SetValue(TierProperty, value);
+
+            // "Take the metal off" has to mean it even when the property was already 0: a
+            // property-changed callback does not fire for a write that changes nothing, so this
+            // is the one path that could otherwise leave a live adorner behind. Cheap, and it
+            // makes SetTier(x, 0) a guarantee rather than a usually.
+            if (value <= 0 && d is FrameworkElement fe && fe.GetValue(AdornerProperty) is TierFxBorderAdorner)
+                Detach(fe);
+        }
+
         public static int GetTier(DependencyObject d) => (int)d.GetValue(TierProperty);
 
         /// <summary>
@@ -75,6 +86,20 @@ namespace ConditioningControlPanel.Controls
         private static readonly DependencyProperty AdornerProperty =
             DependencyProperty.RegisterAttached(
                 "Adorner", typeof(TierFxBorderAdorner), typeof(TierFxBorder),
+                new PropertyMetadata(null));
+
+        /// <summary>
+        /// The layer the adorner was added TO, remembered at attach time.
+        ///
+        /// <para>Detach mostly runs from Unloaded, and by then the element is out of the tree, so
+        /// <c>AdornerLayer.GetAdornerLayer(fe)</c> answers null and a detach that looked it up
+        /// again stopped the clock but left the adorner sitting on the layer for good. Anything
+        /// that rebuilds livery-bearing cards - the Home wall does it on every slot edit - then
+        /// piles up one orphan per card per rebuild.</para>
+        /// </summary>
+        private static readonly DependencyProperty AdornerLayerProperty =
+            DependencyProperty.RegisterAttached(
+                "AdornerLayer", typeof(AdornerLayer), typeof(TierFxBorder),
                 new PropertyMetadata(null));
 
         /// <summary>True once the element's Loaded/Unloaded/hover hooks are in place.</summary>
@@ -192,6 +217,7 @@ namespace ConditioningControlPanel.Controls
                 var adorner = new TierFxBorderAdorner(fe, tier, radius, GetRimThickness(fe));
                 layer.Add(adorner);
                 fe.SetValue(AdornerProperty, adorner);
+                fe.SetValue(AdornerLayerProperty, layer);
                 adorner.Start();
             }
             catch (Exception ex) { App.Logger?.Debug("TierFxBorder.Attach: {E}", ex.Message); }
@@ -203,8 +229,17 @@ namespace ConditioningControlPanel.Controls
             {
                 if (fe.GetValue(AdornerProperty) is not TierFxBorderAdorner adorner) return;
                 fe.SetValue(AdornerProperty, null);
+
+                // The layer it was ADDED to, not the one it would find now: this usually runs
+                // from Unloaded, where the element has already left the tree and a fresh lookup
+                // answers null - which is how a stopped adorner stayed on the layer forever.
+                // The lookup is still the fallback for an adorner attached before this was kept.
+                var layer = fe.GetValue(AdornerLayerProperty) as AdornerLayer
+                            ?? AdornerLayer.GetAdornerLayer(fe);
+                fe.SetValue(AdornerLayerProperty, null);
+
                 adorner.Stop();
-                AdornerLayer.GetAdornerLayer(fe)?.Remove(adorner);
+                layer?.Remove(adorner);
             }
             catch (Exception ex) { App.Logger?.Debug("TierFxBorder.Detach: {E}", ex.Message); }
         }
