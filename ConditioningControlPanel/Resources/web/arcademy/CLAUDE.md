@@ -3517,6 +3517,50 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     second (scratchpad `lfroom-drive.mjs`, `wrap gap` line). Any marquee that clones for a
     wrap has this law; check it against the narrowest tile the mobile pass can deal.
 
+147. **A HUNT DEDUPES ON THE PICTURE OR IT DOES NOT DEDUPE (LOST & FOUND, 2026-09-11).**
+    Owner: "an image can be in multiple places as a copy but seems like only one is correct.
+    We should be sure that the target doesn't get duplicated and there is only one." Two
+    separate doors let her onto a second seat. The loud one was deliberate: `assignWarm()`
+    dealt up to `PLAYTEST.NEAR_TWIN_URL_CAP` (4) "strong" near-twins carrying the TARGET'S
+    ACTUAL MEDIA at a shifted hue - and the constant's own comment predicted the bug it
+    caused ("uncapped, half a tier-4 board would be literal copies - which reads as a bug,
+    not as difficulty"). It read as a bug at 4 too. The quiet one was the dedupe itself:
+    every guard in the room compared EXACT URLS (`drawLive`'s `have` set, `sleeperUsed`,
+    `parkedUrl`, the target filters), and one picture reaches a page under several urls -
+    a clip and its own poster (`loop5.mp4` / `loop5.jpg`; the web host adds a clip's poster
+    to the STILL pool, provider shim `absorb`), a second rendition (`-640x800`, or reddit's
+    size-as-a-query preview host), a crosspost, the same file on a CDN's `preview.` and `i.`
+    subdomains. `board.js mediaKey()` is the identity that survives all of it and `setUrl()`
+    is the one gate that enforces it.
+    **THE LAW HAS TWO TIERS AND THAT IS THE DESIGN.** HER picture is absolute - no second
+    seat, no `lastResort` past it - because that is the report. Any OTHER repeat is merely
+    unwanted: the seat re-draws `UNIQUE_DRAW_TRIES` times and then TAKES the copy. Strict
+    global uniqueness is the trap inside the trap: a tier-4 board is 52 seats and a library
+    smaller than the wall is ordinary (the rig's own feed delivers nine distinct pictures
+    behind those 52), so a strict rule answers a duplicate complaint by parking forty seats
+    on the glyph floor - a worse wall, not a fixed one.
+    **KEY ON THE PATH, NEVER THE FILE NAME.** Name-only keying breaks the DESKTOP outright:
+    the shell serves a local library as `https://ccp.assets/<folder>/<file>` off the
+    player's own tree, and a folder of `001.jpg` beside another folder of `001.jpg` is the
+    ordinary shape of a saved library. Same trap remotely - `v.redd.it/<post>/DASH_720.mp4`
+    puts the identity in the PARENT segment. Drop the scheme and host, keep every segment,
+    fold only what is provably a rendition of one file (query, the `#.ext` animation hint,
+    extension, `-WxH`, a thumb/poster/small/mobile marker, case).
+    **THE SECOND DOOR IS `setTarget`.** A round rotation PROMOTES a seat that is already
+    dressed - no provider draw, so `setUrl`'s gate never sees it - and a shared park resting
+    on that picture puts her on two seats again from round two on. Measured on main: five
+    seats at the deal, NINE by the end of the class. The law is enforced in `setTarget` too.
+    Rig (headless Edge, 844x390 coarse + touch, 2 Mbps / 100 ms / x4, a feed that serves the
+    same picture as a rendition, a repost, and a clip's own poster): main dealt her onto 5
+    seats and a tap on a decoy wearing her picture scored a MISS; the fix deals her onto 1,
+    end of class 1, no decoy wears her, and no seat went bare (0 on the glyph floor, both
+    builds). A `shared:true` draw - parking a sleeper on a live url, one decoder and one
+    clock - is the one legal two-seat case and says so at the call site.
+    **Wrap clones are not a third door**: `buildTileEl` registers every clone in `byEl`, so
+    `tileFromNode` resolves rep 0, rep 1 and a set `fitWrap` adds after a rotation to the
+    SAME tile object. Verified by tapping each rep (trap 146 built those clone sets); do not
+    "fix" it by counting clones - `duplicateKeys()` counts primary seats for that reason.
+
 ## 5. The game module contract (short version)
 
 ```js

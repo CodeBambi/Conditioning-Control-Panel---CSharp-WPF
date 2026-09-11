@@ -86,6 +86,87 @@ const WRAP_REPS_MAX = 6;
 const WRAP_FIT_DEBOUNCE_MS = 180;
 
 /* ----------------------------------------------------------------------------
+ * THE ONE-PICTURE LAW (owner, 0911): a picture sits on exactly ONE seat of the
+ * wall, and the target's picture on exactly one seat - so a tap on "her" is
+ * never a miss because a copy of her was dealt as a decoy. The wall used to
+ * dedupe on the exact url, which is not the same thing: the feed hands the
+ * same picture out under several urls - a clip and its own poster (the poster
+ * is the clip's first frame, and the target is drawn from the STILLS, so the
+ * clip could animate her on another seat), a rendition at another size (the
+ * `-640x800` / `-1280x1600` suffix), a repost under a second niche - and the
+ * recency ring only spreads draws within one bucket. mediaKey() is the
+ * identity that survives all of that: the whole path, rendition markers and
+ * extension folded away, case folded.
+ *
+ * THE LAW HAS TWO TIERS, and the difference is the whole design. THE TARGET'S
+ * picture is absolute: no second seat may wear it, ever, whatever else has to
+ * give - that is the owner's report, word for word. Any OTHER repeat is
+ * merely unwanted: setUrl refuses it so the caller draws again
+ * (UNIQUE_DRAW_TRIES), and only when every draw came back a repeat does the
+ * caller ask again with `lastResort` and take the copy. A library SMALLER than
+ * the wall is ordinary - a tier-4 board is 52 seats and a player may own
+ * twenty pictures - and on one of those a strict rule would answer the owner's
+ * duplicate complaint by leaving thirty seats on the glyph floor, which is a
+ * worse wall, not a fixed one. So: her picture once, the rest as distinct as
+ * the library allows.
+ *
+ * `evict` is the target's own draw (she lands and the copies are bared),
+ * `shared:true` is a draw that is MEANT to be two seats on one resource
+ * (parking a sleeper on a live url when the library has no stills - one
+ * decoder, one clock), and the bundled placeholder floor is exempt.
+ * -------------------------------------------------------------------------- */
+const SIZE_SUFFIX_RE = /[-_]\d{2,5}x\d{2,5}(?=[-_.]|$)/g;
+const RENDITION_MARK_RE = /[-_](?:thumb(?:nail)?|poster|small|mobile)(?=[-_.]|$)/gi;
+const SCHEME_HOST_RE = /^[a-z][a-z0-9+.-]*:\/\/[^/]*/i;
+const PLACEHOLDER_URL_RE = /\/ae-ph-\d+\.svg(\?|#|$)/i;
+
+/**
+ * The media identity of a url: what the player SEES, not where it came from.
+ *
+ * THE PATH, never the bare file name, and the choice is load-bearing in both
+ * directions. Key on too much (the whole url) and a second rendition of one
+ * picture reads as a second picture. Key on too little (the last segment) and
+ * the DESKTOP breaks outright: the shell serves a local library as
+ * `https://ccp.assets/<folder>/<file>` straight off the player's own tree
+ * (ArcademyHostService.ToAssetsUrl), and a folder of 001.jpg / 002.jpg beside
+ * another folder of 001.jpg / 002.jpg is the ordinary shape of a saved
+ * library - name-only keying would call those one picture and bare half the
+ * wall. The same trap remotely: v.redd.it puts the identity in the PARENT
+ * segment and a resolution in the file name (<post>/DASH_720.mp4), so every
+ * reddit clip on the wall would collapse onto "dash_720".
+ *
+ * So: drop the scheme and host - one CDN hands the same file out under its
+ * `preview.` and `i.` subdomains, and inside the Discord Activity the web shim
+ * rewrites every remote row to `<frame origin>/scrolller-media/...`
+ * (inventory.js) - keep every path segment, and fold only what is provably a
+ * rendition of ONE file: the query (reddit's preview host puts the size
+ * there), the host's `#.ext` animation hint, the extension (a clip and its own
+ * poster sit side by side as loop5.mp4 / loop5.jpg), a `-640x800` size suffix,
+ * a thumb/poster/small/mobile rendition marker, and case.
+ */
+export function mediaKey(url) {
+  let s = String(url || '').trim();
+  if (!s) return '';
+  if (/^(blob|data):/i.test(s)) return s;          // a pile row: the url is the picture
+  const hash = s.indexOf('#'); if (hash >= 0) s = s.slice(0, hash);   // the host's ext hint
+  const q = s.indexOf('?'); if (q >= 0) s = s.slice(0, q);
+  s = s.replace(SCHEME_HOST_RE, '').replace(/\\/g, '/').replace(/^\.?\/+/, '');
+  const slash = s.lastIndexOf('/');
+  const dir = slash >= 0 ? s.slice(0, slash + 1) : '';
+  let name = slash >= 0 ? s.slice(slash + 1) : s;
+  const dot = name.lastIndexOf('.');
+  if (dot > 0) name = name.slice(0, dot);
+  name = name.replace(SIZE_SUFFIX_RE, '').replace(RENDITION_MARK_RE, '');
+  return ((dir + name) || s).toLowerCase();
+}
+
+/** A key the one-picture law counts: real media only, never the glyph floor. */
+export function uniqueKey(url) {
+  if (!url || PLACEHOLDER_URL_RE.test(String(url))) return '';
+  return mediaKey(url);
+}
+
+/* ----------------------------------------------------------------------------
  * LOOK PAINTING - shared by the board tiles and by every card in hud.js, so a
  * briefing card, a peek card and the found spotlight are guaranteed to render
  * the target exactly as the board does (same gradient, same hue, same url, same
@@ -676,6 +757,24 @@ export function createBoard(o) {
     const anim = isAnimatedUrl(url);
     if (anim && liveBlocked(tile, url)) return false;
     if (isVid && !tile.isVideo && videoTiles >= videoCap) return false;
+    /* THE ONE-PICTURE LAW (see mediaKey). Checked before any budget moves, so
+     * a refusal costs nothing. */
+    const key = (draw && draw.shared) ? '' : uniqueKey(url);
+    if (key) {
+      const evict = !!(o && o.evict);
+      // TIER ONE - HER picture, and no `lastResort` buys a way past it: a
+      // second seat wearing the target is the bug being fixed, not a repeat.
+      const target = tiles.find((t) => t.target);
+      if (!evict && target && target !== tile && uniqueKey(target.url) === key) return false;
+      // TIER TWO - any other repeat. EVERY wearer, not just the first: a
+      // shared park can legally rest two seats on one picture, so the target's
+      // own draw has to clear the whole set to land alone.
+      const others = tiles.filter((t) => t !== tile && t.url && uniqueKey(t.url) === key);
+      if (others.length) {
+        if (!evict) { if (!(o && o.lastResort)) return false; }
+        else for (const other of others) setUrl(other, { url: null });  // bare; the dress re-seats it
+      }
+    }
 
     releaseLive(tile);
     if (tile.isVideo && !isVid) videoTiles = Math.max(0, videoTiles - 1);
@@ -740,50 +839,34 @@ export function createBoard(o) {
    *
    * The provider is ASKED for same-niche decoys (claim spec nearTwinBias) but does
    * not honour the hint yet, so this is the local fallback that makes the tease
-   * real either way:
-   *   STRONG twins carry the target's actual media at a different hue (capped, or
-   *   half the board would be literal copies);
-   *   WEAK twins take the target's gradient at an unused hue - visually adjacent,
-   *   never ambiguous.
-   * Both are tagged `warm`, which is the only thing index.js reads.
+   * real either way: a twin takes the target's GRADIENT at an unused hue -
+   * visually adjacent, never ambiguous. Tagged `warm`, which is the only thing
+   * index.js reads.
+   *
+   * There are no "strong" twins any more (0911). Up to four seats used to wear
+   * the target's own picture at a shifted hue, and the owner read it exactly
+   * as the constants file predicted it would: "an image can be in multiple
+   * places but only one is correct" - a bug, not difficulty. The one-picture
+   * law (setUrl) would refuse the copy now anyway; the branch is gone so the
+   * intent is in one place.
    */
   function assignWarm(o) {
     const opts = o || {};
     const share = clamp(opts.share, 0, 1);
     const wantRng = typeof opts.rng === 'function' ? opts.rng : rng;
-    // Optional stagger for the strong-twin repaints (per-round target rotation
-    // on touch): the url still lands NOW - bookkeeping stays correct - only the
-    // paint is deferred, through setUrl's own paintDelayMs seam.
-    const paintDelay = Math.max(0, opts.paintDelayMs | 0);
     for (const tile of tiles) if (!tile.target) tile.warm = false;
     if (share <= 0) return 0;
 
     const target = api.targetTile();
     if (!target) return 0;
-    const urlCap = Number.isFinite(opts.urlCap) ? opts.urlCap : PLAYTEST.NEAR_TWIN_URL_CAP;
     const want = Math.min(Math.round(share * tiles.length), Math.floor(tiles.length / 2));
     const used = usedSignatures();
     const freeHues = HUES.filter((h) => !used.has(target.grad + ':' + h));
     const candidates = shuffle(tiles.filter((tile) => !tile.target), wantRng);
 
     let made = 0;
-    let strong = 0;
     for (const tile of candidates) {
       if (made >= want) break;
-      if (strong < urlCap && target.url
-        // The target's own url is free to copy when it is already on the wall
-        // (it always is - this IS the target's url), so a strong twin never
-        // mints a decoder. setUrl still arbitrates, so the budget cannot be
-        // side-stepped through this door either.
-        && setUrl(tile, { url: target.url, remote: target.remote },
-          paintDelay ? { paintDelayMs: paintDelay * (strong + 1) } : null)) {
-        // same media, different hue: the honest local version of a near-twin
-        used.delete(tile.grad + ':' + tile.hue);
-        tile.warm = true;
-        used.add(tile.grad + ':' + tile.hue);
-        strong += 1; made += 1;
-        continue;
-      }
       const hue = freeHues.shift();
       if (hue == null) break;                 // out of collision-free signatures
       used.delete(tile.grad + ':' + tile.hue);
@@ -866,15 +949,52 @@ export function createBoard(o) {
     fitWrap(why) { return fitWrap(why || 'host'); },
     /** Clone sets per row, after the fit. */
     repsPerRow() { return rows.map((r) => r.reps | 0); },
+    /** The one-picture law's telemetry: every media key worn by more than one
+     *  seat (a shared park is the one legal case; it is listed all the same,
+     *  so a log line can say how many). Empty is the promise kept. */
+    duplicateKeys() {
+      const seen = new Map();
+      for (const t of tiles) {
+        const k = uniqueKey(t.url);
+        if (!k) continue;
+        seen.set(k, (seen.get(k) | 0) + 1);
+      }
+      const out = [];
+      for (const [k, n] of seen) if (n > 1) out.push({ key: k, seats: n });
+      return out;
+    },
+    /** How many seats wear the target's PICTURE - the law says exactly 1, and
+     *  0 while she is on her gradient signature alone (a dry pool, the glyph
+     *  floor), which the dress line already reports in words. */
+    targetSeats() {
+      const target = api.targetTile();
+      const k = target ? uniqueKey(target.url) : '';
+      if (!k) return 0;
+      return tiles.reduce((n, t) => n + (uniqueKey(t.url) === k ? 1 : 0), 0);
+    },
     tileFor(node) { return byEl.get(node) || null; },
     targetTile() { return tiles.find((t) => t.target) || null; },
 
     setUrl, repaint, swapLooks, assignWarm,
 
-    /** Mark/unmark the hunt target (a look field, so it rides swaps). */
+    /** Mark/unmark the hunt target (a look field, so it rides swaps).
+     *
+     *  THE ONE-PICTURE LAW's second door. A round rotation promotes a seat
+     *  that is ALREADY dressed (rotateTarget picks off the wall - no provider
+     *  draw, no new decoder), so the law's setUrl gate never sees it. If a
+     *  shared park happens to rest on the picture being promoted, she is on
+     *  two seats again from round two on: the owner's bug, one round later.
+     *  Bare the other wearers here instead; the next onlyBare dress re-seats
+     *  them from the provider's next batch. */
     setTarget(tile) {
       for (const t of tiles) t.target = false;
-      if (tile) tile.target = true;
+      if (!tile) return;
+      tile.target = true;
+      const key = uniqueKey(tile.url);
+      if (!key) return;
+      for (const t of tiles) {
+        if (t !== tile && t.url && uniqueKey(t.url) === key) setUrl(t, { url: null });
+      }
     },
 
     /** Class toggling on every copy of a tile (found rim, pity, warm). */
