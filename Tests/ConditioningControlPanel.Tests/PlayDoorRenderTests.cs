@@ -453,16 +453,16 @@ public class PlayDoorRenderTests
     }
 
     [Fact]
-    public void TheLabAliasScoresThePlayRowsIndex()
+    public void TheNavOrderRenamedTheRowInPlaceSoNoIndexMoved()
     {
-        // ChromeFxNav.NavOrder positions drive slide direction. The legacy alias has to score the
-        // same index as "play" or every caller still passing "lab" gets the fallback "rise"
-        // entrance instead of its neighbours' horizontal slide. Play is the first door after Home
-        // since mort's map (2026-09-11), so the row is index 1.
-        Assert.Equal("play", ChromeFxNav.NavOrder[1]);
+        // ChromeFxNav.NavOrder positions drive slide direction, and ChromeFxNavTests asserts four
+        // of them by number. Phase 6 renamed index 8 rather than inserting; the legacy alias has
+        // to score the same index or every caller still passing "lab" gets the fallback "rise"
+        // entrance instead of its neighbours' horizontal slide.
+        Assert.Equal("play", ChromeFxNav.NavOrder[8]);
         Assert.DoesNotContain("lab", ChromeFxNav.NavOrder);
-        Assert.Equal(1, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(1, ChromeFxNav.IndexOf("play"));
+        Assert.Equal(8, ChromeFxNav.IndexOf("lab"));
+        Assert.Equal(8, ChromeFxNav.IndexOf("play"));
     }
 
     [Fact]
@@ -478,16 +478,10 @@ public class PlayDoorRenderTests
         Assert.Equal("play", (string?)m!.Invoke(null, new object?[] { "play" }));
         Assert.Equal("play", (string?)m.Invoke(null, new object?[] { "lab" }));
 
-        // And the other Play entries did not lose their door on the way past (mort's map,
-        // 2026-09-11: Quests, Programs and For You joined; Lockdown went to Studio, Remote
-        // Control and Available Subjects to Play Together).
-        foreach (var key in new[] { "deeper", "exclusives", "gradedintake", "blinktrainer", "fyp",
-                                    "quests", "programs" })
+        // And the other Play entries did not lose their door on the way past.
+        foreach (var key in new[] { "deeper", "exclusives", "gradedintake", "lockdown",
+                                    "blinktrainer", "remotecontrol", "availablesubjects" })
             Assert.Equal("play", (string?)m.Invoke(null, new object?[] { key }));
-        Assert.Equal("studio", (string?)m.Invoke(null, new object?[] { "lockdown" }));
-        foreach (var key in new[] { "remotecontrol", "availablesubjects" })
-            Assert.Equal("playtogether", (string?)m.Invoke(null, new object?[] { key }));
-        Assert.Equal("webapp", (string?)m.Invoke(null, new object?[] { "webapp" }));
     }
 
     [Fact]

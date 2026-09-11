@@ -610,46 +610,34 @@ namespace ConditioningControlPanel
         /// </summary>
         private static readonly (string Door, string DefaultTab, string[] Tabs)[] NavDoorMap =
         {
-            // Door order = rail order, mort's map (Discord "New UI Feedback", owner-accepted
-            // 2026-09-11). A key listed under a door is filed there for NavDoorForTab, which is
-            // what the accordion, the active ring, the tutorial spotlight and the feature intros
-            // all read - so a row that moves doors moves here, nowhere else.
             ("home",      "settings",  new[] { "settings", "progression" }),
+            ("studio",    "studio",    new[] { "studio", "presets", "haptics" }),
+            ("companion", "companion", new[] { "companion", "bambitakeover", "shelistening", "awareness" }),
             // Phase 6: "play" replaced "lab" in place as this door's first entry and default
             // destination. "lab" is deliberately NOT listed - it is a legacy alias, resolved by
             // NavDoorForTab below so an old ShowTab("lab") still opens this door, and listing it
-            // as a real entry would claim the rail has a row for it, which it does not. "fyp" IS
-            // listed: the For You row lives here, and ShowTab intercepts the key into a window
-            // before any door would expand, so filing it costs nothing and lets the tutorial and
-            // the palette resolve the row's door.
-            ("play",      "play",      new[] { "play", "deeper", "blinktrainer", "gradedintake", "fyp",
-                                               "exclusives", "quests", "programs" }),
-            ("playtogether", "availablesubjects", new[] { "availablesubjects", "remotecontrol" }),
-            ("studio",    "studio",    new[] { "studio", "presets", "haptics", "awareness", "bambitakeover",
-                                               "lockdown" }),
-            ("companion", "companion", new[] { "companion", "shelistening" }),
+            // as a real entry would claim the rail has a row for it, which it does not.
+            ("play",      "play",      new[] { "play", "deeper", "exclusives", "gradedintake", "lockdown",
+                                               "blinktrainer", "remotecontrol", "availablesubjects" }),
             // "spiral" sits right after "discord": the Spiral Room's other two doors are both on
             // the profile (the Trainer Card plate and the account menu row), so the rail row belongs
             // beside the tab those live on. Its entry is Collapsed unless this account is in the fog
             // era or has an open spiral - see MainWindow.SpiralRoom.cs.
-            ("you",       "discord",   new[] { "discord", "spiral", "enhancements", "achievements",
-                                               "leaderboard" }),
+            ("you",       "discord",   new[] { "discord", "spiral", "quests", "achievements", "enhancements",
+                                               "programs", "leaderboard" }),
             ("library",   "assets",    new[] { "assets" }),
-            // The Web door: two launchers (Web App, Catalogue) and no tab. An EMPTY default tab
-            // is the sentinel NavDoor_Click reads as "expand the accordion, navigate nowhere";
-            // "webapp" is a door key only, never a ShowTab case, and is listed so the tutorial's
-            // NavEntryDoorKeys can open this door for its rows.
-            ("webapp",    "",          new[] { "webapp" }),
             ("appsettings", "appsettings", new[] { "appsettings" }),
         };
 
         /// <summary>
         /// v6.8.0: rail doors that LAUNCH instead of navigating - full medallion treatment, no
-        /// tab, no NavDoorMap row. Empty since 2026-09-11: the one launcher door (Web App) became
-        /// the Web door, an accordion with an empty default tab (see NavDoorMap). The list and
-        /// the CacheNavDoorRows walk over it stay, so the next launcher door costs one string.
+        /// tab, no NavDoorMap row (a map row drags in a default tab, a ShowTab case and a
+        /// palette door row, none of which a browser link has). CacheNavDoorRows walks
+        /// NavDoorMap + this list so the tile growth, label rise and fx animate for them too;
+        /// the "you are here" ring never lights because ChromeFx never targets them.
+        /// Each needs its own Click handler - NavDoor_Click on an unmapped Tag is a logged no-op.
         /// </summary>
-        internal static readonly string[] NavLauncherDoors = System.Array.Empty<string>();
+        internal static readonly string[] NavLauncherDoors = { "webapp" };
 
         /// <summary>Where the Web App door (and every other web nudge) points. The dashboard
         /// root, not the link-device page: sign-in and device linking are both discoverable from
@@ -679,13 +667,13 @@ namespace ConditioningControlPanel
             "studio" => (DoorStudio, DoorPanelStudio, DoorEntriesStudio),
             "companion" => (DoorCompanion, DoorPanelCompanion, DoorEntriesCompanion),
             "play" => (DoorPlay, DoorPanelPlay, DoorEntriesPlay),
-            "playtogether" => (DoorPlayTogether, DoorPanelPlayTogether, DoorEntriesPlayTogether),
             "you" => (DoorYou, DoorPanelYou, DoorEntriesYou),
             "library" => (DoorLibrary, DoorPanelLibrary, DoorEntriesLibrary),
             // Pinned, entry-less: a header to light, nothing to expand.
             "appsettings" => (DoorSettings, null, null),
-            // The Web door: an accordion of two launchers and no tab to light.
-            "webapp" => (DoorWebApp, DoorPanelWeb, DoorEntriesWeb),
+            // Launcher door (NavLauncherDoors): a header to animate, nothing to expand and no
+            // tab to light - it opens the web app in the browser.
+            "webapp" => (DoorWebApp, null, null),
             _ => (null, null, null),
         };
 
@@ -942,12 +930,7 @@ namespace ConditioningControlPanel
             if (entries == null) return 0;
             double h = 0;
             foreach (var child in entries.Children.OfType<FrameworkElement>())
-            {
-                if (child.Visibility != Visibility.Visible) continue;
-                // Subgroup captions (NavEntryGroupCaption) carry an explicit Height; rows do not.
-                h += double.IsNaN(child.Height) ? NavEntryRowHeight
-                                                : child.Height + child.Margin.Top + child.Margin.Bottom;
-            }
+                if (child.Visibility == Visibility.Visible) h += NavEntryRowHeight;
             return h;
         }
 
@@ -958,9 +941,6 @@ namespace ConditioningControlPanel
             foreach (var d in NavDoorMap)
             {
                 if (!string.Equals(d.Door, door, StringComparison.Ordinal)) continue;
-                // An expand-only door (the Web door: launchers, no tab) opens its accordion and
-                // navigates nowhere - ShowTab("") would collapse every tab and light nothing.
-                if (string.IsNullOrEmpty(d.DefaultTab)) { SetExpandedDoor(d.Door); return; }
                 ShowTab(d.DefaultTab);
                 return;
             }
@@ -1030,20 +1010,6 @@ namespace ConditioningControlPanel
         private void BtnNavBlinkTrainer_Click(object sender, RoutedEventArgs e) => ShowTab("blinktrainer");
 
         private void BtnNavRemoteControl_Click(object sender, RoutedEventArgs e) => ShowTab("remotecontrol");
-
-        // mort's map (2026-09-11). For You is a window key that ShowTab intercepts, exactly as the
-        // Play wall's card does. The four "part." rows land on an existing page with the zone they
-        // name revealed - one palette row each, so Ctrl+K, the favorites rail and the tutorial all
-        // agree on where the thing is. None of these is a real page split yet.
-        private void BtnNavFyp_Click(object sender, RoutedEventArgs e) => ShowTab("fyp");
-
-        private void BtnNavAiEffects_Click(object sender, RoutedEventArgs e) => OpenPaletteRow("part.aieffects");
-
-        private void BtnNavDeeperEditor_Click(object sender, RoutedEventArgs e) => OpenPaletteRow("part.deepereditor");
-
-        private void BtnNavWorkshop_Click(object sender, RoutedEventArgs e) => OpenPaletteRow("part.workshop");
-
-        private void BtnNavEngineRoom_Click(object sender, RoutedEventArgs e) => OpenPaletteRow("part.engineroom");
 
 
         /// <summary>

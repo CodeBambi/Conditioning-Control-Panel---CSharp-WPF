@@ -46,8 +46,8 @@ namespace ConditioningControlPanel
         /// which is also its <see cref="ExclusiveFeature.Key"/>. Adding a rail row for a sold
         /// feature means adding its pill in MainWindow.xaml and one row here; nothing else.
         ///
-        /// <para>One roster entry deliberately has no row: "justdrop" is a window launcher
-        /// with no rail entry. "fyp" got its Play row on 2026-09-11 and tags like the rest.</para>
+        /// <para>Two roster entries deliberately have no row: "fyp" and "justdrop" are window
+        /// launchers, not rail entries, so there is nothing to tag.</para>
         ///
         /// <para>A property rather than a static field: the tag controls are x:Named members and
         /// do not exist until InitializeComponent has run.</para>
@@ -64,7 +64,6 @@ namespace ConditioningControlPanel
                 yield return (TagPremiumLockdown, "lockdown");
                 yield return (TagPremiumBlinkTrainer, "blinktrainer");
                 yield return (TagPremiumRemoteControl, "remotecontrol");
-                yield return (TagPremiumFyp, "fyp");
             }
         }
 

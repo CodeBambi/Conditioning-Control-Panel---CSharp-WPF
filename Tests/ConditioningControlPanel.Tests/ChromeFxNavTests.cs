@@ -24,14 +24,14 @@ public class ChromeFxNavTests
                         ChromeFxNav.NavOrder.Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
     [Theory]
-    // mort's map (2026-09-11) re-cut the strip: Play is the first door after Home, Play Together
-    // follows it, then Studio. A key that is not on the strip indexes -1.
     [InlineData("settings", 0)]     // Home
-    [InlineData("lab", 1)]          // Play, first entry (alias of "play")
-    [InlineData("studio", 10)]      // Studio, first entry (Phase 4's effects rack)
-    [InlineData("presets", 11)]     // Studio
-    [InlineData("assets", 23)]      // Library, last row on the rail
-    [InlineData("appsettings", 24)] // Settings, pinned below everything
+    [InlineData("studio", 1)]       // Studio, first entry (Phase 4's effects rack)
+    [InlineData("presets", 2)]      // Studio
+    [InlineData("lab", 8)]          // Play, first entry
+    [InlineData("assets", 22)]      // Library, last row on the rail
+    // No "justdrop" row: the shop became a window (JustDropHostService), so it left the rail and
+    // "appsettings" moved back from 24 to 23. A key that is not on the strip indexes -1.
+    [InlineData("appsettings", 23)] // Settings, pinned below everything
     public void IndexOf_FollowsTheNavStrip(string tab, int expected)
         => Assert.Equal(expected, ChromeFxNav.IndexOf(tab));
 
@@ -62,7 +62,7 @@ public class ChromeFxNavTests
     [Fact]
     public void EntranceOffset_SlidesInFromTheLeft_WhenMovingLeftAlongTheStrip()
     {
-        var (x, y) = ChromeFxNav.EntranceOffset("presets", "lab", 12);
+        var (x, y) = ChromeFxNav.EntranceOffset("lab", "presets", 12);
         Assert.Equal(-12, x);
         Assert.Equal(0, y);
     }
