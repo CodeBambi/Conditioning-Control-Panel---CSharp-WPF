@@ -249,7 +249,8 @@ namespace ConditioningControlPanel.Services
             ["BtnNavWorkshop"] = "companion",
             ["BtnNavEngineRoom"] = "companion",
             ["BtnNavWebApp"] = "webapp",
-            ["BtnNavCatalogue"] = "webapp"
+            ["BtnNavCatalogue"] = "webapp",
+            ["BtnNavJustDrop"] = "justdrop"
         };
 
         public event EventHandler<TutorialStep>? StepChanged;
@@ -1059,7 +1060,7 @@ namespace ConditioningControlPanel.Services
                                   "   Exclusives, Quests, Programs  ->  Play\n" +
                                   "• Available Subjects, Remote Control, Goon Game  ->  Play Together\n" +
                                   "• Presets, Haptics, the tile popups, Awareness, Takeover,\n" +
-                                  "   Lockdown, the Deeper Editor  ->  Studio\n" +
+                                  "   Lockdown, the Deeper Editor, Just Drop  ->  Studio\n" +
                                   "• Companion, Workshop, Engine Room, She's Listening  ->  Companion\n" +
                                   "• Profile, Enhancements, Achievements, Leaderboard  ->  You\n" +
                                   "• Mods, Assets, Phrase Manager, Media Log  ->  Library\n" +
@@ -1079,7 +1080,7 @@ namespace ConditioningControlPanel.Services
                                   "the settings live side by side.\n\n" +
                                   "Core Engine holds Presets & Sessions and Haptics; Companion Effects holds " +
                                   "AI Effects, Screen Awareness, Companion Takeover and Lockdown Mode; Creator " +
-                                  "Tools holds the Deeper Editor.",
+                                  "Tools holds the Deeper Editor and Just Drop.",
                     TargetElementName = "DoorStudio",
                     RequiresTab = "studio",
                     // The rack restores whatever module was last selected, so pick one that matches

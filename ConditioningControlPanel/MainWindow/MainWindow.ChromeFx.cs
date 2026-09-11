@@ -95,7 +95,7 @@ namespace ConditioningControlPanel
                     BtnQuests, BtnPrograms,
                     BtnAvailableSubjects, BtnNavRemoteControl, BtnNavGoon,
                     BtnNavStudio, BtnPresets, BtnNavHaptics, BtnNavAiEffects, BtnNavAwareness,
-                    BtnNavBambiTakeover, BtnNavLockdown, BtnNavDeeperEditor,
+                    BtnNavBambiTakeover, BtnNavLockdown, BtnNavDeeperEditor, BtnNavJustDrop,
                     BtnCompanion, BtnNavWorkshop, BtnNavEngineRoom, BtnNavSheListening,
                     BtnDiscordTab, BtnEnhancements, BtnNavSpiral, BtnAchievements, BtnLeaderboard,
                     BtnNavMods, BtnOpenAssetsTop, BtnNavPhrases, BtnNavMediaLog,
