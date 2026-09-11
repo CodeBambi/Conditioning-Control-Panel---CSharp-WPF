@@ -1,4 +1,4 @@
-<UserControl x:Class="ConditioningControlPanel.Features.MindWipeFeatureControl"
+﻿<UserControl x:Class="ConditioningControlPanel.Features.MindWipeFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
@@ -133,7 +133,7 @@
                          sit under the title is the card's ToolTip; TxtAudioFile stays visible because
                          code-behind writes the current filename into it. -->
                     <Border Style="{StaticResource SettingCardStyle}"
-                            ToolTip="Pick your own mind-wipe sound. Keep it short — about 2 seconds works best. Leave it on Default to use the built-in clips.">
+                            ToolTip="{loc:Str tooltip_mind_wipe_custom_audio}">
                         <Grid>
                             <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
                             <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
@@ -146,7 +146,7 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="CUSTOM AUDIO" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" x:Name="TxtAudioFile" Text="Default (built-in clips)"
+                                    <TextBlock Grid.Column="1" x:Name="TxtAudioFile" Text="{loc:Str label_mind_wipe_audio_default}"
                                                Foreground="{DynamicResource PinkBrush}" FontSize="12"
                                                HorizontalAlignment="Right" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis" Margin="10,0,0,0"/>
@@ -156,7 +156,7 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0" x:Name="BtnSelectAudio" Content="Select audio…"
+                                    <Button Grid.Column="0" x:Name="BtnSelectAudio" Content="{loc:Str btn_select_audio}"
                                             Style="{DynamicResource OutlineButton}" Padding="12,6"
                                             Margin="0,0,6,0" Click="BtnSelectAudio_Click"/>
                                     <Button Grid.Column="1" x:Name="BtnClearAudio" Content="Reset"
