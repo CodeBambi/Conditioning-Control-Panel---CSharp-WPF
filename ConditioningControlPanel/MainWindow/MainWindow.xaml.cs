@@ -809,7 +809,9 @@ namespace ConditioningControlPanel
                 CelebrateLevelUp();
                 UpdateLevelDisplay();
                 // Show level up notification
-                _trayIcon?.ShowNotification("Level Up!", $"You reached Level {newLevel}!", System.Windows.Forms.ToolTipIcon.Info);
+                _trayIcon?.ShowNotification(Loc.Get("toast_level_up_title"),
+                                            Loc.GetF("toast_level_up_body", newLevel),
+                                            System.Windows.Forms.ToolTipIcon.Info);
                 // Play level up sound
                 PlayLevelUpSound();
                 // Update avatar if level threshold reached (20, 50, 100)
