@@ -167,8 +167,12 @@ const VIDEO_URL_RE = /\.(mp4|webm|m4v)(\?|#|$)/i;
  * Manifest warms ride the SAME rail as the forecast deck above - one
  * WARM_INFLIGHT budget, one warm per url per provider, WARM_HELD_MAX held,
  * nothing at all under Data Saver. */
-export const MANIFEST_AHEAD_IDLE = 24;
-export const MANIFEST_AHEAD_PLAY = 10;
+/* ENTRIES, not cards (phone, 2026-09-11): SORT's manifest now carries a clip's
+ * poster as its own entry ahead of the clip, so a window of N entries is about
+ * N/2 cards. 10 was 10 cards; 16 is ~8-10 cards, the same look-ahead in card
+ * terms, and the rail's WARM_INFLIGHT still bounds what is actually in flight. */
+export const MANIFEST_AHEAD_IDLE = 40;
+export const MANIFEST_AHEAD_PLAY = 16;
 
 /* THE URL BLACKLIST (0825), module-level so a dead CDN url stays dead across
  * every pool and every class this page runs (it empties with the page). Fed by
@@ -838,8 +842,27 @@ export function createAssets(options = {}) {
     });
   }
 
+  /**
+   * isReady(url) -> boolean: the SYNCHRONOUS half of ready(), what is known
+   * right now and nothing waited for. A deal that wants to prefer a card whose
+   * bytes have landed (SORT's ready-first deal, phone 2026-09-11) asks this on
+   * every candidate on the tick it deals; a promise per candidate would be a
+   * deal that could not decide on that tick. Same three answers as
+   * ready({timeoutMs:0}): dead is never ready, local / own-page is always
+   * ready, a landed warm is ready. For a video url a landed warm is HEADERS
+   * (the rail never pulls a clip's body, trap 36), so callers key a clip on
+   * its poster instead - see games/sort cardReady().
+   */
+  function isReadyNow(url) {
+    const s = String(url || '');
+    if (!s) return false;
+    if (isBrokenUrl(s)) return false;
+    if (instantUrl(s)) return true;
+    return warmDoneUrls.has(s);
+  }
+
   /** The media seam every pool shape exposes (claim() below, claimTagged's
-   *  wrapper, and deck-side adapters forward these five verbs verbatim). */
+   *  wrapper, and deck-side adapters forward these verbs verbatim). */
   /* THE VET (0827, see ./vet.js): liveness proof for a list of rows before a
    * game deals off them. Its dead verdicts land in the blacklist above as
    * PERMANENT strikes, so a tagged serve / a substitute pick skips them. */
@@ -848,6 +871,7 @@ export function createAssets(options = {}) {
     warmManifest: (entries, opts) => { void opts; return warmManifest(entries); },
     warmCursor: (i) => warmCursor(i),
     ready: (url, opts) => readyFor(url, opts),
+    isReady: (url) => isReadyNow(url),
     markBroken: (url, permanent) => markBroken(url, permanent),
     isBroken: (url) => isBrokenUrl(url),
     vet: (rows, opts) => (disposed ? Promise.resolve(null) : vetter.vet(rows, opts)),
@@ -1458,12 +1482,14 @@ export function createAssets(options = {}) {
        *                                  url strings) - the game's full need
        *   warmCursor(i)                  the game's play position in it
        *   ready(url, {timeoutMs})       -> Promise<boolean> (see readyFor)
+       *   isReady(url)                  -> boolean, what is known NOW (isReadyNow)
        *   markBroken(url) / isBroken(url) the shared url blacklist
        *   vet(rows, opts)               -> Promise<stats> (see ./vet.js)
        */
       warmManifest: mediaSeam.warmManifest,
       warmCursor: mediaSeam.warmCursor,
       ready: mediaSeam.ready,
+      isReady: mediaSeam.isReady,
       markBroken: mediaSeam.markBroken,
       isBroken: mediaSeam.isBroken,
       vet: mediaSeam.vet,
@@ -1537,6 +1563,7 @@ export function createAssets(options = {}) {
         pool.warmManifest = mediaSeam.warmManifest;
         pool.warmCursor = mediaSeam.warmCursor;
         pool.ready = mediaSeam.ready;
+        pool.isReady = mediaSeam.isReady;
         pool.markBroken = mediaSeam.markBroken;
         pool.isBroken = mediaSeam.isBroken;
         pool.vet = mediaSeam.vet;

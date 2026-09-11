@@ -3465,6 +3465,32 @@ and it is not a third gate** - see trap 99, `init.devAnnex`.
     COPY (which sits under a `module` package.json), never against a bare path, and never write
     `*/` inside a comment - say "of every game module" instead.
 
+145. **A PHONE LINK CANNOT FEED THE SORT DECK IN PLANNED ORDER, AND A PASS IS A MISS (SORT,
+    phone wave, 2026-09-11).** Owner: "at the start we see gifs, then as we go faster we skip
+    more and more" and "the streak doesn't go down when we miss". Measured on a throttled
+    headless phone (2 Mbps, 100ms, x4 CPU, mock Scrolller feed, a swipe 250ms after the ring):
+    21% of cards had a painted face when swiped and the top-but-unarmed gap was a median
+    1080ms - nearly every card hit the 1s ready ceiling and was then timed over a blank back,
+    36 of 50 blanks being clips. `games/sort/index.js` now (a) puts a clip's POSTER on the
+    warm rail ahead of the clip (`warmDeck`, `S.manifestAt`; the clip's own warm is headers
+    only, trap 36, so the poster is the only face that can be ready before the mint), (b) deals
+    READY-FIRST: `nextCard() -> readyFirst()` swaps the planned card for a later SAME-TAG card
+    whose bytes have landed (`cardReady` over the provider's new synchronous `isReady`), so
+    the plan's side sequence and run cap never move and `S.deckRows` is untouched, (c) at the
+    ready ceiling SETS ASIDE an unpainted card when a later one has landed (`deferUnpainted ->
+    quietPass`: under the stack like a pass, no beat, no cost, once per card), otherwise waits
+    up to `READY_HARD_MS` before the old blank-back road, and (d) keeps the hand up between
+    cards (`handUp`/`handLive`) and PLAYS a swipe that landed before the ring armed
+    (`S.pendingDir` in `armTop`, verdict `early`) - at tempo the finger comes down in the
+    spring, and a dropped swipe read as a "skip" too. The streak half: a pass (ring closed) now
+    costs one rung like a wrong swipe (`chain.js afterPass`, accuracy untouched, never on a
+    ring the room armed over a blank); `sort_rules_pass` changed in lex.js AND
+    `ArcademyHostService.cs` (the C# table wins on the wire). Everything is inert on the
+    desktop: a local url is always ready, so the planned card is always taken. Rig:
+    scratchpad `sortroom-drive.mjs` (CDP, mock feed on :3101, `--touch`, `--early`,
+    `--pass-every`, `--kbps`). MANIFEST_AHEAD_* in provider/index.js now count ENTRIES
+    (posters included), which is why they doubled.
+
 ## 5. The game module contract (short version)
 
 ```js
