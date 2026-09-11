@@ -2183,6 +2183,16 @@ public sealed class ChaosModeService
         => chaosCapArmed && videoPlaying;
 
     /// <summary>
+    /// Is the chaos tape actually on screen? Playing is the ordinary answer. Windows with no
+    /// playback is the sliver where <c>PlayVideo</c> has built its fullscreen surfaces and the
+    /// player has not started yet - still something to close. A teardown already in flight is
+    /// neither: <c>ForceCleanup</c> is doing the work, and re-entering it pumps the dispatcher
+    /// inside its own pump. Pure, so the rule is pinned by a test with no video service behind it.
+    /// </summary>
+    internal static bool ChaosTapeIsOnScreen(bool videoPlaying, bool hasOpenWindows, bool cleaningUp)
+        => videoPlaying || (hasOpenWindows && !cleaningUp);
+
+    /// <summary>
     /// Stop a chaos-fired video and disarm the cap. Every run-exit path calls this, because the
     /// mid-run cap in <c>RunTick</c> cannot: the tick early-returns while the run is paused (draft
     /// card, lesson card, manual hold) and its run-closing branch only covers the clock running
@@ -2193,7 +2203,24 @@ public sealed class ChaosModeService
     {
         bool armed = _chaosVideoCapUtc != DateTime.MinValue;
         _chaosVideoCapUtc = DateTime.MinValue;   // an armed cap never outlives the run
-        if (!ShouldStopVideoOnRunExit(armed, App.Video?.IsPlaying == true)) return;
+        if (!armed) return;                      // chaos started no tape: the user's own video is not ours to touch
+
+        // The tape may not be on screen YET, and that was the hole this teardown left open. A video
+        // bubble arms the cap at detonation, but the request still has to choose a clip off the UI
+        // thread, sit out the 800ms freeze delay, and possibly wait its turn in the InteractionQueue
+        // behind a bubble count or a lock card. Quitting a second after the pop therefore found
+        // nothing playing, tore nothing down, and the video opened over the results card and the
+        // lobby a moment later - the reported #1201 symptom, on a window of at least 800ms.
+        // Cancelling the pending request closes it, and it can only ever reach a request chaos
+        // itself made: the user's own video and the scheduler's carry no token.
+        try { App.Video?.CancelPendingChaosVideo(reason); }
+        catch (Exception ex) { App.Logger?.Debug("Chaos video cancel: {E}", ex.Message); }
+
+        bool onScreen = ChaosTapeIsOnScreen(
+            App.Video?.IsPlaying == true,
+            App.Video?.HasOpenWindows == true,
+            App.Video?.IsCleaningUp == true);
+        if (!ShouldStopVideoOnRunExit(armed, onScreen)) return;
         try { App.Video?.ForceCleanup(); } catch (Exception ex) { App.Logger?.Debug("Chaos video teardown: {E}", ex.Message); }
         ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);   // ForceCleanup may not raise VideoEnded
         App.Logger?.Information("[Chaos] tore down a chaos-fired video ({Reason})", reason);
@@ -2268,6 +2295,12 @@ public sealed class ChaosModeService
         {
             _chaosVideoCapUtc = DateTime.UtcNow.AddSeconds(VIDEO_HARD_CAP_SEC);
             _heavyUntilUtc = DateTime.UtcNow.AddSeconds(VIDEO_HARD_CAP_SEC + 3);   // cap + open/close slack
+            // Ownership begins HERE, not when the tape appears. The request is about to travel
+            // through an off-thread clip selection, an 800ms freeze delay and possibly the
+            // InteractionQueue, and a run that ends inside that window has to be able to call it
+            // back (#1201). The cap alone cannot do that - it only says a video is owed.
+            if (spec.Payload is VideoPayload video)
+                video.ChaosToken = App.Video?.ClaimChaosVideoToken() ?? 0;
         }
         else if (kind == EffectBubblePayloadKind.GifCascade)
         {
