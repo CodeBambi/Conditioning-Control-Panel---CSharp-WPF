@@ -71,7 +71,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto" MaxHeight="340"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*" MinHeight="220"/>
+            <RowDefinition Height="*" MinHeight="120"/>
         </Grid.RowDefinitions>
     
         <!-- Header with title and actions -->

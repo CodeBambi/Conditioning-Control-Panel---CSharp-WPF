@@ -18,6 +18,17 @@ namespace ConditioningControlPanel.Tests;
 /// </summary>
 public class UiThreadStackCaptureTests
 {
+    public UiThreadStackCaptureTests() => UiThreadStacks.ResetAbandonedLatchForTests();
+
+    [Fact]
+    public void AnAbandonedCaptureLatchesSoTheSessionNeverStacksSnapshots()
+    {
+        var first = UiThreadStacks.CaptureWithBudget(Environment.CurrentManagedThreadId, 0);
+        Assert.Contains("budget", first);
+        var second = UiThreadStacks.CaptureWithBudget(Environment.CurrentManagedThreadId, 20_000);
+        Assert.Contains("skipped", second);
+    }
+
     [Fact]
     public void ASelfSnapshotYieldsTheCallingThreadsManagedFrames()
     {

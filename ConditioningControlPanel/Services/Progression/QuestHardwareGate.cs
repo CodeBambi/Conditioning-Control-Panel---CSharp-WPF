@@ -86,7 +86,9 @@ internal sealed class QuestHardwareGate
     }
 
     /// <summary>The same WaveIn enumeration the speech mic picker is built from - no new probe.</summary>
-    private static bool DetectMicrophone() => Speech.SpeechService.HasCaptureDevice;
+    // Not SpeechService.HasCaptureDevice: that swallows a WaveIn throw into "false", which would
+    // read as absent AND resolved. A throw here reaches CachedProbe.Run and fails open instead.
+    private static bool DetectMicrophone() => NAudio.Wave.WaveInEvent.DeviceCount > 0;
 
     /// <summary>Categories that cannot move without a webcam.</summary>
     internal static bool NeedsCamera(QuestCategory category) => category == QuestCategory.BlinkTrainer;

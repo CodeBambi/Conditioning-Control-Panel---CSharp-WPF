@@ -45,6 +45,11 @@ internal static class UiThreadStacks
     /// lives) and return it as report-ready text. Never throws; always returns something printable,
     /// including when the capture fails or runs out of budget.
     /// </summary>
+    private static int _abandoned;
+
+    /// <summary>Tests share one process; the once-per-session latch must not leak between them.</summary>
+    internal static void ResetAbandonedLatchForTests() => Volatile.Write(ref _abandoned, 0);
+
     public static string CaptureWithBudget(int uiManagedThreadId, int budgetMs)
     {
         // The worker thread exists purely so the budget is ENFORCEABLE. .NET 8 has no
@@ -52,6 +57,12 @@ internal static class UiThreadStacks
         // load) the only way to keep our promise is to stop waiting and walk away. The worker is a
         // background thread, so an abandoned one cannot hold the process open either.
         string result = "(stack capture produced nothing)";
+        // One abandoned capture per process, ever. An abandoned worker still owns its PSS
+        // snapshot (a copy-on-write clone of the address space) until ClrMD returns, which on a
+        // machine that is already wedged may be never. Repeating that up to MaxReportsPerSession
+        // times would stack clones on the box we are trying to diagnose.
+        if (Volatile.Read(ref _abandoned) != 0)
+            return "(stack capture skipped: an earlier capture this session ran out of budget and still holds its snapshot; see the hang_*.dmp beside this file)";
         try
         {
             var done = new ManualResetEventSlim(false);
@@ -73,6 +84,7 @@ internal static class UiThreadStacks
             // Set(). Disposing under it would throw there, for nothing.
             if (!done.Wait(budgetMs))
             {
+                Volatile.Write(ref _abandoned, 1);
                 return "(stack capture exceeded its "
                        + (budgetMs / 1000).ToString(CultureInfo.InvariantCulture)
                        + "s budget and was abandoned; see the hang_*.dmp beside this file)";
