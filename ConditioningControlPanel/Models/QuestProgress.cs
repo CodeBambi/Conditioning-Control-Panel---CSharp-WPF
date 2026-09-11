@@ -121,6 +121,15 @@ public class QuestProgress
         }
 
         int maxRerolls = hasPatreon ? 3 : 1;
+        // DELIBERATE, not the copy-paste from the daily branch above that it looks like. The skill
+        // tree has no weekly reroll node - quest_refresh and reroll_addict are the only two that
+        // feed GetDailyFreeRerolls - so the choice is between their bonus applying to both budgets
+        // or only to the daily one, and the shipped copy says both: the weekly reroll tooltip
+        // (tooltip_reroll_for_a_different_quest_once_per_week) reads "One reroll a week, three with
+        // Patreon, plus anything the skill tree adds", in all nine languages. Dropping this line
+        // would take rerolls off everyone who spent 15 and 20 skill points on those nodes and make
+        // nine translated strings wrong, which is not a thing to do quietly in a patch. If the
+        // weekly allowance is ever meant to be flat, the tooltip has to change with it.
         maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
         maxRerolls += App.Settings?.Current?.BonusWeeklyRerolls ?? 0;
         return Math.Max(0, maxRerolls - WeeklyRerollsUsed);
