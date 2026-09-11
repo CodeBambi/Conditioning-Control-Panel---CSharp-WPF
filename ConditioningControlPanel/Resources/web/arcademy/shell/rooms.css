@@ -839,3 +839,46 @@ html.arc-mobile[data-arc-orient="portrait"] .arm-lever .arc-lever-pos {
   padding: 0 12px;
   font-size: 11px;
 }
+
+/* ------------------- the painted door, held upright ---------------------- */
+
+/* AND THE DOOR'S OWN FURNITURE IS STAGE PIXELS, SO PORTRAIT HAS TO PAY FOR IT
+   TWICE (ticket 1544742846899294288, second half). The phone block above
+   doubled the exit's rim and its sign "because a phone fits that plane at about
+   a half" - and that is LANDSCAPE's number. Portrait fits the 1376x768 plate by
+   WIDTH, and `fit()` is `min(w / 1376, h / 768)`, so the scale is:
+
+     844x390 landscape   min(0.613, 0.508) = 0.508   <- what the doubling bought
+     430x932 portrait    min(0.3125, 1.21) = 0.3125
+     390x844 portrait    min(0.2834, 1.10) = 0.2834
+     360x780 portrait    min(0.2616, 1.02) = 0.2616  <- the narrowest in range
+
+   A phone held upright therefore renders the 22px sign at 5.8-6.9 REAL pixels
+   and the 5px rim at 1.3-1.6 of one. That is trap 101's lesson wearing a
+   different hat: the sign is not cut off any more, it is a smudge, and the rim
+   that is supposed to say "this is a door" is a hairline. Both numbers are
+   re-derived for portrait's own scale rather than tuned by eye - 42px of sign
+   lands at 11.0-13.1 real px (the phone block's landscape sign measures 11.2),
+   and 10px of rim lands at 2.6-3.1 against landscape's 2.5.
+
+   THE PIN AND THE PRESS ARE UNTOUCHED. `right: 0` still hangs the sign off the
+   door's own right edge so it grows leftwards into the room (the 2026-09-03
+   fix), and at 42px the widest English label measures ~500 stage px against the
+   four painted doors' right edges - 1346 Homeroom, 1332 the Sorting Room, 1096
+   Discipline Hall, 1064 the Darkroom, 1322 the Records storeroom - so every one
+   of them leaves the sign hundreds of pixels clear of x0. `bottom` is 46 rather
+   than a full sign height because the tag has to finish ABOVE y640: the apron
+   owns the floor, and the storeroom's door is the deep one (bottom y583, so the
+   sign ends at 629). The rect under it does not move, so the press is the same
+   press, and landscape keeps every number it was signed off with. */
+html.arc-mobile[data-arc-orient="portrait"] .arm-hot.arm-exit {
+  box-shadow: inset 0 0 0 10px rgba(190, 160, 255, 0.50),
+              0 0 60px 14px rgba(150, 120, 230, 0.22);
+}
+html.arc-mobile[data-arc-orient="portrait"] .arm-hot.arm-exit .arm-hot-tag {
+  bottom: -46px;
+  padding: 11px 26px;
+  border-width: 2px;
+  border-radius: 8px;
+  font-size: 42px;
+}
