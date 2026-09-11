@@ -20,6 +20,10 @@ namespace ConditioningControlPanel.Services.Dashboard
         string? Level = null,
         string? Text = null);
 
+    /// <summary>What a closing rolodex owes the settings file. The once-ever tour is either spent
+    /// by this close or it is not, and nothing else about a teardown is a decision.</summary>
+    public enum RolodexCloseOutcome { Nothing, MarkTourShown }
+
     /// <summary>
     /// THE PAGE SIDE OF THE ROLODEX, WITH NO BROWSER IN IT: what an incoming message means, where
     /// the tour's picks land, and whether the 3D picker is still on the table this session.
@@ -107,6 +111,42 @@ namespace ConditioningControlPanel.Services.Dashboard
                 placements.Add((TourSlots[placements.Count], row.Key));
             }
             return placements;
+        }
+
+        /// <summary>
+        /// Whether the close that is happening spends the once-ever tour.
+        ///
+        /// <para>Skipping is an answer. Esc, the close button, walking off the Home tab and a
+        /// session starting underneath all end a tour as surely as pressing Done, and a tour that
+        /// ended without marking itself shown is one the app offers again every launch forever. An
+        /// EDIT close spends nothing, because there is no offer in it; so does a close that
+        /// follows a failure to start (<see cref="RolodexMessageKind.Unknown"/>), because an offer
+        /// the app never managed to make is not one the user waved away.</para>
+        /// </summary>
+        public static RolodexCloseOutcome TourOutcomeFor(string? mode, RolodexMessageKind why)
+        {
+            if (!string.Equals(mode?.Trim(), "tour", StringComparison.OrdinalIgnoreCase))
+                return RolodexCloseOutcome.Nothing;
+
+            return why is RolodexMessageKind.Close or RolodexMessageKind.TourDone
+                ? RolodexCloseOutcome.MarkTourShown
+                : RolodexCloseOutcome.Nothing;
+        }
+
+        /// <summary>How much of one page log line reaches the app log. A page in a loop is a page
+        /// that can write a megabyte a second into a file the user is asked to attach to a bug
+        /// report.</summary>
+        public const int MaxLogChars = 400;
+
+        /// <summary>How many page log lines one open may spend before the host stops listening.</summary>
+        public const int MaxLogLinesPerOpen = 200;
+
+        /// <summary>One page log line, cut to <see cref="MaxLogChars"/>. Null is an empty line,
+        /// never a throw: this runs on the browser's message loop.</summary>
+        public static string ClampPageLog(string? text)
+        {
+            var line = text ?? string.Empty;
+            return line.Length <= MaxLogChars ? line : line[..MaxLogChars] + "...";
         }
 
         private static string? CleanKey(string? raw)

@@ -47,6 +47,11 @@ namespace ConditioningControlPanel
         /// <summary>What the program lock ribbon was doing before we took the grid.</summary>
         private Visibility _ribbonBeforeRolodex = Visibility.Collapsed;
 
+        /// <summary>What the mosaic canvas was doing before we took the grid. It is Visible almost
+        /// always and Collapsed on the machines that matter (Motion off, a low-end GPU), which is
+        /// exactly why restoring it to a hard-coded Visible was wrong.</summary>
+        private Visibility _mosaicBeforeRolodex = Visibility.Visible;
+
         /// <summary>The static event's handler, kept so the window can let go of it on the way
         /// out. A static event holding an instance delegate pins the window for the life of the
         /// process.</summary>
@@ -83,9 +88,11 @@ namespace ConditioningControlPanel
                 }
                 finally { _rolodexOpening = false; }
 
-                // The probe failed while we were still on the stack: the view is already gone and
-                // the flag is latched, so say so and let the caller reach for the flat picker.
-                return !RolodexAvailability.GivenUp;
+                // The probe failed, or this open was aborted, while we were still on the stack:
+                // the view is already gone, so say so and let the caller reach for the flat
+                // picker. Asked of the VIEW rather than of the give-up flag, because an abort
+                // closes this open without latching anything.
+                return _rolodex != null;
             }
             catch (Exception ex)
             {
@@ -113,8 +120,9 @@ namespace ConditioningControlPanel
 
             view.Picked += OnRolodexPicked;
             view.TourDone += OnRolodexTourDone;
-            view.CloseRequested += CloseRolodex;
+            view.CloseRequested += OnRolodexCloseRequested;
             view.InitFailed += OnRolodexInitFailed;
+            view.OpenAborted += OnRolodexOpenAborted;
 
             _rolodex = view;
             _rolodexSlot = slot;
@@ -139,45 +147,113 @@ namespace ConditioningControlPanel
         /// HWND is torn down FIRST, and only then does the shared accepted-edit path run - because
         /// that path may raise the Replace / Split question, and a WPF dialog over a browser
         /// rectangle is a dialog nobody can see.
+        ///
+        /// <para>POSTED, not run here. This arrives on the browser's own message loop
+        /// (<c>WebMessageReceived</c>), and the first thing the teardown does is dispose the
+        /// WebView2 that is calling us - a reentrant dispose from inside a WebView2 callback. Both
+        /// halves go into ONE posted callback so the order above survives the hop.</para>
         /// </summary>
         private void OnRolodexPicked(string key)
         {
             var slot = _rolodexSlot;
-            CloseRolodex();
-            HandleDashboardPick(slot, key);
+            PostAfterRolodexMessage(() =>
+            {
+                CloseRolodex(RolodexMessageKind.Pick);
+                HandleDashboardPick(slot, key);
+            });
+        }
+
+        /// <summary>Esc, the close button, or the page giving up on itself. Posted for the same
+        /// reason a pick is, and it is the close that SPENDS a tour: skipping is an answer.</summary>
+        private void OnRolodexCloseRequested()
+            => PostAfterRolodexMessage(() => CloseRolodex(RolodexMessageKind.Close));
+
+        /// <summary>
+        /// Hop off the browser's message loop before tearing its host down. A throwing callback is
+        /// logged rather than allowed to reach the dispatcher's unhandled handler, because by the
+        /// time this runs there is nobody left on the stack who knows what it was for.
+        /// </summary>
+        private void PostAfterRolodexMessage(Action work)
+        {
+            try
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { work(); }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "[Rolodex] posted teardown failed"); }
+                }));
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "[Rolodex] posting the teardown failed"); }
         }
 
         private void OnRolodexInitFailed(string reason)
         {
             RolodexAvailability.GiveUp(reason);
+            FallBackFromRolodex();
+        }
+
+        /// <summary>This open failed, the session did not. Same fallback, no latch - and the next
+        /// pencil probes the browser again.</summary>
+        private void OnRolodexOpenAborted(string reason)
+        {
+            App.Logger?.Debug("[Rolodex] open aborted: {Reason}", reason);
+            FallBackFromRolodex();
+        }
+
+        private void FallBackFromRolodex()
+        {
             var slot = _rolodexSlot;
             var tour = _rolodexTour;
             var opening = _rolodexOpening;
-            CloseRolodex();
 
-            // The opener is still on the stack and will fall back itself. A tour that never opened
-            // spends nothing: the flag stays unset and the next launch offers it again.
-            if (opening || tour) return;
+            // Unknown, not Close: a rolodex that never got going made no offer, so it spends
+            // nothing. The next launch offers the tour again.
+            CloseRolodex(RolodexMessageKind.Unknown);
+
+            // The opener is still on the stack and will fall back itself. A tour has no flat
+            // version at all - there is nothing to fall back TO - so it simply does not happen.
+            if (opening || tour) { if (tour) _dashboardTourOffered = false; return; }
             OpenFlatDashboardPicker(slot);
         }
 
         /// <summary>Removes and disposes the view and gives the wall back. Idempotent - the page
         /// may send <c>close</c> after a <c>tourDone</c>, and a tab hide may arrive on top of
         /// both.</summary>
-        internal void CloseRolodex()
+        internal void CloseRolodex() => CloseRolodex(RolodexMessageKind.Close);
+
+        /// <summary>
+        /// As above, plus what ENDED it - which is the whole of the tour's bookkeeping.
+        ///
+        /// <para>The tour is a once-ever offer, and every way out of it is an answer: Done, Esc,
+        /// the close button, leaving the Home tab, a session starting underneath. All of them come
+        /// through here, so all of them mark it shown, and the offer is not made again next launch
+        /// to somebody who already said no. The one exception is a rolodex that never started
+        /// (<see cref="RolodexMessageKind.Unknown"/>): an offer the app could not make is not an
+        /// offer the user waved away. <see cref="RolodexBridgeRule.TourOutcomeFor"/> holds the
+        /// rule, where it can be read without a browser.</para>
+        /// </summary>
+        private void CloseRolodex(RolodexMessageKind why)
         {
             try
             {
                 var view = _rolodex;
+                var tour = _rolodexTour;
                 _rolodex = null;
                 _rolodexTour = false;
 
                 if (view != null)
                 {
+                    if (RolodexBridgeRule.TourOutcomeFor(tour ? "tour" : "edit", why)
+                        == RolodexCloseOutcome.MarkTourShown)
+                    {
+                        MarkDashboardTourShown();
+                    }
+
                     view.Picked -= OnRolodexPicked;
                     view.TourDone -= OnRolodexTourDone;
-                    view.CloseRequested -= CloseRolodex;
+                    view.CloseRequested -= OnRolodexCloseRequested;
                     view.InitFailed -= OnRolodexInitFailed;
+                    view.OpenAborted -= OnRolodexOpenAborted;
                     (view.Parent as Panel)?.Children.Remove(view);
                     view.Dispose();
                 }
@@ -205,20 +281,31 @@ namespace ConditioningControlPanel
 
                 _dashboardRolodexParked = true;
 
+                // EVERYTHING IS CAPTURED BEFORE ANYTHING IS TOUCHED, in a try of its own. Parking
+                // can throw halfway - Pause() is the likely one - and a restore that then wrote a
+                // default nobody chose would hand the user back a wall that is not the wall they
+                // had. Reading two Visibility properties cannot throw in any way that matters, and
+                // if it somehow does the fallbacks below are at least written down.
+                try
+                {
+                    if (tab.MosaicFx != null) _mosaicBeforeRolodex = tab.MosaicFx.Visibility;
+                    if (tab.ProgramFeatureLockRibbon != null)
+                        _ribbonBeforeRolodex = tab.ProgramFeatureLockRibbon.Visibility;
+                }
+                catch (Exception ex) { App.Logger?.Debug("[Rolodex] capturing the wall: {E}", ex.Message); }
+
                 foreach (var host in DashboardSlotHosts())
                     if (host != null) host.Visibility = Visibility.Collapsed;
 
                 if (tab.MosaicFx != null)
                 {
-                    tab.MosaicFx.Pause();
+                    try { tab.MosaicFx.Pause(); }
+                    catch (Exception ex) { App.Logger?.Debug("[Rolodex] mosaic pause: {E}", ex.Message); }
                     tab.MosaicFx.Visibility = Visibility.Collapsed;
                 }
 
                 if (tab.ProgramFeatureLockRibbon != null)
-                {
-                    _ribbonBeforeRolodex = tab.ProgramFeatureLockRibbon.Visibility;
                     tab.ProgramFeatureLockRibbon.Visibility = Visibility.Collapsed;
-                }
 
                 ApplyDashboardFxLoops();
             }
@@ -240,7 +327,9 @@ namespace ConditioningControlPanel
                 foreach (var host in DashboardSlotHosts())
                     if (host != null) host.Visibility = Visibility.Visible;
 
-                if (tab.MosaicFx != null) tab.MosaicFx.Visibility = Visibility.Visible;
+                // Both restored to what they WERE, never to a default: a mosaic the user turned
+                // off does not come back on because a picker closed.
+                if (tab.MosaicFx != null) tab.MosaicFx.Visibility = _mosaicBeforeRolodex;
                 if (tab.ProgramFeatureLockRibbon != null)
                     tab.ProgramFeatureLockRibbon.Visibility = _ribbonBeforeRolodex;
 
@@ -396,29 +485,53 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Warning(ex, "[Dashboard] tour offer failed"); }
         }
 
-        /// <summary>Opens the rolodex in tour mode over the Home wall. Refuses quietly if the tab
-        /// is not the one on screen - the picker covers a grid, and covering one nobody is looking
-        /// at would be a browser running for no reason.</summary>
+        /// <summary>
+        /// Opens the rolodex in tour mode over the Home wall.
+        ///
+        /// <para>THE WALK COMES FIRST. This is the Inbox row's <c>Open</c>, and an Inbox row can be
+        /// clicked from any tab in the app - while the picker covers the Home grid and nothing
+        /// else. Refusing when Home is not on screen made the row a dead click from everywhere but
+        /// the one tab that did not need it, and <c>StartupPresenter.OpenItem</c> has already
+        /// removed the row by then, so the offer was gone and nothing had happened. Walk to Home
+        /// and then open, the way every other row in the Inbox takes the user where it lives.</para>
+        ///
+        /// <para>And if it still cannot open, the offer is handed BACK: the session latch comes off
+        /// so a later visit to Home offers it again, and the once-ever flag is never spent by an
+        /// attempt that showed the user nothing.</para>
+        /// </summary>
         private void StartDashboardTour()
         {
+            var opened = false;
             try
             {
                 if (App.Settings?.Current?.DashboardTourShown == true) return;
+                if (RolodexAvailability.GivenUp) return;
                 if (IsSessionFeatureLockActive) return;
+
+                // "settings" IS the Home tab (SettingsTabView, the nine-cell wall). Cheap when it
+                // is already the one on screen: ShowTab re-shows the tab it is on.
+                if (SettingsTab?.IsVisible != true) ShowTab("settings");
 
                 var grid = SettingsTab?.VelvetFeatureGrid;
                 if (grid == null || SettingsTab?.IsVisible != true) return;
-                if (RolodexAvailability.GivenUp) return;
 
                 CloseDashboardPicker();
-                CloseRolodex();
+                CloseRolodex(RolodexMessageKind.Unknown);
                 EnsureDashboardSlotsRendered();
 
                 _rolodexOpening = true;
-                try { ShowRolodex(grid, 0, tour: true); }
+                try { opened = ShowRolodex(grid, 0, tour: true); }
                 finally { _rolodexOpening = false; }
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "[Dashboard] tour open failed"); }
+            finally
+            {
+                // Nothing opened, so nothing was offered. DashboardTourShown is untouched, which
+                // means the next launch asks again; dropping the session latch means this one can
+                // too, the next time the Home tab comes up.
+                if (!opened && App.Settings?.Current?.DashboardTourShown != true)
+                    _dashboardTourOffered = false;
+            }
         }
 
         /// <summary>
@@ -429,10 +542,19 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OnRolodexTourDone(IReadOnlyList<string> keys)
         {
-            // The HWND goes first, exactly as it does after a pick: everything below this line can
-            // re-render the wall, and none of it can be seen through a browser.
-            CloseRolodex();
+            // Posted off the browser's message loop for the same reason a pick is, and in one
+            // callback so the order below survives the hop: the HWND goes first, exactly as it
+            // does after a pick, because everything after it re-renders the wall and none of that
+            // can be seen through a browser.
+            PostAfterRolodexMessage(() =>
+            {
+                CloseRolodex(RolodexMessageKind.TourDone);
+                CommitDashboardTour(keys);
+            });
+        }
 
+        private void CommitDashboardTour(IReadOnlyList<string> keys)
+        {
             try
             {
                 MarkDashboardTourShown();

@@ -46,11 +46,25 @@ namespace ConditioningControlPanel.Controls.Dashboard
         /// and buys a browser that cannot be wedged by somebody else's crash.</summary>
         private const string UserDataFolderName = "browser_data_rolodex";
 
+        /// <summary>Two strikes, the same stand-down BrowserVideoEngine.ReportProcessFailure runs
+        /// app-wide: one dead renderer is bad luck, a second one in the same session is a machine
+        /// whose browser will not stay up, and the flat shelf takes the rest of the launch.</summary>
+        private const int MaxProcessFailures = 2;
+
+        private static int _processFailures;
+
         private readonly List<string> _pending = new();
         private WebView2? _web;
         private Window? _window;
         private bool _initStarted;
         private bool _disposed;
+
+        /// <summary>True once the page itself has loaded. A cancelled navigation AFTER that is the
+        /// lock in <see cref="OnNavigationStarting"/> doing its job, not the picker failing.</summary>
+        private bool _navigated;
+
+        /// <summary>Page log lines spent this open. See <see cref="RolodexBridgeRule.MaxLogLinesPerOpen"/>.</summary>
+        private int _logLines;
 
         /// <summary>True once the page has posted <c>ready</c> and the queue has been flushed.</summary>
         public bool IsReady { get; private set; }
@@ -66,9 +80,16 @@ namespace ConditioningControlPanel.Controls.Dashboard
         /// <summary>Esc, the close button, or the page giving up. The host owns the teardown.</summary>
         public event Action? CloseRequested;
 
-        /// <summary>No runtime, no core, a dead process or a navigation failure. The host latches
-        /// <see cref="RolodexAvailability"/> on this and never asks again this session.</summary>
+        /// <summary>No runtime, no core, or an environment that would not build. The host latches
+        /// <see cref="RolodexAvailability"/> on this and never asks again this session, because
+        /// none of those come back before a restart.</summary>
         public event Action<string>? InitFailed;
+
+        /// <summary>This open is over and the flat shelf takes the question - but the session is
+        /// not over. A page that failed to load once, or a renderer that died once, says nothing
+        /// about whether the next pencil can open a rolodex, and latching on either turned one bad
+        /// second into a launch with no 3D picker in it.</summary>
+        public event Action<string>? OpenAborted;
 
         public RolodexEmbedView()
         {
@@ -116,20 +137,22 @@ namespace ConditioningControlPanel.Controls.Dashboard
                 var userDataFolder = Path.Combine(App.UserDataPath, UserDataFolderName);
                 Directory.CreateDirectory(userDataFolder);
 
-                // The app's anti-MPO / anti-occlusion pair, merged through the one composer so a
-                // command line never names --disable-features twice (only the last copy survives,
-                // and this page spins on rAF: an occlusion tracker that decides a tab-docked view
-                // is covered would freeze the rings mid-turn). PrefersReducedMotionArgument is the
-                // same override every other hosted surface gets - the page ALSO receives the
-                // app's own flag in `init`, and honours whichever is stricter.
+                // The app's anti-MPO / anti-occlusion pair, and NOTHING THAT VARIES. This page
+                // spins on rAF, so an occlusion tracker that decided a tab-docked view was covered
+                // would freeze the rings mid-turn - but the string itself has to be the same on
+                // every open, the way SpiralEmbedView's is. WebView2 ties a user-data folder to the
+                // options its environment was built with, and a second environment asking for the
+                // same folder with a different command line fails to create at all. The
+                // reduced-motion override used to ride along here and it flips with a setting the
+                // user can change between two opens, so a motion toggle could leave this picker
+                // permanently unable to start. Reduced motion travels in the `init` message
+                // instead (`reducedMotion`), which is the copy the page actually reads.
                 var options = new CoreWebView2EnvironmentOptions
                 {
-                    AdditionalBrowserArguments = ChaosWebViewHost.ComposeBrowserArguments(
-                        "--disable-direct-composition-video-overlays "
-                        + "--disable-features=CalculateNativeWinOcclusion "
-                        + "--disable-backgrounding-occluded-windows",
-                        ChaosWebViewHost.PrefersReducedMotionArgument(
-                            App.Settings?.Current?.MotionLevel ?? Models.MotionLevel.Full)),
+                    AdditionalBrowserArguments =
+                        "--disable-direct-composition-video-overlays " +
+                        "--disable-features=CalculateNativeWinOcclusion " +
+                        "--disable-backgrounding-occluded-windows",
                 };
 
                 var env = await CoreWebView2Environment
@@ -189,16 +212,40 @@ namespace ConditioningControlPanel.Controls.Dashboard
                 !e.Uri.StartsWith("https://" + PageHost + "/", StringComparison.OrdinalIgnoreCase))
             {
                 e.Cancel = true;
+                App.Logger?.Debug("[Rolodex] navigation refused: {Uri}", e.Uri);
             }
         }
 
         private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            if (!e.IsSuccess) Fail("navigation failed: " + e.WebErrorStatus);
+            if (e.IsSuccess) { _navigated = true; return; }
+
+            // A navigation THIS VIEW cancelled is not a failure worth reporting: the lock above
+            // refuses everything that is not the page, and a refusal arrives here looking exactly
+            // like a load that did not work. Once the page is up, nothing that fails after it is
+            // the picker failing to start either.
+            if (_navigated || e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled)
+            {
+                App.Logger?.Debug("[Rolodex] navigation ended {Status} (page already up: {Up})",
+                                  e.WebErrorStatus, _navigated);
+                return;
+            }
+
+            // One bad load closes THIS open, and the next pencil is allowed to try again.
+            Abort("navigation failed: " + e.WebErrorStatus);
         }
 
         private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
-            => Fail("browser process failed: " + e.ProcessFailedKind);
+        {
+            _processFailures++;
+            var reason = "browser process failed: " + e.ProcessFailedKind;
+            if (_processFailures >= MaxProcessFailures)
+            {
+                Fail(reason + " (strike " + _processFailures + " this session)");
+                return;
+            }
+            Abort(reason);
+        }
 
         // ============================== the bridge ==============================
 
@@ -254,11 +301,33 @@ namespace ConditioningControlPanel.Controls.Dashboard
                         break;
 
                     case RolodexMessageKind.Log:
-                        App.Logger?.Write(RolodexBridgeRule.LogLevel(msg.Level), "[Rolodex][page]: {Msg}", msg.Text);
+                        WritePageLog(msg);
                         break;
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("[Rolodex] OnWebMessageReceived: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// One page log line, cut short and counted. A page stuck in a loop can post faster than
+        /// the log can be written, and the file it would fill is the one users are asked to attach
+        /// to a bug report - so a line is capped and an open has a budget, after which the host
+        /// says so once and stops listening.
+        /// </summary>
+        private void WritePageLog(RolodexMessage msg)
+        {
+            if (_logLines > RolodexBridgeRule.MaxLogLinesPerOpen) return;
+
+            _logLines++;
+            if (_logLines > RolodexBridgeRule.MaxLogLinesPerOpen)
+            {
+                App.Logger?.Information("[Rolodex][page]: {Max} log lines this open - the rest is dropped",
+                                        RolodexBridgeRule.MaxLogLinesPerOpen);
+                return;
+            }
+
+            App.Logger?.Write(RolodexBridgeRule.LogLevel(msg.Level), "[Rolodex][page]: {Msg}",
+                              RolodexBridgeRule.ClampPageLog(msg.Text));
         }
 
         /// <summary>A throwing host handler must not take the browser down with it.</summary>
@@ -322,12 +391,27 @@ namespace ConditioningControlPanel.Controls.Dashboard
 
         // ============================== teardown ==============================
 
+        /// <summary>The permanent one: there is no rolodex on this machine this session. Only the
+        /// runtime probe and an environment that will not build get here.</summary>
         private void Fail(string reason)
         {
             App.Logger?.Information("[Rolodex] embed unavailable: {Reason} - falling back", reason);
             Dispose();
             Raise(() => InitFailed?.Invoke(reason), "InitFailed");
         }
+
+        /// <summary>The one-shot one: this open is over, the flat shelf answers the question this
+        /// time, and nothing is latched.</summary>
+        private void Abort(string reason)
+        {
+            if (_disposed) return;
+            App.Logger?.Information("[Rolodex] this open is over: {Reason} - the flat picker takes it", reason);
+            Dispose();
+            Raise(() => OpenAborted?.Invoke(reason), "OpenAborted");
+        }
+
+        /// <summary>Tests only. The two-strike count is a session fact, not a product setting.</summary>
+        internal static void ResetProcessFailuresForTests() => _processFailures = 0;
 
         /// <summary>Tear the browser down and empty the view. Idempotent, and the ONE way an HWND
         /// on this wall is ever allowed to end.</summary>

@@ -185,7 +185,11 @@ namespace ConditioningControlPanel
 
                 // The Home wall's browser, if one is up. Disposed by hand rather than left to the
                 // teardown: an HWND is not a WPF child that goes quietly with its parent.
-                CloseRolodex();
+                //
+                // Unknown, not Close: quitting the app is not skipping the first-run tour. Every
+                // other way out of it spends the once-ever offer (Esc, Done, leaving the tab); a
+                // user who closed the window mid-tour is owed it again next launch.
+                CloseRolodex(Services.Dashboard.RolodexMessageKind.Unknown);
 
                 // Unsubscribe service events to allow GC of this window
                 UnsubscribeWebcamDebug();

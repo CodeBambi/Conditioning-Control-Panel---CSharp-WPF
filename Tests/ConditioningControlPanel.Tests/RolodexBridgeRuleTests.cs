@@ -171,6 +171,56 @@ public class RolodexBridgeRuleTests
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
+    // ── what a close owes the tour ───────────────────────────────
+
+    [Theory]
+    [InlineData(RolodexMessageKind.Close)]
+    [InlineData(RolodexMessageKind.TourDone)]
+    public void EveryWayOUTOfATourSpendsIt(RolodexMessageKind why)
+    {
+        // Done and Esc are the same answer to a once-ever offer. Leaving the Home tab and a
+        // session starting underneath both arrive as Close too, which is why they are the same
+        // line of code and not three.
+        Assert.Equal(RolodexCloseOutcome.MarkTourShown, RolodexBridgeRule.TourOutcomeFor("tour", why));
+    }
+
+    [Fact]
+    public void ATourThatNeverStartedSpendsNothing()
+    {
+        // An offer the app could not make is not an offer the user waved away: the browser failed,
+        // the user saw nothing, and the next launch owes them the tour.
+        Assert.Equal(RolodexCloseOutcome.Nothing,
+                     RolodexBridgeRule.TourOutcomeFor("tour", RolodexMessageKind.Unknown));
+    }
+
+    [Theory]
+    [InlineData(RolodexMessageKind.Close)]
+    [InlineData(RolodexMessageKind.TourDone)]
+    [InlineData(RolodexMessageKind.Pick)]
+    public void AnEditCloseIsNeverTheTour(RolodexMessageKind why)
+    {
+        // One pencil, one slot, no offer in it. Nothing an edit does may spend the tour.
+        Assert.Equal(RolodexCloseOutcome.Nothing, RolodexBridgeRule.TourOutcomeFor("edit", why));
+        Assert.Equal(RolodexCloseOutcome.Nothing, RolodexBridgeRule.TourOutcomeFor(null, why));
+    }
+
+    // ── the page log budget ──────────────────────────────────────
+
+    [Fact]
+    public void ALongPageLogLineIsCutRatherThanWrittenWhole()
+    {
+        var clamped = RolodexBridgeRule.ClampPageLog(new string('x', 5000));
+        Assert.Equal(RolodexBridgeRule.MaxLogChars + 3, clamped.Length);
+        Assert.EndsWith("...", clamped);
+    }
+
+    [Fact]
+    public void AShortPageLogLineIsLeftExactlyAsItCame()
+    {
+        Assert.Equal("rings built", RolodexBridgeRule.ClampPageLog("rings built"));
+        Assert.Equal(string.Empty, RolodexBridgeRule.ClampPageLog(null));
+    }
+
     // ── the give-up flag ─────────────────────────────────────────
 
     [Fact]
@@ -321,6 +371,26 @@ public class RolodexBridgeRuleTests
             Assert.Contains("Panel.SetZIndex(", source, StringComparison.Ordinal);
             Assert.Contains(", 40)", source, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public void OnlyTheThingsThatCannotComeBackLatchTheGiveUp()
+    {
+        // A navigation that failed once and a renderer that died once are this OPEN's problem, not
+        // the session's: both close the rolodex and hand the question to the flat shelf, and only
+        // the runtime probe and an environment that will not build latch. Nothing in the compiler
+        // can see the difference, so the two routes are pinned by name.
+        var embed = File.ReadAllText(Path.Combine(
+            RepoRoot(), "ConditioningControlPanel", "Controls", "Dashboard", "RolodexEmbedView.cs"));
+
+        Assert.Contains("Abort(\"navigation failed: \"", embed, StringComparison.Ordinal);
+        Assert.Contains("OpenAborted", embed, StringComparison.Ordinal);
+        // Two strikes on a dead renderer, the same stand-down BrowserVideoEngine runs app-wide.
+        Assert.Contains("MaxProcessFailures = 2", embed, StringComparison.Ordinal);
+        // ... and the argument string is a CONSTANT: WebView2 ties a user-data folder to the
+        // options it was built with, so a reduced-motion switch that flips between two opens would
+        // leave this picker unable to create an environment at all.
+        Assert.DoesNotContain("PrefersReducedMotionArgument", embed, StringComparison.Ordinal);
     }
 
     [Fact]

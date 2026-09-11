@@ -51,6 +51,12 @@ namespace ConditioningControlPanel
         /// whatever was there first.</summary>
         private DashboardPickerPopup? _dashboardPicker;
 
+        /// <summary>True when the flat shelf on screen was opened only to host the Replace / Split
+        /// question after a rolodex pick. Such a shelf was never asked for, so backing out of the
+        /// question takes it with it; a shelf the user opened themselves stays, because they are
+        /// still picking.</summary>
+        private bool _dashboardShelfForAsk;
+
         /// <summary>One template for all nine. A ControlTemplate is shareable and sealed on first
         /// use, so building it once is both cheaper and the only way to be sure the nine pencils
         /// cannot drift apart.</summary>
@@ -288,6 +294,11 @@ namespace ConditioningControlPanel
                 picker.Picked += key => HandleDashboardPick(picker.Slot, key);
                 picker.ResetRequested += ResetDashboardLayout;
                 picker.CloseRequested += CloseDashboardPicker;
+                picker.AskCancelled += OnDashboardAskCancelled;
+
+                // Opened by a pencil until somebody says otherwise; AskDashboardPickChoice is the
+                // only caller that says otherwise, and it says it right after this returns.
+                _dashboardShelfForAsk = false;
 
                 grid.Children.Add(picker);
                 _dashboardPicker = picker;
@@ -303,7 +314,9 @@ namespace ConditioningControlPanel
             {
                 var picker = _dashboardPicker;
                 _dashboardPicker = null;
+                _dashboardShelfForAsk = false;
                 if (picker == null) return;
+                picker.AskCancelled -= OnDashboardAskCancelled;
                 (picker.Parent as Panel)?.Children.Remove(picker);
             }
             catch (Exception ex) { App.Logger?.Debug("CloseDashboardPicker: {E}", ex.Message); }
@@ -318,6 +331,17 @@ namespace ConditioningControlPanel
         internal void HandleDashboardPick(int slot, string key)
         {
             if (RefuseActionIfSessionLocked("dashboard:edit")) return;
+
+            // A key the catalog does not know cannot become a tile, so nothing downstream of here
+            // can do anything but refuse it - and the refusal used to happen at the far end, after
+            // AskDashboardPickChoice had built a whole flat shelf to host a question whose only
+            // possible answers were Replace-into-nothing and Cancel. Refuse it at the door. Debug,
+            // not a warning: the only way here is a stale page or a mod that moved.
+            if (FeatureCatalog.Find(key) == null)
+            {
+                App.Logger?.Debug("[Dashboard] pick ignored for slot {Slot}: no catalog row for '{Key}'", slot, key);
+                return;
+            }
 
             var prompt = DashboardPickerRule.Decide(CurrentLayout, slot, key);
             if (prompt is PickPrompt.Place or PickPrompt.Move)
@@ -345,6 +369,10 @@ namespace ConditioningControlPanel
                 // that cannot reach it.
                 OpenFlatDashboardPicker(slot);
                 picker = _dashboardPicker;
+
+                // ... and it is here for the question and nothing else, so Cancel closes it rather
+                // than leaving a shelf up that the user never opened.
+                _dashboardShelfForAsk = picker != null;
             }
 
             if (picker == null)
@@ -355,6 +383,15 @@ namespace ConditioningControlPanel
             }
 
             picker.Ask(offerSplit, split => CommitDashboardPick(slot, key, split));
+        }
+
+        /// <summary>Never mind, from the strip or from Escape. Only the shelf that was conjured
+        /// up to ask goes away with the question; the one the user opened is still theirs.</summary>
+        private void OnDashboardAskCancelled()
+        {
+            if (!_dashboardShelfForAsk) return;
+            App.Logger?.Debug("[Dashboard] ask cancelled; the shelf it was asked in goes too");
+            CloseDashboardPicker();
         }
 
         // ---- the accepted edit ---------------------------------------------------------
