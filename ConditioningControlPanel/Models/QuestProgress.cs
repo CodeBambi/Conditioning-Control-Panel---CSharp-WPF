@@ -79,6 +79,15 @@ public class QuestProgress
     // in): treated as owned by whoever logs in next, matching the old behavior at worst.
     public string? OwnerUnifiedId { get; set; }
 
+    // ccp-bugs#1186 / #1192: the last moment this account was OBSERVED with resolved premium
+    // access, stamped by QuestService on any pass that sees one. It is the only durable answer to
+    // "was this user ever premium", and the premium-loss reroll needs that answer: keeping an
+    // in-progress premium quest is right for a LAPSED patron and wrong for someone who was never
+    // premium at all, who is simply stuck with a quest they cannot finish. Null = never seen
+    // premium (a fresh file, or a genuinely free account). Never cleared except by the
+    // different-account wipe, because "used to be a patron" does not stop being true.
+    public DateTime? LastPremiumSeenUtc { get; set; }
+
     /// <summary>
     /// Get remaining daily rerolls (1 base + 2 for Patreon + skill tree bonuses)
     /// </summary>
