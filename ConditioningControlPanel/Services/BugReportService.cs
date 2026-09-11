@@ -741,6 +741,66 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// How fresh a <c>hang_*.txt</c> has to be before the report dialog ticks the activity-log
+        /// box on the user's behalf. Seven days is the span the watchdog's own retention already
+        /// implies (it keeps the four newest files), and it is long enough to cover the usual
+        /// "it froze on Friday, I filed it on Monday" gap without dragging a month-old stack into
+        /// an unrelated report.
+        /// </summary>
+        internal static readonly TimeSpan RecentHangWindow = TimeSpan.FromDays(7);
+
+        /// <summary>
+        /// Should the report dialog open with the activity-log opt-in already ticked?
+        /// <para>Yes only when a freeze was recorded inside <see cref="RecentHangWindow"/> and the
+        /// user is filing a bug rather than a suggestion. Everyone else keeps the unticked default:
+        /// the whole point of the opt-in is that a report carries no log unless there is a reason.</para>
+        /// <para>A timestamp in the future means a clock change, not a freeze that has not happened
+        /// yet, so it is refused rather than trusted. Pure, so the decision can be pinned by a test
+        /// without a dialog, a clock or a disk.</para>
+        /// </summary>
+        internal static bool ShouldPreAttachHangReport(DateTime? hangWrittenLocal, DateTime nowLocal, bool isSuggestion)
+        {
+            if (isSuggestion) return false;
+            if (hangWrittenLocal is not DateTime at) return false;
+            if (at > nowLocal) return false;
+            return nowLocal - at <= RecentHangWindow;
+        }
+
+        /// <summary>
+        /// When the newest <c>hang_*.txt</c> was written, if one is recent enough to ride along with
+        /// the report the user is about to file; <c>null</c> otherwise. Cheap: it reads timestamps,
+        /// not contents. Never throws.
+        /// </summary>
+        public static DateTime? FindRecentHangReport(ReportKind kind)
+        {
+            try
+            {
+                var at = NewestHangReportTime();
+                return ShouldPreAttachHangReport(at, DateTime.Now, kind == ReportKind.Suggestion) ? at : null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("[BugReport] hang report probe failed: {Msg}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Local write time of the newest <c>hang_*.txt</c>, or <c>null</c> if there is none.</summary>
+        private static DateTime? NewestHangReportTime()
+        {
+            var logDir = Path.Combine(App.UserDataPath, "logs");
+            if (!Directory.Exists(logDir)) return null;
+
+            DateTime newestAt = DateTime.MinValue;
+            foreach (var file in Directory.GetFiles(logDir, "hang_*.txt"))
+            {
+                var at = File.GetLastWriteTimeUtc(file);
+                if (at > newestAt) newestAt = at;
+            }
+            return newestAt == DateTime.MinValue ? null : newestAt.ToLocalTime();
+        }
+
+        /// <summary>
         /// Newest <c>hang_*.txt</c> from the logs folder (the watchdog keeps the four most recent).
         /// Opened share-all because the watchdog may still be appending the stack capture to it.
         /// Never throws.

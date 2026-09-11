@@ -3411,6 +3411,7 @@
   "bug_report_steps_label": "Passos para reproduzir (opcional)",
   "bug_report_metadata_label": "Metadados que serão enviados",
   "bug_report_include_log_checkbox": "Incluir o log de atividade recente (últimas 100 linhas)",
+  "bug_report_hang_attached_hint": "Um relatório de travamento de {0} será anexado. Desmarque para deixá-lo de fora.",
   "bug_report_preview_label": "Prévia (o payload exato enviado ao servidor)",
   "bug_report_scrubber_count": "Foram ocultados {0} caminhos, {1} e-mails, {2} tokens, {3} referências ao appdata.",
   "bug_report_privacy_notice": "Este relatório será enviado ao rastreador de bugs privado do mantenedor do CCP. Sua mensagem, os metadados mostrados acima e seu log de erro higienizado serão enviados. Nenhuma identidade do Discord ou do Patreon é anexada. O higienizador ocultou caminhos da sua pasta pessoal, endereços de e-mail e tokens que ele reconheceu — confira a prévia abaixo para confirmar. Seu endereço de IP fica visível para nosso provedor de hospedagem para prevenção de abuso, mas não é armazenado junto com o relatório.",

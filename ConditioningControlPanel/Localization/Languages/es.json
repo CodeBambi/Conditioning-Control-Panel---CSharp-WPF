@@ -3403,6 +3403,7 @@
   "bug_report_steps_label": "Pasos para reproducirlo (opcional)",
   "bug_report_metadata_label": "Metadatos que se enviarán",
   "bug_report_include_log_checkbox": "Incluir el registro de actividad reciente (últimas 100 líneas)",
+  "bug_report_hang_attached_hint": "Se adjuntará un informe del bloqueo del {0}. Desmarca la casilla para omitirlo.",
   "bug_report_preview_label": "Vista previa (contenido exacto enviado al servidor)",
   "bug_report_scrubber_count": "Se ocultaron {0} rutas, {1} correos, {2} tokens, {3} referencias a appdata.",
   "bug_report_privacy_notice": "Este reporte se enviará al rastreador de errores privado de la responsable de CCP. Se subirán tu mensaje, los metadatos mostrados arriba y tu registro de fallos depurado. No se adjunta ninguna identidad de Discord ni de Patreon. El depurador ha ocultado rutas personales, direcciones de correo y tokens que reconoció — revisa la vista previa de abajo para confirmarlo. Tu dirección IP es visible para nuestro proveedor de alojamiento por prevención de abusos, pero no se guarda junto a tu reporte.",

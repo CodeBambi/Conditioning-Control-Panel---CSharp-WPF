@@ -3412,6 +3412,7 @@
   "bug_report_steps_label": "Étapes pour reproduire (facultatif)",
   "bug_report_metadata_label": "Métadonnées qui seront envoyées",
   "bug_report_include_log_checkbox": "Inclure le journal d'activité récent (100 dernières lignes)",
+  "bug_report_hang_attached_hint": "Un rapport de blocage du {0} sera joint. Décochez la case pour l'omettre.",
   "bug_report_preview_label": "Aperçu (contenu exact envoyé au serveur)",
   "bug_report_scrubber_count": "{0} chemins, {1} e-mails, {2} jetons et {3} références appdata masqués.",
   "bug_report_privacy_notice": "Ce rapport sera envoyé au traqueur de bugs privé du mainteneur de CCP. Ton message, les métadonnées affichées ci-dessus et ton journal de plantage nettoyé seront envoyés. Aucune identité Discord ou Patreon n'est jointe. Le nettoyeur a masqué les chemins personnels, les adresses e-mail et les jetons qu'il a reconnus — vérifie l'aperçu ci-dessous pour confirmer. Ton adresse IP est visible par notre hébergeur pour prévenir les abus, mais elle n'est pas stockée avec ton rapport.",

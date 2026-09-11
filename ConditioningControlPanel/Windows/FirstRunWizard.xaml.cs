@@ -497,7 +497,7 @@ namespace ConditioningControlPanel
 
                 // The far side of the first run: the screen is the user's, and it stays theirs.
                 // The quiet window: ten minutes in which nothing else pops (the presenter parks it in the Inbox).
-                try { App.Startup?.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10)); }
+                try { App.StartupLadder?.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10)); }
                 catch (Exception ex) { App.Logger?.Debug(ex, "[FirstRun] Could not open the quiet window"); }
             }), DispatcherPriority.Normal);
         }

@@ -3412,6 +3412,7 @@
   "bug_report_steps_label": "Schritte zum Nachstellen (optional)",
   "bug_report_metadata_label": "Metadaten, die gesendet werden",
   "bug_report_include_log_checkbox": "Aktuelles Aktivitätsprotokoll beilegen (letzte 100 Zeilen)",
+  "bug_report_hang_attached_hint": "Ein Bericht zum Einfrieren vom {0} wird angehängt. Häkchen entfernen, um ihn wegzulassen.",
   "bug_report_preview_label": "Vorschau (genaue Daten, die an den Server gehen)",
   "bug_report_scrubber_count": "{0} Pfade, {1} E-Mails, {2} Tokens, {3} AppData-Verweise geschwärzt.",
   "bug_report_privacy_notice": "Dieser Bericht geht an den privaten Bug-Tracker des CCP-Betreuers. Deine Nachricht, die oben gezeigten Metadaten und dein bereinigtes Absturzprotokoll werden hochgeladen. Es wird keine Discord- oder Patreon-Identität angehängt. Die Bereinigung hat Home-Pfade, E-Mail-Adressen und erkannte Tokens geschwärzt — prüfe die Vorschau unten zur Kontrolle. Deine IP-Adresse ist für unseren Hosting-Anbieter zur Missbrauchsabwehr sichtbar, wird aber nicht mit deinem Bericht gespeichert.",

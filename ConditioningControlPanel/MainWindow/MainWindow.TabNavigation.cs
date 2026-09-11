@@ -756,7 +756,7 @@ namespace ConditioningControlPanel
                 // own entry-level pulse", and an entry pulse is exactly as much of an interruption
                 // as the header one. The announcement is not lost - the door still opens on the
                 // first visit and the card behind it is still owed.
-                if (App.Startup?.IsQuiet == true) return true;
+                if (App.StartupLadder?.IsQuiet == true) return true;
 
                 if (IsDoorExpandedForTab(tabKey)) return false;
                 var header = NavDoorHeaderForTab(tabKey);

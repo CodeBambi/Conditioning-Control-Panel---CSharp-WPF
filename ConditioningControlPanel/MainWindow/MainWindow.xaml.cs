@@ -4012,7 +4012,7 @@ namespace ConditioningControlPanel
                         // IsLadderIdle is the same question asked of the thing that actually knows.
                         // Past five minutes we simply do not knock; the offer has not been spent,
                         // so the next launch offers it properly.
-                        var startup = App.Startup;
+                        var startup = App.StartupLadder;
                         for (int i = 0; i < 600; i++)
                         {
                             bool busy = App.IsUpdateDialogActive || IsStartupDialogShowing
