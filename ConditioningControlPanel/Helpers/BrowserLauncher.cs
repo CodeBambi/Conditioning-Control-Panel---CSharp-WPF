@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Logging;
 
 namespace ConditioningControlPanel.Helpers
@@ -66,12 +67,10 @@ namespace ConditioningControlPanel.Helpers
             {
                 try { Clipboard.SetText(url); } catch { /* clipboard may be locked by another app */ }
                 var msg = (string.IsNullOrEmpty(purpose)
-                        ? "We couldn't open your web browser automatically."
-                        : $"We couldn't open your web browser to {purpose}.")
-                    + "\n\nThe link has been copied to your clipboard — paste it into any browser to continue:\n\n"
-                    + url
-                    + "\n\n(This usually means Windows has no default browser set.)";
-                MessageBox.Show(msg, "Open this link in your browser",
+                        ? Loc.Get("msg_browser_no_default")
+                        : Loc.GetF("msg_browser_no_default_for", purpose))
+                    + Loc.GetF("msg_browser_link_copied", url);
+                MessageBox.Show(msg, Loc.Get("title_open_link_in_browser"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
 

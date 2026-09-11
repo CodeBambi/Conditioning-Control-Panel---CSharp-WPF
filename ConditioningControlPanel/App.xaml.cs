@@ -1725,8 +1725,8 @@ namespace ConditioningControlPanel
 
                     try
                     {
-                        MessageBox.Show($"An error occurred:\n\n{args.Exception.Message}\n\nDetails logged to crash log.",
-                            "Error - Please report this", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show(Loc.GetF("msg_unexpected_error", args.Exception.Message),
+                            Loc.Get("title_unexpected_error"), MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     catch { /* MessageBox may fail during shutdown */ }
                 }
@@ -4133,7 +4133,7 @@ namespace ConditioningControlPanel
                                 {
                                     btn.Tag = "UpdateAvailable";
                                     btn.Content = "UPDATE";
-                                    btn.ToolTip = "Update Available - Click to install!";
+                                    btn.ToolTip = Loc.Get("tooltip_update_available_install");
                                     Logger?.Information("Update button configured successfully");
                                 }
                             }
@@ -4380,11 +4380,8 @@ namespace ConditioningControlPanel
                     // Silent update for Inno Setup installations
                     var result = MessageBox.Show(
                         owner,
-                        "Update downloaded successfully!\n\n" +
-                        "The app will now close and update automatically.\n" +
-                        "It will restart when complete.\n\n" +
-                        "Continue?",
-                        "Ready to Update",
+                        Loc.Get("msg_ready_to_update"),
+                        Loc.Get("title_ready_to_update"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
 
@@ -4412,11 +4409,8 @@ namespace ConditioningControlPanel
                     // Fresh install flow - show installer UI
                     var result = MessageBox.Show(
                         owner,
-                        "Installer downloaded successfully.\n\n" +
-                        "The app will now close and the installer will start.\n" +
-                        "Please follow the installer prompts to complete the update.\n\n" +
-                        "Continue?",
-                        "Ready to Install",
+                        Loc.Get("msg_ready_to_install"),
+                        Loc.Get("title_ready_to_install"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
 
@@ -4564,10 +4558,8 @@ namespace ConditioningControlPanel
                         Logger?.Warning("Update check returned no update, but server banner indicated update available. Offering browser fallback.");
                         var result = MessageBox.Show(
                             owner,
-                            "The automatic update check couldn't find the update, but our server indicates a new version is available.\n\n" +
-                            "This can happen with certain installation types. Would you like to open the releases page to download manually?\n\n" +
-                            "After this update, automatic updates should work normally.",
-                            "Update Available",
+                            Loc.Get("msg_update_manual_fallback"),
+                            Loc.Get("dialog_update_available"),
                             MessageBoxButton.YesNo,
                             MessageBoxImage.Information);
 
@@ -4594,8 +4586,8 @@ namespace ConditioningControlPanel
 
                     MessageBox.Show(
                         owner,
-                        $"You're running the latest version ({UpdateService.GetCurrentVersion()}).",
-                        "No Updates",
+                        Loc.GetF("msg_already_on_latest", UpdateService.GetCurrentVersion()),
+                        Loc.Get("title_no_updates"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                     return false;
@@ -4613,9 +4605,8 @@ namespace ConditioningControlPanel
                 {
                     var result = MessageBox.Show(
                         owner,
-                        $"Update check failed: {ex.Message}\n\n" +
-                        "However, our server indicates a new version is available. Would you like to open the releases page to download manually?",
-                        "Update Check Failed",
+                        Loc.GetF("msg_update_check_failed_fallback", ex.Message),
+                        Loc.Get("title_update_check_failed"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Warning);
 
@@ -4636,8 +4627,8 @@ namespace ConditioningControlPanel
 
                 MessageBox.Show(
                     owner,
-                    $"Failed to check for updates: {ex.Message}",
-                    "Update Check Failed",
+                    Loc.GetF("msg_update_check_failed", ex.Message),
+                    Loc.Get("title_update_check_failed"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return false;
