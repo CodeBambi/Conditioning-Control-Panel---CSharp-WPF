@@ -1101,7 +1101,25 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (!visible || _dashboardIntroQueued) return;
+                if (!visible)
+                {
+                    // Leaving the tab takes both pickers with it, the rolodex above all: a native
+                    // child HWND does not go away because the panel it sits in was collapsed, and
+                    // an orphan one would hang over whatever tab came next.
+                    CloseDashboardPicker();
+                    CloseRolodex();
+                    return;
+                }
+
+                // The wall is on screen, so the cloud is allowed to redraw it. Hooked here because
+                // this is the one entry that fires for the tab the app LANDS on; it latches itself,
+                // so the later visits cost a null check.
+                HookDashboardCloudAdopt();
+
+                // ... and the once-ever "pick three" offer, for a wall nobody has touched.
+                MaybeOfferDashboardTour();
+
+                if (_dashboardIntroQueued) return;
                 // A session running at this point means the window was re-shown mid-session, not
                 // a launch. Leave the queue unarmed so a later, quieter visit gets the card.
                 if (_sessionEngine?.IsRunning == true) return;

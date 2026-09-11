@@ -229,7 +229,11 @@ namespace ConditioningControlPanel
                 pencil.Opacity = 0;
             }
 
-            if (!show) CloseDashboardPicker();
+            if (show) return;
+            CloseDashboardPicker();
+            // Both pickers answer to the lock. The rolodex is a native HWND, so one left up over a
+            // session's ribbon would be a rectangle the ribbon cannot paint through.
+            if (_rolodex != null) CloseRolodex();
         }
 
         // ---- the two seams -------------------------------------------------------------
@@ -249,6 +253,20 @@ namespace ConditioningControlPanel
             if (RefuseActionIfSessionLocked("dashboard:edit")) return;
             if (slot < 0 || slot >= DashboardLayout.SlotCount) return;
 
+            // PHASE F. The rolodex first; the flat shelf when it cannot run. One session-wide
+            // give-up flag decides that (RolodexAvailability), so a machine with no WebView2
+            // runtime probes once and opens the shelf nine times out of nine after it.
+            if (TryOpenRolodexPicker(slot)) return;
+            OpenFlatDashboardPicker(slot);
+        }
+
+        /// <summary>
+        /// The flat shelf: four ring groups of art tiles laid over the wall. Still the picker on
+        /// every machine the rolodex will not run on, and still the one a keyboard can drive, so it
+        /// is never deleted and never allowed to rot.
+        /// </summary>
+        private void OpenFlatDashboardPicker(int slot)
+        {
             try
             {
                 var grid = SettingsTab?.VelvetFeatureGrid;
@@ -275,7 +293,7 @@ namespace ConditioningControlPanel
                 _dashboardPicker = picker;
                 picker.ShowFor(slot);
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "OpenDashboardPicker failed for slot {Slot}", slot); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "OpenFlatDashboardPicker failed for slot {Slot}", slot); }
         }
 
         /// <summary>Closes whatever picker is open. A no-op when none is.</summary>
@@ -320,8 +338,18 @@ namespace ConditioningControlPanel
             var picker = _dashboardPicker;
             if (picker == null)
             {
-                // No picker on screen means no room to ask - a host that raised a pick from its
-                // own chrome. A plain replace is what the question would have defaulted to.
+                // The rolodex raised this pick and its HWND is already gone (nothing may be drawn
+                // over one, which is why it goes first), so there is no chrome left to ask in.
+                // Bring the flat shelf up on the same slot and ask there rather than defaulting
+                // the question away: Split is a real answer, and the 3D picker must not be the one
+                // that cannot reach it.
+                OpenFlatDashboardPicker(slot);
+                picker = _dashboardPicker;
+            }
+
+            if (picker == null)
+            {
+                // No shelf either. A plain replace is what the question would have defaulted to.
                 CommitDashboardPick(slot, key, split: false);
                 return;
             }

@@ -2550,6 +2550,12 @@ namespace ConditioningControlPanel
                 // convention, while a .ccpmod that overrides the BASE path still wins outright.
                 RefreshDashboardArt();
 
+                // The rolodex ships those same paths to its page as JPEG data URIs and caches the
+                // encode. This method is the one signal the wall re-skins on - the ctor, and every
+                // ApplyActiveModChange - so it is where the picker's copy is dropped too. A picker
+                // still showing the last mod's faces would promise a tile the wall will not paint.
+                Services.Dashboard.RolodexInitBuilder.InvalidateArt();
+
                 if (SettingsTab.CardMystery != null)
                 {
                     var img = ModTileVariant("mysterybox", TileDecodeWidth);

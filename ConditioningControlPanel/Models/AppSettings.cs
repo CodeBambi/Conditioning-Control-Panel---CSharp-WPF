@@ -8040,6 +8040,20 @@ namespace ConditioningControlPanel.Models
             set { _dashboardLayoutTouched = value; OnPropertyChanged(); }
         }
 
+        private bool _dashboardTourShown = false;
+        /// <summary>
+        /// The once-ever "pick three to start with" offer, spent the moment it is answered EITHER
+        /// WAY - three picked, or the row waved away. Separate from
+        /// <see cref="DashboardLayoutTouched"/> on purpose: a user who arranged their wall by hand
+        /// was never offered the tour, and a user who skipped it has not touched their wall.
+        /// </summary>
+        [JsonProperty("dashboard_tour_shown")]
+        public bool DashboardTourShown
+        {
+            get => _dashboardTourShown;
+            set { _dashboardTourShown = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region First-time experience
