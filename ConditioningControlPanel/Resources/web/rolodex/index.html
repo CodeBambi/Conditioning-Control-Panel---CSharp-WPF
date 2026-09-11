@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Feature Picker</title>
+<link rel="stylesheet" href="./style.css">
+<!--
+  The rolodex - the 3D feature picker for the customizable Home dashboard
+  (plan: home-dashboard-slots-rolodex.md, phase E).
+
+  Hosted by the WPF app in a WebView2 at https://ccp.game/rolodex/index.html,
+  and runnable in a plain browser with ?mock=1 (edit mode) or ?mock=tour.
+  three.js is resolved from the shared vendored ESM build; the specifier below
+  is relative to this document so the page works from any mount point.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.min.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+  <!-- The 3D layer. rolodex.js owns this canvas and nothing else touches it. -->
+  <canvas id="stage"></canvas>
+
+  <!-- The HUD. Everything here is DOM so it stays crisp at any HWND size and
+       needs no font work inside the WebGL layer. -->
+  <div id="hud">
+    <header id="bar">
+      <div id="title">Pick a feature</div>
+      <div id="count" hidden></div>
+      <button id="btn-close" type="button" title="Close (Esc)" aria-label="Close">&#215;</button>
+    </header>
+
+    <div id="hint">Drag or arrow keys to spin &#183; up and down to change shelf &#183; Enter to pick</div>
+
+    <button id="btn-done" type="button" hidden>Done</button>
+
+    <!-- Mock-only readout of what the page would have posted to the host. -->
+    <div id="status" hidden></div>
+  </div>
+
+  <script type="module" src="./rolodex.js"></script>
+</body>
+</html>
