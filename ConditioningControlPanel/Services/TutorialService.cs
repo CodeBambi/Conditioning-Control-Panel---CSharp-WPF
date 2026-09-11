@@ -910,7 +910,11 @@ namespace ConditioningControlPanel.Services
                     Title = Loc.Get("tut_sw_flash_title"),
                     Description = Loc.Get("tut_sw_flash_body"),
                     // The Home mosaic's flash tile: the card the user will actually click later.
-                    TargetElementName = "CardFlash",
+                    // Addressed by its CELL, not by the card: the card is built at runtime from the
+                    // slot layout and carries no x:Name any more. The host fills the cell, so the
+                    // spotlight rect is the same one - and slot 0 is where the shipped layout puts
+                    // Flash Images, which is the layout every first-run walk is looking at.
+                    TargetElementName = "Slot0",
                     RequiresTab = "settings",
                     TextPosition = TutorialStepPosition.Right,
                     // Show, do not tell. One image, on top of everything, gone again - the whole

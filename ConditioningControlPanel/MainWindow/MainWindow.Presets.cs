@@ -1137,11 +1137,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                // The tease tile: blur, livery rim and a livery diamond instead of the old "SOON"
-                // price tag. It owns its own badge now (same SetTierBadge helper, called from
-                // there) because the badge, the title, the tooltip and the blur have to move as
-                // one costume - see MainWindow.TeaseCard.cs.
-                ApplyTeaseCard();
+                // The wall's price tags, and the tease tile's costume with them: the renderer
+                // paints whichever slots currently hold a tiered feature, then hands the tease
+                // its blur, rim, badge and title as one piece (MainWindow.TeaseCard.cs).
+                RefreshDashboardLivery();
 
                 RefreshMysteryTile();
                 RefreshWallActiveStates();
@@ -1403,33 +1402,7 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void RefreshWallActiveStates()
         {
-            var s = App.Settings?.Current;
-            var dash = SettingsTab;
-            if (s == null || dash == null) return;
-            try
-            {
-                if (dash.CardFlash != null) dash.CardFlash.IsActive = s.FlashEnabled;
-                if (dash.CardSubliminal != null) dash.CardSubliminal.IsActive = s.SubliminalEnabled;
-                if (dash.CardBubblePop != null) dash.CardBubblePop.IsActive = s.BubblesEnabled;
-                if (dash.CardLockCard != null) dash.CardLockCard.IsActive = s.LockCardEnabled;
-                if (dash.CardBouncingText != null) dash.CardBouncingText.IsActive = s.BouncingTextEnabled;
-                if (dash.ComboVideoBubble != null)
-                {
-                    dash.ComboVideoBubble.IsActiveA = s.MandatoryVideosEnabled;
-                    dash.ComboVideoBubble.IsActiveB = s.BubbleCountEnabled;
-                }
-                if (dash.ComboSpiralPink != null)
-                {
-                    dash.ComboSpiralPink.IsActiveA = s.SpiralEnabled;
-                    dash.ComboSpiralPink.IsActiveB = s.PinkFilterEnabled;
-                }
-                if (dash.ComboMindDrain != null)
-                {
-                    dash.ComboMindDrain.IsActiveA = s.MindWipeEnabled;
-                    dash.ComboMindDrain.IsActiveB = s.BrainDrainEnabled;
-                }
-            }
-            catch (Exception ex) { App.Logger?.Debug("RefreshWallActiveStates: {E}", ex.Message); }
+            RefreshDashboardActiveStates();
         }
 
         private static void SetTierBadge(Features.FeatureCard? card, bool allowed, string badge)

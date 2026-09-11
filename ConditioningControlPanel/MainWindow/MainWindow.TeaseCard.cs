@@ -54,8 +54,10 @@ namespace ConditioningControlPanel
 
         // ==========================================================================
 
-        /// <summary>The tile itself. Null while the dashboard view has not been built.</summary>
-        private Features.FeatureCard? TeaseCard => SettingsTab?.CardJustDrop;
+        /// <summary>The tile itself: whichever slot currently holds justdrop. Null while the
+        /// dashboard view has not been built, and null for good once a user takes Just Drop off
+        /// their wall - at which point there is no tease, which is the right answer.</summary>
+        private Features.FeatureCard? TeaseCard => DashboardCardFor("justdrop");
 
         /// <summary>
         /// Paints the tease (or takes it off). Called from <c>RefreshMosaicTierBadges</c>, which
