@@ -167,6 +167,14 @@ public sealed class VideoPayload : EffectPayload
     /// <summary>Seconds of video the chaos tape shows — a random slice, ended by the chaos hard cap.</summary>
     public const double SEGMENT_SEC = 15;
 
+    /// <summary>
+    /// Nonzero while a descent run owns this request: the token VideoService hands back from
+    /// ClaimChaosVideoToken, taken by ChaosModeService at detonation so the run can call the video
+    /// back if it ends before the tape reaches the screen (ccp-bugs #1201). Zero for a dashboard
+    /// trigger bubble, which no run owns and nothing may cancel.
+    /// </summary>
+    public int ChaosToken { get; set; }
+
     public override void Fire()
     {
         try
@@ -188,7 +196,7 @@ public sealed class VideoPayload : EffectPayload
             // this call from the background scheduler, and the guards inside TriggerVideo that exist
             // to keep the SCHEDULER out of the user's way read it so they no longer eat a video the
             // user asked for (#1135).
-            App.Video.TriggerVideo(silentIfEmpty: true, userEarned: true);
+            App.Video.TriggerVideo(silentIfEmpty: true, userEarned: true, chaosToken: ChaosToken);
         }
         catch (Exception ex)
         {
