@@ -9,7 +9,8 @@ namespace ConditioningControlPanel.Tests;
 /// <summary>
 /// The header demotion, 0911 ("New UI Feedback" thread): the Mod Manager capsule and the language
 /// pill left the top bar. The manager is now the last row of the mod drop-down plus the Library >
-/// Mods rail entry; the language picker is Settings > General plus the first-run Welcome step.
+/// Mods rail entry; the language picker is Settings > General plus the first-run Welcome step,
+/// which now opens on the OS display language.
 ///
 /// <para>Source-text assertions, as in <see cref="HeaderBannerTests"/>: MainWindow cannot be
 /// instantiated without the whole service graph, and every failure guarded here still compiles. A
@@ -136,6 +137,20 @@ public class ModManagerEntryTests
         var gate = wizard.IndexOf("x:Name=\"AgeRow\"", StringComparison.Ordinal);
         Assert.True(picker >= 0, "CmbWizardLanguage is gone from the first-run wizard");
         Assert.True(gate > picker, "the wizard's language picker no longer sits on the Welcome screen above the gate");
+
+        // It opens on the OS display language: detection runs before the static text is applied,
+        // through the same writer the picker itself uses.
+        var code = ReadSource("Windows", "FirstRunWizard.xaml.cs");
+        var detect = code.IndexOf("DetectSystemLanguage();", StringComparison.Ordinal);
+        var text = code.IndexOf("ApplyStaticText();", StringComparison.Ordinal);
+        Assert.True(detect >= 0, "the wizard no longer detects the OS display language");
+        Assert.True(detect < text, "DetectSystemLanguage runs after ApplyStaticText, so the first screen paints in English");
+
+        var body = Method(code, "DetectSystemLanguage");
+        Assert.Contains("CultureInfo.InstalledUICulture", body);
+        Assert.Contains("LocalizationManager.AvailableLanguages", body);
+        Assert.Contains("ApplyLanguageSelection(", body);
+        Assert.Contains("SetApplicationLanguage(", body);
     }
 
     // =====================================================================================
@@ -159,7 +174,7 @@ public class ModManagerEntryTests
         }
 
         var en = File.ReadAllText(Path.Combine(langDir, "en.json"));
-        foreach (var key in new[] { "set2_general_language_hint" })
+        foreach (var key in new[] { "fr8_welcome_language_hint", "set2_general_language_hint" })
         {
             var value = Regex.Match(en, "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
             Assert.True(value.Success, key + " is gone from en.json");
