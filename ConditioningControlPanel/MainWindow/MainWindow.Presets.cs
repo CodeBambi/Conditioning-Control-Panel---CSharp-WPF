@@ -1126,9 +1126,9 @@ namespace ConditioningControlPanel
         /// Paints the mosaic's price tags and the ? box's face. The FX tiles are all free and
         /// deliberately carry no tag - absence is how the wall says "free".
         ///
-        /// <para>Called from <c>RefreshPremiumRail</c>, which already carries the triggers this
-        /// needs - patron status landing or being lost, the Home door being shown, and the weekly
-        /// intake pass changing under <c>EnsureIntakePassRailHooked</c>.</para>
+        /// <para>Called from <c>RefreshDashboardRail</c>, which already carries the triggers this
+        /// needs - patron status landing or being lost, the Home door being shown, and the ? box
+        /// rotating.</para>
         /// </summary>
         internal void RefreshMosaicTierBadges()
         {
@@ -1302,7 +1302,7 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("Dashboard toggle hint count: {E}", ex.Message); }
         }
 
-        /// <summary>Shows or retires the two gesture captions (logo face + premium rail) together.</summary>
+        /// <summary>Shows or retires the gesture caption on the logo face.</summary>
         internal void RefreshDashboardToggleHint()
         {
             var dash = SettingsTab;
@@ -1310,7 +1310,6 @@ namespace ConditioningControlPanel
             var show = Services.DashboardToggleHintRule.ShouldShow(App.Settings?.Current?.DashboardToggleHintUses ?? 0);
             var v = show ? Visibility.Visible : Visibility.Collapsed;
             if (dash.DashToggleHint != null) dash.DashToggleHint.Visibility = v;
-            if (dash.RailToggleHint != null) dash.RailToggleHint.Visibility = v;
         }
 
         /// <summary>The persisted flag behind a wall key. Unknown key = false.</summary>

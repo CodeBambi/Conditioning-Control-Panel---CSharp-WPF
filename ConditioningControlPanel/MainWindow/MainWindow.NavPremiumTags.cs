@@ -25,8 +25,9 @@ namespace ConditioningControlPanel
     /// which is what a user reads it as - so it clears for a patron, for a free account holding
     /// an unspent weekly intake pass (Graded Intake's own probe, in the roster), and on the day
     /// <see cref="Services.DailyFreeService"/> rotates the row's pool key in. That is the same
-    /// three-part answer the dashboard lockbands give (MainWindow.PremiumRail.cs,
-    /// RefreshRailLockbands), so a row cannot wear a star over a door that is standing open.</para>
+    /// three-part answer the dashboard's favorites chips and the Play wall's bands give
+    /// (MainWindow.FavoritesRail.cs, MainWindow.PlayTab.cs), so a row cannot wear a star over a
+    /// door that is standing open.</para>
     ///
     /// <para><b>Collapsed rail: no tags.</b> The 56px strip shows icons only. The pills are
     /// nowhere near it - the nearest one starts ~63px in, after the shortest premium label in the
@@ -74,7 +75,7 @@ namespace ConditioningControlPanel
         // Per-service latches rather than one: the services come up in different orders (App
         // .OnStartup builds Patreon early and IntakePass late), and a single latch set on the
         // first call would permanently orphan whichever one was still null at that moment. Same
-        // idiom as EnsureIntakePassRailHooked in MainWindow.PremiumRail.cs.
+        // idiom the old premium rail used for its intake-pass hook.
         private bool _navTagPatreonHooked;
         private bool _navTagSubStarHooked;
         private bool _navTagDailyFreeHooked;
@@ -149,6 +150,9 @@ namespace ConditioningControlPanel
                     if (tag == null) continue;
                     tag.Visibility = IsNavEntryLocked(key) ? Visibility.Visible : Visibility.Collapsed;
                 }
+                // The dashboard's favorites chips read the same answer (IsNavEntryLocked), so
+                // they repaint on the same four triggers instead of keeping hooks of their own.
+                RefreshFavoritesRail();
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshNavPremiumTags: {E}", ex.Message); }
         }
@@ -159,8 +163,8 @@ namespace ConditioningControlPanel
         /// <item>the roster's own probe (<see cref="ExclusiveFeature.GateState"/>), which is the
         /// plain premium bar for nine of the ten entries and Graded Intake's weekly-pass check
         /// for the tenth;</item>
-        /// <item>the daily rotation, which opens one pool door a day and is the reason
-        /// RefreshRailLockbands passes a key to TierGate rather than using the bare overload;</item>
+        /// <item>the daily rotation, which opens one pool door a day and is the reason the
+        /// Play wall passes a key to TierGate rather than using the bare overload;</item>
         /// <item>nothing else. A key with no roster row is not sold, so it wears no star - which
         /// is the correct answer for Deeper, Available Subjects, Presets and the rest.</item>
         /// </list>

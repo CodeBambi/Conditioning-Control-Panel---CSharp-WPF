@@ -436,10 +436,9 @@ namespace ConditioningControlPanel
             // Update XP bar login state when Patreon auth changes
             UpdateXPBarLoginState();
 
-            // Dashboard premium quick-toggle rail: re-gate (lock overlay + greying) on
-            // every auth change. Without this, logging out mid-session left the rail
-            // chips live because the rail only refreshed on startup / TierChanged.
-            RefreshPremiumRail();
+            // Dashboard rail + mosaic price tags: repaint on every auth change, not only on
+            // TierChanged - logging out mid-session used to leave the rail a tier behind.
+            RefreshDashboardRail();
         }
 
         // ========================================================================

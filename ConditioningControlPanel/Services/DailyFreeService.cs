@@ -248,7 +248,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Fetches the server override if the cache is stale. Fire-and-forget from startup and
-        /// cheap to call opportunistically (RefreshPremiumRail does): the two gates below make
+        /// cheap to call opportunistically (RefreshDashboardRail does): the two gates below make
         /// repeat calls free whether the last one succeeded or not. 404 / offline / bad payload
         /// all mean "no override" - the seeded pick is the designed fallback, so the box works on
         /// day one with no server deploy at all.
