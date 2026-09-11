@@ -317,21 +317,20 @@ namespace ConditioningControlPanel
 
 
         /// <summary>
-        /// Guards the two language surfaces against each other. Populating a ComboBox and
-        /// re-selecting it both raise SelectionChanged, so without this the chrome pill and the
-        /// Settings · General list would ping-pong through <see cref="ApplyLanguageSelection"/>.
+        /// Guards the language surface against itself. Populating a ComboBox and re-selecting it
+        /// both raise SelectionChanged, so without this the Settings · General list would re-enter
+        /// <see cref="ApplyLanguageSelection"/> from its own sync.
         /// </summary>
         private bool _syncingLanguageSelectors;
 
         /// <summary>
-        /// Fills BOTH language surfaces. Owner decision #8 (PLAN §7) keeps the one-click pill in the
-        /// window chrome and also lists languages on Settings · General; they are two surfaces over
-        /// one code path, not two implementations. The pill shows short codes because it lives in a
-        /// 32px-tall chrome slot; the settings list has room for the real language names.
+        /// Fills the language surface. Until 0911 there were two (the chrome pill and Settings ·
+        /// General, owner decision #8); the "New UI Feedback" thread demoted the pill, so Settings ·
+        /// General is the one in-app picker, with the first-run wizard's Welcome step offering the
+        /// same list on a fresh box. One code path either way.
         /// </summary>
         private void InitializeLanguageSelector()
         {
-            PopulateLanguageCombo(CmbLanguagePill, shortLabels: true);
             PopulateLanguageCombo(AppSettingsTab?.CmbLanguageSetting, shortLabels: false);
         }
 
@@ -347,9 +346,9 @@ namespace ConditioningControlPanel
         /// <summary>
         /// The language list itself, and the only copy of it. Shared with the first-run wizard's
         /// Welcome step, which offers the same languages in the same order before this window has
-        /// any chrome to offer them from - one list, three surfaces.
-        /// <para>Static and unguarded on purpose: the re-entrancy flag belongs to the two MainWindow
-        /// surfaces that can talk over each other, not to the list-building itself.</para>
+        /// a Settings tab to offer them from - one list, two surfaces.
+        /// <para>Static and unguarded on purpose: the re-entrancy flag belongs to the MainWindow
+        /// surface and its sync, not to the list-building itself.</para>
         /// </summary>
         internal static void FillLanguageCombo(ComboBox? combo, bool shortLabels)
         {
@@ -375,19 +374,12 @@ namespace ConditioningControlPanel
             combo.SelectedIndex = selectedIndex;
         }
 
-        private void CmbLanguagePill_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_syncingLanguageSelectors) return;
-            if (CmbLanguagePill?.SelectedItem is not ComboBoxItem selected) return;
-            ApplyLanguageSelection(selected.Tag as string);
-        }
-
         /// <summary>
         /// The language write itself, with no MainWindow chrome attached: the setting, the live
         /// <c>LocalizationManager</c> switch and the save. Returns true when the language actually
         /// changed.
         /// <para>Split out so the first-run wizard can take the same path on a fresh box, where
-        /// there is no pill, no Settings tab and no restart banner to update. Everything else goes
+        /// there is no Settings tab and no restart banner to update. Everything else goes
         /// through <see cref="ApplyLanguageSelection"/>, which wraps this with those.</para>
         /// </summary>
         internal static bool SetApplicationLanguage(string? langCode)
@@ -403,9 +395,9 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// The single writer of <c>AppSettings.Language</c>. Called by the chrome pill and by
-        /// Settings · General's <c>CmbLanguageSetting</c>; whichever fires, both are re-selected
-        /// afterwards so the two surfaces can never disagree.
+        /// The single writer of <c>AppSettings.Language</c>. Called by Settings · General's
+        /// <c>CmbLanguageSetting</c> and by the first-run wizard; the settings list is re-selected
+        /// afterwards so it always shows what was written.
         /// </summary>
         internal void ApplyLanguageSelection(string? langCode)
         {
@@ -431,7 +423,6 @@ namespace ConditioningControlPanel
             _syncingLanguageSelectors = true;
             try
             {
-                Select(CmbLanguagePill);
                 Select(AppSettingsTab?.CmbLanguageSetting);
             }
             finally { _syncingLanguageSelectors = false; }

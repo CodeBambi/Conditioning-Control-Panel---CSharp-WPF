@@ -4385,6 +4385,13 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (_enhancement.Metadata != null)
                     _enhancement.Metadata.AutoTags = EnhancementAutoTagger.Detect(_enhancement);
 
+                // Carry the media length in the file so the library list can
+                // show it without opening the media. Only when the preview
+                // actually measured it; a file saved before any media loaded
+                // keeps whatever it had.
+                if (_enhancement.Metadata != null && _totalSeconds > 0 && !double.IsNaN(_totalSeconds))
+                    _enhancement.Metadata.MediaDurationSeconds = Math.Round(_totalSeconds, 1);
+
                 App.EnhancementLibrary?.Save(_enhancement, path);
                 _filePath = path;
                 _isDirty = false;

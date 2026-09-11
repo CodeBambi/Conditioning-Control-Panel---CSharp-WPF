@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -303,6 +304,7 @@ namespace ConditioningControlPanel
             _owner = owner;
             InitializeComponent();
 
+            DetectSystemLanguage();
             ApplyStaticText();
             PopulateLanguages();
             BuildModCards();
@@ -581,7 +583,7 @@ namespace ConditioningControlPanel
                 "Two choices and you are in. Everything else waits until you go looking for it.");
 
             TxtLanguageLabel.Text = Str("fr8_welcome_language", "Language");
-            TxtLanguageHint.Text = Str("fr8_welcome_language_hint", "You can change this any time from the title bar.");
+            TxtLanguageHint.Text = Str("fr8_welcome_language_hint", "You can change this later in Settings.");
 
             TxtFolderLabel.Text = Str("fr8_welcome_folder", "Your own content");
             TxtFolderHint.Text = Str("fr8_welcome_folder_hint",
@@ -700,8 +702,10 @@ namespace ConditioningControlPanel
         // ------------------------------------------------------------------ step 1: language
 
         /// <summary>
-        /// The same language list the title-bar pill and Settings offer, from the same helper -
-        /// <c>MainWindow.FillLanguageCombo</c> - so this screen can never drift from them.
+        /// The same language list Settings · General offers, from the same helper -
+        /// <c>MainWindow.FillLanguageCombo</c> - so this screen can never drift from it. The list
+        /// opens on whatever <see cref="DetectSystemLanguage"/> settled on, so the rest of the walk
+        /// reads in that language from the first screen.
         /// </summary>
         private void PopulateLanguages()
         {
@@ -709,6 +713,38 @@ namespace ConditioningControlPanel
             try { MainWindow.FillLanguageCombo(CmbWizardLanguage, shortLabels: false); }
             catch (Exception ex) { App.Logger?.Warning(ex, "[FirstRun] Could not fill the language list"); }
             finally { _populatingLanguage = false; }
+        }
+
+        /// <summary>
+        /// A fresh box starts in the OS display language when the app ships it. Runs once, from the
+        /// constructor, before the static text is applied: the wizard only exists on a first run
+        /// (<see cref="ShouldRunAndClaim"/>) and the setting is still at its "en" default there, so
+        /// nothing a person chose can be overwritten. Exact match first (pt-BR, zh-CN), then the
+        /// two-letter language, then leave English alone. Never throws: a culture lookup must not be
+        /// the reason a first run fails to start.
+        /// </summary>
+        private void DetectSystemLanguage()
+        {
+            try
+            {
+                var current = App.Settings?.Current?.Language;
+                if (current != null && current != "en") return;
+
+                var ui = CultureInfo.InstalledUICulture;
+                var codes = LocalizationManager.AvailableLanguages.Select(l => l.Code).ToArray();
+                var match = codes.FirstOrDefault(c => string.Equals(c, ui.Name, StringComparison.OrdinalIgnoreCase))
+                         ?? codes.FirstOrDefault(c => string.Equals(c, ui.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
+                         ?? codes.FirstOrDefault(c => c.StartsWith(ui.TwoLetterISOLanguageName + "-", StringComparison.OrdinalIgnoreCase));
+                if (match == null || match == "en") return;
+
+                if (_owner != null) _owner.ApplyLanguageSelection(match);
+                else MainWindow.SetApplicationLanguage(match);
+                App.Logger?.Information("[FirstRun] Language defaulted to {Code} from the OS display language {Culture}", match, ui.Name);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[FirstRun] Could not read the OS display language");
+            }
         }
 
         private void CmbWizardLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)

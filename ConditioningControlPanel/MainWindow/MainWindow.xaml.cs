@@ -74,6 +74,13 @@ namespace ConditioningControlPanel
         public ObservableCollection<ModSelectorItem> AvailableMods { get; } = new();
         // Guards SelectionChanged from re-entering activation while we repopulate the list.
         private bool _suppressModSelectorChange;
+
+        /// <summary>
+        /// Id of the "Open Mod Manager" row at the bottom of <see cref="AvailableMods"/>. Never a
+        /// mod id: <see cref="ModSelectorCombo_SelectionChanged"/> catches it before ActivateMod
+        /// could see it.
+        /// </summary>
+        internal const string ModManagerEntryId = "__open_mod_manager__";
         private BrowserService? _browser;
         private bool _browserInitialized = false;
         // _skipSiteToggleNavigation removed in #867: the site toggle handler moved from Checked
@@ -753,16 +760,15 @@ namespace ConditioningControlPanel
                 _avatarTubeWindow?.UpdateAvatarForLevel(App.Settings.Current.PlayerLevel);
 
                 // THE VAT'S LATE KEY. Opening the Trainer Card fires exactly one ungated
-                // Descent request (MainWindow.ProfileVat.OnProfileVatVisibilityChanged), but
-                // DescentService.RefreshAsync returns false without a word when UnifiedId or
-                // AuthToken is not populated yet — and auth lands well after startup (the
-                // restore-session path alone sleeps 3s). Nothing then re-poked Descent: the
-                // post-sync hook in ProfileSyncService is gated on HasSeenBlock, which that
-                // silent miss left false, so the jar, its faucet tooltip and the XP readout
-                // all stayed dark until a sign-out/in or the 60s background poll happened to
-                // catch up. Profile-loaded is the app's "server data has landed" signal, so
-                // ask again here. RequestRefresh is fire-and-forget and self-throttling
-                // (MinFetchInterval + in-flight gate), so an already-lit vat costs nothing.
+                // Descent request (MainWindow.ProfileVat.OnProfileVatVisibilityChanged), and
+                // auth lands well after startup (the restore-session path alone sleeps 3s).
+                // Profile-loaded is the app's "server data has landed" signal, so ask again
+                // here. Belt and braces now: DescentService remembers an ask it could not
+                // serve and fires it from OnSignedIn (every login path), and an ask inside
+                // its floor after a failed fetch is deferred, not dropped. RequestRefresh is
+                // fire-and-forget and self-throttling (a same-credential fetch that already
+                // answered inside the floor makes this a no-op), so an already-lit vat costs
+                // nothing.
                 App.Descent?.RequestRefresh("profile loaded");
 
                 // Re-arm autonomy after profile load ONLY if the user opted into resume-on-startup
@@ -2406,7 +2412,10 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Rebuilds the top-bar mod-switcher ComboBox and selects the active mod.
-        /// Order: CCP Default → Bambi Sleep → Sissy Hypno → Dronification → user mods (alphabetical).
+        /// Order: CCP Default → Bambi Sleep → Sissy Hypno → Dronification → user mods (alphabetical),
+        /// then the one row that is not a mod: "Open Mod Manager" (<see cref="ModManagerEntryId"/>),
+        /// which took over from the header capsule 0911. Its label is read once here, so a live
+        /// language switch relabels it on the next rebuild, like every other code-behind string.
         /// </summary>
         private void InitializeModSelector()
         {
@@ -2438,6 +2447,10 @@ namespace ConditioningControlPanel
                     {
                         AvailableMods.Add(BuildSelectorItem(mod));
                     }
+
+                    // Last, and drawn as a footer by the item template: the manager row.
+                    AvailableMods.Add(new ModSelectorItem(
+                        ModManagerEntryId, Loc.Get("label_open_mod_manager"), Brushes.Transparent, isAction: true));
 
                     if (ModSelectorCombo != null)
                         ModSelectorCombo.SelectedValue = App.Mods.ActiveModId;
@@ -2858,10 +2871,44 @@ namespace ConditioningControlPanel
         {
             if (_isLoading || _suppressModSelectorChange) return;
             if (ModSelectorCombo?.SelectedValue is not string newModId) return;
+
+            if (newModId == ModManagerEntryId)
+            {
+                OpenModManagerFromSelector();
+                return;
+            }
+
             if (App.Mods == null || App.Mods.ActiveModId == newModId) return;
 
             App.Mods.ActivateMod(newModId);
             ApplyActiveModChange();
+        }
+
+        /// <summary>
+        /// The last row of the mod drop-down is a verb, not a mod. Put the selection back on the
+        /// active mod under the same suppress flag InitializeModSelector uses (so this handler does
+        /// not re-enter and the chip never paints "Open Mod Manager"), close the list, and open the
+        /// manager once the combo has finished its own selection cycle. The dialog itself goes
+        /// through <see cref="BtnManageMods_Click"/>, the one launcher the rail entry also uses.
+        /// </summary>
+        private void OpenModManagerFromSelector()
+        {
+            _suppressModSelectorChange = true;
+            try
+            {
+                if (ModSelectorCombo != null)
+                {
+                    ModSelectorCombo.SelectedValue = App.Mods?.ActiveModId;
+                    ModSelectorCombo.IsDropDownOpen = false;
+                }
+            }
+            finally
+            {
+                _suppressModSelectorChange = false;
+            }
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal,
+                new Action(() => BtnManageMods_Click(this, new RoutedEventArgs())));
         }
 
         /// <summary>
@@ -3998,18 +4045,24 @@ namespace ConditioningControlPanel
         public Win32WindowWrapper(IntPtr handle) => Handle = handle;
     }
 
-    /// <summary>DTO bound to the top-bar mod-switcher ComboBox.</summary>
+    /// <summary>
+    /// DTO bound to the top-bar mod-switcher ComboBox. <see cref="IsAction"/> marks the one row
+    /// that is not a mod: the "Open Mod Manager" verb <c>MainWindow.InitializeModSelector</c>
+    /// appends last, which the item template draws as a footer.
+    /// </summary>
     public sealed class ModSelectorItem
     {
         public string Id { get; }
         public string Name { get; }
         public Brush AccentBrush { get; }
+        public bool IsAction { get; }
 
-        public ModSelectorItem(string id, string name, Brush accentBrush)
+        public ModSelectorItem(string id, string name, Brush accentBrush, bool isAction = false)
         {
             Id = id;
             Name = name;
             AccentBrush = accentBrush;
+            IsAction = isAction;
         }
     }
 }

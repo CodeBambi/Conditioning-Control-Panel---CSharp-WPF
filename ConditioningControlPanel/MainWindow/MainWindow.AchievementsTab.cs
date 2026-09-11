@@ -60,6 +60,11 @@ namespace ConditioningControlPanel
             FrozenBrush(0x8C, 0xFF, 0x69, 0xB4);
         private static readonly SolidColorBrush AchvPatreonInkBrush =
             FrozenBrush(0xFF, 0xC9, 0xE3);
+        // The progress meter on a locked, countable card: pink fill on a dark track.
+        private static readonly SolidColorBrush AchvMeterFillBrush = FrozenBrush(0xFF, 0x69, 0xB4);
+        private static readonly SolidColorBrush AchvMeterTrackBrush =
+            FrozenBrush(0xCC, 0x1A, 0x1A, 0x2E);
+        private const double AchvMeterTrackPx = 4;
 
         // ---- state ----------------------------------------------------------------------
 
@@ -72,6 +77,12 @@ namespace ConditioningControlPanel
             public TextBlock NameText = null!;
             /// <summary>Requirement while locked, flavor once earned.</summary>
             public TextBlock InfoText = null!;
+            /// <summary>The progress meter under the requirement; collapsed unless the achievement
+            /// is countable and still locked. Updated in place, never rebuilt.</summary>
+            public FrameworkElement MeterHost = null!;
+            public ColumnDefinition MeterFill = null!;
+            public ColumnDefinition MeterRest = null!;
+            public TextBlock MeterLabel = null!;
             /// <summary>The bottom band's content host; rebuilt whole on unlock-state changes.</summary>
             public Grid RewardBand = null!;
             public Services.WardrobeItem? Reward;
@@ -334,6 +345,10 @@ namespace ConditioningControlPanel
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
+            // The info row: requirement (or flavor) with the progress meter under it.
+            var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            infoStack.Children.Add(infoText);
+
             var band = new Grid();
 
             // Rows: hero art / name / info (absorbs all slack) / reward band on the bottom edge.
@@ -345,7 +360,7 @@ namespace ConditioningControlPanel
 
             Grid.SetRow(badgeHost, 0);
             Grid.SetRow(nameText, 1);
-            Grid.SetRow(infoText, 2);
+            Grid.SetRow(infoStack, 2);
 
             var bandChrome = new Border
             {
@@ -360,7 +375,7 @@ namespace ConditioningControlPanel
 
             content.Children.Add(badgeHost);
             content.Children.Add(nameText);
-            content.Children.Add(infoText);
+            content.Children.Add(infoStack);
             content.Children.Add(bandChrome);
 
             // The Patreon chip. These four live in the FREE grid on purpose (an earned receipt
@@ -412,7 +427,10 @@ namespace ConditioningControlPanel
             _achievementCards[achievement.Id] = card;
             _achievementCardParts[card] = parts;
 
+            infoStack.Children.Add(BuildAchievementMeter(parts));
+
             ApplyAchievementInfoText(parts, unlocked);
+            ApplyAchievementMeter(parts, unlocked);
             BuildRewardBand(parts);
             ApplyAchievementCardTooltip(parts, unlocked);
 
@@ -443,6 +461,98 @@ namespace ConditioningControlPanel
                 infoText.Text = AchFlavor(parts.Achievement);
                 infoText.FontStyle = FontStyles.Italic;
                 infoText.Foreground = AchvMutedBrush;
+            }
+        }
+
+        /// <summary>
+        /// The slim bar under the requirement: a dark track, a pink fill sized by two star columns
+        /// (no pixel maths, no ProgressBar template), and "current / target" centred beneath it.
+        /// Built once per card; <see cref="ApplyAchievementMeter"/> only moves the numbers.
+        /// </summary>
+        private static FrameworkElement BuildAchievementMeter(AchievementCardParts parts)
+        {
+            var fill = new ColumnDefinition { Width = new GridLength(0, GridUnitType.Star) };
+            var rest = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
+            var columns = new Grid();
+            columns.ColumnDefinitions.Add(fill);
+            columns.ColumnDefinitions.Add(rest);
+            var fillBar = new Border
+            {
+                Background = AchvMeterFillBrush,
+                CornerRadius = new CornerRadius(AchvMeterTrackPx / 2),
+            };
+            Grid.SetColumn(fillBar, 0);
+            columns.Children.Add(fillBar);
+
+            // The track colour sits on the rounded Border itself: a Border does not clip its child
+            // to its corners, so a painted Grid inside it would show square ends.
+            var track = new Border
+            {
+                Height = AchvMeterTrackPx,
+                Background = AchvMeterTrackBrush,
+                CornerRadius = new CornerRadius(AchvMeterTrackPx / 2),
+                Margin = new Thickness(14, 0, 14, 0),
+                SnapsToDevicePixels = true,
+                Child = columns,
+            };
+
+            var label = new TextBlock
+            {
+                FontSize = 10,
+                Foreground = AchvMutedBrush,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(12, 3, 12, 0),
+            };
+
+            var host = new StackPanel { Margin = new Thickness(0, 0, 0, 2), Visibility = Visibility.Collapsed };
+            host.Children.Add(track);
+            host.Children.Add(label);
+
+            parts.MeterHost = host;
+            parts.MeterFill = fill;
+            parts.MeterRest = rest;
+            parts.MeterLabel = label;
+            return host;
+        }
+
+        /// <summary>
+        /// One meter computation per card per refresh, from the same counters and thresholds the
+        /// trackers unlock on (<see cref="Services.AchievementMeters"/>). Locked and countable: bar
+        /// on, requirement capped at two lines so the row still fits. Anything else: bar off.
+        /// </summary>
+        private static void ApplyAchievementMeter(AchievementCardParts parts, bool unlocked)
+        {
+            if (parts.MeterHost == null) return;
+
+            var meter = unlocked ? null : ComputeAchievementMeter(parts.Achievement);
+            if (meter == null)
+            {
+                parts.MeterHost.Visibility = Visibility.Collapsed;
+                parts.InfoText.MaxHeight = 42;
+                return;
+            }
+
+            var fraction = meter.Value.Fraction;
+            parts.MeterFill.Width = new GridLength(fraction, GridUnitType.Star);
+            parts.MeterRest.Width = new GridLength(1 - fraction, GridUnitType.Star);
+            parts.MeterLabel.Text = meter.Value.Label;
+            parts.InfoText.MaxHeight = 28;
+            parts.MeterHost.Visibility = Visibility.Visible;
+        }
+
+        private static Services.AchievementMeter? ComputeAchievementMeter(Models.Achievement achievement)
+        {
+            try
+            {
+                var progress = App.Achievements?.Progress;
+                if (progress == null) return null;
+                var level = App.Settings?.Current?.PlayerLevel ?? 0;
+                return Services.AchievementMeters.Compute(achievement, progress, level);
+            }
+            catch (Exception ex)
+            {
+                Diag.Swallowed(ex, "achievement meter");
+                return null;
             }
         }
 
@@ -744,6 +854,7 @@ namespace ConditioningControlPanel
                 // somehow re-locked stops).
                 SetAchievementTileUnlocked(card, isUnlocked);
                 ApplyAchievementInfoText(parts, isUnlocked);
+                ApplyAchievementMeter(parts, isUnlocked);
                 BuildRewardBand(parts);
                 ApplyAchievementCardTooltip(parts, isUnlocked);
             }
