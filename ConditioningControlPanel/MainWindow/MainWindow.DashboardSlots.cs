@@ -164,9 +164,10 @@ namespace ConditioningControlPanel
         {
             var card = new FeatureCard
             {
-                // Only an FX tile with a rack key has an "off" to be dim about; a destination
-                // never receives IsActive, and focusgaze's switch is not a wall flag.
-                DimWhenInactive = f.Kind == DashboardKind.Fx && f.RackKey != null,
+                // Only an FX tile with a state to read has an "off" to be dim about; a
+                // destination never receives IsActive. focusgaze has no rack key but it does have
+                // a switch, so it dims off the settings flag its right-click flips.
+                DimWhenInactive = f.Kind == DashboardKind.Fx && (f.RackKey != null || IsFocusGazeRow(f)),
                 HelpSectionId = DashboardHelpSections.TryGetValue(f.Key, out var help) ? help : null,
             };
 
@@ -316,6 +317,18 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("RefreshDashboardArt: {E}", ex.Message); }
         }
 
+        /// <summary>focusgaze is the one FX row whose state is not a wall flag.</summary>
+        private static bool IsFocusGazeRow(DashboardFeature f)
+            => string.Equals(f.Key, "focusgaze", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Whether a row's feature is on, or null for a row with no state to read.</summary>
+        private static bool? DashboardRowActive(DashboardFeature f)
+        {
+            if (f.RackKey != null) return IsWallFeatureOn(f.RackKey);
+            if (IsFocusGazeRow(f)) return App.Settings?.Current?.FocusGazeEnabled == true;
+            return null;
+        }
+
         /// <summary>Rings. A split tile lights per half; both halves on = the whole card glows.</summary>
         internal void RefreshDashboardActiveStates()
         {
@@ -323,11 +336,11 @@ namespace ConditioningControlPanel
             try
             {
                 foreach (var (card, f) in _dashboardCardRows)
-                    if (f.RackKey != null) card.IsActive = IsWallFeatureOn(f.RackKey);
+                    if (DashboardRowActive(f) is bool on) card.IsActive = on;
                 foreach (var (card, pair) in _dashboardSplitRows)
                 {
-                    if (pair.A.RackKey != null) card.IsActiveA = IsWallFeatureOn(pair.A.RackKey);
-                    if (pair.B.RackKey != null) card.IsActiveB = IsWallFeatureOn(pair.B.RackKey);
+                    if (DashboardRowActive(pair.A) is bool a) card.IsActiveA = a;
+                    if (DashboardRowActive(pair.B) is bool b) card.IsActiveB = b;
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("RefreshDashboardActiveStates: {E}", ex.Message); }

@@ -1127,7 +1127,11 @@ namespace ConditioningControlPanel.Services
                                   "RIGHT-click it to turn that feature on or off without leaving Home.\n\n" +
                                   "In 6.7.4 it was the other way round. Muscle memory will fight you for an " +
                                   "evening, then it will not.",
-                    TargetElementName = "CardFlash",
+                    // The Home mosaic's first cell, not the card in it: the nine tiles are built at
+                    // runtime from the slot layout and carry no x:Name any more. The host fills the
+                    // cell, so the spotlight rect is unchanged - and slot 0 is Flash Images on the
+                    // shipped wall, which is the tile this card has always pointed at.
+                    TargetElementName = "Slot0",
                     RequiresTab = "settings",
                     TextPosition = TutorialStepPosition.Right
                 },

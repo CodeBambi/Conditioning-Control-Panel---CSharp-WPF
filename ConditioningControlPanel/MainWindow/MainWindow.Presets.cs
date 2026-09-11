@@ -1374,6 +1374,8 @@ namespace ConditioningControlPanel
                 case nameof(Models.AppSettings.BouncingTextEnabled):
                 case nameof(Models.AppSettings.MindWipeEnabled):
                 case nameof(Models.AppSettings.BrainDrainEnabled):
+                // Not a wall flag, but a placed focusgaze tile rings off it all the same.
+                case nameof(Models.AppSettings.FocusGazeEnabled):
                     Dispatcher.BeginInvoke(new Action(RefreshWallActiveStates));
                     break;
             }

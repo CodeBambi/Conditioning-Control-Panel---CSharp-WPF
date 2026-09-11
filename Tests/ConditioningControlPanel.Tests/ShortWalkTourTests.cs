@@ -82,14 +82,34 @@ public class ShortWalkTourTests : IDisposable
     /// THE ROT GUARD. A TargetElementName that does not resolve degrades SILENTLY to an unspotlit
     /// centred card - no exception, no log, just a tour that stops pointing at things. Three steps
     /// of the older tours rotted that way (BtnProgression, FlashSection, BtnOpenAssets) and nobody
-    /// noticed for releases. Every name the short walk points at is checked against the XAML here.
+    /// noticed for releases. Every name the short walk AND the upgrade tour point at is checked
+    /// against the XAML here - the upgrade tour rotted the same way and went unnoticed just as long.
     /// </summary>
-    [Fact]
-    public void EveryShortWalkTargetIsALiveXamlName()
+    [Theory]
+    [InlineData(TutorialType.ShortWalk)]
+    // The upgrade tour rots exactly the same way, and had: its gestures card still pointed at
+    // CardFlash long after the nine mosaic tiles became runtime-built slot hosts with no names.
+    [InlineData(TutorialType.UpgradeTour)]
+    public void EveryTourTargetIsALiveXamlName(TutorialType tour)
     {
         var svc = new TutorialService();
-        svc.Start(TutorialType.ShortWalk);
+        svc.Start(tour);
 
+        var names = LiveXamlNames();
+        Assert.True(names.Count > 500, $"only {names.Count} x:Names were scanned - the scan is broken, not the tour");
+
+        var dead = svc.CurrentSteps
+            .Where(s => s.TargetElementName != null && !names.Contains(s.TargetElementName))
+            .Select(s => $"{s.Id} -> {s.TargetElementName}")
+            .ToList();
+
+        Assert.True(dead.Count == 0,
+            $"these {tour} steps point at an x:Name that does not exist:\n  " + string.Join("\n  ", dead));
+    }
+
+    /// <summary>Every x:Name authored anywhere in the app's XAML, bin and obj left out.</summary>
+    private static HashSet<string> LiveXamlNames()
+    {
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var path in Directory.EnumerateFiles(AppDir(), "*.xaml", SearchOption.AllDirectories))
         {
@@ -99,16 +119,7 @@ public class ShortWalkTourTests : IDisposable
             foreach (Match m in Regex.Matches(File.ReadAllText(path), @"x:Name=""([A-Za-z_][A-Za-z0-9_]*)"""))
                 names.Add(m.Groups[1].Value);
         }
-
-        Assert.True(names.Count > 500, $"only {names.Count} x:Names were scanned - the scan is broken, not the tour");
-
-        var dead = svc.CurrentSteps
-            .Where(s => s.TargetElementName != null && !names.Contains(s.TargetElementName))
-            .Select(s => $"{s.Id} -> {s.TargetElementName}")
-            .ToList();
-
-        Assert.True(dead.Count == 0,
-            "these short walk steps point at an x:Name that does not exist:\n  " + string.Join("\n  ", dead));
+        return names;
     }
 
     /// <summary>

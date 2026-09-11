@@ -5,10 +5,14 @@ using ConditioningControlPanel.Models.Dashboard;
 
 namespace ConditioningControlPanel.Services.Dashboard
 {
-    /// <summary>What <see cref="DashboardLayoutRule.Place"/> did. The two Refused values change nothing.</summary>
+    /// <summary>
+    /// What <see cref="DashboardLayoutRule.Place"/> did. Unchanged and the two Refused values all
+    /// leave the layout exactly as it was; the difference is only whether the caller asked for
+    /// something illegal (Refused) or for something it already had (Unchanged).
+    /// </summary>
     public enum PlaceOutcome
     {
-        Placed, Replaced, Split, MovedFrom, RefusedNotSplittable, RefusedUnknownKey,
+        Placed, Replaced, Split, MovedFrom, Unchanged, RefusedNotSplittable, RefusedUnknownKey,
     }
 
     /// <summary>
@@ -63,10 +67,11 @@ namespace ConditioningControlPanel.Services.Dashboard
 
         /// <summary>
         /// Put <paramref name="key"/> in <paramref name="slot"/>. Precedence: an unknown key
-        /// refuses; a split the pair cannot form refuses; a feature already on the wall reports
-        /// MovedFrom even when it also displaced an occupant, because the move is the surprising
-        /// half and the picker's replace prompt has been answered by then; otherwise an occupied
-        /// target is Replaced and an empty one is Placed.
+        /// refuses; a key dropped on the slot it is already in is Unchanged; a split the pair
+        /// cannot form refuses; a feature already on the wall reports MovedFrom even when it also
+        /// displaced an occupant, because the move is the surprising half and the picker's replace
+        /// prompt has been answered by then; otherwise an occupied target is Replaced and an empty
+        /// one is Placed.
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">Slot outside 0..8.</exception>
         public static PlaceOutcome Place(DashboardLayout layout, int slot, string key, bool split)
@@ -79,15 +84,22 @@ namespace ConditioningControlPanel.Services.Dashboard
 
             var target = layout.Slots[slot];
 
+            // Dropping a key back where it already is means nothing, and it has to be answered
+            // HERE, before the move arithmetic: Remove() would lift this key off its own slot and
+            // promote its partner into the hole, and the write that follows would then flatten the
+            // promotion - destroying the other half of the split the user was only re-picking.
+            // True of either half, and of a split re-drop, which is the same nothing.
+            if (Is(target.Primary, row.Key) || Is(target.Secondary, row.Key))
+                return PlaceOutcome.Unchanged;
+
             if (split)
             {
-                // A split needs a free second half and two FX. Landing on its own primary would
-                // put one feature on both halves, which the once-only invariant forbids.
+                // A split needs a free second half and two FX. The pick cannot be the occupant
+                // itself - one feature on both halves - but the guard above has already said so.
                 if (target.Secondary != null
                     || target.Primary == null
                     || !FeatureCatalog.CanSplit(target.Primary)
-                    || row.Kind != DashboardKind.Fx
-                    || string.Equals(target.Primary, row.Key, StringComparison.OrdinalIgnoreCase))
+                    || row.Kind != DashboardKind.Fx)
                     return PlaceOutcome.RefusedNotSplittable;
 
                 Remove(layout, row.Key);
