@@ -814,7 +814,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavHaptics" Tag="Haptics" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavHaptics_Click" ToolTip="{loc:Str tab_haptics}">
+                                        Click="BtnNavHaptics_Click" ToolTip="{loc:Str tooltip_nav_haptics}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📳', Converter={StaticResource EmojiToImageSource}}"/>
@@ -879,7 +879,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavBambiTakeover" Tag="Takeover" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tab_takeover}">
+                                        Click="BtnNavBambiTakeover_Click" ToolTip="{loc:Str tooltip_nav_takeover}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
@@ -905,7 +905,7 @@
                                 <!-- Awareness finally gets a real button: BtnAwareness_Click has been an
                                      orphan handler (MainWindow.AccountShell.cs) with no XAML owner. -->
                                 <Button x:Name="BtnNavAwareness" Tag="Awareness" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tab_awareness}">
+                                        Click="BtnAwareness_Click" ToolTip="{loc:Str tooltip_nav_awareness}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='👁️', Converter={StaticResource EmojiToImageSource}}"/>
@@ -997,7 +997,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavGradedIntake" Tag="GradedIntake" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tab_gradedintake}">
+                                        Click="BtnNavGradedIntake_Click" ToolTip="{loc:Str tooltip_nav_graded_intake}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📝', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1009,7 +1009,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavLockdown" Tag="Lockdown" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tab_lockdown_mode}">
+                                        Click="BtnNavLockdown_Click" ToolTip="{loc:Str tooltip_nav_lockdown}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1021,7 +1021,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavBlinkTrainer" Tag="BlinkTrainer" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tab_blink_trainer}">
+                                        Click="BtnNavBlinkTrainer_Click" ToolTip="{loc:Str tooltip_nav_blink_trainer}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='👀', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1033,7 +1033,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnNavRemoteControl" Tag="RemoteControl" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tab_remote_control}">
+                                        Click="BtnNavRemoteControl_Click" ToolTip="{loc:Str tooltip_nav_remote_control}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📱', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1133,7 +1133,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnAchievements_Click" ToolTip="{loc:Str tab_achievements}">
+                                        Click="BtnAchievements_Click" ToolTip="{loc:Str tooltip_nav_achievements}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
@@ -1170,7 +1170,7 @@
                                     </StackPanel>
                                 </Button>
                                 <Button x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource NavEntryButton}"
-                                        Click="BtnLeaderboard_Click" ToolTip="{loc:Str tab_leaderboard}">
+                                        Click="BtnLeaderboard_Click" ToolTip="{loc:Str tooltip_nav_leaderboard}">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
                                                Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
@@ -2822,12 +2822,12 @@
                 <Button x:Name="BtnStartMenu" Grid.Column="2" Width="68" Height="50" Margin="8,0,0,0"
                         Style="{StaticResource PinkButton}" Background="{DynamicResource AccentGradientBrush}"
                         FontSize="22" Click="BtnStartMenu_Click"
-                        ToolTip="Start options">
+                        ToolTip="{loc:Str tooltip_start_options}">
                     <TextBlock Text="▼" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"/>
                     <Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem x:Name="MenuStartNormal" Header="▶  Start normally" Click="MenuStartNormal_Click"/>
-                            <MenuItem x:Name="MenuJumpRightIn" Header="🎲  Jump right in (randomize + start)" Click="MenuJumpRightIn_Click"/>
+                            <MenuItem x:Name="MenuStartNormal" Header="{loc:Str menu_start_normally}" Click="MenuStartNormal_Click"/>
+                            <MenuItem x:Name="MenuJumpRightIn" Header="{loc:Str menu_jump_right_in}" Click="MenuJumpRightIn_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
