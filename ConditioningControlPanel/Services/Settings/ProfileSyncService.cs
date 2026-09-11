@@ -1505,6 +1505,12 @@ namespace ConditioningControlPanel.Services
                         // local loadout is empty and unconfirmed - see BuildCosmeticsPayload, an
                         // all-empty object means "unequip everything" to the server.
                         cosmetics = BuildCosmeticsPayload(settings),
+                        // The nine movable Home slots, as the nine-field wire string (Phase D).
+                        // Top-level and a sibling of cosmetics, NEVER inside stats: a layout is not
+                        // progression, and keeping it out of the stats bag keeps it out of the XP
+                        // budget, the per-hour stat cap and anti_cheat_flags by construction.
+                        // Null is "no change", "" is "clear it" - see BuildDashboardLayoutPayload.
+                        dashboard_layout = BuildDashboardLayoutPayload(settings),
                         // Web XP claim ack: the id of the claim this client last APPLIED. Sent on
                         // every sync, not just the one after a claim - the server settles the pending
                         // bucket when it sees its own id come back, and ignores stale/unknown ones.
@@ -1696,6 +1702,9 @@ namespace ConditioningControlPanel.Services
                         // Trainer Card cosmetics: fill-if-empty only, so a fresh machine inherits
                         // the look and an established one is never undressed by a stale echo.
                         if (AdoptCloudCosmetics(v2Result?.Cosmetics)) App.Settings?.Save();
+
+                        // Home dashboard slots: fill-if-empty on the same terms.
+                        if (AdoptCloudDashboardLayout(v2Result?.DashboardLayout)) App.Settings?.Save();
 
                         // WEB XP CLAIM. The server mints XP for verified web activity into a pending
                         // bucket; it never touches the ledger the client authors (xp/level). It hands
@@ -2486,6 +2495,114 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Raised when <see cref="AdoptCloudDashboardLayout"/> has replaced an untouched local wall
+        /// with the account's cloud layout. The Home tab subscribes so the mosaic re-renders in
+        /// place instead of waiting for the next tab switch; nothing else should listen.
+        /// </summary>
+        internal static event Action? DashboardLayoutAdopted;
+
+        /// <summary>
+        /// The decision behind the sync body's <c>dashboard_layout</c> field, with no service state
+        /// in it so the tests can reach it.
+        ///
+        /// Null is "no change" to the server, and there are two reasons to send it. Until this
+        /// session has completed a round-trip we do not yet know what the account holds, and the V2
+        /// load path SYNCS BEFORE IT READS - the same ordering that once wiped everyone's
+        /// cosmetics (see <see cref="BuildCosmeticsPayload"/>). And an untouched local wall is not
+        /// an opinion: it is the shipped default, which must never overwrite a layout the subject
+        /// arranged on another machine.
+        ///
+        /// Once both hold, an explicit empty string is meaningful - it is "clear it", which the
+        /// server answers by deleting the field - so a null wire on a touched install sends "".
+        /// </summary>
+        internal static string? DashboardLayoutPayloadFor(string? wire, bool touched, bool hasLoadedProfile)
+        {
+            if (!hasLoadedProfile) return null;
+            if (!touched) return null;
+            return wire ?? string.Empty;
+        }
+
+        /// <summary>What to put in the sync payload's <c>dashboard_layout</c> field.</summary>
+        private string? BuildDashboardLayoutPayload(Models.AppSettings settings)
+        {
+            try
+            {
+                return DashboardLayoutPayloadFor(settings?.DashboardLayoutWire,
+                    settings?.DashboardLayoutTouched == true, _hasLoadedProfile);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BuildDashboardLayoutPayload: {E}", ex.Message);
+                return null;   // the safe direction - "no change" never destroys anything
+            }
+        }
+
+        /// <summary>
+        /// The wire string an adopt should write, or null for "keep what is local".
+        ///
+        /// Fill-if-empty, exactly like <see cref="AdoptCloudCosmetics"/>: a layout is a choice, not
+        /// progression, so there is no higher value to merge toward and a stale echo must never
+        /// rearrange a wall the subject arranged. The gate is the touched flag rather than the
+        /// string, so resetting to the shipped wall on purpose still counts as an opinion.
+        ///
+        /// The server answers null for "never customized" and may answer "" for a layout that
+        /// sanitized down to nothing; both mean there is nothing to adopt, and neither is a licence
+        /// to clear local. A cloud string that sanitizes back to the default wall is nothing to
+        /// adopt either - it would only cost the subject their untouched flag.
+        /// </summary>
+        internal static string? DashboardLayoutToAdopt(string? cloud, bool touched)
+        {
+            if (touched) return null;
+            if (string.IsNullOrWhiteSpace(cloud)) return null;
+
+            // FromWire sanitizes on the way out: unknown keys blanked, splits reduced, dupes dropped.
+            var layout = Services.Dashboard.DashboardLayoutRule.FromWire(cloud);
+            if (layout.IsDefault) return null;
+
+            return Services.Dashboard.DashboardLayoutRule.ToWire(layout);
+        }
+
+        /// <summary>
+        /// Write an adopted layout into <paramref name="settings"/>, or leave it alone. Marking the
+        /// wall touched is the point: a machine that inherited a layout now owns it, and the next
+        /// sync carries it rather than sending "no change" forever.
+        /// Returns true when settings were changed (caller saves).
+        /// </summary>
+        internal static bool ApplyCloudDashboardLayout(Models.AppSettings? settings, string? cloud)
+        {
+            if (settings == null) return false;
+
+            var adopt = DashboardLayoutToAdopt(cloud, settings.DashboardLayoutTouched);
+            if (adopt == null) return false;
+
+            settings.DashboardLayoutWire = adopt;
+            settings.DashboardLayoutTouched = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Adopt the account's Home layout into a wall this install has never edited.
+        /// Returns true when settings were changed (caller saves).
+        /// </summary>
+        private static bool AdoptCloudDashboardLayout(string? cloud)
+        {
+            try
+            {
+                if (!ApplyCloudDashboardLayout(App.Settings?.Current, cloud)) return false;
+
+                App.Logger?.Information("Adopted the cloud Home dashboard layout into an untouched local wall: {Wire}",
+                    App.Settings?.Current?.DashboardLayoutWire ?? "");
+                DashboardLayoutAdopted?.Invoke();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AdoptCloudDashboardLayout skipped: {E}", ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Merge cloud profile with local data, taking the HIGHER values to prevent progress loss.
         /// This protects against cloud data corruption, sync issues, or stale cloud profiles.
         /// </summary>
@@ -3014,6 +3131,9 @@ namespace ConditioningControlPanel.Services
             // Trainer Card cosmetics: fill-if-empty only (see AdoptCloudCosmetics for why this is
             // deliberately NOT a merge).
             if (AdoptCloudCosmetics(cloudProfile.Cosmetics)) needsSave = true;
+
+            // Home dashboard slots: same fill-if-empty rule, same reasons.
+            if (AdoptCloudDashboardLayout(cloudProfile.DashboardLayout)) needsSave = true;
 
             // Merge conditioning time - take HIGHER value to prevent loss
             if (cloudProfile.TotalConditioningMinutes.HasValue)
@@ -4835,6 +4955,13 @@ namespace ConditioningControlPanel.Services
             /// </summary>
             [JsonProperty("cosmetics")]
             public Models.ProfileCosmetics? Cosmetics { get; set; }
+
+            /// <summary>
+            /// The Home slot layout echoed by the profile read. Null means the account never
+            /// customized (keep local); it is never an instruction to clear.
+            /// </summary>
+            [JsonProperty("dashboard_layout")]
+            public string? DashboardLayout { get; set; }
         }
 
         private class ProfileSyncData
@@ -4947,6 +5074,10 @@ namespace ConditioningControlPanel.Services
             /// <summary>Trainer Card customization echoed back by /v2/user/sync (Phase 2).</summary>
             [JsonProperty("cosmetics")]
             public Models.ProfileCosmetics? Cosmetics { get; set; }
+
+            /// <summary>The Home slot layout echoed back by /v2/user/sync (Phase D).</summary>
+            [JsonProperty("dashboard_layout")]
+            public string? DashboardLayout { get; set; }
 
             [JsonProperty("level_reset")]
             public bool? LevelReset { get; set; }
