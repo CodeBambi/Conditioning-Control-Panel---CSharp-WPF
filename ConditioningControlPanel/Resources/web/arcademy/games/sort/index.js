@@ -1141,7 +1141,10 @@ export default {
           if (typeof face.readyState !== 'number') return true;
           if (Number(face.readyState) >= 2) return true;
           const poster = typeof face.getAttribute === 'function' ? face.getAttribute('poster') : '';
-          return !!(poster && poolIsReady(poster));
+          if (!poster) return false;
+          const pi = face._aePosterImg;
+          if (pi && pi.complete === true && Number(pi.naturalWidth) > 0) return true;
+          return poolIsReady(poster);
         }
         if (typeof face.complete !== 'boolean') return true;
         return !!(face.complete && Number(face.naturalWidth) > 0);
@@ -1381,7 +1384,19 @@ export default {
          * holding preload to metadata, Low Power Mode refusing autoplay all
          * paint the post's own still instead. */
         const poster = posterOf(src);
-        if (poster) { try { v.setAttribute('poster', poster); } catch (e) { /* noop */ } }
+        if (poster) {
+          try { v.setAttribute('poster', poster); } catch (e) { /* noop */ }
+          /* THE POSTER'S OWN WITNESS (2026-09-11). facePainted() has to know
+           * whether the poster is actually on the glass, and a <video> never
+           * says. The warm rail's answer is not enough either: the poster can
+           * sit in the HTTP cache from the vet or an earlier mint with no rail
+           * decode ever landing, and then a visibly painted card read as blank
+           * - which excused a pass from its rung (one such pass in the 1 Mbps
+           * rig run). A detached Image on the same url shares the cache, costs
+           * nothing, and its `complete` is the honest answer. */
+          try { const pi = new Image(); pi.decoding = 'async'; pi.src = poster; v._aePosterImg = pi; }
+          catch (e) { /* no Image in a DOM double */ }
+        }
         if (typeof v.addEventListener === 'function') {
           v.addEventListener('error', () => faceDied(v));
         }
