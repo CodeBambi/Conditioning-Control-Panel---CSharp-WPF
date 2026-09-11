@@ -446,7 +446,14 @@
                             MouseRightButtonUp="PremiumRailContent_RightClick"
                             Width="69" HorizontalAlignment="Center">
                     <TextBlock Text="PREMIUM" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
-                               TextAlignment="Center" Margin="0,0,0,6"/>
+                               TextAlignment="Center" Margin="0,0,0,1"/>
+                    <!-- Same hint, rail-sized: the chips share the tiles' gesture and sit in a
+                         69px column, so two short lines under the caption. Shown and retired
+                         together with DashToggleHint. -->
+                    <TextBlock x:Name="RailToggleHint" x:FieldModifier="internal"
+                               Text="{loc:Str dash_toggle_hint_rail}" FontSize="8"
+                               Foreground="{DynamicResource TextMutedBrush}" Opacity="0.85"
+                               TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,5"/>
                     <Button x:Name="ChipTakeover" x:FieldModifier="internal" Style="{StaticResource PremiumChipStyle}"
                             BorderBrush="{DynamicResource Tier1GoldBorderBrush}"
                             Background="{StaticResource ArtTakeover}"
@@ -915,6 +922,19 @@
                                     </TransformGroup>
                                 </Rectangle.RenderTransform>
                             </Rectangle>
+                            <!-- The gesture hint. On the logo face, not on a tile: this is the one
+                                 cell every eye crosses that is not itself a feature, so the line
+                                 reads as a caption for the whole wall. Hit-test invisible - the
+                                 logo's own click (the easter egg) keeps the whole face. Retired by
+                                 MainWindow.RefreshDashboardToggleHint after three right-click
+                                 toggles (Services/DashboardToggleHintRule). -->
+                            <TextBlock x:Name="DashToggleHint" x:FieldModifier="internal"
+                                       Text="{loc:Str dash_toggle_hint}"
+                                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                                       Margin="12,0,12,8" FontSize="10" Opacity="0.85"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       TextAlignment="Center" TextWrapping="Wrap"
+                                       IsHitTestVisible="False"/>
                         </Grid>
                     </Border>
 

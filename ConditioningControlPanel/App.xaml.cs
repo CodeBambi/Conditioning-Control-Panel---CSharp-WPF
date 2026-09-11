@@ -2938,9 +2938,14 @@ namespace ConditioningControlPanel
                 && Settings?.Current?.HasAcceptedAgeVerification != true
                 && !FirstRunWizard.FirstRunClaimedThisLaunch)
             {
-                Dispatcher.BeginInvoke(new Action(() =>
+                // On the ladder at priority 5, ahead of the failed-update report (10): it is the
+                // one surface that must be answered before anything else is worth showing, and
+                // as a bare Loaded-priority post it could land on top of whatever the ladder had
+                // already opened. If the ladder never gets to it (five minutes behind the update
+                // dialog), the old direct post runs so the gate is never silently skipped.
+                void AskAgeGate(Window? owner)
                 {
-                    var result = MessageBox.Show(mainWindow,
+                    var result = MessageBox.Show(owner ?? mainWindow,
                         "This application contains adult content intended for users aged 18 and older.\n\n" +
                         "By clicking \"Yes\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
                         "Do you wish to continue?",
@@ -2957,7 +2962,19 @@ namespace ConditioningControlPanel
 
                     Settings.Current.HasAcceptedAgeVerification = true;
                     Settings.Save();
-                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                }
+
+                if (StartupLadder != null)
+                {
+                    StartupLadder.EnqueueModal("age-gate", 5, AskAgeGate,
+                        onAbandoned: () => Dispatcher.BeginInvoke(new Action(() => AskAgeGate(mainWindow)),
+                            System.Windows.Threading.DispatcherPriority.Normal));
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(new Action(() => AskAgeGate(mainWindow)),
+                        System.Windows.Threading.DispatcherPriority.Loaded);
+                }
             }
         }
 
@@ -4062,6 +4079,10 @@ namespace ConditioningControlPanel
             // hardcoded assets prompt - on the next launch of an install that has already had them.
             restored.Welcomed = current.Welcomed;
             restored.FirstRunAssetsPromptShown = current.FirstRunAssetsPromptShown;
+
+            // Machine-local settings the backup never carried (content folder, webhook, last-seen).
+            // Without this the restore reset the content folder to "" with no prompt to pick it again.
+            ConditioningControlPanel.Services.ProfileSyncService.PreserveLocalOnlyFields(current, restored);
 
             // Preserve lifetime stats — take higher value (current may have server-synced data)
             restored.TotalConditioningMinutes = Math.Max(current.TotalConditioningMinutes, restored.TotalConditioningMinutes);

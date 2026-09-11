@@ -2201,6 +2201,21 @@ public sealed class ChaosModeService
     /// </summary>
     private void StopChaosOwnedVideo(string reason)
     {
+        // The HT-link payload is the other tape chaos can start: a fullscreen browser takeover
+        // claimed under MediaOwner.Chaos (EffectPayload.HtLinkPayload). Nothing ever released it
+        // on the way out, so quitting the run left the clip playing over the lobby until it ended
+        // on its own. Owner-checked, so a video the user opened themselves - or kept after leaving
+        // fullscreen, which hands ownership to them - is not ours to touch.
+        try
+        {
+            if (App.BrowserMedia?.Owner == Services.Browser.BrowserMediaService.MediaOwner.Chaos)
+            {
+                App.BrowserMedia.ForceEnd("chaos " + reason);
+                App.Logger?.Information("[Chaos] released the HT-link browser takeover ({Reason})", reason);
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("Chaos browser takeover release: {E}", ex.Message); }
+
         bool armed = _chaosVideoCapUtc != DateTime.MinValue;
         _chaosVideoCapUtc = DateTime.MinValue;   // an armed cap never outlives the run
         if (!armed) return;                      // chaos started no tape: the user's own video is not ours to touch

@@ -1192,18 +1192,26 @@ namespace ConditioningControlPanel
                 // armed inside the first-launch window or mid-session. The bark still fires now -
                 // it is her voice, not a modal, and it is the half that survives being clicked
                 // through in half a second.
+                // The flag is spent when the card OPENS, not when the row is posted: a row waved
+                // away from the Inbox unread used to burn the only offer of the rules for good.
                 PresentOrInbox(new Services.Startup.InboxItem
                 {
                     Key = "intro:possession",
                     Glyph = "🕶",
                     Title = "The warden's rules",
                     Summary = "What possession does before the room starts moving.",
-                    Open = () => FeatureIntroPopup.ShowIfFirstTime("possession", this),
+                    Open = () =>
+                    {
+                        var live = App.Settings?.Current;
+                        if (live != null && !live.LockdownPossessionIntroSeen)
+                        {
+                            live.LockdownPossessionIntroSeen = true;
+                            App.Settings?.Save();
+                        }
+                        FeatureIntroPopup.ShowIfFirstTime("possession", this);
+                    },
                 });
                 App.Bark?.NotifyPossessionRules();
-
-                s.LockdownPossessionIntroSeen = true;
-                App.Settings?.Save();
             }
             catch (Exception ex)
             {

@@ -1061,8 +1061,11 @@ namespace ConditioningControlPanel
         {
             try
             {
-                if (_sessionEngine?.IsRunning == true) return;
-                FeatureIntroPopup.ShowIfFirstTime(key, this, NavDoorForTab(doorTab ?? key));
+                // Through the presenter, like the dashboard's own card: inside the quiet window
+                // (first ten minutes, a tour, a session, a modal up) the card becomes an Inbox row
+                // instead of a modal explainer on every tab a new user clicks through. The
+                // session check that used to live here is one of the presenter's quiet inputs.
+                FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key));
             }
             catch (Exception ex)
             {
