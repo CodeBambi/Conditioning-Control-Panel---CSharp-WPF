@@ -911,7 +911,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 var t = _videoSource.GetCurrentTimeSeconds();
                 var d = _videoSource.GetDurationSeconds();
                 TxtCurrent.Text = FormatTime(t);
-                if (d > 0) TxtTotal.Text = FormatTime(d);
+                if (d > 0)
+                {
+                    TxtTotal.Text = FormatTime(d);
+                    RememberDurationOnce(_lastMediaPathForCreateNew ?? _miniEnhancement?.MediaSource, d);
+                }
                 BtnPlayPause.Content = _videoSource.IsPlaying ? "⏸" : "▶";
             }
             else
@@ -919,6 +923,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 var ms = _player.CurrentTimeMs;
                 TxtCurrent.Text = FormatTime(ms / 1000.0);
                 UpdatePlayhead(_player.DurationMs > 0 ? (double)ms / _player.DurationMs : 0);
+                if (_player.DurationMs > 0) RememberDurationOnce(_lastAudioPath, _player.DurationMs / 1000.0);
             }
 
             // Mission 3 mini-timeline + overlay + status pill updates.
@@ -2330,13 +2335,19 @@ namespace ConditioningControlPanel.Views.Deeper
             try { VideoBrowser?.Dispose(); } catch (Exception ex) { Diag.Swallowed(ex); }
         }
 
-        private static string FormatTime(double seconds)
+        private static string FormatTime(double seconds) => MediaDurationCache.Format(seconds);
+
+        // Once per loaded local file, hand the measured length to the
+        // duration cache so the library list shows it next time without a
+        // probe. Remote URLs are rejected by the cache itself.
+        private string? _durationRememberedFor;
+        private void RememberDurationOnce(string? mediaPath, double seconds)
         {
-            if (seconds < 0 || double.IsNaN(seconds)) seconds = 0;
-            var ts = TimeSpan.FromSeconds(seconds);
-            return ts.TotalHours >= 1
-                ? $"{(int)ts.TotalHours}:{ts.Minutes:00}:{ts.Seconds:00}"
-                : $"{ts.Minutes}:{ts.Seconds:00}";
+            if (string.IsNullOrEmpty(mediaPath) || seconds <= 0) return;
+            if (string.Equals(_durationRememberedFor, mediaPath, StringComparison.OrdinalIgnoreCase)) return;
+            _durationRememberedFor = mediaPath;
+            try { MediaDurationCache.Remember(mediaPath, seconds); }
+            catch (Exception ex) { Diag.Swallowed(ex); }
         }
     }
 }
