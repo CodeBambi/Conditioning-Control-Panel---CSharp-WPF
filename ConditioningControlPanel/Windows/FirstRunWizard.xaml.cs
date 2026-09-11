@@ -700,8 +700,8 @@ namespace ConditioningControlPanel
         // ------------------------------------------------------------------ step 1: language
 
         /// <summary>
-        /// The same language list the title-bar pill and Settings offer, from the same helper -
-        /// <c>MainWindow.FillLanguageCombo</c> - so this screen can never drift from them.
+        /// The same language list Settings · General offers, from the same helper -
+        /// <c>MainWindow.FillLanguageCombo</c> - so this screen can never drift from it.
         /// </summary>
         private void PopulateLanguages()
         {
