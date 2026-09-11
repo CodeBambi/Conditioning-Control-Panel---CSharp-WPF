@@ -139,6 +139,11 @@ namespace ConditioningControlPanel.Services
 
         private void Timer_Tick(object? sender, EventArgs e)
         {
+            // Every DispatcherTimer in the app posts the SAME internal WPF delegate, so the hang
+            // report cannot tell one stuck tick from another without a label. lockCardRunning=True
+            // is the one thing the #1189 freeze family has in common, so this tick gets a name.
+            using var _op = UiOpTracker.Scope("LockCard.Tick");
+
             // Recalculate next interval with randomness
             var settings = App.Settings.Current;
             var perHour = Math.Max(1, settings.LockCardFrequency);

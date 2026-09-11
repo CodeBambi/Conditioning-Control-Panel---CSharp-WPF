@@ -1625,6 +1625,12 @@ namespace ConditioningControlPanel
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
 
+            // ...and name the dispatcher operation that is stuck when it fires. One hook covers
+            // every BeginInvoke/Invoke in the app; the per-operation cost is an array store
+            // (ccp-bugs #1189/#1179/#1159/#984, where "a Send-priority op has run for 137s" is
+            // all we ever learn). Must be installed before any feature posts work.
+            Services.UiOpTracker.Install(Dispatcher);
+
             // Flush-on-write trace for the mandatory-video show/heal path and the panic key
             // (#616/#617/#621/#622/#623). Separate from the Serilog rolling file on purpose: the
             // relaunch a user needs in order to FILE the report scrolls the freeze window out of
