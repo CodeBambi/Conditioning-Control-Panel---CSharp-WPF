@@ -41,8 +41,16 @@ namespace ConditioningControlPanel.Features
         /// <summary>Resting opacity for a switched-OFF card that opted into
         /// <see cref="DimWhenInactive"/>. Deep enough that the lit tiles win the eye at a glance,
         /// shallow enough that the art still reads and the tile still looks clickable - and well
-        /// clear of the 0.35 lock veil, which has to keep meaning something else.</summary>
+        /// clear of the 0.35 lock veil, which has to keep meaning something else.
+        ///
+        /// <para>Since 6.9.4 the dim is not the whole story: the same off tile also drains to
+        /// greyscale (ImgIconMute, <see cref="ApplyMute"/>). Opacity alone was read as "a bit
+        /// further away", never as "off"; colour is what a glance actually sorts by.</para></summary>
         private const double InactiveContentOpacity = 0.62;
+
+        /// <summary>The title's weight on a muted tile. Chrome follows the art: a grey picture
+        /// with a bright white label still half-says "on".</summary>
+        private const double MutedTitleOpacity = 0.72;
 
         /// <summary>Blur radius for a teased card's art. Tuned to "coloured smear": at the
         /// mosaic's tile size this leaves a mood and a palette and no recognisable shape, which
@@ -264,12 +272,23 @@ namespace ConditioningControlPanel.Features
                     Stretch = System.Windows.Media.Stretch.UniformToFill,
                     AlignmentY = AlignmentY.Center
                 };
+                // The grey twin rides the same brush settings, so the two layers register
+                // pixel for pixel and the fade between them reads as colour draining, not as
+                // a second picture sliding in. Null (non-bitmap art) leaves the opacity dim
+                // to say "off" on its own.
+                var grey = ArtDesaturate.Of(src);
+                c.ImgIconMute.Background = grey == null ? null : new ImageBrush(grey)
+                {
+                    Stretch = System.Windows.Media.Stretch.UniformToFill,
+                    AlignmentY = AlignmentY.Center
+                };
                 c.ImgIconHost.Visibility = Visibility.Visible;
                 c.GlyphHost.Visibility = Visibility.Collapsed;
             }
             else
             {
                 c.ImgIconHost.Background = null;
+                c.ImgIconMute.Background = null;
                 if (!string.IsNullOrEmpty(c.Glyph))
                 {
                     c.ImgIconHost.Visibility = Visibility.Collapsed;
@@ -324,7 +343,9 @@ namespace ConditioningControlPanel.Features
 
         private static void OnTeaseTierChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is FeatureCard c) c.ApplyTeaseState();
+            if (d is not FeatureCard c) return;
+            c.ApplyTeaseState();
+            c.ApplyMute(0);
         }
 
         /// <summary>
@@ -437,6 +458,7 @@ namespace ConditioningControlPanel.Features
             var showActive = IsActive && !IsLocked;
             ActiveBorder.Visibility = showActive ? Visibility.Visible : Visibility.Collapsed;
             ApplyRestOpacity();
+            ApplyMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
             ApplyActiveBreath(showActive);
         }
 
@@ -458,6 +480,39 @@ namespace ConditioningControlPanel.Features
                 : DimWhenInactive && !IsActive && !_hovered ? InactiveContentOpacity
                 : 1.0;
             ContentRoot.Opacity = target;
+        }
+
+        /// <summary>
+        /// The ONE writer for the grey layer's opacity and the title's muted weight. Lock, tease,
+        /// active and hover are weighed by <see cref="CardMuteRule"/>; this only paints the
+        /// verdict. A locked tile is never muted (its veil is a different sentence), a teased
+        /// tile keeps its blur, and a hover hands the colour straight back.
+        ///
+        /// <para>Always through BeginAnimation: a To-only fade when <paramref name="ms"/> is
+        /// positive, a cleared animation plus a plain assignment otherwise, so an earlier fade
+        /// can never be left holding the property against a later snap.</para>
+        /// </summary>
+        private void ApplyMute(int ms)
+        {
+            try
+            {
+                if (ImgIconMute == null || TxtTitle == null) return;
+                bool mute = CardMuteRule.ShouldMute(DimWhenInactive, IsActive, IsLocked, _hovered, TeaseTier > 0);
+                double to = mute ? 1.0 : 0.0;
+                TxtTitle.Opacity = mute ? MutedTitleOpacity : 1.0;
+                if (ms <= 0)
+                {
+                    ImgIconMute.BeginAnimation(OpacityProperty, null);
+                    ImgIconMute.Opacity = to;
+                    return;
+                }
+                var fade = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                };
+                ImgIconMute.BeginAnimation(OpacityProperty, fade);
+            }
+            catch (Exception ex) { App.Logger?.Debug("FeatureCard.ApplyMute: {E}", ex.Message); }
         }
 
         // ============================== FX ==============================
@@ -634,10 +689,11 @@ namespace ConditioningControlPanel.Features
                 // that does nothing.
                 if (IsLocked) on = false;
 
-                // An inactive tile rests dim; hovering hands it back its full art so the pointer
-                // proves the tile is still live. ApplyRestOpacity re-reads IsLocked, so this stays
-                // correct for a locked card, whose veil must not lift.
+                // An inactive tile rests dim and grey; hovering hands it back its full art so the
+                // pointer proves the tile is still live. Both writers re-read IsLocked, so this
+                // stays correct for a locked card, whose veil must not lift.
                 ApplyRestOpacity();
+                ApplyMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
 
                 MotionFx.HoverLift(RootBorder, on);
                 if (on) HoverPop.Enter(ImgIconHost); else HoverPop.Leave(ImgIconHost);

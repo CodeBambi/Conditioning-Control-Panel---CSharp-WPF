@@ -81,7 +81,11 @@ namespace ConditioningControlPanel.Features
         ///
         /// <para>No opt-out property here, unlike FeatureCard: a split tile exists to carry two
         /// toggles (it raises ToggleA/ToggleB and nothing else), so there is no destination-tile
-        /// case to exclude.</para></summary>
+        /// case to exclude.</para>
+        ///
+        /// <para>Since 6.9.4 an off half also drains to greyscale (HalfMuteA/B,
+        /// <see cref="ApplyHalfMute"/>), on the same per-half rule and the same hover
+        /// exception, for the reason FeatureCard gives.</para></summary>
         private const double InactiveHalfOpacity = 0.62;
 
         /// <summary>Shared frozen stand-in for a region the seam has swept out of existence.</summary>
@@ -102,11 +106,11 @@ namespace ConditioningControlPanel.Features
 
         public static readonly DependencyProperty IconAProperty =
             DependencyProperty.Register(nameof(IconA), typeof(ImageSource), typeof(SplitFeatureCard),
-                new PropertyMetadata(null, (d, e) => ((SplitFeatureCard)d).ApplyIcon(((SplitFeatureCard)d).HalfHostA, e.NewValue as ImageSource)));
+                new PropertyMetadata(null, (d, e) => ((SplitFeatureCard)d).ApplyIcon(((SplitFeatureCard)d).HalfHostA, ((SplitFeatureCard)d).HalfMuteA, e.NewValue as ImageSource)));
 
         public static readonly DependencyProperty IconBProperty =
             DependencyProperty.Register(nameof(IconB), typeof(ImageSource), typeof(SplitFeatureCard),
-                new PropertyMetadata(null, (d, e) => ((SplitFeatureCard)d).ApplyIcon(((SplitFeatureCard)d).HalfHostB, e.NewValue as ImageSource)));
+                new PropertyMetadata(null, (d, e) => ((SplitFeatureCard)d).ApplyIcon(((SplitFeatureCard)d).HalfHostB, ((SplitFeatureCard)d).HalfMuteB, e.NewValue as ImageSource)));
 
         public static readonly DependencyProperty IsActiveAProperty =
             DependencyProperty.Register(nameof(IsActiveA), typeof(bool), typeof(SplitFeatureCard),
@@ -150,6 +154,7 @@ namespace ConditioningControlPanel.Features
             // Both halves start OFF and their DP callbacks only fire on a CHANGE, so a card whose
             // features are off at startup would never be handed its resting dim without this.
             ApplyHalfRestOpacity();
+            ApplyHalfMute(0);
             Loaded += OnCardLoaded;
             Unloaded += OnCardUnloaded;
             // A tile hidden mid-hover (tab switch out of the dashboard) can be denied its
@@ -159,11 +164,17 @@ namespace ConditioningControlPanel.Features
             MouseLeave += (_, _) => { ApplyHover(false); SetHalfHover(null); };
         }
 
-        private void ApplyIcon(Border host, ImageSource? src)
+        private void ApplyIcon(Border host, Border mute, ImageSource? src)
         {
             host.Background = src == null
                 ? null
                 : new ImageBrush(src) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center };
+            // Same brush settings as the colour layer so the two register pixel for pixel; null
+            // (non-bitmap art) leaves the opacity dim to say "off" on its own.
+            var grey = ArtDesaturate.Of(src);
+            mute.Background = grey == null
+                ? null
+                : new ImageBrush(grey) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center };
         }
 
         // ============================== geometry ==============================
@@ -405,9 +416,10 @@ namespace ConditioningControlPanel.Features
             if (_halfHover == halfA) return;
             _halfHover = halfA;
 
-            // The committed half is about to fill the tile, so it gets its full art back even
-            // while its feature is off - the reveal is the point of the sweep.
+            // The committed half is about to fill the tile, so it gets its full art back - colour
+            // and all - even while its feature is off; the reveal is the point of the sweep.
             ApplyHalfRestOpacity();
+            ApplyHalfMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
 
             HoverWashA.Opacity = halfA == true ? 1 : 0;
             HoverWashB.Opacity = halfA == false ? 1 : 0;
@@ -522,6 +534,7 @@ namespace ConditioningControlPanel.Features
                 // ResetSplit clears _halfHover behind SetHalfHover's back, so the half that was
                 // committed would otherwise stay at full brightness with no hover to explain it.
                 ApplyHalfRestOpacity();
+                ApplyHalfMute(0);
                 BeginAnimation(SplitProgressProperty, null);
                 SplitProgress = SplitRest;
                 // Assigning a value it already holds raises no property-changed callback, so the
@@ -565,6 +578,7 @@ namespace ConditioningControlPanel.Features
             ActiveRingA.Visibility = IsActiveA ? Visibility.Visible : Visibility.Collapsed;
             ActiveRingB.Visibility = IsActiveB ? Visibility.Visible : Visibility.Collapsed;
             ApplyHalfRestOpacity();
+            ApplyHalfMute(CardMuteRule.TransitionMs(MotionFx.AllowTransitions, IsLoaded));
             // RebuildGeometry only draws the rings that are on screen (it also runs per frame of
             // the hover fill), so a ring that just came on needs this to get its geometry.
             SafeRebuildGeometry();
@@ -624,6 +638,39 @@ namespace ConditioningControlPanel.Features
             if (HalfHostA == null || HalfHostB == null) return;
             HalfHostA.Opacity = IsActiveA || _halfHover == true ? 1.0 : InactiveHalfOpacity;
             HalfHostB.Opacity = IsActiveB || _halfHover == false ? 1.0 : InactiveHalfOpacity;
+        }
+
+        /// <summary>
+        /// The ONE writer for the two grey layers' Opacity, on <see cref="CardMuteRule"/>'s
+        /// per-half verdict: an OFF half is grey unless the mouse has committed the card to it.
+        /// Always through BeginAnimation - a To-only fade for a positive <paramref name="ms"/>,
+        /// a cleared animation plus a plain assignment otherwise - so no earlier fade can hold
+        /// the property against a later snap.
+        /// </summary>
+        private void ApplyHalfMute(int ms)
+        {
+            try
+            {
+                if (HalfMuteA == null || HalfMuteB == null) return;
+                FadeMute(HalfMuteA, CardMuteRule.ShouldMuteHalf(IsActiveA, _halfHover == true), ms);
+                FadeMute(HalfMuteB, CardMuteRule.ShouldMuteHalf(IsActiveB, _halfHover == false), ms);
+            }
+            catch (Exception ex) { App.Logger?.Debug("SplitFeatureCard.ApplyHalfMute: {E}", ex.Message); }
+        }
+
+        private static void FadeMute(UIElement layer, bool mute, int ms)
+        {
+            double to = mute ? 1.0 : 0.0;
+            if (ms <= 0)
+            {
+                layer.BeginAnimation(OpacityProperty, null);
+                layer.Opacity = to;
+                return;
+            }
+            layer.BeginAnimation(OpacityProperty, new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+            });
         }
 
         private static void ParkRing(System.Windows.Shapes.Path ring)
