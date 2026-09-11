@@ -4655,6 +4655,7 @@
   "label_remote_niches": "니치",
   "label_remote_niches_shared": "For You 피드와 공유됩니다 - 선택은 하나, 두 곳 모두에 적용됩니다.",
   "label_remote_custom_subs": "내 서브레딧",
+  "label_remote_custom_subs_summary": "사용 중 {0}개 · 보관 {1}개",
   "tooltip_remote_custom_sub_add": "서브레딧 이름을 입력하거나(r/ 는 생략 가능) 링크를 붙여넣은 뒤 추가를 누르세요.",
   "label_remote_sub_verified": "확인됨 · Reddit에 클립 {0}개",
   "label_remote_sub_verified_stills": "확인됨 · 사진만",

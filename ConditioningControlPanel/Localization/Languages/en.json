@@ -5238,6 +5238,7 @@
   "label_remote_niches": "Niches",
   "label_remote_niches_shared": "Shared with the For You feed - one selection, both places.",
   "label_remote_custom_subs": "Your own subreddits",
+  "label_remote_custom_subs_summary": "{0} in use · {1} kept",
   "label_remote_custom_subs_kept": "Kept subreddits - click one to use it here, X forgets it everywhere.",
   "tooltip_remote_library_remove": "Forget this subreddit everywhere",
   "tooltip_remote_sub_in_pool": "In your media pool - click to drop it",

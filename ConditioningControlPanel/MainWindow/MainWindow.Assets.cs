@@ -2199,6 +2199,12 @@ namespace ConditioningControlPanel
         /// key, and a fresh launch showing every niche as one tidy line is the better default.</summary>
         private readonly HashSet<string> _remoteNicheExpanded = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Whether the custom-subreddit block (hint, add row, library chips) is
+        /// unfolded. Folded on every launch for the same reason the niche lines are: the block
+        /// is the tallest thing in the media-source panel and the asset browser below pays for
+        /// every pixel of it (AssetsTabView.xaml, RemoteMediaScroll). Session-only, no key.</summary>
+        private bool _remoteCustomSubsExpanded;
+
         /// <summary>The sub being probed right now, or null. Held as state rather than as a
         /// captured Border so the pending pill survives a picker repaint mid-probe.</summary>
         private string? _remoteSubPending;
@@ -2227,6 +2233,8 @@ namespace ConditioningControlPanel
                         tab.BtnRemoteAddSub.Click += BtnRemoteAddSub_Click;
                     if (tab.TxtRemoteCustomSub != null)
                         tab.TxtRemoteCustomSub.KeyDown += TxtRemoteCustomSub_KeyDown;
+                    if (tab.RemoteCustomSubsToggle != null)
+                        tab.RemoteCustomSubsToggle.MouseLeftButtonUp += RemoteCustomSubsToggle_Click;
                 }
 
                 RefreshRemoteMediaPicker();
@@ -2750,6 +2758,53 @@ namespace ConditioningControlPanel
             if (host.Children.Count == 0)
                 host.Children.Add(MutedRemoteNote(LocOr("label_remote_custom_subs_none",
                     "None yet - the niches above are plenty to start with.")));
+
+            PaintRemoteCustomSubsToggle(settings);
+        }
+
+        /// <summary>The disclosure line above the custom-sub block. Folded it reads
+        /// "▸ Your own subreddits · 2 in use · 5 kept", so the counts the chips would have shown
+        /// are still one glance away; unfolded it is just the heading with a ▾. Runs after every
+        /// chip rebuild because the counts move with the library.</summary>
+        private void PaintRemoteCustomSubsToggle(Models.AppSettings settings)
+        {
+            var tab = AssetsTab;
+            if (tab?.RemoteCustomSubsToggle == null || tab.RemoteCustomSubsBody == null) return;
+
+            try
+            {
+                var title = LocOr("label_remote_custom_subs", "Your own subreddits");
+                if (_remoteCustomSubsExpanded)
+                {
+                    tab.RemoteCustomSubsToggle.Text = $"▾ {title}";
+                    tab.RemoteCustomSubsBody.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                int kept = 0, inUse = 0;
+                foreach (var row in settings.BuildRemoteSubLibraryView())
+                {
+                    kept++;
+                    if (row.Selected) inUse++;
+                }
+                tab.RemoteCustomSubsToggle.Text = $"▸ {title} · " +
+                    string.Format(LocOr("label_remote_custom_subs_summary", "{0} in use · {1} kept"), inUse, kept);
+                tab.RemoteCustomSubsBody.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex) { App.Logger?.Debug("Painting the custom sub toggle failed: {E}", ex.Message); }
+        }
+
+        private void RemoteCustomSubsToggle_Click(object sender, MouseButtonEventArgs e)
+        {
+            try
+            {
+                _remoteCustomSubsExpanded = !_remoteCustomSubsExpanded;
+                var settings = App.Settings?.Current;
+                if (settings != null) PaintRemoteCustomSubsToggle(settings);
+                // Unfolding is nearly always a prelude to typing a name.
+                if (_remoteCustomSubsExpanded) AssetsTab?.TxtRemoteCustomSub?.Focus();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Custom sub toggle failed: {E}", ex.Message); }
         }
 
         /// <summary>A removable pill. Same look as the niche toggles, with the companion tab's

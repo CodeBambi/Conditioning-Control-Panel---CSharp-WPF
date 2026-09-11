@@ -4648,6 +4648,7 @@
   "label_remote_niches": "ニッチ",
   "label_remote_niches_shared": "For You フィードと共有されます - 選択はひとつ、どちらにも反映されます。",
   "label_remote_custom_subs": "自分のサブレディット",
+  "label_remote_custom_subs_summary": "使用中 {0} · 保存済み {1}",
   "tooltip_remote_custom_sub_add": "サブレディット名を入力するか（r/ は省略可）、リンクを貼り付けて「追加」を押してください。",
   "label_remote_sub_verified": "確認済み · Reddit に {0} 本のクリップ",
   "label_remote_sub_verified_stills": "確認済み · 静止画のみ",

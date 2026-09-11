@@ -5113,6 +5113,7 @@
   "label_remote_niches": "领域",
   "label_remote_niches_shared": "与 For You 信息流共用 - 选一次，两处生效。",
   "label_remote_custom_subs": "你自己的子版块",
+  "label_remote_custom_subs_summary": "使用中 {0} 个 · 已保存 {1} 个",
   "tooltip_remote_custom_sub_add": "输入子版块名称（r/ 可省略）或粘贴其链接，然后点击添加。",
   "label_remote_sub_verified": "已验证 · Reddit 上有 {0} 段视频",
   "label_remote_sub_verified_stills": "已验证 · 仅静图",
