@@ -513,6 +513,7 @@ namespace ConditioningControlPanel
             if (feature == null) return;
 
             PremiumChip_Toggle(feature.Value);
+            NoteDashboardToggleUsed();
             e.Handled = true;
         }
 
@@ -527,6 +528,7 @@ namespace ConditioningControlPanel
         {
             if (SettingsTab == null) return;
 
+            RefreshDashboardToggleHint();
             EnsureIntakePassRailHooked();
             RefreshRailLockbands();
             // The mosaic's price tags ride along: they answer the same three questions this

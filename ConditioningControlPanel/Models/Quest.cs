@@ -194,8 +194,25 @@ public class QuestDefinition
             "keywordtrigger" => QuestCategory.KeywordTrigger,
             "blink" => QuestCategory.BlinkTrainer,
             "blinktrainer" => QuestCategory.BlinkTrainer,
-            _ => QuestCategory.Combined
+            _ => UnknownCategory(category)
         };
+    }
+
+    /// <summary>
+    /// Combined is the safe bucket for a category this build does not know (a server-side quest
+    /// type newer than the client), but silently is how a typo in a quest definition shipped for
+    /// a month as a "Combined" quest. Say so once per unknown value.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> _warnedCategories = new(StringComparer.OrdinalIgnoreCase);
+    private static QuestCategory UnknownCategory(string? category)
+    {
+        var key = category ?? "(null)";
+        lock (_warnedCategories)
+        {
+            if (_warnedCategories.Add(key))
+                App.Logger?.Warning("Quest: unknown category '{Category}' mapped to Combined", key);
+        }
+        return QuestCategory.Combined;
     }
 
     /// <summary>

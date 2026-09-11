@@ -8005,6 +8005,13 @@ namespace ConditioningControlPanel.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenProgramsIntro { get; set; }
 
+        /// <summary>
+        /// Right-click toggles the user has performed on the dashboard (tiles or premium chips).
+        /// Drives the "right-click a tile to switch it on or off" caption via
+        /// <see cref="Services.DashboardToggleHintRule"/>; stops counting once the caption is retired.
+        /// </summary>
+        public int DashboardToggleHintUses { get; set; }
+
         #endregion
 
         #region First-time experience

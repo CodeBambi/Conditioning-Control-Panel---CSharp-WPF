@@ -21,6 +21,26 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class AiService : IDisposable, IAiService
     {
+
+        /// <summary>Replacement characters and C0 controls (tabs and newlines excepted): the
+        /// signature of a reply that was already garbage when it arrived.</summary>
+        internal static int CountGarbledChars(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            int n = 0;
+            foreach (var ch in text)
+                if (ch == (char)0xFFFD || (ch < ' ' && ch != (char)10 && ch != (char)13 && ch != (char)9)) n++;
+            return n;
+        }
+
+        internal static int CountLines(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+            int n = 1;
+            foreach (var ch in text) if (ch == (char)10) n++;
+            return n;
+        }
+
         private readonly HttpClient _httpClient;
         private readonly BambiSprite _bambiSprite;
 
@@ -513,8 +533,12 @@ namespace ConditioningControlPanel.Services
                 // because nothing recorded what the model actually returned - only that a reply
                 // arrived. One repro with this line settles whether the text was already garbage on
                 // arrival (a provider/model problem) or was mangled downstream by our own cleanup.
-                App.Logger?.Debug("AiService: raw reply ({Length} chars): {Raw}",
-                    result.Content?.Length ?? 0, result.Content ?? "(null)");
+                // Shape only, never the text: Debug reaches the flight recorder, and the recorder
+                // rides along in every bug report (LogPipeline has no level floor on that sink), so
+                // the reply itself would leave the machine. Garbage-on-arrival is still readable
+                // from the shape - a reply full of U+FFFD or control characters is the provider's.
+                App.Logger?.Debug("AiService: raw reply shape: {Length} chars, {Garbled} garbled, {Lines} lines",
+                    result.Content?.Length ?? 0, CountGarbledChars(result.Content), CountLines(result.Content));
 
                 return new ProxyPostResult(ProxyOutcome.Ok, result.Content,
                     result.TokensUsed?.CachedIn, result.TokensRemainingToday);

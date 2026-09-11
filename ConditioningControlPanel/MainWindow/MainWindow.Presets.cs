@@ -1282,6 +1282,35 @@ namespace ConditioningControlPanel
         {
             if (RefuseIfSessionFeatureLocked($"card:{key}")) return;
             SetWallFeature(key, !IsWallFeatureOn(key));
+            NoteDashboardToggleUsed();
+        }
+
+        /// <summary>
+        /// One more right-click toggle learned. Counts until the caption is retired, then stops
+        /// touching settings at all - no save per toggle for the life of the install.
+        /// </summary>
+        internal void NoteDashboardToggleUsed()
+        {
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s == null || !Services.DashboardToggleHintRule.ShouldShow(s.DashboardToggleHintUses)) return;
+                s.DashboardToggleHintUses++;
+                App.Settings?.Save();
+                RefreshDashboardToggleHint();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Dashboard toggle hint count: {E}", ex.Message); }
+        }
+
+        /// <summary>Shows or retires the two gesture captions (logo face + premium rail) together.</summary>
+        internal void RefreshDashboardToggleHint()
+        {
+            var dash = SettingsTab;
+            if (dash == null) return;
+            var show = Services.DashboardToggleHintRule.ShouldShow(App.Settings?.Current?.DashboardToggleHintUses ?? 0);
+            var v = show ? Visibility.Visible : Visibility.Collapsed;
+            if (dash.DashToggleHint != null) dash.DashToggleHint.Visibility = v;
+            if (dash.RailToggleHint != null) dash.RailToggleHint.Visibility = v;
         }
 
         /// <summary>The persisted flag behind a wall key. Unknown key = false.</summary>

@@ -327,6 +327,22 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty("marqueeBanner")]
         public string? MarqueeBanner { get; set; }
+
+        /// <summary>
+        /// True when any string field on the block is set. Walks the public string properties
+        /// rather than naming them, so a field added later counts without anyone remembering
+        /// to add it here - the Mod Creator uses this to decide whether to keep the block.
+        /// </summary>
+        public static bool HasAnyValue(ModMessages? m)
+        {
+            if (m == null) return false;
+            foreach (var prop in typeof(ModMessages).GetProperties())
+            {
+                if (prop.PropertyType != typeof(string) || !prop.CanRead || prop.GetIndexParameters().Length != 0) continue;
+                if (!string.IsNullOrEmpty(prop.GetValue(m) as string)) return true;
+            }
+            return false;
+        }
     }
 
     public class ModBrowser
